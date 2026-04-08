@@ -71,8 +71,9 @@
 		var topH = 0;
 		var bottomH = 0;
 
-		document.querySelectorAll('.ancr-bar.ancr-sticky:not([style*="display: none"])').forEach(function (bar) {
+		document.querySelectorAll('.ancr-bar:not([style*="display: none"])').forEach(function (bar) {
 			if (bar.classList.contains('ancr-hidden')) return;
+			if (bar.classList.contains('ancr-shortcode')) return;
 			if (bar.classList.contains('ancr-pos-top')) {
 				topH += bar.offsetHeight;
 			} else {
@@ -239,6 +240,23 @@
 			var closeBtn = bar.querySelector('.ancr-close');
 			if (closeBtn) {
 				closeBtn.addEventListener('click', function () { closeBar(bar); });
+			}
+
+			// Non-sticky bars: hide on scroll.
+			if (!bar.classList.contains('ancr-sticky') && !bar.classList.contains('ancr-shortcode')) {
+				(function (b) {
+					var barH = 0;
+					window.addEventListener('scroll', function () {
+						if (!barH) barH = b.offsetHeight;
+						if (window.scrollY > barH + 100) {
+							b.style.transform = b.classList.contains('ancr-pos-top')
+								? 'translateY(-100%)'
+								: 'translateY(100%)';
+						} else {
+							b.style.transform = '';
+						}
+					}, { passive: true });
+				})(bar);
 			}
 
 			// Ticker / slider.

@@ -8,7 +8,9 @@
 /*  Bar Base                                                           */
 /* ------------------------------------------------------------------ */
 .ancr-bar {
-	position: relative;
+	position: fixed;
+	left: 0;
+	right: 0;
 	width: 100%;
 	box-sizing: border-box;
 	z-index: 99999;
@@ -30,25 +32,9 @@
 /* ------------------------------------------------------------------ */
 .ancr-bar.ancr-pos-top {
 	top: 0;
-	left: 0;
-	right: 0;
 }
 
 .ancr-bar.ancr-pos-bottom {
-	bottom: 0;
-	left: 0;
-	right: 0;
-}
-
-.ancr-bar.ancr-sticky {
-	position: fixed;
-}
-
-.ancr-bar.ancr-sticky.ancr-pos-top {
-	top: 0;
-}
-
-.ancr-bar.ancr-sticky.ancr-pos-bottom {
 	bottom: 0;
 }
 
