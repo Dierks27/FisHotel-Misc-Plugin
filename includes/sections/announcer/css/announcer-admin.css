@@ -1,0 +1,303 @@
+/**
+ * Announcer admin meta box — dark theme styles.
+ *
+ * @package FisHotel\Misc\Sections\Announcer
+ */
+
+/* ------------------------------------------------------------------ */
+/*  Meta Box Wrapper                                                   */
+/* ------------------------------------------------------------------ */
+.ancr-meta-wrap {
+	margin: -6px -12px -12px;
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+		Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Tabs                                                               */
+/* ------------------------------------------------------------------ */
+.ancr-tabs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0;
+	background: #1a1a1a;
+	border-bottom: 2px solid #00a0d2;
+	padding: 0 8px;
+}
+
+.ancr-tab {
+	background: transparent;
+	border: none;
+	color: #a0a0a0;
+	padding: 10px 16px;
+	font-size: 13px;
+	font-weight: 500;
+	cursor: pointer;
+	border-bottom: 2px solid transparent;
+	margin-bottom: -2px;
+	transition: color 0.2s, border-color 0.2s;
+}
+
+.ancr-tab:hover {
+	color: #e0e0e0;
+}
+
+.ancr-tab--active {
+	color: #fff;
+	border-bottom-color: #00a0d2;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Panels                                                             */
+/* ------------------------------------------------------------------ */
+.ancr-panel {
+	background: #2d2d2d;
+	padding: 20px;
+	min-height: 200px;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Fields                                                             */
+/* ------------------------------------------------------------------ */
+.ancr-field {
+	margin-bottom: 16px;
+}
+
+.ancr-label {
+	display: block;
+	font-size: 13px;
+	font-weight: 600;
+	color: #e0e0e0;
+	margin-bottom: 6px;
+}
+
+.ancr-label input[type="checkbox"] {
+	margin-right: 6px;
+}
+
+.ancr-panel input[type="text"],
+.ancr-panel input[type="url"],
+.ancr-panel input[type="number"],
+.ancr-panel input[type="datetime-local"],
+.ancr-panel select,
+.ancr-panel textarea {
+	background: #1a1a1a;
+	border: 1px solid rgba(255, 255, 255, 0.15);
+	color: #e0e0e0;
+	padding: 7px 10px;
+	border-radius: 4px;
+	font-size: 13px;
+	width: 100%;
+	max-width: 400px;
+	transition: border-color 0.2s;
+}
+
+.ancr-panel input:focus,
+.ancr-panel select:focus,
+.ancr-panel textarea:focus {
+	border-color: #00a0d2;
+	outline: none;
+	box-shadow: 0 0 0 1px #00a0d2;
+}
+
+.ancr-panel select {
+	max-width: 300px;
+}
+
+.ancr-hint {
+	display: block;
+	font-size: 12px;
+	color: #888;
+	margin-top: 4px;
+}
+
+.ancr-desc {
+	color: #a0a0a0;
+	font-size: 13px;
+	margin: 0 0 16px;
+}
+
+.ancr-divider {
+	border: none;
+	border-top: 1px solid rgba(255, 255, 255, 0.08);
+	margin: 20px 0;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Field Rows (side by side)                                          */
+/* ------------------------------------------------------------------ */
+.ancr-field-row {
+	display: flex;
+	gap: 16px;
+	margin-bottom: 16px;
+}
+
+.ancr-field-row .ancr-field {
+	flex: 1;
+	margin-bottom: 0;
+}
+
+@media (max-width: 782px) {
+	.ancr-field-row {
+		flex-direction: column;
+	}
+}
+
+/* ------------------------------------------------------------------ */
+/*  CTA Button Items                                                   */
+/* ------------------------------------------------------------------ */
+.ancr-cta-item {
+	background: #1a1a1a;
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-radius: 6px;
+	margin-bottom: 12px;
+	overflow: hidden;
+}
+
+.ancr-cta-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 10px 14px;
+	background: rgba(255, 255, 255, 0.03);
+	color: #e0e0e0;
+	font-size: 13px;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.ancr-cta-remove {
+	background: none;
+	border: none;
+	color: #dc3232;
+	font-size: 20px;
+	cursor: pointer;
+	padding: 0 4px;
+	line-height: 1;
+	transition: color 0.2s;
+}
+
+.ancr-cta-remove:hover {
+	color: #ff5555;
+}
+
+.ancr-cta-body {
+	padding: 14px;
+}
+
+.ancr-cta-body .ancr-field-row {
+	margin-bottom: 12px;
+}
+
+.ancr-cta-body .ancr-panel input,
+.ancr-cta-body .ancr-panel select {
+	max-width: 100%;
+}
+
+/* Nested fields inside CTA items inherit dark input styles */
+.ancr-cta-body input[type="text"],
+.ancr-cta-body input[type="url"],
+.ancr-cta-body input[type="number"],
+.ancr-cta-body select {
+	background: #222;
+	border: 1px solid rgba(255, 255, 255, 0.15);
+	color: #e0e0e0;
+	padding: 7px 10px;
+	border-radius: 4px;
+	font-size: 13px;
+	width: 100%;
+	transition: border-color 0.2s;
+}
+
+.ancr-cta-body input:focus,
+.ancr-cta-body select:focus {
+	border-color: #00a0d2;
+	outline: none;
+	box-shadow: 0 0 0 1px #00a0d2;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Rule Items (Location & Visitor)                                    */
+/* ------------------------------------------------------------------ */
+.ancr-rule-item {
+	display: flex;
+	gap: 8px;
+	align-items: center;
+	margin-bottom: 8px;
+}
+
+.ancr-rule-item select,
+.ancr-rule-item input[type="text"] {
+	flex: 1;
+	background: #1a1a1a;
+	border: 1px solid rgba(255, 255, 255, 0.15);
+	color: #e0e0e0;
+	padding: 7px 10px;
+	border-radius: 4px;
+	font-size: 13px;
+}
+
+.ancr-rule-remove {
+	background: none;
+	border: none;
+	color: #dc3232;
+	font-size: 18px;
+	cursor: pointer;
+	padding: 4px 8px;
+	line-height: 1;
+	flex-shrink: 0;
+}
+
+.ancr-rule-remove:hover {
+	color: #ff5555;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Buttons                                                            */
+/* ------------------------------------------------------------------ */
+.ancr-panel .button,
+.ancr-meta-wrap .button {
+	background: #3a3a3a;
+	border: 1px solid rgba(255, 255, 255, 0.15);
+	color: #e0e0e0;
+	border-radius: 4px;
+	padding: 6px 14px;
+	font-size: 13px;
+	cursor: pointer;
+	transition: background 0.2s, border-color 0.2s;
+}
+
+.ancr-panel .button:hover,
+.ancr-meta-wrap .button:hover {
+	background: #4a4a4a;
+	border-color: rgba(255, 255, 255, 0.25);
+	color: #fff;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Color Picker Overrides (dark theme)                                */
+/* ------------------------------------------------------------------ */
+.ancr-panel .wp-picker-container .wp-color-result {
+	border-radius: 4px;
+}
+
+.ancr-panel .wp-picker-container {
+	display: inline-block;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Conditional fields                                                 */
+/* ------------------------------------------------------------------ */
+.ancr-conditional {
+	display: none;
+}
+
+.ancr-conditional.ancr-visible {
+	display: block;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Schedule fields toggle                                             */
+/* ------------------------------------------------------------------ */
+.ancr-schedule-fields {
+	padding-left: 24px;
+}

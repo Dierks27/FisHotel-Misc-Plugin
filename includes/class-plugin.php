@@ -29,6 +29,13 @@ class Plugin {
 	private $section_manager;
 
 	/**
+	 * Update checker instance.
+	 *
+	 * @var Update_Checker
+	 */
+	private $update_checker;
+
+	/**
 	 * Get singleton instance.
 	 *
 	 * @return Plugin
@@ -51,6 +58,9 @@ class Plugin {
 	public function init() {
 		$this->section_manager = new Section_Manager();
 		$this->section_manager->init();
+
+		$this->update_checker = new Update_Checker();
+		$this->update_checker->init();
 
 		if ( is_admin() ) {
 			add_action( 'admin_menu', array( $this, 'register_menus' ) );

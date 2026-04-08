@@ -1,6 +1,6 @@
 <?php
 /**
- * Announcer section — placeholder.
+ * Announcer section — notification bars, banners, and announcement messages.
  *
  * @package FisHotel\Misc\Sections\Announcer
  */
@@ -15,6 +15,24 @@ defined( 'ABSPATH' ) || exit;
 class Announcer {
 
 	/**
+	 * Section base path.
+	 *
+	 * @return string
+	 */
+	public static function path() {
+		return FISHOTEL_MISC_PATH . 'includes/sections/announcer/';
+	}
+
+	/**
+	 * Section base URL.
+	 *
+	 * @return string
+	 */
+	public static function url() {
+		return FISHOTEL_MISC_URL . 'includes/sections/announcer/';
+	}
+
+	/**
 	 * Return section metadata used by the Section Manager.
 	 *
 	 * @return array{name: string, description: string, icon: string}
@@ -22,7 +40,7 @@ class Announcer {
 	public static function get_section_info() {
 		return array(
 			'name'        => __( 'Announcer', 'fishotel-misc-plugin' ),
-			'description' => __( 'Broadcast announcements and notices across the site.', 'fishotel-misc-plugin' ),
+			'description' => __( 'Display notification bars, announcement banners, and promotional messages across your site.', 'fishotel-misc-plugin' ),
 			'icon'        => 'dashicons-megaphone',
 		);
 	}
@@ -31,7 +49,16 @@ class Announcer {
 	 * Boot the section when it is enabled.
 	 */
 	public static function boot() {
-		// Placeholder — feature logic will go here.
+		require_once self::path() . 'class-post-type.php';
+		require_once self::path() . 'class-frontend.php';
+
+		$post_type = new Post_Type();
+		$post_type->init();
+
+		if ( ! is_admin() ) {
+			$frontend = new Frontend();
+			$frontend->init();
+		}
 	}
 
 	/**
@@ -43,22 +70,7 @@ class Announcer {
 			__( 'Announcer', 'fishotel-misc-plugin' ),
 			__( 'Announcer', 'fishotel-misc-plugin' ),
 			'manage_options',
-			'fishotel-misc-announcer',
-			array( static::class, 'render_page' )
+			'edit.php?post_type=fishotel_announce'
 		);
-	}
-
-	/**
-	 * Render the section admin page.
-	 */
-	public static function render_page() {
-		if ( ! current_user_can( 'manage_options' ) ) {
-			wp_die( esc_html__( 'You do not have permission to access this page.', 'fishotel-misc-plugin' ) );
-		}
-
-		echo '<div class="wrap fishotel-misc-wrap">';
-		echo '<h1>' . esc_html__( 'Announcer', 'fishotel-misc-plugin' ) . '</h1>';
-		echo '<p>' . esc_html__( 'This section is under construction.', 'fishotel-misc-plugin' ) . '</p>';
-		echo '</div>';
 	}
 }
