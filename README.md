@@ -67,6 +67,8 @@ The Section Manager will automatically discover and register the section.
 
 ## Version
 
+0.16 — Hide theme skip links when announcement bar is present.
+
 0.15 — Raise z-index to 9999999 to fix theme skip links overlapping bar.
 
 0.14 — Fix dark theme: white gap, white editor, TinyMCE iframe styling.

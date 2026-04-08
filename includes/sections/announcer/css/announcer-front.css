@@ -27,6 +27,12 @@
 	transition: transform 0.4s ease, opacity 0.4s ease;
 }
 
+/* Hide theme skip/accessibility links that overlap the bar */
+body:has(.ancr-bar) .nelson_skip_link,
+body:has(.ancr-bar) .skip-link {
+	display: none !important;
+}
+
 .ancr-bar *,
 .ancr-bar *::before,
 .ancr-bar *::after {
