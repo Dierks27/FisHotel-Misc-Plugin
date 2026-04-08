@@ -2,8 +2,9 @@
 /**
  * GitHub-based update checker for the plugin.
  *
- * Checks the GitHub releases API for newer versions and integrates
- * with the WordPress transient-based update system.
+ * Reads the plugin header from the main branch on GitHub to detect
+ * newer versions. No releases or tags required — just push to main
+ * with a bumped Version header.
  *
  * @package FisHotel\Misc
  */
@@ -23,6 +24,20 @@ class Update_Checker {
 	 * @var string
 	 */
 	private $github_repo = 'Dierks27/FisHotel-Misc-Plugin';
+
+	/**
+	 * Branch to check for updates.
+	 *
+	 * @var string
+	 */
+	private $branch = 'main';
+
+	/**
+	 * Path to the main plugin file inside the repo.
+	 *
+	 * @var string
+	 */
+	private $plugin_file = 'fishotel-misc-plugin.php';
 
 	/**
 	 * Plugin basename (e.g. fishotel-misc-plugin/fishotel-misc-plugin.php).
@@ -114,30 +129,28 @@ class Update_Checker {
 
 		check_admin_referer( 'fishotel_misc_check_update' );
 
-		// Clear the cached transient so a fresh check runs.
+		// Clear caches so a fresh check runs.
 		delete_transient( self::TRANSIENT_KEY );
-
-		// Force WordPress to re-check plugin updates.
 		delete_site_transient( 'update_plugins' );
 
-		$release = $this->fetch_latest_release();
+		$remote = $this->fetch_remote_version();
 
-		if ( is_wp_error( $release ) ) {
+		if ( is_wp_error( $remote ) ) {
 			set_transient( 'fishotel_misc_update_notice', array(
 				'type'    => 'error',
 				'message' => sprintf(
 					/* translators: %s: error message */
 					__( 'Update check failed: %s', 'fishotel-misc-plugin' ),
-					$release->get_error_message()
+					$remote->get_error_message()
 				),
 			), 30 );
-		} elseif ( $release && version_compare( $release['version'], $this->current_version, '>' ) ) {
+		} elseif ( version_compare( $remote['version'], $this->current_version, '>' ) ) {
 			set_transient( 'fishotel_misc_update_notice', array(
 				'type'    => 'success',
 				'message' => sprintf(
 					/* translators: %s: new version number */
 					__( 'FisHotel Misc Plugin v%s is available! Update from the plugins page.', 'fishotel-misc-plugin' ),
-					$release['version']
+					$remote['version']
 				),
 			), 30 );
 		} else {
@@ -183,19 +196,19 @@ class Update_Checker {
 			return $transient;
 		}
 
-		$release = $this->get_cached_release();
+		$remote = $this->get_cached_remote();
 
-		if ( ! $release || is_wp_error( $release ) ) {
+		if ( ! $remote || is_wp_error( $remote ) ) {
 			return $transient;
 		}
 
-		if ( version_compare( $release['version'], $this->current_version, '>' ) ) {
+		if ( version_compare( $remote['version'], $this->current_version, '>' ) ) {
 			$transient->response[ $this->plugin_basename ] = (object) array(
 				'slug'        => $this->plugin_slug,
 				'plugin'      => $this->plugin_basename,
-				'new_version' => $release['version'],
-				'url'         => $release['html_url'],
-				'package'     => $release['download_url'],
+				'new_version' => $remote['version'],
+				'url'         => 'https://github.com/' . $this->github_repo,
+				'package'     => $remote['download_url'],
 				'tested'      => '',
 				'icons'       => array(),
 			);
@@ -229,68 +242,68 @@ class Update_Checker {
 			return $result;
 		}
 
-		$release = $this->get_cached_release();
+		$remote = $this->get_cached_remote();
 
-		if ( ! $release || is_wp_error( $release ) ) {
+		if ( ! $remote || is_wp_error( $remote ) ) {
 			return $result;
 		}
 
 		$info                = new \stdClass();
 		$info->name          = 'FisHotel Misc Plugin';
 		$info->slug          = $this->plugin_slug;
-		$info->version       = $release['version'];
+		$info->version       = $remote['version'];
 		$info->author        = '<a href="https://github.com/Dierks27">FisHotel</a>';
 		$info->homepage      = 'https://github.com/' . $this->github_repo;
-		$info->download_link = $release['download_url'];
+		$info->download_link = $remote['download_url'];
 		$info->sections      = array(
 			'description' => 'A modular container plugin with a dark theme admin interface for FisHotel tools.',
-			'changelog'   => nl2br( esc_html( $release['body'] ) ),
+			'changelog'   => '<p>Visit the <a href="https://github.com/' . esc_attr( $this->github_repo ) . '">GitHub repository</a> for the full changelog.</p>',
 		);
 
 		return $info;
 	}
 
 	/**
-	 * Get the latest release data, using a cached transient.
+	 * Get remote version data with caching.
 	 *
-	 * @return array|false|WP_Error
+	 * @return array|false|\WP_Error
 	 */
-	private function get_cached_release() {
+	private function get_cached_remote() {
 		$cached = get_transient( self::TRANSIENT_KEY );
 
 		if ( false !== $cached ) {
 			return $cached;
 		}
 
-		$release = $this->fetch_latest_release();
+		$remote = $this->fetch_remote_version();
 
-		if ( is_wp_error( $release ) ) {
-			// Cache errors briefly to avoid hammering the API.
+		if ( is_wp_error( $remote ) ) {
+			// Cache errors briefly to avoid hammering GitHub.
 			set_transient( self::TRANSIENT_KEY, false, 5 * MINUTE_IN_SECONDS );
-			return $release;
+			return $remote;
 		}
 
-		set_transient( self::TRANSIENT_KEY, $release, self::CACHE_DURATION );
+		set_transient( self::TRANSIENT_KEY, $remote, self::CACHE_DURATION );
 
-		return $release;
+		return $remote;
 	}
 
 	/**
-	 * Fetch the latest release from GitHub.
+	 * Fetch the main plugin file from GitHub and parse the Version header.
 	 *
-	 * @return array|WP_Error Release data or error.
+	 * @return array|\WP_Error Remote version data or error.
 	 */
-	private function fetch_latest_release() {
-		$url = sprintf(
-			'https://api.github.com/repos/%s/releases/latest',
-			$this->github_repo
+	private function fetch_remote_version() {
+		// Fetch the raw plugin file from GitHub.
+		$raw_url = sprintf(
+			'https://raw.githubusercontent.com/%s/%s/%s',
+			$this->github_repo,
+			$this->branch,
+			$this->plugin_file
 		);
 
-		$response = wp_remote_get( $url, array(
-			'timeout' => 10,
-			'headers' => array(
-				'Accept' => 'application/vnd.github.v3+json',
-			),
+		$response = wp_remote_get( $raw_url, array(
+			'timeout' => 15,
 		) );
 
 		if ( is_wp_error( $response ) ) {
@@ -300,44 +313,35 @@ class Update_Checker {
 		$code = wp_remote_retrieve_response_code( $response );
 
 		if ( 200 !== $code ) {
-			if ( 404 === $code ) {
-				return new \WP_Error( 'no_release', __( 'No releases found.', 'fishotel-misc-plugin' ) );
-			}
 			return new \WP_Error(
-				'github_api_error',
+				'github_fetch_error',
 				sprintf(
 					/* translators: %d: HTTP status code */
-					__( 'GitHub API returned status %d.', 'fishotel-misc-plugin' ),
+					__( 'GitHub returned status %d when fetching plugin file.', 'fishotel-misc-plugin' ),
 					$code
 				)
 			);
 		}
 
-		$body = json_decode( wp_remote_retrieve_body( $response ), true );
+		$content = wp_remote_retrieve_body( $response );
 
-		if ( empty( $body['tag_name'] ) ) {
-			return new \WP_Error( 'invalid_response', __( 'Invalid release data from GitHub.', 'fishotel-misc-plugin' ) );
+		// Parse the Version header from the plugin file.
+		if ( preg_match( '/^\s*\*?\s*Version:\s*(.+)$/mi', $content, $matches ) ) {
+			$version = trim( $matches[1] );
+		} else {
+			return new \WP_Error( 'no_version', __( 'Could not parse version from remote plugin file.', 'fishotel-misc-plugin' ) );
 		}
 
-		// Strip leading "v" from tag if present.
-		$version = ltrim( $body['tag_name'], 'v' );
-
-		// Find the zip asset, or fall back to the zipball URL.
-		$download_url = $body['zipball_url'] ?? '';
-		if ( ! empty( $body['assets'] ) ) {
-			foreach ( $body['assets'] as $asset ) {
-				if ( 'application/zip' === $asset['content_type'] || str_ends_with( $asset['name'], '.zip' ) ) {
-					$download_url = $asset['browser_download_url'];
-					break;
-				}
-			}
-		}
+		// The download URL is a zip of the branch.
+		$download_url = sprintf(
+			'https://github.com/%s/archive/refs/heads/%s.zip',
+			$this->github_repo,
+			$this->branch
+		);
 
 		return array(
 			'version'      => $version,
 			'download_url' => $download_url,
-			'html_url'     => $body['html_url'] ?? '',
-			'body'         => $body['body'] ?? '',
 		);
 	}
 }

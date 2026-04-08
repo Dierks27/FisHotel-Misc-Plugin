@@ -67,6 +67,8 @@ The Section Manager will automatically discover and register the section.
 
 ## Version
 
+0.4 — Fix update checker to read version from main branch (no releases needed).
+
 0.3 — Redesign announcer admin: sidebar nav, list table toggles, dark theme, preview.
 
 0.2 — Add Announcer section and GitHub update checker.
