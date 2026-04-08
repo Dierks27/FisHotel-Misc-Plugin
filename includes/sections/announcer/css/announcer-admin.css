@@ -712,8 +712,10 @@
 	color: #dc3232 !important;
 }
 
-/* Classic editor */
-.post-type-fishotel_announce .wp-editor-container {
+/* Classic editor — container, toolbar, content area */
+.post-type-fishotel_announce .wp-editor-container,
+.post-type-fishotel_announce #wp-content-editor-container {
+	background: #2d2d2d !important;
 	border-color: rgba(255, 255, 255, 0.15) !important;
 }
 
@@ -726,8 +728,55 @@
 .post-type-fishotel_announce .wp-editor-tabs .wp-switch-editor.switch-tmce,
 .post-type-fishotel_announce .wp-editor-tabs .wp-switch-editor.switch-html {
 	background: #2d2d2d !important;
+	color: #e0e0e0 !important;
 }
 
+/* TinyMCE toolbar */
+.post-type-fishotel_announce .mce-toolbar,
+.post-type-fishotel_announce .mce-toolbar-grp,
+.post-type-fishotel_announce .mce-menubar,
+.post-type-fishotel_announce .mce-statusbar {
+	background: #2d2d2d !important;
+	border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.post-type-fishotel_announce .mce-toolbar .mce-btn button,
+.post-type-fishotel_announce .mce-toolbar .mce-btn .mce-ico {
+	color: #a0a0a0 !important;
+}
+
+.post-type-fishotel_announce .mce-toolbar .mce-btn:hover button,
+.post-type-fishotel_announce .mce-toolbar .mce-btn:hover .mce-ico {
+	color: #e0e0e0 !important;
+}
+
+.post-type-fishotel_announce .mce-toolbar .mce-btn.mce-active button,
+.post-type-fishotel_announce .mce-toolbar .mce-btn.mce-active .mce-ico {
+	color: #00a0d2 !important;
+}
+
+.post-type-fishotel_announce .mce-statusbar .mce-path {
+	color: #666 !important;
+}
+
+.post-type-fishotel_announce .mce-statusbar .mce-path-item {
+	color: #888 !important;
+}
+
+/* TinyMCE panel/dropdown backgrounds */
+.post-type-fishotel_announce .mce-panel {
+	background: #2d2d2d !important;
+	border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Text area (Code/Text tab) */
+.post-type-fishotel_announce textarea.wp-editor-area,
+.post-type-fishotel_announce textarea#content {
+	background: #1a1a1a !important;
+	color: #e0e0e0 !important;
+}
+
+/* Quicktags toolbar */
 .post-type-fishotel_announce .quicktags-toolbar {
 	background: #252525 !important;
 	border-color: rgba(255, 255, 255, 0.1) !important;
@@ -737,14 +786,33 @@
 	color: #a0a0a0 !important;
 }
 
-.post-type-fishotel_announce textarea.wp-editor-area {
-	background: #1a1a1a !important;
+/* wp-media buttons row above editor */
+.post-type-fishotel_announce #wp-content-media-buttons {
+	color: #a0a0a0 !important;
+}
+
+.post-type-fishotel_announce #wp-content-media-buttons a.button {
+	color: #a0a0a0 !important;
+}
+
+.post-type-fishotel_announce #wp-content-media-buttons a.button:hover {
 	color: #e0e0e0 !important;
+}
+
+/* Eliminate the white gap between sidebar and content */
+.post-type-fishotel_announce #wpcontent,
+.post-type-fishotel_announce #wpwrap {
+	background: #1a1a1a !important;
 }
 
 /* Screen meta links */
 .post-type-fishotel_announce #screen-meta-links .show-settings {
 	color: #a0a0a0 !important;
+}
+
+.post-type-fishotel_announce #screen-meta {
+	background: #2d2d2d !important;
+	border-color: rgba(255, 255, 255, 0.1) !important;
 }
 
 /* Notices on dark bg */

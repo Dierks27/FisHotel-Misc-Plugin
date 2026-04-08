@@ -99,6 +99,7 @@ class Post_Type {
 			add_filter( 'post_row_actions', array( $this, 'row_actions' ), 10, 2 );
 			add_action( 'admin_action_fishotel_duplicate_announcement', array( $this, 'duplicate_announcement' ) );
 			add_action( 'wp_ajax_fishotel_announcer_toggle', array( $this, 'ajax_toggle_enabled' ) );
+			add_filter( 'tiny_mce_before_init', array( $this, 'tinymce_dark_theme' ) );
 		}
 	}
 
@@ -347,6 +348,33 @@ class Post_Type {
 			FISHOTEL_MISC_VERSION,
 			true
 		);
+	}
+
+	/**
+	 * Inject dark theme styles into the TinyMCE iframe.
+	 *
+	 * The TinyMCE editor content lives inside an iframe with its own
+	 * document, so external CSS cannot reach it. This injects inline
+	 * styles via the content_style init parameter.
+	 *
+	 * @param array $settings TinyMCE init settings.
+	 * @return array
+	 */
+	public function tinymce_dark_theme( $settings ) {
+		$screen = get_current_screen();
+		if ( ! $screen || self::POST_TYPE !== $screen->post_type ) {
+			return $settings;
+		}
+
+		$css = 'body.mce-content-body { background: #2d2d2d !important; color: #e0e0e0 !important; } a { color: #00a0d2 !important; }';
+
+		if ( ! empty( $settings['content_style'] ) ) {
+			$settings['content_style'] .= ' ' . $css;
+		} else {
+			$settings['content_style'] = $css;
+		}
+
+		return $settings;
 	}
 
 	/**
