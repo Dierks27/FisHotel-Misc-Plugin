@@ -67,6 +67,8 @@ The Section Manager will automatically discover and register the section.
 
 ## Version
 
+0.13 — Fix 3800px bar: replace the_content filter, add max-height constraint.
+
 0.12 — Force position:fixed via JS inline styles to override Elementor CSS.
 
 0.11 — Bulletproof rendering: wp_footer + JS DOM relocation + position:fixed.

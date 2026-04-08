@@ -44,9 +44,11 @@
 		bar.style.setProperty('left', '0', 'important');
 		bar.style.setProperty('right', '0', 'important');
 		bar.style.setProperty('width', '100%', 'important');
-		bar.style.setProperty('height', 'auto', 'important');
+		bar.style.setProperty('max-height', '150px', 'important');
+		bar.style.setProperty('overflow', 'hidden', 'important');
 		bar.style.setProperty('margin', '0', 'important');
 		bar.style.setProperty('z-index', '999999', 'important');
+		bar.style.setProperty('isolation', 'isolate', 'important');
 		if (isBottom) {
 			bar.style.setProperty('bottom', '0', 'important');
 			bar.style.setProperty('top', 'auto', 'important');

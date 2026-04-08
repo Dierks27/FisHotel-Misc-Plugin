@@ -329,6 +329,26 @@ class Frontend {
 	}
 
 	/**
+	 * Process announcement content safely without the_content filter.
+	 *
+	 * Using apply_filters('the_content') causes themes and plugins to inject
+	 * related posts, share buttons, Elementor widgets, etc. into the bar,
+	 * bloating it to thousands of pixels. We only need paragraph formatting
+	 * and shortcode expansion.
+	 *
+	 * @param string $raw Raw post content.
+	 * @return string Processed HTML.
+	 */
+	private static function safe_content( $raw ) {
+		$content = do_shortcode( $raw );
+		$content = wpautop( $content );
+		$content = wptexturize( $content );
+		$content = convert_smilies( $content );
+
+		return $content;
+	}
+
+	/**
 	 * Build the HTML for a single announcement bar.
 	 *
 	 * @param \WP_Post $post        The announcement post.
@@ -368,7 +388,10 @@ class Frontend {
 		}
 
 		// Parse content for multiple messages.
-		$content  = apply_filters( 'the_content', $post->post_content );
+		// Use wpautop + do_shortcode instead of the_content filter to avoid
+		// theme/plugin injections (related posts, share buttons, Elementor
+		// widgets, etc.) that bloat the bar to thousands of pixels.
+		$content  = self::safe_content( $post->post_content );
 		$messages = array( $content );
 
 		if ( '1' === $multi_enabled ) {
@@ -376,7 +399,7 @@ class Frontend {
 			$parts = preg_split( '/<!--\s*message\s*-->/i', $raw );
 			if ( count( $parts ) > 1 ) {
 				$messages = array_map( function ( $part ) {
-					return apply_filters( 'the_content', trim( $part ) );
+					return self::safe_content( trim( $part ) );
 				}, $parts );
 			}
 
