@@ -9,13 +9,13 @@
 	'use strict';
 
 	/* ============================================================== */
-	/*  Tabs                                                           */
+	/*  Sidebar Navigation                                             */
 	/* ============================================================== */
-	$(document).on('click', '.ancr-tab', function () {
+	$(document).on('click', '.ancr-nav-item', function () {
 		var tab = $(this).data('tab');
 
-		$('.ancr-tab').removeClass('ancr-tab--active');
-		$(this).addClass('ancr-tab--active');
+		$('.ancr-nav-item').removeClass('ancr-nav-item--active');
+		$(this).addClass('ancr-nav-item--active');
 
 		$('.ancr-panel').hide();
 		$('.ancr-panel[data-panel="' + tab + '"]').show();
@@ -195,6 +195,34 @@
 
 	$(document).on('click', '#ancr-visitor-list .ancr-rule-remove', function () {
 		$(this).closest('.ancr-rule-item').remove();
+	});
+
+	/* ============================================================== */
+	/*  List Table — Enable/Disable Toggle                             */
+	/* ============================================================== */
+	$(document).on('change', '.ancr-list-toggle input', function () {
+		var $cb     = $(this);
+		var $label  = $cb.closest('.ancr-list-toggle');
+		var postId  = $cb.data('post-id');
+		var enabled = $cb.is(':checked') ? '1' : '0';
+
+		if (typeof ancrList === 'undefined') return;
+
+		$label.addClass('ancr-saving');
+
+		$.post(ancrList.ajaxUrl, {
+			action:  'fishotel_announcer_toggle',
+			nonce:   ancrList.nonce,
+			post_id: postId,
+			enabled: enabled
+		})
+		.fail(function () {
+			// Revert on failure.
+			$cb.prop('checked', !$cb.is(':checked'));
+		})
+		.always(function () {
+			$label.removeClass('ancr-saving');
+		});
 	});
 
 })(jQuery);

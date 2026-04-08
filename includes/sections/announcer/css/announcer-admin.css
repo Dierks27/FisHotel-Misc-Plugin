@@ -5,27 +5,33 @@
  */
 
 /* ------------------------------------------------------------------ */
-/*  Meta Box Wrapper                                                   */
+/*  Meta Box Wrapper — Sidebar Layout                                  */
 /* ------------------------------------------------------------------ */
 .ancr-meta-wrap {
 	margin: -6px -12px -12px;
 	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
 		Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
-}
-
-/* ------------------------------------------------------------------ */
-/*  Tabs                                                               */
-/* ------------------------------------------------------------------ */
-.ancr-tabs {
 	display: flex;
-	flex-wrap: wrap;
-	gap: 0;
-	background: #1a1a1a;
-	border-bottom: 2px solid #00a0d2;
-	padding: 0 8px;
+	min-height: 350px;
 }
 
-.ancr-tab {
+/* ------------------------------------------------------------------ */
+/*  Sidebar Navigation                                                 */
+/* ------------------------------------------------------------------ */
+.ancr-sidebar {
+	width: 200px;
+	flex-shrink: 0;
+	background: #1a1a1a;
+	border-right: 1px solid rgba(255, 255, 255, 0.08);
+	display: flex;
+	flex-direction: column;
+	padding: 8px 0;
+}
+
+.ancr-nav-item {
+	display: flex;
+	align-items: center;
+	gap: 8px;
 	background: transparent;
 	border: none;
 	color: #a0a0a0;
@@ -33,18 +39,63 @@
 	font-size: 13px;
 	font-weight: 500;
 	cursor: pointer;
-	border-bottom: 2px solid transparent;
-	margin-bottom: -2px;
-	transition: color 0.2s, border-color 0.2s;
+	text-align: left;
+	transition: color 0.2s, background 0.2s;
+	border-left: 3px solid transparent;
 }
 
-.ancr-tab:hover {
+.ancr-nav-item .dashicons {
+	font-size: 16px;
+	width: 16px;
+	height: 16px;
+	line-height: 16px;
+}
+
+.ancr-nav-item:hover {
 	color: #e0e0e0;
+	background: rgba(255, 255, 255, 0.04);
 }
 
-.ancr-tab--active {
-	color: #fff;
-	border-bottom-color: #00a0d2;
+.ancr-nav-item--active {
+	color: #00a0d2;
+	background: rgba(0, 160, 210, 0.08);
+	border-left-color: #00a0d2;
+	font-weight: 600;
+}
+
+@media (max-width: 782px) {
+	.ancr-meta-wrap {
+		flex-direction: column;
+	}
+
+	.ancr-sidebar {
+		width: 100%;
+		flex-direction: row;
+		flex-wrap: wrap;
+		border-right: none;
+		border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+		padding: 4px;
+	}
+
+	.ancr-nav-item {
+		border-left: none;
+		border-bottom: 2px solid transparent;
+		padding: 8px 12px;
+		font-size: 12px;
+	}
+
+	.ancr-nav-item--active {
+		border-bottom-color: #00a0d2;
+		border-left-color: transparent;
+	}
+}
+
+/* ------------------------------------------------------------------ */
+/*  Panel Area                                                         */
+/* ------------------------------------------------------------------ */
+.ancr-panel-area {
+	flex: 1;
+	min-width: 0;
 }
 
 /* ------------------------------------------------------------------ */
@@ -52,8 +103,17 @@
 /* ------------------------------------------------------------------ */
 .ancr-panel {
 	background: #2d2d2d;
-	padding: 20px;
-	min-height: 200px;
+	padding: 24px;
+	min-height: 300px;
+}
+
+.ancr-panel-title {
+	font-size: 14px;
+	font-weight: 600;
+	color: #e0e0e0;
+	margin: 0 0 18px;
+	padding: 0 0 12px;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 /* ------------------------------------------------------------------ */
@@ -273,6 +333,39 @@
 	color: #fff;
 }
 
+.ancr-add-btn {
+	background: #00a0d2 !important;
+	border-color: #00a0d2 !important;
+	color: #fff !important;
+	font-weight: 600;
+}
+
+.ancr-add-btn:hover {
+	background: #0eb5e8 !important;
+	border-color: #0eb5e8 !important;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Preview Box                                                        */
+/* ------------------------------------------------------------------ */
+.ancr-preview-wrap {
+	padding: 4px 0;
+}
+
+.ancr-preview-wrap .ancr-desc {
+	margin-bottom: 12px;
+}
+
+.ancr-preview-wrap #ancr-preview-btn {
+	background: #00a0d2;
+	border-color: #00a0d2;
+	color: #fff;
+	border-radius: 4px;
+	padding: 6px 16px;
+	font-weight: 600;
+	text-decoration: none;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Color Picker Overrides (dark theme)                                */
 /* ------------------------------------------------------------------ */
@@ -300,4 +393,304 @@
 /* ------------------------------------------------------------------ */
 .ancr-schedule-fields {
 	padding-left: 24px;
+}
+
+/* ------------------------------------------------------------------ */
+/*  List Table Toggle Switch                                           */
+/* ------------------------------------------------------------------ */
+.ancr-list-toggle {
+	position: relative;
+	display: inline-block;
+	width: 36px;
+	height: 20px;
+	vertical-align: middle;
+	cursor: pointer;
+}
+
+.ancr-list-toggle input {
+	opacity: 0;
+	width: 0;
+	height: 0;
+	position: absolute;
+}
+
+.ancr-list-slider {
+	position: absolute;
+	inset: 0;
+	background: #555;
+	border-radius: 20px;
+	transition: background 0.25s;
+}
+
+.ancr-list-slider::before {
+	content: "";
+	position: absolute;
+	width: 14px;
+	height: 14px;
+	left: 3px;
+	bottom: 3px;
+	background: #fff;
+	border-radius: 50%;
+	transition: transform 0.25s;
+}
+
+.ancr-list-toggle input:checked + .ancr-list-slider {
+	background: #46b450;
+}
+
+.ancr-list-toggle input:checked + .ancr-list-slider::before {
+	transform: translateX(16px);
+}
+
+.ancr-list-toggle.ancr-saving .ancr-list-slider {
+	opacity: 0.5;
+}
+
+/* ------------------------------------------------------------------ */
+/*  List Table Color Swatches                                          */
+/* ------------------------------------------------------------------ */
+.ancr-color-swatch {
+	display: inline-block;
+	width: 22px;
+	height: 22px;
+	border-radius: 3px;
+	border: 2px solid rgba(0, 0, 0, 0.15);
+	vertical-align: middle;
+	margin-right: 2px;
+	cursor: help;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Dark Theme — List Table & Edit Screen                              */
+/* ------------------------------------------------------------------ */
+.post-type-fishotel_announce #wpbody-content {
+	background: #1a1a1a;
+}
+
+.post-type-fishotel_announce .wrap {
+	color: #e0e0e0;
+}
+
+.post-type-fishotel_announce .wrap h1.wp-heading-inline,
+.post-type-fishotel_announce .wrap h1 {
+	color: #e0e0e0;
+}
+
+.post-type-fishotel_announce .wrap .page-title-action {
+	background: #00a0d2;
+	border-color: #00a0d2;
+	color: #fff;
+	border-radius: 4px;
+}
+
+.post-type-fishotel_announce .wrap .page-title-action:hover {
+	background: #0eb5e8;
+	border-color: #0eb5e8;
+}
+
+/* Subsubsub filter links */
+.post-type-fishotel_announce .subsubsub a {
+	color: #00a0d2;
+}
+
+.post-type-fishotel_announce .subsubsub a:hover {
+	color: #0eb5e8;
+}
+
+.post-type-fishotel_announce .subsubsub .current {
+	color: #e0e0e0;
+}
+
+/* Tablenav */
+.post-type-fishotel_announce .tablenav .tablenav-pages a,
+.post-type-fishotel_announce .tablenav .displaying-num {
+	color: #a0a0a0;
+}
+
+/* WP List Table */
+.post-type-fishotel_announce .wp-list-table {
+	border-color: rgba(255, 255, 255, 0.08);
+}
+
+.post-type-fishotel_announce .wp-list-table thead th,
+.post-type-fishotel_announce .wp-list-table thead td,
+.post-type-fishotel_announce .wp-list-table tfoot th,
+.post-type-fishotel_announce .wp-list-table tfoot td {
+	background: #252525;
+	color: #a0a0a0;
+	border-bottom-color: rgba(255, 255, 255, 0.08);
+}
+
+.post-type-fishotel_announce .wp-list-table thead th a,
+.post-type-fishotel_announce .wp-list-table thead th a:visited {
+	color: #a0a0a0;
+}
+
+.post-type-fishotel_announce .wp-list-table thead th a:hover {
+	color: #e0e0e0;
+}
+
+.post-type-fishotel_announce .wp-list-table thead .sorted .sorting-indicators .sorting-indicator-asc,
+.post-type-fishotel_announce .wp-list-table thead .sorted .sorting-indicators .sorting-indicator-desc {
+	color: #00a0d2;
+}
+
+.post-type-fishotel_announce .wp-list-table tbody tr {
+	background: #2d2d2d;
+}
+
+.post-type-fishotel_announce .wp-list-table tbody tr:hover {
+	background: #333;
+}
+
+.post-type-fishotel_announce .wp-list-table tbody tr td,
+.post-type-fishotel_announce .wp-list-table tbody tr th {
+	color: #e0e0e0;
+	border-bottom-color: rgba(255, 255, 255, 0.06);
+}
+
+.post-type-fishotel_announce .wp-list-table tbody .row-title {
+	color: #00a0d2;
+	font-weight: 600;
+}
+
+.post-type-fishotel_announce .wp-list-table tbody .row-title:hover {
+	color: #0eb5e8;
+}
+
+.post-type-fishotel_announce .wp-list-table .row-actions a {
+	color: #00a0d2;
+}
+
+.post-type-fishotel_announce .wp-list-table .row-actions a:hover {
+	color: #0eb5e8;
+}
+
+.post-type-fishotel_announce .wp-list-table .row-actions .trash a {
+	color: #dc3232;
+}
+
+.post-type-fishotel_announce .wp-list-table .column-announcer_status {
+	width: 70px;
+}
+
+.post-type-fishotel_announce .wp-list-table .column-announcer_sticky {
+	width: 60px;
+}
+
+.post-type-fishotel_announce .wp-list-table .column-announcer_position {
+	width: 70px;
+}
+
+.post-type-fishotel_announce .wp-list-table .column-announcer_colors {
+	width: 140px;
+}
+
+/* Alternate row */
+.post-type-fishotel_announce .wp-list-table .alternate {
+	background: #272727;
+}
+
+.post-type-fishotel_announce .wp-list-table .alternate:hover {
+	background: #333;
+}
+
+/* Search box */
+.post-type-fishotel_announce .search-box input[type="search"],
+.post-type-fishotel_announce .search-box input[type="text"] {
+	background: #2d2d2d;
+	border-color: rgba(255, 255, 255, 0.15);
+	color: #e0e0e0;
+	border-radius: 4px;
+}
+
+.post-type-fishotel_announce .search-box .button {
+	background: #3a3a3a;
+	border-color: rgba(255, 255, 255, 0.15);
+	color: #e0e0e0;
+}
+
+.post-type-fishotel_announce .search-box .button:hover {
+	background: #4a4a4a;
+	color: #fff;
+}
+
+/* Tablenav select/buttons */
+.post-type-fishotel_announce .tablenav select,
+.post-type-fishotel_announce .tablenav .button {
+	background: #2d2d2d;
+	border-color: rgba(255, 255, 255, 0.15);
+	color: #e0e0e0;
+}
+
+.post-type-fishotel_announce .tablenav .button:hover {
+	background: #3a3a3a;
+	color: #fff;
+}
+
+/* No items */
+.post-type-fishotel_announce .wp-list-table .no-items td {
+	color: #a0a0a0;
+	background: #2d2d2d;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Dark Theme — Edit Screen                                           */
+/* ------------------------------------------------------------------ */
+.post-type-fishotel_announce #titlediv #title {
+	background: #2d2d2d;
+	border-color: rgba(255, 255, 255, 0.15);
+	color: #e0e0e0;
+}
+
+.post-type-fishotel_announce .postbox {
+	background: #2d2d2d;
+	border-color: rgba(255, 255, 255, 0.1);
+}
+
+.post-type-fishotel_announce .postbox .postbox-header,
+.post-type-fishotel_announce .postbox .hndle {
+	background: #252525;
+	border-bottom-color: rgba(255, 255, 255, 0.08);
+	color: #e0e0e0;
+}
+
+.post-type-fishotel_announce .postbox .inside {
+	color: #e0e0e0;
+}
+
+.post-type-fishotel_announce #submitdiv .submitbox {
+	background: #2d2d2d;
+	color: #e0e0e0;
+}
+
+.post-type-fishotel_announce #submitdiv .submitbox .misc-pub-section {
+	border-top-color: rgba(255, 255, 255, 0.08);
+	color: #a0a0a0;
+}
+
+.post-type-fishotel_announce #submitdiv #publish,
+.post-type-fishotel_announce #submitdiv .button-primary {
+	background: #00a0d2;
+	border-color: #00a0d2;
+}
+
+.post-type-fishotel_announce #submitdiv #publish:hover {
+	background: #0eb5e8;
+}
+
+.post-type-fishotel_announce #submitdiv .button {
+	background: #3a3a3a;
+	border-color: rgba(255, 255, 255, 0.15);
+	color: #e0e0e0;
+}
+
+/* Screen meta links */
+.post-type-fishotel_announce #screen-meta-links .show-settings {
+	color: #a0a0a0;
+}
+
+/* Notices on dark bg */
+.post-type-fishotel_announce .notice {
+	border-left-width: 4px;
 }

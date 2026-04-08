@@ -98,6 +98,7 @@ class Post_Type {
 			add_action( 'manage_' . self::POST_TYPE . '_posts_custom_column', array( $this, 'column_content' ), 10, 2 );
 			add_filter( 'post_row_actions', array( $this, 'row_actions' ), 10, 2 );
 			add_action( 'admin_action_fishotel_duplicate_announcement', array( $this, 'duplicate_announcement' ) );
+			add_action( 'wp_ajax_fishotel_announcer_toggle', array( $this, 'ajax_toggle_enabled' ) );
 		}
 	}
 
@@ -142,6 +143,24 @@ class Post_Type {
 			'normal',
 			'high'
 		);
+
+		add_meta_box(
+			'fishotel_announcer_preview',
+			__( 'Live Preview', 'fishotel-misc-plugin' ),
+			array( $this, 'render_preview_box' ),
+			self::POST_TYPE,
+			'normal',
+			'high'
+		);
+	}
+
+	/**
+	 * Render the live preview meta box.
+	 *
+	 * @param \WP_Post $post The post object.
+	 */
+	public function render_preview_box( $post ) {
+		include Announcer::path() . 'views/meta-box-preview.php';
 	}
 
 	/**
@@ -186,7 +205,6 @@ class Post_Type {
 
 		// Checkboxes — store '1' if checked, '0' if not.
 		$checkboxes = array(
-			'_announcer_enabled',
 			'_announcer_sticky',
 			'_announcer_schedule_enabled',
 			'_announcer_close_enabled',
@@ -201,8 +219,9 @@ class Post_Type {
 			update_post_meta( $post_id, $key, $value );
 		}
 
-		// Scalar text/select fields.
+		// Scalar text/select/hidden fields.
 		$text_fields = array(
+			'_announcer_enabled',
 			'_announcer_position',
 			'_announcer_layout',
 			'_announcer_display_trigger',
@@ -294,14 +313,32 @@ class Post_Type {
 			return;
 		}
 
-		wp_enqueue_style( 'wp-color-picker' );
-
 		wp_enqueue_style(
 			'fishotel-announcer-admin',
 			Announcer::url() . 'css/announcer-admin.css',
-			array( 'wp-color-picker' ),
+			array(),
 			FISHOTEL_MISC_VERSION
 		);
+
+		// List table page — only needs toggle CSS/JS.
+		if ( 'edit.php' === $hook_suffix ) {
+			wp_enqueue_script(
+				'fishotel-announcer-admin',
+				Announcer::url() . 'js/announcer-admin.js',
+				array( 'jquery' ),
+				FISHOTEL_MISC_VERSION,
+				true
+			);
+
+			wp_localize_script( 'fishotel-announcer-admin', 'ancrList', array(
+				'ajaxUrl' => admin_url( 'admin-ajax.php' ),
+				'nonce'   => wp_create_nonce( 'fishotel_announcer_list_nonce' ),
+			) );
+			return;
+		}
+
+		// Edit page — needs color picker and full JS.
+		wp_enqueue_style( 'wp-color-picker' );
 
 		wp_enqueue_script(
 			'fishotel-announcer-admin',
@@ -321,12 +358,15 @@ class Post_Type {
 	public function columns( $columns ) {
 		$new = array();
 		foreach ( $columns as $key => $label ) {
-			$new[ $key ] = $label;
-			if ( 'title' === $key ) {
+			if ( 'date' === $key ) {
+				// Insert our columns before the date column.
 				$new['announcer_status']   = __( 'Status', 'fishotel-misc-plugin' );
+				$new['announcer_display']  = __( 'Display', 'fishotel-misc-plugin' );
 				$new['announcer_position'] = __( 'Position', 'fishotel-misc-plugin' );
-				$new['announcer_shortcode'] = __( 'Shortcode', 'fishotel-misc-plugin' );
+				$new['announcer_sticky']   = __( 'Sticky', 'fishotel-misc-plugin' );
+				$new['announcer_colors']   = __( 'Colors', 'fishotel-misc-plugin' );
 			}
+			$new[ $key ] = $label;
 		}
 		return $new;
 	}
@@ -341,10 +381,35 @@ class Post_Type {
 		switch ( $column ) {
 			case 'announcer_status':
 				$enabled = get_post_meta( $post_id, '_announcer_enabled', true );
-				if ( '1' === $enabled ) {
-					echo '<span style="color:#46b450;font-weight:600;">&#9679; ' . esc_html__( 'Active', 'fishotel-misc-plugin' ) . '</span>';
+				$checked = ( '1' === $enabled || '' === $enabled ) ? ' checked' : '';
+				echo '<label class="ancr-list-toggle">';
+				echo '<input type="checkbox" data-post-id="' . esc_attr( $post_id ) . '"' . $checked . '>';
+				echo '<span class="ancr-list-slider"></span>';
+				echo '</label>';
+				break;
+
+			case 'announcer_display':
+				$scheduled = get_post_meta( $post_id, '_announcer_schedule_enabled', true );
+				if ( '1' === $scheduled ) {
+					$start = get_post_meta( $post_id, '_announcer_schedule_start', true );
+					$end   = get_post_meta( $post_id, '_announcer_schedule_end', true );
+					echo '<span>' . esc_html__( 'Scheduled between', 'fishotel-misc-plugin' ) . '</span><br>';
+					echo '<small style="color:#a0a0a0;">';
+					echo esc_html( $start ?: '—' ) . ' - ' . esc_html( $end ?: '—' );
+					echo '</small>';
 				} else {
-					echo '<span style="color:#a0a0a0;">&#9679; ' . esc_html__( 'Inactive', 'fishotel-misc-plugin' ) . '</span>';
+					$trigger = self::get_meta( $post_id, '_announcer_display_trigger' );
+					if ( 'delay' === $trigger ) {
+						$secs = self::get_meta( $post_id, '_announcer_delay_seconds' );
+						/* translators: %s: number of seconds */
+						echo esc_html( sprintf( __( 'After %ss delay', 'fishotel-misc-plugin' ), $secs ) );
+					} elseif ( 'scroll' === $trigger ) {
+						$pct = self::get_meta( $post_id, '_announcer_scroll_percent' );
+						/* translators: %s: scroll percentage */
+						echo esc_html( sprintf( __( 'On %s%% scroll', 'fishotel-misc-plugin' ), $pct ) );
+					} else {
+						echo esc_html__( 'Immediate', 'fishotel-misc-plugin' );
+					}
 				}
 				break;
 
@@ -353,8 +418,30 @@ class Post_Type {
 				echo esc_html( 'bottom' === $pos ? __( 'Bottom', 'fishotel-misc-plugin' ) : __( 'Top', 'fishotel-misc-plugin' ) );
 				break;
 
-			case 'announcer_shortcode':
-				echo '<code>[fishotel_announcement id="' . esc_attr( $post_id ) . '"]</code>';
+			case 'announcer_sticky':
+				$sticky = get_post_meta( $post_id, '_announcer_sticky', true );
+				echo esc_html( '1' === $sticky ? __( 'Yes', 'fishotel-misc-plugin' ) : __( 'No', 'fishotel-misc-plugin' ) );
+				break;
+
+			case 'announcer_colors':
+				$bg   = self::get_meta( $post_id, '_announcer_bg_color' );
+				$text = self::get_meta( $post_id, '_announcer_text_color' );
+
+				$cta_buttons = self::get_meta( $post_id, '_announcer_cta_buttons' );
+				$btn_colors  = array();
+				if ( is_array( $cta_buttons ) ) {
+					foreach ( $cta_buttons as $btn ) {
+						if ( ! empty( $btn['bg_color'] ) ) {
+							$btn_colors[] = $btn['bg_color'];
+						}
+					}
+				}
+
+				echo '<span class="ancr-color-swatch" style="background:' . esc_attr( $bg ) . ';" title="' . esc_attr( 'BG: ' . $bg ) . '"></span>';
+				echo '<span class="ancr-color-swatch" style="background:' . esc_attr( $text ) . ';" title="' . esc_attr( 'Text: ' . $text ) . '"></span>';
+				foreach ( array_slice( $btn_colors, 0, 3 ) as $c ) {
+					echo '<span class="ancr-color-swatch" style="background:' . esc_attr( $c ) . ';" title="' . esc_attr( 'CTA: ' . $c ) . '"></span>';
+				}
 				break;
 		}
 	}
@@ -425,6 +512,31 @@ class Post_Type {
 
 		wp_safe_redirect( admin_url( 'edit.php?post_type=' . self::POST_TYPE ) );
 		exit;
+	}
+
+	/**
+	 * AJAX handler for the list-table toggle switch.
+	 */
+	public function ajax_toggle_enabled() {
+		check_ajax_referer( 'fishotel_announcer_list_nonce', 'nonce' );
+
+		if ( ! current_user_can( 'edit_posts' ) ) {
+			wp_send_json_error( array( 'message' => 'Unauthorized.' ), 403 );
+		}
+
+		$post_id = isset( $_POST['post_id'] ) ? absint( $_POST['post_id'] ) : 0;
+		$enabled = isset( $_POST['enabled'] ) && '1' === $_POST['enabled'] ? '1' : '0';
+
+		if ( ! $post_id || get_post_type( $post_id ) !== self::POST_TYPE ) {
+			wp_send_json_error( array( 'message' => 'Invalid announcement.' ), 400 );
+		}
+
+		update_post_meta( $post_id, '_announcer_enabled', $enabled );
+
+		wp_send_json_success( array(
+			'post_id' => $post_id,
+			'enabled' => $enabled,
+		) );
 	}
 
 	/**
