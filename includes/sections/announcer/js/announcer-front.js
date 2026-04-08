@@ -38,6 +38,22 @@
 		if (document.body.firstChild !== bar) {
 			document.body.insertBefore(bar, document.body.firstChild);
 		}
+		// Force positioning via JS inline styles — overrides everything.
+		var isBottom = bar.classList.contains('ancr-pos-bottom');
+		bar.style.setProperty('position', 'fixed', 'important');
+		bar.style.setProperty('left', '0', 'important');
+		bar.style.setProperty('right', '0', 'important');
+		bar.style.setProperty('width', '100%', 'important');
+		bar.style.setProperty('height', 'auto', 'important');
+		bar.style.setProperty('margin', '0', 'important');
+		bar.style.setProperty('z-index', '999999', 'important');
+		if (isBottom) {
+			bar.style.setProperty('bottom', '0', 'important');
+			bar.style.setProperty('top', 'auto', 'important');
+		} else {
+			bar.style.setProperty('top', '0', 'important');
+			bar.style.setProperty('bottom', 'auto', 'important');
+		}
 	}
 
 	/* ============================================================== */
