@@ -443,8 +443,14 @@ class Frontend {
 			$data_attrs .= ' data-ancr-' . esc_attr( $key ) . '="' . esc_attr( $val ) . '"';
 		}
 
+		// Build inline styles — critical positioning + design.
+		$pos_top    = 'top' === $position ? 'top:0;bottom:auto;' : 'bottom:0;top:auto;';
+		$fixed_or_relative = $is_shortcode ? 'position:relative;' : 'position:fixed;left:0;right:0;';
+
 		$style = sprintf(
-			'background-color:%s;color:%s;font-size:%spx;padding:%spx 20px;',
+			'%s%swidth:100%%;height:auto;max-height:200px;overflow:hidden;z-index:99999;box-sizing:border-box;margin:0;background-color:%s;color:%s;font-size:%spx;padding:%spx 20px;',
+			$fixed_or_relative,
+			$is_shortcode ? '' : $pos_top,
 			esc_attr( $bg_color ),
 			esc_attr( $text_color ),
 			esc_attr( $font_size ),

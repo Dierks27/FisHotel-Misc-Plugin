@@ -8,15 +8,19 @@
 /*  Bar Base                                                           */
 /* ------------------------------------------------------------------ */
 .ancr-bar {
-	position: fixed;
-	left: 0;
-	right: 0;
-	width: 100%;
-	box-sizing: border-box;
-	z-index: 99999;
+	position: fixed !important;
+	left: 0 !important;
+	right: 0 !important;
+	width: 100% !important;
+	height: auto !important;
+	max-height: 200px !important;
+	overflow: hidden !important;
+	box-sizing: border-box !important;
+	z-index: 99999 !important;
 	line-height: 1.5;
 	text-align: center;
-	transition: all 0.4s ease;
+	transition: transform 0.4s ease, opacity 0.4s ease;
+	margin: 0 !important;
 }
 
 .ancr-bar * {
@@ -24,18 +28,20 @@
 }
 
 .ancr-bar.ancr-hidden {
-	display: none;
+	display: none !important;
 }
 
 /* ------------------------------------------------------------------ */
 /*  Positions                                                          */
 /* ------------------------------------------------------------------ */
 .ancr-bar.ancr-pos-top {
-	top: 0;
+	top: 0 !important;
+	bottom: auto !important;
 }
 
 .ancr-bar.ancr-pos-bottom {
-	bottom: 0;
+	bottom: 0 !important;
+	top: auto !important;
 }
 
 /* ------------------------------------------------------------------ */
