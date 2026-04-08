@@ -184,43 +184,6 @@ class Post_Type {
 			return;
 		}
 
-		// Scalar fields.
-		$text_fields = array(
-			'_announcer_enabled',
-			'_announcer_position',
-			'_announcer_sticky',
-			'_announcer_layout',
-			'_announcer_display_trigger',
-			'_announcer_delay_seconds',
-			'_announcer_scroll_percent',
-			'_announcer_schedule_enabled',
-			'_announcer_schedule_start',
-			'_announcer_schedule_end',
-			'_announcer_bg_color',
-			'_announcer_text_color',
-			'_announcer_font_size',
-			'_announcer_padding',
-			'_announcer_show_animation',
-			'_announcer_close_animation',
-			'_announcer_close_enabled',
-			'_announcer_cookie_days',
-			'_announcer_location_type',
-			'_announcer_multi_enabled',
-			'_announcer_multi_type',
-			'_announcer_multi_autoplay',
-			'_announcer_multi_speed',
-			'_announcer_ticker_scroll',
-			'_announcer_countdown_enabled',
-			'_announcer_countdown_date',
-			'_announcer_countdown_label',
-			'_announcer_countdown_complete',
-		);
-
-		foreach ( $text_fields as $key ) {
-			$value = isset( $_POST[ $key ] ) ? sanitize_text_field( wp_unslash( $_POST[ $key ] ) ) : '';
-			update_post_meta( $post_id, $key, $value );
-		}
-
 		// Checkboxes — store '1' if checked, '0' if not.
 		$checkboxes = array(
 			'_announcer_enabled',
@@ -235,6 +198,35 @@ class Post_Type {
 
 		foreach ( $checkboxes as $key ) {
 			$value = isset( $_POST[ $key ] ) ? '1' : '0';
+			update_post_meta( $post_id, $key, $value );
+		}
+
+		// Scalar text/select fields.
+		$text_fields = array(
+			'_announcer_position',
+			'_announcer_layout',
+			'_announcer_display_trigger',
+			'_announcer_delay_seconds',
+			'_announcer_scroll_percent',
+			'_announcer_schedule_start',
+			'_announcer_schedule_end',
+			'_announcer_bg_color',
+			'_announcer_text_color',
+			'_announcer_font_size',
+			'_announcer_padding',
+			'_announcer_show_animation',
+			'_announcer_close_animation',
+			'_announcer_cookie_days',
+			'_announcer_location_type',
+			'_announcer_multi_type',
+			'_announcer_multi_speed',
+			'_announcer_countdown_date',
+			'_announcer_countdown_label',
+			'_announcer_countdown_complete',
+		);
+
+		foreach ( $text_fields as $key ) {
+			$value = isset( $_POST[ $key ] ) ? sanitize_text_field( wp_unslash( $_POST[ $key ] ) ) : '';
 			update_post_meta( $post_id, $key, $value );
 		}
 

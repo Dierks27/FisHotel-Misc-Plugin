@@ -110,9 +110,14 @@ class Frontend {
 			'orderby'        => 'menu_order',
 			'order'          => 'ASC',
 			'meta_query'     => array(
+				'relation' => 'OR',
 				array(
 					'key'   => '_announcer_enabled',
 					'value' => '1',
+				),
+				array(
+					'key'     => '_announcer_enabled',
+					'compare' => 'NOT EXISTS',
 				),
 			),
 		) );

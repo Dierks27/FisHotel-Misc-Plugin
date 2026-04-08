@@ -55,10 +55,8 @@ class Announcer {
 		$post_type = new Post_Type();
 		$post_type->init();
 
-		if ( ! is_admin() ) {
-			$frontend = new Frontend();
-			$frontend->init();
-		}
+		$frontend = new Frontend();
+		$frontend->init();
 	}
 
 	/**
