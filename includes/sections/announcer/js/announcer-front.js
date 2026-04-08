@@ -47,7 +47,7 @@
 		bar.style.setProperty('max-height', '150px', 'important');
 		bar.style.setProperty('overflow', 'hidden', 'important');
 		bar.style.setProperty('margin', '0', 'important');
-		bar.style.setProperty('z-index', '999999', 'important');
+		bar.style.setProperty('z-index', '9999999', 'important');
 		bar.style.setProperty('isolation', 'isolate', 'important');
 		if (isBottom) {
 			bar.style.setProperty('bottom', '0', 'important');

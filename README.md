@@ -67,6 +67,8 @@ The Section Manager will automatically discover and register the section.
 
 ## Version
 
+0.15 — Raise z-index to 9999999 to fix theme skip links overlapping bar.
+
 0.14 — Fix dark theme: white gap, white editor, TinyMCE iframe styling.
 
 0.13 — Fix 3800px bar: replace the_content filter, add max-height constraint.
