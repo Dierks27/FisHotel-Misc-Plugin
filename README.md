@@ -67,6 +67,8 @@ The Section Manager will automatically discover and register the section.
 
 ## Version
 
+0.6 — Move admin menu to position 4 (below Theme Panel, above Posts).
+
 0.5 — Force dark theme with !important on whitelisted plugin pages.
 
 0.4 — Fix update checker to read version from main branch (no releases needed).

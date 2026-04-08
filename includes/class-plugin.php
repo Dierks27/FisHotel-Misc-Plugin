@@ -79,7 +79,7 @@ class Plugin {
 			'fishotel-misc',
 			array( $this, 'render_dashboard' ),
 			'dashicons-admin-tools',
-			80
+			4
 		);
 
 		add_submenu_page(
