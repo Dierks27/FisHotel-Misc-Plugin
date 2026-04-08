@@ -18,10 +18,21 @@ class Frontend {
 	 * Register hooks.
 	 */
 	public function init() {
-		add_action( 'wp_footer', array( $this, 'render_announcements' ) );
+		// Primary: inject right after <body> tag.
+		add_action( 'wp_body_open', array( $this, 'render_announcements' ), 1 );
+		// Fallback: if theme doesn't call wp_body_open, use wp_footer.
+		add_action( 'wp_footer', array( $this, 'render_announcements_fallback' ) );
+
 		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 		add_shortcode( 'fishotel_announcement', array( $this, 'shortcode' ) );
 	}
+
+	/**
+	 * Track whether announcements were already rendered via wp_body_open.
+	 *
+	 * @var bool
+	 */
+	private $rendered = false;
 
 	/**
 	 * Enqueue frontend CSS and JS.
@@ -50,9 +61,14 @@ class Frontend {
 	}
 
 	/**
-	 * Render all active announcements in the footer.
+	 * Render all active announcements (called from wp_body_open).
 	 */
 	public function render_announcements() {
+		if ( $this->rendered ) {
+			return;
+		}
+		$this->rendered = true;
+
 		$announcements = $this->get_active_announcements();
 
 		if ( empty( $announcements ) ) {
@@ -62,6 +78,16 @@ class Frontend {
 		foreach ( $announcements as $post ) {
 			echo $this->build_announcement_html( $post ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 		}
+	}
+
+	/**
+	 * Fallback renderer for themes that don't call wp_body_open.
+	 */
+	public function render_announcements_fallback() {
+		if ( $this->rendered ) {
+			return;
+		}
+		$this->render_announcements();
 	}
 
 	/**

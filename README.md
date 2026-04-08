@@ -67,6 +67,8 @@ The Section Manager will automatically discover and register the section.
 
 ## Version
 
+0.8 — Switch to wp_body_open for rendering, with wp_footer fallback.
+
 0.7 — Fix announcement bars not displaying (position: fixed for all bars).
 
 0.6 — Move admin menu to position 4 (below Theme Panel, above Posts).
