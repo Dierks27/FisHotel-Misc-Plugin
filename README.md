@@ -67,4 +67,6 @@ The Section Manager will automatically discover and register the section.
 
 ## Version
 
+0.2 — Add Announcer section and GitHub update checker.
+
 0.1 — Initial dark theme plugin framework.
