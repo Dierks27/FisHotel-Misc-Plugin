@@ -28,6 +28,19 @@
 }
 
 /* ------------------------------------------------------------------ */
+/*  Force Dark Background — FisHotel Dashboard Page                    */
+/*  This CSS only loads on fishotel-misc screens via enqueue check.    */
+/* ------------------------------------------------------------------ */
+body.toplevel_page_fishotel-misc #wpbody-content,
+body.toplevel_page_fishotel-misc #wpbody {
+	background: #1a1a1a !important;
+}
+
+body.toplevel_page_fishotel-misc .wrap {
+	color: #e0e0e0 !important;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Page Wrapper                                                       */
 /* ------------------------------------------------------------------ */
 .fishotel-misc-wrap {

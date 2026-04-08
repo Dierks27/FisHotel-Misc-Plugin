@@ -67,6 +67,8 @@ The Section Manager will automatically discover and register the section.
 
 ## Version
 
+0.5 — Force dark theme with !important on whitelisted plugin pages.
+
 0.4 — Fix update checker to read version from main branch (no releases needed).
 
 0.3 — Redesign announcer admin: sidebar nav, list table toggles, dark theme, preview.

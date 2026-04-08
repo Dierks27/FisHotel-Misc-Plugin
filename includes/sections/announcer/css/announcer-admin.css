@@ -461,113 +461,130 @@
 }
 
 /* ------------------------------------------------------------------ */
-/*  Dark Theme — List Table & Edit Screen                              */
+/*  Dark Theme — Force on ALL Announcer Pages                          */
 /* ------------------------------------------------------------------ */
-.post-type-fishotel_announce #wpbody-content {
-	background: #1a1a1a;
+/* Whitelisted pages: .post-type-fishotel_announce (list + edit) */
+
+.post-type-fishotel_announce #wpbody-content,
+.post-type-fishotel_announce #wpbody {
+	background: #1a1a1a !important;
 }
 
 .post-type-fishotel_announce .wrap {
-	color: #e0e0e0;
+	color: #e0e0e0 !important;
 }
 
 .post-type-fishotel_announce .wrap h1.wp-heading-inline,
 .post-type-fishotel_announce .wrap h1 {
-	color: #e0e0e0;
+	color: #e0e0e0 !important;
 }
 
 .post-type-fishotel_announce .wrap .page-title-action {
-	background: #00a0d2;
-	border-color: #00a0d2;
-	color: #fff;
+	background: #00a0d2 !important;
+	border-color: #00a0d2 !important;
+	color: #fff !important;
 	border-radius: 4px;
 }
 
 .post-type-fishotel_announce .wrap .page-title-action:hover {
-	background: #0eb5e8;
-	border-color: #0eb5e8;
+	background: #0eb5e8 !important;
+	border-color: #0eb5e8 !important;
 }
 
-/* Subsubsub filter links */
+.post-type-fishotel_announce .subsubsub,
+.post-type-fishotel_announce .subsubsub li {
+	color: #a0a0a0 !important;
+}
+
 .post-type-fishotel_announce .subsubsub a {
-	color: #00a0d2;
+	color: #00a0d2 !important;
 }
 
 .post-type-fishotel_announce .subsubsub a:hover {
-	color: #0eb5e8;
+	color: #0eb5e8 !important;
 }
 
 .post-type-fishotel_announce .subsubsub .current {
-	color: #e0e0e0;
+	color: #e0e0e0 !important;
 }
 
-/* Tablenav */
 .post-type-fishotel_announce .tablenav .tablenav-pages a,
 .post-type-fishotel_announce .tablenav .displaying-num {
-	color: #a0a0a0;
+	color: #a0a0a0 !important;
 }
 
 /* WP List Table */
 .post-type-fishotel_announce .wp-list-table {
-	border-color: rgba(255, 255, 255, 0.08);
+	border-color: rgba(255, 255, 255, 0.08) !important;
 }
 
 .post-type-fishotel_announce .wp-list-table thead th,
 .post-type-fishotel_announce .wp-list-table thead td,
 .post-type-fishotel_announce .wp-list-table tfoot th,
 .post-type-fishotel_announce .wp-list-table tfoot td {
-	background: #252525;
-	color: #a0a0a0;
-	border-bottom-color: rgba(255, 255, 255, 0.08);
+	background: #252525 !important;
+	color: #a0a0a0 !important;
+	border-color: rgba(255, 255, 255, 0.08) !important;
 }
 
 .post-type-fishotel_announce .wp-list-table thead th a,
-.post-type-fishotel_announce .wp-list-table thead th a:visited {
-	color: #a0a0a0;
+.post-type-fishotel_announce .wp-list-table thead th a:visited,
+.post-type-fishotel_announce .wp-list-table tfoot th a,
+.post-type-fishotel_announce .wp-list-table tfoot th a:visited {
+	color: #a0a0a0 !important;
 }
 
-.post-type-fishotel_announce .wp-list-table thead th a:hover {
-	color: #e0e0e0;
+.post-type-fishotel_announce .wp-list-table thead th a:hover,
+.post-type-fishotel_announce .wp-list-table tfoot th a:hover {
+	color: #e0e0e0 !important;
 }
 
-.post-type-fishotel_announce .wp-list-table thead .sorted .sorting-indicators .sorting-indicator-asc,
-.post-type-fishotel_announce .wp-list-table thead .sorted .sorting-indicators .sorting-indicator-desc {
-	color: #00a0d2;
+.post-type-fishotel_announce .wp-list-table thead .sorting-indicators span,
+.post-type-fishotel_announce .wp-list-table tfoot .sorting-indicators span {
+	color: #00a0d2 !important;
 }
 
 .post-type-fishotel_announce .wp-list-table tbody tr {
-	background: #2d2d2d;
+	background: #2d2d2d !important;
 }
 
 .post-type-fishotel_announce .wp-list-table tbody tr:hover {
-	background: #333;
+	background: #353535 !important;
+}
+
+.post-type-fishotel_announce .wp-list-table .alternate {
+	background: #272727 !important;
+}
+
+.post-type-fishotel_announce .wp-list-table .alternate:hover {
+	background: #353535 !important;
 }
 
 .post-type-fishotel_announce .wp-list-table tbody tr td,
 .post-type-fishotel_announce .wp-list-table tbody tr th {
-	color: #e0e0e0;
-	border-bottom-color: rgba(255, 255, 255, 0.06);
+	color: #e0e0e0 !important;
+	border-color: rgba(255, 255, 255, 0.06) !important;
 }
 
 .post-type-fishotel_announce .wp-list-table tbody .row-title {
-	color: #00a0d2;
+	color: #00a0d2 !important;
 	font-weight: 600;
 }
 
 .post-type-fishotel_announce .wp-list-table tbody .row-title:hover {
-	color: #0eb5e8;
+	color: #0eb5e8 !important;
 }
 
 .post-type-fishotel_announce .wp-list-table .row-actions a {
-	color: #00a0d2;
+	color: #00a0d2 !important;
 }
 
 .post-type-fishotel_announce .wp-list-table .row-actions a:hover {
-	color: #0eb5e8;
+	color: #0eb5e8 !important;
 }
 
 .post-type-fishotel_announce .wp-list-table .row-actions .trash a {
-	color: #dc3232;
+	color: #dc3232 !important;
 }
 
 .post-type-fishotel_announce .wp-list-table .column-announcer_status {
@@ -586,108 +603,148 @@
 	width: 140px;
 }
 
-/* Alternate row */
-.post-type-fishotel_announce .wp-list-table .alternate {
-	background: #272727;
-}
-
-.post-type-fishotel_announce .wp-list-table .alternate:hover {
-	background: #333;
-}
-
 /* Search box */
 .post-type-fishotel_announce .search-box input[type="search"],
 .post-type-fishotel_announce .search-box input[type="text"] {
-	background: #2d2d2d;
-	border-color: rgba(255, 255, 255, 0.15);
-	color: #e0e0e0;
+	background: #2d2d2d !important;
+	border-color: rgba(255, 255, 255, 0.15) !important;
+	color: #e0e0e0 !important;
 	border-radius: 4px;
 }
 
 .post-type-fishotel_announce .search-box .button {
-	background: #3a3a3a;
-	border-color: rgba(255, 255, 255, 0.15);
-	color: #e0e0e0;
+	background: #3a3a3a !important;
+	border-color: rgba(255, 255, 255, 0.15) !important;
+	color: #e0e0e0 !important;
 }
 
 .post-type-fishotel_announce .search-box .button:hover {
-	background: #4a4a4a;
-	color: #fff;
+	background: #4a4a4a !important;
+	color: #fff !important;
 }
 
 /* Tablenav select/buttons */
 .post-type-fishotel_announce .tablenav select,
 .post-type-fishotel_announce .tablenav .button {
-	background: #2d2d2d;
-	border-color: rgba(255, 255, 255, 0.15);
-	color: #e0e0e0;
+	background: #2d2d2d !important;
+	border-color: rgba(255, 255, 255, 0.15) !important;
+	color: #e0e0e0 !important;
 }
 
 .post-type-fishotel_announce .tablenav .button:hover {
-	background: #3a3a3a;
-	color: #fff;
+	background: #3a3a3a !important;
+	color: #fff !important;
 }
 
 /* No items */
 .post-type-fishotel_announce .wp-list-table .no-items td {
-	color: #a0a0a0;
-	background: #2d2d2d;
+	color: #a0a0a0 !important;
+	background: #2d2d2d !important;
 }
 
 /* ------------------------------------------------------------------ */
 /*  Dark Theme — Edit Screen                                           */
 /* ------------------------------------------------------------------ */
 .post-type-fishotel_announce #titlediv #title {
-	background: #2d2d2d;
-	border-color: rgba(255, 255, 255, 0.15);
-	color: #e0e0e0;
+	background: #2d2d2d !important;
+	border-color: rgba(255, 255, 255, 0.15) !important;
+	color: #e0e0e0 !important;
+}
+
+.post-type-fishotel_announce #titlediv #title-prompt-text {
+	color: #666 !important;
 }
 
 .post-type-fishotel_announce .postbox {
-	background: #2d2d2d;
-	border-color: rgba(255, 255, 255, 0.1);
+	background: #2d2d2d !important;
+	border-color: rgba(255, 255, 255, 0.1) !important;
 }
 
 .post-type-fishotel_announce .postbox .postbox-header,
 .post-type-fishotel_announce .postbox .hndle {
-	background: #252525;
-	border-bottom-color: rgba(255, 255, 255, 0.08);
-	color: #e0e0e0;
+	background: #252525 !important;
+	border-color: rgba(255, 255, 255, 0.08) !important;
+	color: #e0e0e0 !important;
 }
 
 .post-type-fishotel_announce .postbox .inside {
-	color: #e0e0e0;
+	color: #e0e0e0 !important;
 }
 
 .post-type-fishotel_announce #submitdiv .submitbox {
-	background: #2d2d2d;
-	color: #e0e0e0;
+	background: #2d2d2d !important;
+	color: #e0e0e0 !important;
 }
 
 .post-type-fishotel_announce #submitdiv .submitbox .misc-pub-section {
-	border-top-color: rgba(255, 255, 255, 0.08);
-	color: #a0a0a0;
+	border-color: rgba(255, 255, 255, 0.08) !important;
+	color: #a0a0a0 !important;
 }
 
 .post-type-fishotel_announce #submitdiv #publish,
 .post-type-fishotel_announce #submitdiv .button-primary {
-	background: #00a0d2;
-	border-color: #00a0d2;
+	background: #00a0d2 !important;
+	border-color: #00a0d2 !important;
+	color: #fff !important;
 }
 
 .post-type-fishotel_announce #submitdiv #publish:hover {
-	background: #0eb5e8;
+	background: #0eb5e8 !important;
 }
 
 .post-type-fishotel_announce #submitdiv .button {
-	background: #3a3a3a;
-	border-color: rgba(255, 255, 255, 0.15);
-	color: #e0e0e0;
+	background: #3a3a3a !important;
+	border-color: rgba(255, 255, 255, 0.15) !important;
+	color: #e0e0e0 !important;
+}
+
+.post-type-fishotel_announce #major-publishing-actions {
+	background: #252525 !important;
+	border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.post-type-fishotel_announce .misc-pub-section .dashicons,
+.post-type-fishotel_announce .misc-pub-section b {
+	color: #e0e0e0 !important;
+}
+
+.post-type-fishotel_announce #delete-action a {
+	color: #dc3232 !important;
+}
+
+/* Classic editor */
+.post-type-fishotel_announce .wp-editor-container {
+	border-color: rgba(255, 255, 255, 0.15) !important;
+}
+
+.post-type-fishotel_announce .wp-editor-tabs .wp-switch-editor {
+	background: #3a3a3a !important;
+	border-color: rgba(255, 255, 255, 0.15) !important;
+	color: #a0a0a0 !important;
+}
+
+.post-type-fishotel_announce .wp-editor-tabs .wp-switch-editor.switch-tmce,
+.post-type-fishotel_announce .wp-editor-tabs .wp-switch-editor.switch-html {
+	background: #2d2d2d !important;
+}
+
+.post-type-fishotel_announce .quicktags-toolbar {
+	background: #252525 !important;
+	border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.post-type-fishotel_announce .quicktags-toolbar .button {
+	color: #a0a0a0 !important;
+}
+
+.post-type-fishotel_announce textarea.wp-editor-area {
+	background: #1a1a1a !important;
+	color: #e0e0e0 !important;
 }
 
 /* Screen meta links */
 .post-type-fishotel_announce #screen-meta-links .show-settings {
-	color: #a0a0a0;
+	color: #a0a0a0 !important;
 }
 
 /* Notices on dark bg */
