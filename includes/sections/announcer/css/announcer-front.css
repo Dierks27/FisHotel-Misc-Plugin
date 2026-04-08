@@ -6,42 +6,45 @@
 
 /* ------------------------------------------------------------------ */
 /*  Bar Base                                                           */
+/*  Static by default — sits in the document flow right after <body>.  */
+/*  Sticky bars use position:sticky (CSS-only, no JS body padding).    */
 /* ------------------------------------------------------------------ */
 .ancr-bar {
-	position: fixed !important;
-	left: 0 !important;
-	right: 0 !important;
-	width: 100% !important;
-	height: auto !important;
-	max-height: 200px !important;
-	overflow: hidden !important;
-	box-sizing: border-box !important;
-	z-index: 99999 !important;
+	display: block;
+	width: 100%;
+	box-sizing: border-box;
+	z-index: 99999;
+	position: relative;
 	line-height: 1.5;
 	text-align: center;
-	transition: transform 0.4s ease, opacity 0.4s ease;
-	margin: 0 !important;
 }
 
+.ancr-bar,
 .ancr-bar * {
 	box-sizing: border-box;
 }
 
 .ancr-bar.ancr-hidden {
-	display: none !important;
+	display: none;
 }
 
 /* ------------------------------------------------------------------ */
-/*  Positions                                                          */
+/*  Sticky Mode — CSS position:sticky, no JS needed                    */
 /* ------------------------------------------------------------------ */
-.ancr-bar.ancr-pos-top {
-	top: 0 !important;
-	bottom: auto !important;
+.ancr-bar.ancr-sticky {
+	position: -webkit-sticky;
+	position: sticky;
+	top: 0;
+	z-index: 99999;
 }
 
-.ancr-bar.ancr-pos-bottom {
-	bottom: 0 !important;
-	top: auto !important;
+/* Bottom-sticky requires fixed positioning (sticky only works for top) */
+.ancr-bar.ancr-sticky.ancr-pos-bottom {
+	position: fixed;
+	bottom: 0;
+	top: auto;
+	left: 0;
+	right: 0;
 }
 
 /* ------------------------------------------------------------------ */
@@ -61,7 +64,7 @@
 	max-width: 1200px;
 }
 
-/* Shortcode placement resets */
+/* Shortcode placement — always in-flow */
 .ancr-bar.ancr-shortcode {
 	position: relative;
 }
@@ -236,7 +239,7 @@
 /*  Show / Close Animations                                            */
 /* ------------------------------------------------------------------ */
 .ancr-anim-show-slide {
-	animation: ancr-slideIn 0.4s ease forwards;
+	animation: ancr-slideDown 0.4s ease forwards;
 }
 
 .ancr-anim-show-fade {
@@ -252,7 +255,7 @@
 }
 
 .ancr-anim-close-slide {
-	animation: ancr-slideOut 0.3s ease forwards;
+	animation: ancr-slideUp 0.3s ease forwards;
 }
 
 .ancr-anim-close-fade {
@@ -284,17 +287,9 @@
 /* ------------------------------------------------------------------ */
 /*  Keyframes — Bar Show                                               */
 /* ------------------------------------------------------------------ */
-@keyframes ancr-slideIn {
-	from { transform: translateY(-100%); opacity: 0; }
-	to   { transform: translateY(0);     opacity: 1; }
-}
-
-.ancr-pos-bottom.ancr-anim-show-slide {
-	animation-name: ancr-slideInBottom;
-}
-@keyframes ancr-slideInBottom {
-	from { transform: translateY(100%); opacity: 0; }
-	to   { transform: translateY(0);    opacity: 1; }
+@keyframes ancr-slideDown {
+	from { max-height: 0; padding-top: 0; padding-bottom: 0; opacity: 0; overflow: hidden; }
+	to   { max-height: 200px; opacity: 1; }
 }
 
 @keyframes ancr-fadeIn {
@@ -303,10 +298,10 @@
 }
 
 @keyframes ancr-bounceIn {
-	0%   { transform: translateY(-100%); opacity: 0; }
-	60%  { transform: translateY(10px);  opacity: 1; }
-	80%  { transform: translateY(-5px); }
-	100% { transform: translateY(0); }
+	0%   { max-height: 0; opacity: 0; }
+	60%  { max-height: 220px; opacity: 1; }
+	80%  { max-height: 180px; }
+	100% { max-height: 200px; }
 }
 
 @keyframes ancr-zoomIn {
@@ -317,9 +312,9 @@
 /* ------------------------------------------------------------------ */
 /*  Keyframes — Bar Close                                              */
 /* ------------------------------------------------------------------ */
-@keyframes ancr-slideOut {
-	from { transform: translateY(0);     opacity: 1; }
-	to   { transform: translateY(-100%); opacity: 0; }
+@keyframes ancr-slideUp {
+	from { max-height: 200px; opacity: 1; }
+	to   { max-height: 0; padding-top: 0; padding-bottom: 0; opacity: 0; overflow: hidden; }
 }
 
 @keyframes ancr-fadeOut {
@@ -328,9 +323,9 @@
 }
 
 @keyframes ancr-bounceOut {
-	0%   { transform: translateY(0); }
-	20%  { transform: translateY(10px); }
-	100% { transform: translateY(-100%); opacity: 0; }
+	0%   { max-height: 200px; }
+	20%  { max-height: 220px; }
+	100% { max-height: 0; padding-top: 0; padding-bottom: 0; opacity: 0; }
 }
 
 @keyframes ancr-zoomOut {

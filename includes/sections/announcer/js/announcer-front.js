@@ -26,18 +26,16 @@
 	}
 
 	/* ============================================================== */
-	/*  Show Bar with Animation                                        */
+	/*  Show Bar                                                       */
 	/* ============================================================== */
 	function showBar(bar) {
 		var anim = bar.dataset.ancrShowAnim || 'none';
 		bar.classList.remove('ancr-hidden');
+		bar.style.display = '';
 
 		if (anim && anim !== 'none') {
 			bar.classList.add('ancr-anim-show-' + anim);
 		}
-
-		// Push body content if sticky top
-		adjustBodyPadding();
 	}
 
 	/* ============================================================== */
@@ -48,7 +46,6 @@
 		var cookieDays = parseInt(bar.dataset.ancrCookieDays, 10) || 0;
 		var barId      = bar.dataset.ancrId;
 
-		// Set cookie (0 = session cookie).
 		setCookie('ancr_closed_' + barId, '1', cookieDays);
 
 		if (anim && anim !== 'none') {
@@ -56,33 +53,10 @@
 			bar.addEventListener('animationend', function handler() {
 				bar.removeEventListener('animationend', handler);
 				bar.style.display = 'none';
-				adjustBodyPadding();
 			});
 		} else {
 			bar.style.display = 'none';
-			adjustBodyPadding();
 		}
-	}
-
-	/* ============================================================== */
-	/*  Body Padding (prevent sticky bars from overlapping content)     */
-	/* ============================================================== */
-	function adjustBodyPadding() {
-		var topH = 0;
-		var bottomH = 0;
-
-		document.querySelectorAll('.ancr-bar:not([style*="display: none"])').forEach(function (bar) {
-			if (bar.classList.contains('ancr-hidden')) return;
-			if (bar.classList.contains('ancr-shortcode')) return;
-			if (bar.classList.contains('ancr-pos-top')) {
-				topH += bar.offsetHeight;
-			} else {
-				bottomH += bar.offsetHeight;
-			}
-		});
-
-		document.body.style.paddingTop    = topH    ? topH + 'px'    : '';
-		document.body.style.paddingBottom = bottomH ? bottomH + 'px' : '';
 	}
 
 	/* ============================================================== */
@@ -100,10 +74,8 @@
 		var messages = bar.querySelectorAll('.ancr-message');
 		if (messages.length < 2) return;
 
-		// Marquee mode — all messages visible, CSS animation handles scrolling.
 		if (isScroll) {
 			messages.forEach(function (m) { m.classList.add('ancr-message--active'); });
-			// Set speed as CSS variable.
 			var totalWidth = 0;
 			messages.forEach(function (m) { totalWidth += m.scrollWidth; });
 			bar.style.setProperty('--ancr-marquee-speed', Math.max(totalWidth / 60, 10) + 's');
@@ -118,14 +90,12 @@
 			messages[current].classList.add('ancr-message--active');
 		}
 
-		// Navigation buttons.
 		var prevBtn = bar.querySelector('.ancr-nav-prev');
 		var nextBtn = bar.querySelector('.ancr-nav-next');
 
 		if (prevBtn) prevBtn.addEventListener('click', function () { goTo(current - 1); });
 		if (nextBtn) nextBtn.addEventListener('click', function () { goTo(current + 1); });
 
-		// Auto-play.
 		if (autoPlay) {
 			setInterval(function () { goTo(current + 1); }, speed);
 		}
@@ -150,12 +120,10 @@
 			if (diff <= 0) {
 				if (complete === 'hide') {
 					bar.style.display = 'none';
-					adjustBodyPadding();
 				} else if (complete === 'keep') {
 					var cdWrap = bar.querySelector('.ancr-countdown');
 					if (cdWrap) cdWrap.style.display = 'none';
 				}
-				// 'zeros' — leave as 00:00:00:00
 				return;
 			}
 
@@ -190,7 +158,6 @@
 					e.preventDefault();
 					closeBar(bar);
 				} else if (action === 'link_close') {
-					// Let the link open, then close.
 					setTimeout(function () { closeBar(bar); }, 100);
 				}
 			});
@@ -240,23 +207,6 @@
 			var closeBtn = bar.querySelector('.ancr-close');
 			if (closeBtn) {
 				closeBtn.addEventListener('click', function () { closeBar(bar); });
-			}
-
-			// Non-sticky bars: hide on scroll.
-			if (!bar.classList.contains('ancr-sticky') && !bar.classList.contains('ancr-shortcode')) {
-				(function (b) {
-					var barH = 0;
-					window.addEventListener('scroll', function () {
-						if (!barH) barH = b.offsetHeight;
-						if (window.scrollY > barH + 100) {
-							b.style.transform = b.classList.contains('ancr-pos-top')
-								? 'translateY(-100%)'
-								: 'translateY(100%)';
-						} else {
-							b.style.transform = '';
-						}
-					}, { passive: true });
-				})(bar);
 			}
 
 			// Ticker / slider.

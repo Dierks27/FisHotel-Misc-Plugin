@@ -67,6 +67,8 @@ The Section Manager will automatically discover and register the section.
 
 ## Version
 
+0.10 — Complete rewrite: static positioning with CSS sticky, no body padding hacks.
+
 0.9 — Fix bar stretching to full viewport; inline critical styles, explicit constraints.
 
 0.8 — Switch to wp_body_open for rendering, with wp_footer fallback.
