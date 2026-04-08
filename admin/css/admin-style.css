@@ -1,0 +1,308 @@
+/**
+ * FisHotel Misc Plugin — Dark Theme Admin Styles
+ *
+ * @package FisHotel\Misc
+ */
+
+/* ------------------------------------------------------------------ */
+/*  Custom Properties                                                  */
+/* ------------------------------------------------------------------ */
+:root {
+	--fh-bg-primary: #1a1a1a;
+	--fh-bg-secondary: #2d2d2d;
+	--fh-bg-hover: #363636;
+	--fh-text-primary: #e0e0e0;
+	--fh-text-secondary: #a0a0a0;
+	--fh-accent: #00a0d2;
+	--fh-accent-hover: #0eb5e8;
+	--fh-border: rgba(255, 255, 255, 0.1);
+	--fh-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+	--fh-shadow-hover: 0 4px 16px rgba(0, 0, 0, 0.45);
+	--fh-radius: 8px;
+	--fh-transition: 0.2s ease;
+	--fh-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+		Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+	--fh-success: #46b450;
+	--fh-warning: #ffb900;
+	--fh-danger: #dc3232;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Page Wrapper                                                       */
+/* ------------------------------------------------------------------ */
+.fishotel-misc-wrap {
+	max-width: 1200px;
+	margin: 20px auto;
+	padding: 0 20px;
+	font-family: var(--fh-font);
+	color: var(--fh-text-primary);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Header                                                             */
+/* ------------------------------------------------------------------ */
+.fishotel-misc-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	background: var(--fh-bg-secondary);
+	border: 1px solid var(--fh-border);
+	border-radius: var(--fh-radius);
+	padding: 24px 32px;
+	margin-bottom: 30px;
+	box-shadow: var(--fh-shadow);
+}
+
+.fishotel-misc-header h1 {
+	margin: 0;
+	padding: 0;
+	font-size: 24px;
+	font-weight: 600;
+	color: var(--fh-text-primary);
+}
+
+.fishotel-misc-header .version-badge {
+	display: inline-block;
+	background: var(--fh-accent);
+	color: #fff;
+	font-size: 12px;
+	font-weight: 600;
+	padding: 3px 10px;
+	border-radius: 12px;
+	letter-spacing: 0.5px;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Section Grid                                                       */
+/* ------------------------------------------------------------------ */
+.fishotel-misc-grid {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 24px;
+}
+
+@media (max-width: 1024px) {
+	.fishotel-misc-grid {
+		grid-template-columns: repeat(2, 1fr);
+	}
+}
+
+@media (max-width: 600px) {
+	.fishotel-misc-grid {
+		grid-template-columns: 1fr;
+	}
+}
+
+/* ------------------------------------------------------------------ */
+/*  Section Card                                                       */
+/* ------------------------------------------------------------------ */
+.fishotel-misc-card {
+	background: var(--fh-bg-secondary);
+	border: 1px solid var(--fh-border);
+	border-radius: var(--fh-radius);
+	padding: 24px;
+	box-shadow: var(--fh-shadow);
+	transition: transform var(--fh-transition), box-shadow var(--fh-transition),
+		border-color var(--fh-transition);
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+
+.fishotel-misc-card:hover {
+	transform: translateY(-2px);
+	box-shadow: var(--fh-shadow-hover);
+	border-color: rgba(255, 255, 255, 0.18);
+}
+
+/* Card header row */
+.fishotel-misc-card-header {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+}
+
+.fishotel-misc-card-icon {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 44px;
+	height: 44px;
+	border-radius: 10px;
+	background: rgba(0, 160, 210, 0.12);
+	color: var(--fh-accent);
+	font-size: 22px;
+	flex-shrink: 0;
+	transition: background var(--fh-transition);
+}
+
+.fishotel-misc-card:hover .fishotel-misc-card-icon {
+	background: rgba(0, 160, 210, 0.2);
+}
+
+.fishotel-misc-card-title {
+	font-size: 16px;
+	font-weight: 600;
+	color: var(--fh-text-primary);
+	margin: 0;
+}
+
+/* Description */
+.fishotel-misc-card-desc {
+	font-size: 13px;
+	line-height: 1.5;
+	color: var(--fh-text-secondary);
+	margin: 0;
+	flex: 1;
+}
+
+/* Card footer */
+.fishotel-misc-card-footer {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding-top: 12px;
+	border-top: 1px solid var(--fh-border);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Status Badge                                                       */
+/* ------------------------------------------------------------------ */
+.fishotel-misc-badge {
+	display: inline-block;
+	font-size: 11px;
+	font-weight: 600;
+	padding: 3px 10px;
+	border-radius: 12px;
+	letter-spacing: 0.3px;
+	text-transform: uppercase;
+	transition: background var(--fh-transition), color var(--fh-transition);
+}
+
+.fishotel-misc-badge--active {
+	background: rgba(70, 180, 80, 0.15);
+	color: var(--fh-success);
+}
+
+.fishotel-misc-badge--inactive {
+	background: rgba(255, 255, 255, 0.06);
+	color: var(--fh-text-secondary);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Toggle Switch                                                      */
+/* ------------------------------------------------------------------ */
+.fishotel-misc-toggle {
+	position: relative;
+	width: 44px;
+	height: 24px;
+	flex-shrink: 0;
+}
+
+.fishotel-misc-toggle input {
+	opacity: 0;
+	width: 0;
+	height: 0;
+	position: absolute;
+}
+
+.fishotel-misc-toggle .slider {
+	position: absolute;
+	inset: 0;
+	background: #555;
+	border-radius: 24px;
+	cursor: pointer;
+	transition: background var(--fh-transition);
+}
+
+.fishotel-misc-toggle .slider::before {
+	content: "";
+	position: absolute;
+	width: 18px;
+	height: 18px;
+	left: 3px;
+	bottom: 3px;
+	background: #fff;
+	border-radius: 50%;
+	transition: transform var(--fh-transition);
+}
+
+.fishotel-misc-toggle input:checked + .slider {
+	background: var(--fh-accent);
+}
+
+.fishotel-misc-toggle input:checked + .slider::before {
+	transform: translateX(20px);
+}
+
+.fishotel-misc-toggle input:focus-visible + .slider {
+	outline: 2px solid var(--fh-accent);
+	outline-offset: 2px;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Empty State                                                        */
+/* ------------------------------------------------------------------ */
+.fishotel-misc-empty {
+	text-align: center;
+	padding: 60px 20px;
+	background: var(--fh-bg-secondary);
+	border: 1px dashed var(--fh-border);
+	border-radius: var(--fh-radius);
+	color: var(--fh-text-secondary);
+}
+
+.fishotel-misc-empty .dashicons {
+	font-size: 48px;
+	width: 48px;
+	height: 48px;
+	margin-bottom: 16px;
+	opacity: 0.4;
+}
+
+.fishotel-misc-empty p {
+	font-size: 15px;
+	margin: 8px 0 0;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Loading Spinner                                                    */
+/* ------------------------------------------------------------------ */
+.fishotel-misc-spinner {
+	display: inline-block;
+	width: 16px;
+	height: 16px;
+	border: 2px solid rgba(255, 255, 255, 0.15);
+	border-top-color: var(--fh-accent);
+	border-radius: 50%;
+	animation: fh-spin 0.6s linear infinite;
+}
+
+@keyframes fh-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+/* ------------------------------------------------------------------ */
+/*  Notices                                                            */
+/* ------------------------------------------------------------------ */
+.fishotel-misc-notice {
+	padding: 12px 16px;
+	border-radius: var(--fh-radius);
+	font-size: 13px;
+	margin-bottom: 20px;
+	border: 1px solid var(--fh-border);
+}
+
+.fishotel-misc-notice--success {
+	background: rgba(70, 180, 80, 0.1);
+	color: var(--fh-success);
+	border-color: rgba(70, 180, 80, 0.25);
+}
+
+.fishotel-misc-notice--error {
+	background: rgba(220, 50, 50, 0.1);
+	color: var(--fh-danger);
+	border-color: rgba(220, 50, 50, 0.25);
+}

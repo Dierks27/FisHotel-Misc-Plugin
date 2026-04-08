@@ -1,0 +1,70 @@
+# FisHotel Misc Plugin
+
+A modular container plugin for WordPress with a dark theme admin interface.
+
+## Overview
+
+FisHotel Misc Plugin provides a framework for managing independent feature "sections" through a unified dark-themed dashboard. Each section is a self-contained module that can be enabled or disabled independently.
+
+## Requirements
+
+- WordPress 5.8+
+- PHP 7.4+
+
+## Installation
+
+1. Upload the `fishotel-misc-plugin` folder to `/wp-content/plugins/`.
+2. Activate the plugin through the **Plugins** menu in WordPress.
+3. Navigate to **FisHotel Tools → Dashboard** to manage sections.
+
+## Architecture
+
+```
+fishotel-misc-plugin/
+├── fishotel-misc-plugin.php        # Bootstrap & autoloader
+├── includes/
+│   ├── class-plugin.php            # Main plugin orchestrator
+│   ├── class-section-manager.php   # Section discovery & toggling
+│   └── sections/
+│       └── announcer/              # Example section (placeholder)
+├── admin/
+│   ├── css/admin-style.css         # Dark theme styles
+│   ├── js/admin-script.js          # Toggle & AJAX handling
+│   └── views/dashboard.php         # Dashboard template
+└── README.md
+```
+
+## Creating a Section
+
+1. Create a directory under `includes/sections/` (e.g. `my-feature/`).
+2. Add a class file named `class-my-feature.php`.
+3. Implement the required static methods:
+
+```php
+namespace FisHotel\Misc\Sections\My_feature;
+
+class My_feature {
+
+    public static function get_section_info() {
+        return [
+            'name'        => 'My Feature',
+            'description' => 'A brief description.',
+            'icon'        => 'dashicons-star-filled',
+        ];
+    }
+
+    public static function boot() {
+        // Initialise your feature hooks here.
+    }
+
+    public static function register_menu() {
+        // Optional: add a submenu page.
+    }
+}
+```
+
+The Section Manager will automatically discover and register the section.
+
+## Version
+
+0.1 — Initial dark theme plugin framework.
