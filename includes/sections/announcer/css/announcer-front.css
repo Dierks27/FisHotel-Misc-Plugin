@@ -1,50 +1,65 @@
 /**
  * Announcer frontend styles.
  *
+ * Uses position:fixed so the bar displays correctly regardless of
+ * where the HTML lands in the DOM. JS moves it to body's first child
+ * and adds body padding to prevent content overlap.
+ *
  * @package FisHotel\Misc\Sections\Announcer
  */
 
 /* ------------------------------------------------------------------ */
-/*  Bar Base                                                           */
-/*  Static by default — sits in the document flow right after <body>.  */
-/*  Sticky bars use position:sticky (CSS-only, no JS body padding).    */
+/*  Bar Base — position:fixed, JS handles body offset                  */
 /* ------------------------------------------------------------------ */
 .ancr-bar {
-	display: block;
-	width: 100%;
-	box-sizing: border-box;
-	z-index: 99999;
-	position: relative;
+	position: fixed !important;
+	left: 0 !important;
+	right: 0 !important;
+	width: 100% !important;
+	height: auto !important;
+	bottom: auto !important;
+	top: auto !important;
+	margin: 0 !important;
+	box-sizing: border-box !important;
+	z-index: 99999 !important;
 	line-height: 1.5;
 	text-align: center;
+	transition: transform 0.4s ease, opacity 0.4s ease;
 }
 
-.ancr-bar,
-.ancr-bar * {
+.ancr-bar *,
+.ancr-bar *::before,
+.ancr-bar *::after {
 	box-sizing: border-box;
 }
 
 .ancr-bar.ancr-hidden {
-	display: none;
+	display: none !important;
 }
 
 /* ------------------------------------------------------------------ */
-/*  Sticky Mode — CSS position:sticky, no JS needed                    */
+/*  Positions                                                          */
 /* ------------------------------------------------------------------ */
-.ancr-bar.ancr-sticky {
-	position: -webkit-sticky;
-	position: sticky;
-	top: 0;
-	z-index: 99999;
+.ancr-bar.ancr-pos-top {
+	top: 0 !important;
+	bottom: auto !important;
 }
 
-/* Bottom-sticky requires fixed positioning (sticky only works for top) */
-.ancr-bar.ancr-sticky.ancr-pos-bottom {
-	position: fixed;
-	bottom: 0;
-	top: auto;
-	left: 0;
-	right: 0;
+.ancr-bar.ancr-pos-bottom {
+	bottom: 0 !important;
+	top: auto !important;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Shortcode — inline, not fixed                                      */
+/* ------------------------------------------------------------------ */
+.ancr-bar.ancr-shortcode {
+	position: relative !important;
+	top: auto !important;
+	bottom: auto !important;
+	left: auto !important;
+	right: auto !important;
+	z-index: auto !important;
 }
 
 /* ------------------------------------------------------------------ */
@@ -62,11 +77,6 @@
 
 .ancr-bar.ancr-boxed .ancr-inner {
 	max-width: 1200px;
-}
-
-/* Shortcode placement — always in-flow */
-.ancr-bar.ancr-shortcode {
-	position: relative;
 }
 
 /* ------------------------------------------------------------------ */
@@ -238,181 +248,55 @@
 /* ------------------------------------------------------------------ */
 /*  Show / Close Animations                                            */
 /* ------------------------------------------------------------------ */
-.ancr-anim-show-slide {
-	animation: ancr-slideDown 0.4s ease forwards;
-}
+.ancr-anim-show-slide  { animation: ancr-slideDown  0.4s ease forwards; }
+.ancr-anim-show-fade   { animation: ancr-fadeIn     0.4s ease forwards; }
+.ancr-anim-show-bounce { animation: ancr-bounceIn   0.6s ease forwards; }
+.ancr-anim-show-zoom   { animation: ancr-zoomIn     0.4s ease forwards; }
 
-.ancr-anim-show-fade {
-	animation: ancr-fadeIn 0.4s ease forwards;
-}
-
-.ancr-anim-show-bounce {
-	animation: ancr-bounceIn 0.6s ease forwards;
-}
-
-.ancr-anim-show-zoom {
-	animation: ancr-zoomIn 0.4s ease forwards;
-}
-
-.ancr-anim-close-slide {
-	animation: ancr-slideUp 0.3s ease forwards;
-}
-
-.ancr-anim-close-fade {
-	animation: ancr-fadeOut 0.3s ease forwards;
-}
-
-.ancr-anim-close-bounce {
-	animation: ancr-bounceOut 0.4s ease forwards;
-}
-
-.ancr-anim-close-zoom {
-	animation: ancr-zoomOut 0.3s ease forwards;
-}
+.ancr-anim-close-slide  { animation: ancr-slideUp   0.3s ease forwards; }
+.ancr-anim-close-fade   { animation: ancr-fadeOut   0.3s ease forwards; }
+.ancr-anim-close-bounce { animation: ancr-bounceOut 0.4s ease forwards; }
+.ancr-anim-close-zoom   { animation: ancr-zoomOut  0.3s ease forwards; }
 
 /* ------------------------------------------------------------------ */
 /*  CTA Button Animations                                              */
 /* ------------------------------------------------------------------ */
-.ancr-anim-bounce  { animation: ancr-btn-bounce  1s ease infinite; }
-.ancr-anim-flash   { animation: ancr-btn-flash   1.2s ease infinite; }
-.ancr-anim-pulse   { animation: ancr-btn-pulse   1.5s ease infinite; }
-.ancr-anim-shake   { animation: ancr-btn-shake   0.8s ease infinite; }
-.ancr-anim-swing   { animation: ancr-btn-swing   1s ease infinite; }
-.ancr-anim-tada    { animation: ancr-btn-tada    1s ease infinite; }
-.ancr-anim-wobble  { animation: ancr-btn-wobble  1s ease infinite; }
-.ancr-anim-jello   { animation: ancr-btn-jello   1s ease infinite; }
-.ancr-anim-heartbeat   { animation: ancr-btn-heartbeat 1.4s ease infinite; }
-.ancr-anim-rubberband  { animation: ancr-btn-rubberband 1s ease infinite; }
+.ancr-anim-bounce     { animation: ancr-btn-bounce     1s   ease infinite; }
+.ancr-anim-flash      { animation: ancr-btn-flash      1.2s ease infinite; }
+.ancr-anim-pulse      { animation: ancr-btn-pulse      1.5s ease infinite; }
+.ancr-anim-shake      { animation: ancr-btn-shake      0.8s ease infinite; }
+.ancr-anim-swing      { animation: ancr-btn-swing      1s   ease infinite; }
+.ancr-anim-tada       { animation: ancr-btn-tada       1s   ease infinite; }
+.ancr-anim-wobble     { animation: ancr-btn-wobble     1s   ease infinite; }
+.ancr-anim-jello      { animation: ancr-btn-jello      1s   ease infinite; }
+.ancr-anim-heartbeat  { animation: ancr-btn-heartbeat  1.4s ease infinite; }
+.ancr-anim-rubberband { animation: ancr-btn-rubberband 1s   ease infinite; }
 
 /* ------------------------------------------------------------------ */
-/*  Keyframes — Bar Show                                               */
+/*  Keyframes — Bar                                                    */
 /* ------------------------------------------------------------------ */
-@keyframes ancr-slideDown {
-	from { max-height: 0; padding-top: 0; padding-bottom: 0; opacity: 0; overflow: hidden; }
-	to   { max-height: 200px; opacity: 1; }
-}
-
-@keyframes ancr-fadeIn {
-	from { opacity: 0; }
-	to   { opacity: 1; }
-}
-
-@keyframes ancr-bounceIn {
-	0%   { max-height: 0; opacity: 0; }
-	60%  { max-height: 220px; opacity: 1; }
-	80%  { max-height: 180px; }
-	100% { max-height: 200px; }
-}
-
-@keyframes ancr-zoomIn {
-	from { transform: scale(0.5); opacity: 0; }
-	to   { transform: scale(1);   opacity: 1; }
-}
-
-/* ------------------------------------------------------------------ */
-/*  Keyframes — Bar Close                                              */
-/* ------------------------------------------------------------------ */
-@keyframes ancr-slideUp {
-	from { max-height: 200px; opacity: 1; }
-	to   { max-height: 0; padding-top: 0; padding-bottom: 0; opacity: 0; overflow: hidden; }
-}
-
-@keyframes ancr-fadeOut {
-	from { opacity: 1; }
-	to   { opacity: 0; }
-}
-
-@keyframes ancr-bounceOut {
-	0%   { max-height: 200px; }
-	20%  { max-height: 220px; }
-	100% { max-height: 0; padding-top: 0; padding-bottom: 0; opacity: 0; }
-}
-
-@keyframes ancr-zoomOut {
-	from { transform: scale(1);   opacity: 1; }
-	to   { transform: scale(0.5); opacity: 0; }
-}
+@keyframes ancr-slideDown  { from { transform: translateY(-100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+@keyframes ancr-fadeIn     { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ancr-bounceIn   { 0% { transform: translateY(-100%); opacity: 0; } 60% { transform: translateY(5px); opacity: 1; } 100% { transform: translateY(0); } }
+@keyframes ancr-zoomIn     { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes ancr-slideUp    { from { transform: translateY(0); opacity: 1; } to { transform: translateY(-100%); opacity: 0; } }
+@keyframes ancr-fadeOut    { from { opacity: 1; } to { opacity: 0; } }
+@keyframes ancr-bounceOut  { 0% { transform: translateY(0); } 20% { transform: translateY(5px); } 100% { transform: translateY(-100%); opacity: 0; } }
+@keyframes ancr-zoomOut    { from { transform: scale(1); opacity: 1; } to { transform: scale(0.5); opacity: 0; } }
 
 /* ------------------------------------------------------------------ */
 /*  Keyframes — CTA Buttons                                            */
 /* ------------------------------------------------------------------ */
-@keyframes ancr-btn-bounce {
-	0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
-	40%  { transform: translateY(-8px); }
-	60%  { transform: translateY(-4px); }
-}
-
-@keyframes ancr-btn-flash {
-	0%, 50%, 100% { opacity: 1; }
-	25%, 75%      { opacity: 0.2; }
-}
-
-@keyframes ancr-btn-pulse {
-	0%   { transform: scale(1); }
-	50%  { transform: scale(1.08); }
-	100% { transform: scale(1); }
-}
-
-@keyframes ancr-btn-shake {
-	0%, 100% { transform: translateX(0); }
-	10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
-	20%, 40%, 60%, 80% { transform: translateX(4px); }
-}
-
-@keyframes ancr-btn-swing {
-	20%  { transform: rotate(12deg); }
-	40%  { transform: rotate(-8deg); }
-	60%  { transform: rotate(4deg); }
-	80%  { transform: rotate(-4deg); }
-	100% { transform: rotate(0deg); }
-}
-
-@keyframes ancr-btn-tada {
-	0%        { transform: scale(1) rotate(0); }
-	10%, 20%  { transform: scale(0.9) rotate(-3deg); }
-	30%, 50%, 70%, 90% { transform: scale(1.1) rotate(3deg); }
-	40%, 60%, 80% { transform: scale(1.1) rotate(-3deg); }
-	100%      { transform: scale(1) rotate(0); }
-}
-
-@keyframes ancr-btn-wobble {
-	0%   { transform: translateX(0); }
-	15%  { transform: translateX(-10px) rotate(-5deg); }
-	30%  { transform: translateX(8px) rotate(3deg); }
-	45%  { transform: translateX(-6px) rotate(-3deg); }
-	60%  { transform: translateX(4px) rotate(2deg); }
-	75%  { transform: translateX(-2px) rotate(-1deg); }
-	100% { transform: translateX(0); }
-}
-
-@keyframes ancr-btn-jello {
-	0%, 11.1%, 100% { transform: none; }
-	22.2% { transform: skewX(-12.5deg) skewY(-12.5deg); }
-	33.3% { transform: skewX(6.25deg) skewY(6.25deg); }
-	44.4% { transform: skewX(-3.125deg) skewY(-3.125deg); }
-	55.5% { transform: skewX(1.5625deg) skewY(1.5625deg); }
-	66.6% { transform: skewX(-0.78125deg) skewY(-0.78125deg); }
-	77.7% { transform: skewX(0.390625deg) skewY(0.390625deg); }
-	88.8% { transform: skewX(-0.1953125deg) skewY(-0.1953125deg); }
-}
-
-@keyframes ancr-btn-heartbeat {
-	0%   { transform: scale(1); }
-	14%  { transform: scale(1.15); }
-	28%  { transform: scale(1); }
-	42%  { transform: scale(1.15); }
-	70%  { transform: scale(1); }
-}
-
-@keyframes ancr-btn-rubberband {
-	0%   { transform: scaleX(1) scaleY(1); }
-	30%  { transform: scaleX(1.25) scaleY(0.75); }
-	40%  { transform: scaleX(0.75) scaleY(1.25); }
-	50%  { transform: scaleX(1.15) scaleY(0.85); }
-	65%  { transform: scaleX(0.95) scaleY(1.05); }
-	75%  { transform: scaleX(1.05) scaleY(0.95); }
-	100% { transform: scaleX(1) scaleY(1); }
-}
+@keyframes ancr-btn-bounce     { 0%,20%,50%,80%,100% { transform:translateY(0); } 40% { transform:translateY(-8px); } 60% { transform:translateY(-4px); } }
+@keyframes ancr-btn-flash      { 0%,50%,100% { opacity:1; } 25%,75% { opacity:0.2; } }
+@keyframes ancr-btn-pulse      { 0% { transform:scale(1); } 50% { transform:scale(1.08); } 100% { transform:scale(1); } }
+@keyframes ancr-btn-shake      { 0%,100% { transform:translateX(0); } 10%,30%,50%,70%,90% { transform:translateX(-4px); } 20%,40%,60%,80% { transform:translateX(4px); } }
+@keyframes ancr-btn-swing      { 20% { transform:rotate(12deg); } 40% { transform:rotate(-8deg); } 60% { transform:rotate(4deg); } 80% { transform:rotate(-4deg); } 100% { transform:rotate(0); } }
+@keyframes ancr-btn-tada       { 0% { transform:scale(1) rotate(0); } 10%,20% { transform:scale(.9) rotate(-3deg); } 30%,50%,70%,90% { transform:scale(1.1) rotate(3deg); } 40%,60%,80% { transform:scale(1.1) rotate(-3deg); } 100% { transform:scale(1) rotate(0); } }
+@keyframes ancr-btn-wobble     { 0% { transform:translateX(0); } 15% { transform:translateX(-10px) rotate(-5deg); } 30% { transform:translateX(8px) rotate(3deg); } 45% { transform:translateX(-6px) rotate(-3deg); } 60% { transform:translateX(4px) rotate(2deg); } 75% { transform:translateX(-2px) rotate(-1deg); } 100% { transform:translateX(0); } }
+@keyframes ancr-btn-jello      { 0%,11.1%,100% { transform:none; } 22.2% { transform:skewX(-12.5deg) skewY(-12.5deg); } 33.3% { transform:skewX(6.25deg) skewY(6.25deg); } 44.4% { transform:skewX(-3.125deg) skewY(-3.125deg); } 55.5% { transform:skewX(1.5625deg) skewY(1.5625deg); } 66.6% { transform:skewX(-.78125deg) skewY(-.78125deg); } 77.7% { transform:skewX(.390625deg) skewY(.390625deg); } 88.8% { transform:skewX(-.1953125deg) skewY(-.1953125deg); } }
+@keyframes ancr-btn-heartbeat  { 0% { transform:scale(1); } 14% { transform:scale(1.15); } 28% { transform:scale(1); } 42% { transform:scale(1.15); } 70% { transform:scale(1); } }
+@keyframes ancr-btn-rubberband { 0% { transform:scaleX(1) scaleY(1); } 30% { transform:scaleX(1.25) scaleY(.75); } 40% { transform:scaleX(.75) scaleY(1.25); } 50% { transform:scaleX(1.15) scaleY(.85); } 65% { transform:scaleX(.95) scaleY(1.05); } 75% { transform:scaleX(1.05) scaleY(.95); } 100% { transform:scaleX(1) scaleY(1); } }
 
 /* ------------------------------------------------------------------ */
 /*  Responsive                                                         */

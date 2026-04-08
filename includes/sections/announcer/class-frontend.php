@@ -18,29 +18,39 @@ class Frontend {
 	 * Register hooks.
 	 */
 	public function init() {
-		// Primary: inject right after <body> tag.
-		add_action( 'wp_body_open', array( $this, 'render_announcements' ), 1 );
-		// Fallback: if theme doesn't call wp_body_open, use wp_footer.
-		add_action( 'wp_footer', array( $this, 'render_announcements_fallback' ) );
-
+		// Render in wp_footer — works on every theme regardless of template.
+		// The JS will reposition the bar to be the first child of <body>.
+		add_action( 'wp_footer', array( $this, 'render_announcements' ), 5 );
 		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_assets' ) );
 		add_shortcode( 'fishotel_announcement', array( $this, 'shortcode' ) );
 	}
 
 	/**
-	 * Track whether announcements were already rendered via wp_body_open.
-	 *
-	 * @var bool
-	 */
-	private $rendered = false;
-
-	/**
 	 * Enqueue frontend CSS and JS.
 	 */
 	public function enqueue_assets() {
-		$announcements = $this->get_active_announcements();
+		// Always enqueue — let JS handle the display logic.
+		// We can't rely on get_active_announcements() at enqueue time
+		// because some page conditionals may not be resolved yet.
+		$has_any = get_posts( array(
+			'post_type'      => Post_Type::POST_TYPE,
+			'post_status'    => 'publish',
+			'posts_per_page' => 1,
+			'fields'         => 'ids',
+			'meta_query'     => array(
+				'relation' => 'OR',
+				array(
+					'key'   => '_announcer_enabled',
+					'value' => '1',
+				),
+				array(
+					'key'     => '_announcer_enabled',
+					'compare' => 'NOT EXISTS',
+				),
+			),
+		) );
 
-		if ( empty( $announcements ) ) {
+		if ( empty( $has_any ) ) {
 			return;
 		}
 
@@ -61,33 +71,20 @@ class Frontend {
 	}
 
 	/**
-	 * Render all active announcements (called from wp_body_open).
+	 * Render all active announcements in the footer.
+	 * JS will reposition them to the top of <body>.
 	 */
 	public function render_announcements() {
-		if ( $this->rendered ) {
-			return;
-		}
-		$this->rendered = true;
-
 		$announcements = $this->get_active_announcements();
 
 		if ( empty( $announcements ) ) {
+			echo '<!-- ancr: no active announcements -->';
 			return;
 		}
 
 		foreach ( $announcements as $post ) {
 			echo $this->build_announcement_html( $post ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 		}
-	}
-
-	/**
-	 * Fallback renderer for themes that don't call wp_body_open.
-	 */
-	public function render_announcements_fallback() {
-		if ( $this->rendered ) {
-			return;
-		}
-		$this->render_announcements();
 	}
 
 	/**
@@ -110,7 +107,6 @@ class Frontend {
 			return '';
 		}
 
-		// Enqueue assets for shortcode usage.
 		wp_enqueue_style( 'fishotel-announcer-front', Announcer::url() . 'css/announcer-front.css', array(), FISHOTEL_MISC_VERSION );
 		wp_enqueue_script( 'fishotel-announcer-front', Announcer::url() . 'js/announcer-front.js', array(), FISHOTEL_MISC_VERSION, true );
 
@@ -123,12 +119,6 @@ class Frontend {
 	 * @return \WP_Post[]
 	 */
 	private function get_active_announcements() {
-		static $cached = null;
-
-		if ( null !== $cached ) {
-			return $cached;
-		}
-
 		$posts = get_posts( array(
 			'post_type'      => Post_Type::POST_TYPE,
 			'post_status'    => 'publish',
@@ -148,7 +138,7 @@ class Frontend {
 			),
 		) );
 
-		$cached = array();
+		$active = array();
 
 		foreach ( $posts as $post ) {
 			if ( ! $this->passes_schedule( $post->ID ) ) {
@@ -161,10 +151,10 @@ class Frontend {
 				continue;
 			}
 
-			$cached[] = $post;
+			$active[] = $post;
 		}
 
-		return $cached;
+		return $active;
 	}
 
 	/**
@@ -286,7 +276,7 @@ class Frontend {
 					$match = is_user_logged_in();
 					if ( 'no' === strtolower( $cond['value'] ) ) {
 						$match = ! $match;
-						$cond['operator'] = 'is'; // Normalize.
+						$cond['operator'] = 'is';
 					}
 					break;
 
@@ -298,7 +288,7 @@ class Frontend {
 					break;
 
 				case 'device':
-					$val   = strtolower( $cond['value'] );
+					$val       = strtolower( $cond['value'] );
 					$is_mobile = wp_is_mobile();
 					if ( 'mobile' === $val ) {
 						$match = $is_mobile;
@@ -308,13 +298,11 @@ class Frontend {
 					break;
 
 				case 'browser':
-					$val = strtolower( $cond['value'] );
-					$match = false !== stripos( $ua, $val );
+					$match = false !== stripos( $ua, $cond['value'] );
 					break;
 
 				case 'os':
-					$val = strtolower( $cond['value'] );
-					$match = false !== stripos( $ua, $val );
+					$match = false !== stripos( $ua, $cond['value'] );
 					break;
 
 				case 'referrer':
@@ -328,12 +316,10 @@ class Frontend {
 					break;
 			}
 
-			// Apply operator.
 			if ( 'is_not' === ( $cond['operator'] ?? 'is' ) ) {
 				$match = ! $match;
 			}
 
-			// All conditions must pass (AND logic).
 			if ( ! $match ) {
 				return false;
 			}
@@ -386,22 +372,21 @@ class Frontend {
 		$messages = array( $content );
 
 		if ( '1' === $multi_enabled ) {
-			$raw      = $post->post_content;
-			$parts    = preg_split( '/<!--\s*message\s*-->/i', $raw );
+			$raw   = $post->post_content;
+			$parts = preg_split( '/<!--\s*message\s*-->/i', $raw );
 			if ( count( $parts ) > 1 ) {
 				$messages = array_map( function ( $part ) {
 					return apply_filters( 'the_content', trim( $part ) );
 				}, $parts );
 			}
 
-			// Random mode — pick one.
 			if ( 'random' === $multi_type && count( $messages ) > 1 ) {
 				$messages = array( $messages[ array_rand( $messages ) ] );
 			}
 		}
 
 		// Build classes.
-		$classes = array( 'ancr-bar' );
+		$classes   = array( 'ancr-bar' );
 		$classes[] = 'ancr-pos-' . sanitize_html_class( $position );
 		if ( '1' === $sticky && ! $is_shortcode ) {
 			$classes[] = 'ancr-sticky';
@@ -476,7 +461,6 @@ class Frontend {
 							<div class="ancr-content"><?php echo $msg; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></div>
 
 							<?php
-							// CTA buttons for this message.
 							$msg_buttons = array_filter( $cta_buttons, function ( $btn ) use ( $idx ) {
 								$mi = absint( $btn['message_index'] ?? 0 );
 								return 0 === $mi || $mi === ( $idx + 1 );

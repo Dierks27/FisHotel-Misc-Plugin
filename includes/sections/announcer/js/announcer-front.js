@@ -1,5 +1,9 @@
 /**
- * Announcer frontend — display triggers, close, cookies, ticker, countdown.
+ * Announcer frontend.
+ *
+ * Strategy: bars are rendered in wp_footer (guaranteed to work on every theme).
+ * On DOMContentLoaded, JS moves each bar to be the first child of <body> and
+ * adds matching body padding so nothing is hidden behind the fixed bar.
  *
  * @package FisHotel\Misc\Sections\Announcer
  */
@@ -26,6 +30,50 @@
 	}
 
 	/* ============================================================== */
+	/*  Move Bar to Top of Body                                        */
+	/* ============================================================== */
+	function moveBarToBody(bar) {
+		if (bar.classList.contains('ancr-shortcode')) return;
+		// Move the bar to be the very first child of <body>.
+		if (document.body.firstChild !== bar) {
+			document.body.insertBefore(bar, document.body.firstChild);
+		}
+	}
+
+	/* ============================================================== */
+	/*  Adjust Body Padding                                            */
+	/* ============================================================== */
+	function adjustBodyPadding() {
+		var topH = 0;
+		var bottomH = 0;
+
+		document.querySelectorAll('.ancr-bar').forEach(function (bar) {
+			if (bar.classList.contains('ancr-shortcode')) return;
+			if (bar.style.display === 'none') return;
+			if (bar.classList.contains('ancr-hidden')) return;
+
+			if (bar.classList.contains('ancr-pos-bottom')) {
+				bottomH += bar.offsetHeight;
+			} else {
+				topH += bar.offsetHeight;
+			}
+		});
+
+		// Account for WP admin bar if present.
+		var adminBar = document.getElementById('wpadminbar');
+		if (adminBar && topH > 0) {
+			var bars = document.querySelectorAll('.ancr-bar.ancr-pos-top:not(.ancr-shortcode)');
+			bars.forEach(function (bar) {
+				bar.style.top = adminBar.offsetHeight + 'px';
+			});
+			topH += adminBar.offsetHeight;
+		}
+
+		document.body.style.paddingTop = topH ? topH + 'px' : '';
+		document.body.style.paddingBottom = bottomH ? bottomH + 'px' : '';
+	}
+
+	/* ============================================================== */
 	/*  Show Bar                                                       */
 	/* ============================================================== */
 	function showBar(bar) {
@@ -36,6 +84,8 @@
 		if (anim && anim !== 'none') {
 			bar.classList.add('ancr-anim-show-' + anim);
 		}
+
+		adjustBodyPadding();
 	}
 
 	/* ============================================================== */
@@ -53,9 +103,11 @@
 			bar.addEventListener('animationend', function handler() {
 				bar.removeEventListener('animationend', handler);
 				bar.style.display = 'none';
+				adjustBodyPadding();
 			});
 		} else {
 			bar.style.display = 'none';
+			adjustBodyPadding();
 		}
 	}
 
@@ -63,11 +115,11 @@
 	/*  Ticker / Slider                                                */
 	/* ============================================================== */
 	function initTicker(bar) {
-		var isMulti    = bar.dataset.ancrMulti === '1';
-		var multiType  = bar.dataset.ancrMultiType;
-		var autoPlay   = bar.dataset.ancrMultiAuto === '1';
-		var speed      = (parseInt(bar.dataset.ancrMultiSpeed, 10) || 5) * 1000;
-		var isScroll   = bar.dataset.ancrTickerScroll === '1';
+		var isMulti   = bar.dataset.ancrMulti === '1';
+		var multiType = bar.dataset.ancrMultiType;
+		var autoPlay  = bar.dataset.ancrMultiAuto === '1';
+		var speed     = (parseInt(bar.dataset.ancrMultiSpeed, 10) || 5) * 1000;
+		var isScroll  = bar.dataset.ancrTickerScroll === '1';
 
 		if (!isMulti || multiType !== 'ticker') return;
 
@@ -107,7 +159,7 @@
 	function initCountdown(bar) {
 		if (bar.dataset.ancrCountdown !== '1') return;
 
-		var timerEl  = bar.querySelector('.ancr-cd-timer');
+		var timerEl = bar.querySelector('.ancr-cd-timer');
 		if (!timerEl) return;
 
 		var target   = new Date(timerEl.dataset.ancrCdTarget).getTime();
@@ -120,6 +172,7 @@
 			if (diff <= 0) {
 				if (complete === 'hide') {
 					bar.style.display = 'none';
+					adjustBodyPadding();
 				} else if (complete === 'keep') {
 					var cdWrap = bar.querySelector('.ancr-countdown');
 					if (cdWrap) cdWrap.style.display = 'none';
@@ -138,9 +191,7 @@
 			if (parts[2]) parts[2].textContent = String(m).padStart(2, '0');
 			if (parts[3]) parts[3].textContent = String(s).padStart(2, '0');
 
-			requestAnimationFrame(function () {
-				setTimeout(update, 1000);
-			});
+			setTimeout(update, 1000);
 		}
 
 		update();
@@ -174,13 +225,16 @@
 			var barId   = bar.dataset.ancrId;
 			var trigger = bar.dataset.ancrTrigger || 'immediate';
 
-			// Check if previously closed (cookie).
+			// Step 1: Move bar to top of <body> (from wherever wp_footer put it).
+			moveBarToBody(bar);
+
+			// Step 2: Check cookie — hide if previously closed.
 			if (getCookie('ancr_closed_' + barId)) {
 				bar.style.display = 'none';
 				return;
 			}
 
-			// Display trigger.
+			// Step 3: Display trigger.
 			if (trigger === 'immediate') {
 				showBar(bar);
 			} else if (trigger === 'delay') {
@@ -203,21 +257,20 @@
 				window.addEventListener('scroll', onScroll, { passive: true });
 			}
 
-			// Close button.
+			// Step 4: Close button.
 			var closeBtn = bar.querySelector('.ancr-close');
 			if (closeBtn) {
 				closeBtn.addEventListener('click', function () { closeBar(bar); });
 			}
 
-			// Ticker / slider.
+			// Step 5: Features.
 			initTicker(bar);
-
-			// Countdown.
 			initCountdown(bar);
-
-			// CTA actions.
 			initCTAActions(bar);
 		});
+
+		// Initial padding calculation.
+		adjustBodyPadding();
 	}
 
 	/* ============================================================== */

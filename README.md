@@ -67,6 +67,8 @@ The Section Manager will automatically discover and register the section.
 
 ## Version
 
+0.11 — Bulletproof rendering: wp_footer + JS DOM relocation + position:fixed.
+
 0.10 — Complete rewrite: static positioning with CSS sticky, no body padding hacks.
 
 0.9 — Fix bar stretching to full viewport; inline critical styles, explicit constraints.
