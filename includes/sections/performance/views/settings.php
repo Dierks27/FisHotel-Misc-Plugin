@@ -1,0 +1,79 @@
+<?php
+/**
+ * Performance settings view.
+ *
+ * @package FisHotel\Misc\Sections\Performance
+ * @var array $settings Passed from Settings::render_page().
+ */
+
+defined( 'ABSPATH' ) || exit;
+
+$features = array(
+	'script_cleanup'       => array(
+		'label' => __( 'Script & Style Cleanup', 'fishotel-misc-plugin' ),
+		'desc'  => __( 'Dequeue Contact Form 7 CSS and JS on pages that do not contain the shortcode.', 'fishotel-misc-plugin' ),
+	),
+	'cache_headers'        => array(
+		'label' => __( 'Browser Cache-Control Headers', 'fishotel-misc-plugin' ),
+		'desc'  => __( 'Add Cache-Control: public, max-age=3600 for front-end pages. WooCommerce cart, checkout, and account pages are excluded.', 'fishotel-misc-plugin' ),
+	),
+	'gzip_compression'     => array(
+		'label' => __( 'Gzip Compression', 'fishotel-misc-plugin' ),
+		'desc'  => __( 'Enable PHP output compression when the server is not already handling it.', 'fishotel-misc-plugin' ),
+	),
+	'remove_query_strings' => array(
+		'label' => __( 'Remove Query Strings', 'fishotel-misc-plugin' ),
+		'desc'  => __( 'Strip ?ver= query strings from CSS and JS URLs to improve proxy and CDN caching.', 'fishotel-misc-plugin' ),
+	),
+);
+?>
+
+<div class="wrap fishotel-misc-wrap">
+
+	<div class="fishotel-misc-header">
+		<h1><?php esc_html_e( 'Performance Optimization', 'fishotel-misc-plugin' ); ?></h1>
+		<span class="version-badge">v<?php echo esc_html( FISHOTEL_MISC_VERSION ); ?></span>
+	</div>
+
+	<?php if ( isset( $_GET['updated'] ) ) : ?>
+		<div class="fishotel-misc-notice fishotel-misc-notice--success">
+			<?php esc_html_e( 'Settings saved.', 'fishotel-misc-plugin' ); ?>
+		</div>
+	<?php endif; ?>
+
+	<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+		<?php wp_nonce_field( 'fishotel_perf_settings' ); ?>
+		<input type="hidden" name="action" value="fishotel_perf_save">
+
+		<div class="fishotel-misc-card" style="max-width: 720px;">
+
+			<?php foreach ( $features as $key => $feature ) : ?>
+				<div class="fishotel-misc-card-footer" style="border-top: <?php echo 'script_cleanup' === $key ? 'none' : ''; ?>;">
+					<div>
+						<strong style="color: var(--fh-text-primary); font-size: 14px;">
+							<?php echo esc_html( $feature['label'] ); ?>
+						</strong>
+						<p class="fishotel-misc-card-desc" style="margin-top: 4px;">
+							<?php echo esc_html( $feature['desc'] ); ?>
+						</p>
+					</div>
+					<label class="fishotel-misc-toggle">
+						<input type="checkbox"
+							name="<?php echo esc_attr( $key ); ?>"
+							value="1"
+							<?php checked( ! empty( $settings[ $key ] ) ); ?>>
+						<span class="slider"></span>
+					</label>
+				</div>
+			<?php endforeach; ?>
+
+		</div>
+
+		<p style="margin-top: 20px;">
+			<button type="submit" class="button button-primary" style="background: var(--fh-accent); border-color: var(--fh-accent);">
+				<?php esc_html_e( 'Save Settings', 'fishotel-misc-plugin' ); ?>
+			</button>
+		</p>
+	</form>
+
+</div>

@@ -67,6 +67,8 @@ The Section Manager will automatically discover and register the section.
 
 ## Version
 
+0.18 — Add Performance Optimization section (script cleanup, cache headers, gzip, query-string removal).
+
 0.17 — Defer plugin_dir_url() to plugins_loaded hook to fix early-load notice.
 
 0.16 — Hide theme skip links when announcement bar is present.
