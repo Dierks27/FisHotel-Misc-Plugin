@@ -87,3 +87,43 @@ $features = array(
 	</form>
 
 </div>
+
+<script>
+jQuery(function ($) {
+	$('#fishotel-perf-form').on('submit', function (e) {
+		e.preventDefault();
+
+		var $form = $(this);
+		var $btn  = $form.find('button[type="submit"]');
+		var $wrap = $form.closest('.fishotel-misc-wrap');
+
+		$btn.prop('disabled', true);
+		$wrap.find('.fishotel-misc-notice').remove();
+
+		$.post(<?php echo wp_json_encode( admin_url( 'admin-ajax.php' ) ); ?>, $form.serialize())
+			.done(function (res) {
+				var ok  = res && res.success;
+				var msg = (res && res.data && res.data.message) ? res.data.message
+						: (ok ? <?php echo wp_json_encode( __( 'Settings saved.', 'fishotel-misc-plugin' ) ); ?>
+						: <?php echo wp_json_encode( __( 'Something went wrong. Please try again.', 'fishotel-misc-plugin' ) ); ?>);
+				var cls = ok ? 'fishotel-misc-notice--success' : 'fishotel-misc-notice--error';
+
+				$('<div class="fishotel-misc-notice ' + cls + '">' + msg + '</div>')
+					.insertAfter($wrap.find('.fishotel-misc-header'))
+					.delay(3000).fadeOut(300, function () { $(this).remove(); });
+			})
+			.fail(function () {
+				$('<div class="fishotel-misc-notice fishotel-misc-notice--error">' +
+					<?php echo wp_json_encode( __( 'Something went wrong. Please try again.', 'fishotel-misc-plugin' ) ); ?> +
+					'</div>')
+					.insertAfter($wrap.find('.fishotel-misc-header'))
+					.delay(3000).fadeOut(300, function () { $(this).remove(); });
+			})
+			.always(function () {
+				$btn.prop('disabled', false);
+			});
+
+		return false;
+	});
+});
+</script>

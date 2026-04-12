@@ -160,6 +160,10 @@ class Optimizer {
 	 * Start output buffering with gzip compression when possible.
 	 */
 	public function gzip_compression() {
+		if ( wp_doing_ajax() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) {
+			return;
+		}
+
 		if (
 			! ini_get( 'zlib.output_compression' ) &&
 			! headers_sent() &&
