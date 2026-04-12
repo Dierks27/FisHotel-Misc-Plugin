@@ -67,6 +67,8 @@ The Section Manager will automatically discover and register the section.
 
 ## Version
 
+0.26 — Add onsubmit="return false" HTML safeguard to Performance form; prevents hard POST if all JS fails.
+
 0.25 — Full audit fix: skip gzip on AJAX (root cause), move form handler to inline script (Varnish-proof), safe response access.
 
 0.24 — Use check_ajax_referer instead of check_admin_referer in Performance save handler.
