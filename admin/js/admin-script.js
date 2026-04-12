@@ -88,5 +88,5 @@
 	};
 
 	// Bind events.
-	$(document).on('change', '.fishotel-misc-toggle input', handleToggle);
+	$(document).on('change', '.fishotel-misc-toggle input[data-section]', handleToggle);
 })(jQuery);

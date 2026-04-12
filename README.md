@@ -67,6 +67,8 @@ The Section Manager will automatically discover and register the section.
 
 ## Version
 
+0.20 — Fix Performance toggle saving error; scope dashboard AJAX handler, add try/catch and AJAX guard.
+
 0.19 — Add CSS/JS file combiner to Performance section.
 
 0.18 — Add Performance Optimization section (script cleanup, cache headers, gzip, query-string removal).

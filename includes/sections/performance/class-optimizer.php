@@ -198,7 +198,7 @@ class Optimizer {
 	 * Combine local CSS and JS assets into single cached files.
 	 */
 	public function combine_assets() {
-		if ( is_admin() ) {
+		if ( is_admin() || wp_doing_ajax() ) {
 			return;
 		}
 

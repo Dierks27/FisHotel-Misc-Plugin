@@ -31,26 +31,47 @@ class Settings {
 
 		check_admin_referer( 'fishotel_perf_settings' );
 
-		$settings = array(
-			'script_cleanup'       => ! empty( $_POST['script_cleanup'] ),
-			'cache_headers'        => ! empty( $_POST['cache_headers'] ),
-			'gzip_compression'     => ! empty( $_POST['gzip_compression'] ),
-			'remove_query_strings' => ! empty( $_POST['remove_query_strings'] ),
-			'combine_assets'       => ! empty( $_POST['combine_assets'] ),
-		);
+		try {
+			$settings = array(
+				'script_cleanup'       => ! empty( $_POST['script_cleanup'] ),
+				'cache_headers'        => ! empty( $_POST['cache_headers'] ),
+				'gzip_compression'     => ! empty( $_POST['gzip_compression'] ),
+				'remove_query_strings' => ! empty( $_POST['remove_query_strings'] ),
+				'combine_assets'       => ! empty( $_POST['combine_assets'] ),
+			);
 
-		update_option( Performance::OPTION_KEY, $settings );
+			update_option( Performance::OPTION_KEY, $settings );
 
-		wp_safe_redirect(
-			add_query_arg(
-				array(
-					'page'    => 'fishotel-misc-performance',
-					'updated' => '1',
-				),
-				admin_url( 'admin.php' )
-			)
-		);
-		exit;
+			// Pre-create the cache directory when the combiner is enabled.
+			if ( ! empty( $settings['combine_assets'] ) ) {
+				$cache_dir = WP_CONTENT_DIR . '/cache/fishotel-perf/';
+				if ( ! is_dir( $cache_dir ) ) {
+					wp_mkdir_p( $cache_dir );
+				}
+			}
+
+			wp_safe_redirect(
+				add_query_arg(
+					array(
+						'page'    => 'fishotel-misc-performance',
+						'updated' => '1',
+					),
+					admin_url( 'admin.php' )
+				)
+			);
+			exit;
+		} catch ( \Exception $e ) {
+			wp_safe_redirect(
+				add_query_arg(
+					array(
+						'page'    => 'fishotel-misc-performance',
+						'error'   => rawurlencode( $e->getMessage() ),
+					),
+					admin_url( 'admin.php' )
+				)
+			);
+			exit;
+		}
 	}
 
 	/**
