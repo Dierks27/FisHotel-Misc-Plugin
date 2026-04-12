@@ -25,6 +25,10 @@ $features = array(
 		'label' => __( 'Remove Query Strings', 'fishotel-misc-plugin' ),
 		'desc'  => __( 'Strip ?ver= query strings from CSS and JS URLs to improve proxy and CDN caching.', 'fishotel-misc-plugin' ),
 	),
+	'combine_assets'       => array(
+		'label' => __( 'CSS & JS File Combiner', 'fishotel-misc-plugin' ),
+		'desc'  => __( 'Combine local CSS and non-deferred JS into single cached files to reduce HTTP requests. External assets (CDN, Google, PayPal, OneSignal) are skipped automatically.', 'fishotel-misc-plugin' ),
+	),
 );
 ?>
 

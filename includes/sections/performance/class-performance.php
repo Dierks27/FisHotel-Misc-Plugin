@@ -32,6 +32,7 @@ class Performance {
 		'cache_headers'        => true,
 		'gzip_compression'     => true,
 		'remove_query_strings' => true,
+		'combine_assets'       => false,
 	);
 
 	/**

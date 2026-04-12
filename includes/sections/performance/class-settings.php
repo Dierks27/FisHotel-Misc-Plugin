@@ -36,6 +36,7 @@ class Settings {
 			'cache_headers'        => ! empty( $_POST['cache_headers'] ),
 			'gzip_compression'     => ! empty( $_POST['gzip_compression'] ),
 			'remove_query_strings' => ! empty( $_POST['remove_query_strings'] ),
+			'combine_assets'       => ! empty( $_POST['combine_assets'] ),
 		);
 
 		update_option( Performance::OPTION_KEY, $settings );
