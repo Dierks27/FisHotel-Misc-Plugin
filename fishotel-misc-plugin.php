@@ -19,7 +19,6 @@ defined( 'ABSPATH' ) || exit;
 define( 'FISHOTEL_MISC_VERSION', '0.16' );
 define( 'FISHOTEL_MISC_FILE', __FILE__ );
 define( 'FISHOTEL_MISC_PATH', plugin_dir_path( __FILE__ ) );
-define( 'FISHOTEL_MISC_URL', plugin_dir_url( __FILE__ ) );
 
 /**
  * Autoload classes from the includes directory.
@@ -55,6 +54,8 @@ spl_autoload_register( function ( $class ) {
  * Boot the plugin.
  */
 function fishotel_misc_init() {
+	define( 'FISHOTEL_MISC_URL', plugin_dir_url( FISHOTEL_MISC_FILE ) );
+
 	$plugin = Plugin::get_instance();
 	$plugin->init();
 }
