@@ -50,16 +50,7 @@ class Settings {
 				}
 			}
 
-			wp_safe_redirect(
-				add_query_arg(
-					array(
-						'page'    => 'fishotel-misc-performance',
-						'updated' => '1',
-					),
-					admin_url( 'admin.php' )
-				)
-			);
-			exit;
+			wp_send_json_success( array( 'message' => __( 'Settings saved.', 'fishotel-misc-plugin' ) ) );
 		} catch ( \Exception $e ) {
 			wp_send_json_error( array( 'message' => $e->getMessage() ) );
 		}

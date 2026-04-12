@@ -87,6 +87,34 @@
 		error:    'Something went wrong. Please try again.'
 	};
 
+	/**
+	 * Submit the Performance settings form via AJAX.
+	 */
+	function handlePerfSave(e) {
+		e.preventDefault();
+
+		var $form = $(this);
+		var $btn  = $form.find('button[type="submit"]');
+
+		$btn.prop('disabled', true);
+
+		$.post(fishotelMisc.ajaxUrl, $form.serialize())
+			.done(function (response) {
+				if (response.success) {
+					showNotice('success', response.data.message || 'Settings saved.');
+				} else {
+					showNotice('error', response.data.message || fishotelMiscL10n.error);
+				}
+			})
+			.fail(function () {
+				showNotice('error', fishotelMiscL10n.error);
+			})
+			.always(function () {
+				$btn.prop('disabled', false);
+			});
+	}
+
 	// Bind events.
 	$(document).on('change', '.fishotel-misc-toggle input[data-section]', handleToggle);
+	$(document).on('submit', '#fishotel-perf-form', handlePerfSave);
 })(jQuery);
