@@ -2,7 +2,7 @@
 /**
  * Plugin Name: FisHotel Misc Plugin
  * Description: A modular container plugin with a dark theme admin interface for FisHotel tools.
- * Version:     0.22
+ * Version:     0.23
  * Author:      FisHotel
  * Text Domain: fishotel-misc-plugin
  * Domain Path: /languages
@@ -16,7 +16,7 @@ namespace FisHotel\Misc;
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'FISHOTEL_MISC_VERSION', '0.22' );
+define( 'FISHOTEL_MISC_VERSION', '0.23' );
 define( 'FISHOTEL_MISC_FILE', __FILE__ );
 define( 'FISHOTEL_MISC_PATH', plugin_dir_path( __FILE__ ) );
 

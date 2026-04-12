@@ -114,7 +114,9 @@
 			});
 	}
 
-	// Bind events.
-	$(document).on('change', '.fishotel-misc-toggle input[data-section]', handleToggle);
-	$(document).on('submit', '#fishotel-perf-form', handlePerfSave);
+	// Bind events after the DOM is ready.
+	$(function () {
+		$(document).on('change', '.fishotel-misc-toggle input[data-section]', handleToggle);
+		$(document).on('submit', '#fishotel-perf-form', handlePerfSave);
+	});
 })(jQuery);
