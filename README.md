@@ -67,6 +67,8 @@ The Section Manager will automatically discover and register the section.
 
 ## Version
 
+0.24 — Use check_ajax_referer instead of check_admin_referer in Performance save handler.
+
 0.23 — Wrap admin JS event bindings in DOM-ready handler to fix Performance form hard-POST.
 
 0.22 — Replace redirect with wp_send_json_success in Performance save handler; add AJAX form submit.

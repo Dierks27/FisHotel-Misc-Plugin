@@ -29,7 +29,7 @@ class Settings {
 			wp_send_json_error( array( 'message' => 'Unauthorized.' ), 403 );
 		}
 
-		check_admin_referer( 'fishotel_perf_settings' );
+		check_ajax_referer( 'fishotel_perf_settings', '_wpnonce' );
 
 		try {
 			$settings = array(
