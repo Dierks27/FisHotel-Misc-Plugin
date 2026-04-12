@@ -18,7 +18,7 @@ class Settings {
 	 * Register hooks.
 	 */
 	public function init() {
-		add_action( 'admin_post_fishotel_perf_save', array( $this, 'save_settings' ) );
+		add_action( 'wp_ajax_fishotel_perf_save', array( $this, 'save_settings' ) );
 	}
 
 	/**
@@ -26,7 +26,7 @@ class Settings {
 	 */
 	public function save_settings() {
 		if ( ! current_user_can( 'manage_options' ) ) {
-			wp_die( esc_html__( 'Unauthorized.', 'fishotel-misc-plugin' ) );
+			wp_send_json_error( array( 'message' => 'Unauthorized.' ), 403 );
 		}
 
 		check_admin_referer( 'fishotel_perf_settings' );
@@ -61,16 +61,7 @@ class Settings {
 			);
 			exit;
 		} catch ( \Exception $e ) {
-			wp_safe_redirect(
-				add_query_arg(
-					array(
-						'page'    => 'fishotel-misc-performance',
-						'error'   => rawurlencode( $e->getMessage() ),
-					),
-					admin_url( 'admin.php' )
-				)
-			);
-			exit;
+			wp_send_json_error( array( 'message' => $e->getMessage() ) );
 		}
 	}
 

@@ -67,6 +67,8 @@ The Section Manager will automatically discover and register the section.
 
 ## Version
 
+0.21 — Fix Performance save handler: switch to wp_ajax hook and admin-ajax.php endpoint.
+
 0.20 — Fix Performance toggle saving error; scope dashboard AJAX handler, add try/catch and AJAX guard.
 
 0.19 — Add CSS/JS file combiner to Performance section.

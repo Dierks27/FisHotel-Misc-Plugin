@@ -51,7 +51,7 @@ $features = array(
 		</div>
 	<?php endif; ?>
 
-	<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+	<form method="post" action="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>">
 		<?php wp_nonce_field( 'fishotel_perf_settings' ); ?>
 		<input type="hidden" name="action" value="fishotel_perf_save">
 
