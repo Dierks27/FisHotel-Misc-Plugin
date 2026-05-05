@@ -64,7 +64,9 @@ class Section_Manager {
 				continue;
 			}
 
-			$class_name = 'FisHotel\\Misc\\Sections\\' . ucfirst( $slug ) . '\\' . ucfirst( $slug );
+			// Convert slug to a valid namespace segment: 'product-archive' → 'Product_Archive'.
+			$ns_segment = str_replace( ' ', '_', ucwords( str_replace( array( '-', '_' ), ' ', $slug ) ) );
+			$class_name = 'FisHotel\\Misc\\Sections\\' . $ns_segment . '\\' . $ns_segment;
 
 			if ( ! class_exists( $class_name ) ) {
 				require_once $class_file;

@@ -67,6 +67,8 @@ The Section Manager will automatically discover and register the section.
 
 ## Version
 
+0.27 — Added Product Archive section — archive WooCommerce products to hide from shop/admin without deleting.
+
 0.26 — Add onsubmit="return false" HTML safeguard to Performance form; prevents hard POST if all JS fails.
 
 0.25 — Full audit fix: skip gzip on AJAX (root cause), move form handler to inline script (Varnish-proof), safe response access.

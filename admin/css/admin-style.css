@@ -35,15 +35,15 @@ body.toplevel_page_fishotel-misc #wpcontent,
 body.toplevel_page_fishotel-misc #wpwrap,
 body.toplevel_page_fishotel-misc #wpbody-content,
 body.toplevel_page_fishotel-misc #wpbody,
-body[class*="fishotel-misc-performance"] #wpcontent,
-body[class*="fishotel-misc-performance"] #wpwrap,
-body[class*="fishotel-misc-performance"] #wpbody-content,
-body[class*="fishotel-misc-performance"] #wpbody {
+body[class*="page_fishotel-misc"] #wpcontent,
+body[class*="page_fishotel-misc"] #wpwrap,
+body[class*="page_fishotel-misc"] #wpbody-content,
+body[class*="page_fishotel-misc"] #wpbody {
 	background: #1a1a1a !important;
 }
 
 body.toplevel_page_fishotel-misc .wrap,
-body[class*="fishotel-misc-performance"] .wrap {
+body[class*="page_fishotel-misc"] .wrap {
 	color: #e0e0e0 !important;
 }
 
