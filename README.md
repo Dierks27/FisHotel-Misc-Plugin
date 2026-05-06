@@ -67,6 +67,8 @@ The Section Manager will automatically discover and register the section.
 
 ## Version
 
+0.29 — Added Coming Soon section — flag variable products with a release datetime to display a ribbon, live countdown, and "Notify Me" button while server-side blocking purchase. No cron: release transitions are detected per-request from a `_fh_release_datetime` parent meta vs. `time()`. Auto-reload on countdown end with random jitter.
+
 0.28 — Added Product Archive section — archive WooCommerce products to hide from shop/admin without deleting.
 
 0.26 — Add onsubmit="return false" HTML safeguard to Performance form; prevents hard POST if all JS fails.

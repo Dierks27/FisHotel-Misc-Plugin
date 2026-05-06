@@ -1,0 +1,134 @@
+/**
+ * Coming Soon frontend styles — ribbon, countdown, notify button.
+ *
+ * @package FisHotel\Misc\Sections\Coming_Soon
+ */
+
+/* ------------------------------------------------------------------ */
+/*  Ribbon Overlay                                                     */
+/* ------------------------------------------------------------------ */
+/* Anchor positioning to the nearest product/gallery container so the
+ * ribbon sits over the image regardless of theme markup. */
+.product.fh-coming-soon,
+.fh-coming-soon .woocommerce-product-gallery {
+	position: relative;
+	overflow: hidden;
+}
+
+.fh-cs-ribbon {
+	position: absolute;
+	top: 14px;
+	right: -42px;
+	z-index: 5;
+	display: block;
+	width: 160px;
+	padding: 6px 0;
+	background: #c0392b;
+	color: #ffffff;
+	text-align: center;
+	font-size: 12px;
+	font-weight: 700;
+	text-transform: uppercase;
+	letter-spacing: 1px;
+	transform: rotate(45deg);
+	box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+	pointer-events: none;
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+		Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Countdown                                                          */
+/* ------------------------------------------------------------------ */
+.fh-cs-countdown {
+	display: inline-block;
+	margin: 8px 0;
+	padding: 6px 10px;
+	background: rgba(192, 57, 43, 0.08);
+	border: 1px solid rgba(192, 57, 43, 0.25);
+	border-radius: 4px;
+	color: #c0392b;
+	font-size: 13px;
+	font-weight: 600;
+	line-height: 1.2;
+}
+
+.fh-cs-countdown__digits {
+	/* Slightly monospaced — system stack falls back gracefully but
+	 * keeps digits roughly fixed-width, which prevents layout shift
+	 * each second. */
+	font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+		"Liberation Mono", "Courier New", monospace;
+	font-feature-settings: "tnum" 1;
+	font-variant-numeric: tabular-nums;
+	letter-spacing: 0.5px;
+	white-space: nowrap;
+}
+
+.fh-cs-countdown--ended {
+	background: rgba(70, 180, 80, 0.08);
+	border-color: rgba(70, 180, 80, 0.3);
+	color: #2a8c34;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Notify Me Button                                                   */
+/* ------------------------------------------------------------------ */
+.fh-cs-notify-button {
+	display: inline-block;
+	padding: 8px 18px;
+	background: #c0392b;
+	color: #ffffff !important;
+	border: 0;
+	border-radius: 4px;
+	font-size: 14px;
+	font-weight: 600;
+	text-decoration: none;
+	line-height: 1.2;
+	cursor: pointer;
+	transition: background 0.15s, transform 0.05s;
+}
+
+.fh-cs-notify-button:hover,
+.fh-cs-notify-button:focus {
+	background: #a93226;
+	color: #ffffff !important;
+}
+
+.fh-cs-notify-button:active {
+	transform: translateY(1px);
+}
+
+.fh-cs-notify-button--single {
+	padding: 12px 22px;
+	font-size: 15px;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Single Product Coming Soon Block                                   */
+/* ------------------------------------------------------------------ */
+.fh-cs-single {
+	margin: 16px 0 24px;
+	padding: 16px;
+	background: rgba(0, 0, 0, 0.02);
+	border: 1px solid rgba(0, 0, 0, 0.08);
+	border-radius: 6px;
+}
+
+.fh-cs-single .fh-cs-countdown {
+	margin: 0 0 12px;
+	font-size: 15px;
+	padding: 8px 14px;
+}
+
+.fh-cs-single .fh-cs-price {
+	font-size: 18px;
+	font-weight: 600;
+	margin: 0 0 6px;
+}
+
+.fh-cs-single .fh-cs-stock {
+	font-size: 13px;
+	color: #555;
+	margin: 0 0 14px;
+}
