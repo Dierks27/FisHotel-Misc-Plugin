@@ -1,0 +1,294 @@
+/**
+ * Visitor Stats — admin styles.
+ *
+ * Two surfaces:
+ *   1. The Visitor Stats page, which loads the plugin's shared
+ *      admin-style.css and is forced dark.
+ *   2. The WP dashboard widget on the wp-admin home (index.php), which
+ *      does NOT load admin-style.css and sits on the default light
+ *      dashboard.
+ *
+ * The shared --fh-* custom properties are re-declared here so the dark
+ * cards render correctly even on index.php where admin-style.css is
+ * absent. Values match admin/css/admin-style.css exactly.
+ *
+ * @package FisHotel\Misc\Sections\Visitor_Stats
+ */
+
+:root {
+	--fh-bg-primary: #1a1a1a;
+	--fh-bg-secondary: #2d2d2d;
+	--fh-bg-hover: #363636;
+	--fh-text-primary: #e0e0e0;
+	--fh-text-secondary: #a0a0a0;
+	--fh-accent: #00a0d2;
+	--fh-accent-hover: #0eb5e8;
+	--fh-border: rgba(255, 255, 255, 0.1);
+	--fh-radius: 8px;
+	--fh-transition: 0.2s ease;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Online Now hero                                                    */
+/* ------------------------------------------------------------------ */
+.fishotel-stats-wrap .fh-stats-online {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+	background: var(--fh-bg-secondary);
+	border: 1px solid var(--fh-border);
+	border-radius: var(--fh-radius);
+	padding: 32px 24px;
+	margin-bottom: 24px;
+	text-align: center;
+}
+
+.fishotel-stats-wrap .fh-stats-online-now {
+	font-size: 64px;
+	font-weight: 700;
+	line-height: 1;
+	color: var(--fh-accent);
+}
+
+.fishotel-stats-wrap .fh-stats-online-label {
+	font-size: 13px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.08em;
+	color: var(--fh-text-secondary);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Date range segmented control                                       */
+/* ------------------------------------------------------------------ */
+.fishotel-stats-wrap .fh-stats-range {
+	display: inline-flex;
+	gap: 0;
+	margin-bottom: 24px;
+	border: 1px solid var(--fh-border);
+	border-radius: var(--fh-radius);
+	overflow: hidden;
+	background: var(--fh-bg-secondary);
+}
+
+.fishotel-stats-wrap .fh-stats-range__btn {
+	display: inline-block;
+	padding: 9px 20px;
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--fh-text-secondary);
+	text-decoration: none;
+	border-right: 1px solid var(--fh-border);
+	transition: background var(--fh-transition), color var(--fh-transition);
+}
+
+.fishotel-stats-wrap .fh-stats-range__btn:last-child {
+	border-right: none;
+}
+
+.fishotel-stats-wrap .fh-stats-range__btn:hover,
+.fishotel-stats-wrap .fh-stats-range__btn:focus {
+	background: var(--fh-bg-hover);
+	color: var(--fh-text-primary);
+	box-shadow: none;
+}
+
+.fishotel-stats-wrap .fh-stats-range__btn.is-active {
+	background: var(--fh-accent);
+	color: #fff;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Responsive two-column grid                                         */
+/* ------------------------------------------------------------------ */
+.fishotel-stats-wrap .fh-stats-grid {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 24px;
+	margin-bottom: 24px;
+}
+
+@media (max-width: 782px) {
+	.fishotel-stats-wrap .fh-stats-grid {
+		grid-template-columns: 1fr;
+	}
+}
+
+/* ------------------------------------------------------------------ */
+/*  Cards                                                              */
+/* ------------------------------------------------------------------ */
+.fishotel-stats-wrap .fh-stats-card {
+	background: var(--fh-bg-secondary);
+	border: 1px solid var(--fh-border);
+	border-radius: var(--fh-radius);
+	padding: 20px 24px;
+}
+
+.fishotel-stats-wrap .fh-stats-card h2 {
+	margin: 0 0 14px;
+	font-size: 15px;
+	font-weight: 600;
+	color: var(--fh-text-primary);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Tables                                                             */
+/* ------------------------------------------------------------------ */
+.fishotel-stats-wrap .fh-stats-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 13px;
+}
+
+.fishotel-stats-wrap .fh-stats-table th,
+.fishotel-stats-wrap .fh-stats-table td {
+	padding: 10px 12px;
+	text-align: left;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+	color: var(--fh-text-primary);
+	vertical-align: top;
+}
+
+.fishotel-stats-wrap .fh-stats-table th {
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.06em;
+	color: var(--fh-text-secondary);
+}
+
+.fishotel-stats-wrap .fh-stats-table tbody tr:last-child td {
+	border-bottom: none;
+}
+
+.fishotel-stats-wrap .fh-stats-table tbody tr:hover td {
+	background: rgba(255, 255, 255, 0.04);
+}
+
+.fishotel-stats-wrap .fh-stats-table__num {
+	text-align: right;
+	white-space: nowrap;
+	font-variant-numeric: tabular-nums;
+}
+
+.fishotel-stats-wrap .fh-stats-table__page a {
+	color: var(--fh-accent);
+	text-decoration: none;
+	font-weight: 600;
+}
+
+.fishotel-stats-wrap .fh-stats-table__page a:hover {
+	color: var(--fh-accent-hover);
+	text-decoration: underline;
+}
+
+.fishotel-stats-wrap .fh-stats-table__url {
+	display: block;
+	margin-top: 2px;
+	font-size: 11px;
+	color: var(--fh-text-secondary);
+	word-break: break-all;
+}
+
+.fishotel-stats-wrap .fh-stats-table__edit {
+	display: inline-block;
+	margin-top: 2px;
+	font-size: 11px;
+	font-weight: 400;
+	color: var(--fh-text-secondary);
+	text-decoration: none;
+}
+
+.fishotel-stats-wrap .fh-stats-table__edit:hover {
+	color: var(--fh-text-primary);
+	text-decoration: underline;
+}
+
+/* Empty state */
+.fishotel-stats-wrap .fh-stats-empty {
+	text-align: center;
+	padding: 28px 12px;
+	color: var(--fh-text-secondary);
+	font-style: italic;
+}
+
+/* ------------------------------------------------------------------ */
+/*  WP Dashboard widget (light dashboard — index.php)                  */
+/* ------------------------------------------------------------------ */
+.fh-stats-widget {
+	font-size: 13px;
+	color: #1d2327;
+}
+
+.fh-stats-widget__big {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	margin: 0 0 12px;
+}
+
+.fh-stats-widget .fh-stats-online-now {
+	font-size: 34px;
+	font-weight: 700;
+	line-height: 1;
+	color: var(--fh-accent);
+}
+
+.fh-stats-widget__label {
+	font-size: 12px;
+	color: #646970;
+}
+
+.fh-stats-widget__today {
+	margin: 0 0 14px;
+	padding-bottom: 12px;
+	border-bottom: 1px solid #f0f0f1;
+	color: #50575e;
+}
+
+.fh-stats-widget__h {
+	margin: 0 0 8px;
+	font-size: 12px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.05em;
+	color: #646970;
+}
+
+.fh-stats-widget__list {
+	margin: 0 0 14px;
+	padding: 0;
+	list-style: none;
+}
+
+.fh-stats-widget__list li {
+	display: flex;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 5px 0;
+	border-bottom: 1px solid #f6f7f7;
+}
+
+.fh-stats-widget__list li:last-child {
+	border-bottom: none;
+}
+
+.fh-stats-widget__page {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.fh-stats-widget__count {
+	flex-shrink: 0;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+	color: #1d2327;
+}
+
+.fh-stats-widget__footer {
+	margin: 0;
+	padding-top: 4px;
+}
