@@ -147,6 +147,9 @@ class Tracker {
 		$referrer_domain = $this->extract_referrer_domain( $raw_ref );
 
 		// 5. Insert. No IP, no User-Agent — only the opaque visitor ID.
+		// created_at is stored in UTC (gmdate) so it pairs with the
+		// UTC_TIMESTAMP()-based queries regardless of the MySQL server
+		// or site timezone.
 		global $wpdb;
 
 		$wpdb->insert(
@@ -158,7 +161,7 @@ class Tracker {
 				'referrer_domain' => $referrer_domain,
 				'post_id'         => $post_id,
 				'post_type'       => $post_type,
-				'created_at'      => current_time( 'mysql' ),
+				'created_at'      => gmdate( 'Y-m-d H:i:s' ),
 			),
 			array( '%s', '%s', '%s', '%s', '%d', '%s', '%s' )
 		);

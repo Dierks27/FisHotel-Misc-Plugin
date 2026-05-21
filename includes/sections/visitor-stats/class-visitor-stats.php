@@ -44,7 +44,7 @@ class Visitor_Stats {
 	 *
 	 * @var string
 	 */
-	const DB_VERSION = '1.0';
+	const DB_VERSION = '1.1';
 
 	/**
 	 * Option key storing the installed schema version.
@@ -206,7 +206,9 @@ class Visitor_Stats {
 	 * the schema actually changes. Safe to call on every boot().
 	 */
 	public static function install() {
-		if ( self::DB_VERSION === get_option( self::DB_VERSION_OPTION ) ) {
+		$installed = get_option( self::DB_VERSION_OPTION );
+
+		if ( self::DB_VERSION === $installed ) {
 			return;
 		}
 
@@ -235,6 +237,24 @@ class Visitor_Stats {
 
 		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
 		dbDelta( $sql );
+
+		// 1.0 → 1.1: rows were stored in site-local time before the
+		// timezone fix. Shift them back to UTC once so they line up with
+		// the UTC_TIMESTAMP() queries. Uses the current site offset; rows
+		// from before the last DST change may be off by an hour, which is
+		// acceptable for this short-lived (≤30 day) data.
+		if ( '1.0' === $installed ) {
+			$offset_seconds = (int) wp_timezone()->getOffset( new \DateTimeImmutable() );
+
+			if ( 0 !== $offset_seconds ) {
+				$wpdb->query(
+					$wpdb->prepare(
+						"UPDATE {$table_name} SET created_at = DATE_SUB( created_at, INTERVAL %d SECOND )",
+						$offset_seconds
+					)
+				);
+			}
+		}
 
 		update_option( self::DB_VERSION_OPTION, self::DB_VERSION );
 	}
@@ -270,7 +290,7 @@ class Visitor_Stats {
 
 		$wpdb->query(
 			$wpdb->prepare(
-				"DELETE FROM {$table_name} WHERE created_at < DATE_SUB( NOW(), INTERVAL %d DAY )",
+				"DELETE FROM {$table_name} WHERE created_at < DATE_SUB( UTC_TIMESTAMP(), INTERVAL %d DAY )",
 				self::RETENTION_DAYS
 			)
 		);

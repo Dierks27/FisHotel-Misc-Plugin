@@ -54,7 +54,7 @@ class Admin {
 
 		return (int) $wpdb->get_var(
 			$wpdb->prepare(
-				"SELECT COUNT(DISTINCT visitor_id) FROM {$table} WHERE created_at > DATE_SUB( NOW(), INTERVAL %d MINUTE )",
+				"SELECT COUNT(DISTINCT visitor_id) FROM {$table} WHERE created_at > DATE_SUB( UTC_TIMESTAMP(), INTERVAL %d MINUTE )",
 				Visitor_Stats::ONLINE_NOW_WINDOW_MINUTES
 			)
 		);
@@ -70,8 +70,18 @@ class Admin {
 
 		$table = Visitor_Stats::table_name();
 
-		// No variables to bind — the table name comes from $wpdb->prefix.
-		return (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table} WHERE DATE(created_at) = CURDATE()" );
+		// "Today" means today in the site's timezone, expressed as a UTC
+		// lower bound so it matches the UTC-stored created_at values.
+		$tz        = wp_timezone();
+		$midnight  = ( new \DateTimeImmutable( 'now', $tz ) )->setTime( 0, 0, 0 );
+		$utc_start = $midnight->setTimezone( new \DateTimeZone( 'UTC' ) )->format( 'Y-m-d H:i:s' );
+
+		return (int) $wpdb->get_var(
+			$wpdb->prepare(
+				"SELECT COUNT(*) FROM {$table} WHERE created_at >= %s",
+				$utc_start
+			)
+		);
 	}
 
 	/**
@@ -90,7 +100,7 @@ class Admin {
 			$wpdb->prepare(
 				"SELECT url, MAX(title) AS title, COUNT(*) AS views, COUNT(DISTINCT visitor_id) AS unique_views
 				FROM {$table}
-				WHERE created_at > DATE_SUB( NOW(), INTERVAL %d DAY )
+				WHERE created_at > DATE_SUB( UTC_TIMESTAMP(), INTERVAL %d DAY )
 				GROUP BY url
 				ORDER BY views DESC
 				LIMIT %d",
@@ -116,7 +126,7 @@ class Admin {
 			$wpdb->prepare(
 				"SELECT post_id, MAX(url) AS url, MAX(title) AS title, COUNT(*) AS views
 				FROM {$table}
-				WHERE created_at > DATE_SUB( NOW(), INTERVAL %d DAY )
+				WHERE created_at > DATE_SUB( UTC_TIMESTAMP(), INTERVAL %d DAY )
 					AND post_type = 'product'
 					AND post_id > 0
 				GROUP BY post_id
@@ -144,7 +154,7 @@ class Admin {
 			$wpdb->prepare(
 				"SELECT referrer_domain, COUNT(*) AS visits, COUNT(DISTINCT visitor_id) AS unique_visitors
 				FROM {$table}
-				WHERE created_at > DATE_SUB( NOW(), INTERVAL %d DAY )
+				WHERE created_at > DATE_SUB( UTC_TIMESTAMP(), INTERVAL %d DAY )
 					AND referrer_domain != ''
 				GROUP BY referrer_domain
 				ORDER BY visits DESC
