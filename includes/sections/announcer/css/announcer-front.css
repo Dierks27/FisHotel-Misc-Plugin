@@ -75,10 +75,11 @@ body:has(.ancr-bar) .skip-link {
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	gap: 16px;
+	gap: 24px;
 	max-width: 100%;
 	margin: 0 auto;
 	position: relative;
+	padding-right: 56px; /* reserved space for the absolutely-positioned close button */
 }
 
 .ancr-bar.ancr-boxed .ancr-inner {
@@ -89,10 +90,11 @@ body:has(.ancr-bar) .skip-link {
 /*  Messages                                                           */
 /* ------------------------------------------------------------------ */
 .ancr-messages {
-	flex: 1;
+	flex: 0 1 auto;
 	overflow: hidden;
-	position: relative;
+	position: static;
 	min-height: 1.5em;
+	margin: 0;
 }
 
 .ancr-message {
@@ -115,8 +117,12 @@ body:has(.ancr-bar) .skip-link {
 }
 
 .ancr-content a {
-	color: inherit;
+	color: var(--ancr-link-color, inherit);
 	text-decoration: underline;
+}
+
+.ancr-content a:hover {
+	opacity: 0.85;
 }
 
 /* ------------------------------------------------------------------ */
@@ -150,6 +156,11 @@ body:has(.ancr-bar) .skip-link {
 /*  Close Button                                                       */
 /* ------------------------------------------------------------------ */
 .ancr-close {
+	position: absolute;
+	right: 16px;
+	top: 50%;
+	transform: translateY(-50%);
+	margin: 0;
 	background: none;
 	border: none;
 	color: inherit;
@@ -206,6 +217,13 @@ body:has(.ancr-bar) .skip-link {
 	font-variant-numeric: tabular-nums;
 }
 
+/* Separator between the countdown and the message, e.g. "01:23:14:03 · Join in!" */
+.ancr-countdown::after {
+	content: "·";
+	opacity: 0.4;
+	margin-left: 16px;
+}
+
 .ancr-cd-label {
 	font-weight: 600;
 	white-space: nowrap;
@@ -237,6 +255,7 @@ body:has(.ancr-bar) .skip-link {
 /* ------------------------------------------------------------------ */
 .ancr-bar.ancr-marquee .ancr-messages {
 	overflow: hidden;
+	flex: 1 1 100%;
 }
 
 .ancr-bar.ancr-marquee .ancr-message {
@@ -320,6 +339,10 @@ body:has(.ancr-bar) .skip-link {
 
 	.ancr-countdown {
 		font-size: 0.85em;
+	}
+
+	.ancr-countdown::after {
+		display: none;
 	}
 
 	.ancr-close {

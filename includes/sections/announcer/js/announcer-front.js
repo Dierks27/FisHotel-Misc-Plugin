@@ -92,6 +92,39 @@
 	}
 
 	/* ============================================================== */
+	/*  Publish Bar Height to the Theme                               */
+	/* ============================================================== */
+	/**
+	 * Expose the bar height so sticky theme headers can offset themselves
+	 * and avoid sitting behind the announcer bar.
+	 *
+	 * Contract: CSS variable --ancr-bar-height on <html> and the
+	 * has-ancr-bar class on <body>.
+	 */
+	function syncBarHeight() {
+		var bar = document.querySelector('.ancr-bar:not(.ancr-shortcode)');
+		if (!bar) return;
+
+		var update = function () {
+			var h = Math.round(bar.getBoundingClientRect().height);
+			document.documentElement.style.setProperty('--ancr-bar-height', h + 'px');
+			document.body.classList.add('has-ancr-bar');
+		};
+
+		update();
+
+		if (typeof ResizeObserver !== 'undefined') {
+			new ResizeObserver(update).observe(bar);
+		}
+		window.addEventListener('resize', update);
+	}
+
+	function clearBarHeightContract() {
+		document.documentElement.style.removeProperty('--ancr-bar-height');
+		document.body.classList.remove('has-ancr-bar');
+	}
+
+	/* ============================================================== */
 	/*  Show Bar                                                       */
 	/* ============================================================== */
 	function showBar(bar) {
@@ -122,10 +155,12 @@
 				bar.removeEventListener('animationend', handler);
 				bar.style.display = 'none';
 				adjustBodyPadding();
+				clearBarHeightContract();
 			});
 		} else {
 			bar.style.display = 'none';
 			adjustBodyPadding();
+			clearBarHeightContract();
 		}
 	}
 
@@ -289,6 +324,9 @@
 
 		// Initial padding calculation.
 		adjustBodyPadding();
+
+		// Publish the bar height contract for the theme.
+		syncBarHeight();
 	}
 
 	/* ============================================================== */
