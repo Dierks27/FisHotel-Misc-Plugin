@@ -228,6 +228,11 @@ $tabs = array(
 					<label class="ancr-label"><?php esc_html_e( 'Text color', 'fishotel-misc-plugin' ); ?></label>
 					<input type="text" name="_announcer_text_color" value="<?php echo esc_attr( $meta['_announcer_text_color'] ); ?>" class="ancr-color-picker">
 				</div>
+				<div class="ancr-field">
+					<label class="ancr-label"><?php esc_html_e( 'Link color', 'fishotel-misc-plugin' ); ?></label>
+					<input type="text" name="_announcer_link_color" value="<?php echo esc_attr( $meta['_announcer_link_color'] ); ?>" class="ancr-color-picker">
+					<span class="ancr-hint"><?php esc_html_e( 'Leave empty to use the text color.', 'fishotel-misc-plugin' ); ?></span>
+				</div>
 			</div>
 
 			<div class="ancr-field-row">
