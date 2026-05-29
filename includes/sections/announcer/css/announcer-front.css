@@ -57,6 +57,25 @@ body:has(.ancr-bar) .skip-link {
 }
 
 /* ------------------------------------------------------------------ */
+/*  WP Admin Bar Offset                                                */
+/* ------------------------------------------------------------------ */
+/* When the WP admin bar is visible, push the top-positioned announcer
+   bar below it so the admin bar and announcer stack cleanly with no
+   empty strip. Must be !important to beat .ancr-pos-top's top:0 and the
+   inline styles JS sets. Logged-out visitors have no .admin-bar class,
+   so the bar stays at top:0 unchanged. Matches WP's own admin-bar
+   heights: 32px above 782px, 46px at/below it. */
+body.admin-bar .ancr-bar.ancr-pos-top {
+	top: 32px !important;
+}
+
+@media screen and (max-width: 782px) {
+	body.admin-bar .ancr-bar.ancr-pos-top {
+		top: 46px !important;
+	}
+}
+
+/* ------------------------------------------------------------------ */
 /*  Shortcode — inline, not fixed                                      */
 /* ------------------------------------------------------------------ */
 .ancr-bar.ancr-shortcode {
