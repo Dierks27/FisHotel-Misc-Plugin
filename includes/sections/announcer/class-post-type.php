@@ -51,6 +51,7 @@ class Post_Type {
 		// Style.
 		'_announcer_bg_color'           => '#0073aa',
 		'_announcer_text_color'         => '#ffffff',
+		'_announcer_link_color'         => '',
 		'_announcer_font_size'          => '14',
 		'_announcer_padding'            => '12',
 		'_announcer_show_animation'     => 'slide',
@@ -232,6 +233,7 @@ class Post_Type {
 			'_announcer_schedule_end',
 			'_announcer_bg_color',
 			'_announcer_text_color',
+			'_announcer_link_color',
 			'_announcer_font_size',
 			'_announcer_padding',
 			'_announcer_show_animation',

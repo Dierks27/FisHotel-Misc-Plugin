@@ -366,6 +366,7 @@ class Frontend {
 		$scroll_pct     = Post_Type::get_meta( $id, '_announcer_scroll_percent' );
 		$bg_color       = Post_Type::get_meta( $id, '_announcer_bg_color' );
 		$text_color     = Post_Type::get_meta( $id, '_announcer_text_color' );
+		$link_color     = Post_Type::get_meta( $id, '_announcer_link_color' );
 		$font_size      = Post_Type::get_meta( $id, '_announcer_font_size' );
 		$padding        = Post_Type::get_meta( $id, '_announcer_padding' );
 		$show_anim      = Post_Type::get_meta( $id, '_announcer_show_animation' );
@@ -458,6 +459,10 @@ class Frontend {
 			esc_attr( $font_size ),
 			esc_attr( $padding )
 		);
+
+		if ( $link_color ) {
+			$style .= '--ancr-link-color:' . esc_attr( $link_color ) . ';';
+		}
 
 		ob_start();
 		?>
