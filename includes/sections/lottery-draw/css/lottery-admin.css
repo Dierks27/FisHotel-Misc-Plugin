@@ -1,0 +1,139 @@
+/**
+ * Lottery Draw — admin styles.
+ *
+ * Layered on top of the plugin's shared admin-style.css, which forces the
+ * dark theme on every fishotel-misc screen. Core's form tables and list
+ * tables assume a light background, so the rules here re-tint them and
+ * reuse the --fh-* custom properties so a palette change propagates.
+ *
+ * @package FisHotel\Misc\Sections\Lottery_Draw
+ */
+
+.fh-draw-admin {
+	color: var(--fh-text-primary);
+	max-width: 1100px;
+}
+
+.fh-draw-admin h1,
+.fh-draw-admin h2,
+.fh-draw-admin h3,
+.fh-draw-admin h4 {
+	color: var(--fh-text-primary);
+}
+
+.fh-draw-admin h2 {
+	margin-top: 32px;
+	padding-top: 18px;
+	border-top: 1px solid var(--fh-border);
+}
+
+.fh-draw-lede,
+.fh-draw-admin .description {
+	color: var(--fh-text-secondary);
+	max-width: 760px;
+}
+
+.fh-draw-admin .form-table th,
+.fh-draw-admin .form-table td,
+.fh-draw-admin label,
+.fh-draw-admin legend {
+	color: var(--fh-text-primary);
+}
+
+.fh-draw-admin .widefat {
+	background: var(--fh-bg-secondary);
+	border-color: var(--fh-border);
+}
+
+.fh-draw-admin .widefat th,
+.fh-draw-admin .widefat td,
+.fh-draw-admin .widefat thead th,
+.fh-draw-admin .widefat a {
+	color: var(--fh-text-primary);
+	border-color: var(--fh-border);
+}
+
+.fh-draw-admin .widefat.striped > tbody > :nth-child(odd) {
+	background: var(--fh-bg-primary);
+}
+
+.fh-draw-admin code,
+.fh-draw-admin textarea,
+.fh-draw-admin input[type="text"],
+.fh-draw-admin input[type="number"] {
+	background: var(--fh-bg-primary);
+	color: var(--fh-text-primary);
+	border: 1px solid var(--fh-border);
+}
+
+.fh-draw-admin code {
+	padding: 2px 6px;
+	border-radius: 4px;
+}
+
+/* Status chip in the page heading. */
+.fh-draw-status {
+	display: inline-block;
+	margin-left: 10px;
+	padding: 3px 10px;
+	border-radius: 999px;
+	font-size: 12px;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	vertical-align: middle;
+	background: var(--fh-bg-hover);
+	color: var(--fh-text-secondary);
+}
+
+.fh-draw-status.is-seed_committed {
+	background: rgba(255, 185, 0, 0.15);
+	color: var(--fh-warning);
+}
+
+.fh-draw-status.is-published {
+	background: rgba(70, 180, 80, 0.15);
+	color: var(--fh-success);
+}
+
+.fh-draw-entrant-cell {
+	max-width: 420px;
+	word-break: break-word;
+}
+
+.fh-draw-run-status {
+	color: var(--fh-warning);
+	font-weight: 600;
+}
+
+.fh-draw-preview {
+	display: grid;
+	gap: 14px;
+	grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+	margin-top: 12px;
+}
+
+.fh-draw-preview-fish {
+	background: var(--fh-bg-secondary);
+	border: 1px solid var(--fh-border);
+	border-radius: var(--fh-radius);
+	padding: 14px 16px;
+}
+
+.fh-draw-preview-fish h4 {
+	margin: 0 0 8px;
+}
+
+.fh-draw-preview-fish p {
+	margin: 4px 0;
+	color: var(--fh-text-secondary);
+	word-break: break-word;
+}
+
+.fh-draw-preview-fish strong {
+	color: var(--fh-text-primary);
+}
+
+.fh-draw-fish-list form {
+	margin: 0;
+}

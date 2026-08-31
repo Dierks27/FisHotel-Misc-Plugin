@@ -1,0 +1,277 @@
+/**
+ * Lottery Draw — public results page.
+ *
+ * Mobile-first: most members open this on a phone, straight from the
+ * forum thread. Wide content scrolls inside its own container so the
+ * page itself never scrolls sideways. Colours are inherited from the
+ * theme wherever possible; only the verification banner insists on its
+ * own, because a red banner has to be unmistakable.
+ *
+ * @package FisHotel\Misc\Sections\Lottery_Draw
+ */
+
+.fh-draw {
+	max-width: 100%;
+	line-height: 1.55;
+	overflow-wrap: break-word;
+}
+
+.fh-draw-title {
+	margin: 0 0 16px;
+}
+
+.fh-draw-note,
+.fh-draw-utc {
+	font-size: 0.85em;
+	opacity: 0.75;
+}
+
+.fh-draw-utc {
+	display: block;
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* --- Seed ------------------------------------------------------- */
+
+.fh-draw-seedbox {
+	border: 1px solid rgba(127, 127, 127, 0.35);
+	border-radius: 8px;
+	padding: 14px 16px;
+	margin: 0 0 18px;
+}
+
+.fh-draw-seed-label {
+	font-size: 0.75em;
+	font-weight: 700;
+	letter-spacing: 0.1em;
+	text-transform: uppercase;
+	opacity: 0.7;
+}
+
+.fh-draw-seed {
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 1.25em;
+	font-weight: 700;
+	word-break: break-all;
+	margin: 4px 0 12px;
+}
+
+.fh-draw-seedmeta {
+	display: grid;
+	grid-template-columns: 1fr;
+	gap: 2px 16px;
+	margin: 0;
+}
+
+.fh-draw-seedmeta dt {
+	font-weight: 700;
+	font-size: 0.85em;
+	opacity: 0.7;
+	margin-top: 8px;
+}
+
+.fh-draw-seedmeta dd {
+	margin: 0;
+}
+
+@media (min-width: 620px) {
+	.fh-draw-seedmeta {
+		grid-template-columns: max-content 1fr;
+	}
+
+	.fh-draw-seedmeta dt {
+		margin-top: 0;
+	}
+}
+
+/* --- Verification banner ---------------------------------------- */
+
+.fh-draw-verify {
+	border-radius: 8px;
+	padding: 14px 16px;
+	margin: 0 0 18px;
+	font-weight: 700;
+	border: 2px solid transparent;
+}
+
+.fh-draw-verify.is-pending {
+	background: #f3f4f6;
+	border-color: #d1d5db;
+	color: #374151;
+}
+
+.fh-draw-verify.is-ok {
+	background: #e7f6ec;
+	border-color: #1f8a4c;
+	color: #10562f;
+}
+
+.fh-draw-verify.is-fail {
+	background: #fdeaea;
+	border-color: #c0261f;
+	color: #8a1610;
+}
+
+.fh-draw-diff {
+	border: 2px solid #c0261f;
+	border-radius: 8px;
+	padding: 14px 16px;
+	margin: 0 0 18px;
+	background: #fff6f5;
+	color: #4a1210;
+}
+
+.fh-draw-diff-pair {
+	margin: 0 0 12px;
+}
+
+.fh-draw-diff-pair dt {
+	font-weight: 700;
+	font-size: 0.85em;
+}
+
+.fh-draw-diff-pair dd {
+	margin: 0 0 6px;
+	font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+	font-size: 0.9em;
+	word-break: break-word;
+}
+
+/* --- Results ---------------------------------------------------- */
+
+.fh-draw-fish {
+	border-top: 1px solid rgba(127, 127, 127, 0.3);
+	padding-top: 16px;
+	margin-top: 16px;
+}
+
+.fh-draw-fish-name {
+	margin: 0 0 4px;
+}
+
+.fh-draw-fish-name em {
+	display: block;
+	font-size: 0.7em;
+	font-weight: 400;
+	opacity: 0.75;
+}
+
+.fh-draw-stock {
+	margin: 0 0 8px;
+	font-size: 0.9em;
+	opacity: 0.85;
+}
+
+.fh-draw-uncontested {
+	margin: 0 0 8px;
+	font-weight: 600;
+}
+
+.fh-draw-subhead {
+	margin: 14px 0 6px;
+	font-size: 0.8em;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	opacity: 0.7;
+}
+
+.fh-draw-winners {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.fh-draw-winners li {
+	border: 1px solid rgba(31, 138, 76, 0.5);
+	background: rgba(31, 138, 76, 0.08);
+	border-radius: 999px;
+	padding: 4px 12px;
+	font-weight: 600;
+}
+
+.fh-draw-count {
+	opacity: 0.75;
+}
+
+.fh-draw-waitlist {
+	margin: 0 0 6px;
+	padding-left: 1.4em;
+}
+
+.fh-draw-empty {
+	margin: 0;
+	opacity: 0.75;
+}
+
+/* --- Entrant lists ---------------------------------------------- */
+
+.fh-draw-entrants,
+.fh-draw-howto {
+	border-top: 1px solid rgba(127, 127, 127, 0.3);
+	padding-top: 16px;
+	margin-top: 24px;
+}
+
+.fh-draw-scroll {
+	overflow-x: auto;
+	-webkit-overflow-scrolling: touch;
+	max-width: 100%;
+}
+
+.fh-draw-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 0.92em;
+}
+
+.fh-draw-table th,
+.fh-draw-table td {
+	text-align: left;
+	padding: 6px 10px;
+	border-bottom: 1px solid rgba(127, 127, 127, 0.25);
+	white-space: nowrap;
+}
+
+.fh-draw-table th {
+	font-size: 0.8em;
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
+	opacity: 0.7;
+}
+
+/* --- Verify it yourself ----------------------------------------- */
+
+.fh-draw-steps li {
+	margin-bottom: 10px;
+}
+
+.fh-draw-steps code {
+	word-break: break-all;
+}
+
+.fh-draw-missing,
+.fh-draw-pending {
+	font-style: italic;
+	opacity: 0.85;
+}
+
+/* --- Corrections ------------------------------------------------- */
+
+.fh-draw-superseded {
+	border-left: 4px solid #c0261f;
+	background: #fdeaea;
+	color: #8a1610;
+	padding: 10px 14px;
+	margin: 0 0 16px;
+	font-weight: 600;
+}
+
+.fh-draw-corrects {
+	border-left: 4px solid rgba(127, 127, 127, 0.6);
+	padding: 10px 14px;
+	margin: 0 0 16px;
+	font-size: 0.95em;
+}

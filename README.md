@@ -26,7 +26,8 @@ fishotel-misc-plugin/
 │   ├── class-plugin.php            # Main plugin orchestrator
 │   ├── class-section-manager.php   # Section discovery & toggling
 │   └── sections/
-│       └── announcer/              # Example section (placeholder)
+│       ├── announcer/              # Example section (placeholder)
+│       └── lottery-draw/           # Verifiable lottery for group orders
 ├── admin/
 │   ├── css/admin-style.css         # Dark theme styles
 │   ├── js/admin-script.js          # Toggle & AJAX handling
@@ -66,6 +67,8 @@ class My_feature {
 The Section Manager will automatically discover and register the section.
 
 ## Version
+
+0.34 — Added Lottery Draw section — allocates contested group-order fish by a seeded lottery members can recompute in their own browser. The draw algorithm lives in exactly one implementation (`draw.js`), shared verbatim by the admin screen that produces a result and the public page that re-checks it; PHP stores and renders but never draws. Seeds are committed before entries close (or taken from external randomness), published draws are immutable, and a tampered result renders a red MISMATCH banner instead of a green one.
 
 0.31 — Hotfix: Visitor Stats timezone bug. Pageviews now stored and queried in UTC, so the "online now" counter and recent-window aggregates work correctly regardless of site vs. MySQL server timezone. One-time backfill converts existing rows from site-local to UTC.
 
