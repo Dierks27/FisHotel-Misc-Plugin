@@ -30,6 +30,14 @@ $fh_status_labels = array(
 		<?php esc_html_e( 'Allocate contested fish by a seeded lottery members can recompute themselves. The draw runs in your browser; this plugin stores the inputs and the result, and the public page re-runs the draw in every visitor\'s browser to check it.', 'fishotel-misc-plugin' ); ?>
 	</p>
 
+	<p class="fh-draw-toolbar">
+		<a class="button button-secondary"
+			href="<?php echo esc_url( add_query_arg( array( 'page' => Lottery_Draw::MENU_SLUG, 'import' => '1' ), admin_url( 'admin.php' ) ) ); ?>">
+			<?php esc_html_e( 'Import from JSON', 'fishotel-misc-plugin' ); ?>
+		</a>
+		<span class="description"><?php esc_html_e( 'Paste a whole draw instead of retyping every fish and entrant.', 'fishotel-misc-plugin' ); ?></span>
+	</p>
+
 	<h2><?php esc_html_e( 'Draws', 'fishotel-misc-plugin' ); ?></h2>
 
 	<?php if ( empty( $draws ) ) : ?>

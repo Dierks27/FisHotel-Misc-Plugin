@@ -69,6 +69,17 @@ class Lottery_Draw {
 	const META_SUPERSEDES = '_fh_draw_supersedes';
 
 	/**
+	 * Post meta key holding the draw's import log.
+	 *
+	 * Kept beside the payload rather than inside it: the payload is the
+	 * public, verifiable document, and who pressed Import is site
+	 * bookkeeping rather than something members need to check a draw.
+	 *
+	 * @var string
+	 */
+	const META_LOG = '_fh_draw_log';
+
+	/**
 	 * Admin submenu slug.
 	 *
 	 * @var string
@@ -174,6 +185,7 @@ class Lottery_Draw {
 		// (`Lottery_Draw`). Require classes explicitly to bypass that,
 		// exactly as the Coming Soon and Visitor Stats sections do.
 		require_once self::path() . 'class-store.php';
+		require_once self::path() . 'class-importer.php';
 		require_once self::path() . 'class-frontend.php';
 
 		add_action( 'init', array( self::class, 'register_post_type' ) );
@@ -195,6 +207,7 @@ class Lottery_Draw {
 	 */
 	public static function register_menu() {
 		require_once self::path() . 'class-store.php';
+		require_once self::path() . 'class-importer.php';
 		require_once self::path() . 'class-admin.php';
 
 		add_submenu_page(

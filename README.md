@@ -68,6 +68,8 @@ The Section Manager will automatically discover and register the section.
 
 ## Version
 
+0.35 — Lottery Draw: added a JSON importer so a whole draw can be pasted in rather than retyped fish by fish. Validation renders a preview (slots, tickets, and whether each fish is a real draw or rank-only) before anything is written. A payload carrying `winners` or `waitlist` is refused outright and named, never silently stripped, and import only ever writes a draft — results can only ever come from the draw itself. Each import is logged with who, when, and how many fish and tickets.
+
 0.34 — Added Lottery Draw section — allocates contested group-order fish by a seeded lottery members can recompute in their own browser. The draw algorithm lives in exactly one implementation (`draw.js`), shared verbatim by the admin screen that produces a result and the public page that re-checks it; PHP stores and renders but never draws. Seeds are committed before entries close (or taken from external randomness), published draws are immutable, and a tampered result renders a red MISMATCH banner instead of a green one.
 
 0.31 — Hotfix: Visitor Stats timezone bug. Pageviews now stored and queried in UTC, so the "online now" counter and recent-window aggregates work correctly regardless of site vs. MySQL server timezone. One-time backfill converts existing rows from site-local to UTC.

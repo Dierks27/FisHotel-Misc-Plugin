@@ -5,6 +5,7 @@
 ```
 node includes/sections/lottery-draw/tests/draw.test.js
 node includes/sections/lottery-draw/tests/banner.test.js
+php  includes/sections/lottery-draw/tests/importer-test.php
 ```
 
 `draw.test.js` covers acceptance tests 1–7 and 9 against `js/draw.js`
@@ -25,6 +26,18 @@ Open a published draw's public page in Chrome, Firefox, and Safari (and on
 a phone). The banner must be green in every one. The draw uses `Math.imul`
 and 32-bit integer arithmetic precisely so this holds; if one browser
 disagrees, stop and treat the results as unverified.
+
+### Importer tests
+
+`importer-test.php` covers all seven importer acceptance tests headlessly,
+against `class-importer.php` and `class-store.php` with a small WordPress stub
+(`wp-stubs.php`). The round-trip test shells out to `node` for the draw itself;
+it skips with a notice if node is unavailable.
+
+The one to actually try by hand, once, on a real site: paste a payload
+containing `winners` into **Import from JSON** and press Validate. It must be
+refused with the offending fish named, and nothing may be written. If a payload
+carrying results ever imports, stop and fix that before shipping anything else.
 
 ### Test 8 — a published draw cannot be edited
 
