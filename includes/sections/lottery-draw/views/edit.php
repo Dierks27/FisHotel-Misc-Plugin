@@ -209,6 +209,14 @@ $fh_action    = admin_url( 'admin-post.php' );
 	<?php endif; ?>
 
 	<?php if ( $fh_editable ) : ?>
+		<p class="fh-draw-toolbar">
+			<a class="button button-secondary"
+				href="<?php echo esc_url( add_query_arg( array( 'page' => Lottery_Draw::MENU_SLUG, 'import' => '1', 'draw' => $payload['id'] ), admin_url( 'admin.php' ) ) ); ?>">
+				<?php esc_html_e( 'Import from JSON', 'fishotel-misc-plugin' ); ?>
+			</a>
+			<span class="description"><?php esc_html_e( 'Replaces the fish and entrant lists above with a pasted payload.', 'fishotel-misc-plugin' ); ?></span>
+		</p>
+
 		<h3><?php esc_html_e( 'Add a fish', 'fishotel-misc-plugin' ); ?></h3>
 
 		<form method="post" action="<?php echo esc_url( $fh_action ); ?>" class="fh-draw-form">
@@ -308,6 +316,50 @@ $fh_action    = admin_url( 'admin-post.php' );
 		</form>
 
 		<div class="fh-draw-preview" data-fh-preview></div>
+	<?php endif; ?>
+
+	<?php $fh_log = Store::get_log( $post->ID ); ?>
+	<?php if ( $fh_log ) : ?>
+		<h2><?php esc_html_e( 'Import log', 'fishotel-misc-plugin' ); ?></h2>
+
+		<table class="widefat striped fh-draw-log">
+			<thead>
+				<tr>
+					<th scope="col"><?php esc_html_e( 'When', 'fishotel-misc-plugin' ); ?></th>
+					<th scope="col"><?php esc_html_e( 'Who', 'fishotel-misc-plugin' ); ?></th>
+					<th scope="col"><?php esc_html_e( 'What', 'fishotel-misc-plugin' ); ?></th>
+					<th scope="col"><?php esc_html_e( 'Imported', 'fishotel-misc-plugin' ); ?></th>
+				</tr>
+			</thead>
+			<tbody>
+				<?php foreach ( array_reverse( $fh_log ) as $fh_entry ) : ?>
+					<tr>
+						<td><?php echo esc_html( Lottery_Draw::format_local( $fh_entry['at'] ) ); ?></td>
+						<td><?php echo esc_html( $fh_entry['user'] ); ?></td>
+						<td>
+							<?php
+							echo esc_html(
+								'import-replace' === $fh_entry['action']
+									? __( 'Replaced the fish list by import', 'fishotel-misc-plugin' )
+									: __( 'Created by import', 'fishotel-misc-plugin' )
+							);
+							?>
+						</td>
+						<td>
+							<?php
+							printf(
+								/* translators: 1: fish count, 2: ticket count, 3: people count */
+								esc_html__( '%1$d fish, %2$d tickets, %3$d people', 'fishotel-misc-plugin' ),
+								(int) $fh_entry['fish'],
+								(int) $fh_entry['tickets'],
+								(int) $fh_entry['people']
+							);
+							?>
+						</td>
+					</tr>
+				<?php endforeach; ?>
+			</tbody>
+		</table>
 	<?php endif; ?>
 
 	<?php if ( $fh_published ) : ?>

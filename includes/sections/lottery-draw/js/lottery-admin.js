@@ -226,6 +226,56 @@
 	}
 
 	/**
+	 * Keep the import button honest about what it would import.
+	 *
+	 * The preview below the form describes the payload as it was when
+	 * Validate ran. Edit the textarea afterwards and that preview is
+	 * stale, so importing is disabled until it is validated again. The
+	 * server re-validates the submitted text regardless — this only
+	 * stops the admin confirming a preview of something else.
+	 */
+	function bindImport() {
+		var form = document.querySelector( '[data-fh-import-form]' );
+
+		if ( ! form ) {
+			return;
+		}
+
+		var payload = form.querySelector( '[data-fh-import-payload]' );
+		var commit  = form.querySelector( '[data-fh-import-commit]' );
+		var stale   = form.querySelector( '[data-fh-import-stale]' );
+
+		if ( ! payload || ! commit ) {
+			return;
+		}
+
+		// Whether the server rendered the button enabled — i.e. whether the
+		// text in the box is a payload that actually passed validation.
+		var startedDisabled = commit.disabled;
+		var validated       = payload.value;
+
+		payload.addEventListener( 'input', function () {
+			var changed = ( payload.value !== validated );
+
+			commit.disabled = startedDisabled || changed;
+
+			if ( stale ) {
+				stale.hidden = ! changed;
+			}
+		} );
+
+		form.addEventListener( 'submit', function ( event ) {
+			if ( 'commit' !== ( event.submitter && event.submitter.value ) ) {
+				return;
+			}
+
+			if ( ! window.confirm( 'Import this payload? It replaces the fish and entrant lists for this draft.' ) ) {
+				event.preventDefault();
+			}
+		} );
+	}
+
+	/**
 	 * Confirm destructive or irreversible actions.
 	 */
 	function bindConfirms() {
@@ -242,6 +292,7 @@
 		bindSeedGeneration();
 		bindSeedMethod();
 		bindRunDraw();
+		bindImport();
 		bindCopy();
 		bindConfirms();
 	}

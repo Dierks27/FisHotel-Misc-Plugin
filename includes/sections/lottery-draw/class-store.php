@@ -31,6 +31,13 @@ class Store {
 	const JSON_FLAGS = JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE;
 
 	/**
+	 * How many import-log entries to keep per draw.
+	 *
+	 * @var int
+	 */
+	const LOG_LIMIT = 50;
+
+	/**
 	 * Encode a payload array to the canonical JSON string we store.
 	 *
 	 * @param array $payload Draw payload.
@@ -172,6 +179,37 @@ class Store {
 			return new \WP_Error( 'fh_draw_invalid', __( 'A draw needs a title and an ID.', 'fishotel-misc-plugin' ) );
 		}
 
+		return self::insert(
+			array(
+				'id'                => $draw_id,
+				'title'             => $title,
+				'seed'              => $seed,
+				'seed_method'       => $seed_method,
+				'seed_source'       => $seed_source,
+				'supersedes'        => sanitize_title( $supersedes ),
+				'seed_published_at' => '',
+				'drawn_at'          => '',
+				'status'            => Lottery_Draw::STATUS_DRAFT,
+				'created_at'        => Lottery_Draw::now_utc(),
+				'fish'              => array(),
+			)
+		);
+	}
+
+	/**
+	 * Insert a new draft draw from a complete payload.
+	 *
+	 * @param array $payload Payload to store. Must carry an id and title.
+	 * @return int|\WP_Error New post ID, or an error.
+	 */
+	public static function insert( array $payload ) {
+		$draw_id = sanitize_title( $payload['id'] ?? '' );
+		$title   = trim( (string) ( $payload['title'] ?? '' ) );
+
+		if ( '' === $draw_id || '' === $title ) {
+			return new \WP_Error( 'fh_draw_invalid', __( 'A draw needs a title and an ID.', 'fishotel-misc-plugin' ) );
+		}
+
 		if ( self::find_post( $draw_id ) ) {
 			return new \WP_Error( 'fh_draw_duplicate', __( 'A draw with that ID already exists.', 'fishotel-misc-plugin' ) );
 		}
@@ -190,24 +228,50 @@ class Store {
 			return $post_id;
 		}
 
-		self::save_payload(
-			$post_id,
-			array(
-				'id'                => $draw_id,
-				'title'             => $title,
-				'seed'              => $seed,
-				'seed_method'       => $seed_method,
-				'seed_source'       => $seed_source,
-				'supersedes'        => sanitize_title( $supersedes ),
-				'seed_published_at' => '',
-				'drawn_at'          => '',
-				'status'            => Lottery_Draw::STATUS_DRAFT,
-				'created_at'        => Lottery_Draw::now_utc(),
-				'fish'              => array(),
-			)
-		);
+		self::save_payload( $post_id, $payload );
 
 		return $post_id;
+	}
+
+	/**
+	 * Read a draw's import log, oldest entry first.
+	 *
+	 * @param int $post_id Draw post ID.
+	 * @return array<int, array>
+	 */
+	public static function get_log( $post_id ) {
+		$log = get_post_meta( $post_id, Lottery_Draw::META_LOG, true );
+
+		return is_array( $log ) ? $log : array();
+	}
+
+	/**
+	 * Append an entry to a draw's import log.
+	 *
+	 * @param int   $post_id Draw post ID.
+	 * @param array $entry   Entry fields; `at` defaults to now (UTC).
+	 * @return array The log as stored.
+	 */
+	public static function append_log( $post_id, array $entry ) {
+		$log = self::get_log( $post_id );
+
+		$log[] = array(
+			'at'      => $entry['at'] ?? Lottery_Draw::now_utc(),
+			'user'    => (string) ( $entry['user'] ?? '' ),
+			'action'  => (string) ( $entry['action'] ?? '' ),
+			'fish'    => (int) ( $entry['fish'] ?? 0 ),
+			'tickets' => (int) ( $entry['tickets'] ?? 0 ),
+			'people'  => (int) ( $entry['people'] ?? 0 ),
+			'detail'  => (string) ( $entry['detail'] ?? '' ),
+		);
+
+		if ( count( $log ) > self::LOG_LIMIT ) {
+			$log = array_slice( $log, - self::LOG_LIMIT );
+		}
+
+		update_post_meta( $post_id, Lottery_Draw::META_LOG, $log );
+
+		return $log;
 	}
 
 	/**
