@@ -18,16 +18,19 @@
  *   @type int[]         $extras        Current add-on quantities by ID.
  *   @type float         $extra_price   Add-on unit price.
  *   @type int           $max_qty       Add-on max per sticker.
- *   @type string        $intro_upsell  Intro with {price} resolved.
+ *   @type string        $heading_upsell Add-on heading for this cart's state.
+ *   @type string        $intro_upsell  Add-on intro with {price} resolved.
  * }
  */
+
+use FisHotel\Misc\Sections\Sticker_Giveaway\Cart;
 
 defined( 'ABSPATH' ) || exit;
 
 $s = $view['settings'];
 ?>
 <div class="fh-sticker fh-sticker--<?php echo esc_attr( $view['context'] ); ?>" data-fh-sticker data-context="<?php echo esc_attr( $view['context'] ); ?>">
-	<input type="hidden" name="fh_sticker_picker" value="1">
+	<input type="hidden" name="<?php echo esc_attr( Cart::FIELD_MARKER ); ?>" value="1">
 
 	<?php if ( $view['eligible'] ) : ?>
 	<header class="fh-sticker__header">
@@ -41,7 +44,7 @@ $s = $view['settings'];
 	<div class="fh-sticker__grid" role="radiogroup" aria-label="<?php echo esc_attr( $s['heading_free'] ); ?>">
 		<?php foreach ( $view['products'] as $pid => $product ) : ?>
 		<label class="fh-sticker__option">
-			<input class="fh-sticker__radio" type="radio" name="fh_sticker_free" value="<?php echo esc_attr( $pid ); ?>" <?php checked( $view['selected_free'], (int) $pid ); ?>>
+			<input class="fh-sticker__radio" type="radio" name="<?php echo esc_attr( Cart::FIELD_FREE ); ?>" value="<?php echo esc_attr( $pid ); ?>" <?php checked( $view['selected_free'], (int) $pid ); ?>>
 			<span class="fh-sticker__card">
 				<span class="fh-sticker__thumb"><?php echo $product->get_image( 'woocommerce_thumbnail' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
 				<span class="fh-sticker__name"><?php echo esc_html( $product->get_name() ); ?></span>
@@ -53,7 +56,7 @@ $s = $view['settings'];
 		<?php endforeach; ?>
 
 		<label class="fh-sticker__option fh-sticker__option--none">
-			<input class="fh-sticker__radio" type="radio" name="fh_sticker_free" value="0" <?php checked( $view['selected_free'], 0 ); ?>>
+			<input class="fh-sticker__radio" type="radio" name="<?php echo esc_attr( Cart::FIELD_FREE ); ?>" value="0" <?php checked( $view['selected_free'], 0 ); ?>>
 			<span class="fh-sticker__card">
 				<span class="fh-sticker__name"><?php echo esc_html( $s['no_thanks_label'] ); ?></span>
 			</span>
@@ -64,7 +67,7 @@ $s = $view['settings'];
 	<?php if ( $view['offer_upsell'] ) : ?>
 	<div class="fh-sticker__upsell">
 		<header class="fh-sticker__header">
-			<span class="fh-sticker__eyebrow"><?php echo esc_html( $s['heading_upsell'] ); ?></span>
+			<span class="fh-sticker__eyebrow"><?php echo esc_html( $view['heading_upsell'] ); ?></span>
 		</header>
 
 		<?php if ( '' !== $view['intro_upsell'] ) : ?>
@@ -79,7 +82,8 @@ $s = $view['settings'];
 				?>
 			<li class="fh-sticker__row">
 				<span class="fh-sticker__row-thumb"><?php echo $product->get_image( 'woocommerce_gallery_thumbnail' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
-				<label class="fh-sticker__row-name" for="<?php echo esc_attr( $id ); ?>"><?php echo esc_html( $product->get_name() ); ?></label>
+				<?php // A <span>, not a <label for>: the theme styles every label[for] in the checkout form as a gold uppercase field label. The input carries aria-label instead. ?>
+				<span class="fh-sticker__row-name"><?php echo esc_html( $product->get_name() ); ?></span>
 				<span class="fh-sticker__row-price"><?php echo wp_kses_post( wc_price( $view['extra_price'] ) ); ?></span>
 				<span class="fh-sticker__stepper">
 					<button type="button" class="fh-sticker__step" data-step="-1" aria-label="<?php esc_attr_e( 'One fewer', 'fishotel-misc-plugin' ); ?>">&minus;</button>
@@ -87,8 +91,10 @@ $s = $view['settings'];
 						type="number"
 						id="<?php echo esc_attr( $id ); ?>"
 						class="fh-sticker__qty"
-						name="fh_sticker_extra[<?php echo esc_attr( $pid ); ?>]"
+						name="<?php echo esc_attr( Cart::FIELD_EXTRA ); ?>[<?php echo esc_attr( $pid ); ?>]"
 						value="<?php echo esc_attr( $qty ); ?>"
+						<?php /* translators: %s: sticker product name */ ?>
+						aria-label="<?php echo esc_attr( sprintf( __( 'Quantity of %s', 'fishotel-misc-plugin' ), $product->get_name() ) ); ?>"
 						min="0"
 						max="<?php echo esc_attr( $view['max_qty'] ); ?>"
 						step="1"

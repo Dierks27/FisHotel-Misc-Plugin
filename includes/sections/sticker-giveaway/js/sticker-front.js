@@ -72,7 +72,9 @@
 		data.append('action', 'fishotel_sticker_sync');
 		data.append('nonce', cfg.nonce || '');
 
-		var inputs = picker.querySelectorAll('input[name^="fh_sticker"]');
+		// Every named input inside the picker is ours (field names come
+		// from Cart::FIELD_* via the view, so nothing is hardcoded here).
+		var inputs = picker.querySelectorAll('input[name]');
 		for (var i = 0; i < inputs.length; i++) {
 			var input = inputs[i];
 			if (input.type === 'radio' && !input.checked) {

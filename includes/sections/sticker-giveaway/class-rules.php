@@ -100,8 +100,11 @@ class Rules {
 	 *      a fish order, and the free line must not keep itself eligible.
 	 *   2. At least one remaining line must sit in an eligible category
 	 *      (the caller passes ancestor slugs, so a child of
-	 *      `quarantined-fish` matches). An EMPTY eligible list means no
-	 *      category requirement at all — every order gets one.
+	 *      `quarantined-fish` matches). An EMPTY eligible list means NO
+	 *      order qualifies — the giveaway is off until a category is
+	 *      ticked. (Jeff: "mostly only fish orders get stickers for
+	 *      free"; an accidental untick-all must never widen that to the
+	 *      whole store.)
 	 *   3. The subtotal of the remaining lines must reach `min_subtotal`
 	 *      (0 = no minimum). Compared at cent precision so 49.995 does not
 	 *      sneak past a $50 floor by float noise.
@@ -112,9 +115,14 @@ class Rules {
 	 */
 	public static function is_eligible( array $lines, array $settings ) {
 		$eligible_slugs = self::eligible_slugs( $settings );
-		$subtotal       = 0.0;
-		$has_line       = false;
-		$category_ok    = empty( $eligible_slugs );
+
+		if ( empty( $eligible_slugs ) ) {
+			return false;
+		}
+
+		$subtotal    = 0.0;
+		$has_line    = false;
+		$category_ok = false;
 
 		foreach ( $lines as $line ) {
 			if ( ! empty( $line['is_sticker'] ) ) {
@@ -163,7 +171,7 @@ class Rules {
 		}
 
 		$out = array();
-		$max = (int) ( $settings['upsell_max_qty'] ?? 0 );
+		$max = self::max_extra_qty( $settings );
 
 		if ( ! empty( $settings['upsell_enabled'] ) && $max > 0 ) {
 			foreach ( $extras as $pid => $qty ) {
@@ -186,6 +194,20 @@ class Rules {
 			'free'   => $free,
 			'extras' => $out,
 		);
+	}
+
+	/**
+	 * The add-on quantity ceiling per design (0 when unset/invalid).
+	 *
+	 * Shared by the picker (clamping the posted selection) and the totals
+	 * pass (clamping lines the customer bumped on the cart page), so the
+	 * max is enforced wherever a quantity can change.
+	 *
+	 * @param array $settings Settings array.
+	 * @return int
+	 */
+	public static function max_extra_qty( array $settings ) {
+		return max( 0, (int) ( $settings['upsell_max_qty'] ?? 0 ) );
 	}
 
 	/**

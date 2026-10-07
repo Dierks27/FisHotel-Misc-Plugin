@@ -65,9 +65,10 @@ check( 'food only does not qualify', ! Rules::is_eligible( array( $food ), $sett
 check( 'an empty cart does not qualify', ! Rules::is_eligible( array(), $settings ) );
 check( 'a line with no categories does not qualify', ! Rules::is_eligible( array( line( 41, array(), 500.00 ) ), $settings ) );
 
-$any_order = array_merge( $settings, array( 'eligible_category_slugs' => array() ) );
-check( 'with no categories ticked, every order qualifies', Rules::is_eligible( array( $meds ), $any_order ) );
-check( 'with no categories ticked, a sticker-only cart still does not', ! Rules::is_eligible( array( line( 101, array( 'merchandise' ), 1.00, true ) ), $any_order ) );
+$no_cats = array_merge( $settings, array( 'eligible_category_slugs' => array() ) );
+check( 'with no categories ticked, nothing qualifies (giveaway is off, not store-wide)', ! Rules::is_eligible( array( $fish, $meds ), $no_cats ) );
+check( 'with no categories ticked, a fish line alone does not qualify either', ! Rules::is_eligible( array( $fish ), $no_cats ) );
+check( 'blank / junk slugs count as no categories', ! Rules::is_eligible( array( $fish ), array_merge( $settings, array( 'eligible_category_slugs' => array( '', '  ', 0 ) ) ) ) );
 
 $two_cats = array_merge( $settings, array( 'eligible_category_slugs' => array( 'quarantined-fish', 'merchandise' ) ) );
 check( 'any one of several ticked categories qualifies', Rules::is_eligible( array( line( 51, array( 'merchandise' ), 20.00 ) ), $two_cats ) );
@@ -115,6 +116,11 @@ $sel        = Rules::normalise_selection( 101, array( 101 => 1 ), $empty_pool );
 check( 'an empty pool yields no free pick and no add-ons', 0 === $sel['free'] && array() === $sel['extras'] );
 
 check( 'pool() dedupes and drops junk', array( 101, 102 ) === Rules::pool( array( 'sticker_product_ids' => array( '101', 101, 0, -4, 'x', 102 ) ) ) );
+
+check( 'max_extra_qty() reads the setting', 5 === Rules::max_extra_qty( $settings ) );
+check( 'max_extra_qty() is 0 when unset', 0 === Rules::max_extra_qty( array() ) );
+check( 'max_extra_qty() never goes negative', 0 === Rules::max_extra_qty( array( 'upsell_max_qty' => -3 ) ) );
+check( 'a max of 0 drops every add-on', array() === Rules::normalise_selection( 101, array( 102 => 2 ), array_merge( $settings, array( 'upsell_max_qty' => 0 ) ) )['extras'] );
 
 echo "5. Pricing\n";
 check( 'the free sticker costs nothing', 0.0 === Rules::price_for( Rules::KIND_FREE, $settings ) );

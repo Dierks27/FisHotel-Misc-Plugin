@@ -163,6 +163,7 @@ class Sticker_Giveaway {
 
 		require_once self::path() . 'class-settings.php';
 		require_once self::path() . 'class-rules.php';
+		require_once self::path() . 'class-cart.php'; // Admin::pool_warnings() resolves category ancestry through Cart.
 		require_once self::path() . 'class-admin.php';
 
 		add_submenu_page(

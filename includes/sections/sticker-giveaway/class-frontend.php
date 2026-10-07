@@ -148,27 +148,38 @@ class Frontend {
 		}
 
 		$extra_price = Rules::price_for( Rules::KIND_EXTRA, $settings );
-		$max_qty     = max( 1, (int) $settings['upsell_max_qty'] );
-		$intro_upsel = str_replace( '{price}', Sticker_Giveaway::plain_price( $extra_price ), (string) $settings['intro_upsell'] );
+		$max_qty     = max( 1, Rules::max_extra_qty( $settings ) );
+
+		// "WANT MORE?" presupposes a free sticker; a cart that is only
+		// offered add-ons (meds-only order) gets its own heading and intro.
+		$heading_upsell = (string) ( $eligible ? $settings['heading_upsell'] : $settings['heading_upsell_only'] );
+		$intro_upsell   = (string) ( $eligible ? $settings['intro_upsell'] : $settings['intro_upsell_only'] );
+		$intro_upsell   = str_replace( '{price}', Sticker_Giveaway::plain_price( $extra_price ), $intro_upsell );
 
 		$view = array(
-			'context'       => $context,
-			'settings'      => $settings,
-			'products'      => $products,
-			'eligible'      => $eligible,
-			'offer_upsell'  => $offer_upsell,
-			'selected_free' => (int) $selected_free,
-			'extras'        => $current['extras'],
-			'extra_price'   => $extra_price,
-			'max_qty'       => $max_qty,
-			'intro_upsell'  => $intro_upsel,
+			'context'        => $context,
+			'settings'       => $settings,
+			'products'       => $products,
+			'eligible'       => $eligible,
+			'offer_upsell'   => $offer_upsell,
+			'selected_free'  => (int) $selected_free,
+			'extras'         => $current['extras'],
+			'extra_price'    => $extra_price,
+			'max_qty'        => $max_qty,
+			'heading_upsell' => $heading_upsell,
+			'intro_upsell'   => $intro_upsell,
 		);
 
 		include Sticker_Giveaway::path() . 'views/checkout-picker.php';
 	}
 
 	/**
-	 * Enqueue the picker CSS/JS on checkout (and cart when enabled).
+	 * Enqueue the picker CSS/JS.
+	 *
+	 * The stylesheet loads on checkout and on the cart page regardless of
+	 * `show_on_cart`: sticker lines in the cart carry the FREE price label,
+	 * the name pill and the row class whether or not the picker itself is
+	 * rendered there. The script is only needed where a picker is.
 	 */
 	public function enqueue_assets() {
 		if ( ! function_exists( 'is_checkout' ) ) {
@@ -176,7 +187,7 @@ class Frontend {
 		}
 
 		$on_checkout = is_checkout() && ! is_wc_endpoint_url( 'order-received' );
-		$on_cart     = is_cart() && Settings::get_value( 'show_on_cart' );
+		$on_cart     = is_cart();
 
 		if ( ! $on_checkout && ! $on_cart ) {
 			return;
@@ -188,6 +199,10 @@ class Frontend {
 			array(),
 			FISHOTEL_MISC_VERSION
 		);
+
+		if ( $on_cart && ! $on_checkout && ! Settings::get_value( 'show_on_cart' ) ) {
+			return;
+		}
 
 		wp_enqueue_script(
 			'fishotel-sticker-front',

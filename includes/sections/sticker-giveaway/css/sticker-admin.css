@@ -7,27 +7,33 @@
  * @package FisHotel\Misc\Sections\Sticker_Giveaway
  */
 
+/*
+ * Colours come from the --fh-* tokens admin-style.css defines on
+ * .fishotel-misc-wrap; the literal fallbacks only matter if that sheet
+ * ever fails to load.
+ */
 .fh-sg-summary {
 	display: flex;
 	align-items: center;
 	gap: 10px;
 	margin: 0 0 20px;
 	padding: 12px 16px;
-	background: #2d2d2d;
-	border: 1px solid rgba(255, 255, 255, 0.1);
-	border-left: 3px solid #00a0d2;
-	border-radius: 8px;
+	background: var(--fh-bg-secondary, #2d2d2d);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	border-left: 3px solid var(--fh-accent, #00a0d2);
+	border-radius: var(--fh-radius, 8px);
 	font-size: 13px;
-	color: #e0e0e0;
+	color: var(--fh-text-primary, #e0e0e0);
 }
 
 .fh-sg-summary .dashicons {
-	color: #00a0d2;
+	color: var(--fh-accent, #00a0d2);
 }
 
 .fh-sg-columns {
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+	/* min(…, 100%) lets a column shrink below 380px on a phone instead of overflowing the wrap. */
+	grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr));
 	gap: 20px;
 	align-items: start;
 }
@@ -51,15 +57,15 @@
 	display: block;
 	font-size: 13px;
 	font-weight: 600;
-	color: #e0e0e0;
+	color: var(--fh-text-primary, #e0e0e0);
 	margin-bottom: 6px;
 }
 
 .fh-sg-input {
 	width: 100%;
-	background: #1a1a1a;
+	background: var(--fh-bg-primary, #1a1a1a);
 	border: 1px solid rgba(255, 255, 255, 0.15);
-	color: #e0e0e0;
+	color: var(--fh-text-primary, #e0e0e0);
 	padding: 7px 10px;
 	border-radius: 4px;
 	font-size: 13px;
@@ -69,13 +75,17 @@
 }
 
 .fh-sg-input:focus {
-	border-color: #00a0d2;
+	border-color: var(--fh-accent, #00a0d2);
 	outline: none;
-	box-shadow: 0 0 0 1px #00a0d2;
+	box-shadow: 0 0 0 1px var(--fh-accent, #00a0d2);
 }
 
 .fh-sg-input--number {
 	max-width: 140px;
+}
+
+.fh-sg-input:invalid {
+	border-color: var(--fh-danger, #dc3232);
 }
 
 .fh-sg-money {
@@ -85,7 +95,7 @@
 }
 
 .fh-sg-money__symbol {
-	color: #a0a0a0;
+	color: var(--fh-text-secondary, #a0a0a0);
 	font-size: 13px;
 }
 
@@ -95,8 +105,8 @@
 .fh-sg-cats {
 	max-height: 280px;
 	overflow-y: auto;
-	background: #1a1a1a;
-	border: 1px solid rgba(255, 255, 255, 0.1);
+	background: var(--fh-bg-primary, #1a1a1a);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
 	border-radius: 4px;
 	padding: 6px 0;
 }
@@ -107,12 +117,12 @@
 	gap: 8px;
 	padding: 5px 12px;
 	font-size: 13px;
-	color: #e0e0e0;
+	color: var(--fh-text-primary, #e0e0e0);
 	cursor: pointer;
 }
 
 .fh-sg-cat:hover {
-	background: #363636;
+	background: var(--fh-bg-hover, #363636);
 }
 
 .fh-sg-cat input[type="checkbox"] {
@@ -122,7 +132,7 @@
 .fh-sg-cat__slug {
 	margin-left: auto;
 	font-size: 11px;
-	color: #888;
+	color: var(--fh-text-secondary, #a0a0a0);
 	background: rgba(255, 255, 255, 0.06);
 	padding: 1px 6px;
 	border-radius: 3px;
@@ -137,7 +147,7 @@
 	background: rgba(255, 185, 0, 0.08);
 	border: 1px solid rgba(255, 185, 0, 0.3);
 	border-radius: 4px;
-	color: #ffb900;
+	color: var(--fh-warning, #ffb900);
 	font-size: 12px;
 	line-height: 1.5;
 }
@@ -161,7 +171,7 @@
 }
 
 .fh-sg-callout .dashicons {
-	color: #00a0d2;
+	color: var(--fh-accent, #00a0d2);
 	flex: 0 0 auto;
 }
 
@@ -169,52 +179,62 @@
 	margin-top: 20px;
 }
 
+/* "Saved, but X was dropped" — admin-style.css only ships success/error. */
+.fh-sg-wrap .fishotel-misc-notice--warning {
+	background: rgba(255, 185, 0, 0.1);
+	border-left: 3px solid var(--fh-warning, #ffb900);
+	color: var(--fh-warning, #ffb900);
+}
+
 .fh-sg-save.button-primary {
-	background: #00a0d2;
-	border-color: #00a0d2;
+	background: var(--fh-accent, #00a0d2);
+	border-color: var(--fh-accent, #00a0d2);
 }
 
 .fh-sg-save.button-primary:hover,
 .fh-sg-save.button-primary:focus {
-	background: #0eb5e8;
-	border-color: #0eb5e8;
+	background: var(--fh-accent-hover, #0eb5e8);
+	border-color: var(--fh-accent-hover, #0eb5e8);
 }
 
 /* ------------------------------------------------------------------ */
 /*  selectWoo on the dark surface                                      */
 /* ------------------------------------------------------------------ */
 .fh-sg-wrap .select2-container--default .select2-selection--multiple {
-	background: #1a1a1a;
+	background: var(--fh-bg-primary, #1a1a1a);
 	border: 1px solid rgba(255, 255, 255, 0.15);
 	border-radius: 4px;
 	min-height: 36px;
 }
 
 .fh-sg-wrap .select2-container--default.select2-container--focus .select2-selection--multiple {
-	border-color: #00a0d2;
-	box-shadow: 0 0 0 1px #00a0d2;
+	border-color: var(--fh-accent, #00a0d2);
+	box-shadow: 0 0 0 1px var(--fh-accent, #00a0d2);
 }
 
 .fh-sg-wrap .select2-container--default .select2-selection--multiple .select2-selection__choice {
-	background: #363636;
+	background: var(--fh-bg-hover, #363636);
 	border: 1px solid rgba(255, 255, 255, 0.15);
-	color: #e0e0e0;
+	color: var(--fh-text-primary, #e0e0e0);
 }
 
 .fh-sg-wrap .select2-container--default .select2-selection--multiple .select2-selection__choice__remove {
-	color: #a0a0a0;
+	color: var(--fh-text-secondary, #a0a0a0);
 }
 
 .fh-sg-wrap .select2-container--default .select2-search--inline .select2-search__field {
-	color: #e0e0e0;
+	color: var(--fh-text-primary, #e0e0e0);
 	background: transparent;
 }
 
 .fh-sg-wrap .select2-container--default .select2-search--inline .select2-search__field::placeholder {
-	color: #888;
+	color: var(--fh-text-secondary, #a0a0a0);
 }
 
-/* The dropdown renders at body level, outside .fh-sg-wrap. */
+/*
+ * The dropdown renders at body level, outside .fishotel-misc-wrap, so
+ * the tokens are not in scope there — literals only.
+ */
 body[class*="page_fishotel-misc-sticker-giveaway"] .select2-dropdown {
 	background: #2d2d2d;
 	border-color: rgba(255, 255, 255, 0.15);

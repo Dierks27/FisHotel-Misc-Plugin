@@ -53,6 +53,8 @@ class Settings {
 		'intro_free'              => 'Every fish order ships with a free FisHotel sticker — choose your favourite.',
 		'heading_upsell'          => 'WANT MORE?',
 		'intro_upsell'            => 'Add extra stickers for {price} each.',
+		'heading_upsell_only'     => 'ADD A FISHOTEL STICKER',
+		'intro_upsell_only'       => 'Grab a sticker for {price} each — free with any fish order.',
 		'no_thanks_label'         => 'No sticker, thanks',
 		'badge_text'              => 'FREE WITH YOUR FISH ORDER',
 		'show_on_cart'            => false,
@@ -101,14 +103,22 @@ class Settings {
 
 		check_ajax_referer( self::NONCE_ACTION, '_wpnonce' );
 
-		$settings = self::sanitize( wp_unslash( $_POST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above.
+		$dropped  = array();
+		$settings = self::sanitize( wp_unslash( $_POST ), $dropped ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above.
 
 		update_option( Sticker_Giveaway::OPTION_KEY, $settings );
 
+		$message = __( 'Settings saved.', 'fishotel-misc-plugin' );
+		if ( $dropped ) {
+			/* translators: %s: comma-separated list of what was not saved */
+			$message .= ' ' . sprintf( __( 'Not saved: %s.', 'fishotel-misc-plugin' ), implode( '; ', $dropped ) );
+		}
+
 		wp_send_json_success(
 			array(
-				'message'  => __( 'Settings saved.', 'fishotel-misc-plugin' ),
+				'message'  => $message,
 				'settings' => $settings,
+				'dropped'  => $dropped,
 			)
 		);
 	}
@@ -117,13 +127,22 @@ class Settings {
 	 * Sanitise a raw (unslashed) POST payload into a settings array.
 	 *
 	 * Every field is coerced to its type; unknown product IDs and
-	 * category slugs are dropped rather than stored.
+	 * category slugs are dropped rather than stored, and each drop is
+	 * reported in `$dropped` so the admin page can say so instead of
+	 * quietly showing a pool the picker will not use.
 	 *
-	 * @param array $raw Raw request data.
+	 * Money fields: a blank or non-numeric value restores the default,
+	 * the same way the copy fields do. Without that, clearing the add-on
+	 * price field and saving would store 0.00 and make every add-on free.
+	 *
+	 * @param array    $raw     Raw request data.
+	 * @param string[] $dropped Filled with human-readable reasons for
+	 *                          anything left out of the saved settings.
 	 * @return array
 	 */
-	public static function sanitize( array $raw ) {
-		$d = self::DEFAULTS;
+	public static function sanitize( array $raw, &$dropped = array() ) {
+		$d       = self::DEFAULTS;
+		$dropped = array();
 
 		// Pool — simple products only; keep IDs that resolve to a product.
 		$pool = array();
@@ -135,6 +154,12 @@ class Settings {
 			$product = function_exists( 'wc_get_product' ) ? wc_get_product( $id ) : null;
 			if ( $product && $product->is_type( 'simple' ) ) {
 				$pool[] = $id;
+			} elseif ( $product ) {
+				/* translators: %s: product name */
+				$dropped[] = sprintf( __( '%s is not a simple product (the picker only offers simple products)', 'fishotel-misc-plugin' ), $product->get_name() );
+			} else {
+				/* translators: %d: product ID */
+				$dropped[] = sprintf( __( 'product #%d does not exist', 'fishotel-misc-plugin' ), $id );
 			}
 		}
 
@@ -147,30 +172,57 @@ class Settings {
 			}
 			if ( term_exists( $slug, 'product_cat' ) ) {
 				$slugs[] = $slug;
+			} else {
+				/* translators: %s: category slug */
+				$dropped[] = sprintf( __( 'category "%s" does not exist', 'fishotel-misc-plugin' ), $slug );
 			}
 		}
 
-		$min_subtotal = isset( $raw['min_subtotal'] ) ? (float) wc_format_decimal( $raw['min_subtotal'] ) : 0.0;
-		$upsell_price = isset( $raw['upsell_price'] ) ? (float) wc_format_decimal( $raw['upsell_price'] ) : $d['upsell_price'];
-		$upsell_max   = isset( $raw['upsell_max_qty'] ) ? absint( $raw['upsell_max_qty'] ) : $d['upsell_max_qty'];
+		$min_subtotal = self::money( $raw, 'min_subtotal' );
+		$upsell_price = self::money( $raw, 'upsell_price' );
+		$upsell_max   = isset( $raw['upsell_max_qty'] ) && '' !== trim( (string) $raw['upsell_max_qty'] )
+			? absint( $raw['upsell_max_qty'] )
+			: $d['upsell_max_qty'];
 
 		return array(
 			'sticker_product_ids'     => $pool,
 			'eligible_category_slugs' => $slugs,
-			'min_subtotal'            => max( 0.0, $min_subtotal ),
+			'min_subtotal'            => $min_subtotal,
 			'free_count'              => 1, // UI fixes this at one; stored for a future "pick two" option.
 			'upsell_enabled'          => ! empty( $raw['upsell_enabled'] ),
-			'upsell_price'            => max( 0.0, round( $upsell_price, 2 ) ),
+			'upsell_price'            => $upsell_price,
 			'upsell_max_qty'          => min( self::MAX_UPSELL_QTY, max( 1, $upsell_max ) ),
 			'upsell_for_everyone'     => ! empty( $raw['upsell_for_everyone'] ),
 			'heading_free'            => self::text( $raw, 'heading_free' ),
 			'intro_free'              => self::text( $raw, 'intro_free' ),
 			'heading_upsell'          => self::text( $raw, 'heading_upsell' ),
 			'intro_upsell'            => self::text( $raw, 'intro_upsell' ),
+			'heading_upsell_only'     => self::text( $raw, 'heading_upsell_only' ),
+			'intro_upsell_only'       => self::text( $raw, 'intro_upsell_only' ),
 			'no_thanks_label'         => self::text( $raw, 'no_thanks_label' ),
 			'badge_text'              => self::text( $raw, 'badge_text' ),
 			'show_on_cart'            => ! empty( $raw['show_on_cart'] ),
 		);
+	}
+
+	/**
+	 * Sanitise a money field: blank or non-numeric restores the default,
+	 * negatives become zero, and the result is rounded to cents.
+	 *
+	 * @param array  $raw Raw request data.
+	 * @param string $key Field key.
+	 * @return float
+	 */
+	private static function money( array $raw, $key ) {
+		$value = isset( $raw[ $key ] ) ? trim( (string) $raw[ $key ] ) : '';
+
+		if ( '' === $value || ! is_numeric( function_exists( 'wc_format_decimal' ) ? wc_format_decimal( $value ) : $value ) ) {
+			return (float) self::DEFAULTS[ $key ];
+		}
+
+		$number = (float) ( function_exists( 'wc_format_decimal' ) ? wc_format_decimal( $value ) : $value );
+
+		return max( 0.0, round( $number, 2 ) );
 	}
 
 	/**

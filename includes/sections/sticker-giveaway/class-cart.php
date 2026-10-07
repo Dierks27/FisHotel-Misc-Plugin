@@ -95,6 +95,8 @@ class Cart {
 
 		// ── Cart page display ───────────────────────────────────────
 		add_filter( 'woocommerce_cart_item_quantity', array( $this, 'lock_quantity' ), 10, 3 );
+		add_filter( 'woocommerce_cart_item_class', array( $this, 'item_class' ), 10, 2 );
+		add_filter( 'woocommerce_cart_item_name', array( $this, 'item_name_pill' ), 10, 2 );
 		add_filter( 'woocommerce_get_item_data', array( $this, 'item_data' ), 10, 2 );
 		add_filter( 'woocommerce_cart_item_price', array( $this, 'free_price_label' ), 10, 2 );
 		add_filter( 'woocommerce_cart_item_subtotal', array( $this, 'free_price_label' ), 10, 2 );
@@ -355,9 +357,11 @@ class Cart {
 	 * @param int|string $free_pid       Free sticker product ID (0 = none).
 	 * @param array      $extras         Raw [product_id => qty] map.
 	 * @param bool       $free_untouched True when the form carried no free
-	 *                                   radio at all (cart not eligible, so
-	 *                                   the radios were not rendered); the
-	 *                                   remembered choice is then kept.
+	 *                                   radio at all (cart not eligible when
+	 *                                   the picker rendered, so no radios);
+	 *                                   the free line already in the cart —
+	 *                                   or failing that the remembered
+	 *                                   choice — is then kept as-is.
 	 */
 	public static function sync( $free_pid, array $extras, $free_untouched = false ) {
 		$cart = self::cart();
@@ -365,7 +369,19 @@ class Cart {
 			return;
 		}
 
-		$settings  = Settings::get();
+		$settings = Settings::get();
+
+		if ( $free_untouched ) {
+			// The customer was never shown the radios in this form, so
+			// "free = 0" would be our invention, not their choice. Keep
+			// whatever the cart holds (e.g. a sticker auto-added from
+			// another tab once a fish went in), else the remembered pick.
+			$free_pid = self::current_selection()['free'];
+			if ( ! $free_pid ) {
+				$free_pid = (int) self::remembered_choice();
+			}
+		}
+
 		$selection = Rules::normalise_selection( $free_pid, $extras, $settings );
 		$eligible  = self::is_cart_eligible( $settings );
 
@@ -381,6 +397,7 @@ class Cart {
 			$selection['extras'] = array();
 		}
 
+		$was_syncing   = self::$syncing;
 		self::$syncing = true;
 
 		$current_free  = array(); // key => product_id.
@@ -441,12 +458,21 @@ class Cart {
 			}
 		}
 
-		self::$syncing = false;
+		self::$syncing = $was_syncing;
 	}
 
 	/**
 	 * Add one sticker line, guarding against products that have gone
 	 * missing, been unpublished or sold out since the pool was saved.
+	 *
+	 * WC_Cart::add_to_cart() re-validates stock against everything already
+	 * in the cart for that product (the free line, an add-on of the same
+	 * design and a normal purchase are three lines of one product) and
+	 * raises a WooCommerce *error* notice when it refuses — a notice that
+	 * would be printed on every checkout refresh and would block Place
+	 * Order. So the cumulative check is done here first, and any error
+	 * notice WC still adds is discarded: a sticker must never stop a fish
+	 * order going through; the line is simply not added.
 	 *
 	 * @param int    $product_id Product ID.
 	 * @param int    $quantity   Quantity.
@@ -465,24 +491,41 @@ class Cart {
 			return false;
 		}
 
+		$quantity = max( 1, (int) $quantity );
+
+		if ( $product->is_sold_individually() ) {
+			$quantity = 1;
+		}
+
 		if ( $product->managing_stock() && ! $product->backorders_allowed() ) {
-			$stock = (int) $product->get_stock_quantity();
-			if ( $stock < 1 ) {
+			$in_cart = $cart->get_cart_item_quantities();
+			$held    = (int) ( $in_cart[ $product->get_stock_managed_by_id() ] ?? 0 );
+			$room    = (int) $product->get_stock_quantity() - $held;
+
+			if ( $room < 1 ) {
 				return false;
 			}
-			$quantity = min( $quantity, $stock );
+			$quantity = min( $quantity, $room );
 		}
+
+		$errors_before = function_exists( 'wc_get_notices' ) ? wc_get_notices( 'error' ) : null;
 
 		try {
 			$key = $cart->add_to_cart(
 				$product->get_id(),
-				max( 1, (int) $quantity ),
+				$quantity,
 				0,
 				array(),
 				array( Sticker_Giveaway::ITEM_KEY => $kind )
 			);
 		} catch ( \Exception $e ) {
-			return false;
+			$key = false;
+		}
+
+		if ( ! $key && null !== $errors_before && function_exists( 'wc_set_notices' ) ) {
+			$all          = wc_get_notices();
+			$all['error'] = $errors_before;
+			wc_set_notices( $all );
 		}
 
 		return $key ? $key : false;
@@ -494,10 +537,18 @@ class Cart {
 
 	/**
 	 * `woocommerce_before_calculate_totals` — price every sticker line
-	 * and drop the free one if the cart no longer qualifies.
+	 * and keep each one within what the current settings allow:
+	 *
+	 *   - free line: removed when the cart no longer qualifies or the
+	 *     design left the pool; quantity forced back to 1.
+	 *   - add-on line: removed when the upsell is off, is not offered to
+	 *     this cart, or the design left the pool; quantity clamped to
+	 *     `upsell_max_qty`. The theme's cart page renders its own qty
+	 *     stepper (it never applies `woocommerce_cart_item_quantity`), so
+	 *     this is the only place the max is enforced after the picker.
 	 *
 	 * Idempotent: WC calls this many times per request; set_price() on an
-	 * already-zeroed product is a no-op, and a cart that is already clean
+	 * already-priced product is a no-op, and a cart that is already clean
 	 * removes nothing.
 	 *
 	 * @param \WC_Cart $cart Cart being totalled.
@@ -512,9 +563,10 @@ class Cart {
 		}
 
 		$settings    = Settings::get();
-		$eligible    = null; // Resolved lazily — only carts with a free line pay for it.
+		$eligible    = null; // Resolved lazily — only carts with sticker lines pay for it.
 		$free_price  = Rules::price_for( Rules::KIND_FREE, $settings );
 		$extra_price = Rules::price_for( Rules::KIND_EXTRA, $settings );
+		$max_extra   = Rules::max_extra_qty( $settings );
 
 		foreach ( $cart->get_cart() as $key => $item ) {
 			$kind = self::kind( $item );
@@ -522,17 +574,17 @@ class Cart {
 				continue;
 			}
 
-			$product = isset( $item['data'] ) && $item['data'] instanceof \WC_Product ? $item['data'] : null;
+			$product    = isset( $item['data'] ) && $item['data'] instanceof \WC_Product ? $item['data'] : null;
+			$product_id = isset( $item['product_id'] ) ? (int) $item['product_id'] : 0;
+			$in_pool    = Rules::in_pool( $product_id, $settings );
 
 			if ( Rules::KIND_FREE === $kind ) {
-				if ( null === $eligible ) {
+				if ( $in_pool && null === $eligible ) {
 					$eligible = Rules::is_eligible( self::lines_for_rules( $cart ), $settings );
 				}
 
-				if ( ! $eligible || ! Rules::in_pool( (int) $item['product_id'], $settings ) ) {
-					self::$syncing = true;
-					$cart->remove_cart_item( $key );
-					self::$syncing = false;
+				if ( ! $in_pool || ! $eligible ) {
+					self::remove_quietly( $cart, $key );
 					continue;
 				}
 
@@ -543,12 +595,44 @@ class Cart {
 				if ( $product ) {
 					$product->set_price( $free_price );
 				}
-			} else {
-				if ( $product ) {
-					$product->set_price( $extra_price );
-				}
+				continue;
+			}
+
+			// Add-on line.
+			if ( $in_pool && $max_extra > 0 && ! empty( $settings['upsell_enabled'] ) && null === $eligible ) {
+				$eligible = Rules::is_eligible( self::lines_for_rules( $cart ), $settings );
+			}
+
+			if ( ! $in_pool || $max_extra < 1 || ! Rules::offers_upsell( (bool) $eligible, $settings ) ) {
+				self::remove_quietly( $cart, $key );
+				continue;
+			}
+
+			$cap = ( $product && $product->is_sold_individually() ) ? 1 : $max_extra;
+			if ( (int) $item['quantity'] > $cap && isset( $cart->cart_contents[ $key ] ) ) {
+				$cart->cart_contents[ $key ]['quantity'] = $cap;
+			}
+
+			if ( $product ) {
+				$product->set_price( $extra_price );
 			}
 		}
+	}
+
+	/**
+	 * Remove a cart line as a settings-driven correction, not a customer
+	 * action: the re-entrancy flag is raised so `forget_choice_on_removal`
+	 * ignores it, and restored to whatever it was (this runs from inside
+	 * WC's calculate_totals, which sync() itself can trigger).
+	 *
+	 * @param \WC_Cart $cart Cart.
+	 * @param string   $key  Cart item key.
+	 */
+	private static function remove_quietly( \WC_Cart $cart, $key ) {
+		$was_syncing   = self::$syncing;
+		self::$syncing = true;
+		$cart->remove_cart_item( $key );
+		self::$syncing = $was_syncing;
 	}
 
 	/* ============================================================== */
@@ -559,6 +643,11 @@ class Cart {
 	 * `woocommerce_cart_item_quantity` — sticker quantities are managed by
 	 * the picker, so show plain text instead of a qty input. The remove
 	 * link is untouched; a customer can still take the line out.
+	 *
+	 * Only WooCommerce's stock cart template applies this filter. The
+	 * FisHotel theme's cart.php draws its own stepper, which is why
+	 * `item_class()` tags the row (so CSS can hide the stepper on the free
+	 * line) and `apply_pricing()` clamps whatever quantity comes back.
 	 *
 	 * @param string $product_quantity Quantity input HTML.
 	 * @param string $cart_item_key    Cart item key.
@@ -573,6 +662,51 @@ class Cart {
 		$qty = isset( $cart_item['quantity'] ) ? (int) $cart_item['quantity'] : 1;
 
 		return sprintf( '<span class="fh-sticker-qty-locked">%d</span>', $qty );
+	}
+
+	/**
+	 * `woocommerce_cart_item_class` — tag sticker rows so the stylesheet
+	 * can treat them (hide the theme's qty stepper on the free line, which
+	 * is always 1). Applied by both the theme's cart.php and its
+	 * review-order.php.
+	 *
+	 * @param string $class     Row class string.
+	 * @param array  $cart_item Cart item.
+	 * @return string
+	 */
+	public function item_class( $class, $cart_item ) {
+		$kind = self::kind( $cart_item );
+		if ( ! $kind ) {
+			return $class;
+		}
+
+		return trim( $class . ' fh-sticker-line fh-sticker-line--' . $kind );
+	}
+
+	/**
+	 * `woocommerce_cart_item_name` — append a small pill to sticker lines.
+	 *
+	 * The theme's cart and checkout templates never print
+	 * `woocommerce_get_item_data`, so without this a free sticker and a
+	 * paid add-on of the same design would read as two identical rows.
+	 * Both templates pass the name through wp_kses_post(), so a span
+	 * survives; stock WC templates show this pill *and* the item data.
+	 *
+	 * @param string $name      Product name HTML.
+	 * @param array  $cart_item Cart item.
+	 * @return string
+	 */
+	public function item_name_pill( $name, $cart_item ) {
+		$kind = self::kind( $cart_item );
+		if ( ! $kind ) {
+			return $name;
+		}
+
+		$label = Rules::KIND_FREE === $kind
+			? __( 'Free sticker', 'fishotel-misc-plugin' )
+			: __( 'Add-on', 'fishotel-misc-plugin' );
+
+		return $name . ' <span class="fh-sticker-pill fh-sticker-pill--' . esc_attr( $kind ) . '">' . esc_html( $label ) . '</span>';
 	}
 
 	/**

@@ -103,13 +103,14 @@ class Admin {
 					'error'     => __( 'Something went wrong. Please try again.', 'fishotel-misc-plugin' ),
 					'stickers'  => __( '%d stickers in pool', 'fishotel-misc-plugin' ),
 					'sticker'   => __( '%d sticker in pool', 'fishotel-misc-plugin' ),
-					'noPool'    => __( 'no stickers in pool — picker hidden', 'fishotel-misc-plugin' ),
-					'freeWith'  => __( 'free with: %s', 'fishotel-misc-plugin' ),
-					'freeAll'   => __( 'free with every order', 'fishotel-misc-plugin' ),
-					'minSub'    => __( 'min subtotal %s', 'fishotel-misc-plugin' ),
-					'addons'    => __( 'add-ons %s', 'fishotel-misc-plugin' ),
-					'addonsOff' => __( 'add-ons off', 'fishotel-misc-plugin' ),
-					'max'       => __( 'max %d', 'fishotel-misc-plugin' ),
+					'noPool'        => __( 'no stickers in pool — picker hidden', 'fishotel-misc-plugin' ),
+					'freeWith'      => __( 'free with: %s', 'fishotel-misc-plugin' ),
+					'freeNone'      => __( 'no categories ticked — no free stickers', 'fishotel-misc-plugin' ),
+					'minSub'        => __( 'min subtotal %s', 'fishotel-misc-plugin' ),
+					'addons'        => __( 'add-ons %s', 'fishotel-misc-plugin' ),
+					'addonsOff'     => __( 'add-ons off', 'fishotel-misc-plugin' ),
+					'max'           => __( 'max %d', 'fishotel-misc-plugin' ),
+					'priceRequired' => __( 'Enter a price per add-on sticker (0 is allowed).', 'fishotel-misc-plugin' ),
 				),
 			)
 		);
@@ -142,30 +143,75 @@ class Admin {
 	 * @return string[]
 	 */
 	private function pool_warnings( array $products ) {
-		$warnings = array();
+		$warnings    = array();
+		$preset_cats = self::theme_preset_category_slugs();
 
 		foreach ( $products as $product ) {
-			$name = $product->get_name();
+			$name      = $product->get_name();
+			$published = 'publish' === $product->get_status();
+			$has_price = '' !== (string) $product->get_price();
 
 			if ( ! $product->is_type( 'simple' ) ) {
 				/* translators: %s: product name */
 				$warnings[] = sprintf( __( '%s is not a simple product — the picker only offers simple products.', 'fishotel-misc-plugin' ), $name );
 			}
-			if ( 'publish' !== $product->get_status() ) {
+			if ( ! $published ) {
 				/* translators: %s: product name */
 				$warnings[] = sprintf( __( '%s is not published — it will not appear in the picker.', 'fishotel-misc-plugin' ), $name );
 			}
-			if ( ! $product->is_purchasable() ) {
+			if ( ! $has_price ) {
 				/* translators: %s: product name */
 				$warnings[] = sprintf( __( '%s has no price — give it a regular price (the picker overrides it) so WooCommerce treats it as purchasable.', 'fishotel-misc-plugin' ), $name );
+			} elseif ( $published && ! $product->is_purchasable() ) {
+				/* translators: %s: product name */
+				$warnings[] = sprintf( __( '%s is not purchasable (another plugin is blocking it) — it will not appear in the picker.', 'fishotel-misc-plugin' ), $name );
 			}
 			if ( ! $product->is_in_stock() ) {
 				/* translators: %s: product name */
 				$warnings[] = sprintf( __( '%s is out of stock — it will not appear in the picker.', 'fishotel-misc-plugin' ), $name );
 			}
+			if ( $product->is_sold_individually() ) {
+				/* translators: %s: product name */
+				$warnings[] = sprintf( __( '%s is marked "Sold individually" — add-on quantity for it is capped at 1.', 'fishotel-misc-plugin' ), $name );
+			}
+
+			if ( $preset_cats ) {
+				$in_preset = array_intersect( $preset_cats, Cart::category_slugs( $product->get_id() ) );
+				if ( $in_preset ) {
+					/* translators: 1: product name, 2: comma-separated category slugs */
+					$warnings[] = sprintf(
+						__( '%1$s is in the %2$s category, which the theme uses to pick cart/checkout wording. A sticker line in that category makes every fish order fall back to the generic wording — move the sticker products to a category the theme does not map (e.g. "stickers").', 'fishotel-misc-plugin' ),
+						$name,
+						implode( ', ', $in_preset )
+					);
+				}
+			}
+
+			if ( '' !== trim( (string) $product->get_short_description() ) ) {
+				/* translators: %s: product name */
+				$warnings[] = sprintf( __( '%s has a short description — the theme prints a line\'s short description as its italic scientific name in the cart. Leave it empty for stickers.', 'fishotel-misc-plugin' ), $name );
+			}
 		}
 
 		return $warnings;
+	}
+
+	/**
+	 * Category slugs the FisHotel theme maps to a cart preset (fish, meds,
+	 * food, merch). Sticker products should stay out of these; the theme
+	 * resolves its cart copy from every cart line and falls back to the
+	 * generic preset as soon as two presets match.
+	 *
+	 * @return string[]
+	 */
+	private static function theme_preset_category_slugs() {
+		if ( ! function_exists( 'fishotel_cart_preset_slug_map' ) ) {
+			return array();
+		}
+
+		$map = fishotel_cart_preset_slug_map();
+
+		return is_array( $map ) ? array_map( 'strval', array_keys( $map ) ) : array();
 	}
 
 	/**
@@ -231,7 +277,7 @@ class Admin {
 			/* translators: %s: comma-separated category slugs */
 			$parts[] = sprintf( __( 'free with: %s', 'fishotel-misc-plugin' ), implode( ', ', $slugs ) );
 		} else {
-			$parts[] = __( 'free with every order', 'fishotel-misc-plugin' );
+			$parts[] = __( 'no categories ticked — no free stickers', 'fishotel-misc-plugin' );
 		}
 
 		if ( (float) $settings['min_subtotal'] > 0 ) {

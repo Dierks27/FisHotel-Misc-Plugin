@@ -52,7 +52,7 @@
 		$form.find('input[name="eligible_category_slugs[]"]:checked').each(function () {
 			slugs.push(this.value);
 		});
-		parts.push(slugs.length ? fmt(i18n.freeWith, slugs.join(', ')) : (i18n.freeAll || 'free with every order'));
+		parts.push(slugs.length ? fmt(i18n.freeWith, slugs.join(', ')) : (i18n.freeNone || 'no categories ticked — no free stickers'));
 
 		var minSub = parseFloat($form.find('[name="min_subtotal"]').val());
 		if (!isNaN(minSub) && minSub > 0) {
@@ -69,6 +69,54 @@
 		$('#fh-sg-summary .fh-sg-summary__text').text(parts.join(' · '));
 	}
 
+	/**
+	 * Mirror what the server actually stored back into the form, so a
+	 * product or category that sanitize() dropped does not linger in the
+	 * UI (and in the summary) after "Settings saved.".
+	 */
+	function applySaved(settings) {
+		var $form = $('#fishotel-sticker-giveaway-form');
+		if (!settings) {
+			return;
+		}
+
+		var pool = $.map(settings.sticker_product_ids || [], function (id) { return String(id); });
+		var $pool = $form.find('#fh-sg-pool');
+		var changed = false;
+		$pool.find('option').each(function () {
+			if ($.inArray(String(this.value), pool) === -1) {
+				$(this).remove();
+				changed = true;
+			}
+		});
+		if (changed) {
+			$pool.trigger('change');
+		}
+
+		var slugs = settings.eligible_category_slugs || [];
+		$form.find('input[name="eligible_category_slugs[]"]').each(function () {
+			this.checked = $.inArray(this.value, slugs) !== -1;
+		});
+
+		if (typeof settings.min_subtotal !== 'undefined') {
+			$form.find('[name="min_subtotal"]').val(parseFloat(settings.min_subtotal).toFixed(2));
+		}
+		if (typeof settings.upsell_price !== 'undefined') {
+			$form.find('[name="upsell_price"]').val(parseFloat(settings.upsell_price).toFixed(2));
+		}
+		if (typeof settings.upsell_max_qty !== 'undefined') {
+			$form.find('[name="upsell_max_qty"]').val(parseInt(settings.upsell_max_qty, 10) || 1);
+		}
+
+		$form.find('input[type="text"][name]').each(function () {
+			if (typeof settings[this.name] === 'string') {
+				this.value = settings[this.name];
+			}
+		});
+
+		updateSummary();
+	}
+
 	$(function () {
 		var $form = $('#fishotel-sticker-giveaway-form');
 		if (!$form.length) {
@@ -81,6 +129,15 @@
 		$form.on('submit', function (e) {
 			e.preventDefault();
 
+			// A blank price would otherwise be saved as the default without
+			// Jeff noticing; make him type one.
+			var $price = $form.find('[name="upsell_price"]');
+			if ($price.length && $.trim(String($price.val())) === '') {
+				notice('fishotel-misc-notice--error', i18n.priceRequired || 'Enter a price per add-on sticker (0 is allowed).');
+				$price.trigger('focus');
+				return false;
+			}
+
 			var $btn = $form.find('button[type="submit"]');
 			$btn.prop('disabled', true);
 
@@ -89,8 +146,13 @@
 					var ok  = res && res.success;
 					var msg = (res && res.data && res.data.message) ? res.data.message
 						: (ok ? (i18n.saved || 'Settings saved.') : (i18n.error || 'Something went wrong.'));
-					notice(ok ? 'fishotel-misc-notice--success' : 'fishotel-misc-notice--error', msg);
-					updateSummary();
+					var dropped = ok && res.data && res.data.dropped && res.data.dropped.length;
+					notice(ok ? (dropped ? 'fishotel-misc-notice--warning' : 'fishotel-misc-notice--success') : 'fishotel-misc-notice--error', msg);
+					if (ok && res.data) {
+						applySaved(res.data.settings);
+					} else {
+						updateSummary();
+					}
 				})
 				.fail(function () {
 					notice('fishotel-misc-notice--error', i18n.error || 'Something went wrong.');
