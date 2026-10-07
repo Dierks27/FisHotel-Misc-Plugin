@@ -1,0 +1,235 @@
+/**
+ * Sticker Giveaway admin styles — settings page under FisHotel Tools.
+ *
+ * Builds on admin/css/admin-style.css (dark cards, toggles, badges) and
+ * restyles WooCommerce's selectWoo widget to sit on the dark surface.
+ *
+ * @package FisHotel\Misc\Sections\Sticker_Giveaway
+ */
+
+.fh-sg-summary {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin: 0 0 20px;
+	padding: 12px 16px;
+	background: #2d2d2d;
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-left: 3px solid #00a0d2;
+	border-radius: 8px;
+	font-size: 13px;
+	color: #e0e0e0;
+}
+
+.fh-sg-summary .dashicons {
+	color: #00a0d2;
+}
+
+.fh-sg-columns {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+	gap: 20px;
+	align-items: start;
+}
+
+.fh-sg-card:hover {
+	transform: none;
+}
+
+.fh-sg-field {
+	margin-top: 16px;
+}
+
+.fh-sg-field--row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+}
+
+.fh-sg-label {
+	display: block;
+	font-size: 13px;
+	font-weight: 600;
+	color: #e0e0e0;
+	margin-bottom: 6px;
+}
+
+.fh-sg-input {
+	width: 100%;
+	background: #1a1a1a;
+	border: 1px solid rgba(255, 255, 255, 0.15);
+	color: #e0e0e0;
+	padding: 7px 10px;
+	border-radius: 4px;
+	font-size: 13px;
+	box-sizing: border-box;
+	transition: border-color 0.2s, box-shadow 0.2s;
+	color-scheme: dark;
+}
+
+.fh-sg-input:focus {
+	border-color: #00a0d2;
+	outline: none;
+	box-shadow: 0 0 0 1px #00a0d2;
+}
+
+.fh-sg-input--number {
+	max-width: 140px;
+}
+
+.fh-sg-money {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.fh-sg-money__symbol {
+	color: #a0a0a0;
+	font-size: 13px;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Category tree                                                      */
+/* ------------------------------------------------------------------ */
+.fh-sg-cats {
+	max-height: 280px;
+	overflow-y: auto;
+	background: #1a1a1a;
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-radius: 4px;
+	padding: 6px 0;
+}
+
+.fh-sg-cat {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 5px 12px;
+	font-size: 13px;
+	color: #e0e0e0;
+	cursor: pointer;
+}
+
+.fh-sg-cat:hover {
+	background: #363636;
+}
+
+.fh-sg-cat input[type="checkbox"] {
+	margin: 0;
+}
+
+.fh-sg-cat__slug {
+	margin-left: auto;
+	font-size: 11px;
+	color: #888;
+	background: rgba(255, 255, 255, 0.06);
+	padding: 1px 6px;
+	border-radius: 3px;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Warnings + callout                                                 */
+/* ------------------------------------------------------------------ */
+.fh-sg-warnings {
+	margin: 12px 0 0;
+	padding: 10px 12px 10px 28px;
+	background: rgba(255, 185, 0, 0.08);
+	border: 1px solid rgba(255, 185, 0, 0.3);
+	border-radius: 4px;
+	color: #ffb900;
+	font-size: 12px;
+	line-height: 1.5;
+}
+
+.fh-sg-warnings li {
+	margin: 2px 0;
+}
+
+.fh-sg-callout {
+	display: flex;
+	gap: 8px;
+	align-items: flex-start;
+	margin-top: 16px;
+	padding: 10px 12px;
+	background: rgba(0, 160, 210, 0.08);
+	border: 1px solid rgba(0, 160, 210, 0.3);
+	border-radius: 4px;
+	font-size: 12px;
+	line-height: 1.5;
+	color: #cfe9f3;
+}
+
+.fh-sg-callout .dashicons {
+	color: #00a0d2;
+	flex: 0 0 auto;
+}
+
+.fh-sg-actions {
+	margin-top: 20px;
+}
+
+.fh-sg-save.button-primary {
+	background: #00a0d2;
+	border-color: #00a0d2;
+}
+
+.fh-sg-save.button-primary:hover,
+.fh-sg-save.button-primary:focus {
+	background: #0eb5e8;
+	border-color: #0eb5e8;
+}
+
+/* ------------------------------------------------------------------ */
+/*  selectWoo on the dark surface                                      */
+/* ------------------------------------------------------------------ */
+.fh-sg-wrap .select2-container--default .select2-selection--multiple {
+	background: #1a1a1a;
+	border: 1px solid rgba(255, 255, 255, 0.15);
+	border-radius: 4px;
+	min-height: 36px;
+}
+
+.fh-sg-wrap .select2-container--default.select2-container--focus .select2-selection--multiple {
+	border-color: #00a0d2;
+	box-shadow: 0 0 0 1px #00a0d2;
+}
+
+.fh-sg-wrap .select2-container--default .select2-selection--multiple .select2-selection__choice {
+	background: #363636;
+	border: 1px solid rgba(255, 255, 255, 0.15);
+	color: #e0e0e0;
+}
+
+.fh-sg-wrap .select2-container--default .select2-selection--multiple .select2-selection__choice__remove {
+	color: #a0a0a0;
+}
+
+.fh-sg-wrap .select2-container--default .select2-search--inline .select2-search__field {
+	color: #e0e0e0;
+	background: transparent;
+}
+
+.fh-sg-wrap .select2-container--default .select2-search--inline .select2-search__field::placeholder {
+	color: #888;
+}
+
+/* The dropdown renders at body level, outside .fh-sg-wrap. */
+body[class*="page_fishotel-misc-sticker-giveaway"] .select2-dropdown {
+	background: #2d2d2d;
+	border-color: rgba(255, 255, 255, 0.15);
+	color: #e0e0e0;
+}
+
+body[class*="page_fishotel-misc-sticker-giveaway"] .select2-results__option {
+	color: #e0e0e0;
+}
+
+body[class*="page_fishotel-misc-sticker-giveaway"] .select2-container--default .select2-results__option--highlighted[aria-selected] {
+	background: #00a0d2;
+	color: #fff;
+}
+
+body[class*="page_fishotel-misc-sticker-giveaway"] .select2-container--default .select2-results__option[aria-selected="true"] {
+	background: #363636;
+}
