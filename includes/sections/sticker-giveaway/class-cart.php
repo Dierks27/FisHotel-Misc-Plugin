@@ -101,6 +101,7 @@ class Cart {
 		add_filter( 'woocommerce_cart_item_price', array( $this, 'free_price_label' ), 10, 2 );
 		add_filter( 'woocommerce_cart_item_subtotal', array( $this, 'free_price_label' ), 10, 2 );
 		add_action( 'woocommerce_cart_item_removed', array( $this, 'forget_choice_on_removal' ), 10, 2 );
+		add_filter( 'woocommerce_update_cart_validation', array( $this, 'forget_choice_on_zero_qty' ), 10, 4 );
 
 		// ── Order line items ────────────────────────────────────────
 		add_action( 'woocommerce_checkout_create_order_line_item', array( $this, 'order_line_item_meta' ), 10, 3 );
@@ -487,7 +488,7 @@ class Cart {
 			return false;
 		}
 
-		if ( ! $product->is_purchasable() || ! $product->is_in_stock() || 'publish' !== $product->get_status() ) {
+		if ( ! self::is_sellable( $product ) ) {
 			return false;
 		}
 
@@ -539,6 +540,11 @@ class Cart {
 	 * `woocommerce_before_calculate_totals` — price every sticker line
 	 * and keep each one within what the current settings allow:
 	 *
+	 *   - any sticker line: removed when its product can no longer be sold
+	 *     (unpublished, no longer purchasable, sold out since it was added).
+	 *     WC's own check_cart_items() would otherwise raise an *error*
+	 *     notice for it at checkout and block Place Order — a sticker must
+	 *     never stop a fish order, so the line is dropped quietly instead.
 	 *   - free line: removed when the cart no longer qualifies or the
 	 *     design left the pool; quantity forced back to 1.
 	 *   - add-on line: removed when the upsell is off, is not offered to
@@ -549,7 +555,9 @@ class Cart {
 	 *
 	 * Idempotent: WC calls this many times per request; set_price() on an
 	 * already-priced product is a no-op, and a cart that is already clean
-	 * removes nothing.
+	 * removes nothing. The sellability check runs before set_price() so it
+	 * sees the product's real price ('' = not purchasable), not the one
+	 * this pass assigns.
 	 *
 	 * @param \WC_Cart $cart Cart being totalled.
 	 */
@@ -578,6 +586,11 @@ class Cart {
 			$product_id = isset( $item['product_id'] ) ? (int) $item['product_id'] : 0;
 			$in_pool    = Rules::in_pool( $product_id, $settings );
 
+			if ( ! $product || ! self::is_sellable( $product ) ) {
+				self::remove_quietly( $cart, $key );
+				continue;
+			}
+
 			if ( Rules::KIND_FREE === $kind ) {
 				if ( $in_pool && null === $eligible ) {
 					$eligible = Rules::is_eligible( self::lines_for_rules( $cart ), $settings );
@@ -592,9 +605,7 @@ class Cart {
 					$cart->cart_contents[ $key ]['quantity'] = 1;
 				}
 
-				if ( $product ) {
-					$product->set_price( $free_price );
-				}
+				$product->set_price( $free_price );
 				continue;
 			}
 
@@ -608,15 +619,26 @@ class Cart {
 				continue;
 			}
 
-			$cap = ( $product && $product->is_sold_individually() ) ? 1 : $max_extra;
+			$cap = $product->is_sold_individually() ? 1 : $max_extra;
 			if ( (int) $item['quantity'] > $cap && isset( $cart->cart_contents[ $key ] ) ) {
 				$cart->cart_contents[ $key ]['quantity'] = $cap;
 			}
 
-			if ( $product ) {
-				$product->set_price( $extra_price );
-			}
+			$product->set_price( $extra_price );
 		}
+	}
+
+	/**
+	 * Whether a sticker product can still be handed out: published,
+	 * purchasable and in stock. The same three checks gate the picker
+	 * (Frontend::available_pool) and add_line(), so a line that passes here
+	 * is one the picker would produce today.
+	 *
+	 * @param \WC_Product $product Product.
+	 * @return bool
+	 */
+	public static function is_sellable( \WC_Product $product ) {
+		return 'publish' === $product->get_status() && $product->is_purchasable() && $product->is_in_stock();
 	}
 
 	/**
@@ -765,6 +787,31 @@ class Cart {
 		if ( $removed && Rules::KIND_FREE === self::kind( $removed ) ) {
 			self::remember_choice( 0 );
 		}
+	}
+
+	/**
+	 * `woocommerce_update_cart_validation` — the cart form's other way of
+	 * dropping a line. WC_Cart::set_quantity( $key, 0 ) unsets the line
+	 * WITHOUT firing `woocommerce_cart_item_removed`, so a customer who
+	 * types 0 into the free sticker's quantity (the theme hides that
+	 * stepper, but a stock template or a CSS failure would not) is
+	 * remembered as "no sticker" here instead. The change is still allowed
+	 * through; nothing here validates.
+	 *
+	 * @param bool   $passed        Whether the update is allowed.
+	 * @param string $cart_item_key Cart item key.
+	 * @param array  $values        Cart item.
+	 * @param int    $quantity      New quantity.
+	 * @return bool
+	 */
+	public function forget_choice_on_zero_qty( $passed, $cart_item_key, $values, $quantity ) {
+		unset( $cart_item_key );
+
+		if ( $passed && ! self::$syncing && (int) $quantity < 1 && Rules::KIND_FREE === self::kind( $values ) ) {
+			self::remember_choice( 0 );
+		}
+
+		return $passed;
 	}
 
 	/* ============================================================== */

@@ -29,7 +29,13 @@ defined( 'ABSPATH' ) || exit;
 
 $s = $view['settings'];
 ?>
-<div class="fh-sticker fh-sticker--<?php echo esc_attr( $view['context'] ); ?>" data-fh-sticker data-context="<?php echo esc_attr( $view['context'] ); ?>">
+<?php
+// `update_totals_on_change` is WooCommerce's own checkout.js contract: a
+// radio inside such a wrapper triggers update_checkout natively, so the
+// free pick reaches the cart even if sticker-front.js never loads. The
+// steppers still need the script (WC only watches `.input-text` inputs).
+?>
+<div class="fh-sticker fh-sticker--<?php echo esc_attr( $view['context'] ); ?> update_totals_on_change" data-fh-sticker data-context="<?php echo esc_attr( $view['context'] ); ?>">
 	<input type="hidden" name="<?php echo esc_attr( Cart::FIELD_MARKER ); ?>" value="1">
 
 	<?php if ( $view['eligible'] ) : ?>

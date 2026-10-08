@@ -74,7 +74,7 @@ class Frontend {
 				continue;
 			}
 
-			if ( 'publish' !== $product->get_status() || ! $product->is_purchasable() || ! $product->is_in_stock() ) {
+			if ( ! Cart::is_sellable( $product ) ) {
 				continue;
 			}
 

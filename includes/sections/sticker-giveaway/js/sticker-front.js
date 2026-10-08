@@ -159,6 +159,23 @@
 
 			onChange(picker);
 		});
+
+		// Enter in a quantity field is a native form submit — on checkout
+		// that is Place Order. Turn it into a commit of the value instead.
+		document.addEventListener('keydown', function (e) {
+			var key = e.key || e.keyCode;
+			if (key !== 'Enter' && key !== 13) {
+				return;
+			}
+
+			var target = e.target;
+			if (!target || !target.classList || !target.classList.contains('fh-sticker__qty')) {
+				return;
+			}
+
+			e.preventDefault();
+			target.blur();
+		});
 	}
 
 	if (document.readyState === 'loading') {

@@ -180,7 +180,7 @@ class Settings {
 
 		$min_subtotal = self::money( $raw, 'min_subtotal' );
 		$upsell_price = self::money( $raw, 'upsell_price' );
-		$upsell_max   = isset( $raw['upsell_max_qty'] ) && '' !== trim( (string) $raw['upsell_max_qty'] )
+		$upsell_max   = isset( $raw['upsell_max_qty'] ) && is_scalar( $raw['upsell_max_qty'] ) && '' !== trim( (string) $raw['upsell_max_qty'] )
 			? absint( $raw['upsell_max_qty'] )
 			: $d['upsell_max_qty'];
 
@@ -214,7 +214,7 @@ class Settings {
 	 * @return float
 	 */
 	private static function money( array $raw, $key ) {
-		$value = isset( $raw[ $key ] ) ? trim( (string) $raw[ $key ] ) : '';
+		$value = isset( $raw[ $key ] ) && is_scalar( $raw[ $key ] ) ? trim( (string) $raw[ $key ] ) : '';
 
 		if ( '' === $value || ! is_numeric( function_exists( 'wc_format_decimal' ) ? wc_format_decimal( $value ) : $value ) ) {
 			return (float) self::DEFAULTS[ $key ];
@@ -233,7 +233,7 @@ class Settings {
 	 * @return string
 	 */
 	private static function text( array $raw, $key ) {
-		$value = isset( $raw[ $key ] ) ? sanitize_text_field( $raw[ $key ] ) : '';
+		$value = isset( $raw[ $key ] ) && is_scalar( $raw[ $key ] ) ? sanitize_text_field( (string) $raw[ $key ] ) : '';
 		return '' === $value ? self::DEFAULTS[ $key ] : $value;
 	}
 }
