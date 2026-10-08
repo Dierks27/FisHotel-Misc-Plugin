@@ -46,6 +46,9 @@ leave a line the picker would not have produced:
   when the upsell is off, not offered to this cart, or the design left the
   pool.
 
+A sticker line of either kind is also removed quietly when its product is no
+longer purchasable or in stock, the same checks that gate the picker.
+
 Adding a line goes through `WC_Cart::add_to_cart()` only after checking the
 product's stock against what the cart already holds for it (the free line, an
 add-on of the same design and a normal purchase are three lines of one
@@ -61,14 +64,15 @@ quantity only shows in stock WooCommerce templates. Instead:
 - `woocommerce_cart_item_class` adds `fh-sticker-line fh-sticker-line--free|extra`
   to the row; the stylesheet hides the theme stepper on the free row (always 1).
   Add-on rows keep the stepper and the server clamps whatever comes back.
-- `woocommerce_cart_item_name` appends a small "Free sticker" / "Add-on" pill,
-  because neither the theme's cart nor its checkout statement prints
-  `woocommerce_get_item_data` (stock templates show both the pill and the
-  item data row).
+- The theme's cart and checkout statement print the item data under the
+  title (`wc_get_formatted_cart_item_data()`), so the "Sticker: Free with
+  your fish order" / "Add-on" row from `woocommerce_get_item_data` is what
+  tells a free sticker from an add-on of the same design. The plugin adds no
+  name pill, so the label is never shown twice.
 - Removing the free sticker with the theme's Remove link is remembered as
   "no sticker" for the session, so checkout does not quietly put it back.
 - `css/sticker-front.css` is enqueued on the cart page regardless of *Also
-  show on cart* so the FREE label and pills are styled there.
+  show on cart* so the FREE label is styled there.
 
 ## Shipping
 
@@ -126,7 +130,7 @@ plugin cannot filter them from outside. Both want a one-line skip:
 | File | Responsibility |
 | --- | --- |
 | `class-rules.php` | Eligibility, selection clamping, pricing. Pure — no WordPress calls. |
-| `class-cart.php` | Sync the cart with the picker (diff-based, on `woocommerce_checkout_update_order_review` and `woocommerce_checkout_process`), pricing + quantity clamping on every totals pass, row class and name pill, labels, order line meta, shipping package stripping. |
+| `class-cart.php` | Sync the cart with the picker (diff-based, on `woocommerce_checkout_update_order_review` and `woocommerce_checkout_process`), pricing + quantity clamping on every totals pass, row class, labels, order line meta, shipping package stripping. |
 | `class-frontend.php` | Renders the picker on `woocommerce_checkout_after_customer_details` (inside `<form name="checkout">`), enqueues assets, optional cart-page AJAX sync. |
 | `class-settings.php` | Option `fishotel_sticker_giveaway_settings`, defaults, sanitised AJAX save. |
 | `class-admin.php` | Settings page under FisHotel Tools → Sticker Giveaway (product search, category tree, live summary). |

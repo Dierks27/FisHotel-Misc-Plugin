@@ -286,30 +286,6 @@
 	text-align: center;
 }
 
-/* Appended to the line name by woocommerce_cart_item_name. */
-.fh-sticker-pill {
-	display: inline-block;
-	vertical-align: middle;
-	margin-left: 6px;
-	padding: 2px 7px;
-	border-radius: 2px;
-	font-size: 9px;
-	font-weight: 700;
-	letter-spacing: 1.5px;
-	text-transform: uppercase;
-	line-height: 1.4;
-	white-space: nowrap;
-	border: 1px solid var(--fh-border-md, rgba(255, 255, 255, 0.10));
-	color: var(--fh-text-2, #a09890);
-	background: transparent;
-}
-
-.fh-sticker-pill--free {
-	border-color: var(--fh-border-gold, rgba(201, 150, 58, 0.25));
-	color: var(--fh-gold, #c9963a);
-	background: var(--fh-gold-dim, rgba(201, 150, 58, 0.12));
-}
-
 /*
  * The theme's cart.php draws its own qty stepper for every line. The
  * free sticker is always exactly one, so hide the stepper on that row

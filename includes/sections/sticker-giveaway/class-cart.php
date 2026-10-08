@@ -96,7 +96,6 @@ class Cart {
 		// ── Cart page display ───────────────────────────────────────
 		add_filter( 'woocommerce_cart_item_quantity', array( $this, 'lock_quantity' ), 10, 3 );
 		add_filter( 'woocommerce_cart_item_class', array( $this, 'item_class' ), 10, 2 );
-		add_filter( 'woocommerce_cart_item_name', array( $this, 'item_name_pill' ), 10, 2 );
 		add_filter( 'woocommerce_get_item_data', array( $this, 'item_data' ), 10, 2 );
 		add_filter( 'woocommerce_cart_item_price', array( $this, 'free_price_label' ), 10, 2 );
 		add_filter( 'woocommerce_cart_item_subtotal', array( $this, 'free_price_label' ), 10, 2 );
@@ -706,33 +705,12 @@ class Cart {
 	}
 
 	/**
-	 * `woocommerce_cart_item_name` — append a small pill to sticker lines.
-	 *
-	 * The theme's cart and checkout templates never print
-	 * `woocommerce_get_item_data`, so without this a free sticker and a
-	 * paid add-on of the same design would read as two identical rows.
-	 * Both templates pass the name through wp_kses_post(), so a span
-	 * survives; stock WC templates show this pill *and* the item data.
-	 *
-	 * @param string $name      Product name HTML.
-	 * @param array  $cart_item Cart item.
-	 * @return string
-	 */
-	public function item_name_pill( $name, $cart_item ) {
-		$kind = self::kind( $cart_item );
-		if ( ! $kind ) {
-			return $name;
-		}
-
-		$label = Rules::KIND_FREE === $kind
-			? __( 'Free sticker', 'fishotel-misc-plugin' )
-			: __( 'Add-on', 'fishotel-misc-plugin' );
-
-		return $name . ' <span class="fh-sticker-pill fh-sticker-pill--' . esc_attr( $kind ) . '">' . esc_html( $label ) . '</span>';
-	}
-
-	/**
 	 * `woocommerce_get_item_data` — label sticker lines in cart and checkout.
+	 *
+	 * The theme's cart and checkout templates print this row under the item
+	 * title (`wc_get_formatted_cart_item_data()`), as stock WC does, so it is
+	 * the one label a sticker line gets; a name pill on top would show the
+	 * same thing twice.
 	 *
 	 * @param array $item_data Existing item data rows.
 	 * @param array $cart_item Cart item.

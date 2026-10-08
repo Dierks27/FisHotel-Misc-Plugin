@@ -177,9 +177,9 @@ class Frontend {
 	 * Enqueue the picker CSS/JS.
 	 *
 	 * The stylesheet loads on checkout and on the cart page regardless of
-	 * `show_on_cart`: sticker lines in the cart carry the FREE price label,
-	 * the name pill and the row class whether or not the picker itself is
-	 * rendered there. The script is only needed where a picker is.
+	 * `show_on_cart`: sticker lines in the cart carry the FREE price label
+	 * and the row class whether or not the picker itself is rendered there.
+	 * The script is only needed where a picker is.
 	 */
 	public function enqueue_assets() {
 		if ( ! function_exists( 'is_checkout' ) ) {
