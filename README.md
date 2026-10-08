@@ -26,7 +26,8 @@ fishotel-misc-plugin/
 │   ├── class-plugin.php            # Main plugin orchestrator
 │   ├── class-section-manager.php   # Section discovery & toggling
 │   └── sections/
-│       ├── announcer/              # Example section (placeholder)
+│       ├── announcer/              # Announcement bars
+│       ├── sticker-giveaway/       # Free sticker picker at checkout (+ $1 add-ons)
 │       └── lottery-draw/           # Verifiable lottery for group orders
 ├── admin/
 │   ├── css/admin-style.css         # Dark theme styles
@@ -67,6 +68,8 @@ class My_feature {
 The Section Manager will automatically discover and register the section.
 
 ## Version
+
+0.36 — Added Sticker Giveaway section — qualifying carts (Quarantined Fish by default, configurable categories and minimum subtotal) pick one free sticker at checkout from an admin-managed pool of simple products, with an optional add-on stepper at a configurable price (default $1.00, max 5). Stickers are real $0 / add-on cart lines flagged `fh_sticker`, excluded from shipping calculation, locked to qty 1 for the free one, and surface on orders, emails and PDF invoices as item meta. Settings page under FisHotel Tools with WooCommerce product search, category tree, copy fields and a live summary; pure `Rules` class with a headless test. Also: the update checker now hooks `upgrader_source_selection` so one-click GitHub updates install into the active folder instead of deactivating the plugin; the announcer bar publishes only visible top bars to the theme's sticky-header contract and no longer double-counts the admin bar; countdown targets are emitted in the site time zone.
 
 0.35 — Lottery Draw: added a JSON importer so a whole draw can be pasted in rather than retyped fish by fish. Validation renders a preview (slots, tickets, and whether each fish is a real draw or rank-only) before anything is written. A payload carrying `winners` or `waitlist` is refused outright and named, never silently stripped, and import only ever writes a draft — results can only ever come from the draw itself. Each import is logged with who, when, and how many fish and tickets.
 
