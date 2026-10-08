@@ -1,0 +1,57 @@
+name: Lint
+
+# Every push to main auto-deploys to the live store through the plugin's
+# GitHub update checker, so a syntax error reaches fishotel.com within the
+# hour. This gate catches parse errors on the PHP versions the server may
+# run and runs the headless section tests before anything lands on main.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  php-lint:
+    name: PHP ${{ matrix.php }} syntax
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['7.4', '8.3']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+      - name: php -l every tracked PHP file
+        run: |
+          set -e
+          git ls-files '*.php' | while read -r f; do php -l "$f" > /dev/null; done
+          echo "PHP syntax OK on $(php -r 'echo PHP_VERSION;')"
+      - name: Section tests (PHP)
+        if: matrix.php == '8.3'
+        run: |
+          set -e
+          for t in $(git ls-files 'includes/sections/*/tests/*.php' | grep -v 'wp-stubs.php'); do
+            echo "== $t"; php "$t"
+          done
+
+  js-check:
+    name: JS syntax + node tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: node --check every tracked JS file
+        run: |
+          set -e
+          git ls-files '*.js' | while read -r f; do node --check "$f"; done
+      - name: Section tests (node)
+        run: |
+          set -e
+          for t in $(git ls-files 'includes/sections/*/tests/*.test.js'); do
+            echo "== $t"; node "$t"
+          done
