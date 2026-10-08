@@ -77,14 +77,15 @@
 			}
 		});
 
-		// Account for WP admin bar if present.
+		// Account for WP admin bar if present. Only the bars move down: core
+		// already pushes the page by the admin bar height (html margin-top),
+		// so adding it to the padding too would count it twice.
 		var adminBar = document.getElementById('wpadminbar');
 		if (adminBar && topH > 0) {
 			var bars = document.querySelectorAll('.ancr-bar.ancr-pos-top:not(.ancr-shortcode)');
 			bars.forEach(function (bar) {
 				bar.style.top = adminBar.offsetHeight + 'px';
 			});
-			topH += adminBar.offsetHeight;
 		}
 
 		document.body.style.paddingTop = topH ? topH + 'px' : '';
@@ -100,23 +101,40 @@
 	 *
 	 * Contract: CSS variable --ancr-bar-height on <html> and the
 	 * has-ancr-bar class on <body>.
+	 *
+	 * Only visible top bars count: a bottom bar sits under the content, so
+	 * publishing its height would push the sticky header down for nothing.
+	 * With no top bar showing the contract is cleared, so show/close paths
+	 * re-run this instead of clearing blindly.
 	 */
+	function publishBarHeight() {
+		var h = 0;
+
+		document.querySelectorAll('.ancr-bar.ancr-pos-top:not(.ancr-shortcode):not(.ancr-hidden)').forEach(function (bar) {
+			if (window.getComputedStyle(bar).display === 'none') return;
+			h += Math.round(bar.getBoundingClientRect().height);
+		});
+
+		if (!h) {
+			clearBarHeightContract();
+			return;
+		}
+
+		document.documentElement.style.setProperty('--ancr-bar-height', h + 'px');
+		document.body.classList.add('has-ancr-bar');
+	}
+
 	function syncBarHeight() {
-		var bar = document.querySelector('.ancr-bar:not(.ancr-shortcode)');
-		if (!bar) return;
+		var bars = document.querySelectorAll('.ancr-bar.ancr-pos-top:not(.ancr-shortcode)');
+		if (!bars.length) return;
 
-		var update = function () {
-			var h = Math.round(bar.getBoundingClientRect().height);
-			document.documentElement.style.setProperty('--ancr-bar-height', h + 'px');
-			document.body.classList.add('has-ancr-bar');
-		};
-
-		update();
+		publishBarHeight();
 
 		if (typeof ResizeObserver !== 'undefined') {
-			new ResizeObserver(update).observe(bar);
+			var observer = new ResizeObserver(publishBarHeight);
+			bars.forEach(function (bar) { observer.observe(bar); });
 		}
-		window.addEventListener('resize', update);
+		window.addEventListener('resize', publishBarHeight);
 	}
 
 	function clearBarHeightContract() {
@@ -137,6 +155,7 @@
 		}
 
 		adjustBodyPadding();
+		publishBarHeight();
 	}
 
 	/* ============================================================== */
@@ -155,12 +174,12 @@
 				bar.removeEventListener('animationend', handler);
 				bar.style.display = 'none';
 				adjustBodyPadding();
-				clearBarHeightContract();
+				publishBarHeight();
 			});
 		} else {
 			bar.style.display = 'none';
 			adjustBodyPadding();
-			clearBarHeightContract();
+			publishBarHeight();
 		}
 	}
 
@@ -226,6 +245,7 @@
 				if (complete === 'hide') {
 					bar.style.display = 'none';
 					adjustBodyPadding();
+					publishBarHeight();
 				} else if (complete === 'keep') {
 					var cdWrap = bar.querySelector('.ancr-countdown');
 					if (cdWrap) cdWrap.style.display = 'none';

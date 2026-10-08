@@ -49,12 +49,14 @@ class Optimizer {
 		 * ── 2. Cache-Control Headers ─────────────────────────────────────
 		 * Performance Optimization Module
 		 *
-		 * Add Cache-Control: public, max-age=3600 for regular front-end
+		 * Add Cache-Control: public, max-age=600 for regular front-end
 		 * pages. WooCommerce cart, checkout, and account pages are
 		 * explicitly set to no-store, no-cache.
 		 */
 		if ( ! empty( $this->settings['cache_headers'] ) ) {
-			add_action( 'send_headers', array( $this, 'cache_headers' ) );
+			// template_redirect, not send_headers: the WC conditionals are
+			// reliable here and it still runs before any output.
+			add_action( 'template_redirect', array( $this, 'cache_headers' ) );
 		}
 
 		/*
@@ -65,7 +67,10 @@ class Optimizer {
 		 * handling it (e.g. via zlib.output_compression or mod_deflate).
 		 */
 		if ( ! empty( $this->settings['gzip_compression'] ) ) {
-			add_action( 'init', array( $this, 'gzip_compression' ), 1 );
+			// template_redirect only fires for real front-end page loads, so
+			// admin-post.php downloads (Batch XLSX export sets its own
+			// Content-Length), REST, AJAX and cron never get gzip-wrapped.
+			add_action( 'template_redirect', array( $this, 'gzip_compression' ), 1 );
 		}
 
 		/*
@@ -130,7 +135,9 @@ class Optimizer {
 	/**
 	 * Send Cache-Control headers for front-end pages.
 	 *
-	 * WooCommerce transactional pages are explicitly excluded.
+	 * WooCommerce transactional pages are explicitly excluded, and any
+	 * per-visitor response (logged in, items in cart, pending WC notices)
+	 * is left with whatever core / WooCommerce already sent.
 	 */
 	public function cache_headers() {
 		if ( is_admin() ) {
@@ -141,13 +148,32 @@ class Optimizer {
 		if (
 			( function_exists( 'is_cart' ) && is_cart() ) ||
 			( function_exists( 'is_checkout' ) && is_checkout() ) ||
-			( function_exists( 'is_account_page' ) && is_account_page() )
+			( function_exists( 'is_account_page' ) && is_account_page() ) ||
+			( function_exists( 'is_wc_endpoint_url' ) && ( is_wc_endpoint_url( 'order-pay' ) || is_wc_endpoint_url( 'order-received' ) ) )
 		) {
 			header( 'Cache-Control: no-store, no-cache, must-revalidate' );
 			return;
 		}
 
-		header( 'Cache-Control: public, max-age=3600' );
+		// Core already sent no-cache headers for logged-in users; a public
+		// max-age here would replace them and hand the admin bar, nonces
+		// and session notices to the next visitor.
+		if ( is_user_logged_in() || is_404() || is_search() || is_preview() || is_customize_preview() ) {
+			return;
+		}
+
+		// The theme renders the cart badge server-side, and WC notices are
+		// session state, so those pages are per-visitor too.
+		if (
+			! empty( $_COOKIE['woocommerce_items_in_cart'] ) ||
+			( function_exists( 'WC' ) && WC() && WC()->cart && ! WC()->cart->is_empty() ) ||
+			( function_exists( 'wc_notice_count' ) && WC()->session && wc_notice_count() > 0 )
+		) {
+			return;
+		}
+
+		// 600s rather than 3600: product stock changes several times a week.
+		header( 'Cache-Control: public, max-age=600' );
 	}
 
 	/*
@@ -158,12 +184,26 @@ class Optimizer {
 
 	/**
 	 * Start output buffering with gzip compression when possible.
+	 *
+	 * Only for ordinary front-end page loads: anything that sets its own
+	 * Content-Length (admin-post.php exports, REST, AJAX, cron) must not
+	 * be wrapped in a buffer that changes the byte count.
 	 */
 	public function gzip_compression() {
-		if ( wp_doing_ajax() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) {
+		if ( is_admin() || wp_doing_ajax() || wp_doing_cron() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) {
 			return;
 		}
 
+		// Belt and braces: template_redirect never fires for these, but a
+		// future hook move must not silently re-wrap them.
+		$script = ! empty( $GLOBALS['pagenow'] )
+			? $GLOBALS['pagenow']
+			: basename( isset( $_SERVER['SCRIPT_NAME'] ) ? (string) $_SERVER['SCRIPT_NAME'] : '' );
+		if ( in_array( $script, array( 'admin-post.php', 'wp-login.php' ), true ) ) {
+			return;
+		}
+
+		// zlib.output_compression means PHP (or the server) already gzips.
 		if (
 			! ini_get( 'zlib.output_compression' ) &&
 			! headers_sent() &&
@@ -206,6 +246,17 @@ class Optimizer {
 			return;
 		}
 
+		// Checkout / cart / account carry per-session scripts (wc-checkout,
+		// PPCP) that WC only localises at wp_print_scripts — after we would
+		// have dequeued them — so never combine there.
+		if (
+			( function_exists( 'is_checkout' ) && is_checkout() ) ||
+			( function_exists( 'is_cart' ) && is_cart() ) ||
+			( function_exists( 'is_account_page' ) && is_account_page() )
+		) {
+			return;
+		}
+
 		$this->combine_styles();
 		$this->combine_scripts();
 	}
@@ -235,6 +286,12 @@ class Optimizer {
 				continue;
 			}
 
+			// Skip anything with inline CSS (wp_add_inline_style): it is
+			// per-page / per-request and must not be baked into a shared file.
+			if ( '' !== $this->inline_payload( $obj ) ) {
+				continue;
+			}
+
 			$path = $this->url_to_path( $obj->src );
 			if ( ! $path || ! file_exists( $path ) ) {
 				continue;
@@ -248,12 +305,15 @@ class Optimizer {
 			return;
 		}
 
-		// Build a hash from file paths and modification times.
+		// Build a hash from file paths, modification times and (belt and
+		// braces, should the inline skip above ever be relaxed) inline payloads.
 		$hash_input = '';
-		foreach ( $file_paths as $path ) {
+		$inline     = '';
+		foreach ( $file_paths as $handle => $path ) {
 			$hash_input .= $path . '|' . filemtime( $path ) . ',';
+			$inline     .= $this->inline_payload( $wp_styles->registered[ $handle ] );
 		}
-		$hash = substr( md5( $hash_input ), 0, 12 );
+		$hash = substr( md5( $hash_input . md5( $inline ) ), 0, 12 );
 
 		$cache_file = $this->get_cache_dir() . 'combined-' . $hash . '.css';
 		$cache_url  = $this->get_cache_url() . 'combined-' . $hash . '.css';
@@ -293,7 +353,7 @@ class Optimizer {
 			file_put_contents( $tmp, $combined );
 			rename( $tmp, $cache_file );
 
-			$this->cleanup_stale_cache( $cache_file, 'combined-*.css' );
+			$this->cleanup_stale_cache();
 		}
 
 		// Mark originals as done so they don't output but still satisfy dependencies.
@@ -338,6 +398,20 @@ class Optimizer {
 				continue;
 			}
 
+			// Skip anything with inline data (wp_localize_script /
+			// wp_add_inline_script): nonces and per-page values would be
+			// frozen into a shared cache file until a source file changes.
+			if ( '' !== $this->inline_payload( $obj ) ) {
+				continue;
+			}
+
+			// WooCommerce / PPCP localise late (wp_print_scripts) and skip
+			// handles already marked done; jQuery is a dependency of nearly
+			// everything and must stay its own cacheable file.
+			if ( preg_match( '/^(wc-|woocommerce|ppcp|jquery)/', $handle ) ) {
+				continue;
+			}
+
 			$path = $this->url_to_path( $obj->src );
 			if ( ! $path || ! file_exists( $path ) ) {
 				continue;
@@ -351,11 +425,15 @@ class Optimizer {
 			return;
 		}
 
+		// Hash paths, mtimes and (belt and braces, should the inline skip
+		// above ever be relaxed) the inline payloads.
 		$hash_input = '';
-		foreach ( $file_paths as $path ) {
+		$inline     = '';
+		foreach ( $file_paths as $handle => $path ) {
 			$hash_input .= $path . '|' . filemtime( $path ) . ',';
+			$inline     .= $this->inline_payload( $wp_scripts->registered[ $handle ] );
 		}
-		$hash = substr( md5( $hash_input ), 0, 12 );
+		$hash = substr( md5( $hash_input . md5( $inline ) ), 0, 12 );
 
 		$cache_file = $this->get_cache_dir() . 'combined-' . $hash . '.js';
 		$cache_url  = $this->get_cache_url() . 'combined-' . $hash . '.js';
@@ -398,7 +476,7 @@ class Optimizer {
 			file_put_contents( $tmp, $combined );
 			rename( $tmp, $cache_file );
 
-			$this->cleanup_stale_cache( $cache_file, 'combined-*.js' );
+			$this->cleanup_stale_cache();
 		}
 
 		// Mark originals as done so they don't output but still satisfy dependencies.
@@ -535,14 +613,44 @@ class Optimizer {
 	}
 
 	/**
-	 * Remove stale cached files that do not match the current build.
+	 * Concatenate a dependency's inline payload (localised data plus
+	 * before / after inline snippets). Empty string when there is none.
 	 *
-	 * @param string $current_file Absolute path of the file to keep.
-	 * @param string $pattern      Glob pattern (e.g. 'combined-*.css').
+	 * @param \_WP_Dependency $obj Registered script or style.
+	 * @return string
 	 */
-	private function cleanup_stale_cache( $current_file, $pattern ) {
-		foreach ( glob( $this->get_cache_dir() . $pattern ) as $file ) {
-			if ( $file !== $current_file ) {
+	private function inline_payload( $obj ) {
+		$parts = array();
+		foreach ( array( 'data', 'before', 'after' ) as $key ) {
+			if ( ! empty( $obj->extra[ $key ] ) ) {
+				$parts[] = implode( "\n", (array) $obj->extra[ $key ] );
+			}
+		}
+		return implode( "\n", $parts );
+	}
+
+	/**
+	 * Prune old combined files from the cache directory.
+	 *
+	 * Age-based rather than "delete everything but the current file": each
+	 * page type (home / shop / product) has its own asset set and therefore
+	 * its own hash, and already-served HTML still references the others.
+	 * Seven days is comfortably past the HTML cache TTL. Runs at most hourly.
+	 */
+	private function cleanup_stale_cache() {
+		if ( get_transient( 'fishotel_perf_cache_pruned' ) ) {
+			return;
+		}
+		set_transient( 'fishotel_perf_cache_pruned', 1, HOUR_IN_SECONDS );
+
+		$files = glob( $this->get_cache_dir() . 'combined-*' );
+		if ( empty( $files ) ) {
+			return;
+		}
+
+		$cutoff = time() - WEEK_IN_SECONDS;
+		foreach ( $files as $file ) {
+			if ( is_file( $file ) && filemtime( $file ) < $cutoff ) {
 				@unlink( $file );
 			}
 		}

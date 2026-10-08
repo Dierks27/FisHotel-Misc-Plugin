@@ -87,6 +87,14 @@ class Post_Status {
 			return;
 		}
 
+		// Singular views (incl. ?p=ID&preview=true) keep WP's own status
+		// handling, otherwise draft / scheduled Previews and admin views of
+		// private products 404. Core already hides the non-public archived
+		// status on single views, so the forcing is only needed for archives.
+		if ( $query->is_singular() ) {
+			return;
+		}
+
 		$post_type = $query->get( 'post_type' );
 
 		$touches_product = false;

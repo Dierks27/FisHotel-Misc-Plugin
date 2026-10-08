@@ -21,9 +21,12 @@ class Update_Checker {
 	/**
 	 * GitHub repository in owner/repo format.
 	 *
+	 * Real slug casing (GitHub reports the old mixed-case name as "moved"),
+	 * so the raw / zip URLs do not lean on the case-insensitive redirect.
+	 *
 	 * @var string
 	 */
-	private $github_repo = 'Dierks27/FisHotel-Misc-Plugin';
+	private $github_repo = 'Dierks27/fishotel-misc-plugin';
 
 	/**
 	 * Branch to check for updates.
@@ -88,6 +91,9 @@ class Update_Checker {
 	public function init() {
 		add_filter( 'pre_set_site_transient_update_plugins', array( $this, 'check_for_update' ) );
 		add_filter( 'plugins_api', array( $this, 'plugin_info' ), 20, 3 );
+		// GitHub's branch zip unpacks to fishotel-misc-plugin-main/; without
+		// this core installs that folder, deletes ours and deactivates the plugin.
+		add_filter( 'upgrader_source_selection', array( $this, 'fix_source_dir' ), 10, 4 );
 		add_filter( 'plugin_row_meta', array( $this, 'add_check_update_link' ), 10, 2 );
 		add_action( 'admin_init', array( $this, 'handle_manual_check' ) );
 		add_action( 'admin_notices', array( $this, 'show_update_notice' ) );
@@ -223,6 +229,45 @@ class Update_Checker {
 		}
 
 		return $transient;
+	}
+
+	/**
+	 * Rename the unpacked update folder to the installed plugin folder.
+	 *
+	 * The branch zip extracts to <repo>-<branch>/ (fishotel-misc-plugin-main),
+	 * not fishotel-misc-plugin/. Left alone, core installs the new folder,
+	 * removes the old one and active_plugins points at a missing file.
+	 *
+	 * @param string       $source        Path to the unpacked source folder.
+	 * @param string       $remote_source Path to the unpack directory.
+	 * @param \WP_Upgrader $upgrader      Upgrader instance.
+	 * @param array        $hook_extra    Extra args; 'plugin' is the basename being updated.
+	 * @return string
+	 */
+	public function fix_source_dir( $source, $remote_source, $upgrader, $hook_extra ) {
+		unset( $upgrader );
+
+		if ( ! isset( $hook_extra['plugin'] ) || $hook_extra['plugin'] !== $this->plugin_basename ) {
+			return $source;
+		}
+
+		$expected = trailingslashit( $remote_source ) . dirname( $this->plugin_basename ) . '/';
+
+		if ( untrailingslashit( $source ) === untrailingslashit( $expected ) ) {
+			return $source;
+		}
+
+		global $wp_filesystem;
+
+		if ( null === $wp_filesystem ) {
+			return $source;
+		}
+
+		if ( $wp_filesystem->move( $source, $expected ) ) {
+			return $expected;
+		}
+
+		return $source;
 	}
 
 	/**
