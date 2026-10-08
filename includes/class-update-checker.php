@@ -21,9 +21,12 @@ class Update_Checker {
 	/**
 	 * GitHub repository in owner/repo format.
 	 *
+	 * Real slug casing (GitHub reports the old mixed-case name as "moved"),
+	 * so the raw / zip URLs do not lean on the case-insensitive redirect.
+	 *
 	 * @var string
 	 */
-	private $github_repo = 'Dierks27/FisHotel-Misc-Plugin';
+	private $github_repo = 'Dierks27/fishotel-misc-plugin';
 
 	/**
 	 * Branch to check for updates.
@@ -88,7 +91,7 @@ class Update_Checker {
 	public function init() {
 		add_filter( 'pre_set_site_transient_update_plugins', array( $this, 'check_for_update' ) );
 		add_filter( 'plugins_api', array( $this, 'plugin_info' ), 20, 3 );
-		// GitHub's branch zip unpacks to FisHotel-Misc-Plugin-main/; without
+		// GitHub's branch zip unpacks to fishotel-misc-plugin-main/; without
 		// this core installs that folder, deletes ours and deactivates the plugin.
 		add_filter( 'upgrader_source_selection', array( $this, 'fix_source_dir' ), 10, 4 );
 		add_filter( 'plugin_row_meta', array( $this, 'add_check_update_link' ), 10, 2 );
@@ -231,7 +234,7 @@ class Update_Checker {
 	/**
 	 * Rename the unpacked update folder to the installed plugin folder.
 	 *
-	 * The branch zip extracts to <Repo>-<branch>/ (FisHotel-Misc-Plugin-main),
+	 * The branch zip extracts to <repo>-<branch>/ (fishotel-misc-plugin-main),
 	 * not fishotel-misc-plugin/. Left alone, core installs the new folder,
 	 * removes the old one and active_plugins points at a missing file.
 	 *
