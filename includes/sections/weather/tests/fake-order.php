@@ -7,6 +7,12 @@
  * @package FisHotel\Misc\Sections\Weather
  */
 
+// Helper, not a test: the CI lint job runs every tests/*.php with php, so
+// exit cleanly when executed directly instead of as a require.
+if ( ! empty( $_SERVER['SCRIPT_FILENAME'] ) && realpath( $_SERVER['SCRIPT_FILENAME'] ) === __FILE__ ) {
+	exit( 0 );
+}
+
 class WC_Order {
 
 	private $id;
