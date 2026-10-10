@@ -1,0 +1,29 @@
+{
+  "result": {
+    "input": {
+      "address": { "address": "14000 Carrollton Blvd, Carrollton, VA 23314" },
+      "benchmark": { "isDefault": true, "benchmarkDescription": "Public Address Ranges - Current Benchmark", "id": "4", "benchmarkName": "Public_AR_Current" }
+    },
+    "addressMatches": [
+      {
+        "tigerLine": { "side": "L", "tigerLineId": "66312467" },
+        "coordinates": { "x": -76.5600123, "y": 36.9397456 },
+        "addressComponents": {
+          "zip": "23314",
+          "streetName": "CARROLLTON",
+          "preType": "",
+          "city": "CARROLLTON",
+          "preDirection": "",
+          "suffixDirection": "",
+          "fromAddress": "13900",
+          "state": "VA",
+          "suffixType": "BLVD",
+          "toAddress": "14098",
+          "suffixQualifier": "",
+          "preQualifier": ""
+        },
+        "matchedAddress": "14000 CARROLLTON BLVD, CARROLLTON, VA, 23314"
+      }
+    ]
+  }
+}
