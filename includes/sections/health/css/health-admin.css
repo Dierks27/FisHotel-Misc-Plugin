@@ -1,0 +1,386 @@
+/**
+ * Health admin styles — the section page under FisHotel Tools (dark,
+ * built on admin/css/admin-style.css and its --fh-* tokens). The
+ * dashboard widget uses its own small inline block and stock WP styling.
+ *
+ * @package FisHotel\Misc\Sections\Health
+ */
+
+/* ------------------------------------------------------------------ */
+/*  Tabs                                                               */
+/* ------------------------------------------------------------------ */
+.fh-health-tabs {
+	display: flex;
+	gap: 6px;
+	margin: -14px 0 20px;
+}
+
+.fh-health-tab {
+	padding: 7px 14px;
+	border-radius: 999px;
+	font-size: 13px;
+	font-weight: 600;
+	text-decoration: none;
+	color: var(--fh-text-secondary, #a0a0a0);
+	background: var(--fh-bg-secondary, #2d2d2d);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+}
+
+.fh-health-tab:hover,
+.fh-health-tab:focus {
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-health-tab.is-active {
+	color: #fff;
+	background: var(--fh-accent, #00a0d2);
+	border-color: var(--fh-accent, #00a0d2);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Badges                                                             */
+/* ------------------------------------------------------------------ */
+.fh-health-badge,
+.fh-health-level {
+	display: inline-block;
+	padding: 2px 9px;
+	border-radius: 12px;
+	font-size: 11px;
+	font-weight: 600;
+	line-height: 1.6;
+	letter-spacing: 0.3px;
+	text-transform: uppercase;
+	color: #fff;
+	background: #6b6b6b;
+	white-space: nowrap;
+}
+
+.fh-health-badge--ok    { background: #2e9e47; }
+.fh-health-badge--warn  { background: #c98a00; }
+.fh-health-badge--error { background: #c0392b; }
+.fh-health-badge--info  { background: #4a5b6a; }
+
+.fh-health-level--debug    { background: #4a5b6a; }
+.fh-health-level--info     { background: #2d5fb8; }
+.fh-health-level--warning  { background: #c98a00; }
+.fh-health-level--error    { background: #c0392b; }
+.fh-health-level--critical { background: #8e1b1b; }
+
+/* ------------------------------------------------------------------ */
+/*  Summary strip                                                      */
+/* ------------------------------------------------------------------ */
+.fh-health-summary {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 14px;
+	margin: 0 0 20px;
+	padding: 14px 16px;
+	background: var(--fh-bg-secondary, #2d2d2d);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	border-left-width: 4px;
+	border-radius: var(--fh-radius, 8px);
+}
+
+.fh-health-summary--ok    { border-left-color: #2e9e47; }
+.fh-health-summary--warn  { border-left-color: #ffb900; }
+.fh-health-summary--error { border-left-color: #dc3232; }
+
+.fh-health-summary__pill {
+	padding: 4px 12px;
+	border-radius: 999px;
+	font-size: 13px;
+	font-weight: 700;
+	color: #fff;
+	background: #2e9e47;
+}
+
+.fh-health-summary--warn .fh-health-summary__pill  { background: #c98a00; }
+.fh-health-summary--error .fh-health-summary__pill { background: #c0392b; }
+
+.fh-health-summary__counts {
+	font-size: 13px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-health-summary__meta {
+	margin-left: auto;
+	font-size: 12px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Check groups                                                       */
+/* ------------------------------------------------------------------ */
+.fh-health-groups {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(460px, 100%), 1fr));
+	gap: 20px;
+	align-items: start;
+}
+
+.fh-health-card:hover {
+	transform: none;
+}
+
+.fh-health-checks {
+	width: 100%;
+	border-collapse: collapse;
+}
+
+.fh-health-check td {
+	padding: 8px 6px;
+	border-top: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	vertical-align: top;
+	font-size: 13px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-health-check__status {
+	width: 1%;
+	white-space: nowrap;
+}
+
+.fh-health-check__value {
+	text-align: right;
+	color: var(--fh-text-secondary, #a0a0a0);
+	white-space: nowrap;
+	max-width: 260px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.fh-health-check--warn .fh-health-check__value,
+.fh-health-check--error .fh-health-check__value {
+	white-space: normal;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-health-check__hint {
+	display: block;
+	margin-top: 3px;
+	font-size: 12px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-health-footnote {
+	margin-top: 16px;
+	font-size: 12px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Log tab                                                            */
+/* ------------------------------------------------------------------ */
+.fh-health-toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-end;
+	gap: 16px;
+	margin: 0 0 12px;
+	padding: 14px 16px;
+	background: var(--fh-bg-secondary, #2d2d2d);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	border-radius: var(--fh-radius, 8px);
+}
+
+.fh-health-filters,
+.fh-health-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-end;
+	gap: 10px;
+}
+
+.fh-health-actions {
+	margin-left: auto;
+}
+
+.fh-health-filter {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	font-size: 12px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-health-filter--grow {
+	min-width: 220px;
+}
+
+.fh-health-filter--quick {
+	min-width: 200px;
+}
+
+.fh-health-wrap .fh-health-input {
+	background: var(--fh-bg-primary, #1a1a1a);
+	border: 1px solid rgba(255, 255, 255, 0.15);
+	color: var(--fh-text-primary, #e0e0e0);
+	padding: 6px 10px;
+	border-radius: 4px;
+	font-size: 13px;
+	box-sizing: border-box;
+	color-scheme: dark;
+	width: 100%;
+	min-height: 32px;
+}
+
+.fh-health-wrap .fh-health-input:focus {
+	border-color: var(--fh-accent, #00a0d2);
+	outline: none;
+	box-shadow: 0 0 0 1px var(--fh-accent, #00a0d2);
+}
+
+.fh-health-wrap .fh-health-input--num {
+	max-width: 120px;
+	text-align: right;
+}
+
+.fh-health-wrap .fh-health-input:invalid {
+	border-color: var(--fh-danger, #dc3232);
+}
+
+.fh-health-status {
+	font-size: 12px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-health-status.is-error { color: var(--fh-danger, #dc3232); }
+.fh-health-status.is-ok    { color: var(--fh-success, #46b450); }
+
+.fh-health-count {
+	margin: 0 0 10px;
+	font-size: 12px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+/* Core's list table assumes a light background; re-tint with the tokens. */
+.fh-health-wrap .widefat {
+	background: var(--fh-bg-secondary, #2d2d2d);
+	border-color: var(--fh-border, rgba(255, 255, 255, 0.1));
+}
+
+.fh-health-wrap .widefat th,
+.fh-health-wrap .widefat td,
+.fh-health-wrap .widefat thead th {
+	color: var(--fh-text-primary, #e0e0e0);
+	border-color: var(--fh-border, rgba(255, 255, 255, 0.1));
+	vertical-align: top;
+}
+
+.fh-health-wrap .widefat.striped > tbody > :nth-child(odd) {
+	background: var(--fh-bg-primary, #1a1a1a);
+}
+
+.fh-health-when {
+	white-space: nowrap;
+	width: 1%;
+}
+
+.fh-health-repeats {
+	display: inline-block;
+	margin-left: 6px;
+	padding: 0 6px;
+	border-radius: 999px;
+	font-size: 11px;
+	font-weight: 700;
+	background: rgba(255, 185, 0, 0.18);
+	color: var(--fh-warning, #ffb900);
+}
+
+.fh-health-source {
+	font-size: 12px;
+	background: rgba(255, 255, 255, 0.06);
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-health-message {
+	word-break: break-word;
+}
+
+.fh-health-ctx {
+	margin: 8px 0 0;
+	padding: 8px 10px;
+	max-height: 320px;
+	overflow: auto;
+	font-size: 11px;
+	line-height: 1.5;
+	background: var(--fh-bg-primary, #1a1a1a);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	border-radius: 4px;
+	color: var(--fh-text-secondary, #a0a0a0);
+	white-space: pre-wrap;
+}
+
+.fh-health-row__actions {
+	white-space: nowrap;
+	width: 1%;
+}
+
+.fh-health-row.is-hidden {
+	display: none;
+}
+
+.fh-health-pagination {
+	display: flex;
+	gap: 8px;
+	margin-top: 12px;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Settings tab                                                       */
+/* ------------------------------------------------------------------ */
+.fh-health-columns {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr));
+	gap: 20px;
+	align-items: start;
+}
+
+.fh-health-field {
+	margin-top: 16px;
+}
+
+.fh-health-field--row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+}
+
+.fh-health-label {
+	display: block;
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--fh-text-primary, #e0e0e0);
+	margin-bottom: 6px;
+}
+
+.fh-health-field--row .fh-health-label {
+	margin-bottom: 0;
+}
+
+.fh-health-field .fishotel-misc-card-desc {
+	margin: 4px 0 0;
+}
+
+.fh-health-actions-row {
+	margin-top: 20px;
+}
+
+.fh-health-wrap .fishotel-misc-notice--warning {
+	background: rgba(255, 185, 0, 0.1);
+	border-left: 3px solid var(--fh-warning, #ffb900);
+	color: var(--fh-warning, #ffb900);
+}
+
+.fh-health-save.button-primary {
+	background: var(--fh-accent, #00a0d2);
+	border-color: var(--fh-accent, #00a0d2);
+}
+
+.fh-health-save.button-primary:hover,
+.fh-health-save.button-primary:focus {
+	background: var(--fh-accent-hover, #0eb5e8);
+	border-color: var(--fh-accent-hover, #0eb5e8);
+}
