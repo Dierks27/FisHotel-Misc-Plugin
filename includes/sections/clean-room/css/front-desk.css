@@ -1,0 +1,863 @@
+/**
+ * Clean Room front desk — the phone screen. Inlined into the page by
+ * Front_Desk::maybe_render(); nothing here is loaded from anywhere.
+ *
+ * One thumb, wet hands: every target is at least 56px tall, high contrast
+ * on a dark background, the action bar sits at the bottom.
+ *
+ * @package FisHotel\Misc\Sections\Clean_Room
+ */
+
+:root {
+	--fd-bg: #0f1720;
+	--fd-card: #1b2733;
+	--fd-card-2: #243544;
+	--fd-text: #f3f6f8;
+	--fd-muted: #9fb0bf;
+	--fd-accent: #35b8ff;
+	--fd-accent-2: #1f8fd0;
+	--fd-ok: #3ddc84;
+	--fd-warn: #ffc53d;
+	--fd-danger: #ff5c5c;
+	--fd-border: rgba(255, 255, 255, 0.12);
+	--fd-radius: 14px;
+	--fd-tap: 56px;
+	--fd-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+* {
+	box-sizing: border-box;
+	-webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+	margin: 0;
+	padding: 0;
+	background: var(--fd-bg);
+	color: var(--fd-text);
+	font-family: var(--fd-font);
+	font-size: 18px;
+	line-height: 1.35;
+	-webkit-text-size-adjust: 100%;
+}
+
+body.fh-fd {
+	min-height: 100vh;
+	padding-bottom: calc(var(--fd-tap) * 2 + 40px + env(safe-area-inset-bottom, 0px));
+}
+
+.fh-fd-noscript,
+.fh-fd-loading {
+	padding: 24px 16px;
+	color: var(--fd-muted);
+	text-align: center;
+}
+
+.fh-fd-app {
+	max-width: 640px;
+	margin: 0 auto;
+	padding: 12px 12px 0;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Header                                                             */
+/* ------------------------------------------------------------------ */
+.fh-fd-head {
+	padding: 10px 4px 14px;
+}
+
+.fh-fd-head h1 {
+	margin: 0;
+	font-size: 34px;
+	line-height: 1.1;
+	font-weight: 800;
+	letter-spacing: -0.5px;
+}
+
+.fh-fd-head .fh-fd-sub {
+	margin: 6px 0 0;
+	font-size: 15px;
+	color: var(--fd-muted);
+}
+
+.fh-fd-head .fh-fd-sub strong {
+	color: var(--fd-text);
+	font-weight: 600;
+}
+
+.fh-fd-links {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px 16px;
+	margin: 10px 0 0;
+	font-size: 15px;
+}
+
+.fh-fd-links a,
+.fh-fd-links button {
+	color: var(--fd-accent);
+	text-decoration: none;
+	background: none;
+	border: 0;
+	padding: 8px 0;
+	font: inherit;
+	font-size: 15px;
+	min-height: 44px;
+	cursor: pointer;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Occupants                                                          */
+/* ------------------------------------------------------------------ */
+.fh-fd-list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.fh-fd-occ {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	width: 100%;
+	min-height: 72px;
+	padding: 12px 14px;
+	border: 1px solid var(--fd-border);
+	border-radius: var(--fd-radius);
+	background: var(--fd-card);
+	color: var(--fd-text);
+	text-align: left;
+	font: inherit;
+}
+
+button.fh-fd-occ {
+	cursor: pointer;
+}
+
+button.fh-fd-occ:active {
+	background: var(--fd-card-2);
+}
+
+.fh-fd-occ__qty {
+	flex: 0 0 auto;
+	min-width: 56px;
+	font-size: 30px;
+	font-weight: 800;
+	text-align: center;
+	line-height: 1;
+}
+
+.fh-fd-occ__qty small {
+	display: block;
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--fd-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.4px;
+	margin-top: 2px;
+}
+
+.fh-fd-occ__body {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.fh-fd-occ__name {
+	display: block;
+	font-size: 19px;
+	font-weight: 700;
+	line-height: 1.2;
+	overflow-wrap: anywhere;
+}
+
+.fh-fd-occ__meta {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px 10px;
+	margin-top: 4px;
+	font-size: 14px;
+	color: var(--fd-muted);
+}
+
+.fh-fd-badge {
+	display: inline-block;
+	padding: 2px 9px;
+	border-radius: 999px;
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: 0.3px;
+	text-transform: uppercase;
+	background: #3a4a5a;
+	color: #fff;
+	white-space: nowrap;
+}
+
+.fh-fd-badge--in_qt   { background: #b7791f; }
+.fh-fd-badge--cleared { background: #1f8f4d; }
+.fh-fd-badge--closed  { background: #555; }
+
+.fh-fd-empty {
+	padding: 28px 16px;
+	border: 1px dashed var(--fd-border);
+	border-radius: var(--fd-radius);
+	color: var(--fd-muted);
+	text-align: center;
+	font-size: 17px;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Action bar and buttons                                             */
+/* ------------------------------------------------------------------ */
+.fh-fd-bar {
+	position: fixed;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+	background: rgba(15, 23, 32, 0.96);
+	border-top: 1px solid var(--fd-border);
+	backdrop-filter: blur(6px);
+}
+
+.fh-fd-bar__inner {
+	max-width: 640px;
+	margin: 0 auto;
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 8px;
+}
+
+.fh-fd-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	min-height: var(--fd-tap);
+	padding: 10px 14px;
+	border: 1px solid var(--fd-border);
+	border-radius: var(--fd-radius);
+	background: var(--fd-card-2);
+	color: var(--fd-text);
+	font: inherit;
+	font-size: 18px;
+	font-weight: 700;
+	text-align: center;
+	cursor: pointer;
+	width: 100%;
+}
+
+.fh-fd-btn:active {
+	transform: scale(0.98);
+	background: #2c4256;
+}
+
+.fh-fd-btn:disabled {
+	opacity: 0.45;
+	cursor: default;
+	transform: none;
+}
+
+.fh-fd-btn--primary {
+	background: var(--fd-accent-2);
+	border-color: var(--fd-accent-2);
+}
+
+.fh-fd-btn--primary:active {
+	background: var(--fd-accent);
+}
+
+.fh-fd-btn--danger {
+	background: #8e2b2b;
+	border-color: #8e2b2b;
+}
+
+.fh-fd-btn--ok {
+	background: #1f8f4d;
+	border-color: #1f8f4d;
+}
+
+.fh-fd-btn--mic {
+	background: #5a2d8e;
+	border-color: #5a2d8e;
+}
+
+.fh-fd-btn--quiet {
+	background: transparent;
+}
+
+.fh-fd-btn--block {
+	width: 100%;
+	margin-top: 10px;
+}
+
+.fh-fd-btn--big {
+	min-height: 72px;
+	font-size: 22px;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Screens                                                            */
+/* ------------------------------------------------------------------ */
+.fh-fd-screen h2 {
+	margin: 4px 0 12px;
+	font-size: 26px;
+	font-weight: 800;
+	letter-spacing: -0.3px;
+}
+
+.fh-fd-screen h3 {
+	margin: 18px 0 8px;
+	font-size: 14px;
+	font-weight: 700;
+	color: var(--fd-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+}
+
+.fh-fd-field {
+	margin: 0 0 14px;
+}
+
+.fh-fd-label {
+	display: block;
+	margin: 0 0 6px;
+	font-size: 14px;
+	font-weight: 700;
+	color: var(--fd-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+}
+
+.fh-fd-input,
+.fh-fd-textarea {
+	width: 100%;
+	min-height: var(--fd-tap);
+	padding: 12px 14px;
+	border: 1px solid var(--fd-border);
+	border-radius: var(--fd-radius);
+	background: var(--fd-card);
+	color: var(--fd-text);
+	font: inherit;
+	font-size: 20px;
+	color-scheme: dark;
+}
+
+.fh-fd-input:focus,
+.fh-fd-textarea:focus {
+	outline: none;
+	border-color: var(--fd-accent);
+	box-shadow: 0 0 0 2px rgba(53, 184, 255, 0.35);
+}
+
+.fh-fd-textarea {
+	min-height: 120px;
+	resize: vertical;
+}
+
+/* Stepper */
+.fh-fd-stepper {
+	display: grid;
+	grid-template-columns: 72px 1fr 72px;
+	gap: 8px;
+	align-items: stretch;
+}
+
+.fh-fd-stepper button {
+	min-height: 72px;
+	font-size: 34px;
+	font-weight: 800;
+}
+
+.fh-fd-stepper input {
+	text-align: center;
+	font-size: 40px;
+	font-weight: 800;
+	min-height: 72px;
+}
+
+/* Chips */
+.fh-fd-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.fh-fd-chip {
+	min-height: 48px;
+	padding: 8px 16px;
+	border: 1px solid var(--fd-border);
+	border-radius: 999px;
+	background: var(--fd-card);
+	color: var(--fd-text);
+	font: inherit;
+	font-size: 16px;
+	font-weight: 600;
+	cursor: pointer;
+	max-width: 100%;
+	overflow-wrap: anywhere;
+}
+
+.fh-fd-chip.is-on {
+	background: var(--fd-accent-2);
+	border-color: var(--fd-accent-2);
+}
+
+.fh-fd-chip--ghost {
+	border-style: dashed;
+	color: var(--fd-accent);
+}
+
+/* Suggestions */
+.fh-fd-suggest {
+	list-style: none;
+	margin: 6px 0 0;
+	padding: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.fh-fd-suggest button {
+	width: 100%;
+	min-height: var(--fd-tap);
+	padding: 10px 14px;
+	border: 1px solid var(--fd-border);
+	border-radius: var(--fd-radius);
+	background: var(--fd-card);
+	color: var(--fd-text);
+	font: inherit;
+	font-size: 18px;
+	text-align: left;
+	cursor: pointer;
+}
+
+.fh-fd-suggest button small {
+	display: block;
+	font-size: 13px;
+	color: var(--fd-muted);
+}
+
+.fh-fd-chosen {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	min-height: var(--fd-tap);
+	padding: 10px 14px;
+	border-radius: var(--fd-radius);
+	background: #1f8f4d;
+	font-weight: 700;
+	font-size: 19px;
+}
+
+.fh-fd-chosen button {
+	min-height: 40px;
+	padding: 6px 12px;
+	border: 1px solid rgba(255, 255, 255, 0.4);
+	border-radius: 999px;
+	background: transparent;
+	color: #fff;
+	font: inherit;
+	font-size: 14px;
+	cursor: pointer;
+}
+
+/* Destination grid */
+.fh-fd-area {
+	margin: 0 0 18px;
+}
+
+.fh-fd-area h3 {
+	margin-top: 10px;
+}
+
+.fh-fd-building {
+	margin: 0 0 12px;
+	padding: 10px;
+	border: 1px solid var(--fd-border);
+	border-radius: var(--fd-radius);
+	background: rgba(255, 255, 255, 0.03);
+}
+
+.fh-fd-building.is-qt {
+	border-color: rgba(255, 197, 61, 0.6);
+}
+
+.fh-fd-building.is-coming {
+	opacity: 0.5;
+}
+
+.fh-fd-building__head {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	margin: 0 0 8px;
+	font-size: 15px;
+	font-weight: 700;
+}
+
+.fh-fd-building__head small {
+	font-weight: 600;
+	color: var(--fd-muted);
+}
+
+.fh-fd-building__head .fh-fd-badge--qt {
+	background: #b7791f;
+}
+
+.fh-fd-tanks {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+	gap: 8px;
+}
+
+.fh-fd-tank {
+	min-height: 64px;
+	padding: 8px 6px;
+	border: 1px solid var(--fd-border);
+	border-radius: 12px;
+	background: var(--fd-card-2);
+	color: var(--fd-text);
+	font: inherit;
+	font-size: 22px;
+	font-weight: 800;
+	line-height: 1.1;
+	cursor: pointer;
+}
+
+.fh-fd-tank small {
+	display: block;
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--fd-muted);
+	margin-top: 3px;
+}
+
+.fh-fd-tank.is-empty {
+	background: var(--fd-card);
+}
+
+.fh-fd-tank.is-current {
+	opacity: 0.4;
+	cursor: default;
+	border-style: dashed;
+}
+
+.fh-fd-tank.is-empty small {
+	color: var(--fd-ok);
+}
+
+/* Voice */
+.fh-fd-voice {
+	padding: 18px 16px;
+	border: 1px solid var(--fd-border);
+	border-radius: var(--fd-radius);
+	background: var(--fd-card);
+	text-align: center;
+}
+
+.fh-fd-voice__state {
+	font-size: 20px;
+	font-weight: 700;
+	margin: 0 0 8px;
+}
+
+.fh-fd-voice__heard {
+	color: var(--fd-muted);
+	font-size: 15px;
+	margin: 0 0 12px;
+}
+
+.fh-fd-voice__sentence {
+	font-size: 24px;
+	font-weight: 800;
+	line-height: 1.25;
+	margin: 0 0 14px;
+	overflow-wrap: anywhere;
+}
+
+.fh-fd-countdown {
+	height: 10px;
+	margin: 0 0 14px;
+	border-radius: 999px;
+	background: rgba(255, 255, 255, 0.08);
+	overflow: hidden;
+}
+
+.fh-fd-countdown span {
+	display: block;
+	height: 100%;
+	background: var(--fd-ok);
+	transition: width 0.25s linear;
+}
+
+.fh-fd-pulse {
+	width: 84px;
+	height: 84px;
+	margin: 0 auto 12px;
+	border-radius: 50%;
+	background: #5a2d8e;
+	animation: fh-fd-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes fh-fd-pulse {
+	0%, 100% { transform: scale(1); opacity: 1; }
+	50% { transform: scale(1.12); opacity: 0.75; }
+}
+
+/* Toast */
+.fh-fd-toast {
+	position: fixed;
+	left: 12px;
+	right: 12px;
+	bottom: calc(var(--fd-tap) * 2 + 36px + env(safe-area-inset-bottom, 0px));
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	max-width: 616px;
+	margin: 0 auto;
+	padding: 12px 14px;
+	border-radius: var(--fd-radius);
+	background: #0b3d26;
+	border: 1px solid rgba(61, 220, 132, 0.5);
+	color: #fff;
+	font-size: 17px;
+	font-weight: 600;
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+	z-index: 20;
+}
+
+.fh-fd-toast[hidden] {
+	display: none;
+}
+
+.fh-fd-toast.is-error {
+	background: #4a1515;
+	border-color: rgba(255, 92, 92, 0.6);
+}
+
+.fh-fd-toast button {
+	flex: 0 0 auto;
+	min-height: 48px;
+	padding: 8px 18px;
+	border: 1px solid rgba(255, 255, 255, 0.5);
+	border-radius: 999px;
+	background: transparent;
+	color: #fff;
+	font: inherit;
+	font-size: 17px;
+	font-weight: 800;
+	cursor: pointer;
+}
+
+.fh-fd-toast .fh-fd-toast__bar {
+	position: absolute;
+	left: 0;
+	bottom: 0;
+	height: 4px;
+	background: var(--fd-ok);
+	border-radius: 0 0 var(--fd-radius) var(--fd-radius);
+	transition: width 0.25s linear;
+}
+
+.fh-fd-toast {
+	position: fixed;
+	overflow: hidden;
+}
+
+/* Small helpers */
+.fh-fd-muted {
+	color: var(--fd-muted);
+	font-size: 15px;
+}
+
+.fh-fd-row {
+	display: flex;
+	gap: 8px;
+}
+
+.fh-fd-row > * {
+	flex: 1 1 0;
+}
+
+.fh-fd-spacer {
+	height: 12px;
+}
+
+/* Six buttons in one row only once "Shipped" and "Arrival" fit (a 480 px phone in landscape overflowed). */
+@media (min-width: 640px) {
+	.fh-fd-bar__inner {
+		grid-template-columns: repeat(6, 1fr);
+	}
+}
+
+/* ------------------------------------------------------------------ */
+/*  Today strip, copper, quick loss, occupant sheet                    */
+/* ------------------------------------------------------------------ */
+.fh-fd-today {
+	margin: 12px 0;
+	padding: 0 12px;
+	border: 1px solid var(--fd-border);
+	border-radius: var(--fd-radius);
+	background: rgba(255, 255, 255, 0.03);
+}
+
+.fh-fd-today.is-open {
+	padding-bottom: 10px;
+}
+
+/* The one-line fold: "Today · 3 to do ▸" */
+.fh-fd-today__toggle {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	width: 100%;
+	min-height: 48px;
+	margin: 0;
+	padding: 6px 0;
+	border: 0;
+	background: none;
+	color: var(--fd-muted);
+	font: inherit;
+	font-size: 15px;
+	font-weight: 700;
+	text-align: left;
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+	cursor: pointer;
+}
+
+.fh-fd-today__caret {
+	flex: 0 0 auto;
+	font-size: 18px;
+	color: var(--fd-accent);
+}
+
+/* A sticky toast (with Undo) stays until the next action. */
+.fh-fd-toast.is-sticky {
+	border-color: rgba(53, 184, 255, 0.5);
+}
+
+.fh-fd-today__head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	margin: 0 0 8px;
+	font-size: 14px;
+	font-weight: 700;
+	color: var(--fd-muted);
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+}
+
+.fh-fd-today .fh-fd-muted {
+	margin: 4px 0 0;
+}
+
+.fh-fd-copper {
+	min-height: 44px;
+	padding: 6px 14px;
+	border: 1px solid var(--fd-border);
+	border-radius: 999px;
+	background: var(--fd-card);
+	color: var(--fd-text);
+	font: inherit;
+	font-size: 15px;
+	font-weight: 700;
+	text-transform: none;
+	letter-spacing: 0;
+	cursor: pointer;
+}
+
+.fh-fd-copper.is-ok  { border-color: rgba(61, 220, 132, 0.6); }
+.fh-fd-copper.is-low { border-color: var(--fd-danger); color: #ffb3b3; }
+
+.fh-fd-chip--todo {
+	min-height: 52px;
+	border-radius: 12px;
+	text-align: left;
+}
+
+.fh-fd-chip--todo.is-done {
+	opacity: 0.5;
+	text-decoration: line-through;
+	cursor: default;
+}
+
+.fh-fd-chip--tank {
+	font-size: 20px;
+	min-height: 56px;
+	padding: 8px 18px;
+}
+
+.fh-fd-occ-row {
+	display: flex;
+	align-items: stretch;
+	gap: 8px;
+}
+
+.fh-fd-occ-row .fh-fd-occ {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.fh-fd-quick {
+	flex: 0 0 88px;
+	min-height: 72px;
+	border: 1px solid #8e2b2b;
+	border-radius: var(--fd-radius);
+	background: #8e2b2b;
+	color: #fff;
+	font: inherit;
+	font-size: 17px;
+	font-weight: 800;
+	line-height: 1.1;
+	cursor: pointer;
+}
+
+.fh-fd-quick:active {
+	background: #b03a3a;
+}
+
+.fh-fd-quick:disabled {
+	opacity: 0.35;
+}
+
+.fh-fd-badge--ready { background: #1f8f4d; box-shadow: 0 0 0 2px rgba(61, 220, 132, 0.6); }
+
+.fh-fd-facts {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px 14px;
+	margin: 0 0 16px;
+	font-size: 15px;
+	color: var(--fd-muted);
+}
+
+.fh-fd-grid2 {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 8px;
+}
+
+.fh-fd-grid2 .fh-fd-btn--big {
+	grid-column: 1 / -1;
+}
+
+.fh-fd-input--big {
+	font-size: 40px;
+	font-weight: 800;
+	min-height: 84px;
+	text-align: center;
+}
