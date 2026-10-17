@@ -11,6 +11,7 @@
  * @var array[] $tanks        Tanks.
  * @var array   $groups       Layout::group().
  * @var array[] $aliases      Aliases.
+ * @var array[] $box_rates    Settings::box_rates().
  * @var string  $labels_url   Printable labels URL.
  * @var bool    $tables_ok    Whether the tables exist.
  * @var bool    $can_settings Always true here.
@@ -229,6 +230,44 @@ $tab = 'settings';
 			</form>
 			<p class="fh-cr-status fh-cr-layout-status" aria-live="polite"></p>
 		</div>
+
+		<?php /* ── Box rates ─────────────────────────────────────── */ ?>
+		<form id="fishotel-cleanroom-box-rates" class="fishotel-misc-card fh-cr-card fh-cr-card--wide" method="post" action="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>" onsubmit="return false;">
+			<?php wp_nonce_field( Settings::NONCE_ACTION ); ?>
+			<input type="hidden" name="action" value="fishotel_cleanroom_box_rates">
+			<div class="fishotel-misc-card-header">
+				<div class="fishotel-misc-card-icon"><span class="dashicons dashicons-archive"></span></div>
+				<h2 class="fishotel-misc-card-title"><?php esc_html_e( 'Box rates', 'fishotel-misc-plugin' ); ?></h2>
+			</div>
+			<p class="fishotel-misc-card-desc"><?php esc_html_e( 'The per-box shipping and the re-ox fee each supplier charges by origin. The order editor\'s "Suggest" button fills the import & re-ox fees with boxes × (per box + re-ox) for the order\'s supplier and origin — never on its own. A row with no origin stands for every origin of that supplier.', 'fishotel-misc-plugin' ); ?></p>
+
+			<table class="widefat fh-cr-table fh-cr-box-rates" id="fh-cr-box-rates-table">
+				<thead>
+					<tr>
+						<th scope="col"><?php esc_html_e( 'Supplier', 'fishotel-misc-plugin' ); ?></th>
+						<th scope="col"><?php esc_html_e( 'Origin', 'fishotel-misc-plugin' ); ?></th>
+						<th scope="col" class="fh-cr-num"><?php esc_html_e( 'Per box', 'fishotel-misc-plugin' ); ?></th>
+						<th scope="col" class="fh-cr-num"><?php esc_html_e( 'Re-ox', 'fishotel-misc-plugin' ); ?></th>
+						<th scope="col"></th>
+					</tr>
+				</thead>
+				<tbody>
+					<?php foreach ( $box_rates as $fh_i => $fh_rate ) : ?>
+						<tr class="fh-cr-rate">
+							<td><input type="text" class="fh-cr-input" name="rates[<?php echo esc_attr( $fh_i ); ?>][supplier]" value="<?php echo esc_attr( $fh_rate['supplier'] ); ?>" maxlength="80"></td>
+							<td><input type="text" class="fh-cr-input" name="rates[<?php echo esc_attr( $fh_i ); ?>][origin]" value="<?php echo esc_attr( $fh_rate['origin'] ); ?>" maxlength="80"></td>
+							<td><input type="number" step="0.01" min="0" class="fh-cr-input fh-cr-input--num" name="rates[<?php echo esc_attr( $fh_i ); ?>][per_box]" value="<?php echo esc_attr( number_format( (float) $fh_rate['per_box'], 2, '.', '' ) ); ?>"></td>
+							<td><input type="number" step="0.01" min="0" class="fh-cr-input fh-cr-input--num" name="rates[<?php echo esc_attr( $fh_i ); ?>][reox]" value="<?php echo esc_attr( number_format( (float) $fh_rate['reox'], 2, '.', '' ) ); ?>"></td>
+							<td><button type="button" class="button button-small fh-cr-rate-remove">&times;</button></td>
+						</tr>
+					<?php endforeach; ?>
+				</tbody>
+			</table>
+			<p class="fh-cr-actions-row">
+				<button type="button" class="button fh-cr-rate-add"><?php esc_html_e( 'Add rate', 'fishotel-misc-plugin' ); ?></button>
+				<button type="submit" class="button button-primary fh-cr-box-rates-save"><?php esc_html_e( 'Save box rates', 'fishotel-misc-plugin' ); ?></button>
+			</p>
+		</form>
 
 		<?php /* ── Aliases ───────────────────────────────────────── */ ?>
 		<div class="fishotel-misc-card fh-cr-card">

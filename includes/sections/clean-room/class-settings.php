@@ -5,7 +5,7 @@
  * actions of the Settings tab. Everything here needs manage_options and a
  * nonce.
  *
- * Two options:
+ * Three options:
  *   fishotel_cleanroom_settings   sale_ready_days (a stay is sale-ready that
  *                                 many days after check-in, default 28), the
  *                                 copper floor and target the
@@ -13,7 +13,12 @@
  *                                 the voice preview's auto-confirm seconds
  *                                 and whether the Mic button is offered;
  *   fishotel_cleanroom_protocol   the treatment template (Protocol), seeded
- *                                 with the rough version on first read.
+ *                                 with the rough version on first read;
+ *   fishotel_cleanroom_box_rates  the per-box shipping and re-ox fee by
+ *                                 supplier and origin (the order editor's
+ *                                 "suggest import fees" button reads it);
+ *                                 empty until typed or imported — never
+ *                                 seeded in code.
  *
  * The layout (buildings and tanks) and the learned aliases live in their
  * tables, written through the Store with the numbering rule enforced by
@@ -59,6 +64,16 @@ class Settings {
 	const AUTO_CONFIRM_MAX = 15;
 
 	/**
+	 * Option holding the box rates (supplier, origin, per box, re-ox).
+	 *
+	 * @var string
+	 */
+	const BOX_RATES_OPTION = 'fishotel_cleanroom_box_rates';
+
+	const BOX_RATES_MAX = 200;
+	const BOX_RATE_MAX  = 99999.99;
+
+	/**
 	 * The least the undo toast stays (seconds): it then stays until the
 	 * next action on the phone, so a wet thumb has time to change its
 	 * mind. Fixed, not a setting; the server honours an undo for
@@ -76,6 +91,141 @@ class Settings {
 		add_action( 'wp_ajax_fishotel_cleanroom_protocol', array( $this, 'save_protocol' ) );
 		add_action( 'wp_ajax_fishotel_cleanroom_layout', array( $this, 'ajax_layout' ) );
 		add_action( 'wp_ajax_fishotel_cleanroom_alias_delete', array( $this, 'ajax_alias_delete' ) );
+		add_action( 'wp_ajax_fishotel_cleanroom_box_rates', array( $this, 'save_box_rates' ) );
+	}
+
+	/* ============================================================== */
+	/*  Box rates                                                      */
+	/* ============================================================== */
+
+	/**
+	 * The box rates: rows of supplier, origin, per_box, reox — empty until
+	 * typed in Settings or filled by the importer.
+	 *
+	 * @return array[]
+	 */
+	public static function box_rates() {
+		$stored = get_option( self::BOX_RATES_OPTION, array() );
+		return self::sanitize_box_rates( is_array( $stored ) ? $stored : array() );
+	}
+
+	/**
+	 * Clean a list of box-rate rows (pure): text trimmed, money ≥ 0, rows
+	 * without a supplier and an origin dropped, duplicates (same supplier
+	 * and origin) collapsed to the last, at most BOX_RATES_MAX, sorted.
+	 *
+	 * @param mixed $raw rows[n][supplier|origin|per_box|reox].
+	 * @return array[]
+	 */
+	public static function sanitize_box_rates( $raw ) {
+		$by_key = array();
+		foreach ( (array) $raw as $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+			$supplier = isset( $row['supplier'] ) && is_scalar( $row['supplier'] ) ? substr( trim( preg_replace( '/\s+/', ' ', (string) $row['supplier'] ) ), 0, 80 ) : '';
+			$origin   = isset( $row['origin'] ) && is_scalar( $row['origin'] ) ? substr( trim( preg_replace( '/\s+/', ' ', (string) $row['origin'] ) ), 0, 80 ) : '';
+			if ( '' === $supplier && '' === $origin ) {
+				continue;
+			}
+			$per_box = max( 0.0, min( self::BOX_RATE_MAX, Costing::money_in( $row['per_box'] ?? 0 ) ) );
+			$reox    = max( 0.0, min( self::BOX_RATE_MAX, Costing::money_in( $row['reox'] ?? 0 ) ) );
+
+			// The same pair twice: the first spelling stays, the last numbers win.
+			$key = strtolower( $supplier ) . '|' . strtolower( $origin );
+			if ( isset( $by_key[ $key ] ) ) {
+				$supplier = $by_key[ $key ]['supplier'];
+				$origin   = $by_key[ $key ]['origin'];
+			}
+			$by_key[ $key ] = array(
+				'supplier' => $supplier,
+				'origin'   => $origin,
+				'per_box'  => round( $per_box, 2 ),
+				'reox'     => round( $reox, 2 ),
+			);
+		}
+
+		$out = array_values( $by_key );
+		usort(
+			$out,
+			static function ( $a, $b ) {
+				return strcasecmp( $a['supplier'], $b['supplier'] ) ?: strcasecmp( $a['origin'], $b['origin'] );
+			}
+		);
+
+		return array_slice( $out, 0, self::BOX_RATES_MAX );
+	}
+
+	/**
+	 * The box rate for a supplier and origin (pure, case-insensitive): the
+	 * exact pair, else the supplier's row with no origin, else null.
+	 *
+	 * @param array[] $rates    Box rates.
+	 * @param string  $supplier Supplier.
+	 * @param string  $origin   Origin.
+	 * @return array|null
+	 */
+	public static function box_rate_for( array $rates, $supplier, $origin ) {
+		$supplier = strtolower( trim( (string) $supplier ) );
+		$origin   = strtolower( trim( (string) $origin ) );
+		$fallback = null;
+		foreach ( $rates as $rate ) {
+			if ( strtolower( (string) ( $rate['supplier'] ?? '' ) ) !== $supplier ) {
+				continue;
+			}
+			$rate_origin = strtolower( (string) ( $rate['origin'] ?? '' ) );
+			if ( $rate_origin === $origin ) {
+				return $rate;
+			}
+			if ( '' === $rate_origin && null === $fallback ) {
+				$fallback = $rate;
+			}
+		}
+		return $fallback;
+	}
+
+	/**
+	 * The import & re-ox fees a box count suggests: boxes × (per box +
+	 * re-ox) for the supplier / origin, or null when no rate is known
+	 * (pure; the JS helper does the same on the order editor).
+	 *
+	 * @param array[]  $rates    Box rates.
+	 * @param string   $supplier Supplier.
+	 * @param string   $origin   Origin.
+	 * @param int|null $boxes    Boxes.
+	 * @return float|null
+	 */
+	public static function suggest_import_fees( array $rates, $supplier, $origin, $boxes ) {
+		$rate = self::box_rate_for( $rates, $supplier, $origin );
+		if ( ! $rate || null === $boxes || (int) $boxes <= 0 ) {
+			return null;
+		}
+		return (int) $boxes * ( (float) $rate['per_box'] + (float) $rate['reox'] );
+	}
+
+	/**
+	 * AJAX handler — save the box rates. The form posts
+	 * rates[n][supplier|origin|per_box|reox]; an empty list is allowed.
+	 */
+	public function save_box_rates() {
+		if ( ! current_user_can( Clean_Room::SETTINGS_CAPABILITY ) ) {
+			wp_send_json_error( array( 'message' => __( 'Unauthorized.', 'fishotel-misc-plugin' ) ), 403 );
+		}
+
+		check_ajax_referer( self::NONCE_ACTION, '_wpnonce' );
+
+		$raw   = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above.
+		$rates = self::sanitize_box_rates( isset( $raw['rates'] ) && is_array( $raw['rates'] ) ? $raw['rates'] : array() );
+
+		update_option( self::BOX_RATES_OPTION, $rates, false );
+
+		wp_send_json_success(
+			array(
+				/* translators: %d: number of rates */
+				'message' => sprintf( __( 'Box rates saved: %d rows.', 'fishotel-misc-plugin' ), count( $rates ) ),
+				'rates'   => $rates,
+			)
+		);
 	}
 
 	/* ============================================================== */

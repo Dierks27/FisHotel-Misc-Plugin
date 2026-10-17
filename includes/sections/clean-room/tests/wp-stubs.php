@@ -84,6 +84,14 @@ function add_query_arg( $args, $url = '' ) {
 	return $url . ( false === strpos( $url, '?' ) ? '?' : '&' ) . http_build_query( $args );
 }
 
+function wp_create_nonce( $action = -1 ) {
+	return 'nonce-' . substr( md5( (string) $action ), 0, 10 );
+}
+
+function wp_nonce_url( $url, $action = -1, $name = '_wpnonce' ) {
+	return add_query_arg( array( $name => wp_create_nonce( $action ) ), (string) $url );
+}
+
 /**
  * Options live in $GLOBALS['fh_options'] so a test can seed and read back.
  */
@@ -200,6 +208,7 @@ require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-store.php'
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-settings.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-front-desk.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-admin.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-admin-workbook.php';
 require_once __DIR__ . '/fake-store.php';
 
 /**

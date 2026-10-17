@@ -98,11 +98,19 @@ class Fake_Store {
 	private $next_order   = 1;
 	private $next_line    = 1;
 
+	/**
+	 * Hydrated buildings (Store::hydrate_building shape), id => building.
+	 *
+	 * @var array[]
+	 */
+	public $buildings = array();
+
 	public function __construct( array $products = array() ) {
 		$this->products = $products;
 
 		$tank_id = 0;
 		foreach ( Layout::seed() as $index => $building ) {
+			$this->buildings[ $index + 1 ] = Store::hydrate_building( array_merge( $building, array( 'id' => $index + 1 ) ) );
 			foreach ( $building['tanks'] as $tank ) {
 				$tank_id++;
 				$this->tanks[ $tank_id ] = Store::hydrate_tank(
@@ -122,7 +130,15 @@ class Fake_Store {
 		}
 	}
 
-	/* ---- tanks ---------------------------------------------------- */
+	/* ---- buildings and tanks -------------------------------------- */
+
+	public function buildings() {
+		return array_values( $this->buildings );
+	}
+
+	public function building( $id ) {
+		return isset( $this->buildings[ (int) $id ] ) ? $this->buildings[ (int) $id ] : null;
+	}
 
 	public function tanks( $include_offline = true ) {
 		$out = array();
@@ -677,14 +693,8 @@ class Fake_Store {
 	/* ---- supplier orders ------------------------------------------ */
 
 	private function order_row( array $row ) {
-		$building = null;
-		foreach ( $this->tanks as $tank ) {
-			if ( $row['building_id'] && (int) $tank['building']['id'] === (int) $row['building_id'] ) {
-				$building = $tank['building'];
-				break;
-			}
-		}
-		$count = 0;
+		$building = $row['building_id'] ? $this->building( $row['building_id'] ) : null;
+		$count    = 0;
 		foreach ( $this->lines as $line ) {
 			if ( (int) $line['order_id'] === (int) $row['id'] ) {
 				$count++;
@@ -907,7 +917,7 @@ class Fake_Store {
 				'worth'        => isset( $line['worth'] ) && null !== $line['worth'] ? round( (float) $line['worth'], 2 ) : null,
 				'qty_doa'      => $linked ? (int) $current['qty_doa'] : max( 0, (int) ( $line['qty_doa'] ?? 0 ) ),
 				'qty_survived' => $linked ? $current['qty_survived'] : ( isset( $line['qty_survived'] ) && null !== $line['qty_survived'] ? (int) $line['qty_survived'] : null ),
-				'landed_total' => isset( $line['landed_total'] ) && null !== $line['landed_total'] ? round( (float) $line['landed_total'], 2 ) : null,
+				'landed_total' => array_key_exists( 'landed_total', $line ) ? ( null !== $line['landed_total'] ? round( (float) $line['landed_total'], 2 ) : null ) : ( $current ? $current['landed_total'] : null ),
 				'stay_id'      => $current ? $current['stay_id'] : null,
 				'tank_id'      => $linked ? $current['tank_id'] : ( ! empty( $line['tank_id'] ) ? (int) $line['tank_id'] : null ),
 				'sort'         => (int) $sort,
@@ -935,6 +945,14 @@ class Fake_Store {
 			$deleted++;
 		}
 		return array( 'ids' => $ids, 'deleted' => $deleted );
+	}
+
+	public function cache_line_total( $line_id, $landed ) {
+		if ( ! isset( $this->lines[ (int) $line_id ] ) ) {
+			return false;
+		}
+		$this->lines[ (int) $line_id ]['landed_total'] = null === $landed ? null : round( (float) $landed, 2 );
+		return true;
 	}
 
 	public function set_line_stay( $line_id, $stay_id, $tank_id = null ) {

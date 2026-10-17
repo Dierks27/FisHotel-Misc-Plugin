@@ -43,6 +43,17 @@
  *   - class-admin.php       the Room Board page (Board / Stays / Events /
  *                           Settings), CSV, the label print page, the
  *                           product meta box.
+ *   - class-costing.php     PURE: the supplier order's landed-cost maths,
+ *                           replicating the workbook's order sheet.
+ *   - class-stats.php       PURE: the yearly figures, weighted and as the
+ *                           spreadsheet averaged them.
+ *   - class-species.php     PURE: the species master row and its merge into
+ *                           the candidate list.
+ *   - class-orders.php      the order from a form, the live figures of a
+ *                           checked-in line, the check-in that creates stays.
+ *   - class-xlsx.php        a dependency-free .xlsx writer.
+ *   - class-admin-workbook.php  the Arrivals / Species / Stats tabs, their
+ *                           AJAX and the XLSX / CSV exports.
  *
  * The file uses bracketed namespaces because the facts helper must live in
  * the global namespace.
@@ -127,7 +138,7 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 		public static function get_section_info() {
 			return array(
 				'name'        => __( 'Clean Room', 'fishotel-misc-plugin' ),
-				'description' => __( 'Where every fish is, from landing to shipping: buildings and tanks with QR labels, a one-thumb phone screen with voice, a room board, stays with day counts and clearing, and the facts the fish page reads.', 'fishotel-misc-plugin' ),
+				'description' => __( 'Where every fish is, from landing to shipping: buildings and tanks with QR labels, a one-thumb phone screen with voice, a room board, stays with day counts and clearing, supplier orders with the workbook\'s landed-cost maths and a check-in that creates the stays, a species master, yearly stats, Excel exports, and the facts the fish page reads.', 'fishotel-misc-plugin' ),
 				'icon'        => 'dashicons-location-alt',
 			);
 		}
@@ -178,12 +189,16 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 
 			if ( is_admin() ) {
 				require_once self::path() . 'class-admin.php';
+				require_once self::path() . 'class-admin-workbook.php';
 
 				$settings = new Settings();
 				$settings->init();
 
 				$admin = new Admin();
 				$admin->init();
+
+				$workbook = new Admin_Workbook();
+				$workbook->init();
 			}
 		}
 
@@ -193,6 +208,7 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 		public static function register_menu() {
 			self::load();
 			require_once self::path() . 'class-admin.php';
+			require_once self::path() . 'class-admin-workbook.php';
 
 			add_submenu_page(
 				'fishotel-misc',

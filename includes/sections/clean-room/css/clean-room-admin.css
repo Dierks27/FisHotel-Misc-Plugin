@@ -555,6 +555,225 @@
 }
 
 /* ------------------------------------------------------------------ */
+/*  Arrivals, Species, Stats                                           */
+/* ------------------------------------------------------------------ */
+.fh-cr-grid-wrap {
+	overflow-x: auto;
+	margin: 0 0 12px;
+}
+
+.fh-cr-badge--order-draft    { background: #6b6b6b; }
+.fh-cr-badge--order-ordered  { background: #b7791f; }
+.fh-cr-badge--order-received { background: #2d5fb8; }
+.fh-cr-badge--order-closed   { background: #555; }
+
+.fh-cr-up   { color: var(--fh-success, #46b450); }
+.fh-cr-down { color: var(--fh-danger, #dc3232); }
+
+.fh-cr-sub--inline {
+	display: inline;
+}
+
+.fh-cr-toolbar--order {
+	align-items: center;
+}
+
+.fh-cr-order__title {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin: 0;
+	font-size: 18px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-order__head {
+	margin: 0 0 14px;
+}
+
+.fh-cr-fields-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+	gap: 10px 14px;
+}
+
+.fh-cr-fields-grid label {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	font-size: 12px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-fields-grid__wide {
+	grid-column: 1 / -1;
+}
+
+.fh-cr-inline {
+	display: flex;
+	gap: 6px;
+	align-items: center;
+}
+
+.fh-cr-grid td,
+.fh-cr-grid th {
+	padding: 4px 4px;
+	white-space: nowrap;
+}
+
+.fh-cr-grid .fh-cr-input {
+	min-height: 28px;
+	padding: 3px 6px;
+	font-size: 12px;
+}
+
+.fh-cr-grid .fh-cr-species {
+	min-width: 180px;
+}
+
+.fh-cr-grid .fh-cr-input--sci {
+	min-width: 140px;
+}
+
+.fh-cr-grid .fh-cr-input--qty {
+	width: 62px;
+	text-align: right;
+}
+
+.fh-cr-grid .fh-cr-input--money {
+	width: 84px;
+	text-align: right;
+}
+
+.fh-cr-grid .fh-cr-input--tank {
+	width: 80px;
+}
+
+.fh-cr-grid .fh-cr-calc {
+	font-variant-numeric: tabular-nums;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-grid tfoot th {
+	font-weight: 700;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-grid tr.is-linked td {
+	background: rgba(45, 95, 184, 0.12);
+}
+
+.fh-cr-worth.is-yes {
+	color: var(--fh-success, #46b450);
+	font-weight: 700;
+}
+
+.fh-cr-order[data-mode="box"] .fh-cr-col--bags,
+.fh-cr-order[data-mode="bag"] .fh-cr-col--per-box {
+	display: none;
+}
+
+.fh-cr-order__stats {
+	margin-top: 14px;
+}
+
+.fh-cr-stats-block {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+	gap: 8px 16px;
+	margin: 12px 0 0;
+}
+
+.fh-cr-stats-block > div {
+	display: flex;
+	justify-content: space-between;
+	gap: 10px;
+	padding: 6px 0;
+	border-bottom: 1px solid var(--fh-border, rgba(255, 255, 255, 0.08));
+	font-size: 12px;
+}
+
+.fh-cr-stats-block dt {
+	margin: 0;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-stats-block dd {
+	margin: 0;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+	color: var(--fh-text-primary, #e0e0e0);
+	text-align: right;
+}
+
+/* Suggestions under a species / product input. */
+.fh-cr-suggest-wrap {
+	position: relative;
+}
+
+.fh-cr-suggest {
+	position: absolute;
+	z-index: 50;
+	left: 0;
+	top: 100%;
+	min-width: 280px;
+	max-height: 260px;
+	overflow-y: auto;
+	margin: 2px 0 0;
+	padding: 4px 0;
+	list-style: none;
+	background: var(--fh-bg-secondary, #2d2d2d);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.15));
+	border-radius: 6px;
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+	white-space: normal;
+}
+
+.fh-cr-suggest__item,
+.fh-cr-suggest__empty {
+	padding: 6px 10px;
+	font-size: 12px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-suggest__item {
+	cursor: pointer;
+}
+
+.fh-cr-suggest__item:hover {
+	background: rgba(255, 255, 255, 0.07);
+}
+
+.fh-cr-suggest__item em {
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-suggest__empty {
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-species-add {
+	margin: 0 0 14px;
+}
+
+.fh-cr-fields__product {
+	flex: 1 1 240px;
+}
+
+.fh-cr-pager {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin: 12px 0;
+	font-size: 12px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-box-rates .fh-cr-input--num {
+	max-width: 110px;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Product meta box (light WP styling)                                */
 /* ------------------------------------------------------------------ */
 .fh-cr-metabox__facts {

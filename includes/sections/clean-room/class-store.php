@@ -2708,11 +2708,13 @@ class Store {
 					'worth'        => isset( $line['worth'] ) && null !== $line['worth'] ? round( (float) $line['worth'], 2 ) : null,
 					'qty_doa'      => $linked ? (int) $current['qty_doa'] : max( 0, (int) ( $line['qty_doa'] ?? 0 ) ),
 					'qty_survived' => $linked ? $current['qty_survived'] : ( isset( $line['qty_survived'] ) && null !== $line['qty_survived'] ? (int) $line['qty_survived'] : null ),
-					'landed_total' => isset( $line['landed_total'] ) && null !== $line['landed_total'] ? round( (float) $line['landed_total'], 2 ) : null,
 					'tank_id'      => $linked ? $current['tank_id'] : ( ! empty( $line['tank_id'] ) ? (int) $line['tank_id'] : null ),
 					'sort'         => (int) $sort,
 					'notes'        => (string) ( $line['notes'] ?? '' ),
 				);
+				if ( array_key_exists( 'landed_total', $line ) ) {
+					$data['landed_total'] = null !== $line['landed_total'] ? round( (float) $line['landed_total'], 2 ) : null;
+				}
 				if ( $current ) {
 					$ok = $wpdb->update( self::table( 'order_lines' ), $data, array( 'id' => $id ), null, array( '%d' ) );
 					if ( false !== $ok ) {
@@ -2745,6 +2747,28 @@ class Store {
 			'ids'     => $ids,
 			'deleted' => $deleted,
 		);
+	}
+
+	/**
+	 * Cache a line's landed total (the costing's figure, to the cent) so
+	 * an export can show it without recomputing.
+	 *
+	 * @param int        $line_id Line id.
+	 * @param float|null $landed  Landed total.
+	 * @return bool
+	 */
+	public function cache_line_total( $line_id, $landed ) {
+		if ( ! self::tables_exist() || (int) $line_id <= 0 ) {
+			return false;
+		}
+
+		global $wpdb;
+
+		try {
+			return false !== $wpdb->update( self::table( 'order_lines' ), array( 'landed_total' => null === $landed ? null : round( (float) $landed, 2 ) ), array( 'id' => (int) $line_id ), null, array( '%d' ) );
+		} catch ( \Throwable $e ) {
+			return false;
+		}
 	}
 
 	/**
@@ -3142,7 +3166,7 @@ class Store {
 			'worth'              => self::money_or_null( $row['worth'] ?? null ),
 			'qty_doa'            => (int) ( $row['qty_doa'] ?? 0 ),
 			'qty_survived'       => self::int_or_null( $row['qty_survived'] ?? null ),
-			'landed_total'       => self::money_or_null( $row['landed_total'] ?? null ),
+			'landed_cached'      => self::money_or_null( $row['landed_total'] ?? null ),
 			'stay_id'            => ! empty( $row['stay_id'] ) ? (int) $row['stay_id'] : null,
 			'tank_id'            => ! empty( $row['tank_id'] ) ? (int) $row['tank_id'] : null,
 			'tank_number'        => ! empty( $row['tank_number'] ) ? (int) $row['tank_number'] : null,

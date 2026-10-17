@@ -1,7 +1,8 @@
 <?php
 /**
  * Clean Room admin — the Room Board page under FisHotel Tools (Board /
- * Stays / Events / Settings), the stays CSV, the printable QR labels, the
+ * Stays / Events / Settings; the Arrivals / Species / Stats tabs are
+ * handed to Admin_Workbook), the stays CSV, the printable QR labels, the
  * stay edits from the Stays tab (counts, dates, a move, the seam fields),
  * the per-row Undo on the Events tab, the Coming Soon release button and
  * the product meta box.
@@ -71,7 +72,7 @@ class Admin {
 	/**
 	 * URL of a tab.
 	 *
-	 * @param string $tab   board|stays|events|settings.
+	 * @param string $tab   board|stays|arrivals|species|stats|events|settings.
 	 * @param array  $extra Extra query args.
 	 * @return string
 	 */
@@ -120,7 +121,7 @@ class Admin {
 		}
 
 		$tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'board'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only tab switch.
-		if ( ! in_array( $tab, array( 'board', 'stays', 'events', 'settings' ), true ) ) {
+		if ( ! in_array( $tab, array( 'board', 'stays', 'arrivals', 'species', 'stats', 'events', 'settings' ), true ) ) {
 			$tab = 'board';
 		}
 
@@ -131,12 +132,28 @@ class Admin {
 		$tables_ok    = Store::tables_exist();
 		$labels_url   = self::labels_url();
 
+		if ( in_array( $tab, Admin_Workbook::TABS, true ) ) {
+			Admin_Workbook::render(
+				$tab,
+				array(
+					'store'        => $store,
+					'settings'     => $settings,
+					'today'        => $today,
+					'tables_ok'    => $tables_ok,
+					'can_settings' => $can_settings,
+					'labels_url'   => $labels_url,
+				)
+			);
+			return;
+		}
+
 		if ( 'settings' === $tab && $can_settings ) {
 			$protocol  = Settings::protocol();
 			$buildings = $store->buildings();
 			$tanks     = $store->tanks();
 			$groups    = Layout::group( $buildings, $tanks );
 			$aliases   = $store->aliases();
+			$box_rates = Settings::box_rates();
 
 			include Clean_Room::path() . 'views/settings.php';
 			return;
@@ -148,6 +165,8 @@ class Admin {
 			$stays        = $store->open_stays( $filters, $today, $settings );
 			$closed_stays = $show_closed ? $store->closed_stays( $today, $settings ) : array();
 			$csv_url      = self::csv_url( $show_closed );
+			$xlsx_url     = Admin_Workbook::export_url( 'stays', 'xlsx', $show_closed ? array( 'closed' => '1' ) : array() );
+			$flash        = Admin_Workbook::take_flash();
 
 			include Clean_Room::path() . 'views/stays.php';
 			return;
@@ -332,18 +351,28 @@ class Admin {
 				'ajaxUrl'       => admin_url( 'admin-ajax.php' ),
 				'nonce'         => wp_create_nonce( self::NONCE_AJAX ),
 				'settingsNonce' => wp_create_nonce( Settings::NONCE_ACTION ),
+				'boxRates'      => $on_page ? Settings::box_rates() : array(),
 				'i18n'          => array(
-					'saved'        => __( 'Saved.', 'fishotel-misc-plugin' ),
-					'error'        => __( 'Something went wrong. Please try again.', 'fishotel-misc-plugin' ),
-					'confirmAlias' => __( 'Forget this alias?', 'fishotel-misc-plugin' ),
-					'confirmReset' => __( 'Replace the protocol with the rough seed?', 'fishotel-misc-plugin' ),
-					'confirmZero'  => __( 'Set the count to 0 and close this group?', 'fishotel-misc-plugin' ),
-					'confirmUndo'  => __( 'Undo this event? (A compensating event is written; nothing is deleted.)', 'fishotel-misc-plugin' ),
-					'reloading'    => __( 'Saved. Reloading…', 'fishotel-misc-plugin' ),
-					'howMany'      => __( 'How many?', 'fishotel-misc-plugin' ),
-					'which'        => __( 'Which date (YYYY-MM-DD)? Leave empty to clear.', 'fishotel-misc-plugin' ),
-					'whichTank'    => __( 'Move to which tank number?', 'fishotel-misc-plugin' ),
-					'whyMove'      => __( 'Why? (optional: clear building / bullying / pairing / other)', 'fishotel-misc-plugin' ),
+					'saved'          => __( 'Saved.', 'fishotel-misc-plugin' ),
+					'error'          => __( 'Something went wrong. Please try again.', 'fishotel-misc-plugin' ),
+					'confirmAlias'   => __( 'Forget this alias?', 'fishotel-misc-plugin' ),
+					'confirmReset'   => __( 'Replace the protocol with the rough seed?', 'fishotel-misc-plugin' ),
+					'confirmZero'    => __( 'Set the count to 0 and close this group?', 'fishotel-misc-plugin' ),
+					'confirmUndo'    => __( 'Undo this event? (A compensating event is written; nothing is deleted.)', 'fishotel-misc-plugin' ),
+					'reloading'      => __( 'Saved. Reloading…', 'fishotel-misc-plugin' ),
+					'howMany'        => __( 'How many?', 'fishotel-misc-plugin' ),
+					'which'          => __( 'Which date (YYYY-MM-DD)? Leave empty to clear.', 'fishotel-misc-plugin' ),
+					'whichTank'      => __( 'Move to which tank number?', 'fishotel-misc-plugin' ),
+					'whyMove'        => __( 'Why? (optional: clear building / bullying / pairing / other)', 'fishotel-misc-plugin' ),
+					'confirmCheckin' => __( 'Check the received fish in? One stay per line with fish (lines already checked in are skipped). The order becomes "received".', 'fishotel-misc-plugin' ),
+					'confirmDelete'  => __( 'Delete this order and its lines?', 'fishotel-misc-plugin' ),
+					'confirmSpecies' => __( 'Remove this species from the list?', 'fishotel-misc-plugin' ),
+					'unsavedLines'   => __( 'Save the order first.', 'fishotel-misc-plugin' ),
+					'noRate'         => __( 'No box rate for this supplier and origin (Settings → Box rates), or no box count.', 'fishotel-misc-plugin' ),
+					'noMatch'        => __( 'No match — type the name to use it as an unlisted species.', 'fishotel-misc-plugin' ),
+					'linked'         => __( 'Linked', 'fishotel-misc-plugin' ),
+					'yes'            => __( 'Yes', 'fishotel-misc-plugin' ),
+					'no'             => __( 'No', 'fishotel-misc-plugin' ),
 				),
 			)
 		);
