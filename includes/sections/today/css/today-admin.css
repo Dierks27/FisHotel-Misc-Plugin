@@ -1,0 +1,482 @@
+/**
+ * Today admin styles — the section page under FisHotel Tools (dark, built
+ * on admin/css/admin-style.css and its --fh-* tokens). The dashboard
+ * widget carries its own small inline style block in views/widget.php.
+ *
+ * @package FisHotel\Misc\Sections\Today
+ */
+
+/* ------------------------------------------------------------------ */
+/*  Tabs                                                               */
+/* ------------------------------------------------------------------ */
+.fh-today-tabs {
+	display: flex;
+	gap: 6px;
+	margin: -14px 0 20px;
+}
+
+.fh-today-tab {
+	padding: 7px 14px;
+	border-radius: 999px;
+	font-size: 13px;
+	font-weight: 600;
+	text-decoration: none;
+	color: var(--fh-text-secondary, #a0a0a0);
+	background: var(--fh-bg-secondary, #2d2d2d);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+}
+
+.fh-today-tab:hover,
+.fh-today-tab:focus {
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-today-tab.is-active {
+	color: #fff;
+	background: var(--fh-accent, #00a0d2);
+	border-color: var(--fh-accent, #00a0d2);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Hero line                                                          */
+/* ------------------------------------------------------------------ */
+.fh-today-hero {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px 20px;
+	margin: 0 0 20px;
+	padding: 16px 20px;
+	background: var(--fh-bg-secondary, #2d2d2d);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	border-left: 4px solid var(--fh-text-secondary, #a0a0a0);
+	border-radius: var(--fh-radius, 8px);
+}
+
+.fh-today-hero.is-ship-day {
+	border-left-color: var(--fh-success, #46b450);
+}
+
+.fh-today-headline {
+	margin: 0;
+	font-size: 17px;
+	font-weight: 600;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-today-hero__actions {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.fh-today-fresh,
+.fh-today-status {
+	font-size: 12px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-today-status.is-error {
+	color: var(--fh-danger, #dc3232);
+}
+
+.fh-today-status.is-ok {
+	color: var(--fh-success, #46b450);
+}
+
+.fh-today-colnote {
+	margin: 0 0 12px;
+	font-size: 12px;
+	color: var(--fh-warning, #ffb900);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Date block                                                         */
+/* ------------------------------------------------------------------ */
+.fh-today-block {
+	margin: 0 0 24px;
+	padding: 18px 20px;
+	background: var(--fh-bg-secondary, #2d2d2d);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	border-radius: var(--fh-radius, 8px);
+}
+
+.fh-today-block.is-tomorrow {
+	border-color: rgba(70, 180, 80, 0.5);
+}
+
+.fh-today-block__head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 12px 20px;
+	margin: 0 0 12px;
+}
+
+.fh-today-block__title {
+	margin: 0;
+	font-size: 18px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-today-block__sub {
+	margin: 2px 0 0;
+	font-size: 12px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-today-pill {
+	display: inline-block;
+	margin-left: 8px;
+	padding: 2px 9px;
+	border-radius: 999px;
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.3px;
+	color: #fff;
+	background: var(--fh-success, #46b450);
+	vertical-align: middle;
+}
+
+/* Chips */
+.fh-today-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+.fh-today-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	padding: 4px 10px;
+	border-radius: 999px;
+	font-size: 12px;
+	color: var(--fh-text-primary, #e0e0e0);
+	background: var(--fh-bg-primary, #1a1a1a);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	border-left-width: 3px;
+}
+
+.fh-today-chip strong {
+	font-size: 13px;
+}
+
+.fh-today-chip--hold        { border-left-color: #8e1b1b; }
+.fh-today-chip--ups_store   { border-left-color: #c0392b; }
+.fh-today-chip--at_line     { border-left-color: #ffb900; }
+.fh-today-chip--unavailable { border-left-color: #7a7a7a; }
+.fh-today-chip--need        { border-left-color: var(--fh-accent, #00a0d2); }
+
+.fh-today-chip.is-zero {
+	opacity: 0.45;
+}
+
+/* Needs attention */
+.fh-today-attention {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 6px 14px;
+	margin: 0 0 14px;
+	padding: 10px 14px;
+	background: rgba(255, 185, 0, 0.08);
+	border: 1px solid rgba(255, 185, 0, 0.3);
+	border-radius: 6px;
+}
+
+.fh-today-attention__label {
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.4px;
+	color: var(--fh-warning, #ffb900);
+}
+
+.fh-today-attention__list {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px 16px;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.fh-today-attention__item {
+	margin: 0;
+	font-size: 12px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-today-attention__item a {
+	font-weight: 600;
+	text-decoration: none;
+	color: var(--fh-accent, #00a0d2);
+}
+
+.fh-today-attention__item span {
+	margin-left: 4px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-today-attention__item--hold a,
+.fh-today-attention__item--ups_store a {
+	color: #ff6b6b;
+}
+
+.fh-today-allclear {
+	margin: 0 0 14px;
+	font-size: 12px;
+	color: var(--fh-success, #46b450);
+}
+
+/* Table — core's list table assumes a light background; re-tint. */
+.fh-today-wrap .widefat {
+	background: var(--fh-bg-secondary, #2d2d2d);
+	border-color: var(--fh-border, rgba(255, 255, 255, 0.1));
+}
+
+.fh-today-wrap .widefat th,
+.fh-today-wrap .widefat td,
+.fh-today-wrap .widefat thead th,
+.fh-today-wrap .widefat a {
+	color: var(--fh-text-primary, #e0e0e0);
+	border-color: var(--fh-border, rgba(255, 255, 255, 0.1));
+}
+
+.fh-today-wrap .widefat.striped > tbody > :nth-child(odd) {
+	background: var(--fh-bg-primary, #1a1a1a);
+}
+
+.fh-today-wrap .widefat td {
+	vertical-align: middle;
+}
+
+.fh-today-num {
+	text-align: right;
+	white-space: nowrap;
+}
+
+.fh-today-sub {
+	display: block;
+	font-size: 11px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+/* Invoice / Tracking cells (.fh-today-check is the settings checkbox label). */
+.fh-today-cell.is-done {
+	color: var(--fh-success, #46b450);
+	white-space: nowrap;
+}
+
+.fh-today-cell.is-open,
+.fh-today-cell.is-open a {
+	color: var(--fh-warning, #ffb900);
+}
+
+.fh-today-alerts {
+	color: var(--fh-warning, #ffb900);
+	font-weight: 600;
+}
+
+.fh-today-note-col {
+	width: 36px;
+	text-align: center;
+}
+
+.fh-today-note-icon {
+	color: var(--fh-accent, #00a0d2);
+}
+
+/* Badges */
+.fh-today-badge {
+	display: inline-block;
+	padding: 3px 10px;
+	border-radius: 12px;
+	font-size: 11px;
+	font-weight: 600;
+	line-height: 1.5;
+	letter-spacing: 0.3px;
+	text-transform: uppercase;
+	color: #fff;
+	background: #6b6b6b;
+	white-space: nowrap;
+}
+
+.fh-today-badge--heat_pack   { background: #d35400; }
+.fh-today-badge--none        { background: #2e9e47; }
+.fh-today-badge--cooling     { background: #0b7fc2; }
+.fh-today-badge--ups_store   { background: #c0392b; }
+.fh-today-badge--hold        { background: #8e1b1b; }
+.fh-today-badge--at_line     { background: #b7791f; box-shadow: 0 0 0 2px #ffb900; }
+.fh-today-badge--unavailable { background: #7a7a7a; }
+
+.fh-today-badge--not_checked {
+	background: transparent;
+	color: #8a8a8a;
+	border: 1px dashed #9a9a9a;
+}
+
+/* Links under a block */
+.fh-today-links {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px 18px;
+	margin: 12px 0 0;
+	font-size: 12px;
+}
+
+.fh-today-links a {
+	text-decoration: none;
+	color: var(--fh-accent, #00a0d2);
+}
+
+.fh-today-more,
+.fh-today-footnote {
+	margin-top: 16px;
+	font-size: 12px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Settings tab                                                       */
+/* ------------------------------------------------------------------ */
+.fh-today-columns {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr));
+	gap: 20px;
+	align-items: start;
+}
+
+.fh-today-card:hover {
+	transform: none;
+}
+
+.fh-today-field {
+	margin-top: 16px;
+}
+
+.fh-today-field--row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+}
+
+.fh-today-label {
+	display: block;
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--fh-text-primary, #e0e0e0);
+	margin-bottom: 6px;
+}
+
+.fh-today-field--row .fh-today-label {
+	margin-bottom: 0;
+}
+
+.fh-today-wrap .fh-today-input {
+	background: var(--fh-bg-primary, #1a1a1a);
+	border: 1px solid rgba(255, 255, 255, 0.15);
+	color: var(--fh-text-primary, #e0e0e0);
+	padding: 7px 10px;
+	border-radius: 4px;
+	font-size: 13px;
+	box-sizing: border-box;
+	color-scheme: dark;
+	width: 100%;
+}
+
+.fh-today-wrap .fh-today-input:focus {
+	border-color: var(--fh-accent, #00a0d2);
+	outline: none;
+	box-shadow: 0 0 0 1px var(--fh-accent, #00a0d2);
+}
+
+.fh-today-wrap .fh-today-input--num {
+	max-width: 110px;
+	text-align: right;
+}
+
+.fh-today-wrap .fh-today-input:invalid {
+	border-color: var(--fh-danger, #dc3232);
+}
+
+.fh-today-checks {
+	background: var(--fh-bg-primary, #1a1a1a);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	border-radius: 4px;
+	padding: 6px 0;
+	max-height: 260px;
+	overflow-y: auto;
+}
+
+.fh-today-check {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 5px 12px;
+	font-size: 13px;
+	color: var(--fh-text-primary, #e0e0e0);
+	cursor: pointer;
+}
+
+.fh-today-check:hover {
+	background: var(--fh-bg-hover, #363636);
+}
+
+.fh-today-check input[type="checkbox"] {
+	margin: 0;
+}
+
+.fh-today-check code {
+	margin-left: auto;
+	font-size: 11px;
+	color: var(--fh-text-secondary, #a0a0a0);
+	background: rgba(255, 255, 255, 0.06);
+	padding: 1px 6px;
+	border-radius: 3px;
+}
+
+.fh-today-callout {
+	display: flex;
+	gap: 8px;
+	align-items: flex-start;
+	margin-top: 16px;
+	padding: 10px 12px;
+	background: rgba(0, 160, 210, 0.08);
+	border: 1px solid rgba(0, 160, 210, 0.3);
+	border-radius: 4px;
+	font-size: 12px;
+	line-height: 1.5;
+	color: #cfe9f3;
+}
+
+.fh-today-callout .dashicons {
+	color: var(--fh-accent, #00a0d2);
+	flex: 0 0 auto;
+}
+
+.fh-today-actions-row {
+	margin-top: 20px;
+}
+
+.fh-today-wrap .fishotel-misc-notice--warning {
+	background: rgba(255, 185, 0, 0.1);
+	border-left: 3px solid var(--fh-warning, #ffb900);
+	color: var(--fh-warning, #ffb900);
+}
+
+.fh-today-save.button-primary {
+	background: var(--fh-accent, #00a0d2);
+	border-color: var(--fh-accent, #00a0d2);
+}
+
+.fh-today-save.button-primary:hover,
+.fh-today-save.button-primary:focus {
+	background: var(--fh-accent-hover, #0eb5e8);
+	border-color: var(--fh-accent-hover, #0eb5e8);
+}
