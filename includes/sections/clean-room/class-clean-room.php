@@ -142,6 +142,11 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 			require_once self::path() . 'class-protocol.php';
 			require_once self::path() . 'class-parser.php';
 			require_once self::path() . 'class-qr.php';
+			require_once self::path() . 'class-costing.php';
+			require_once self::path() . 'class-stats.php';
+			require_once self::path() . 'class-species.php';
+			require_once self::path() . 'class-orders.php';
+			require_once self::path() . 'class-xlsx.php';
 			require_once self::path() . 'class-store.php';
 			require_once self::path() . 'class-settings.php';
 			require_once self::path() . 'class-front-desk.php';

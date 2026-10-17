@@ -2,19 +2,26 @@
 /**
  * Clean Room store — the ONLY file in the section that touches $wpdb.
  *
- * Six tables, created with dbDelta on first boot (gated by the autoloaded
+ * Nine tables, created with dbDelta on first boot (gated by the autoloaded
  * fishotel_cleanroom_db_version option, so a booted site pays no query)
  * and on plugin activation, the layout seeded in the same step:
  *
- *   {prefix}fh_buildings    area, number, name, status, sort, notes
+ *   {prefix}fh_buildings    area, number, name, status, sort, notes, schedule, system_gallons
  *   {prefix}fh_tanks        building_id, number, level, position, size, gallons, status, sort
  *   {prefix}fh_stays        the cached state of one group of one species
  *                           (+ supplier, order_ref, landed_cost, order_line_id —
- *                           the seam the supplier-order import will fill)
+ *                           the seam a supplier order's check-in fills)
  *   {prefix}fh_stay_events  the history: every change to a stay is an event
  *   {prefix}fh_tank_logs    per-tank entries: copper readings, dose / test
  *                           tick-offs, water changes, feeding, tank notes
+ *                           (+ building_id for a system-level dose)
  *   {prefix}fh_aliases      spoken words → product / species, learned on the phone
+ *   {prefix}fh_species      the species master (the workbook's Fishlist): name,
+ *                           scientific name, group, per box, prices, product link
+ *   {prefix}fh_orders       a supplier order's header: ref, supplier, origin, dates,
+ *                           status, cost mode, tariffs / flight / import fees / credit
+ *   {prefix}fh_order_lines  its lines: species, ordered / received / DOA / survived,
+ *                           per box or bags, price, worth, tank, the stay it became
  *
  * record_event() appends and then REPLAYS the stay from all of its events
  * (Replay::state), writing the result back into the stays row — the row is
@@ -45,10 +52,12 @@ class Store {
 	 * Schema version. Bump to trigger a dbDelta upgrade. 1.1 changed no
 	 * column: it re-saves the version option autoloaded on a site that
 	 * stored 1.0 without autoload, so boot() stops costing a query there.
+	 * 1.2 adds the species, orders and order_lines tables, the buildings'
+	 * schedule and system_gallons and the tank logs' building_id.
 	 *
 	 * @var string
 	 */
-	const DB_VERSION = '1.1';
+	const DB_VERSION = '1.2';
 
 	/**
 	 * Option holding the installed schema version.
@@ -81,7 +90,13 @@ class Store {
 
 	const SOURCES   = array( 'manual', 'voice', 'qr', 'import', 'order' );
 	const LOG_KINDS = array( 'copper', 'dose', 'test', 'water_change', 'feed', 'note', 'other' );
-	const TABLES    = array( 'buildings', 'tanks', 'stays', 'stay_events', 'tank_logs', 'aliases' );
+	const TABLES    = array( 'buildings', 'tanks', 'stays', 'stay_events', 'tank_logs', 'aliases', 'species', 'orders', 'order_lines' );
+
+	/**
+	 * Row caps for the list queries.
+	 */
+	const SPECIES_LIMIT = 5000;
+	const ORDERS_LIMIT  = 500;
 
 	/**
 	 * Whether the tables exist, memoised per request (null = not checked).
@@ -138,6 +153,9 @@ class Store {
 		$events          = self::table( 'stay_events' );
 		$logs            = self::table( 'tank_logs' );
 		$aliases         = self::table( 'aliases' );
+		$species         = self::table( 'species' );
+		$orders          = self::table( 'orders' );
+		$lines           = self::table( 'order_lines' );
 
 		// dbDelta is whitespace-sensitive: each column on its own line,
 		// two spaces after PRIMARY KEY, KEY (not INDEX) with a name.
@@ -150,6 +168,8 @@ class Store {
 				status ENUM('active','coming_soon','offline') NOT NULL DEFAULT 'active',
 				sort INT NOT NULL DEFAULT 0,
 				notes TEXT NULL,
+				schedule VARCHAR(40) NOT NULL DEFAULT '',
+				system_gallons SMALLINT NULL,
 				PRIMARY KEY  (id),
 				UNIQUE KEY number (number)
 			) {$charset_collate};",
@@ -219,9 +239,11 @@ class Store {
 				actor_id BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
 				source ENUM('manual','voice','qr','import','order') NOT NULL DEFAULT 'manual',
 				created_at DATETIME NOT NULL,
+				building_id BIGINT(20) UNSIGNED NULL,
 				PRIMARY KEY  (id),
 				KEY tank_id (tank_id),
-				KEY logged_at (logged_at)
+				KEY logged_at (logged_at),
+				KEY building_id (building_id)
 			) {$charset_collate};",
 			"CREATE TABLE {$aliases} (
 				id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -231,6 +253,75 @@ class Store {
 				created_at DATETIME NOT NULL,
 				PRIMARY KEY  (id),
 				UNIQUE KEY alias (alias)
+			) {$charset_collate};",
+			"CREATE TABLE {$species} (
+				id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+				name VARCHAR(120) NOT NULL,
+				sci_name VARCHAR(120) NOT NULL DEFAULT '',
+				group_name VARCHAR(60) NOT NULL DEFAULT '',
+				per_box SMALLINT NOT NULL DEFAULT 24,
+				my_price DECIMAL(10,2) NULL,
+				online_price DECIMAL(10,2) NULL,
+				online_site VARCHAR(60) NULL,
+				online_date DATE NULL,
+				reef_safe ENUM('','yes','no','caution') NOT NULL DEFAULT '',
+				max_size VARCHAR(40) NOT NULL DEFAULT '',
+				product_id BIGINT(20) UNSIGNED NULL,
+				notes TEXT NULL,
+				created_at DATETIME NOT NULL,
+				updated_at DATETIME NOT NULL,
+				PRIMARY KEY  (id),
+				UNIQUE KEY name (name),
+				KEY product_id (product_id)
+			) {$charset_collate};",
+			"CREATE TABLE {$orders} (
+				id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+				ref VARCHAR(40) NOT NULL,
+				supplier VARCHAR(80) NOT NULL DEFAULT '',
+				origin VARCHAR(80) NOT NULL DEFAULT '',
+				order_date DATE NULL,
+				received_date DATE NULL,
+				status ENUM('draft','ordered','received','closed') NOT NULL DEFAULT 'draft',
+				boxes SMALLINT NULL,
+				cost_mode ENUM('box','bag') NOT NULL DEFAULT 'box',
+				tariffs DECIMAL(10,2) NOT NULL DEFAULT 0,
+				domestic_flight DECIMAL(10,2) NOT NULL DEFAULT 0,
+				import_fees DECIMAL(10,2) NOT NULL DEFAULT 0,
+				credit DECIMAL(10,2) NOT NULL DEFAULT 0,
+				markup DECIMAL(5,2) NOT NULL DEFAULT 4.00,
+				worth_threshold DECIMAL(5,2) NOT NULL DEFAULT 2.75,
+				schedule VARCHAR(40) NOT NULL DEFAULT '',
+				building_id BIGINT(20) UNSIGNED NULL,
+				notes TEXT NULL,
+				created_at DATETIME NOT NULL,
+				updated_at DATETIME NOT NULL,
+				PRIMARY KEY  (id),
+				UNIQUE KEY ref (ref),
+				KEY received_date (received_date)
+			) {$charset_collate};",
+			"CREATE TABLE {$lines} (
+				id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+				order_id BIGINT(20) UNSIGNED NOT NULL,
+				species_id BIGINT(20) UNSIGNED NULL,
+				species VARCHAR(120) NOT NULL DEFAULT '',
+				sci_name VARCHAR(120) NOT NULL DEFAULT '',
+				qty_ordered INT NOT NULL DEFAULT 0,
+				qty_received INT NULL,
+				per_box SMALLINT NULL,
+				bags SMALLINT NULL,
+				unit_price DECIMAL(10,4) NULL,
+				worth DECIMAL(10,2) NULL,
+				qty_doa INT NOT NULL DEFAULT 0,
+				qty_survived INT NULL,
+				landed_total DECIMAL(10,2) NULL,
+				stay_id BIGINT(20) UNSIGNED NULL,
+				tank_id BIGINT(20) UNSIGNED NULL,
+				sort INT NOT NULL DEFAULT 0,
+				notes TEXT NULL,
+				PRIMARY KEY  (id),
+				KEY order_id (order_id),
+				KEY species_id (species_id),
+				KEY stay_id (stay_id)
 			) {$charset_collate};",
 		);
 
@@ -320,7 +411,8 @@ class Store {
 	}
 
 	/**
-	 * Drop the cached species list (a product was saved).
+	 * Drop the cached species list (a product, a species row or an alias
+	 * was saved).
 	 */
 	public static function clear_species_cache() {
 		if ( function_exists( 'delete_transient' ) ) {
@@ -1366,11 +1458,15 @@ class Store {
 	/**
 	 * Products in the fish categories (and their direct child categories)
 	 * matching a term on the title, the common names or the scientific
-	 * name, plus matching learned aliases — for the arrival search box.
+	 * name, plus matching learned aliases and matching species rows (one
+	 * entry per lower-cased name; a species row linked to a listed product,
+	 * or named like one, lends it its species_id / per box / price instead
+	 * of a second entry) — for the arrival search box and the order editor.
 	 *
 	 * @param string $term  Search text.
 	 * @param int    $limit Row cap.
-	 * @return array[] product_id, name, common, sci, match (title|common|sci|alias), alias.
+	 * @return array[] product_id, name, common, sci, match (title|common|sci|alias|species), alias
+	 *                 (+ species_id, per_box, my_price, group_name when a species row is known).
 	 */
 	public function species_suggestions( $term, $limit = 10 ) {
 		$term = trim( (string) $term );
@@ -1380,7 +1476,20 @@ class Store {
 
 		$words = preg_split( '/\s+/', $term );
 		$limit = max( 1, min( 50, (int) $limit ) );
-		$out   = array();
+
+		return array_slice( $this->merge_species_suggestions( $this->product_suggestions( $term, $words, $limit ), $words, $limit ), 0, $limit );
+	}
+
+	/**
+	 * The alias and product part of species_suggestions().
+	 *
+	 * @param string   $term  Search text.
+	 * @param string[] $words Its words.
+	 * @param int      $limit Row cap.
+	 * @return array[]
+	 */
+	private function product_suggestions( $term, array $words, $limit ) {
+		$out = array();
 
 		// Aliases first.
 		foreach ( $this->aliases() as $alias ) {
@@ -1445,6 +1554,115 @@ class Store {
 	}
 
 	/**
+	 * Fold the matching species rows into a suggestion list (pure apart
+	 * from the query): a row linked to a listed product, or named like a
+	 * listed entry, lends it its fields; any other matching row is an
+	 * entry of its own.
+	 *
+	 * @param array[]  $items Alias / product suggestions.
+	 * @param string[] $words Search words.
+	 * @param int      $limit Row cap.
+	 * @return array[]
+	 */
+	private function merge_species_suggestions( array $items, array $words, $limit ) {
+		if ( ! self::tables_exist() ) {
+			return $items;
+		}
+
+		$product_ids = array();
+		foreach ( $items as $item ) {
+			if ( ! empty( $item['product_id'] ) ) {
+				$product_ids[] = (int) $item['product_id'];
+			}
+		}
+
+		return self::fold_species_rows( $items, $this->species_rows_matching( $words, $product_ids, $limit ) );
+	}
+
+	/**
+	 * Attach species rows to a suggestion list (pure): by product link,
+	 * then by lower-cased name; the rest appended as 'species' matches.
+	 *
+	 * @param array[] $items Suggestions.
+	 * @param array[] $rows  Hydrated species rows.
+	 * @return array[]
+	 */
+	public static function fold_species_rows( array $items, array $rows ) {
+		$by_product = array();
+		$by_name    = array();
+		foreach ( $items as $index => $item ) {
+			if ( ! empty( $item['product_id'] ) ) {
+				$by_product[ (int) $item['product_id'] ] = $index;
+			}
+			$by_name[ Species::key( (string) ( $item['name'] ?? '' ) ) ] = $index;
+		}
+
+		foreach ( $rows as $row ) {
+			$suggestion = Species::suggestion( $row );
+			$key        = Species::key( $suggestion['name'] );
+			$index      = null;
+			if ( null !== $suggestion['product_id'] && isset( $by_product[ $suggestion['product_id'] ] ) ) {
+				$index = $by_product[ $suggestion['product_id'] ];
+			} elseif ( isset( $by_name[ $key ] ) ) {
+				$index = $by_name[ $key ];
+			}
+			if ( null !== $index ) {
+				if ( empty( $items[ $index ]['species_id'] ) ) {
+					foreach ( array( 'species_id', 'per_box', 'my_price', 'group_name' ) as $extra ) {
+						$items[ $index ][ $extra ] = $suggestion[ $extra ];
+					}
+					if ( '' === trim( (string) ( $items[ $index ]['sci'] ?? '' ) ) ) {
+						$items[ $index ]['sci'] = $suggestion['sci'];
+					}
+				}
+				continue;
+			}
+			$items[]           = $suggestion;
+			$by_name[ $key ]   = count( $items ) - 1;
+			if ( null !== $suggestion['product_id'] ) {
+				$by_product[ $suggestion['product_id'] ] = count( $items ) - 1;
+			}
+		}
+
+		return $items;
+	}
+
+	/**
+	 * Species rows whose name or scientific name contains every word, or
+	 * that link one of the given products.
+	 *
+	 * @param string[] $words       Search words.
+	 * @param int[]    $product_ids Products already listed.
+	 * @param int      $limit       Row cap.
+	 * @return array[] Hydrated rows.
+	 */
+	private function species_rows_matching( array $words, array $product_ids, $limit ) {
+		global $wpdb;
+
+		$where  = array();
+		$params = array();
+		foreach ( $words as $word ) {
+			$like     = '%' . $wpdb->esc_like( $word ) . '%';
+			$where[]  = '(name LIKE %s OR sci_name LIKE %s)';
+			$params[] = $like;
+			$params[] = $like;
+		}
+		$clause = '(' . implode( ' AND ', $where ) . ')';
+		if ( $product_ids ) {
+			$clause .= ' OR product_id IN (' . implode( ',', array_map( 'intval', $product_ids ) ) . ')';
+		}
+		$params[] = max( 1, min( 100, (int) $limit + count( $product_ids ) ) );
+
+		try {
+			$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM ' . self::table( 'species' ) . ' WHERE ' . $clause . ' ORDER BY name ASC LIMIT %d', $params ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+
+		return array_map( array( self::class, 'hydrate_species' ), is_array( $rows ) ? $rows : array() );
+	}
+
+	/**
 	 * The product query the species search and the candidate list share.
 	 *
 	 * @param string $ids Comma-separated term ids (already ints).
@@ -1493,8 +1711,11 @@ class Store {
 	}
 
 	/**
-	 * Every fish product as a parser candidate (title, common names,
-	 * scientific name, learned aliases), cached for 10 minutes.
+	 * Every fish product and every species row as a parser candidate
+	 * (title, common names, scientific name, learned aliases), one entry
+	 * per lower-cased name (Species::merge_candidates), cached for 10
+	 * minutes — the cache is dropped by every product, species and alias
+	 * save.
 	 *
 	 * @return array[] product_id, name, variants[] {text, kind}.
 	 */
@@ -1503,7 +1724,7 @@ class Store {
 		if ( is_array( $cached ) ) {
 			$products = $cached;
 		} else {
-			$products = $this->fish_products();
+			$products = Species::merge_candidates( $this->fish_products(), $this->species_brief() );
 			set_transient( self::SPECIES_TRANSIENT, $products, 10 * MINUTE_IN_SECONDS );
 		}
 
@@ -1527,8 +1748,10 @@ class Store {
 					'kind' => 'sci',
 				);
 			}
-			$by_product[ (int) $product['product_id'] ] = array(
-				'product_id' => (int) $product['product_id'],
+			$pid                = (int) ( $product['product_id'] ?? 0 );
+			$slot               = $pid > 0 ? $pid : 'species:' . Species::key( $product['name'] );
+			$by_product[ $slot ] = array(
+				'product_id' => $pid > 0 ? $pid : null,
 				'name'       => $product['name'],
 				'variants'   => $variants,
 			);
@@ -1768,6 +1991,828 @@ class Store {
 	}
 
 	/* ============================================================== */
+	/*  Species master                                                 */
+	/* ============================================================== */
+
+	/**
+	 * Species rows for a list: a prefix search on the name or the
+	 * scientific name (any word of them), an optional group, by name.
+	 *
+	 * @param array $filters search (string), group (string).
+	 * @param int   $limit   Page size.
+	 * @param int   $offset  Offset.
+	 * @return array[] Hydrated rows.
+	 */
+	public function species_list( array $filters = array(), $limit = 50, $offset = 0 ) {
+		if ( ! self::tables_exist() ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		list( $where, $params ) = self::species_where( $filters );
+		$params[]               = max( 1, min( self::SPECIES_LIMIT, (int) $limit ) );
+		$params[]               = max( 0, (int) $offset );
+
+		try {
+			$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT * FROM ' . self::table( 'species' ) . ' WHERE ' . $where . ' ORDER BY name ASC LIMIT %d OFFSET %d', $params ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+
+		return array_map( array( self::class, 'hydrate_species' ), is_array( $rows ) ? $rows : array() );
+	}
+
+	/**
+	 * How many species rows a list filter matches.
+	 *
+	 * @param array $filters search, group.
+	 * @return int
+	 */
+	public function species_count( array $filters = array() ) {
+		if ( ! self::tables_exist() ) {
+			return 0;
+		}
+
+		global $wpdb;
+
+		list( $where, $params ) = self::species_where( $filters );
+		$sql                    = 'SELECT COUNT(*) FROM ' . self::table( 'species' ) . ' WHERE ' . $where;
+
+		try {
+			return (int) ( $params ? $wpdb->get_var( $wpdb->prepare( $sql, $params ) ) : $wpdb->get_var( $sql ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		} catch ( \Throwable $e ) {
+			return 0;
+		}
+	}
+
+	/**
+	 * The WHERE of a species list filter.
+	 *
+	 * @param array $filters search, group.
+	 * @return array{0: string, 1: array}
+	 */
+	private static function species_where( array $filters ) {
+		global $wpdb;
+
+		$where  = array( '1=1' );
+		$params = array();
+		$search = Species::key( (string) ( $filters['search'] ?? '' ) );
+		if ( '' !== $search ) {
+			$prefix   = $wpdb->esc_like( $search );
+			$where[]  = '(name LIKE %s OR name LIKE %s OR sci_name LIKE %s OR sci_name LIKE %s)';
+			$params[] = $prefix . '%';
+			$params[] = '% ' . $prefix . '%';
+			$params[] = $prefix . '%';
+			$params[] = '% ' . $prefix . '%';
+		}
+		if ( isset( $filters['group'] ) && '' !== trim( (string) $filters['group'] ) ) {
+			$where[]  = 'group_name = %s';
+			$params[] = trim( (string) $filters['group'] );
+		}
+
+		return array( implode( ' AND ', $where ), $params );
+	}
+
+	/**
+	 * One species row.
+	 *
+	 * @param int $id Species id.
+	 * @return array|null
+	 */
+	public function species( $id ) {
+		return $this->species_row( 'id = %d', (int) $id );
+	}
+
+	/**
+	 * The species row with a name (case-insensitive, as the unique key is).
+	 *
+	 * @param string $name Name.
+	 * @return array|null
+	 */
+	public function species_by_name( $name ) {
+		$name = trim( preg_replace( '/\s+/', ' ', (string) $name ) );
+		return '' === $name ? null : $this->species_row( 'name = %s', $name );
+	}
+
+	/**
+	 * The species row linked to a product.
+	 *
+	 * @param int $product_id Product id.
+	 * @return array|null
+	 */
+	public function species_by_product( $product_id ) {
+		return (int) $product_id > 0 ? $this->species_row( 'product_id = %d', (int) $product_id ) : null;
+	}
+
+	private function species_row( $where, $value ) {
+		if ( ! self::tables_exist() ) {
+			return null;
+		}
+
+		global $wpdb;
+
+		try {
+			$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . self::table( 'species' ) . ' WHERE ' . $where . ' ORDER BY id ASC LIMIT 1', $value ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		} catch ( \Throwable $e ) {
+			return null;
+		}
+
+		return $row ? self::hydrate_species( $row ) : null;
+	}
+
+	/**
+	 * Every species row in brief (id, name, sci_name, product_id, per_box,
+	 * my_price, group_name) — the candidate merge and the exports.
+	 *
+	 * @return array[]
+	 */
+	public function species_brief() {
+		if ( ! self::tables_exist() ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		try {
+			$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT id, name, sci_name, group_name, per_box, my_price, product_id FROM ' . self::table( 'species' ) . ' ORDER BY name ASC LIMIT %d', self::SPECIES_LIMIT ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+
+		return array_map( array( self::class, 'hydrate_species' ), is_array( $rows ) ? $rows : array() );
+	}
+
+	/**
+	 * The distinct species groups in use.
+	 *
+	 * @return string[]
+	 */
+	public function species_groups() {
+		if ( ! self::tables_exist() ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		try {
+			$rows = $wpdb->get_col( 'SELECT DISTINCT group_name FROM ' . self::table( 'species' ) . " WHERE group_name <> '' ORDER BY group_name ASC" ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+
+		return array_values( array_map( 'strval', is_array( $rows ) ? $rows : array() ) );
+	}
+
+	/**
+	 * Insert or update a species row (Species::normalize() first; the
+	 * name must be set and unique — the caller checks species_by_name(),
+	 * the unique key is the net). Drops the candidate cache.
+	 *
+	 * @param array $fields The clean row (id 0 = insert).
+	 * @return int|false Row id.
+	 */
+	public function save_species( array $fields ) {
+		if ( ! self::tables_exist() || '' === trim( (string) ( $fields['name'] ?? '' ) ) ) {
+			return false;
+		}
+
+		global $wpdb;
+
+		$now  = gmdate( 'Y-m-d H:i:s' );
+		$data = array(
+			'name'         => (string) $fields['name'],
+			'sci_name'     => (string) ( $fields['sci_name'] ?? '' ),
+			'group_name'   => (string) ( $fields['group_name'] ?? '' ),
+			'per_box'      => max( 1, (int) ( $fields['per_box'] ?? Costing::DEFAULT_PER_BOX ) ),
+			'my_price'     => isset( $fields['my_price'] ) && null !== $fields['my_price'] ? round( (float) $fields['my_price'], 2 ) : null,
+			'online_price' => isset( $fields['online_price'] ) && null !== $fields['online_price'] ? round( (float) $fields['online_price'], 2 ) : null,
+			'online_site'  => isset( $fields['online_site'] ) && '' !== (string) $fields['online_site'] ? (string) $fields['online_site'] : null,
+			'online_date'  => Replay::is_date( $fields['online_date'] ?? null ) ? (string) $fields['online_date'] : null,
+			'reef_safe'    => in_array( (string) ( $fields['reef_safe'] ?? '' ), Species::REEF_SAFE, true ) ? (string) $fields['reef_safe'] : '',
+			'max_size'     => (string) ( $fields['max_size'] ?? '' ),
+			'product_id'   => ! empty( $fields['product_id'] ) ? (int) $fields['product_id'] : null,
+			'notes'        => (string) ( $fields['notes'] ?? '' ),
+			'updated_at'   => $now,
+		);
+
+		try {
+			$id = (int) ( $fields['id'] ?? 0 );
+			if ( $id > 0 ) {
+				$ok = $wpdb->update( self::table( 'species' ), $data, array( 'id' => $id ), null, array( '%d' ) );
+				$id = false === $ok ? false : $id;
+			} else {
+				$data['created_at'] = $now;
+				$ok                 = $wpdb->insert( self::table( 'species' ), $data );
+				$id                 = $ok ? (int) $wpdb->insert_id : false;
+			}
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+
+		self::clear_species_cache();
+
+		return $id;
+	}
+
+	/**
+	 * Delete a species row — unless an order line still names it, in
+	 * which case nothing happens and 'referenced' comes back (the history
+	 * keeps its species).
+	 *
+	 * @param int $id Species id.
+	 * @return true|string|false True, 'referenced', or false on an error.
+	 */
+	public function delete_species( $id ) {
+		if ( ! self::tables_exist() || (int) $id <= 0 ) {
+			return false;
+		}
+
+		global $wpdb;
+
+		try {
+			$used = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . self::table( 'order_lines' ) . ' WHERE species_id = %d', (int) $id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			if ( $used > 0 ) {
+				return 'referenced';
+			}
+			$ok = $wpdb->delete( self::table( 'species' ), array( 'id' => (int) $id ), array( '%d' ) );
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+
+		self::clear_species_cache();
+
+		return (bool) $ok;
+	}
+
+	/**
+	 * Link a species row to a product (0 unlinks). Whether the product
+	 * exists is the caller's check (product_title()).
+	 *
+	 * @param int $id         Species id.
+	 * @param int $product_id Product id (0 = none).
+	 * @return bool
+	 */
+	public function link_species_product( $id, $product_id ) {
+		if ( ! self::tables_exist() || (int) $id <= 0 ) {
+			return false;
+		}
+
+		global $wpdb;
+
+		try {
+			$ok = $wpdb->update(
+				self::table( 'species' ),
+				array(
+					'product_id' => (int) $product_id > 0 ? (int) $product_id : null,
+					'updated_at' => gmdate( 'Y-m-d H:i:s' ),
+				),
+				array( 'id' => (int) $id ),
+				null,
+				array( '%d' )
+			);
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+
+		self::clear_species_cache();
+
+		return false !== $ok;
+	}
+
+	/**
+	 * Open stays per product id and per lower-cased species name, for the
+	 * "open stays" column of the species list (one query).
+	 *
+	 * @return array{product: array<int, int>, name: array<string, int>}
+	 */
+	public function open_stay_counts() {
+		$out = array(
+			'product' => array(),
+			'name'    => array(),
+		);
+		if ( ! self::tables_exist() ) {
+			return $out;
+		}
+
+		global $wpdb;
+
+		try {
+			$rows = $wpdb->get_results( 'SELECT product_id, LOWER(species) AS name, COUNT(*) AS n FROM ' . self::table( 'stays' ) . " WHERE status <> 'closed' GROUP BY product_id, LOWER(species)", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		} catch ( \Throwable $e ) {
+			return $out;
+		}
+
+		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
+			$n = (int) $row['n'];
+			if ( ! empty( $row['product_id'] ) ) {
+				$out['product'][ (int) $row['product_id'] ] = ( $out['product'][ (int) $row['product_id'] ] ?? 0 ) + $n;
+			}
+			$key                 = Species::key( (string) $row['name'] );
+			$out['name'][ $key ] = ( $out['name'][ $key ] ?? 0 ) + $n;
+		}
+
+		return $out;
+	}
+
+	/* ============================================================== */
+	/*  Supplier orders                                                */
+	/* ============================================================== */
+
+	private static function order_select() {
+		return 'SELECT o.*, (SELECT COUNT(*) FROM ' . self::table( 'order_lines' ) . ' l WHERE l.order_id = o.id) AS line_count, b.number AS building_number, b.name AS building_name FROM ' . self::table( 'orders' ) . ' o LEFT JOIN ' . self::table( 'buildings' ) . ' b ON b.id = o.building_id';
+	}
+
+	private static function line_select() {
+		return 'SELECT l.*, sp.per_box AS species_per_box, sp.group_name AS species_group, sp.product_id AS species_product_id, sp.my_price AS species_my_price, st.qty_live AS stay_live, st.status AS stay_status, t.number AS tank_number FROM ' . self::table( 'order_lines' ) . ' l LEFT JOIN ' . self::table( 'species' ) . ' sp ON sp.id = l.species_id LEFT JOIN ' . self::table( 'stays' ) . ' st ON st.id = l.stay_id LEFT JOIN ' . self::table( 'tanks' ) . ' t ON t.id = l.tank_id';
+	}
+
+	/**
+	 * The date an order sorts and files under: received, else ordered,
+	 * else created.
+	 *
+	 * @return string SQL expression.
+	 */
+	private static function order_date_expr() {
+		return 'COALESCE(o.received_date, o.order_date, DATE(o.created_at))';
+	}
+
+	/**
+	 * Order headers, newest first.
+	 *
+	 * @param array $filters year (int), status (string), supplier (string), limit (int).
+	 * @return array[] Hydrated headers (+ line_count).
+	 */
+	public function orders( array $filters = array() ) {
+		if ( ! self::tables_exist() ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		$where  = array( '1=1' );
+		$params = array();
+		if ( ! empty( $filters['year'] ) ) {
+			$where[]  = 'YEAR(' . self::order_date_expr() . ') = %d';
+			$params[] = (int) $filters['year'];
+		}
+		if ( ! empty( $filters['status'] ) && in_array( (string) $filters['status'], Orders::STATUSES, true ) ) {
+			$where[]  = 'o.status = %s';
+			$params[] = (string) $filters['status'];
+		}
+		if ( ! empty( $filters['supplier'] ) ) {
+			$where[]  = 'o.supplier = %s';
+			$params[] = (string) $filters['supplier'];
+		}
+		$params[] = isset( $filters['limit'] ) ? max( 1, min( self::ORDERS_LIMIT, (int) $filters['limit'] ) ) : self::ORDERS_LIMIT;
+
+		try {
+			$rows = $wpdb->get_results( $wpdb->prepare( self::order_select() . ' WHERE ' . implode( ' AND ', $where ) . ' ORDER BY ' . self::order_date_expr() . ' DESC, o.id DESC LIMIT %d', $params ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+
+		return array_map( array( self::class, 'hydrate_order' ), is_array( $rows ) ? $rows : array() );
+	}
+
+	/**
+	 * The years that have orders, newest first.
+	 *
+	 * @return int[]
+	 */
+	public function order_years() {
+		if ( ! self::tables_exist() ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		try {
+			$rows = $wpdb->get_col( 'SELECT DISTINCT YEAR(' . self::order_date_expr() . ') AS y FROM ' . self::table( 'orders' ) . ' o ORDER BY y DESC' ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+
+		return array_values( array_filter( array_map( 'intval', is_array( $rows ) ? $rows : array() ) ) );
+	}
+
+	/**
+	 * The refs in use (for the next "YYYY-N").
+	 *
+	 * @return string[]
+	 */
+	public function order_refs() {
+		if ( ! self::tables_exist() ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		try {
+			$rows = $wpdb->get_col( 'SELECT ref FROM ' . self::table( 'orders' ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+
+		return array_map( 'strval', is_array( $rows ) ? $rows : array() );
+	}
+
+	/**
+	 * The distinct suppliers and origins already used.
+	 *
+	 * @return array{suppliers: string[], origins: string[]}
+	 */
+	public function order_pick_lists() {
+		$out = array(
+			'suppliers' => array(),
+			'origins'   => array(),
+		);
+		if ( ! self::tables_exist() ) {
+			return $out;
+		}
+
+		global $wpdb;
+
+		try {
+			$out['suppliers'] = array_map( 'strval', (array) $wpdb->get_col( 'SELECT DISTINCT supplier FROM ' . self::table( 'orders' ) . " WHERE supplier <> '' ORDER BY supplier ASC" ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			$out['origins']   = array_map( 'strval', (array) $wpdb->get_col( 'SELECT DISTINCT origin FROM ' . self::table( 'orders' ) . " WHERE origin <> '' ORDER BY origin ASC" ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		} catch ( \Throwable $e ) {
+			unset( $e );
+		}
+
+		return $out;
+	}
+
+	/**
+	 * One order with its lines.
+	 *
+	 * @param int $id Order id.
+	 * @return array|null
+	 */
+	public function order( $id ) {
+		if ( ! self::tables_exist() || (int) $id <= 0 ) {
+			return null;
+		}
+
+		global $wpdb;
+
+		try {
+			$row = $wpdb->get_row( $wpdb->prepare( self::order_select() . ' WHERE o.id = %d', (int) $id ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		} catch ( \Throwable $e ) {
+			return null;
+		}
+		if ( ! $row ) {
+			return null;
+		}
+
+		$order          = self::hydrate_order( $row );
+		$order['lines'] = $this->order_lines( (int) $id );
+
+		return $order;
+	}
+
+	/**
+	 * The order with a ref.
+	 *
+	 * @param string $ref Ref.
+	 * @return array|null Header (no lines).
+	 */
+	public function order_by_ref( $ref ) {
+		$ref = trim( (string) $ref );
+		if ( ! self::tables_exist() || '' === $ref ) {
+			return null;
+		}
+
+		global $wpdb;
+
+		try {
+			$row = $wpdb->get_row( $wpdb->prepare( self::order_select() . ' WHERE o.ref = %s', $ref ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		} catch ( \Throwable $e ) {
+			return null;
+		}
+
+		return $row ? self::hydrate_order( $row ) : null;
+	}
+
+	/**
+	 * Insert or update an order header (Orders::normalize_order() first).
+	 * The ref must be set and unique — the caller checks order_by_ref(),
+	 * the unique key is the net.
+	 *
+	 * @param array $fields The clean header (id 0 = insert).
+	 * @return int|false Row id.
+	 */
+	public function save_order( array $fields ) {
+		if ( ! self::tables_exist() || '' === trim( (string) ( $fields['ref'] ?? '' ) ) ) {
+			return false;
+		}
+
+		global $wpdb;
+
+		$now  = gmdate( 'Y-m-d H:i:s' );
+		$data = array(
+			'ref'             => (string) $fields['ref'],
+			'supplier'        => (string) ( $fields['supplier'] ?? '' ),
+			'origin'          => (string) ( $fields['origin'] ?? '' ),
+			'order_date'      => Replay::is_date( $fields['order_date'] ?? null ) ? (string) $fields['order_date'] : null,
+			'received_date'   => Replay::is_date( $fields['received_date'] ?? null ) ? (string) $fields['received_date'] : null,
+			'status'          => in_array( (string) ( $fields['status'] ?? '' ), Orders::STATUSES, true ) ? (string) $fields['status'] : 'draft',
+			'boxes'           => isset( $fields['boxes'] ) && null !== $fields['boxes'] ? (int) $fields['boxes'] : null,
+			'cost_mode'       => in_array( (string) ( $fields['cost_mode'] ?? '' ), Costing::MODES, true ) ? (string) $fields['cost_mode'] : 'box',
+			'tariffs'         => round( (float) ( $fields['tariffs'] ?? 0 ), 2 ),
+			'domestic_flight' => round( (float) ( $fields['domestic_flight'] ?? 0 ), 2 ),
+			'import_fees'     => round( (float) ( $fields['import_fees'] ?? 0 ), 2 ),
+			'credit'          => round( (float) ( $fields['credit'] ?? 0 ), 2 ),
+			'markup'          => round( (float) ( $fields['markup'] ?? Costing::DEFAULT_MARKUP ), 2 ),
+			'worth_threshold' => round( (float) ( $fields['worth_threshold'] ?? Costing::DEFAULT_THRESHOLD ), 2 ),
+			'schedule'        => (string) ( $fields['schedule'] ?? '' ),
+			'building_id'     => ! empty( $fields['building_id'] ) ? (int) $fields['building_id'] : null,
+			'notes'           => (string) ( $fields['notes'] ?? '' ),
+			'updated_at'      => $now,
+		);
+
+		try {
+			$id = (int) ( $fields['id'] ?? 0 );
+			if ( $id > 0 ) {
+				$ok = $wpdb->update( self::table( 'orders' ), $data, array( 'id' => $id ), null, array( '%d' ) );
+				return false === $ok ? false : $id;
+			}
+			$data['created_at'] = $now;
+			$ok                 = $wpdb->insert( self::table( 'orders' ), $data );
+			return $ok ? (int) $wpdb->insert_id : false;
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+	}
+
+	/**
+	 * Change some header fields of an order (status, received_date, …) —
+	 * what the check-in does.
+	 *
+	 * @param int   $id     Order id.
+	 * @param array $fields Any header column except id / ref / created_at.
+	 * @return bool
+	 */
+	public function update_order_fields( $id, array $fields ) {
+		if ( ! self::tables_exist() || (int) $id <= 0 ) {
+			return false;
+		}
+
+		$data = array();
+		foreach ( array( 'supplier', 'origin', 'status', 'cost_mode', 'schedule', 'notes' ) as $key ) {
+			if ( array_key_exists( $key, $fields ) ) {
+				$data[ $key ] = (string) $fields[ $key ];
+			}
+		}
+		foreach ( array( 'order_date', 'received_date' ) as $key ) {
+			if ( array_key_exists( $key, $fields ) ) {
+				$data[ $key ] = Replay::is_date( $fields[ $key ] ) ? (string) $fields[ $key ] : null;
+			}
+		}
+		foreach ( array( 'tariffs', 'domestic_flight', 'import_fees', 'credit', 'markup', 'worth_threshold' ) as $key ) {
+			if ( array_key_exists( $key, $fields ) ) {
+				$data[ $key ] = round( (float) $fields[ $key ], 2 );
+			}
+		}
+		foreach ( array( 'boxes', 'building_id' ) as $key ) {
+			if ( array_key_exists( $key, $fields ) ) {
+				$data[ $key ] = null === $fields[ $key ] || (int) $fields[ $key ] <= 0 ? null : (int) $fields[ $key ];
+			}
+		}
+		if ( isset( $data['status'] ) && ! in_array( $data['status'], Orders::STATUSES, true ) ) {
+			unset( $data['status'] );
+		}
+		if ( ! $data ) {
+			return false;
+		}
+		$data['updated_at'] = gmdate( 'Y-m-d H:i:s' );
+
+		global $wpdb;
+
+		try {
+			return false !== $wpdb->update( self::table( 'orders' ), $data, array( 'id' => (int) $id ), null, array( '%d' ) );
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+	}
+
+	/**
+	 * Delete an order and its lines — unless a line has a stay (the stays
+	 * point at the line), in which case nothing happens and 'referenced'
+	 * comes back.
+	 *
+	 * @param int $id Order id.
+	 * @return true|string|false
+	 */
+	public function delete_order( $id ) {
+		if ( ! self::tables_exist() || (int) $id <= 0 ) {
+			return false;
+		}
+
+		global $wpdb;
+
+		try {
+			$linked = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . self::table( 'order_lines' ) . ' WHERE order_id = %d AND stay_id IS NOT NULL', (int) $id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			if ( $linked > 0 ) {
+				return 'referenced';
+			}
+			$wpdb->delete( self::table( 'order_lines' ), array( 'order_id' => (int) $id ), array( '%d' ) );
+			$ok = $wpdb->delete( self::table( 'orders' ), array( 'id' => (int) $id ), array( '%d' ) );
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+
+		return (bool) $ok;
+	}
+
+	/**
+	 * The lines of an order, in sheet order, with the species row's per
+	 * box / group / product, the stay's live count and the tank number.
+	 *
+	 * @param int $order_id Order id.
+	 * @return array[]
+	 */
+	public function order_lines( $order_id ) {
+		$by_order = $this->lines_for_orders( array( (int) $order_id ) );
+		return isset( $by_order[ (int) $order_id ] ) ? $by_order[ (int) $order_id ] : array();
+	}
+
+	/**
+	 * The lines of several orders in one query, grouped by order id.
+	 *
+	 * @param int[] $order_ids Order ids.
+	 * @return array<int, array[]>
+	 */
+	public function lines_for_orders( array $order_ids ) {
+		$order_ids = array_values( array_unique( array_filter( array_map( 'intval', $order_ids ) ) ) );
+		if ( ! self::tables_exist() || ! $order_ids ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		try {
+			$rows = $wpdb->get_results( self::line_select() . ' WHERE l.order_id IN (' . implode( ',', $order_ids ) . ') ORDER BY l.order_id ASC, l.sort ASC, l.id ASC', ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+
+		$out = array();
+		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
+			$line                         = self::hydrate_line( $row );
+			$out[ $line['order_id'] ][]   = $line;
+		}
+
+		return $out;
+	}
+
+	/**
+	 * Save an order's lines: rows with an id that belongs to the order
+	 * are updated, rows without one inserted, the order's other lines
+	 * deleted — except lines that already became a stay, which are kept
+	 * and keep their received / DOA / survived figures (those live on the
+	 * stay now). Orders::normalize_lines() first.
+	 *
+	 * @param int     $order_id Order id.
+	 * @param array[] $lines    Clean lines (id 0 = new), each may carry landed_total.
+	 * @return array{ids: int[], deleted: int}|false
+	 */
+	public function save_order_lines( $order_id, array $lines ) {
+		if ( ! self::tables_exist() || (int) $order_id <= 0 ) {
+			return false;
+		}
+
+		global $wpdb;
+
+		$existing = array();
+		foreach ( $this->order_lines( (int) $order_id ) as $line ) {
+			$existing[ (int) $line['id'] ] = $line;
+		}
+
+		$ids = array();
+		try {
+			foreach ( array_values( $lines ) as $sort => $line ) {
+				$id      = (int) ( $line['id'] ?? 0 );
+				$current = $id > 0 && isset( $existing[ $id ] ) ? $existing[ $id ] : null;
+				$linked  = $current && ! empty( $current['stay_id'] );
+				$data    = array(
+					'order_id'     => (int) $order_id,
+					'species_id'   => ! empty( $line['species_id'] ) ? (int) $line['species_id'] : null,
+					'species'      => (string) ( $line['species'] ?? '' ),
+					'sci_name'     => (string) ( $line['sci_name'] ?? '' ),
+					'qty_ordered'  => max( 0, (int) ( $line['qty_ordered'] ?? 0 ) ),
+					'qty_received' => $linked ? $current['qty_received'] : ( isset( $line['qty_received'] ) && null !== $line['qty_received'] ? (int) $line['qty_received'] : null ),
+					'per_box'      => isset( $line['per_box'] ) && null !== $line['per_box'] ? (int) $line['per_box'] : null,
+					'bags'         => isset( $line['bags'] ) && null !== $line['bags'] ? (int) $line['bags'] : null,
+					'unit_price'   => isset( $line['unit_price'] ) && null !== $line['unit_price'] ? round( (float) $line['unit_price'], 4 ) : null,
+					'worth'        => isset( $line['worth'] ) && null !== $line['worth'] ? round( (float) $line['worth'], 2 ) : null,
+					'qty_doa'      => $linked ? (int) $current['qty_doa'] : max( 0, (int) ( $line['qty_doa'] ?? 0 ) ),
+					'qty_survived' => $linked ? $current['qty_survived'] : ( isset( $line['qty_survived'] ) && null !== $line['qty_survived'] ? (int) $line['qty_survived'] : null ),
+					'landed_total' => isset( $line['landed_total'] ) && null !== $line['landed_total'] ? round( (float) $line['landed_total'], 2 ) : null,
+					'tank_id'      => $linked ? $current['tank_id'] : ( ! empty( $line['tank_id'] ) ? (int) $line['tank_id'] : null ),
+					'sort'         => (int) $sort,
+					'notes'        => (string) ( $line['notes'] ?? '' ),
+				);
+				if ( $current ) {
+					$ok = $wpdb->update( self::table( 'order_lines' ), $data, array( 'id' => $id ), null, array( '%d' ) );
+					if ( false !== $ok ) {
+						$ids[] = $id;
+					}
+					unset( $existing[ $id ] );
+					continue;
+				}
+				$ok = $wpdb->insert( self::table( 'order_lines' ), $data );
+				if ( $ok ) {
+					$ids[] = (int) $wpdb->insert_id;
+				}
+			}
+
+			$deleted = 0;
+			foreach ( $existing as $id => $line ) {
+				if ( ! empty( $line['stay_id'] ) ) {
+					$ids[] = (int) $id; // A line that became a stay stays.
+					continue;
+				}
+				if ( $wpdb->delete( self::table( 'order_lines' ), array( 'id' => (int) $id ), array( '%d' ) ) ) {
+					$deleted++;
+				}
+			}
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+
+		return array(
+			'ids'     => $ids,
+			'deleted' => $deleted,
+		);
+	}
+
+	/**
+	 * Link a line to the stay it became (and the tank it went into).
+	 *
+	 * @param int      $line_id Line id.
+	 * @param int      $stay_id Stay id.
+	 * @param int|null $tank_id Tank id.
+	 * @return bool
+	 */
+	public function set_line_stay( $line_id, $stay_id, $tank_id = null ) {
+		if ( ! self::tables_exist() || (int) $line_id <= 0 ) {
+			return false;
+		}
+
+		global $wpdb;
+
+		$data = array( 'stay_id' => (int) $stay_id > 0 ? (int) $stay_id : null );
+		if ( null !== $tank_id ) {
+			$data['tank_id'] = (int) $tank_id > 0 ? (int) $tank_id : null;
+		}
+
+		try {
+			return false !== $wpdb->update( self::table( 'order_lines' ), $data, array( 'id' => (int) $line_id ), null, array( '%d' ) );
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+	}
+
+	/**
+	 * The live figures of a set of stays in one query over their events:
+	 * stay_id → arrived, lost, sold, doa, live, survived
+	 * (Orders::figures_from_events()).
+	 *
+	 * @param int[] $stay_ids Stay ids.
+	 * @return array<int, array>
+	 */
+	public function stay_figures( array $stay_ids ) {
+		$stay_ids = array_values( array_unique( array_filter( array_map( 'intval', $stay_ids ) ) ) );
+		if ( ! self::tables_exist() || ! $stay_ids ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		try {
+			$rows = $wpdb->get_results( 'SELECT id, stay_id, type, qty, note, event_at FROM ' . self::table( 'stay_events' ) . ' WHERE stay_id IN (' . implode( ',', $stay_ids ) . ') ORDER BY event_at ASC, id ASC', ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+
+		$by_stay = array();
+		foreach ( $stay_ids as $id ) {
+			$by_stay[ $id ] = array();
+		}
+		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
+			$by_stay[ (int) $row['stay_id'] ][] = self::hydrate_event( $row );
+		}
+
+		$out = array();
+		foreach ( $by_stay as $id => $events ) {
+			$out[ $id ] = Orders::figures_from_events( $events );
+		}
+
+		return $out;
+	}
+
+	/* ============================================================== */
 	/*  Product facts                                                  */
 	/* ============================================================== */
 
@@ -1866,13 +2911,15 @@ class Store {
 
 	public static function hydrate_building( array $row ) {
 		return array(
-			'id'     => (int) ( $row['id'] ?? 0 ),
-			'area'   => (string) ( $row['area'] ?? 'clean' ),
-			'number' => (int) ( $row['number'] ?? 0 ),
-			'name'   => (string) ( $row['name'] ?? '' ),
-			'status' => (string) ( $row['status'] ?? 'active' ),
-			'sort'   => (int) ( $row['sort'] ?? 0 ),
-			'notes'  => (string) ( $row['notes'] ?? '' ),
+			'id'             => (int) ( $row['id'] ?? 0 ),
+			'area'           => (string) ( $row['area'] ?? 'clean' ),
+			'number'         => (int) ( $row['number'] ?? 0 ),
+			'name'           => (string) ( $row['name'] ?? '' ),
+			'status'         => (string) ( $row['status'] ?? 'active' ),
+			'sort'           => (int) ( $row['sort'] ?? 0 ),
+			'notes'          => (string) ( $row['notes'] ?? '' ),
+			'schedule'       => (string) ( $row['schedule'] ?? '' ),
+			'system_gallons' => isset( $row['system_gallons'] ) && null !== $row['system_gallons'] && '' !== $row['system_gallons'] ? (int) $row['system_gallons'] : null,
 		);
 	}
 
@@ -1990,6 +3037,7 @@ class Store {
 		return array(
 			'id'          => (int) ( $row['id'] ?? 0 ),
 			'tank_id'     => (int) ( $row['tank_id'] ?? 0 ),
+			'building_id' => ! empty( $row['building_id'] ) ? (int) $row['building_id'] : null,
 			'tank_number' => ! empty( $row['tank_number'] ) ? (int) $row['tank_number'] : null,
 			'kind'        => (string) ( $row['kind'] ?? 'note' ),
 			'value'       => isset( $row['value'] ) && null !== $row['value'] ? (float) $row['value'] : null,
@@ -1998,6 +3046,114 @@ class Store {
 			'actor_id'    => (int) ( $row['actor_id'] ?? 0 ),
 			'actor_name'  => (string) ( $row['actor_name'] ?? '' ),
 			'source'      => (string) ( $row['source'] ?? 'manual' ),
+		);
+	}
+
+	/**
+	 * A nullable money column.
+	 *
+	 * @param mixed $value Raw.
+	 * @return float|null
+	 */
+	private static function money_or_null( $value ) {
+		return isset( $value ) && null !== $value && '' !== $value && is_numeric( $value ) ? (float) $value : null;
+	}
+
+	/**
+	 * A nullable int column.
+	 *
+	 * @param mixed $value Raw.
+	 * @return int|null
+	 */
+	private static function int_or_null( $value ) {
+		return isset( $value ) && null !== $value && '' !== $value && is_numeric( $value ) ? (int) $value : null;
+	}
+
+	/**
+	 * A nullable date column ('0000-00-00' = null).
+	 *
+	 * @param mixed $value Raw.
+	 * @return string|null
+	 */
+	private static function date_or_null( $value ) {
+		return ! empty( $value ) && '0000-00-00' !== $value ? (string) $value : null;
+	}
+
+	public static function hydrate_species( array $row ) {
+		return array(
+			'id'           => (int) ( $row['id'] ?? 0 ),
+			'name'         => (string) ( $row['name'] ?? '' ),
+			'sci_name'     => (string) ( $row['sci_name'] ?? '' ),
+			'group_name'   => (string) ( $row['group_name'] ?? '' ),
+			'per_box'      => max( 1, (int) ( $row['per_box'] ?? Costing::DEFAULT_PER_BOX ) ),
+			'my_price'     => self::money_or_null( $row['my_price'] ?? null ),
+			'online_price' => self::money_or_null( $row['online_price'] ?? null ),
+			'online_site'  => isset( $row['online_site'] ) && null !== $row['online_site'] && '' !== $row['online_site'] ? (string) $row['online_site'] : null,
+			'online_date'  => self::date_or_null( $row['online_date'] ?? null ),
+			'reef_safe'    => (string) ( $row['reef_safe'] ?? '' ),
+			'max_size'     => (string) ( $row['max_size'] ?? '' ),
+			'product_id'   => ! empty( $row['product_id'] ) ? (int) $row['product_id'] : null,
+			'notes'        => (string) ( $row['notes'] ?? '' ),
+			'created_at'   => (string) ( $row['created_at'] ?? '' ),
+			'updated_at'   => (string) ( $row['updated_at'] ?? '' ),
+		);
+	}
+
+	public static function hydrate_order( array $row ) {
+		return array(
+			'id'              => (int) ( $row['id'] ?? 0 ),
+			'ref'             => (string) ( $row['ref'] ?? '' ),
+			'supplier'        => (string) ( $row['supplier'] ?? '' ),
+			'origin'          => (string) ( $row['origin'] ?? '' ),
+			'order_date'      => self::date_or_null( $row['order_date'] ?? null ),
+			'received_date'   => self::date_or_null( $row['received_date'] ?? null ),
+			'status'          => (string) ( $row['status'] ?? 'draft' ),
+			'boxes'           => self::int_or_null( $row['boxes'] ?? null ),
+			'cost_mode'       => 'bag' === (string) ( $row['cost_mode'] ?? 'box' ) ? 'bag' : 'box',
+			'tariffs'         => (float) ( $row['tariffs'] ?? 0 ),
+			'domestic_flight' => (float) ( $row['domestic_flight'] ?? 0 ),
+			'import_fees'     => (float) ( $row['import_fees'] ?? 0 ),
+			'credit'          => (float) ( $row['credit'] ?? 0 ),
+			'markup'          => (float) ( $row['markup'] ?? Costing::DEFAULT_MARKUP ),
+			'worth_threshold' => (float) ( $row['worth_threshold'] ?? Costing::DEFAULT_THRESHOLD ),
+			'schedule'        => (string) ( $row['schedule'] ?? '' ),
+			'building_id'     => ! empty( $row['building_id'] ) ? (int) $row['building_id'] : null,
+			'building_number' => ! empty( $row['building_number'] ) ? (int) $row['building_number'] : null,
+			'building_name'   => (string) ( $row['building_name'] ?? '' ),
+			'notes'           => (string) ( $row['notes'] ?? '' ),
+			'line_count'      => (int) ( $row['line_count'] ?? 0 ),
+			'created_at'      => (string) ( $row['created_at'] ?? '' ),
+			'updated_at'      => (string) ( $row['updated_at'] ?? '' ),
+		);
+	}
+
+	public static function hydrate_line( array $row ) {
+		return array(
+			'id'                 => (int) ( $row['id'] ?? 0 ),
+			'order_id'           => (int) ( $row['order_id'] ?? 0 ),
+			'species_id'         => ! empty( $row['species_id'] ) ? (int) $row['species_id'] : null,
+			'species'            => (string) ( $row['species'] ?? '' ),
+			'sci_name'           => (string) ( $row['sci_name'] ?? '' ),
+			'qty_ordered'        => (int) ( $row['qty_ordered'] ?? 0 ),
+			'qty_received'       => self::int_or_null( $row['qty_received'] ?? null ),
+			'per_box'            => self::int_or_null( $row['per_box'] ?? null ),
+			'bags'               => self::int_or_null( $row['bags'] ?? null ),
+			'unit_price'         => self::money_or_null( $row['unit_price'] ?? null ),
+			'worth'              => self::money_or_null( $row['worth'] ?? null ),
+			'qty_doa'            => (int) ( $row['qty_doa'] ?? 0 ),
+			'qty_survived'       => self::int_or_null( $row['qty_survived'] ?? null ),
+			'landed_total'       => self::money_or_null( $row['landed_total'] ?? null ),
+			'stay_id'            => ! empty( $row['stay_id'] ) ? (int) $row['stay_id'] : null,
+			'tank_id'            => ! empty( $row['tank_id'] ) ? (int) $row['tank_id'] : null,
+			'tank_number'        => ! empty( $row['tank_number'] ) ? (int) $row['tank_number'] : null,
+			'sort'               => (int) ( $row['sort'] ?? 0 ),
+			'notes'              => (string) ( $row['notes'] ?? '' ),
+			'species_per_box'    => self::int_or_null( $row['species_per_box'] ?? null ),
+			'group_name'         => (string) ( $row['species_group'] ?? '' ),
+			'species_product_id' => ! empty( $row['species_product_id'] ) ? (int) $row['species_product_id'] : null,
+			'species_my_price'   => self::money_or_null( $row['species_my_price'] ?? null ),
+			'stay_live'          => self::int_or_null( $row['stay_live'] ?? null ),
+			'stay_status'        => isset( $row['stay_status'] ) && null !== $row['stay_status'] ? (string) $row['stay_status'] : null,
 		);
 	}
 }

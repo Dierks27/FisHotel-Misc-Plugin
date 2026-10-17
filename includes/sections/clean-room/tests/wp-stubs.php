@@ -2,12 +2,13 @@
 /**
  * Just enough WordPress to load the Clean Room section's classes headless.
  *
- * Layout, Replay, Parser and Qr touch no WordPress function at all;
- * Settings needs the translation helpers, wp_parse_args and options;
- * Admin::csv_cell() / csv_rows() need nothing. The Store class is loaded
- * for its constants and pure statics (hydrate_*, site_noon_utc) and
- * replaced by fake-store.php where a store is needed — no $wpdb method
- * is ever called in these tests.
+ * Layout, Replay, Parser, Qr, Costing, Stats, Species and Xlsx touch no
+ * WordPress function at all; Settings needs the translation helpers,
+ * wp_parse_args and options; Admin::csv_cell() / csv_rows() need nothing.
+ * The Store class is loaded for its constants and pure statics
+ * (hydrate_*, site_noon_utc, fold_species_rows) and replaced by
+ * fake-store.php where a store is needed — no $wpdb method is ever called
+ * in these tests.
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  */
@@ -190,6 +191,11 @@ require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-replay.php
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-protocol.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-parser.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-qr.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-costing.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-stats.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-species.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-orders.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-xlsx.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-store.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-settings.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-front-desk.php';
