@@ -55,12 +55,17 @@ products straight from the tables.
   from the Events tab at any time — and never twice for the same event.
 - The **treatment protocol** is an editable template, not code: steps
   with a day offset, a kind (feed / dose / test / water change / other),
-  an optional repeat and a "where". The seed is the rough version (about
-  six Metronidazole treatments, fourteen days of copper held at 2.25 or
-  higher with 2.5 the target, two Praziquantel treatments) and is meant to
-  be replaced by the workbook's schedule. **Copper readings** are logged
-  per tank ("521 copper 2.4"); a reading logged today ticks the copper
-  test chip (a `test` step whose label names copper / Cu) by itself.
+  an optional repeat and a "where". The seed is the workbook's **14 Day
+  CM** schedule, counted from the check-in day as day 1 (the sheet counts
+  the arrival day as day 0, so site day = sheet day + 1): Copper Power to
+  2.0 on day 1 and to 2.4 on day 2, then held at 2.25 or higher (2.5 the
+  target) with a daily copper test to day 15; Metronidazole every other
+  day from day 2 to day 12 (six treatments); Praziquantel on days 8 and
+  14; a freshwater or formalin bath on day 16 and the move to the Clean
+  Room. The sheet's other schedules (14 Day CF, Xtra 14 Day CF, CQ) are not
+  seeded yet. **Copper readings** are logged per tank ("521 copper 2.4");
+  a reading logged today ticks the copper test chip (a `test` step whose
+  label names copper / Cu) by itself.
 
 ## The numbering rule
 

@@ -52,8 +52,9 @@ node includes/sections/clean-room/tests/front-desk.test.js
   move); event ordering and the checkin fallback (the SITE date of an
   arrival); `effective()` on cached rows; every compensating event,
   `is_undone()` / `undone_ids()` and two undo round trips.
-- **protocol-test.php** — the seed (seven steps — no "observation ends"
-  chip —, idempotent under `normalize()`), `is_due()` for daily /
+- **protocol-test.php** — the seed (the workbook's 14 Day CM schedule as
+  eight steps, site day = sheet day + 1 — no "observation ends" chip —,
+  idempotent under `normalize()`), `is_due()` for daily /
   every-other-day / one-off / open-ended steps, `due()` per area,
   `normalize()` from a form (dropped, typed, clamped, capped at 60), the
   daily to-do of a tank (feed once, due steps per live stay, tick-offs by
@@ -142,8 +143,10 @@ node includes/sections/clean-room/tests/front-desk.test.js
 4. Tap "−1 lost" on the row (the first button under the title): 3 live at
    once, Undo works. Mic → "lost one cardinal": the preview reads "1 × …
    lost in Tank 521" and confirms after the countdown.
-5. Mic → "521 copper 2.4": tap the "Today" line — it opens on Cu 2.4 and
-   the *Copper test* chip is already ticked; it stays open after Refresh.
+5. Occupant → Dates: set the check-in date to yesterday first (the daily
+   copper test starts on day 2). Mic → "521 copper 2.4": tap the "Today"
+   line — it opens on Cu 2.4 and the *Copper test* chip is already
+   ticked; it stays open after Refresh.
    Tap another to-do chip: it ticks and stays ticked after Refresh.
 6. Move (with one group in the tank it goes straight to "Where to?") →
    chip *bullying* → Tank 121: the toast reads "… moved to Tank 121 ·

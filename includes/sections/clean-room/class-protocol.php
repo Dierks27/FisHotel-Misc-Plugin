@@ -5,13 +5,16 @@
  * and an optional "where"), and the daily to-do it generates for a tank
  * from the stays in it.
  *
- * Nothing about the schedule is hard-coded: the seed below is only the
- * rough version Jeff described (about six Metronidazole treatments,
- * fourteen days of copper held at 2.25 or higher with 2.5 the target,
- * two Praziquantel treatments for flukes) and is meant to be replaced by
- * the workbook's schedule in Settings → Protocol.
+ * Nothing about the schedule is hard-coded: the seed below is the "14 Day
+ * CM" schedule from Jeff's workbook (Treatment Schedule tab, the column
+ * every 2026 batch since August runs): copper to 2.0 on arrival and 2.4
+ * the next day, then held at 2.25 or higher (2.5 the target) with a daily
+ * test; Metronidazole every other day, six times; Praziquantel twice for
+ * flukes; a freshwater or formalin bath and the move to the Clean Room on
+ * the sixteenth day. It is edited in Settings → Protocol.
  *
  * Day numbers follow Replay::day_number(): day 1 is the check-in day.
+ * The workbook counts the arrival day as day 0, so site day = sheet day + 1.
  * A step is due on day d when d == day, or when it repeats (every > 0)
  * and d >= day, (d − day) % every == 0 and d <= until (when set).
  *
@@ -41,19 +44,21 @@ class Protocol {
 	const MAX_DAY   = 120;
 
 	/**
-	 * The rough seed — to be replaced by the workbook's schedule.
+	 * The seed: the workbook's "14 Day CM" schedule, one day later than the
+	 * sheet's numbering (sheet day 0 = check-in = site day 1).
 	 *
 	 * @return array[]
 	 */
 	public static function seed() {
 		return array(
 			self::step( 'Feed', 'feed', 1, 1, null, 'any', 'every tank with fish, every day' ),
-			self::step( 'Start copper', 'dose', 1, 0, null, 'spa', 'bring copper to 2.5 (hold at 2.25 or higher)' ),
-			self::step( 'Copper test', 'test', 2, 1, 14, 'spa', 'hold at 2.25 or higher, target 2.5 — log it: "521 copper 2.4"' ),
-			self::step( 'Metronidazole', 'dose', 1, 2, 11, 'spa', 'six treatments, every other day' ),
-			self::step( 'Copper off — water change', 'water_change', 14, 0, null, 'spa', 'copper comes off after 14 days; ready to move to the Clean Room' ),
-			self::step( 'Praziquantel 1', 'dose', 15, 0, null, 'any', 'flukes, first treatment' ),
-			self::step( 'Praziquantel 2', 'dose', 22, 0, null, 'any', 'flukes, second treatment' ),
+			self::step( 'Copper Power to 2.0', 'dose', 1, 0, null, 'spa', 'check-in day: bring copper to 2.0 (the sheet\'s day 0)' ),
+			self::step( 'Copper Power to 2.4', 'dose', 2, 0, null, 'spa', 'raise to 2.4, then hold at 2.25 or higher — 2.5 is the target' ),
+			self::step( 'Copper test', 'test', 2, 1, 15, 'spa', 'hold at 2.25 or higher, target 2.5 — log it: "521 copper 2.4"' ),
+			self::step( 'Metronidazole', 'dose', 2, 2, 12, 'spa', 'six treatments, every other day; 25 mg per gallon (5.1 g on the 205-gallon system, 2.5 g on the 100)' ),
+			self::step( 'Praziquantel 1', 'dose', 8, 0, null, 'any', 'flukes, first treatment; 9.5 mg per gallon (about 2 g on 205 gallons)' ),
+			self::step( 'Praziquantel 2', 'dose', 14, 0, null, 'any', 'flukes, second treatment' ),
+			self::step( 'Bath, then move to the Clean Room', 'water_change', 16, 0, null, 'spa', 'freshwater or formalin bath; copper comes off and observation starts in the Clean Room (the sheet\'s day 15)' ),
 		);
 	}
 

@@ -164,7 +164,7 @@ check( 'the sale-ready override removed: the toast says N days after check-in', 
 echo "6. A copper reading ticks the copper test\n";
 $r = act( $store, 521, 'copper', array( 'value' => '2.4' ) );
 check( 'logged on the tank', empty( $r['error'] ) && 'Copper 2.4 in Tank 521' === $r['message'] && 'copper' === end( $store->logs )['kind'] && 2.4 === end( $store->logs )['value'] );
-$todo = Protocol::todo( Protocol::seed(), array( array( 'id' => 2, 'species' => 'Ocellaris Clownfish', 'qty_live' => 2, 'checkin_date' => $today, 'day' => 5 ) ), $today, 'spa', array( end( $store->logs ) ) );
+$todo = Protocol::todo( Protocol::seed(), array( array( 'id' => 2, 'species' => 'Ocellaris Clownfish', 'qty_live' => 2, 'checkin_date' => $today, 'day' => 4 ) ), $today, 'spa', array( end( $store->logs ) ) );
 $done = array();
 foreach ( $todo as $item ) {
 	$done[ $item['label'] ] = $item['done'];
