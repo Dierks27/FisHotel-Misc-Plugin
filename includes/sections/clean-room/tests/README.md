@@ -4,7 +4,9 @@ All run without WordPress, WooCommerce or a database. `wp-stubs.php`
 supplies the handful of WordPress functions the classes touch (the
 translation helpers, `sanitize_*`, options, transients, `current_time`,
 `wp_timezone` = America/Chicago, `user_can`, the action and filter
-registries — all in-memory) and loads the section's classes; the Store
+registries — all in-memory), the `check()` / `check_same()` /
+`check_contains()` / `fh_finish()` harness and the temp-dir helpers, and
+loads the section's classes; the Store
 class (the only `$wpdb` file) is loaded for its constants and pure
 statics only and stands replaced by `fake-store.php` — an in-memory
 store that runs the same Replay and hydration code — so no `$wpdb`
@@ -26,13 +28,26 @@ php  includes/sections/clean-room/tests/species-test.php
 php  includes/sections/clean-room/tests/orders-test.php
 php  includes/sections/clean-room/tests/xlsx-test.php
 php  includes/sections/clean-room/tests/workbook-admin-test.php
+php  includes/sections/clean-room/tests/workbook-test.php
+php  includes/sections/clean-room/tests/import-map-test.php
+php  includes/sections/clean-room/tests/import-test.php
 node includes/sections/clean-room/tests/front-desk.test.js
 node includes/sections/clean-room/tests/clean-room-admin.test.js
 ```
 
 Every species, price, supplier and figure in these tests is invented
 ("Blue Test Wrasse", "Test Supplier One", "Testland"); nothing comes
-from the workbook but the formulas.
+from the workbook but the formulas and the five treatment schedules. The
+workbook the reader, mapper and import tests run on is **synthetic**:
+`fixture-builder.php` writes a FisHotel-style .xlsx with invented names,
+prices and dates in the real layout (header row 4 from column B, the
+row-2 totals, the right-hand label block, a second unused "DOA" block,
+`QT Tanks` logs in K:P, the Data sheet with vendors / origins / two
+box-rate blocks, FishSheetStock, a `PW` sheet that must never be read)
+with `xlsx-builder.php`, a tiny .xlsx writer of hand-written XML parts.
+The CI job runs every `tests/*.php`, so both builders (and
+`fake-store.php`) exit 0 when run directly. Temporary files go to the
+system temp directory (`FH_TEST_TMP` overrides).
 
 - **layout-test.php** — the seed (six buildings, 22 tanks, 100–400
   Clean Room, 500/600 Spa, 400 coming soon and empty), every seeded
@@ -42,7 +57,11 @@ from the workbook but the formulas.
   left out); the phone title, the path, the printed label text; the
   editor's validation (round hundreds, taken numbers, level 1–2,
   position 1–9, derived duplicates named); rack ordering, grouping with
-  an empty building, `tank_at()` for left / right / middle / second.
+  an empty building, `tank_at()` for left / right / middle / second; the
+  seed's system gallons (205 / 100 on the Spa buildings, none elsewhere),
+  `system_gallons()` (the typed figure, else the sum of the building's
+  tanks by id or by the hundreds, offline tanks dry, 0 = blank),
+  `system_label()`, the schedule-name and gallons validation.
 - **replay-test.php** — `day_number()` across the March and November
   DST changes (and a whole year), `add_days()`, the sale-ready date (N
   days after check-in, the override), `note_date()`, event dates in
@@ -72,7 +91,27 @@ from the workbook but the formulas.
   key, a copper reading logged today ticking the copper test by itself —
   and only a `test` step that names copper / Cu —, no live fish =
   nothing, the day derived from the check-in), `copper_state()`,
-  `describe()`.
+  `describe()`; the five named templates in order, every one starting
+  with the daily feeding, and the days each translated step is due (14
+  Day CF: formalin 5–14, praziquantel 7 / 12 / 14, the move 15; Xtra 14
+  Day CF: formalin 1–14, praziquantel 6 / 11 / 13; CQ: chloroquine 3, 6 /
+  8 / 10 / 12, 14, praziquantel 7 / 11 / 13, the bath 16; Trifecta: the
+  combo day 1, Furan-2 the even days, the water change the odd days);
+  the option's migration (an old bare steps array → the 14 Day CM
+  template beside the other four seeds, an empty list kept empty, the
+  new shape cleaned, an unknown default falling back, at most 20);
+  `steps_for()` / `template_for()` (the building's template, else the
+  default, through Settings when nothing is passed); the medication
+  aliases (`medication_key()` on step labels and log notes, whole words
+  — "Cumin" is not Cu), the dose suggestions (metro 5.1 g on 205 gal, 2.5
+  on 100; two decimals below one gram; none for copper), `dose_text()`;
+  the dose tick (a metro dose ticks Metronidazole, not the copper test;
+  the alias works through an import marker; a plain note ticks nothing;
+  a copper dose ticks "Copper Power to 2.0", never the copper test);
+  the Settings template operations (save, add — a seeded name brings its
+  schedule back —, rename with the default following and the buildings
+  told, delete never the last one, make default, reset to the seed or to
+  the daily feeding).
 - **parser-test.php** — arrivals (Spa-only: a Clean Room tank, spoken or
   implied, needs a Spa tank), the loss family as the fastest path ("lost
   one cardinal in 521", "2 dead in 513", DOA / jumped / disease /
@@ -122,10 +161,18 @@ from the workbook but the formulas.
   cleared date typed (now + note, corrected to an earlier date, set again
   after an unset, today by default), the check-in date (future / junk
   refused, corrected, undone), the sale-ready override removed; a copper
-  reading that ticks the copper test and a tick-off; the label-login
-  cookie life (a year for a crew member bound for the Front Desk, untouched
-  otherwise); `facts_or_null()` and the facts filter answering null
-  through a dead `$wpdb`.
+  reading that ticks the copper test and a tick-off; the dose action (an
+  unknown medication, an amount of 0 / below 0 / above 9999 / junk, a
+  unit other than g / ml / tsp refused; the whole-system log on the
+  building with tank 0 and the toast "Metronidazole 5.1 g · Building 500,
+  whole system"; the tank-only log; the system dose ticking Metronidazole
+  on every tank of the building but not the other system's, the tank
+  dose on its tank alone; the last dose per medication per building; the
+  Events-tab wording of dose, copper and building-level rows and the
+  import marker kept out of sight; the medications offered with their
+  suggestions); the label-login cookie life (a year for a crew member
+  bound for the Front Desk, untouched otherwise); `facts_or_null()` and
+  the facts filter answering null through a dead `$wpdb`.
 - **costing-test.php** — the order sheet's maths: a box-mode example
   worked by hand in the comments (fractions, fees per box, the tariff
   factor, landed totals, per fish, the suggested price to the nearest
@@ -182,9 +229,60 @@ from the workbook but the formulas.
   example, the landed-total cache), the check-in read back through the
   figures, the export sheets (orders + lines, species, stats, stays)
   with typed cells, the CSV guard, the URLs and the one-time notice.
+- **workbook-test.php** — the reader on hand-written XML parts zipped into
+  a tiny .xlsx: shared, inline and rich-text strings, cached formula
+  values (numbers, strings, errors; a formula without one absent),
+  booleans, date / time / datetime styles (built-in and custom), a
+  currency format staying a number, `rows()` with a row cap on a cold and
+  a warm cache, `cell()` with anchors, a sheet name with spaces and
+  parentheses, the `PW` sheet refused by name / case / whitespace, cells
+  and rows without `r` attributes, phonetic runs skipped, `close()`; the
+  failure modes (missing, not a zip, no workbook.xml, a directory), the
+  1904 date system, the zip-bomb guard, extra refused names, every static
+  helper (column letters, serials around the 1900 leap-day phantom,
+  format kinds).
+- **import-map-test.php** — the mapper on the synthetic fixture: only the
+  known sheets opened (never `PW`), the species rows until the first blank
+  name (error cells null, a typed date read), the three batches mapped
+  and the template / empty one skipped, the header row found by text in
+  both layouts (an extra column, the right-hand block shifted), box and
+  bag mode from the headers, the row-2 fees (a blank left null, not the
+  next label), supplier / origin / credit by label, the QT start date,
+  schedule and log (a tank label skipped, text amounts and times kept,
+  "Both"), the file-name year for a batch without a QT date, suppliers /
+  origins / the two box-rate blocks, the stock rows, the ten warnings and
+  none mentioning `PW`, `read_qt()` alone, an explicit default year, every
+  value helper, a closed workbook.
+- **import-test.php** — the import on the fixture and the `Fake_Store`:
+  the markers; the pure preview (an empty site, what exists updating or
+  skipping, a name twice, a rate without a supplier, the stays estimate
+  per cutoff); the species upsert (every field, the stock enrichment by
+  scientific then common name, "With Caution" → caution, an error-cell
+  price null); the box rates in the option; the three orders (an old
+  batch closed with its fees, date, schedule and building, the recent one
+  received in bag mode, the undated one ordered) and their lines (species
+  ids by name, an unknown fish without, the landed totals cached); the
+  recent batch's stays (the DOA loss, source `import` on the stay and its
+  events, the seam fields, the first empty tank of the chosen building);
+  the logs by system (205 → 500, 100 → 600, "Both" → both, the copper
+  reading, the result appended, Chicago times to UTC) and the Board's last
+  doses from them; the second run (species updated, nothing else created,
+  a price the sheet lacks kept, a group typed on the site kept, the
+  sheet's price winning); the options (no stays / no logs, a long cutoff
+  on the other building, a Clean Room building ignored); the system →
+  building rule in every branch; `log_entry()` for a dose, "Added X", an
+  unknown medication, a note, a copper test, no date; the amount, date and
+  time helpers; the admin panel's pure helpers (the options sanitised and
+  defaulted, the default building, the summary lines, the `.htaccess`, the
+  random file name).
 - **fake-store.php** — not a test (exits 0 when run directly): the
   in-memory store the above drives (tanks and buildings from the seed,
-  stays, events, logs, aliases, species rows, orders and lines).
+  stays, events, logs — per tank or per building, with `logs_on_date()`,
+  `latest_doses()`, `imported_log_keys()` —, aliases, species rows,
+  orders and lines).
+- **xlsx-builder.php**, **fixture-builder.php** — not tests (exit 0 when
+  run directly): the tiny .xlsx writer and the synthetic FisHotel-style
+  workbook the reader, mapper and import tests use.
 - **front-desk.test.js** — `englishValue()`, `tankValue()`,
   `normalizeNumberWords()` (known tanks, the rule without a list, "four
   six line wrasse" left alone, "a couple" / "two point four" left for the
@@ -267,3 +365,34 @@ from the workbook but the formulas.
     of the batch rates), by supplier / origin / species group. Export
     XLSX on Arrivals, Species, Stats and Stays: Excel opens each
     without a repair prompt, a species named "=1+1" shows as text.
+14. Settings → Treatment schedules: the picker lists 14 Day CM (default),
+    14 Day CF, Xtra 14 Day CF, CQ and Trifecta; pick CQ — the editor shows
+    its steps; Add "Mine" — a template with the daily feeding alone;
+    Rename it, Make default, Delete it (the default goes back to 14 Day
+    CM); edit a step of 14 Day CM, Save, Reset — the workbook's schedule is
+    back. Layout: Building 500 shows "205 gal system"; set its schedule
+    to CQ and Save; the Board's building header reads "205 gal system ·
+    CQ" and the to-do of a tank in 500 follows CQ (a day-3 group gets
+    "Chloroquine 40 mg/gal") while a tank in 600 keeps the default.
+15. Front Desk on 521: the title line ends "· 205 gal system · schedule
+    CQ"; open Today → Dose: chips, the amount, "Whole system — Building
+    500 · 205 gal system" preselected, tap Metro — the unit reads g and
+    the chip "Suggested: 5.1 g" fills the amount; Save: the toast
+    "Metronidazole 5.1 g · Building 500, whole system" with no Undo. On
+    523 the Today strip's Metronidazole chip (a day-2 group) is already
+    ticked; on 611 it is not. Dose again with "This tank only": the toast
+    ends "· Tank 521". Events tab: the two dose rows read like the toasts,
+    the system one under "Building 500"; the Board's header for 500 shows
+    "last dose: Metronidazole …".
+16. Settings → Import workbook: upload a .txt — refused with the reader's
+    reason; upload the FisHotel-2026.xlsm — the preview table (species to
+    create, orders with their lines and log rows, box rates, the stays
+    estimate for the last 45 days) and the reader's warnings folded away;
+    the file sits in wp-content/uploads/fishotel-private/ under a random
+    name and the folder's URL answers 403; Import now with the defaults:
+    the result lines, Species / Arrivals / Stats filled, the recent
+    batches' stays on the Board with supplier, ref and landed cost, the
+    treatment logs on the Events tab under Building 500 / 600, Settings →
+    Box rates filled; the file is gone. Upload the same file again and
+    Import now: every count but the species updates is 0, nothing new on
+    the Board or the Events tab. Upload and Discard: the file is gone.
