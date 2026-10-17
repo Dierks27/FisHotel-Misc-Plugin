@@ -884,19 +884,31 @@ class Admin {
 	}
 
 	/**
-	 * A tank log entry in plain words (pure).
+	 * A tank log entry in plain words (pure). A dose reads like the Front
+	 * Desk's toast ("Metronidazole 5.1 g · Building 500, whole system"); a
+	 * building-level entry of any kind says so; an import marker in the
+	 * note is kept out of sight.
 	 *
 	 * @param array $log Hydrated log.
 	 * @return string
 	 */
 	public static function log_text( array $log ) {
-		$kind = (string) ( $log['kind'] ?? 'note' );
+		$kind  = (string) ( $log['kind'] ?? 'note' );
+		$note  = Import::strip_marker( (string) ( $log['note'] ?? '' ) );
+		$where = '';
+		if ( (int) ( $log['tank_id'] ?? 0 ) <= 0 && ! empty( $log['building_id'] ) ) {
+			/* translators: %s: building label */
+			$where = ' · ' . sprintf( __( '%s, whole system', 'fishotel-misc-plugin' ), Layout::building_label( array( 'number' => (int) ( $log['building_number'] ?? 0 ), 'name' => '' ) ) );
+		}
 		if ( 'copper' === $kind ) {
-			return 'copper ' . ( null !== ( $log['value'] ?? null ) ? rtrim( rtrim( number_format( (float) $log['value'], 2, '.', '' ), '0' ), '.' ) : '?' );
+			return 'copper ' . ( null !== ( $log['value'] ?? null ) ? rtrim( rtrim( number_format( (float) $log['value'], 2, '.', '' ), '0' ), '.' ) : '?' ) . $where;
+		}
+		if ( 'dose' === $kind ) {
+			return $note . $where;
 		}
 		if ( 'note' === $kind ) {
-			return 'note: ' . (string) ( $log['note'] ?? '' );
+			return 'note: ' . $note . $where;
 		}
-		return str_replace( '_', ' ', $kind ) . ': ' . (string) ( $log['note'] ?? '' );
+		return str_replace( '_', ' ', $kind ) . ': ' . $note . $where;
 	}
 }

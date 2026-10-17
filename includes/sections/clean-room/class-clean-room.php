@@ -164,6 +164,7 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 			require_once self::path() . 'class-xlsx.php';
 			require_once self::path() . 'class-workbook.php';
 			require_once self::path() . 'class-import-map.php';
+			require_once self::path() . 'class-import.php';
 			require_once self::path() . 'class-store.php';
 			require_once self::path() . 'class-settings.php';
 			require_once self::path() . 'class-front-desk.php';

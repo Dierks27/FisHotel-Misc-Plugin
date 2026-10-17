@@ -1396,21 +1396,84 @@ class Store {
 	 * @return int|false Log id.
 	 */
 	public function log_tank( $tank_id, array $log ) {
-		if ( ! self::tables_exist() || (int) $tank_id <= 0 ) {
+		if ( (int) $tank_id <= 0 ) {
+			return false;
+		}
+		return $this->insert_log( (int) $tank_id, null, $log );
+	}
+
+	/**
+	 * Append a BUILDING-level log entry (a dose or a reading of the whole
+	 * system): tank_id 0, building_id set. Every tank of the building reads
+	 * it as its own for the day's to-do (logs_on_date()).
+	 *
+	 * @param int   $building_id Building id.
+	 * @param array $log         kind, value, note, logged_at, actor_id, source.
+	 * @return int|false Log id.
+	 */
+	public function log_building( $building_id, array $log ) {
+		if ( (int) $building_id <= 0 ) {
+			return false;
+		}
+		return $this->insert_log( 0, (int) $building_id, $log );
+	}
+
+	/**
+	 * A dose: kind 'dose', value = the amount, note "<Medication> <amount>
+	 * <unit>" (+ " · " + the typed note) — on the whole system (tank 0,
+	 * the building) when $tank_id is 0, else on that tank.
+	 *
+	 * @param int    $building_id Building id (the whole system).
+	 * @param int    $tank_id     Tank id (0 = the whole system).
+	 * @param string $medication  Key of Protocol::MEDICATIONS (or a name).
+	 * @param float  $amount      Amount.
+	 * @param string $unit        g|ml|tsp.
+	 * @param string $note        Optional typed note.
+	 * @param int    $actor_id    User.
+	 * @param string $source      manual|voice|qr|import|order.
+	 * @return int|false Log id.
+	 */
+	public function log_dose( $building_id, $tank_id, $medication, $amount, $unit, $note = '', $actor_id = 0, $source = 'manual' ) {
+		$text = Protocol::dose_text( $medication, $amount, $unit );
+		$note = trim( (string) $note );
+		$log  = array(
+			'kind'     => 'dose',
+			'value'    => (float) $amount,
+			'note'     => $text . ( '' !== $note ? ' · ' . $note : '' ),
+			'actor_id' => (int) $actor_id,
+			'source'   => (string) $source,
+		);
+		if ( (int) $tank_id > 0 ) {
+			return $this->log_tank( (int) $tank_id, $log );
+		}
+		return $this->log_building( (int) $building_id, $log );
+	}
+
+	/**
+	 * The one INSERT behind the log writers.
+	 *
+	 * @param int      $tank_id     Tank id (0 = building-level).
+	 * @param int|null $building_id Building id.
+	 * @param array    $log         kind, value, note, logged_at, actor_id, source.
+	 * @return int|false
+	 */
+	private function insert_log( $tank_id, $building_id, array $log ) {
+		if ( ! self::tables_exist() ) {
 			return false;
 		}
 
 		global $wpdb;
 
 		$data = array(
-			'tank_id'    => (int) $tank_id,
-			'kind'       => in_array( (string) ( $log['kind'] ?? '' ), self::LOG_KINDS, true ) ? (string) $log['kind'] : 'note',
-			'value'      => isset( $log['value'] ) && null !== $log['value'] && is_numeric( $log['value'] ) ? round( (float) $log['value'], 3 ) : null,
-			'note'       => substr( (string) ( $log['note'] ?? '' ), 0, 2000 ),
-			'logged_at'  => self::utc_datetime( $log['logged_at'] ?? '' ),
-			'actor_id'   => (int) ( $log['actor_id'] ?? 0 ),
-			'source'     => in_array( (string) ( $log['source'] ?? '' ), self::SOURCES, true ) ? (string) $log['source'] : 'manual',
-			'created_at' => gmdate( 'Y-m-d H:i:s' ),
+			'tank_id'     => (int) $tank_id,
+			'building_id' => (int) $building_id > 0 ? (int) $building_id : null,
+			'kind'        => in_array( (string) ( $log['kind'] ?? '' ), self::LOG_KINDS, true ) ? (string) $log['kind'] : 'note',
+			'value'       => isset( $log['value'] ) && null !== $log['value'] && is_numeric( $log['value'] ) ? round( (float) $log['value'], 3 ) : null,
+			'note'        => substr( (string) ( $log['note'] ?? '' ), 0, 2000 ),
+			'logged_at'   => self::utc_datetime( $log['logged_at'] ?? '' ),
+			'actor_id'    => (int) ( $log['actor_id'] ?? 0 ),
+			'source'      => in_array( (string) ( $log['source'] ?? '' ), self::SOURCES, true ) ? (string) $log['source'] : 'manual',
+			'created_at'  => gmdate( 'Y-m-d H:i:s' ),
 		);
 
 		try {
@@ -1423,7 +1486,7 @@ class Store {
 	}
 
 	private static function log_select() {
-		return 'SELECT l.*, t.number AS tank_number, u.display_name AS actor_name FROM ' . self::table( 'tank_logs' ) . ' l LEFT JOIN ' . self::table( 'tanks' ) . ' t ON t.id = l.tank_id LEFT JOIN ' . self::users_table() . ' u ON u.ID = l.actor_id';
+		return 'SELECT l.*, t.number AS tank_number, b.number AS building_number, u.display_name AS actor_name FROM ' . self::table( 'tank_logs' ) . ' l LEFT JOIN ' . self::table( 'tanks' ) . ' t ON t.id = l.tank_id LEFT JOIN ' . self::table( 'buildings' ) . ' b ON b.id = l.building_id LEFT JOIN ' . self::users_table() . ' u ON u.ID = l.actor_id';
 	}
 
 	/**
@@ -1458,7 +1521,9 @@ class Store {
 	}
 
 	/**
-	 * The last copper reading per tank.
+	 * The last copper reading per tank. A building-level reading (the
+	 * whole system tested — the Spa is one water) counts for every tank of
+	 * that building when it is newer than the tank's own.
 	 *
 	 * @return array<int, array{value: float, logged_at: string}>
 	 */
@@ -1471,19 +1536,38 @@ class Store {
 
 		try {
 			$rows = $wpdb->get_results(
-				'SELECT l.tank_id, l.value, l.logged_at FROM ' . self::table( 'tank_logs' ) . " l INNER JOIN (SELECT tank_id, MAX(id) AS max_id FROM " . self::table( 'tank_logs' ) . " WHERE kind = 'copper' AND value IS NOT NULL GROUP BY tank_id) m ON m.max_id = l.id", // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				'SELECT l.tank_id, l.building_id, l.value, l.logged_at FROM ' . self::table( 'tank_logs' ) . ' l INNER JOIN (SELECT tank_id, building_id, MAX(id) AS max_id FROM ' . self::table( 'tank_logs' ) . " WHERE kind = 'copper' AND value IS NOT NULL GROUP BY tank_id, building_id) m ON m.max_id = l.id", // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 				ARRAY_A
 			);
 		} catch ( \Throwable $e ) {
 			return array();
 		}
 
-		$out = array();
+		$out          = array();
+		$per_building = array();
 		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
-			$out[ (int) $row['tank_id'] ] = array(
+			$entry = array(
 				'value'     => (float) $row['value'],
 				'logged_at' => (string) $row['logged_at'],
 			);
+			if ( (int) $row['tank_id'] > 0 ) {
+				$out[ (int) $row['tank_id'] ] = $entry;
+			} elseif ( ! empty( $row['building_id'] ) ) {
+				$per_building[ (int) $row['building_id'] ] = $entry;
+			}
+		}
+
+		if ( $per_building ) {
+			foreach ( $this->tanks() as $tank ) {
+				$id       = (int) $tank['id'];
+				$building = (int) $tank['building_id'];
+				if ( ! isset( $per_building[ $building ] ) ) {
+					continue;
+				}
+				if ( ! isset( $out[ $id ] ) || strcmp( $per_building[ $building ]['logged_at'], $out[ $id ]['logged_at'] ) > 0 ) {
+					$out[ $id ] = $per_building[ $building ];
+				}
+			}
 		}
 
 		return $out;
@@ -1532,7 +1616,8 @@ class Store {
 
 	/**
 	 * Every log entry of a site date, grouped by tank — what ticks the
-	 * to-do off.
+	 * to-do off. A building-level entry (tank 0, a building) is listed
+	 * under every tank of that building.
 	 *
 	 * @param string $date Site date.
 	 * @return array<int, array[]>
@@ -1545,20 +1630,58 @@ class Store {
 		global $wpdb;
 
 		try {
-			$tz    = Clean_Room::timezone();
-			$start = ( new \DateTimeImmutable( $date . ' 00:00:00', $tz ) )->setTimezone( new \DateTimeZone( 'UTC' ) )->format( 'Y-m-d H:i:s' );
-			$end   = ( new \DateTimeImmutable( $date . ' 23:59:59', $tz ) )->setTimezone( new \DateTimeZone( 'UTC' ) )->format( 'Y-m-d H:i:s' );
-			$rows  = $wpdb->get_results(
-				$wpdb->prepare( 'SELECT tank_id, kind, value, note, logged_at FROM ' . self::table( 'tank_logs' ) . ' WHERE logged_at BETWEEN %s AND %s ORDER BY id ASC', $start, $end ), // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			list( $start, $end ) = self::site_day_bounds( $date );
+			$rows                = $wpdb->get_results(
+				$wpdb->prepare( 'SELECT tank_id, building_id, kind, value, note, logged_at FROM ' . self::table( 'tank_logs' ) . ' WHERE logged_at BETWEEN %s AND %s ORDER BY id ASC', $start, $end ), // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 				ARRAY_A
 			);
 		} catch ( \Throwable $e ) {
 			return array();
 		}
 
+		return self::spread_logs( is_array( $rows ) ? $rows : array(), $this->tanks() );
+	}
+
+	/**
+	 * The UTC bounds of a site date.
+	 *
+	 * @param string $date Y-m-d.
+	 * @return array{0: string, 1: string}
+	 */
+	public static function site_day_bounds( $date ) {
+		$tz  = Clean_Room::timezone();
+		$utc = new \DateTimeZone( 'UTC' );
+		return array(
+			( new \DateTimeImmutable( $date . ' 00:00:00', $tz ) )->setTimezone( $utc )->format( 'Y-m-d H:i:s' ),
+			( new \DateTimeImmutable( $date . ' 23:59:59', $tz ) )->setTimezone( $utc )->format( 'Y-m-d H:i:s' ),
+		);
+	}
+
+	/**
+	 * Group log rows by tank (pure): a row on a tank under that tank, a
+	 * building-level row under every tank of its building.
+	 *
+	 * @param array[] $rows  tank_id, building_id, kind, value, note, logged_at.
+	 * @param array[] $tanks Every tank (id, building_id).
+	 * @return array<int, array[]>
+	 */
+	public static function spread_logs( array $rows, array $tanks ) {
+		$by_building = array();
+		foreach ( $tanks as $tank ) {
+			$by_building[ (int) ( $tank['building_id'] ?? 0 ) ][] = (int) $tank['id'];
+		}
+
 		$out = array();
-		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
-			$out[ (int) $row['tank_id'] ][] = $row;
+		foreach ( $rows as $row ) {
+			$tank_id = (int) ( $row['tank_id'] ?? 0 );
+			if ( $tank_id > 0 ) {
+				$out[ $tank_id ][] = $row;
+				continue;
+			}
+			$building = (int) ( $row['building_id'] ?? 0 );
+			foreach ( isset( $by_building[ $building ] ) ? $by_building[ $building ] : array() as $id ) {
+				$out[ $id ][] = $row;
+			}
 		}
 
 		return $out;
@@ -3172,17 +3295,18 @@ class Store {
 
 	public static function hydrate_log( array $row ) {
 		return array(
-			'id'          => (int) ( $row['id'] ?? 0 ),
-			'tank_id'     => (int) ( $row['tank_id'] ?? 0 ),
-			'building_id' => ! empty( $row['building_id'] ) ? (int) $row['building_id'] : null,
-			'tank_number' => ! empty( $row['tank_number'] ) ? (int) $row['tank_number'] : null,
-			'kind'        => (string) ( $row['kind'] ?? 'note' ),
-			'value'       => isset( $row['value'] ) && null !== $row['value'] ? (float) $row['value'] : null,
-			'note'        => (string) ( $row['note'] ?? '' ),
-			'logged_at'   => (string) ( $row['logged_at'] ?? '' ),
-			'actor_id'    => (int) ( $row['actor_id'] ?? 0 ),
-			'actor_name'  => (string) ( $row['actor_name'] ?? '' ),
-			'source'      => (string) ( $row['source'] ?? 'manual' ),
+			'id'              => (int) ( $row['id'] ?? 0 ),
+			'tank_id'         => (int) ( $row['tank_id'] ?? 0 ),
+			'building_id'     => ! empty( $row['building_id'] ) ? (int) $row['building_id'] : null,
+			'building_number' => ! empty( $row['building_number'] ) ? (int) $row['building_number'] : null,
+			'tank_number'     => ! empty( $row['tank_number'] ) ? (int) $row['tank_number'] : null,
+			'kind'            => (string) ( $row['kind'] ?? 'note' ),
+			'value'           => isset( $row['value'] ) && null !== $row['value'] ? (float) $row['value'] : null,
+			'note'            => (string) ( $row['note'] ?? '' ),
+			'logged_at'       => (string) ( $row['logged_at'] ?? '' ),
+			'actor_id'        => (int) ( $row['actor_id'] ?? 0 ),
+			'actor_name'      => (string) ( $row['actor_name'] ?? '' ),
+			'source'          => (string) ( $row['source'] ?? 'manual' ),
 		);
 	}
 

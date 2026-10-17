@@ -19,6 +19,7 @@ namespace FisHotel\Misc\Sections\Clean_Room\Tests;
 
 use FisHotel\Misc\Sections\Clean_Room\Layout;
 use FisHotel\Misc\Sections\Clean_Room\Orders;
+use FisHotel\Misc\Sections\Clean_Room\Protocol;
 use FisHotel\Misc\Sections\Clean_Room\Replay;
 use FisHotel\Misc\Sections\Clean_Room\Settings;
 use FisHotel\Misc\Sections\Clean_Room\Species;
@@ -436,20 +437,115 @@ class Fake_Store {
 		if ( ! $this->tank( $tank_id ) ) {
 			return false;
 		}
+		return $this->insert_log( (int) $tank_id, null, $log );
+	}
+
+	public function log_building( $building_id, array $log ) {
+		if ( ! $this->building( $building_id ) ) {
+			return false;
+		}
+		return $this->insert_log( 0, (int) $building_id, $log );
+	}
+
+	public function log_dose( $building_id, $tank_id, $medication, $amount, $unit, $note = '', $actor_id = 0, $source = 'manual' ) {
+		$note = trim( (string) $note );
+		$log  = array(
+			'kind'     => 'dose',
+			'value'    => (float) $amount,
+			'note'     => Protocol::dose_text( $medication, $amount, $unit ) . ( '' !== $note ? ' · ' . $note : '' ),
+			'actor_id' => (int) $actor_id,
+			'source'   => (string) $source,
+		);
+		return (int) $tank_id > 0 ? $this->log_tank( (int) $tank_id, $log ) : $this->log_building( (int) $building_id, $log );
+	}
+
+	private function insert_log( $tank_id, $building_id, array $log ) {
 		$id = $this->next_log++;
 
 		$this->logs[ $id ] = array(
-			'id'        => $id,
-			'tank_id'   => (int) $tank_id,
-			'kind'      => in_array( (string) ( $log['kind'] ?? '' ), Store::LOG_KINDS, true ) ? (string) $log['kind'] : 'note',
-			'value'     => isset( $log['value'] ) && null !== $log['value'] && is_numeric( $log['value'] ) ? round( (float) $log['value'], 3 ) : null,
-			'note'      => (string) ( $log['note'] ?? '' ),
-			'logged_at' => Store::utc_datetime( $log['logged_at'] ?? '' ),
-			'actor_id'  => (int) ( $log['actor_id'] ?? 0 ),
-			'source'    => (string) ( $log['source'] ?? 'manual' ),
+			'id'          => $id,
+			'tank_id'     => (int) $tank_id,
+			'building_id' => (int) $building_id > 0 ? (int) $building_id : null,
+			'kind'        => in_array( (string) ( $log['kind'] ?? '' ), Store::LOG_KINDS, true ) ? (string) $log['kind'] : 'note',
+			'value'       => isset( $log['value'] ) && null !== $log['value'] && is_numeric( $log['value'] ) ? round( (float) $log['value'], 3 ) : null,
+			'note'        => substr( (string) ( $log['note'] ?? '' ), 0, 2000 ),
+			'logged_at'   => Store::utc_datetime( $log['logged_at'] ?? '' ),
+			'actor_id'    => (int) ( $log['actor_id'] ?? 0 ),
+			'source'      => in_array( (string) ( $log['source'] ?? '' ), Store::SOURCES, true ) ? (string) $log['source'] : 'manual',
 		);
 
 		return $id;
+	}
+
+	/**
+	 * Today's logs by tank, a building-level log under every tank of its
+	 * building (Store::spread_logs) — the same rows the real Store hands
+	 * Protocol::todo().
+	 */
+	public function logs_on_date( $date ) {
+		list( $start, $end ) = Store::site_day_bounds( $date );
+		$rows                = array();
+		foreach ( $this->logs as $row ) {
+			if ( strcmp( $row['logged_at'], $start ) >= 0 && strcmp( $row['logged_at'], $end ) <= 0 ) {
+				$rows[] = $row;
+			}
+		}
+		return Store::spread_logs( $rows, $this->tanks() );
+	}
+
+	/**
+	 * The latest log entries (every tank, or one), newest first, hydrated.
+	 */
+	public function tank_logs( $tank_id = 0, $limit = 50 ) {
+		$out = array();
+		foreach ( array_reverse( $this->logs, true ) as $row ) {
+			if ( (int) $tank_id > 0 && (int) $row['tank_id'] !== (int) $tank_id ) {
+				continue;
+			}
+			$building = $row['building_id'] ? $this->building( $row['building_id'] ) : null;
+			$tank     = $row['tank_id'] ? $this->tank( $row['tank_id'] ) : null;
+			$out[]    = Store::hydrate_log(
+				array_merge(
+					$row,
+					array(
+						'tank_number'     => $tank ? $tank['number'] : null,
+						'building_number' => $building ? $building['number'] : null,
+						'actor_name'      => '',
+					)
+				)
+			);
+			if ( count( $out ) >= max( 1, (int) $limit ) ) {
+				break;
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * The last dose per medication per building (Store::latest_doses()).
+	 */
+	public function latest_doses( $limit = 500 ) {
+		$out = array();
+		foreach ( array_reverse( $this->logs, true ) as $row ) {
+			if ( 'dose' !== $row['kind'] ) {
+				continue;
+			}
+			$building = $row['building_id'] ? (int) $row['building_id'] : 0;
+			if ( ! $building && $row['tank_id'] ) {
+				$tank     = $this->tank( $row['tank_id'] );
+				$building = $tank ? (int) $tank['building_id'] : 0;
+			}
+			$key = Protocol::medication_key( $row['note'] );
+			if ( $building <= 0 || null === $key || isset( $out[ $building ][ $key ] ) ) {
+				continue;
+			}
+			$out[ $building ][ $key ] = array(
+				'label'     => Protocol::medication_label( $key ),
+				'note'      => $row['note'],
+				'logged_at' => $row['logged_at'],
+			);
+		}
+		return $out;
 	}
 
 	public function product_title( $product_id ) {
