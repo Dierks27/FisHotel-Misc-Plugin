@@ -529,6 +529,41 @@
 	color: var(--fh-text-secondary, #a0a0a0);
 }
 
+/* The Import workbook panel: the preview table, the result lines, the
+   reader's warnings folded away. */
+.fh-cr-import__table {
+	margin: 0 0 12px;
+}
+
+.fh-cr-import__lines {
+	margin: 6px 0 0 18px;
+	list-style: disc;
+	font-size: 12px;
+}
+
+.fh-cr-import__warnings {
+	max-height: 220px;
+	overflow-y: auto;
+}
+
+.fh-cr-import__details {
+	margin: 0 0 12px;
+	font-size: 12px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-import__details summary {
+	cursor: pointer;
+}
+
+.fh-cr-import__form + .fh-cr-import__form .fh-cr-actions-row {
+	margin-top: 0;
+}
+
+.fh-cr-wrap .fh-cr-import__form input[type="file"] {
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
 .fh-cr-protocol .fh-cr-input--num {
 	max-width: 76px;
 }

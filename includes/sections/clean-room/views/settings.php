@@ -14,6 +14,8 @@
  * @var array   $groups       Layout::group().
  * @var array[] $aliases      Aliases.
  * @var array[] $box_rates    Settings::box_rates().
+ * @var array   $import       Admin_Import::panel_data().
+ * @var string  $flash        A one-time notice.
  * @var string  $labels_url   Printable labels URL.
  * @var bool    $tables_ok    Whether the tables exist.
  * @var bool    $can_settings Always true here.
@@ -297,6 +299,9 @@ $tab = 'settings';
 				<button type="submit" class="button button-primary fh-cr-box-rates-save"><?php esc_html_e( 'Save box rates', 'fishotel-misc-plugin' ); ?></button>
 			</p>
 		</form>
+
+		<?php /* ── Import workbook ───────────────────────────────── */ ?>
+		<?php include Clean_Room::path() . 'views/import.php'; ?>
 
 		<?php /* ── Aliases ───────────────────────────────────────── */ ?>
 		<div class="fishotel-misc-card fh-cr-card">

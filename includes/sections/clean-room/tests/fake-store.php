@@ -17,6 +17,7 @@
 
 namespace FisHotel\Misc\Sections\Clean_Room\Tests;
 
+use FisHotel\Misc\Sections\Clean_Room\Import;
 use FisHotel\Misc\Sections\Clean_Room\Layout;
 use FisHotel\Misc\Sections\Clean_Room\Orders;
 use FisHotel\Misc\Sections\Clean_Room\Protocol;
@@ -519,6 +520,19 @@ class Fake_Store {
 			}
 		}
 		return $out;
+	}
+
+	/**
+	 * The import markers already on a batch's logs (Store::imported_log_keys()).
+	 */
+	public function imported_log_keys( $ref ) {
+		$rows = array();
+		foreach ( $this->logs as $row ) {
+			if ( 'import' === $row['source'] && false !== strpos( $row['note'], Import::MARKER . trim( (string) $ref ) . '#' ) ) {
+				$rows[] = $row;
+			}
+		}
+		return Store::log_keys( $rows );
 	}
 
 	/**

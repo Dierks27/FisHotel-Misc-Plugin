@@ -56,8 +56,13 @@
  *                           (cached values only; the PW sheet is never opened).
  *   - class-import-map.php  PURE: the FisHotel-YEAR workbook layout → species,
  *                           orders, box rates, stock (columns found by header text).
+ *   - class-import.php      the mapped workbook into the Store (species upsert,
+ *                           box rates, orders + lines, recent batches as stays,
+ *                           treatment logs), idempotent; preview() pure.
  *   - class-admin-workbook.php  the Arrivals / Species / Stats tabs, their
  *                           AJAX and the XLSX / CSV exports.
+ *   - class-admin-import.php  Settings → Import workbook: upload to a private
+ *                           folder, preview, Import now (manage_options).
  *
  * The file uses bracketed namespaces because the facts helper must live in
  * the global namespace.
@@ -197,6 +202,7 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 			if ( is_admin() ) {
 				require_once self::path() . 'class-admin.php';
 				require_once self::path() . 'class-admin-workbook.php';
+				require_once self::path() . 'class-admin-import.php';
 
 				$settings = new Settings();
 				$settings->init();
@@ -206,6 +212,9 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 
 				$workbook = new Admin_Workbook();
 				$workbook->init();
+
+				$import = new Admin_Import();
+				$import->init();
 			}
 		}
 
@@ -216,6 +225,7 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 			self::load();
 			require_once self::path() . 'class-admin.php';
 			require_once self::path() . 'class-admin-workbook.php';
+			require_once self::path() . 'class-admin-import.php';
 
 			add_submenu_page(
 				'fishotel-misc',

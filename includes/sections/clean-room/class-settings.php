@@ -113,6 +113,19 @@ class Settings {
 	}
 
 	/**
+	 * Store the box rates (sanitised first) — the editor's save and the
+	 * workbook import write through here.
+	 *
+	 * @param array $rows Rows of supplier, origin, per_box, reox.
+	 * @return array[] The stored rows.
+	 */
+	public static function store_box_rates( array $rows ) {
+		$rates = self::sanitize_box_rates( $rows );
+		update_option( self::BOX_RATES_OPTION, $rates, false );
+		return $rates;
+	}
+
+	/**
 	 * Clean a list of box-rate rows (pure): text trimmed, money ≥ 0, rows
 	 * without a supplier and an origin dropped, duplicates (same supplier
 	 * and origin) collapsed to the last, at most BOX_RATES_MAX, sorted.
@@ -218,9 +231,7 @@ class Settings {
 		check_ajax_referer( self::NONCE_ACTION, '_wpnonce' );
 
 		$raw   = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above.
-		$rates = self::sanitize_box_rates( isset( $raw['rates'] ) && is_array( $raw['rates'] ) ? $raw['rates'] : array() );
-
-		update_option( self::BOX_RATES_OPTION, $rates, false );
+		$rates = self::store_box_rates( isset( $raw['rates'] ) && is_array( $raw['rates'] ) ? $raw['rates'] : array() );
 
 		wp_send_json_success(
 			array(

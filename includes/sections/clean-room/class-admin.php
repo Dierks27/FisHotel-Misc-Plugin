@@ -159,6 +159,7 @@ class Admin {
 			$groups    = Layout::group( $buildings, $tanks );
 			$aliases   = $store->aliases();
 			$box_rates = Settings::box_rates();
+			$import    = Admin_Import::panel_data( $store );
 			$flash     = Admin_Workbook::take_flash();
 
 			include Clean_Room::path() . 'views/settings.php';

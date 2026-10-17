@@ -386,7 +386,7 @@ class Orders {
 	 * @param array  $order           The order with its lines (Store::order()).
 	 * @param string $today           Site date.
 	 * @param array  $settings        Settings.
-	 * @param array  $base            actor_id, source.
+	 * @param array  $base            actor_id, source ('import' for the workbook import, 'order' otherwise).
 	 * @param int    $default_per_box Fish per box when nothing says.
 	 * @return array{created: array[], skipped: int, errors: string[], date: string}
 	 */
@@ -419,7 +419,9 @@ class Orders {
 				$occupied[] = (int) $stay['tank_id'];
 			}
 		}
-		$base = array_merge( $base, array( 'source' => 'order' ) );
+		// The Arrivals button writes source 'order'; the workbook import 'import'.
+		$source = 'import' === (string) ( $base['source'] ?? '' ) ? 'import' : 'order';
+		$base   = array_merge( $base, array( 'source' => $source ) );
 
 		foreach ( $order['lines'] as $line ) {
 			if ( ! empty( $line['stay_id'] ) ) {
@@ -445,7 +447,7 @@ class Orders {
 					'species'       => (string) $line['species'],
 					'checkin_date'  => $date,
 					'tank_id'       => (int) $tank['id'],
-					'source'        => 'order',
+					'source'        => $source,
 					'order_line_id' => (int) $line['id'],
 					'supplier'      => (string) ( $order['supplier'] ?? '' ),
 					'order_ref'     => (string) ( $order['ref'] ?? '' ),

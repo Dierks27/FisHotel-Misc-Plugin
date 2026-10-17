@@ -1574,6 +1574,53 @@ class Store {
 	}
 
 	/**
+	 * The import markers already on the logs of one batch — what a second
+	 * run of the workbook import skips: "b<building>|t<tank>|<marker>" for
+	 * every log with source 'import' whose note carries "import:<ref>#".
+	 *
+	 * @param string $ref Order ref.
+	 * @return string[]
+	 */
+	public function imported_log_keys( $ref ) {
+		$ref = trim( (string) $ref );
+		if ( ! self::tables_exist() || '' === $ref ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		try {
+			$rows = $wpdb->get_results(
+				$wpdb->prepare( 'SELECT tank_id, building_id, note FROM ' . self::table( 'tank_logs' ) . " WHERE source = 'import' AND note LIKE %s", '%' . $wpdb->esc_like( Import::MARKER . $ref . '#' ) . '%' ), // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				ARRAY_A
+			);
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+
+		return self::log_keys( is_array( $rows ) ? $rows : array() );
+	}
+
+	/**
+	 * The import keys of log rows (pure): "b<building>|t<tank>|<marker>",
+	 * rows without a marker left out.
+	 *
+	 * @param array[] $rows tank_id, building_id, note.
+	 * @return string[]
+	 */
+	public static function log_keys( array $rows ) {
+		$out = array();
+		foreach ( $rows as $row ) {
+			$marker = Import::marker_of( (string) ( $row['note'] ?? '' ) );
+			if ( '' === $marker ) {
+				continue;
+			}
+			$out[] = 'b' . (int) ( $row['building_id'] ?? 0 ) . '|t' . (int) ( $row['tank_id'] ?? 0 ) . '|' . $marker;
+		}
+		return array_values( array_unique( $out ) );
+	}
+
+	/**
 	 * The last dose per medication per building, from the dose logs
 	 * (building-level ones and those on a tank of the building alike):
 	 * building id => medication key => { label, note, logged_at }.
