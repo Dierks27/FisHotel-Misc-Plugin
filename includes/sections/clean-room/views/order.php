@@ -46,10 +46,7 @@ foreach ( $order['lines'] as $fh_l ) {
  * @param array      $line Resolved line (empty for the template).
  * @param array      $fig  Its figures (empty for the template).
  */
-$fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks, $today ) {
-	$n      = static function ( $key ) use ( $line ) {
-		return 'lines[' . $key . ']';
-	};
+$fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks ) {
 	$name   = static function ( $field ) use ( $i ) {
 		return 'lines[' . $i . '][' . $field . ']';
 	};
@@ -63,7 +60,6 @@ $fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks,
 	$money  = static function ( $field, $decimals ) use ( $line ) {
 		return isset( $line[ $field ] ) && null !== $line[ $field ] ? number_format( (float) $line[ $field ], $decimals, '.', '' ) : '';
 	};
-	unset( $n );
 	?>
 	<tr class="fh-cr-line<?php echo $linked ? ' is-linked' : ''; ?>" data-line="<?php echo esc_attr( $value( 'id', 0 ) ); ?>">
 		<td class="fh-cr-num fh-cr-line__n"><span class="fh-cr-line__num"><?php echo esc_html( is_int( $i ) ? (string) ( $i + 1 ) : '' ); ?></span><input type="hidden" name="<?php echo esc_attr( $name( 'id' ) ); ?>" value="<?php echo esc_attr( $value( 'id', 0 ) ); ?>"><input type="hidden" name="<?php echo esc_attr( $name( 'species_id' ) ); ?>" value="<?php echo esc_attr( $value( 'species_id' ) ); ?>"></td>

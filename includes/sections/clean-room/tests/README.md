@@ -20,8 +20,19 @@ php  includes/sections/clean-room/tests/parser-test.php
 php  includes/sections/clean-room/tests/qr-test.php
 php  includes/sections/clean-room/tests/csv-test.php
 php  includes/sections/clean-room/tests/front-desk-test.php
+php  includes/sections/clean-room/tests/costing-test.php
+php  includes/sections/clean-room/tests/stats-test.php
+php  includes/sections/clean-room/tests/species-test.php
+php  includes/sections/clean-room/tests/orders-test.php
+php  includes/sections/clean-room/tests/xlsx-test.php
+php  includes/sections/clean-room/tests/workbook-admin-test.php
 node includes/sections/clean-room/tests/front-desk.test.js
+node includes/sections/clean-room/tests/clean-room-admin.test.js
 ```
+
+Every species, price, supplier and figure in these tests is invented
+("Blue Test Wrasse", "Test Supplier One", "Testland"); nothing comes
+from the workbook but the formulas.
 
 - **layout-test.php** — the seed (six buildings, 22 tanks, 100–400
   Clean Room, 500/600 Spa, 400 coming soon and empty), every seeded
@@ -115,13 +126,73 @@ node includes/sections/clean-room/tests/front-desk.test.js
   cookie life (a year for a crew member bound for the Front Desk, untouched
   otherwise); `facts_or_null()` and the facts filter answering null
   through a dead `$wpdb`.
+- **costing-test.php** — the order sheet's maths: a box-mode example
+  worked by hand in the comments (fractions, fees per box, the tariff
+  factor, landed totals, per fish, the suggested price to the nearest
+  5, profit / margin / worth-it, revenue, the rates, the sheet's DOA
+  cost against the per-fish one), a line that is worth it, a bag-mode
+  example, every zero / blank guard (no lines, nothing received, no
+  units, everything DOA, survivors not typed → survival undefined,
+  junk inputs), `round_to()` (MROUND halves away from zero), the money
+  reader and the display helpers.
+- **stats-test.php** — the year of an order; per-order rows over four
+  invented orders (a bag-mode one dated by its order date, one that
+  received nothing, one whose survivors are unknown); the weighted Σ/Σ
+  totals (survival over the known orders only); the sheet-style
+  averages (the empty batch out, the unknown batch out of the survival
+  average, total fish through QT); by supplier / origin (merged
+  case-insensitively) / species group ("(no group)" last); one year at
+  a time.
+- **species-test.php** — a form row normalised (whitespace, per box,
+  money, dates, reef-safe, product); the candidate merge (a species row
+  folding into a same-named or linked product, a duplicate dropped, a
+  species of its own, one linked outside the fish list); on the fake
+  store: save with the unique name, prefix search on name / scientific
+  name / any word, the group filter and paging, by name / by product;
+  the search-box suggestions (products first, species rows folded in or
+  appended, the Front Desk item shape intact); the parser finding a
+  species that is not a product and a product by its row's scientific
+  name; the product link, the open-stays counts, delete-or-refuse.
+- **orders-test.php** — on the fake store: the header and lines from a
+  form (typed, defaulted, empty species dropped); create with the next
+  "YYYY-N" ref, a duplicate ref refused; save lines (upsert by id,
+  delete of the rest, a foreign id inserted anew); the check-in (one
+  stay per line with fish, the arrival into the first empty Spa tank of
+  the building, the DOA loss noted `doa`, every seam field, the landed
+  cost per fish to the cent, the order turned received); a second
+  check-in creating nothing; the live figures from the stay's events
+  (losses of every reason, shipped, DOA with its undo) read back into
+  the line and the costing; a linked line keeping its figures and
+  surviving a re-save that leaves it out; the tank fallback (own tank,
+  a Clean Room tank ignored, the building's empty tanks, any empty
+  tank, the first tank of the building, ten lines across the Spa), a
+  received date in the past (noon that day) or the future (clamped);
+  lists, years, refs, pick lists, deleting a draft.
+- **xlsx-test.php** — column letters, legal unique sheet names (31
+  characters, forbidden characters, duplicates); every cell kind (null,
+  int, float, bool, text as an inline string, a numeric string kept as
+  text, escaping, control characters stripped, padding preserved, a
+  DateTime, NaN); a workbook built, written, opened with ZipArchive and
+  parsed with SimpleXML: the parts, the sheet names, every cell read
+  back, "=SUM(A1)" still a string, no formula element anywhere.
+- **workbook-admin-test.php** — the box rates (sanitised, deduped,
+  matched, the import-fees suggestion), the order editor's Save path on
+  the fake store (the next ref, a duplicate refused, a Clean Room
+  building dropped, the figures as the display strings of the worked
+  example, the landed-total cache), the check-in read back through the
+  figures, the export sheets (orders + lines, species, stats, stays)
+  with typed cells, the CSV guard, the URLs and the one-time notice.
 - **fake-store.php** — not a test (exits 0 when run directly): the
-  in-memory store the above drives.
+  in-memory store the above drives (tanks and buildings from the seed,
+  stays, events, logs, aliases, species rows, orders and lines).
 - **front-desk.test.js** — `englishValue()`, `tankValue()`,
   `normalizeNumberWords()` (known tanks, the rule without a list, "four
   six line wrasse" left alone, "a couple" / "two point four" left for the
   server), `previewSentence()` for every intent including the Spa-tank
   ask and the "Which fish?" prefix, `fmt()`, `escapeHtml()`.
+- **clean-room-admin.test.js** — `renumber()` with a prefix and a
+  template row's `__i__`, `suggestImportFees()` (the exact pair, the
+  origin-less fallback, nulls, cents).
 
 ## By hand, once, on a real site
 
@@ -170,3 +241,29 @@ node includes/sections/clean-room/tests/front-desk.test.js
 9. On that product's edit screen, the *Clean room* box lists the stays;
    `fishotel_cleanroom_product_facts( $id )` (e.g. from a mu-plugin)
    returns the same numbers — and `null` for a product with no stay.
+10. Species tab → Add species: a name, a scientific name, per box 8, a
+    price; it lists with 0 open stays. Type the first letters in the
+    search box: it is found by name and by scientific name. *Link
+    product* → type a product title → pick it: the row shows the product
+    link. Front Desk → Arrival → type the species' name: it is offered
+    once (not twice when its name is a product's title).
+11. Arrivals → New order: supplier, origin, box mode, tariffs / flight /
+    import fees; two lines picked from the suggestions (the worth
+    prefilled from the species' price), ordered / received / price;
+    Save: the ref reads `2026-1`, the computed columns and the stats
+    block fill in without a reload, and the numbers match the workbook
+    for the same inputs (the box fraction, fees per box, landed, per
+    fish, suggested price to the nearest 5, margin, worth?, fill /
+    survival / DOA rates, the two DOA costs). Settings → Box rates →
+    add a row for that supplier / origin; back on the order, Boxes 2 →
+    *Suggest* fills the import fees with 2 × (per box + re-ox).
+12. *Check in received fish* → confirm: the alert names the stays and
+    tanks; the lines now show "stay #N", live / survived / sold, and the
+    Board shows the groups in the Spa with supplier / ref / landed cost
+    on the Stays tab. Click it again: "Nothing to check in". Record a
+    loss on one of them from the phone: the line's survived drops.
+13. Stats: the year's orders, the weighted card and the "as the
+    spreadsheet averaged them" card (the latter the unweighted average
+    of the batch rates), by supplier / origin / species group. Export
+    XLSX on Arrivals, Species, Stats and Stays: Excel opens each
+    without a repair prompt, a species named "=1+1" shows as text.

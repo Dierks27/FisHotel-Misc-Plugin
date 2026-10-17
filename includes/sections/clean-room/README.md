@@ -6,12 +6,15 @@ as a seeded, editable layout; one **stay** per group of one species with
 an event history that is replayed, never edited; a one-thumb phone screen
 (the **Front Desk**) opened by a QR label on every tank, driven by big
 buttons or one spoken sentence; a dark **Room Board** under FisHotel
-Tools; a treatment protocol that turns into each tank's daily to-do; and
-the facts the fish page will read.
+Tools; a treatment protocol that turns into each tank's daily to-do; the
+**supplier orders** with the workbook's landed-cost maths and a check-in
+that turns an order's lines into stays; a **species master**; the yearly
+**stats**; Excel exports; and the facts the fish page will read.
 
 Nothing here needs WooCommerce: a stay may or may not be linked to a
-product, and the species search reads the `quarantined-fish` / `inverts`
-products straight from the tables.
+product, a species may or may not be, and the species search reads the
+`quarantined-fish` / `inverts` products straight from the tables next to
+the species list.
 
 ## How Jeff runs the room (the rules the code follows)
 
@@ -163,6 +166,8 @@ letters); an ambiguous or weak match asks "Which fish?" with the top three.
 
 ## The Room Board (FisHotel Tools → Clean Room)
 
+Tabs: **Board · Stays · Arrivals · Species · Stats · Events · Settings**.
+
 **Board** — Area → Building → Level grid of tank cards (occupants with
 species · live · day N · badge; empty tanks dimmed; coming-soon buildings
 greyed), a header per building with *shared water* and the count in QT,
@@ -173,11 +178,123 @@ stay (species, live / arrived, check-in, day, state, cleared, sale-ready,
 tank, supplier / order ref) with Lost / Shipped / Count / Cleared… /
 Sale-ready… / Move… / Coming Soon / Edit (species, product, check-in
 date, supplier, order ref, landed cost, a note), closed stays with a
-toggle, a CSV export with the formula-cell guard. **Events** — the latest
-200 stay events and 100 tank-log entries in plain words, with a per-row
-**Undo** (a compensating event, no actor or age guard, refused a second
-time). **Settings** (`manage_options`) — the numbers, the protocol
-editor, the layout editor, the learned aliases, *Print tank labels*.
+toggle, a CSV and an XLSX export with the formula-cell guard.
+**Arrivals**, **Species** and **Stats** — the workbook replacement, below.
+**Events** — the latest 200 stay events and 100 tank-log entries in plain
+words, with a per-row **Undo** (a compensating event, no actor or age
+guard, refused a second time). **Settings** (`manage_options`) — the
+numbers, the protocol editor, the layout editor, the box rates, the
+learned aliases, *Print tank labels*.
+
+## Supplier orders (Arrivals)
+
+What the workbook's "Recieved (N)" sheet held: one **order** per
+delivery (ref `YYYY-N`, supplier, origin, order and received dates,
+status draft → ordered → received → closed, the Spa building it lands in,
+the cost mode and the money: tariffs, domestic flight, import & re-ox
+fees, credit, the markup for the suggested price and the "worth it"
+margin threshold) with its **lines** (species — picked from the species
+list and the products, or typed —, ordered, received, per box or bags,
+the supplier's price, what it is worth at FisHotel's price, DOA,
+survived, the Spa tank). The costing replicates the sheet exactly
+(`class-costing.php`, pure):
+
+- **box mode** — fraction = received ÷ per box (the line's, else the
+  species list's, else 24; 0 when nothing was received); fees per box =
+  (flight + import) ÷ Σ fraction; landed = received × price × (1 +
+  tariffs ÷ Σ(received × price)) + fraction × fees per box — tariffs by
+  goods value, the flight and import fees by box space;
+- **bag mode** — units = bags when typed, else received; per bag =
+  (flight + import + tariffs) ÷ Σ units; landed = units × price + units ×
+  per bag;
+- per line: landed per fish = landed ÷ received; suggested price = per
+  fish × markup (4) to the nearest 5; profit = received × worth − landed;
+  margin = profit ÷ landed; worth it when the margin is above the
+  threshold (2.75); revenue = worth × survived; DOA cost = DOA × price;
+- per order: total = Σ landed; grand total = total − credit; revenue; up /
+  down = revenue − grand total; fill = Σ received ÷ Σ ordered; survival =
+  Σ survived ÷ (Σ received − Σ DOA), undefined until a survivor count is
+  known; DOA rate = Σ DOA ÷ Σ received; the sheet's DOA cost = Σ DOA ×
+  price + Σ DOA × fee rate — in box mode the fee rate is a *whole box's*
+  fees, a carry-over from the bag version, so it is labelled and the
+  per-fish figure (fees per box ÷ per box) stands beside it;
+- every division is guarded (an undefined ratio shows "—"); full float
+  precision inside, rounding only on display and when a figure is
+  stored.
+
+**Check in received fish** creates the stays — one per line that received
+fish and has no stay yet — through the same `Store::create_stay()` +
+`record_event()` path the Front Desk uses: an `arrival` of the received
+count on the order's received date (today when empty; never in the
+future) into the line's tank, else the first empty active Spa tank of
+the order's building, else any empty Spa tank, else the first Spa tank
+of the building, else the first Spa tank; `source = order`, the line id,
+the supplier, the ref and the landed cost per fish filled; then a `loss`
+of the DOA count noted `doa`. A line with a stay is skipped, so a second
+click creates nothing; the order becomes *received*. From then on the
+line's figures are **live**: survived = arrived − every loss (any
+reason), sold = the shipped events, DOA = the losses noted `doa` (undos
+honoured) — shown read-only on the line, which also cannot be removed
+and keeps its figures on re-save. Lines without stays (imported history,
+or fish not checked in) keep the typed survived / DOA numbers.
+
+The **Suggest** button next to the import & re-ox fees fills boxes ×
+(per box + re-ox) from Settings → *Box rates* for the order's supplier
+and origin (a row with no origin stands for every origin of that
+supplier) — on request, never on its own. The box rates and the pick
+lists start empty; nothing is seeded in code.
+
+## Species
+
+The workbook's Fishlist as a table: name (unique), scientific name,
+group, fish per box (24 by default), FisHotel's price, a competitor's
+price / site / date, reef-safe, max size, notes, and an optional product
+link. A species may or may not be a product — most are never listed.
+The Arrival screen's search, the voice parser's candidates and the order
+editor read the products and the species rows **as one list, deduped by
+lower-cased name**: a species row linked to a listed product, or named
+like one, folds into that product (its scientific name fills a missing
+one, a different common name joins the product's common names, its per
+box and price ride along); any other row is an entry of its own, with its
+product link (which may point outside the fish categories) or none. The
+candidate cache is dropped by every product, species and alias save. The
+Species tab: search by a prefix of the name or the scientific name (any
+word), group filter, 50 per page, inline edit, add, *Link product* (a
+product search over the fish categories), delete — refused while an
+order line names the species —, the open-stays count (by product when
+linked, else by name).
+
+## Stats
+
+Per year (the order's received date, else its order date): the per-order
+rows, then the same figures two ways, both shown and both exported:
+
+- **weighted** — Σ ÷ Σ over every order: fill = Σ received ÷ Σ ordered,
+  survival = Σ survived ÷ (Σ received − Σ DOA) over the orders whose
+  survivors are known, DOA = Σ DOA ÷ Σ received, landed, revenue, up /
+  down;
+- **as the spreadsheet averaged them** — the UNWEIGHTED average of each
+  batch's fill / survival / DOA rate over the batches that received
+  anything (each rate over the batches where it is defined: a batch
+  whose survivors are not typed yet is not in the survival average, as it
+  was "not in the formulas yet"), and *total fish through QT* = Σ
+  survived;
+
+and the weighted figures by supplier, by origin and by species group
+(the species row's group; "(no group)" otherwise).
+
+## Exports
+
+XLSX everywhere, CSV where it is one table: orders + lines (two sheets;
+the CSV is the lines), species, stats (Orders, Totals — weighted beside
+sheet-style —, By supplier, By origin, By group; the CSV is the orders),
+stays (beside the existing CSV). All are admin-post downloads with a
+nonce and `manage_woocommerce`, named `fishotel-<thing>-<Ymd-His>.xlsx`.
+The writer (`class-xlsx.php`) needs nothing but the zip extension: text
+is written as inline strings — never a formula, whatever it starts with
+—, numbers as numbers, nulls as empty cells; sheet names are cut to 31
+characters with the forbidden characters replaced. Without the zip
+extension the same request sends a CSV and says so on the next page.
 
 **Print tank labels** opens an admin-only printable page: one 3.5 × 2 in
 label per active tank with the number large, area / building / size
@@ -217,29 +334,36 @@ when the product exists; a stay never assumes one does. Photos are stock
 photos; nothing here touches them. The lottery for contested fish is the
 Lottery Draw section.
 
-## Where the supplier-order import will attach
+## How an order becomes stays
 
-Every stay already carries `supplier`, `order_ref`, `landed_cost` and
+Every stay carries `supplier`, `order_ref`, `landed_cost` and
 `order_line_id` (all nullable; editable on the Stays tab) and a `source`
-of `import` / `order`. The import, once the workbook arrives, will create
+of `order` / `import`. The check-in fills them (see *Supplier orders*):
 one stay per order line through `Store::create_stay()` + an `arrival`
-event (`Store::record_event()`), exactly as the Front Desk does, with
-those four fields filled — the Replay, the facts and the board need
-nothing new.
+event (`Store::record_event()`), exactly as the Front Desk does — the
+Replay, the facts and the board need nothing new, and a workbook import
+will create orders and species through the same Store methods.
 
 ## Data
 
-Six tables, created by dbDelta on first boot (gated by the autoloaded
-`fishotel_cleanroom_db_version` option, so a booted site pays no query
-and no `SHOW TABLES`) and on activation, the layout seeded in the same
-step; everything kept on deactivation.
+Nine tables, created by dbDelta on first boot (gated by the autoloaded
+`fishotel_cleanroom_db_version` option, 1.2, so a booted site pays no
+query and no `SHOW TABLES`) and on activation, the layout seeded in the
+same step; everything kept on deactivation.
 
-- `{prefix}fh_buildings` — id, area, number (unique), name, status, sort, notes
+- `{prefix}fh_buildings` — id, area, number (unique), name, status, sort, notes, schedule, system_gallons (the last two reserved: not read yet)
 - `{prefix}fh_tanks` — id, building_id, number (unique), level, position, size_label, gallons, status, sort
 - `{prefix}fh_stays` — the cached state: product_id, species, qty_arrived, qty_live, checkin_date, cleared_date, sale_ready_date (the override), closed_date, status, tank_id, source, order_line_id, supplier, order_ref, landed_cost, notes
 - `{prefix}fh_stay_events` — the truth: stay_id, type (arrival · move · loss · clear · sold · count · note), qty, from/to tank, note, event_at (UTC), actor, source
-- `{prefix}fh_tank_logs` — per tank: copper readings, dose / test / water-change / feed tick-offs, tank notes
+- `{prefix}fh_tank_logs` — per tank: copper readings, dose / test / water-change / feed tick-offs, tank notes (+ building_id, reserved: not read yet)
 - `{prefix}fh_aliases` — spoken words → product / species
+- `{prefix}fh_species` — the species master: name (unique), sci_name, group_name, per_box, my_price, online_price, online_site, online_date, reef_safe, max_size, product_id, notes
+- `{prefix}fh_orders` — a supplier order: ref (unique), supplier, origin, order_date, received_date, status, boxes, cost_mode, tariffs, domestic_flight, import_fees, credit, markup, worth_threshold, schedule, building_id, notes
+- `{prefix}fh_order_lines` — its lines: order_id, species_id, species, sci_name, qty_ordered, qty_received, per_box, bags, unit_price, worth, qty_doa, qty_survived, landed_total (a cache of the costing), stay_id, tank_id, sort, notes
+
+Three options: `fishotel_cleanroom_settings`, `fishotel_cleanroom_protocol`
+and `fishotel_cleanroom_box_rates` (rows of supplier, origin, per box,
+re-ox; empty until typed).
 
 `Store::record_event()` appends the event and replays the stay
 (`Replay::state()`); the row is only a cache, and the reply says when the
@@ -259,19 +383,28 @@ stored.
 clean-room/
 ├── class-clean-room.php    section info, load, boot, menu, activate / deactivate, the global
 │                           fishotel_cleanroom_product_facts() + the fishotel_product_qt_facts filter
-├── class-store.php         the ONLY $wpdb file: six tables, seed, stays / events / logs, record_event
-│                           (append + replay), splits, species search + candidates, aliases, facts
+├── class-store.php         the ONLY $wpdb file: nine tables, seed, stays / events / logs, record_event
+│                           (append + replay), splits, species search + candidates, aliases, facts,
+│                           the species master, the orders and their lines, stay figures
 ├── class-layout.php        PURE: numbering rule, seed, shares-water, titles / labels, grouping
 ├── class-replay.php        PURE: events → state, day math, sale-ready, splits, compensating events
 ├── class-protocol.php      PURE: the treatment template → a tank's daily to-do
 ├── class-parser.php        PURE: a spoken / typed phrase → structured preview
 ├── class-qr.php            PURE: byte-mode QR encoder (EC M, v1–6) → inline SVG
-├── class-settings.php      options, sanitised AJAX saves (settings, protocol), layout editor, aliases
+├── class-costing.php       PURE: the order sheet's landed-cost maths (box / bag), display helpers
+├── class-stats.php         PURE: per-order rows, weighted and sheet-style figures, groupings
+├── class-species.php       PURE: a species row normalised, the merge into the candidate list
+├── class-orders.php        header / lines from a form, live figures of a line, the check-in
+│                           (takes the store as a parameter, like Front_Desk::perform())
+├── class-xlsx.php          a dependency-free .xlsx writer (inline strings, never a formula)
+├── class-settings.php      options, sanitised AJAX saves (settings, protocol, box rates), layout editor, aliases
 ├── class-front-desk.php    the phone page (query var fh_front_desk), the label-login cookie life,
 │                           its AJAX (act / parse / suggest) with perform() = the testable switch
 ├── class-admin.php         the Room Board page, CSV, labels, stay edits + move + undo, Coming Soon release, meta box
+├── class-admin-workbook.php  the Arrivals / Species / Stats tabs, their AJAX, the XLSX / CSV exports
 ├── css/front-desk.css, js/front-desk.js      the phone screen (inlined into the page)
 ├── css/clean-room-admin.css, js/clean-room-admin.js
-├── views/front-desk.php, board.php, stays.php, events.php, settings.php, tabs.php, labels.php, meta-box.php
+├── views/front-desk.php, board.php, stays.php, arrivals.php, order.php, species.php, stats.php,
+│          events.php, settings.php, tabs.php, labels.php, meta-box.php
 └── tests/                  headless PHP + node tests (see tests/README.md)
 ```
