@@ -52,6 +52,10 @@
  *   - class-orders.php      the order from a form, the live figures of a
  *                           checked-in line, the check-in that creates stays.
  *   - class-xlsx.php        a dependency-free .xlsx writer.
+ *   - class-workbook.php    PURE: a dependency-free .xlsx / .xlsm reader
+ *                           (cached values only; the PW sheet is never opened).
+ *   - class-import-map.php  PURE: the FisHotel-YEAR workbook layout → species,
+ *                           orders, box rates, stock (columns found by header text).
  *   - class-admin-workbook.php  the Arrivals / Species / Stats tabs, their
  *                           AJAX and the XLSX / CSV exports.
  *
@@ -158,6 +162,8 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 			require_once self::path() . 'class-species.php';
 			require_once self::path() . 'class-orders.php';
 			require_once self::path() . 'class-xlsx.php';
+			require_once self::path() . 'class-workbook.php';
+			require_once self::path() . 'class-import-map.php';
 			require_once self::path() . 'class-store.php';
 			require_once self::path() . 'class-settings.php';
 			require_once self::path() . 'class-front-desk.php';
