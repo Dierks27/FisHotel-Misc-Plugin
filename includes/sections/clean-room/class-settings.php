@@ -12,8 +12,11 @@
  *                                 tank screen warns against (2.25 / 2.5),
  *                                 the voice preview's auto-confirm seconds
  *                                 and whether the Mic button is offered;
- *   fishotel_cleanroom_protocol   the treatment template (Protocol), seeded
- *                                 with the rough version on first read;
+ *   fishotel_cleanroom_protocol   the treatment schedules (Protocol): the
+ *                                 default template's name and the named
+ *                                 templates, seeded with the workbook's five
+ *                                 on first read; an older bare steps array
+ *                                 is read as the "14 Day CM" template;
  *   fishotel_cleanroom_box_rates  the per-box shipping and re-ox fee by
  *                                 supplier and origin (the order editor's
  *                                 "suggest import fees" button reads it);
@@ -405,25 +408,189 @@ class Settings {
 	/* ============================================================== */
 
 	/**
-	 * The treatment template: the stored steps, or the seed when nothing
-	 * was ever saved.
+	 * The treatment schedules: { default, templates } — the stored option
+	 * in its current shape (an old bare steps array becomes the "14 Day CM"
+	 * template), or the five seeds when nothing was ever saved.
+	 *
+	 * @return array{default: string, templates: array<string, array[]>}
+	 */
+	public static function protocols() {
+		return Protocol::normalize_option( get_option( Protocol::OPTION_KEY, null ) );
+	}
+
+	/**
+	 * The default template's steps (what a building without a schedule of
+	 * its own runs).
 	 *
 	 * @return array[]
 	 */
 	public static function protocol() {
-		$stored = get_option( Protocol::OPTION_KEY, null );
-
-		if ( ! is_array( $stored ) ) {
-			return Protocol::seed();
-		}
-
-		return Protocol::normalize( $stored );
+		$protocols = self::protocols();
+		return isset( $protocols['templates'][ $protocols['default'] ] ) ? $protocols['templates'][ $protocols['default'] ] : array();
 	}
 
 	/**
-	 * AJAX handler — save the protocol template. The form posts
-	 * steps[n][label|kind|day|every|until|where|note]; an empty list is
-	 * allowed (no to-do at all) and "reset" restores the seed.
+	 * The steps a building runs: its schedule template when set and
+	 * existing, else the default.
+	 *
+	 * @param array $building Building row.
+	 * @return array[]
+	 */
+	public static function steps_for( array $building ) {
+		return Protocol::steps_for( $building, self::protocols() );
+	}
+
+	/**
+	 * Store the schedules (normalised first).
+	 *
+	 * @param array $protocols { default, templates }.
+	 * @return array The stored shape.
+	 */
+	public static function save_protocols( array $protocols ) {
+		$protocols = Protocol::normalize_option( $protocols );
+		update_option( Protocol::OPTION_KEY, $protocols, false );
+		return $protocols;
+	}
+
+	/**
+	 * One Settings → Protocol operation on the schedules (pure): save the
+	 * steps of a template, add one (a seeded name gets its seed back, any
+	 * other the daily feeding alone), rename, delete (never the last one;
+	 * the default moves to the first remaining), make default, or reset a
+	 * template to its seed.
+	 *
+	 * @param array  $protocols { default, templates }.
+	 * @param string $op        save|add|rename|delete|make_default|reset.
+	 * @param array  $raw       template (name), name (add / rename), steps[] (save).
+	 * @return array{protocols: array, template: string, message: string, renamed?: array{0: string, 1: string}}|array{error: string}
+	 */
+	public static function apply_protocol_op( array $protocols, $op, array $raw ) {
+		$protocols = Protocol::normalize_option( $protocols );
+		$templates = $protocols['templates'];
+		$template  = Protocol::template_name( isset( $raw['template'] ) ? $raw['template'] : '' );
+		if ( '' === $template ) {
+			$template = $protocols['default'];
+		}
+		$known = isset( $templates[ $template ] );
+		$name  = Protocol::template_name( isset( $raw['name'] ) ? $raw['name'] : '' );
+
+		switch ( (string) $op ) {
+			case 'save':
+				if ( ! $known ) {
+					return array( 'error' => __( 'That template no longer exists — reload the page.', 'fishotel-misc-plugin' ) );
+				}
+				$templates[ $template ] = Protocol::normalize( isset( $raw['steps'] ) && is_array( $raw['steps'] ) ? $raw['steps'] : array() );
+				/* translators: 1: template name, 2: number of steps */
+				$message = sprintf( __( '"%1$s" saved: %2$d steps.', 'fishotel-misc-plugin' ), $template, count( $templates[ $template ] ) );
+				break;
+
+			case 'add':
+				if ( '' === $name ) {
+					return array( 'error' => __( 'Name the new template.', 'fishotel-misc-plugin' ) );
+				}
+				if ( isset( $templates[ $name ] ) ) {
+					/* translators: %s: template name */
+					return array( 'error' => sprintf( __( 'A template named "%s" already exists.', 'fishotel-misc-plugin' ), $name ) );
+				}
+				if ( count( $templates ) >= Protocol::MAX_TEMPLATES ) {
+					/* translators: %d: the cap */
+					return array( 'error' => sprintf( __( 'At most %d templates.', 'fishotel-misc-plugin' ), Protocol::MAX_TEMPLATES ) );
+				}
+				$seed               = Protocol::seed_template( $name );
+				$templates[ $name ] = null !== $seed ? $seed : array( Protocol::feed_step() );
+				$template           = $name;
+				/* translators: %s: template name */
+				$message = sprintf( __( '"%s" added.', 'fishotel-misc-plugin' ), $name );
+				break;
+
+			case 'rename':
+				if ( ! $known ) {
+					return array( 'error' => __( 'That template no longer exists — reload the page.', 'fishotel-misc-plugin' ) );
+				}
+				if ( '' === $name ) {
+					return array( 'error' => __( 'Name the template.', 'fishotel-misc-plugin' ) );
+				}
+				if ( $name !== $template && isset( $templates[ $name ] ) ) {
+					/* translators: %s: template name */
+					return array( 'error' => sprintf( __( 'A template named "%s" already exists.', 'fishotel-misc-plugin' ), $name ) );
+				}
+				$renamed = array();
+				foreach ( $templates as $key => $steps ) {
+					$renamed[ $key === $template ? $name : $key ] = $steps;
+				}
+				$templates = $renamed;
+				if ( $protocols['default'] === $template ) {
+					$protocols['default'] = $name;
+				}
+				$old      = $template;
+				$template = $name;
+				/* translators: 1: old name, 2: new name */
+				$message = sprintf( __( '"%1$s" renamed to "%2$s".', 'fishotel-misc-plugin' ), $old, $name );
+				return array(
+					'protocols' => Protocol::normalize_option( array_merge( $protocols, array( 'templates' => $templates ) ) ),
+					'template'  => $template,
+					'message'   => $message,
+					'renamed'   => array( $old, $name ),
+				);
+
+			case 'delete':
+				if ( ! $known ) {
+					return array( 'error' => __( 'That template no longer exists — reload the page.', 'fishotel-misc-plugin' ) );
+				}
+				if ( count( $templates ) <= 1 ) {
+					return array( 'error' => __( 'The last template stays — add another one first.', 'fishotel-misc-plugin' ) );
+				}
+				unset( $templates[ $template ] );
+				if ( $protocols['default'] === $template ) {
+					$protocols['default'] = (string) array_key_first( $templates );
+				}
+				$old      = $template;
+				$template = $protocols['default'];
+				/* translators: 1: deleted name, 2: the default now */
+				$message = sprintf( __( '"%1$s" deleted; buildings that ran it now run the default ("%2$s").', 'fishotel-misc-plugin' ), $old, $protocols['default'] );
+				return array(
+					'protocols' => Protocol::normalize_option( array_merge( $protocols, array( 'templates' => $templates ) ) ),
+					'template'  => $template,
+					'message'   => $message,
+					'renamed'   => array( $old, '' ),
+				);
+
+			case 'make_default':
+				if ( ! $known ) {
+					return array( 'error' => __( 'That template no longer exists — reload the page.', 'fishotel-misc-plugin' ) );
+				}
+				$protocols['default'] = $template;
+				/* translators: %s: template name */
+				$message = sprintf( __( '"%s" is the default now.', 'fishotel-misc-plugin' ), $template );
+				break;
+
+			case 'reset':
+				if ( ! $known ) {
+					return array( 'error' => __( 'That template no longer exists — reload the page.', 'fishotel-misc-plugin' ) );
+				}
+				$seed                   = Protocol::seed_template( $template );
+				$templates[ $template ] = null !== $seed ? $seed : array( Protocol::feed_step() );
+				/* translators: %s: template name */
+				$message = null !== $seed ? sprintf( __( '"%s" reset to the workbook\'s schedule.', 'fishotel-misc-plugin' ), $template ) : sprintf( __( '"%s" reset to the daily feeding.', 'fishotel-misc-plugin' ), $template );
+				break;
+
+			default:
+				return array( 'error' => __( 'Unknown protocol action.', 'fishotel-misc-plugin' ) );
+		}
+
+		return array(
+			'protocols' => Protocol::normalize_option( array_merge( $protocols, array( 'templates' => $templates ) ) ),
+			'template'  => $template,
+			'message'   => $message,
+		);
+	}
+
+	/**
+	 * AJAX handler — one operation on the schedules (apply_protocol_op()):
+	 * `op` save (steps[n][label|kind|day|every|until|where|note] for
+	 * `template`; an empty list is allowed), add / rename (`name`), delete,
+	 * make_default, reset. A rename or delete follows through to the
+	 * buildings that named the template.
 	 */
 	public function save_protocol() {
 		if ( ! current_user_can( Clean_Room::SETTINGS_CAPABILITY ) ) {
@@ -433,26 +600,26 @@ class Settings {
 		check_ajax_referer( self::NONCE_ACTION, '_wpnonce' );
 
 		$raw = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above.
+		$op  = isset( $raw['op'] ) ? sanitize_key( $raw['op'] ) : ( ! empty( $raw['reset'] ) ? 'reset' : 'save' );
 
-		if ( ! empty( $raw['reset'] ) ) {
-			delete_option( Protocol::OPTION_KEY );
-			wp_send_json_success(
-				array(
-					'message' => __( 'Protocol reset to the rough seed.', 'fishotel-misc-plugin' ),
-					'steps'   => Protocol::seed(),
-				)
-			);
+		$result = self::apply_protocol_op( self::protocols(), $op, $raw );
+		if ( ! empty( $result['error'] ) ) {
+			wp_send_json_error( array( 'message' => (string) $result['error'] ), 400 );
 		}
 
-		$steps = Protocol::normalize( isset( $raw['steps'] ) && is_array( $raw['steps'] ) ? $raw['steps'] : array() );
-
-		update_option( Protocol::OPTION_KEY, $steps, false );
+		$protocols = self::save_protocols( $result['protocols'] );
+		if ( ! empty( $result['renamed'] ) ) {
+			$store = new Store();
+			$store->rename_schedule( (string) $result['renamed'][0], (string) $result['renamed'][1] );
+		}
 
 		wp_send_json_success(
 			array(
-				/* translators: %d: number of steps */
-				'message' => sprintf( __( 'Protocol saved: %d steps.', 'fishotel-misc-plugin' ), count( $steps ) ),
-				'steps'   => $steps,
+				'message'   => (string) $result['message'],
+				'template'  => (string) $result['template'],
+				'default'   => (string) $protocols['default'],
+				'templates' => array_keys( $protocols['templates'] ),
+				'steps'     => isset( $protocols['templates'][ $result['template'] ] ) ? $protocols['templates'][ $result['template'] ] : array(),
 			)
 		);
 	}
@@ -520,14 +687,21 @@ class Settings {
 			return array( 'errors' => array( __( 'That building no longer exists.', 'fishotel-misc-plugin' ) ) );
 		}
 
+		$gallons = $current ? $current['system_gallons'] : null;
+		if ( array_key_exists( 'system_gallons', $raw ) && is_scalar( $raw['system_gallons'] ) ) {
+			$gallons = '' === trim( (string) $raw['system_gallons'] ) ? null : absint( $raw['system_gallons'] );
+		}
+
 		$building = array(
-			'id'     => $id,
-			'area'   => isset( $raw['area'] ) ? sanitize_key( $raw['area'] ) : ( $current ? $current['area'] : 'clean' ),
-			'number' => isset( $raw['number'] ) ? absint( $raw['number'] ) : ( $current ? (int) $current['number'] : 0 ),
-			'name'   => isset( $raw['name'] ) ? substr( sanitize_text_field( $raw['name'] ), 0, 60 ) : ( $current ? $current['name'] : '' ),
-			'status' => isset( $raw['status'] ) ? sanitize_key( $raw['status'] ) : ( $current ? $current['status'] : 'active' ),
-			'sort'   => isset( $raw['sort'] ) ? (int) $raw['sort'] : ( $current ? (int) $current['sort'] : 0 ),
-			'notes'  => isset( $raw['notes'] ) ? sanitize_textarea_field( $raw['notes'] ) : ( $current ? (string) $current['notes'] : '' ),
+			'id'             => $id,
+			'area'           => isset( $raw['area'] ) ? sanitize_key( $raw['area'] ) : ( $current ? $current['area'] : 'clean' ),
+			'number'         => isset( $raw['number'] ) ? absint( $raw['number'] ) : ( $current ? (int) $current['number'] : 0 ),
+			'name'           => isset( $raw['name'] ) ? substr( sanitize_text_field( $raw['name'] ), 0, 60 ) : ( $current ? $current['name'] : '' ),
+			'status'         => isset( $raw['status'] ) ? sanitize_key( $raw['status'] ) : ( $current ? $current['status'] : 'active' ),
+			'sort'           => isset( $raw['sort'] ) ? (int) $raw['sort'] : ( $current ? (int) $current['sort'] : 0 ),
+			'notes'          => isset( $raw['notes'] ) ? sanitize_textarea_field( $raw['notes'] ) : ( $current ? (string) $current['notes'] : '' ),
+			'schedule'       => isset( $raw['schedule'] ) ? Protocol::template_name( sanitize_text_field( $raw['schedule'] ) ) : ( $current ? (string) $current['schedule'] : '' ),
+			'system_gallons' => $gallons,
 		);
 
 		$taken = array();
@@ -538,6 +712,9 @@ class Settings {
 		}
 
 		$errors = Layout::validate_building( $building, $taken );
+		if ( '' !== $building['schedule'] && ! isset( self::protocols()['templates'][ $building['schedule'] ] ) ) {
+			$errors[] = __( 'that schedule template does not exist', 'fishotel-misc-plugin' );
+		}
 		if ( $errors ) {
 			return array( 'errors' => $errors );
 		}

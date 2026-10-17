@@ -270,20 +270,72 @@
 			return false;
 		});
 
+		/*
+		 * The template operations (add / rename / delete / make default /
+		 * reset): one post, then the page reloads on the template the server
+		 * names so the picker, the editor and the layout's schedule selects
+		 * agree. The picker itself just navigates.
+		 */
+		function templatePage(name) {
+			var base = $protocol.data('page-url') || root.location.href.split('&template=')[0];
+			return base + (base.indexOf('?') === -1 ? '?' : '&') + 'template=' + encodeURIComponent(name);
+		}
+
+		function templateOp(op, extra) {
+			var fields = $.extend({ action: 'fishotel_cleanroom_protocol', _wpnonce: cfg.settingsNonce, op: op, template: $protocol.data('template') || '' }, extra || {});
+			$protocol.find('.fh-cr-template-bar button').prop('disabled', true);
+			$.post(ajaxUrl(), fields)
+				.done(function (res) {
+					if (!res || !res.success) {
+						fail(res);
+						$protocol.find('.fh-cr-template-bar button').prop('disabled', false);
+						return;
+					}
+					notice('fishotel-misc-notice--success', (res.data && res.data.message) || (i18n.reloading || 'Saved. Reloading…'));
+					root.setTimeout(function () { root.location.href = templatePage((res.data && res.data.template) || ''); }, 600);
+				})
+				.fail(function (res) {
+					fail(res);
+					$protocol.find('.fh-cr-template-bar button').prop('disabled', false);
+				});
+		}
+
+		$protocol.on('change', '.fh-cr-template-pick', function () {
+			root.location.href = templatePage(this.value);
+		});
+
+		$protocol.on('click', '.fh-cr-template-add', function () {
+			var name = root.prompt(i18n.templateName || 'Name of the new template?', '');
+			if (name === null || !$.trim(name)) {
+				return;
+			}
+			templateOp('add', { name: $.trim(name) });
+		});
+
+		$protocol.on('click', '.fh-cr-template-rename', function () {
+			var name = root.prompt(i18n.templateRename || 'New name?', $protocol.data('template') || '');
+			if (name === null || !$.trim(name)) {
+				return;
+			}
+			templateOp('rename', { name: $.trim(name) });
+		});
+
+		$protocol.on('click', '.fh-cr-template-default', function () {
+			templateOp('make_default');
+		});
+
+		$protocol.on('click', '.fh-cr-template-delete', function () {
+			if (!root.confirm(i18n.confirmTemplate || 'Delete this template? Buildings that run it go back to the default.')) {
+				return;
+			}
+			templateOp('delete');
+		});
+
 		$protocol.on('click', '.fh-cr-protocol-reset', function () {
 			if (!root.confirm(i18n.confirmReset || 'Reset?')) {
 				return;
 			}
-			$.post(ajaxUrl(), { action: 'fishotel_cleanroom_protocol', _wpnonce: cfg.settingsNonce, reset: 1 })
-				.done(function (res) {
-					if (!res || !res.success) {
-						fail(res);
-						return;
-					}
-					notice('fishotel-misc-notice--success', i18n.reloading || 'Saved. Reloading…');
-					root.setTimeout(function () { root.location.reload(); }, 700);
-				})
-				.fail(fail);
+			templateOp('reset');
 		});
 
 		// Box rates editor.

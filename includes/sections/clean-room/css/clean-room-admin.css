@@ -504,6 +504,31 @@
 	padding: 6px 4px;
 }
 
+/* The template picker above the steps editor. */
+.fh-cr-template-bar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	margin: 12px 0;
+}
+
+.fh-cr-template-bar .fh-cr-label {
+	margin-right: 4px;
+}
+
+.fh-cr-template-bar .fh-cr-input {
+	width: auto;
+	min-width: 220px;
+}
+
+/* The last dose per medication in a Board building header. */
+.fh-cr-building__doses {
+	flex: 1 1 100%;
+	font-size: 11px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
 .fh-cr-protocol .fh-cr-input--num {
 	max-width: 76px;
 }

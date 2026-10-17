@@ -148,12 +148,18 @@ class Admin {
 		}
 
 		if ( 'settings' === $tab && $can_settings ) {
-			$protocol  = Settings::protocol();
+			$protocols     = Settings::protocols();
+			$template_name = isset( $_GET['template'] ) ? Protocol::template_name( sanitize_text_field( wp_unslash( $_GET['template'] ) ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only picker.
+			if ( '' === $template_name || ! isset( $protocols['templates'][ $template_name ] ) ) {
+				$template_name = $protocols['default'];
+			}
+			$protocol  = $protocols['templates'][ $template_name ];
 			$buildings = $store->buildings();
 			$tanks     = $store->tanks();
 			$groups    = Layout::group( $buildings, $tanks );
 			$aliases   = $store->aliases();
 			$box_rates = Settings::box_rates();
+			$flash     = Admin_Workbook::take_flash();
 
 			include Clean_Room::path() . 'views/settings.php';
 			return;
@@ -181,10 +187,12 @@ class Admin {
 			return;
 		}
 
-		$filters = self::filters_from_request( $_GET ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		$tanks   = $store->tanks_with_occupants( $today, $settings, Settings::protocol() );
-		$groups  = Layout::group( $store->buildings(), $tanks );
-		$totals  = self::totals( $tanks );
+		$filters   = self::filters_from_request( $_GET ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$protocols = Settings::protocols();
+		$tanks     = $store->tanks_with_occupants( $today, $settings, $protocols );
+		$groups    = Layout::group( $store->buildings(), $tanks );
+		$totals    = self::totals( $tanks );
+		$doses     = $store->latest_doses();
 
 		include Clean_Room::path() . 'views/board.php';
 	}
@@ -356,7 +364,10 @@ class Admin {
 					'saved'          => __( 'Saved.', 'fishotel-misc-plugin' ),
 					'error'          => __( 'Something went wrong. Please try again.', 'fishotel-misc-plugin' ),
 					'confirmAlias'   => __( 'Forget this alias?', 'fishotel-misc-plugin' ),
-					'confirmReset'   => __( 'Replace the protocol with the rough seed?', 'fishotel-misc-plugin' ),
+					'confirmReset'   => __( 'Replace this template\'s steps with its seed (the workbook\'s schedule, or the daily feeding for a template of your own)?', 'fishotel-misc-plugin' ),
+					'confirmTemplate' => __( 'Delete this template? Buildings that run it go back to the default.', 'fishotel-misc-plugin' ),
+					'templateName'   => __( 'Name of the new template? (A seeded name — 14 Day CF, Xtra 14 Day CF, CQ, Trifecta — brings its schedule back.)', 'fishotel-misc-plugin' ),
+					'templateRename' => __( 'New name for this template?', 'fishotel-misc-plugin' ),
 					'confirmZero'    => __( 'Set the count to 0 and close this group?', 'fishotel-misc-plugin' ),
 					'confirmUndo'    => __( 'Undo this event? (A compensating event is written; nothing is deleted.)', 'fishotel-misc-plugin' ),
 					'reloading'      => __( 'Saved. Reloading…', 'fishotel-misc-plugin' ),

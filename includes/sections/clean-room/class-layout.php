@@ -47,6 +47,14 @@ class Layout {
 
 	const MAX_POSITION = 9;
 	const MAX_BUILDING = 900;
+	const MAX_GALLONS  = 9999;
+
+	/**
+	 * The seed's system volumes (sump included) of the two Spa buildings —
+	 * the figures Jeff's dose maths use, not workbook data.
+	 */
+	const SPA_500_GALLONS = 205;
+	const SPA_600_GALLONS = 100;
 
 	/**
 	 * The seed layout — inserted ONLY when the buildings table is empty.
@@ -57,19 +65,22 @@ class Layout {
 		$long    = array( '20G long', 20 );
 		$breeder = array( '40G breeder', 40 );
 
+		// The last value is the system's water volume (sump included): the
+		// two Spa systems hold 205 and 100 gallons — the figures Jeff's dose
+		// log and dose maths use; a null means "the sum of the tanks".
 		$buildings = array(
-			array( 'clean', 100, 'active', array( 2 => array( $long, $long, $long ), 1 => array( $breeder, $breeder ) ) ),
-			array( 'clean', 200, 'active', array( 2 => array( $long, $long ), 1 => array( $breeder, $breeder ) ) ),
-			array( 'clean', 300, 'active', array( 2 => array( $long, $long ), 1 => array( $breeder, $breeder ) ) ),
-			array( 'clean', 400, 'coming_soon', array() ),
-			array( 'spa', 500, 'active', array( 2 => array( $long, $long, $long, $long ), 1 => array( $breeder, $breeder, $breeder ) ) ),
-			array( 'spa', 600, 'active', array( 2 => array( $breeder ), 1 => array( $breeder ) ) ),
+			array( 'clean', 100, 'active', array( 2 => array( $long, $long, $long ), 1 => array( $breeder, $breeder ) ), null ),
+			array( 'clean', 200, 'active', array( 2 => array( $long, $long ), 1 => array( $breeder, $breeder ) ), null ),
+			array( 'clean', 300, 'active', array( 2 => array( $long, $long ), 1 => array( $breeder, $breeder ) ), null ),
+			array( 'clean', 400, 'coming_soon', array(), null ),
+			array( 'spa', 500, 'active', array( 2 => array( $long, $long, $long, $long ), 1 => array( $breeder, $breeder, $breeder ) ), self::SPA_500_GALLONS ),
+			array( 'spa', 600, 'active', array( 2 => array( $breeder ), 1 => array( $breeder ) ), self::SPA_600_GALLONS ),
 		);
 
 		$out  = array();
 		$sort = 0;
 		foreach ( $buildings as $def ) {
-			list( $area, $number, $status, $rows ) = $def;
+			list( $area, $number, $status, $rows, $gallons ) = $def;
 			$sort++;
 
 			$tanks = array();
@@ -92,17 +103,58 @@ class Layout {
 			}
 
 			$out[] = array(
-				'area'   => $area,
-				'number' => $number,
-				'name'   => '',
-				'status' => $status,
-				'sort'   => $sort,
-				'notes'  => '',
-				'tanks'  => $tanks,
+				'area'           => $area,
+				'number'         => $number,
+				'name'           => '',
+				'status'         => $status,
+				'sort'           => $sort,
+				'notes'          => '',
+				'schedule'       => '',
+				'system_gallons' => $gallons,
+				'tanks'          => $tanks,
 			);
 		}
 
 		return $out;
+	}
+
+	/**
+	 * The water volume of a building's system: its own figure when set,
+	 * else the gallons of its tanks (offline tanks are dry) added up.
+	 *
+	 * @param array   $building Building (id, number, system_gallons).
+	 * @param array[] $tanks    Tanks (of this building, or every tank).
+	 * @return int 0 when nothing is known.
+	 */
+	public static function system_gallons( array $building, array $tanks ) {
+		if ( isset( $building['system_gallons'] ) && null !== $building['system_gallons'] && (int) $building['system_gallons'] > 0 ) {
+			return (int) $building['system_gallons'];
+		}
+		$sum = 0;
+		foreach ( $tanks as $tank ) {
+			if ( 'offline' === (string) ( $tank['status'] ?? 'active' ) ) {
+				continue;
+			}
+			if ( ! empty( $building['id'] ) && ! empty( $tank['building_id'] ) ) {
+				$mine = (int) $tank['building_id'] === (int) $building['id'];
+			} else {
+				$mine = (int) floor( (int) ( $tank['number'] ?? 0 ) / 100 ) * 100 === (int) floor( (int) ( $building['number'] ?? 0 ) / 100 ) * 100;
+			}
+			if ( $mine ) {
+				$sum += max( 0, (int) ( $tank['gallons'] ?? 0 ) );
+			}
+		}
+		return $sum;
+	}
+
+	/**
+	 * '205 gal system' ('' when the volume is not known).
+	 *
+	 * @param int $gallons System gallons.
+	 * @return string
+	 */
+	public static function system_label( $gallons ) {
+		return (int) $gallons > 0 ? (int) $gallons . ' gal system' : '';
 	}
 
 	/* ============================================================== */
@@ -190,6 +242,12 @@ class Layout {
 		}
 		if ( isset( $building['name'] ) && strlen( (string) $building['name'] ) > 60 ) {
 			$errors[] = 'name is longer than 60 characters';
+		}
+		if ( isset( $building['schedule'] ) && strlen( (string) $building['schedule'] ) > 40 ) {
+			$errors[] = 'schedule name is longer than 40 characters';
+		}
+		if ( array_key_exists( 'system_gallons', $building ) && null !== $building['system_gallons'] && ( ! is_numeric( $building['system_gallons'] ) || (int) $building['system_gallons'] < 0 || (int) $building['system_gallons'] > self::MAX_GALLONS ) ) {
+			$errors[] = 'system gallons must be blank or 0–9999';
 		}
 
 		return $errors;

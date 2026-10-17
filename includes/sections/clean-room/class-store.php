@@ -335,9 +335,61 @@ class Store {
 		if ( self::tables_exist() ) {
 			update_option( self::DB_VERSION_OPTION, self::DB_VERSION, true );
 			self::seed_if_empty();
+			self::backfill_system_gallons();
 		}
 
 		return true;
+	}
+
+	/**
+	 * The 1.2 upgrade of a site seeded before the column existed: the two
+	 * Spa systems' volumes (205 and 100 gallons — Jeff's figures, used by
+	 * the dose maths and the workbook import), written only where the
+	 * column is still NULL so a typed value is never touched.
+	 */
+	public static function backfill_system_gallons() {
+		if ( ! self::tables_exist() ) {
+			return;
+		}
+
+		global $wpdb;
+
+		$seed = array(
+			500 => Layout::SPA_500_GALLONS,
+			600 => Layout::SPA_600_GALLONS,
+		);
+		foreach ( $seed as $number => $gallons ) {
+			try {
+				$wpdb->query( $wpdb->prepare( 'UPDATE ' . self::table( 'buildings' ) . ' SET system_gallons = %d WHERE number = %d AND system_gallons IS NULL', $gallons, $number ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			} catch ( \Throwable $e ) {
+				unset( $e );
+			}
+		}
+	}
+
+	/**
+	 * A schedule template was renamed (or deleted: '' as the new name):
+	 * every building that named it follows.
+	 *
+	 * @param string $old Old template name.
+	 * @param string $new New name ('' = back to the default).
+	 * @return bool
+	 */
+	public function rename_schedule( $old, $new ) {
+		$old = (string) $old;
+		if ( ! self::tables_exist() || '' === $old || $old === (string) $new ) {
+			return false;
+		}
+
+		global $wpdb;
+
+		try {
+			$ok = $wpdb->query( $wpdb->prepare( 'UPDATE ' . self::table( 'buildings' ) . ' SET schedule = %s WHERE schedule = %s', substr( (string) $new, 0, 40 ), $old ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+
+		return false !== $ok;
 	}
 
 	/**
@@ -481,15 +533,18 @@ class Store {
 
 		global $wpdb;
 
-		$data = array(
-			'area'   => in_array( (string) ( $building['area'] ?? '' ), array_keys( Layout::AREAS ), true ) ? (string) $building['area'] : 'clean',
-			'number' => (int) ( $building['number'] ?? 0 ),
-			'name'   => substr( (string) ( $building['name'] ?? '' ), 0, 60 ),
-			'status' => in_array( (string) ( $building['status'] ?? '' ), Layout::BUILDING_STATUSES, true ) ? (string) $building['status'] : 'active',
-			'sort'   => (int) ( $building['sort'] ?? 0 ),
-			'notes'  => (string) ( $building['notes'] ?? '' ),
+		$gallons = isset( $building['system_gallons'] ) && null !== $building['system_gallons'] && '' !== $building['system_gallons'] && is_numeric( $building['system_gallons'] ) ? max( 0, (int) $building['system_gallons'] ) : null;
+		$data    = array(
+			'area'           => in_array( (string) ( $building['area'] ?? '' ), array_keys( Layout::AREAS ), true ) ? (string) $building['area'] : 'clean',
+			'number'         => (int) ( $building['number'] ?? 0 ),
+			'name'           => substr( (string) ( $building['name'] ?? '' ), 0, 60 ),
+			'status'         => in_array( (string) ( $building['status'] ?? '' ), Layout::BUILDING_STATUSES, true ) ? (string) $building['status'] : 'active',
+			'sort'           => (int) ( $building['sort'] ?? 0 ),
+			'notes'          => (string) ( $building['notes'] ?? '' ),
+			'schedule'       => substr( (string) ( $building['schedule'] ?? '' ), 0, 40 ),
+			'system_gallons' => $gallons, // A null is written as NULL whatever the format.
 		);
-		$format = array( '%s', '%d', '%s', '%s', '%d', '%s' );
+		$format  = array( '%s', '%d', '%s', '%s', '%d', '%s', '%s', '%d' );
 
 		$this->areas = null;
 
@@ -645,11 +700,14 @@ class Store {
 	/**
 	 * Every tank with its building, its occupants (open stays with their
 	 * day / state), the numbers it shares water with, its last copper
-	 * reading and its to-do for today.
+	 * reading and its to-do for today — from the building's own schedule
+	 * when the protocols option is given, from one list of steps when only
+	 * that is.
 	 *
-	 * @param string  $today    Site date.
-	 * @param array   $settings Settings.
-	 * @param array[] $protocol The protocol template (empty = no to-do).
+	 * @param string $today    Site date.
+	 * @param array  $settings Settings.
+	 * @param array  $protocol Settings::protocols() ({ default, templates }), or one steps list
+	 *                         (empty = no to-do).
 	 * @return array[]
 	 */
 	public function tanks_with_occupants( $today, array $settings, array $protocol = array() ) {
@@ -667,6 +725,14 @@ class Store {
 		$copper = $this->latest_copper();
 		$done   = $this->logs_on_date( $today );
 
+		$per_building = isset( $protocol['templates'] );
+		$buildings    = array();
+		if ( $per_building ) {
+			foreach ( $this->buildings() as $building ) {
+				$buildings[ (int) $building['id'] ] = $building;
+			}
+		}
+
 		$out = array();
 		foreach ( $tanks as $tank ) {
 			$id                  = (int) $tank['id'];
@@ -683,8 +749,14 @@ class Store {
 				}
 			}
 			$tank['copper'] = isset( $copper[ $id ] ) ? $copper[ $id ] : null;
-			$tank['todo']   = $protocol ? Protocol::todo( $protocol, $tank['occupants'], $today, (string) $tank['building']['area'], isset( $done[ $id ] ) ? $done[ $id ] : array() ) : array();
-			$out[]          = $tank;
+			if ( $per_building ) {
+				$building = isset( $buildings[ (int) $tank['building_id'] ] ) ? $buildings[ (int) $tank['building_id'] ] : array();
+				$steps    = Protocol::steps_for( $building, $protocol );
+			} else {
+				$steps = $protocol;
+			}
+			$tank['todo'] = $steps ? Protocol::todo( $steps, $tank['occupants'], $today, (string) $tank['building']['area'], isset( $done[ $id ] ) ? $done[ $id ] : array() ) : array();
+			$out[]        = $tank;
 		}
 
 		return $out;
@@ -1410,6 +1482,47 @@ class Store {
 		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
 			$out[ (int) $row['tank_id'] ] = array(
 				'value'     => (float) $row['value'],
+				'logged_at' => (string) $row['logged_at'],
+			);
+		}
+
+		return $out;
+	}
+
+	/**
+	 * The last dose per medication per building, from the dose logs
+	 * (building-level ones and those on a tank of the building alike):
+	 * building id => medication key => { label, note, logged_at }.
+	 *
+	 * @param int $limit How many of the latest dose logs to read.
+	 * @return array<int, array<string, array{label: string, note: string, logged_at: string}>>
+	 */
+	public function latest_doses( $limit = 500 ) {
+		if ( ! self::tables_exist() ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		try {
+			$rows = $wpdb->get_results(
+				$wpdb->prepare( 'SELECT l.building_id, l.note, l.logged_at, t.building_id AS tank_building_id FROM ' . self::table( 'tank_logs' ) . ' l LEFT JOIN ' . self::table( 'tanks' ) . " t ON t.id = l.tank_id WHERE l.kind = 'dose' ORDER BY l.logged_at DESC, l.id DESC LIMIT %d", max( 1, min( 5000, (int) $limit ) ) ), // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				ARRAY_A
+			);
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+
+		$out = array();
+		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
+			$building = ! empty( $row['building_id'] ) ? (int) $row['building_id'] : (int) ( $row['tank_building_id'] ?? 0 );
+			$key      = Protocol::medication_key( (string) $row['note'] );
+			if ( $building <= 0 || null === $key || isset( $out[ $building ][ $key ] ) ) {
+				continue;
+			}
+			$out[ $building ][ $key ] = array(
+				'label'     => Protocol::medication_label( $key ),
+				'note'      => (string) $row['note'],
 				'logged_at' => (string) $row['logged_at'],
 			);
 		}

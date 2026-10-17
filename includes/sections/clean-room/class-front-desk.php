@@ -318,7 +318,8 @@ class Front_Desk {
 			return $data;
 		}
 
-		$tanks     = $store->tanks_with_occupants( $today, $settings, Settings::protocol() );
+		$protocols = Settings::protocols();
+		$tanks     = $store->tanks_with_occupants( $today, $settings, $protocols );
 		$buildings = $store->buildings();
 		$current   = null;
 		foreach ( $tanks as $tank ) {
@@ -352,24 +353,67 @@ class Front_Desk {
 			);
 		}
 
+		$building_row = array();
+		foreach ( $buildings as $row ) {
+			if ( (int) $row['id'] === (int) $current['building_id'] ) {
+				$building_row = $row;
+				break;
+			}
+		}
+		$gallons = Layout::system_gallons( $building_row ? $building_row : $current['building'], $tanks );
+
 		$data['tank'] = array(
-			'id'         => (int) $current['id'],
-			'number'     => (int) $current['number'],
-			'title'      => Layout::tank_title( $current, $current['building'], $current['shares_with'] ),
-			'path'       => $current['path'],
-			'sizeLabel'  => (string) $current['size_label'],
-			'area'       => (string) $current['building']['area'],
-			'areaLabel'  => Layout::area_label( $current['building']['area'] ),
-			'building'   => Layout::building_label( $current['building'] ),
-			'isSpa'      => 'spa' === (string) $current['building']['area'],
-			'sharesWith' => $current['shares_with'],
-			'occupants'  => $occupants,
-			'todo'       => array_values( (array) $current['todo'] ),
-			'copper'     => $copper,
-			'url'        => Clean_Room::front_desk_url( (int) $current['number'] ),
+			'id'          => (int) $current['id'],
+			'number'      => (int) $current['number'],
+			'title'       => Layout::tank_title( $current, $current['building'], $current['shares_with'] ),
+			'path'        => $current['path'],
+			'sizeLabel'   => (string) $current['size_label'],
+			'gallons'     => (int) $current['gallons'],
+			'area'        => (string) $current['building']['area'],
+			'areaLabel'   => Layout::area_label( $current['building']['area'] ),
+			'building'    => Layout::building_label( $current['building'] ),
+			'buildingId'  => (int) $current['building_id'],
+			'isSpa'       => 'spa' === (string) $current['building']['area'],
+			'sharesWith'  => $current['shares_with'],
+			'system'      => array(
+				'gallons'  => $gallons,
+				'label'    => Layout::system_label( $gallons ),
+				'schedule' => Protocol::template_for( $building_row ? $building_row : array(), $protocols ),
+			),
+			'medications' => self::medications( $gallons, (int) $current['gallons'] ),
+			'occupants'   => $occupants,
+			'todo'        => array_values( (array) $current['todo'] ),
+			'copper'      => $copper,
+			'url'         => Clean_Room::front_desk_url( (int) $current['number'] ),
 		);
 
 		return $data;
+	}
+
+	/**
+	 * The medications the Dose sheet offers, with the suggested amount for
+	 * the whole system and for this one tank (null for copper, which is
+	 * dosed to the test).
+	 *
+	 * @param int $system_gallons The building's system volume.
+	 * @param int $tank_gallons   This tank's volume.
+	 * @return array[] key, label, short, unit, system (amount|null), tank (amount|null).
+	 */
+	public static function medications( $system_gallons, $tank_gallons ) {
+		$out = array();
+		foreach ( Protocol::MEDICATIONS as $key => $medication ) {
+			$system = Protocol::dose_suggestion( $key, $system_gallons );
+			$tank   = Protocol::dose_suggestion( $key, $tank_gallons );
+			$out[]  = array(
+				'key'    => $key,
+				'label'  => $medication['label'],
+				'short'  => $medication['short'],
+				'unit'   => $medication['unit'],
+				'system' => $system ? $system['amount'] : null,
+				'tank'   => $tank ? $tank['amount'] : null,
+			);
+		}
+		return $out;
 	}
 
 	/**
