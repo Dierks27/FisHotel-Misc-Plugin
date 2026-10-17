@@ -602,6 +602,7 @@
 			case 'dates': renderDates(); break;
 			case 'note': renderNote(); break;
 			case 'copper': renderCopper(); break;
+			case 'dose': renderDose(); break;
 			case 'voice': renderVoice(); break;
 			case 'species': renderSpecies(); break;
 			default: renderTank();
@@ -623,6 +624,12 @@
 			bits.push(' · ' + tk.sizeLabel);
 		}
 		bits.push(' · ' + (tk.sharesWith && tk.sharesWith.length ? t('sharesWater', 'shares water with') + ' ' + tk.sharesWith.join(', ') : t('ownWater', 'its own water')));
+		if (tk.system && tk.system.label) {
+			bits.push(' · ' + tk.system.label);
+		}
+		if (tk.system && tk.system.schedule) {
+			bits.push(' · ' + t('schedule', 'schedule') + ' ' + tk.system.schedule);
+		}
 		return bits;
 	}
 
@@ -762,7 +769,10 @@
 		}
 		var head = el('div', { class: 'fh-fd-today__head' }, [
 			el('span', { text: t('today', 'Today') }),
-			tk.isSpa || tk.copper ? copperLine(tk) : null
+			el('span', { class: 'fh-fd-today__tools' }, [
+				tk.isSpa || tk.copper ? copperLine(tk) : null,
+				el('button', { type: 'button', class: 'fh-fd-copper fh-fd-dose', text: t('dose', 'Dose') + ' +', on: { click: function () { go('dose'); } } })
+			])
 		]);
 		wrap.appendChild(head);
 		if (!todo.length) {
@@ -1266,6 +1276,97 @@
 					return;
 				}
 				act({ act: 'copper', tank: tk.number, value: f.value, via: 'qr' });
+			})
+		]);
+	}
+
+	/*
+	 * Dose: medication chips, the amount with its unit, "whole system"
+	 * (default when the building has a volume) or this tank only, and the
+	 * suggested amount as a chip that fills the field. The server words
+	 * the toast; a dose has no undo.
+	 */
+	function renderDose() {
+		var tk = tank();
+		var f = state.form;
+		var meds = tk.medications || [];
+		var systemGallons = tk.system ? parseInt(tk.system.gallons, 10) || 0 : 0;
+		if (typeof f.whole === 'undefined') {
+			f.whole = systemGallons > 0;
+		}
+		if (!f.unit) {
+			f.unit = 'g';
+		}
+		function med() {
+			for (var i = 0; i < meds.length; i++) {
+				if (meds[i].key === f.medication) {
+					return meds[i];
+				}
+			}
+			return null;
+		}
+		app.appendChild(header(t('dose', 'Dose'), ['Tank ' + tk.number + ' · ' + tk.building + (tk.system && tk.system.label ? ' · ' + tk.system.label : '')]));
+		var screen = el('div', { class: 'fh-fd-screen' });
+
+		screen.appendChild(el('div', { class: 'fh-fd-field' }, [
+			el('label', { class: 'fh-fd-label', text: t('medication', 'Medication') }),
+			el('div', { class: 'fh-fd-chips' }, meds.map(function (m) {
+				return el('button', {
+					type: 'button',
+					class: 'fh-fd-chip' + (f.medication === m.key ? ' is-on' : ''),
+					text: m.short || m.label,
+					on: { click: function () { f.medication = m.key; f.unit = m.unit || f.unit; render(); } }
+				});
+			}))
+		]));
+
+		var chosen = med();
+		var suggestion = chosen ? (f.whole ? chosen.system : chosen.tank) : null;
+		var amountInput = el('input', { class: 'fh-fd-input fh-fd-input--big', type: 'number', inputmode: 'decimal', step: '0.01', min: '0', max: '9999', placeholder: suggestion !== null && suggestion !== undefined ? String(suggestion) : '', value: f.amount || '', on: { input: function (e) { f.amount = e.target.value; } } });
+		var unitSelect = el('select', { class: 'fh-fd-input fh-fd-unit', on: { change: function (e) { f.unit = e.target.value; } } }, ['g', 'ml', 'tsp'].map(function (u) {
+			var opt = el('option', { value: u, text: u });
+			if (u === f.unit) {
+				opt.selected = true;
+			}
+			return opt;
+		}));
+		var amountField = el('div', { class: 'fh-fd-field' }, [
+			el('label', { class: 'fh-fd-label', text: t('amount', 'Amount') }),
+			el('div', { class: 'fh-fd-row fh-fd-row--amount' }, [amountInput, unitSelect])
+		]);
+		if (chosen) {
+			if (suggestion !== null && suggestion !== undefined) {
+				amountField.appendChild(el('div', { class: 'fh-fd-chips' }, [
+					el('button', { type: 'button', class: 'fh-fd-chip fh-fd-chip--ghost', text: fmt(t('suggested', 'Suggested: %s'), suggestion + ' ' + (chosen.unit || f.unit)), on: { click: function () { f.amount = String(suggestion); f.unit = chosen.unit || f.unit; amountInput.value = f.amount; unitSelect.value = f.unit; } } })
+				]));
+			} else {
+				amountField.appendChild(el('p', { class: 'fh-fd-muted', text: t('noSuggest', 'Dosed to the test reading') }));
+			}
+		}
+		screen.appendChild(amountField);
+
+		var wholeLabel = fmt(t('wholeSystem', 'Whole system — %s'), tk.building + (systemGallons > 0 ? ' · ' + tk.system.label : ''));
+		screen.appendChild(el('div', { class: 'fh-fd-field' }, [
+			el('div', { class: 'fh-fd-chips' }, [
+				el('button', { type: 'button', class: 'fh-fd-chip' + (f.whole ? ' is-on' : ''), text: wholeLabel, on: { click: function () { f.whole = true; render(); } } }),
+				el('button', { type: 'button', class: 'fh-fd-chip' + (!f.whole ? ' is-on' : ''), text: t('thisTank', 'This tank only') + ' · ' + tk.number, on: { click: function () { f.whole = false; render(); } } })
+			])
+		]));
+		screen.appendChild(el('p', { class: 'fh-fd-muted', text: t('noUndoDose', 'A dose cannot be undone — note a correction instead.') }));
+		app.appendChild(screen);
+
+		bar([
+			button(t('cancel', 'Cancel'), 'fh-fd-btn--quiet', function () { go('tank'); }),
+			button(t('save', 'Save'), 'fh-fd-btn--primary', function () {
+				if (!f.medication) {
+					toast(t('medication', 'Medication') + '?', null, true);
+					return;
+				}
+				if (!f.amount || !(parseFloat(f.amount) > 0)) {
+					toast(t('amount', 'Amount') + '?', null, true);
+					return;
+				}
+				act({ act: 'dose', tank: tk.number, medication: f.medication, amount: f.amount, unit: f.unit, whole: f.whole ? 1 : 0, via: 'qr' });
 			})
 		]);
 	}

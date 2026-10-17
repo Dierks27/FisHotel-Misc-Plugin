@@ -14,6 +14,7 @@
 
 require_once __DIR__ . '/wp-stubs.php';
 
+use FisHotel\Misc\Sections\Clean_Room\Admin;
 use FisHotel\Misc\Sections\Clean_Room\Clean_Room;
 use FisHotel\Misc\Sections\Clean_Room\Front_Desk;
 use FisHotel\Misc\Sections\Clean_Room\Protocol;
@@ -176,6 +177,56 @@ $r = act( $store, 521, 'tick', array( 'key' => 'Feed', 'kind' => 'feed', 'label'
 check( 'a tick-off is a tank log with the key', empty( $r['error'] ) && 'feed' === end( $store->logs )['kind'] && 'feed' === end( $store->logs )['note'] );
 $r = act( $store, 521, 'bogus', array() );
 check( 'an unknown action', 'Unknown action.' === ( $r['error'] ?? '' ) );
+
+echo "6b. A dose on the whole system or on the tank — no undo\n";
+$r = act( $store, 521, 'dose', array( 'medication' => 'aspirin', 'amount' => '5', 'unit' => 'g', 'whole' => 1 ) );
+check( 'an unknown medication: refused', 'Which medication? Pick one.' === ( $r['error'] ?? '' ) );
+$bad = 0;
+foreach ( array( '0', '-1', '10000', 'abc', '' ) as $amount ) {
+	$r = act( $store, 521, 'dose', array( 'medication' => 'metro', 'amount' => $amount, 'unit' => 'g', 'whole' => 1 ) );
+	if ( 'How much? An amount above 0 and at most 9999.' === ( $r['error'] ?? '' ) ) {
+		$bad++;
+	}
+}
+check( 'an amount of 0, below 0, above 9999, junk or blank: refused', 5 === $bad );
+$r = act( $store, 521, 'dose', array( 'medication' => 'metro', 'amount' => '5', 'unit' => 'cups', 'whole' => 1 ) );
+check( 'a unit other than g / ml / tsp: refused', 'Which unit? g, ml or tsp.' === ( $r['error'] ?? '' ) );
+$logs_before = count( $store->logs );
+$r = act( $store, 521, 'dose', array( 'medication' => 'metro', 'amount' => '5.1', 'unit' => 'g', 'whole' => 1 ) );
+$log = end( $store->logs );
+check( 'whole system: the toast "Metronidazole 5.1 g · Building 500, whole system", nothing to undo', empty( $r['error'] ) && 'Metronidazole 5.1 g · Building 500, whole system' === $r['message'] && array() === $r['event_ids'], json_encode( $r ) );
+check( 'the log: kind dose, tank 0, the building of 521, value 5.1, the note "Metronidazole 5.1 g", source qr, actor 8', $logs_before + 1 === count( $store->logs ) && 'dose' === $log['kind'] && 0 === $log['tank_id'] && (int) $spa['building_id'] === $log['building_id'] && 5.1 === $log['value'] && 'Metronidazole 5.1 g' === $log['note'] && 'qr' === $log['source'] && 8 === $log['actor_id'], json_encode( $log ) );
+$r = act( $store, 521, 'dose', array( 'medication' => 'copper', 'amount' => '55', 'unit' => 'ml', 'whole' => 0 ) );
+$log = end( $store->logs );
+check( 'this tank only: "Copper Power 55 ml · Tank 521", the log on the tank with no building', 'Copper Power 55 ml · Tank 521' === ( $r['message'] ?? '' ) && (int) $spa['id'] === $log['tank_id'] && null === $log['building_id'] && 55.0 === $log['value'] && 'Copper Power 55 ml' === $log['note'] );
+$r = act( $store, 521, 'dose', array( 'medication' => 'formalin', 'amount' => '20.5', 'unit' => 'ml' ) );
+check( 'no whole flag = this tank; a decimal amount reads back trimmed', 'Formalin 20.5 ml · Tank 521' === ( $r['message'] ?? '' ) );
+
+// A day-2 group in 523 (same system) and one in 621 (the other system).
+act( $store, 523, 'arrival', array( 'species' => 'Test Tang', 'qty' => 2, 'date' => Replay::add_days( $today, -1 ) ) );
+$tang = $store->stay( count( $store->stays ), $today, $settings );
+act( $store, 621, 'arrival', array( 'species' => 'Test Goby', 'qty' => 2, 'date' => Replay::add_days( $today, -1 ) ) );
+$goby = $store->stay( count( $store->stays ), $today, $settings );
+$done = $store->logs_on_date( $today );
+check( 'today\'s logs for 523 include the building-level dose, not the tank-level ones of 521; 621 has none of them', 1 === count( array_filter( $done[ (int) $tang['tank_id'] ] ?? array(), static function ( $l ) { return 'dose' === $l['kind']; } ) ) && empty( $done[ (int) $goby['tank_id'] ] ) && 3 === count( array_filter( $done[ (int) $spa['id'] ] ?? array(), static function ( $l ) { return 'dose' === $l['kind']; } ) ) );
+$todo = Protocol::todo( Protocol::seed(), array( $tang ), $today, 'spa', $done[ (int) $tang['tank_id'] ] ?? array() );
+$by   = array();
+foreach ( $todo as $item ) {
+	$by[ $item['label'] ] = $item['done'];
+}
+check( 'day 2 in 523: Metronidazole ticked by the system dose, Copper Power to 2.4 and the copper test not (those were on 521 alone)', 2 === $tang['day'] && true === $by['Metronidazole'] && false === $by['Copper Power to 2.4'] && false === $by['Copper test'], json_encode( $by ) );
+$todo = Protocol::todo( Protocol::seed(), array( $goby ), $today, 'spa', $done[ (int) $goby['tank_id'] ] ?? array() );
+$by   = array();
+foreach ( $todo as $item ) {
+	$by[ $item['label'] ] = $item['done'];
+}
+check( 'day 2 in 621 (the other system): nothing ticked', false === $by['Metronidazole'] && false === $by['Copper Power to 2.4'] );
+$doses = $store->latest_doses();
+check( 'the last dose per medication per building: metro, copper and formalin on 500 (the tank doses count for their building), nothing on 600', array( 'formalin', 'copper', 'metro' ) === array_keys( $doses[ (int) $spa['building_id'] ] ) && 'Metronidazole' === $doses[ (int) $spa['building_id'] ]['metro']['label'] && ! isset( $doses[ (int) $goby['building_id'] ] ) );
+$latest = $store->tank_logs( 0, 3 );
+check( 'the Events tab: the dose rows read like the toast, the system one named by its building', 'Formalin 20.5 ml' === Admin::log_text( $latest[0] ) && 'Copper Power 55 ml' === Admin::log_text( $latest[1] ) && 'Metronidazole 5.1 g · Building 500, whole system' === Admin::log_text( $latest[2] ) && 500 === $latest[2]['building_number'] && null === $latest[2]['tank_number'] );
+check( 'a building-level copper reading or note says so too; an import marker is kept out of sight', 'copper 2.01 · Building 600, whole system' === Admin::log_text( array( 'kind' => 'copper', 'value' => 2.01, 'tank_id' => 0, 'building_id' => 6, 'building_number' => 600 ) ) && 'Praziquantel 2.05 · Building 600, whole system' === Admin::log_text( array( 'kind' => 'dose', 'note' => 'Praziquantel 2.05 · import:2026-9#4', 'tank_id' => 0, 'building_id' => 6, 'building_number' => 600 ) ) && 'note: Lost Fish 2' === Admin::log_text( array( 'kind' => 'note', 'note' => 'Lost Fish 2 · import:2026-9#5', 'tank_id' => 7 ) ) );
+check( 'the medications offered with their suggestions: 205 gal → metro 5.1 g, copper none; a 20-gal tank → metro 0.5 g', 5.1 === Front_Desk::medications( 205, 20 )[1]['system'] && 0.5 === Front_Desk::medications( 205, 20 )[1]['tank'] && null === Front_Desk::medications( 205, 20 )[0]['system'] && 'copper' === Front_Desk::medications( 205, 20 )[0]['key'] && 'ml' === Front_Desk::medications( 205, 20 )[0]['unit'] );
 
 echo "7. A scanned label keeps the phone signed in\n";
 $front                                  = new Front_Desk();

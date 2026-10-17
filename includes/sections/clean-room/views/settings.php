@@ -5,12 +5,17 @@
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  *
- * @var array   $settings     Settings.
- * @var array[] $protocol     Protocol steps.
- * @var array[] $buildings    Buildings.
+ * @var array   $settings      Settings.
+ * @var array   $protocols     Settings::protocols() — { default, templates }.
+ * @var string  $template_name The template the editor shows.
+ * @var array[] $protocol      Its steps.
+ * @var array[] $buildings     Buildings.
  * @var array[] $tanks        Tanks.
  * @var array   $groups       Layout::group().
  * @var array[] $aliases      Aliases.
+ * @var array[] $box_rates    Settings::box_rates().
+ * @var array   $import       Admin_Import::panel_data().
+ * @var string  $flash        A one-time notice.
  * @var string  $labels_url   Printable labels URL.
  * @var bool    $tables_ok    Whether the tables exist.
  * @var bool    $can_settings Always true here.
@@ -18,6 +23,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
+use FisHotel\Misc\Sections\Clean_Room\Admin;
 use FisHotel\Misc\Sections\Clean_Room\Clean_Room;
 use FisHotel\Misc\Sections\Clean_Room\Layout;
 use FisHotel\Misc\Sections\Clean_Room\Protocol;
@@ -85,14 +91,29 @@ $tab = 'settings';
 		</form>
 
 		<?php /* ── Protocol ──────────────────────────────────────── */ ?>
-		<form id="fishotel-cleanroom-protocol" class="fishotel-misc-card fh-cr-card fh-cr-card--wide" method="post" action="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>" onsubmit="return false;">
+		<form id="fishotel-cleanroom-protocol" class="fishotel-misc-card fh-cr-card fh-cr-card--wide" method="post" action="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>" onsubmit="return false;" data-template="<?php echo esc_attr( $template_name ); ?>" data-page-url="<?php echo esc_url( Admin::page_url( 'settings' ) ); ?>">
 			<?php wp_nonce_field( Settings::NONCE_ACTION ); ?>
 			<input type="hidden" name="action" value="fishotel_cleanroom_protocol">
+			<input type="hidden" name="op" value="save">
+			<input type="hidden" name="template" value="<?php echo esc_attr( $template_name ); ?>">
 			<div class="fishotel-misc-card-header">
 				<div class="fishotel-misc-card-icon"><span class="dashicons dashicons-list-view"></span></div>
-				<h2 class="fishotel-misc-card-title"><?php esc_html_e( 'Treatment protocol', 'fishotel-misc-plugin' ); ?></h2>
+				<h2 class="fishotel-misc-card-title"><?php esc_html_e( 'Treatment schedules', 'fishotel-misc-plugin' ); ?></h2>
 			</div>
-			<p class="fishotel-misc-card-desc"><?php esc_html_e( 'The daily to-do of every tank comes from this template: day 1 is the check-in day; "every" repeats a step until the last day; "where" limits it to the Spa or the Clean Room. The seed is the rough version — replace it with the workbook\'s schedule.', 'fishotel-misc-plugin' ); ?></p>
+			<p class="fishotel-misc-card-desc"><?php esc_html_e( 'Each Spa building runs one of these templates (Layout, below); a building without one runs the default. The daily to-do of every tank comes from its building\'s template: day 1 is the check-in day; "every" repeats a step until the last day; "where" limits it to the Spa or the Clean Room. The five seeds are the workbook\'s schedules with site day = sheet day + 1; a dose logged on the Front Desk ticks the dose step that names the same medication.', 'fishotel-misc-plugin' ); ?></p>
+
+			<div class="fh-cr-template-bar">
+				<label class="fh-cr-label" for="fh-cr-template"><?php esc_html_e( 'Template', 'fishotel-misc-plugin' ); ?></label>
+				<select id="fh-cr-template" class="fh-cr-input fh-cr-template-pick">
+					<?php foreach ( array_keys( $protocols['templates'] ) as $fh_name ) : ?>
+						<option value="<?php echo esc_attr( $fh_name ); ?>" <?php selected( $template_name, $fh_name ); ?>><?php echo esc_html( $fh_name . ( $fh_name === $protocols['default'] ? ' ' . __( '(default)', 'fishotel-misc-plugin' ) : '' ) ); ?></option>
+					<?php endforeach; ?>
+				</select>
+				<button type="button" class="button button-small fh-cr-template-add"><?php esc_html_e( 'Add', 'fishotel-misc-plugin' ); ?></button>
+				<button type="button" class="button button-small fh-cr-template-rename"><?php esc_html_e( 'Rename', 'fishotel-misc-plugin' ); ?></button>
+				<button type="button" class="button button-small fh-cr-template-default" <?php disabled( $template_name === $protocols['default'] ); ?>><?php esc_html_e( 'Make default', 'fishotel-misc-plugin' ); ?></button>
+				<button type="button" class="button button-small fh-cr-template-delete" <?php disabled( count( $protocols['templates'] ) <= 1 ); ?>><?php esc_html_e( 'Delete', 'fishotel-misc-plugin' ); ?></button>
+			</div>
 
 			<table class="widefat fh-cr-table fh-cr-protocol" id="fh-cr-protocol-table">
 				<thead>
@@ -136,8 +157,8 @@ $tab = 'settings';
 			</table>
 			<p class="fh-cr-actions-row">
 				<button type="button" class="button fh-cr-step-add"><?php esc_html_e( 'Add step', 'fishotel-misc-plugin' ); ?></button>
-				<button type="submit" class="button button-primary fh-cr-protocol-save"><?php esc_html_e( 'Save protocol', 'fishotel-misc-plugin' ); ?></button>
-				<button type="button" class="button fh-cr-protocol-reset"><?php esc_html_e( 'Reset to the rough seed', 'fishotel-misc-plugin' ); ?></button>
+				<button type="submit" class="button button-primary fh-cr-protocol-save"><?php echo esc_html( sprintf( /* translators: %s: template name */ __( 'Save "%s"', 'fishotel-misc-plugin' ), $template_name ) ); ?></button>
+				<button type="button" class="button fh-cr-protocol-reset"><?php echo esc_html( null !== Protocol::seed_template( $template_name ) ? __( 'Reset to the workbook\'s schedule', 'fishotel-misc-plugin' ) : __( 'Reset to the daily feeding', 'fishotel-misc-plugin' ) ); ?></button>
 			</p>
 		</form>
 
@@ -147,12 +168,15 @@ $tab = 'settings';
 				<div class="fishotel-misc-card-icon"><span class="dashicons dashicons-layout"></span></div>
 				<h2 class="fishotel-misc-card-title"><?php esc_html_e( 'Layout', 'fishotel-misc-plugin' ); ?></h2>
 			</div>
-			<p class="fishotel-misc-card-desc"><?php esc_html_e( 'Buildings are round hundreds (100–900); a tank\'s number is derived from its building, level (1 bottom, 2 top) and position (1 = leftmost) — never typed. Retire with the status instead of deleting: stays point at tanks.', 'fishotel-misc-plugin' ); ?></p>
+			<p class="fishotel-misc-card-desc"><?php esc_html_e( 'Buildings are round hundreds (100–900); a tank\'s number is derived from its building, level (1 bottom, 2 top) and position (1 = leftmost) — never typed. Retire with the status instead of deleting: stays point at tanks. Each building runs a schedule template (blank = the default) and has a system volume in gallons (sump included — blank = the sum of its tanks); the Dose sheet suggests amounts from it and the workbook import matches the log\'s 205 / 100 systems to it.', 'fishotel-misc-plugin' ); ?></p>
 
 			<?php foreach ( $groups as $fh_area => $fh_group ) : ?>
 				<h3 class="fh-cr-h3"><?php echo esc_html( $fh_group['label'] ); ?></h3>
 				<?php foreach ( $fh_group['buildings'] as $fh_entry ) : ?>
-					<?php $fh_b = $fh_entry['building']; ?>
+					<?php
+					$fh_b       = $fh_entry['building'];
+					$fh_gallons = Layout::system_gallons( $fh_b, $fh_entry['tanks'] );
+					?>
 					<div class="fh-cr-layout-building">
 						<form class="fh-cr-layout-form" data-op="building_save">
 							<input type="hidden" name="id" value="<?php echo esc_attr( $fh_b['id'] ); ?>">
@@ -164,6 +188,14 @@ $tab = 'settings';
 								<?php endforeach; ?>
 							</select>
 							<input type="number" class="fh-cr-input fh-cr-input--num" name="sort" value="<?php echo esc_attr( $fh_b['sort'] ); ?>" title="<?php esc_attr_e( 'sort', 'fishotel-misc-plugin' ); ?>">
+							<select class="fh-cr-input" name="schedule" title="<?php esc_attr_e( 'schedule template', 'fishotel-misc-plugin' ); ?>">
+								<option value=""><?php echo esc_html( sprintf( /* translators: %s: the default template */ __( 'schedule: default (%s)', 'fishotel-misc-plugin' ), $protocols['default'] ) ); ?></option>
+								<?php foreach ( array_keys( $protocols['templates'] ) as $fh_name ) : ?>
+									<option value="<?php echo esc_attr( $fh_name ); ?>" <?php selected( $fh_b['schedule'], $fh_name ); ?>><?php echo esc_html( $fh_name ); ?></option>
+								<?php endforeach; ?>
+							</select>
+							<input type="number" class="fh-cr-input fh-cr-input--num" name="system_gallons" value="<?php echo esc_attr( null === $fh_b['system_gallons'] ? '' : $fh_b['system_gallons'] ); ?>" min="0" max="9999" placeholder="<?php echo esc_attr( $fh_gallons > 0 ? $fh_gallons : 'gal' ); ?>" title="<?php esc_attr_e( 'system gallons (blank = the sum of the tanks)', 'fishotel-misc-plugin' ); ?>">
+							<span class="fh-cr-sub fh-cr-sub--inline"><?php echo esc_html( Layout::system_label( $fh_gallons ) ); ?></span>
 							<input type="text" class="fh-cr-input" name="notes" value="<?php echo esc_attr( $fh_b['notes'] ); ?>" placeholder="<?php esc_attr_e( 'notes', 'fishotel-misc-plugin' ); ?>">
 							<button type="submit" class="button button-small"><?php esc_html_e( 'Save', 'fishotel-misc-plugin' ); ?></button>
 						</form>
@@ -229,6 +261,47 @@ $tab = 'settings';
 			</form>
 			<p class="fh-cr-status fh-cr-layout-status" aria-live="polite"></p>
 		</div>
+
+		<?php /* ── Box rates ─────────────────────────────────────── */ ?>
+		<form id="fishotel-cleanroom-box-rates" class="fishotel-misc-card fh-cr-card fh-cr-card--wide" method="post" action="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>" onsubmit="return false;">
+			<?php wp_nonce_field( Settings::NONCE_ACTION ); ?>
+			<input type="hidden" name="action" value="fishotel_cleanroom_box_rates">
+			<div class="fishotel-misc-card-header">
+				<div class="fishotel-misc-card-icon"><span class="dashicons dashicons-archive"></span></div>
+				<h2 class="fishotel-misc-card-title"><?php esc_html_e( 'Box rates', 'fishotel-misc-plugin' ); ?></h2>
+			</div>
+			<p class="fishotel-misc-card-desc"><?php esc_html_e( 'The per-box shipping and the re-ox fee each supplier charges by origin. The order editor\'s "Suggest" button fills the import & re-ox fees with boxes × (per box + re-ox) for the order\'s supplier and origin — never on its own. A row with no origin stands for every origin of that supplier.', 'fishotel-misc-plugin' ); ?></p>
+
+			<table class="widefat fh-cr-table fh-cr-box-rates" id="fh-cr-box-rates-table">
+				<thead>
+					<tr>
+						<th scope="col"><?php esc_html_e( 'Supplier', 'fishotel-misc-plugin' ); ?></th>
+						<th scope="col"><?php esc_html_e( 'Origin', 'fishotel-misc-plugin' ); ?></th>
+						<th scope="col" class="fh-cr-num"><?php esc_html_e( 'Per box', 'fishotel-misc-plugin' ); ?></th>
+						<th scope="col" class="fh-cr-num"><?php esc_html_e( 'Re-ox', 'fishotel-misc-plugin' ); ?></th>
+						<th scope="col"></th>
+					</tr>
+				</thead>
+				<tbody>
+					<?php foreach ( $box_rates as $fh_i => $fh_rate ) : ?>
+						<tr class="fh-cr-rate">
+							<td><input type="text" class="fh-cr-input" name="rates[<?php echo esc_attr( $fh_i ); ?>][supplier]" value="<?php echo esc_attr( $fh_rate['supplier'] ); ?>" maxlength="80"></td>
+							<td><input type="text" class="fh-cr-input" name="rates[<?php echo esc_attr( $fh_i ); ?>][origin]" value="<?php echo esc_attr( $fh_rate['origin'] ); ?>" maxlength="80"></td>
+							<td><input type="number" step="0.01" min="0" class="fh-cr-input fh-cr-input--num" name="rates[<?php echo esc_attr( $fh_i ); ?>][per_box]" value="<?php echo esc_attr( number_format( (float) $fh_rate['per_box'], 2, '.', '' ) ); ?>"></td>
+							<td><input type="number" step="0.01" min="0" class="fh-cr-input fh-cr-input--num" name="rates[<?php echo esc_attr( $fh_i ); ?>][reox]" value="<?php echo esc_attr( number_format( (float) $fh_rate['reox'], 2, '.', '' ) ); ?>"></td>
+							<td><button type="button" class="button button-small fh-cr-rate-remove">&times;</button></td>
+						</tr>
+					<?php endforeach; ?>
+				</tbody>
+			</table>
+			<p class="fh-cr-actions-row">
+				<button type="button" class="button fh-cr-rate-add"><?php esc_html_e( 'Add rate', 'fishotel-misc-plugin' ); ?></button>
+				<button type="submit" class="button button-primary fh-cr-box-rates-save"><?php esc_html_e( 'Save box rates', 'fishotel-misc-plugin' ); ?></button>
+			</p>
+		</form>
+
+		<?php /* ── Import workbook ───────────────────────────────── */ ?>
+		<?php include Clean_Room::path() . 'views/import.php'; ?>
 
 		<?php /* ── Aliases ───────────────────────────────────────── */ ?>
 		<div class="fishotel-misc-card fh-cr-card">
