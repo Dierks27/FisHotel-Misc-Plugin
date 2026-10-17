@@ -575,7 +575,12 @@
 				$order.find('[data-t="up_down"]').removeClass('fh-cr-up fh-cr-down').addClass('fh-cr-' + (fig.order.up_down_flag || 'up'));
 			}
 
-			function saveOrder(done) {
+			/**
+			 * Save the order; done(data) runs after a successful save of an
+			 * existing order (a new one redirects), failed() after a refused
+			 * or failed one.
+			 */
+			function saveOrder(done, failed) {
 				$lines.find('tr.fh-cr-line').not('.is-linked').each(function () {
 					if (!$.trim($(this).find('.fh-cr-species').val())) {
 						$(this).remove();
@@ -593,6 +598,9 @@
 						if (!res || !res.success) {
 							$orderStatus.addClass('is-error').text('');
 							fail(res);
+							if (failed) {
+								failed();
+							}
 							return;
 						}
 						var d = res.data || {};
@@ -604,6 +612,10 @@
 						if (d.status) {
 							$order.find('.fh-cr-order__status').text(d.status).attr('class', 'fh-cr-badge fh-cr-order__status fh-cr-badge--order-' + d.status);
 						}
+						if (typeof d.can_checkin !== 'undefined') {
+							// Received counts typed and saved: the check-in is offered without a reload.
+							$order.find('.fh-cr-checkin').prop('disabled', !d.can_checkin);
+						}
 						$orderStatus.addClass('is-ok').text(d.message || (i18n.saved || 'Saved.'));
 						if (done) {
 							done(d);
@@ -612,6 +624,9 @@
 					.fail(function (res) {
 						$orderStatus.addClass('is-error').text('');
 						fail(res);
+						if (failed) {
+							failed();
+						}
 					})
 					.always(function () { $btn.prop('disabled', false); });
 			}
@@ -657,6 +672,7 @@
 				}
 				var $btn = $(this).prop('disabled', true);
 				saveOrder(function () {
+					$btn.prop('disabled', true); // The save reply re-enabled it; one check-in at a time.
 					$.post(ajaxUrl(), { action: 'fishotel_cleanroom_order', nonce: cfg.nonce, op: 'checkin', order_id: $order.data('order') })
 						.done(function (res) {
 							if (!res || !res.success) {
@@ -671,6 +687,8 @@
 							fail(res);
 							$btn.prop('disabled', false);
 						});
+				}, function () {
+					$btn.prop('disabled', false); // The save was refused: nothing was checked in, try again.
 				});
 			});
 

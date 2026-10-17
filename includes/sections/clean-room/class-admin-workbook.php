@@ -193,14 +193,8 @@ class Admin_Workbook {
 			}
 			$box_rates   = Settings::box_rates();
 			$pick        = self::pick_lists( $store, $box_rates );
-			$can_checkin = false;
-			foreach ( $order['lines'] as $line ) {
-				if ( empty( $line['stay_id'] ) && (int) ( $line['qty_received'] ?? 0 ) > 0 ) {
-					$can_checkin = true;
-					break;
-				}
-			}
-			$is_new   = 0 === (int) $order['id'];
+			$can_checkin = self::can_check_in( $order );
+			$is_new      = 0 === (int) $order['id'];
 			$list_url = Admin::page_url( 'arrivals' );
 
 			include Clean_Room::path() . 'views/order.php';
@@ -334,21 +328,32 @@ class Admin_Workbook {
 	}
 
 	/**
-	 * Product titles by id (each a small query; the species page shows
-	 * at most a page of them).
+	 * Product titles by id, in one query (Store::product_titles()); a
+	 * product that does not exist is left out.
 	 *
 	 * @param Store $store Store.
 	 * @param int[] $ids   Product ids.
 	 * @return array<int, string>
 	 */
 	public static function product_titles( $store, array $ids ) {
-		$out = array();
-		foreach ( array_unique( array_map( 'intval', $ids ) ) as $id ) {
-			if ( $id > 0 ) {
-				$out[ $id ] = (string) $store->product_title( $id );
+		$ids = array_values( array_unique( array_filter( array_map( 'intval', $ids ) ) ) );
+		return $ids ? (array) $store->product_titles( $ids ) : array();
+	}
+
+	/**
+	 * Whether "Check in received fish" has anything to do: a line with
+	 * received fish and no stay yet (pure).
+	 *
+	 * @param array $order The order with its lines.
+	 * @return bool
+	 */
+	public static function can_check_in( array $order ) {
+		foreach ( (array) ( $order['lines'] ?? array() ) as $line ) {
+			if ( empty( $line['stay_id'] ) && (int) ( $line['qty_received'] ?? 0 ) > 0 ) {
+				return true;
 			}
 		}
-		return $out;
+		return false;
 	}
 
 	/**
@@ -507,7 +512,7 @@ class Admin_Workbook {
 	 * @param array  $raw   Unslashed payload.
 	 * @param int    $id    Order id (0 = new).
 	 * @param string $today Site date.
-	 * @return array message, order_id, is_new, redirect (new), line_ids, figures — or error.
+	 * @return array message, order_id, is_new, redirect (new), line_ids, figures, can_checkin — or error.
 	 */
 	public static function save_order( $store, array $raw, $id, $today ) {
 		$header = Orders::normalize_order( array_merge( $raw, array( 'id' => $id ) ) );
@@ -548,8 +553,9 @@ class Admin_Workbook {
 			'redirect' => 0 === (int) $id ? self::order_url( $saved_id ) : '',
 			'ref'      => (string) $order['ref'],
 			'status'   => (string) $order['status'],
-			'line_ids' => array_values( array_map( 'intval', array_column( $order['lines'], 'id' ) ) ),
-			'figures'  => self::figures( $order ),
+			'line_ids'    => array_values( array_map( 'intval', array_column( $order['lines'], 'id' ) ) ),
+			'figures'     => self::figures( $order ),
+			'can_checkin' => self::can_check_in( $order ),
 		);
 	}
 
@@ -792,7 +798,10 @@ class Admin_Workbook {
 	}
 
 	/**
-	 * A typed cell as a guarded CSV string (pure).
+	 * A typed cell as a guarded CSV string (pure). A typed number is our
+	 * own arithmetic (digits, a sign, a point, an exponent — never a
+	 * formula), so it is written as is: guarding it would turn a negative
+	 * profit into the text '-50.
 	 *
 	 * @param mixed $value Cell.
 	 * @return string
@@ -804,8 +813,11 @@ class Admin_Workbook {
 		if ( is_bool( $value ) ) {
 			return $value ? '1' : '0';
 		}
+		if ( is_int( $value ) ) {
+			return (string) $value;
+		}
 		if ( is_float( $value ) ) {
-			return Admin::csv_cell( Xlsx::number( $value ) );
+			return is_nan( $value ) || is_infinite( $value ) ? '' : Xlsx::number( $value );
 		}
 		if ( $value instanceof \DateTimeInterface ) {
 			return $value->format( 'Y-m-d' );

@@ -81,7 +81,7 @@ $raw = array(
 	),
 );
 $r = Admin_Workbook::save_order( $store, $raw, 0, $today );
-check( 'saved as a new order: the ref 2026-1 from the order date, a redirect to its editor, three line ids (the empty species dropped)', empty( $r['error'] ) && 1 === $r['order_id'] && true === $r['is_new'] && '2026-1' === $r['ref'] && false !== strpos( $r['redirect'], 'order=1' ) && array( 1, 2, 3 ) === $r['line_ids'], json_encode( $r ) );
+check( 'saved as a new order: the ref 2026-1 from the order date, a redirect to its editor, three line ids (the empty species dropped), a check-in offered', empty( $r['error'] ) && 1 === $r['order_id'] && true === $r['is_new'] && '2026-1' === $r['ref'] && false !== strpos( $r['redirect'], 'order=1' ) && array( 1, 2, 3 ) === $r['line_ids'] && true === $r['can_checkin'], json_encode( $r ) );
 check( 'a Clean Room building is dropped (only the Spa receives fish)', null === $store->order( 1 )['building_id'] );
 $f = $r['figures'];
 check( 'the figures are the worked example\'s strings: landed 257.14 / 142.86 / 0.00, suggested 130 / 50 / —, total 400.00, grand 390.00, revenue 440.00, up/down +50.00', '257.14' === $f['lines'][0]['landed_total'] && '142.86' === $f['lines'][1]['landed_total'] && '0.00' === $f['lines'][2]['landed_total'] && '130' === $f['lines'][0]['suggested_price'] && '50' === $f['lines'][1]['suggested_price'] && '—' === $f['lines'][2]['suggested_price'] && '400.00' === $f['order']['total'] && '390.00' === $f['order']['grand_total'] && '440.00' === $f['order']['revenue'] && '+50.00' === $f['order']['up_down'] && 'up' === $f['order']['up_down_flag'], json_encode( $f['order'] ) );
@@ -116,6 +116,9 @@ foreach ( $resolved as $candidate ) {
 check( 'resolved_orders: the year\'s orders, each costed, the checked-in one with live figures', 2 === count( $resolved ) && isset( $resolved[0]['costing'] ) && null !== $first && true === $first['lines'][0]['linked'] && 8 === $first['lines'][0]['live'] );
 $stats = Admin_Workbook::stats_for_year( $store, (int) substr( $today, 0, 4 ) );
 check( 'stats_for_year builds over them', 2 === $stats['totals']['orders'] && 1 === $stats['sheet']['batches'] && 8 === $stats['sheet']['through_qt'] );
+$r5 = Admin_Workbook::save_order( $store, $raw2, 1, $today );
+check( 'after the check-in a re-save offers no check-in (the wrasse has its stay, the blenny received nothing); can_check_in() is the same rule', empty( $r5['error'] ) && false === $r5['can_checkin'] && false === Admin_Workbook::can_check_in( $store->order( 1 ) ) && true === Admin_Workbook::can_check_in( array( 'lines' => array( array( 'stay_id' => null, 'qty_received' => 3 ) ) ) ) && false === Admin_Workbook::can_check_in( array( 'lines' => array( array( 'stay_id' => 4, 'qty_received' => 3 ), array( 'qty_received' => 0 ) ) ) ) );
+check( 'product_titles: one lookup for the page, missing products left out, ids deduped', array( 12 => 'Blue Test Wrasse' ) === Admin_Workbook::product_titles( $store, array( 12, '12', 99, 0, null ) ) && array() === Admin_Workbook::product_titles( $store, array() ) );
 
 echo "4. Export sheets\n";
 $sheets = Admin_Workbook::orders_sheets( array( $order ) );
@@ -134,13 +137,14 @@ $rows  = Admin_Workbook::stays_rows( $stays );
 check( 'the stays sheet: the CSV header, typed cells (ids and counts as ints, landed cost a float, the building from the tank)', Admin::csv_header() === $rows[0] && 19 === count( $rows[1] ) && 1 === $rows[1][0] && 9 === $rows[1][3] && 511 === $rows[1][11] && 500 === $rows[1][12] && is_float( $rows[1][17] ) && 'order' === $rows[1][14] );
 
 echo "5. The CSV of typed cells\n";
-check( 'csv_value: null → empty, bools, floats as plain decimals, dates, the formula guard', '' === Admin_Workbook::csv_value( null ) && '1' === Admin_Workbook::csv_value( true ) && '0' === Admin_Workbook::csv_value( false ) && '12.5' === Admin_Workbook::csv_value( 12.5 ) && '2026-04-05' === Admin_Workbook::csv_value( new DateTime( '2026-04-05' ) ) && "'=SUM(A1)" === Admin_Workbook::csv_value( '=SUM(A1)' ) && '7' === Admin_Workbook::csv_value( 7 ) && "'-2.5" === Admin_Workbook::csv_value( -2.5 ) );
+check( 'csv_value: null → empty, bools, floats as plain decimals, dates, the formula guard on text', '' === Admin_Workbook::csv_value( null ) && '1' === Admin_Workbook::csv_value( true ) && '0' === Admin_Workbook::csv_value( false ) && '12.5' === Admin_Workbook::csv_value( 12.5 ) && '2026-04-05' === Admin_Workbook::csv_value( new DateTime( '2026-04-05' ) ) && "'=SUM(A1)" === Admin_Workbook::csv_value( '=SUM(A1)' ) && '7' === Admin_Workbook::csv_value( 7 ) && "'-2.5" === Admin_Workbook::csv_value( '-2.5' ) );
+check( 'a typed negative number is a number, not a guarded string (a −50 profit must not read \'-50); NaN / INF → empty', '-2.5' === Admin_Workbook::csv_value( -2.5 ) && '-50' === Admin_Workbook::csv_value( -50.0 ) && '-2' === Admin_Workbook::csv_value( -2 ) && '' === Admin_Workbook::csv_value( NAN ) && '' === Admin_Workbook::csv_value( INF ) );
 $out = fopen( 'php://memory', 'w+' );
-$n   = Admin_Workbook::write_csv( $out, array( array( 'a', 'b' ), array( '=x', 1.5, null, true ), 'scalar' ) );
+$n   = Admin_Workbook::write_csv( $out, array( array( 'a', 'b' ), array( '=x', 1.5, null, true, -3.25, -4 ), 'scalar' ) );
 rewind( $out );
 $text = stream_get_contents( $out );
 fclose( $out );
-check( 'write_csv: three rows, the guard applied, a scalar row wrapped', 3 === $n && "a,b\n'=x,1.5,,1\nscalar\n" === $text, json_encode( $text ) );
+check( 'write_csv: three rows, the guard applied to text only, a scalar row wrapped', 3 === $n && "a,b\n'=x,1.5,,1,-3.25,-4\nscalar\n" === $text, json_encode( $text ) );
 
 echo "6. URLs and the flash\n";
 check( 'export_url carries the action, what, format, extras and a nonce', false !== strpos( Admin_Workbook::export_url( 'stats', 'csv', array( 'year' => 2026 ) ), 'action=fishotel_cleanroom_export' ) && false !== strpos( Admin_Workbook::export_url( 'stats', 'csv', array( 'year' => 2026 ) ), 'what=stats' ) && false !== strpos( Admin_Workbook::export_url( 'stats', 'csv', array( 'year' => 2026 ) ), 'year=2026' ) );

@@ -566,6 +566,16 @@ class Fake_Store {
 		return isset( $this->products[ (int) $product_id ] ) ? (string) $this->products[ (int) $product_id ] : '';
 	}
 
+	public function product_titles( array $ids ) {
+		$out = array();
+		foreach ( array_unique( array_map( 'intval', $ids ) ) as $id ) {
+			if ( isset( $this->products[ $id ] ) ) {
+				$out[ $id ] = (string) $this->products[ $id ];
+			}
+		}
+		return $out;
+	}
+
 	public function add_alias( $alias, $product_id, $species ) {
 		$alias = strtolower( trim( preg_replace( '/\s+/', ' ', (string) $alias ) ) );
 		if ( '' === $alias ) {

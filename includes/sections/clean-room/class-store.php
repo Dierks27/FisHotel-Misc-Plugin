@@ -2136,6 +2136,35 @@ class Store {
 	}
 
 	/**
+	 * The titles of several products in one query, by id; a missing
+	 * product is left out — the species list's "Product" column.
+	 *
+	 * @param int[] $ids Product ids.
+	 * @return array<int, string>
+	 */
+	public function product_titles( array $ids ) {
+		$ids = array_values( array_unique( array_filter( array_map( 'intval', $ids ) ) ) );
+		if ( ! $ids ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		try {
+			$rows = $wpdb->get_results( 'SELECT ID, post_title FROM ' . $wpdb->posts . " WHERE post_type = 'product' AND ID IN (" . implode( ',', $ids ) . ')', ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- ids cast to int above.
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+
+		$out = array();
+		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
+			$out[ (int) $row['ID'] ] = (string) $row['post_title'];
+		}
+
+		return $out;
+	}
+
+	/**
 	 * The species of the last N arrivals (distinct, newest first) — the
 	 * "recent species" chips.
 	 *

@@ -107,6 +107,9 @@ check( 'groups: Wrasses, Gobies, Blennies, then (no group) last', array( 'Wrasse
 check( 'Wrasses: A1 + B → 2 lines, 30 ordered, 18 received, 3 DOA, 10 survived, survival 10/15, landed 80, revenue 360', 2 === $grp[0]['lines'] && 30 === $grp[0]['ordered'] && 18 === $grp[0]['received'] && 3 === $grp[0]['doa'] && 10 === $grp[0]['survived'] && near( $grp[0]['survival_rate'], 10 / 15 ) && near( $grp[0]['total'], 80 ) && near( $grp[0]['revenue'], 360 ) && near( $grp[0]['up_down'], 280 ) );
 check( 'Gobies: survivors unknown → survival null; (no group): A2', null === $grp[1]['survival_rate'] && 5 === $grp[1]['received'] && 10 === $grp[3]['received'] && near( $grp[3]['survival_rate'], 1 ) && near( $grp[3]['revenue'], 200 ) );
 check( 'Blennies: nothing received, fill 0', 0 === $grp[2]['received'] && near( $grp[2]['fill_rate'], 0 ) && null === $grp[2]['doa_rate'] );
+check( 'a group counts the orders with a line in it, once each: Wrasses 2 (A, B), Gobies 1, Blennies 1, (no group) 1', array( 2, 1, 1, 1 ) === array_column( $grp, 'orders' ), json_encode( array_column( $grp, 'orders' ) ) );
+$twice = Stats::build( array( array_merge( $orders[0], array( 'lines' => array( $orders[0]['lines'][0], $orders[0]['lines'][0] ) ) ) ) );
+check( 'two lines of one group in one order: 2 lines, 1 order', 2 === $twice['by_group'][0]['lines'] && 1 === $twice['by_group'][0]['orders'] );
 $one_name = Stats::group_rows( $rows, 'supplier' );
 check( 'group_rows() is what by_supplier used', $one_name === $sup );
 check( 'an empty key groups as (none)', '(none)' === Stats::group_rows( array( array_merge( $rows[0], array( 'origin' => '' ) ) ), 'origin' )[0]['name'] );

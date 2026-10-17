@@ -64,15 +64,17 @@ class Stats {
 	 * @return array{orders: array[], years: int[], totals: array, sheet: array, by_supplier: array[], by_origin: array[], by_group: array[]}
 	 */
 	public static function build( array $orders, $default_per_box = Costing::DEFAULT_PER_BOX ) {
-		$rows   = array();
-		$years  = array();
-		$groups = array();
+		$rows         = array();
+		$years        = array();
+		$groups       = array();
+		$group_orders = array(); // group → the orders with a line in it (an order counts once per group).
 
-		foreach ( $orders as $order ) {
-			$lines   = isset( $order['lines'] ) && is_array( $order['lines'] ) ? $order['lines'] : array();
-			$costing = Costing::compute( $order, $lines, $default_per_box );
-			$row     = self::row( $order, $costing['order'] );
-			$rows[]  = $row;
+		foreach ( $orders as $n => $order ) {
+			$lines     = isset( $order['lines'] ) && is_array( $order['lines'] ) ? $order['lines'] : array();
+			$costing   = Costing::compute( $order, $lines, $default_per_box );
+			$row       = self::row( $order, $costing['order'] );
+			$rows[]    = $row;
+			$order_key = $row['id'] > 0 ? 'id:' . $row['id'] : 'n:' . $n;
 			if ( null !== $row['year'] ) {
 				$years[ $row['year'] ] = true;
 			}
@@ -82,9 +84,11 @@ class Stats {
 				$group = trim( (string) ( $line['group_name'] ?? '' ) );
 				$group = '' !== $group ? $group : self::NO_GROUP;
 				if ( ! isset( $groups[ $group ] ) ) {
-					$groups[ $group ] = self::empty_bucket( $group );
+					$groups[ $group ]       = self::empty_bucket( $group );
+					$group_orders[ $group ] = array();
 				}
-				$survived = null === $costed['qty_survived'] ? null : (int) $costed['qty_survived'];
+				$group_orders[ $group ][ $order_key ] = true;
+				$survived                             = null === $costed['qty_survived'] ? null : (int) $costed['qty_survived'];
 				self::add_to_bucket(
 					$groups[ $group ],
 					array(
@@ -100,6 +104,10 @@ class Stats {
 					)
 				);
 			}
+		}
+
+		foreach ( $group_orders as $group => $seen ) {
+			$groups[ $group ]['orders'] = count( $seen );
 		}
 
 		$years = array_keys( $years );

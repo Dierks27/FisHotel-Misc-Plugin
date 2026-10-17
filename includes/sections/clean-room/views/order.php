@@ -279,6 +279,6 @@ $fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks 
 	</form>
 
 	<p class="fh-cr-footnote">
-		<?php esc_html_e( 'Box mode: each line takes a fraction of a box (received ÷ per box — the line\'s, else the species list\'s, else 24); the domestic flight and the import & re-ox fees are shared by box space, the tariffs by goods value. Bag mode: bags (else received) × price, plus the flight, import fees and tariffs per bag. Per fish × markup, to the nearest 5, is the suggested price; a line is worth it when its margin (profit ÷ landed) is above the threshold. Checking in creates one stay per line with received fish (the DOA as a loss) and the order becomes "received"; from then on a line\'s received, DOA and survived come from its stay.', 'fishotel-misc-plugin' ); ?>
+		<?php esc_html_e( 'Box mode: each line takes a fraction of a box (received ÷ per box — the line\'s, else the species list\'s, else 24); the domestic flight and the import & re-ox fees are shared by box space, the tariffs by goods value. Bag mode: bags (else received) × price, plus the flight, import fees and tariffs per bag. Per fish × markup, to the nearest 5, is the suggested price; a line is worth it when its margin (profit ÷ landed) is above the threshold. Checking in creates one stay per line with received fish (the DOA as a loss) and the order becomes "received"; from then on a line\'s DOA, survived, live and sold come from its stay, and its received count is kept as typed.', 'fishotel-misc-plugin' ); ?>
 	</p>
 </div>
