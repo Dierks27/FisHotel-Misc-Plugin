@@ -145,8 +145,8 @@ fh_login( 8, 'anna', true );
 $html = fh_page( array( 'tab' => 'mine' ) );
 check( 'an administrator not named: read only, told so, shown the line', false !== strpos( $html, 'Your account is not named in FISHOTEL_SNIPPETS_EDITORS' ) && false !== strpos( $html, "define( 'FISHOTEL_SNIPPETS_EDITORS', 'jeff' );" ) );
 $before = count( $store->log );
-fh_call( 'handle_save', fh_form() );
-check( '… a save by her is refused and logged', $before + 1 === count( $store->log ) && array() === $store->snippets );
+$halt   = fh_call( 'handle_save', fh_form() );
+check( '… a save by her is refused and logged (her posted code is not shown back)', $before + 1 === count( $store->log ) && array() === $store->snippets && $halt instanceof RuntimeException && false === strpos( $halt->getMessage(), '<textarea' ) );
 fh_login( 12, 'by-id', true );
 check( 'named by user ID: may write', Editor::permission_now()['allowed'] );
 fh_login( 7, 'jeff', false );
@@ -162,8 +162,10 @@ fh_login( 7, 'jeff', true );
 $html = fh_page( array( 'tab' => 'mine' ) );
 check( 'jeff: no read-only box, an Add new button', false === strpos( $html, 'Read only.' ) && false !== strpos( $html, 'Add new' ) );
 $before = count( $store->log );
-$halt   = fh_call( 'handle_save', fh_form( array( Editor::NONCE_FIELD => 'stale' ) ) );
+$stale  = "\$late_night = '</textarea><script>x()</script>';";
+$halt   = fh_call( 'handle_save', fh_form( array( Editor::NONCE_FIELD => 'stale', 'code' => $stale ) ) );
 check( 'a stale nonce: refused, logged as denied with the reason', $halt instanceof RuntimeException && $before + 1 === count( $store->log ) && false !== strpos( $store->log_rows( array(), 1 )[0]['summary'], 'security token was missing or expired' ) );
+check( '… nothing kept for him (a forged request must not plant a draft), but his code comes back read only, escaped, to copy', array() === Admin_Editor::drafts( 7 ) && false !== strpos( $halt->getMessage(), '<textarea readonly' ) && false !== strpos( $halt->getMessage(), esc_textarea( $stale ) . '</textarea>' ) && false === strpos( $halt->getMessage(), '<script>' ) );
 
 echo "3. Saving\n";
 $GLOBALS['fh_admin_ran'] = array();
@@ -246,6 +248,82 @@ check( '… no Restore button any more', 0 === substr_count( fh_page( array( 'ta
 $filtered = fh_page( array( 'tab' => 'log', 'log_action' => 'denied' ) );
 check( 'the log filters by action', false !== strpos( $filtered, 'refused save' ) && false === strpos( $filtered, 'deleted at v' ) );
 
+
+echo "5b. Other administrators never see the code\n";
+$secret_row = $store->get( $row['id'] );
+fh_login( 8, 'anna', true );
+$views = array(
+	'edit'    => fh_page( array( 'tab' => 'mine', 'view' => 'edit', 'id' => (string) $row['id'] ) ),
+	'history' => fh_page( array( 'tab' => 'mine', 'view' => 'history', 'id' => (string) $row['id'] ) ),
+	'diff'    => fh_page( array( 'tab' => 'mine', 'view' => 'history', 'id' => (string) $row['id'], 'rev' => (string) $store->revisions( $row['id'] )[1]['id'] ) ),
+	'new'     => fh_page( array( 'tab' => 'mine', 'view' => 'new' ) ),
+	'list'    => fh_page( array( 'tab' => 'mine' ) ),
+);
+$leaks = array();
+foreach ( $views as $name => $html ) {
+	if ( false !== strpos( $html, 'fh_admin_ran' ) || false !== strpos( $html, '<textarea' ) || false !== strpos( $html, 'class="diff"' ) ) {
+		$leaks[] = $name;
+	}
+}
+check( 'an administrator not named: no code on the edit, history, diff or new screen — only the list', array() === $leaks && false !== strpos( $views['edit'], 'Only the people named in FISHOTEL_SNIPPETS_EDITORS can open a snippet&#039;s code' ) && false !== strpos( $views['edit'], 'fh-snip-db-table' ), implode( ',', $leaks ) );
+check( '… the list keeps the name and status but has no Edit / View / History links', false !== strpos( $views['list'], esc_html( $secret_row['name'] ) ) && false === strpos( $views['list'], 'view=edit' ) && false === strpos( $views['list'], 'view=history' ) );
+$GLOBALS['fh_multisite'] = true;
+fh_login( 7, 'jeff', true );
+check( 'multisite: a named site administrator who is not super admin sees no code either', false === strpos( fh_page( array( 'tab' => 'mine', 'view' => 'edit', 'id' => (string) $row['id'] ) ), 'fh_admin_ran' ) );
+$GLOBALS['fh_multisite'] = false;
+check( 'jeff still sees it', false !== strpos( fh_page( array( 'tab' => 'mine', 'view' => 'edit', 'id' => (string) $row['id'] ) ), 'fh_admin_ran' ) );
+
+echo "5c. Never lose typed code\n";
+fh_call( 'handle_save', fh_form( array( 'slug' => 'fix-me', 'name' => 'Fix me', 'code' => '$GLOBALS[\'fh_admin_ran\'][] = \'fix-me\';' ) ) );
+$fix  = $store->get_by_slug( 'fix-me' );
+fh_call( 'handle_save', fh_form( array( 'snippet_id' => (string) $fix['id'], 'base_version' => '1', 'name' => 'Fix me', 'code' => "throw new \\RuntimeException( 'oops' );" ) ) );
+fh_call( 'ajax_toggle', array( 'snippet_id' => (string) $fix['id'], 'enabled' => '0', Editor::NONCE_FIELD => fh_nonce() ) );
+$html = fh_page( array( 'tab' => 'mine', 'view' => 'edit', 'id' => (string) $fix['id'] ) );
+preg_match( '/name="base_version" value="([^"]*)"/', $html, $bv );
+fh_call( 'handle_save', fh_form( array( 'snippet_id' => (string) $fix['id'], 'base_version' => $bv[1], 'name' => 'Fix me', 'active' => '', 'code' => '$fixed = 1;' ) ) );
+check( 'a refused save, then he switches it off in the list, then saves his fixed code from the form: saved (an on / off change is no conflict)', '$fixed = 1;' === $store->get( $fix['id'] )['code'] && null === Admin_Editor::draft( 7, $fix['id'] ), json_encode( Admin_Editor::draft( 7, $fix['id'] ) ) );
+fh_call( 'handle_save', fh_form( array( 'snippet_id' => (string) $fix['id'], 'base_version' => (string) $store->get( $fix['id'] )['version'], 'name' => 'Renamed in another tab', 'active' => '', 'code' => '$fixed = 1;' ) ) );
+fh_call( 'handle_save', fh_form( array( 'snippet_id' => (string) $fix['id'], 'base_version' => $bv[1], 'name' => 'Fix me', 'active' => '', 'code' => '$mine = 2;' ) ) );
+$draft = Admin_Editor::draft( 7, $fix['id'] );
+check( 'a real conflict: refused, his code kept — the draft now based on the current version', false !== strpos( $draft['message'], 'changed since you opened it' ) && '$mine = 2;' === $draft['fields']['code'] && (string) $store->get( $fix['id'] )['version'] === $draft['fields']['base_version'] );
+$html = fh_page( array( 'tab' => 'mine', 'view' => 'edit', 'id' => (string) $fix['id'] ) );
+preg_match( '/name="base_version" value="([^"]*)"/', $html, $bv2 );
+fh_call( 'handle_save', fh_form( array( 'snippet_id' => (string) $fix['id'], 'base_version' => $bv2[1], 'name' => 'Fix me', 'active' => '', 'code' => '$mine = 2;' ) ) );
+check( '… so saving again from that form goes through (not "changed since" forever)', '$mine = 2;' === $store->get( $fix['id'] )['code'] && null === Admin_Editor::draft( 7, $fix['id'] ) );
+
+fh_call( 'handle_save', fh_form( array( 'slug' => 'gone', 'name' => 'Gone', 'active' => '', 'code' => '$g = 1;' ) ) );
+$gone = $store->get_by_slug( 'gone' );
+$html = fh_page( array( 'tab' => 'mine', 'view' => 'edit', 'id' => (string) $gone['id'] ) );
+check( 'the edit form carries the slug (never read on save), so a draft keeps it', false !== strpos( $html, '<input type="hidden" name="slug" value="gone">' ) );
+fh_call( 'handle_delete', array( 'snippet_id' => (string) $gone['id'], Editor::NONCE_FIELD => fh_nonce() ) ); // In another tab.
+Admin_Editor::take_notice();
+$halt = fh_call( 'handle_save', fh_form( array( 'snippet_id' => (string) $gone['id'], 'base_version' => '1', 'slug' => 'gone', 'name' => 'Gone', 'active' => '', 'code' => '$an_hour_of_work = 42;' ) ) );
+$html = fh_page( array( 'tab' => 'mine', 'view' => 'edit', 'id' => (string) $gone['id'] ) );
+check( 'saving a snippet deleted meanwhile: back to its address, where his code is offered as a new snippet (slug editable, filled)', $halt instanceof FH_Halt && false !== strpos( $halt->data, 'id=' . $gone['id'] ) && false !== strpos( $html, '$an_hour_of_work = 42;</textarea>' ) && false !== strpos( $html, 'was deleted (in another tab?)' ) && false !== strpos( $html, 'name="slug" value="gone"' ) && false !== strpos( $html, 'name="draft_id" value="' . $gone['id'] . '"' ) && false !== strpos( $html, 'name="snippet_id" value="0"' ) );
+check( '… and the list links to it', false !== strpos( fh_page( array( 'tab' => 'mine' ) ), 'You have unsaved code of snippet #' . $gone['id'] . ', which was deleted' ) );
+fh_call( 'handle_save', fh_form( array( 'snippet_id' => '0', 'draft_id' => (string) $gone['id'], 'slug' => 'gone', 'name' => 'Gone', 'active' => '', 'code' => '$an_hour_of_work = 42;' ) ) );
+check( '… created from there: a new snippet with his code, the draft gone', '$an_hour_of_work = 42;' === $store->get_by_slug( 'gone' )['code'] && (int) $store->get_by_slug( 'gone' )['id'] !== (int) $gone['id'] && null === Admin_Editor::draft( 7, $gone['id'] ) && false === strpos( fh_page( array( 'tab' => 'mine' ) ), 'which was deleted' ) );
+
+echo "5d. The list the site runs follows the table\n";
+$GLOBALS['fh_option_fail'][ Db_Snippets::OPTION_ACTIVE ] = true;
+$on_row = $store->get_by_slug( 'fix-me' );
+$halt   = fh_call( 'ajax_toggle', array( 'snippet_id' => (string) $on_row['id'], 'enabled' => '1', Editor::NONCE_FIELD => fh_nonce() ) );
+check( 'switched on, but the option write fails: the answer says so (stale), the site does not run it yet', true === $halt->data['success'] && true === $halt->data['data']['stale'] && false !== strpos( $halt->data['data']['message'], 'BUT the list' ) && 'pending' === $halt->data['data']['status']['key'] && ! isset( get_option( Db_Snippets::OPTION_ACTIVE )['fix-me'] ) );
+$halt = fh_call( 'handle_save', fh_form( array( 'snippet_id' => (string) $on_row['id'], 'base_version' => (string) $store->get( $on_row['id'] )['version'], 'name' => 'Fix me', 'code' => '$mine = 3;' ) ) );
+$html = fh_page( array( 'tab' => 'mine', 'view' => 'edit', 'id' => (string) $on_row['id'] ) );
+check( 'a save whose option write fails: an error notice, not "Saved"', false !== strpos( $html, 'is-error' ) && false !== strpos( $html, 'BUT the list of snippets the site runs could not be updated' ) );
+fh_login( 8, 'anna', true );
+$html = fh_page( array( 'tab' => 'mine' ) );
+check( 'anna\'s list: the drift is shown, the row says the site does not run it, nothing rebuilt', false !== strpos( $html, 'does not match this table (switched on but missing: fix-me)' ) && false !== strpos( $html, 'not in the list the site runs' ) && ! isset( get_option( Db_Snippets::OPTION_ACTIVE )['fix-me'] ) );
+unset( $GLOBALS['fh_option_fail'][ Db_Snippets::OPTION_ACTIVE ] );
+update_option( Db_Snippets::OPTION_ACTIVE, array_merge( get_option( Db_Snippets::OPTION_ACTIVE ), array( 'x' => array( 'slug' => 'x', 'type' => 'php', 'scope' => 'global', 'code' => "\$GLOBALS['fh_admin_ran'][] = 'injected';" ) ) ), true ); // Anna, through wp-admin/options.php.
+fh_login( 7, 'jeff', true );
+$GLOBALS['fh_actions'] = array();
+$html = fh_page( array( 'tab' => 'mine' ) );
+$want = Db_Snippets::active_option( $store->all() )['map'];
+check( 'jeff\'s next view of the list rebuilds it from the table: the snippet listed, the injected entry gone, a notice and a Health warning', $want === get_option( Db_Snippets::OPTION_ACTIVE ) && isset( $want['fix-me'] ) && ! isset( get_option( Db_Snippets::OPTION_ACTIVE )['x'] ) && false !== strpos( $html, 'It was rebuilt from the table just now' ) && false !== strpos( $html, 'switched on but missing: fix-me; not written by the editor (or the salts changed): x' ) && 1 === count( array_filter( $GLOBALS['fh_actions'], static function ( $a ) { return 'fishotel_log' === $a[0] && 'warning' === $a[1][0] && false !== strpos( $a[1][2], 'rebuilt from the table' ); } ) ) );
+check( '… and the view after that is quiet', false === strpos( fh_page( array( 'tab' => 'mine' ) ), 'did not match' ) );
+
 echo "6. Export and the CSV\n";
 $halt = fh_call( 'handle_export', array( 'snippet_id' => (string) $row['id'], Editor::NONCE_FIELD => fh_nonce() ) );
 check( 'export: the file is sent as a download and the request ends', $halt instanceof FH_Halt && 'exit' === $halt->kind && 0 === strpos( $GLOBALS['fh_printed'], "<?php\n/**\n * Snippet: Hide the bar\n" ) && false !== strpos( $GLOBALS['fh_printed'], 'Origin: written in wp-admin by jeff, exported ' ) && false !== strpos( $GLOBALS['fh_printed'], 'Default: off' ) );
@@ -291,6 +369,22 @@ for ( $n = 0; $n < 40; $n++ ) {
 	fh_call( 'handle_save', fh_form() );
 }
 check( 'a logged-in customer hammering the save: refused every time, at most 30 denied rows an hour', $before + Admin_Editor::DENIED_PER_HOUR === count( $store->log ) );
+foreach ( array( 31, 32, 33, 34 ) as $customer ) {
+	fh_login( $customer, 'customer' . $customer, false );
+	for ( $n = 0; $n < 40; $n++ ) {
+		fh_call( 'handle_save', fh_form() );
+	}
+}
+check( 'five customer accounts: at most 100 denied rows an hour for all of them together', $before + Admin_Editor::DENIED_SITE_PER_HOUR === count( $store->log ) );
+fh_login( 8, 'anna', true );
+fh_call( 'handle_save', fh_form() );
+check( '… an administrator\'s refusal is still logged (the customers cannot crowd it out)', $before + Admin_Editor::DENIED_SITE_PER_HOUR + 1 === count( $store->log ) && 'anna' === $store->log_rows( array(), 1 )[0]['user_login'] );
+$site = get_transient( Admin_Editor::DENIED_TRANSIENT . 'site' );
+set_transient( Admin_Editor::DENIED_TRANSIENT . 'site', array( 'start' => $site['start'] - HOUR_IN_SECONDS, 'n' => $site['n'] ), 1 );
+set_transient( Admin_Editor::DENIED_TRANSIENT . '35', array( 'start' => time() - HOUR_IN_SECONDS, 'n' => Admin_Editor::DENIED_PER_HOUR ), 1 );
+fh_login( 35, 'customer35', false );
+fh_call( 'handle_save', fh_form() );
+check( 'the hour is a fixed window: once it is over, refusals are logged again', $before + Admin_Editor::DENIED_SITE_PER_HOUR + 2 === count( $store->log ) && 1 === get_transient( Admin_Editor::DENIED_TRANSIENT . 'site' )['n'] );
 fh_login( 7, 'jeff', true );
 $_GET[ Loader::SAFE_MODE_QUERY ] = '1';
 Loader::reset();
@@ -332,7 +426,20 @@ check( 'section boot (admin): no install query either, and the editor\'s handler
 delete_option( Db_Store::DB_VERSION_OPTION );
 delete_option( Db_Snippets::OPTION_ACTIVE );
 check( 'not installed: the first boot installs the three tables', true === Db_Store::maybe_install( false ) && 3 === count( $GLOBALS['fh_dbdelta'] ) && Db_Store::installed() && true === $GLOBALS['fh_autoload'][ Db_Store::DB_VERSION_OPTION ] );
-check( '… with the slug unique, the revision version unique per snippet, the log keyed for its filters', false !== strpos( $GLOBALS['fh_dbdelta'][0], 'UNIQUE KEY slug (slug)' ) && false !== strpos( $GLOBALS['fh_dbdelta'][1], 'UNIQUE KEY snippet_version (snippet_id,version)' ) && false !== strpos( $GLOBALS['fh_dbdelta'][2], 'KEY action (action)' ) && false !== strpos( $GLOBALS['fh_dbdelta'][0], 'code LONGTEXT NOT NULL' ) );
+check( '… with the slug unique, the revision version unique per snippet, the log keyed for its filters', false !== strpos( $GLOBALS['fh_dbdelta'][0], 'UNIQUE KEY slug (slug)' ) && false !== strpos( $GLOBALS['fh_dbdelta'][1], 'UNIQUE KEY snippet_version (snippet_id,version)' ) && false !== strpos( $GLOBALS['fh_dbdelta'][2], 'KEY action (action)' ) && false !== strpos( $GLOBALS['fh_dbdelta'][0], 'code longtext NOT NULL' ) );
+$types = array();
+foreach ( $GLOBALS['fh_dbdelta'] as $statement ) {
+	preg_match( '|\((.*)\)|ms', $statement, $body );
+	foreach ( explode( "\n", trim( $body[1] ) ) as $line ) {
+		$line = trim( $line, " \t\n\r\0\x0B," );
+		// dbDelta's own reading of a column line, then its comparison with DESCRIBE: Type !== $fieldtype.
+		if ( preg_match( '|^`?(\w+)`? ([^ ]*( unsigned)?)|i', $line, $m ) && ! in_array( strtolower( $m[1] ), array( 'primary', 'unique', 'key', 'index' ), true ) ) {
+			$types[] = $m[2];
+		}
+	}
+}
+$describe = array( 'bigint(20) unsigned', 'varchar(64)', 'varchar(191)', 'varchar(8)', 'varchar(20)', 'varchar(60)', 'varchar(45)', 'varchar(100)', 'varchar(255)', 'text', 'longtext', 'int(11)', 'int(10) unsigned', 'tinyint(1)', 'datetime' );
+check( '… every column type exactly as MySQL 5.7 / MariaDB report it (dbDelta compares case-sensitively: anything else ALTERs the column on every install)', 33 === count( $types ) && array() === array_diff( $types, $describe ), json_encode( array_diff( $types, $describe ) ) );
 check( '… and the active option exists, empty and autoloaded (the loader reads it on every request)', array() === get_option( Db_Snippets::OPTION_ACTIVE ) && true === $GLOBALS['fh_autoload'][ Db_Snippets::OPTION_ACTIVE ] );
 $GLOBALS['wpdb']->tables     = array();
 $GLOBALS['fh_dbdelta_fail']  = true;

@@ -13,17 +13,25 @@
  *      the PHP is TEST-RUN ONCE in this request (Loader::test_run(), as the
  *      Snippets page switch does for a file): a throw refuses the save with
  *      the message and is logged as test_failed; a compile-stage fatal ends
- *      only this request — nothing has been written yet;
- *   4. only then, in one transaction: the row (version + 1, optimistic
- *      lock on the version the editor read), one revision, one audit log
- *      row; then the active option is rebuilt and the entry goes to the
- *      Health log through fishotel_log.
+ *      only this request — nothing has been written yet. When the snippet
+ *      already runs on that request, Loader runs the new code in its place
+ *      at plugins_loaded:1 (trial_save() / trial_restore() tell it which,
+ *      writing nothing) and test_run() hands back that result;
+ *   4. only then, in one transaction (a refused COMMIT is a failure): the
+ *      row (version + 1, optimistic lock on the version the editor read),
+ *      one revision, one audit log row; then the active option is rebuilt
+ *      and read back (a result flagged `stale` when it could not be: the
+ *      table moved on, the site did not) and the entry goes to the Health
+ *      log through fishotel_log.
+ *
+ * Switching off skips steps 1–3: the code does not run, so nothing about
+ * it may keep the snippet on.
  *
  * A refused write writes nothing but its log row (test_failed / denied);
  * the admin keeps the typed code as a draft so nothing is lost.
  *
  * Results are arrays: ok, code (a short reason key), message, errors
- * (field => text), id, version.
+ * (field => text), id, version (for a conflict: the current one), stale.
  *
  * @package FisHotel\Misc\Sections\Site_Snippets
  */
@@ -109,7 +117,9 @@ class Editor {
 		$ms   = function_exists( 'is_multisite' ) && is_multisite();
 
 		return array(
-			'constant'           => defined( Editor_Rules::EDITORS_CONSTANT ) ? (string) constant( Editor_Rules::EDITORS_CONSTANT ) : null,
+			// As defined: Editor_Rules::parse_editors() accepts a string or a
+			// user ID only (an array cast to a string would be the login "array").
+			'constant'           => defined( Editor_Rules::EDITORS_CONSTANT ) ? constant( Editor_Rules::EDITORS_CONSTANT ) : null,
 			'user_id'            => $id,
 			'user_login'         => $id > 0 && isset( $user->user_login ) ? (string) $user->user_login : '',
 			'can_manage_options' => $id > 0 && current_user_can( 'manage_options' ),
@@ -157,13 +167,110 @@ class Editor {
 	 * @return array
 	 */
 	public function save( array $input, $id = 0 ) {
+		$plan = $this->plan_save( $input, $id );
+
+		return isset( $plan['ok'] ) ? $plan : $this->commit( $plan['before'], $plan['fields'], $plan['action'], $plan['opts'] );
+	}
+
+	/**
+	 * Switch a snippet on or off (the list's switch). On = the same checks
+	 * and test run as a save. Off always works: the code does not run, so
+	 * neither the field rules, the parse check, a clash nor the size cap can
+	 * refuse it (code that no longer parses on a newer PHP, or a GitHub file
+	 * that now declares the same function, must not keep it on).
+	 *
+	 * @param int  $id Snippet id.
+	 * @param bool $on On?
+	 * @return array
+	 */
+	public function set_active( $id, $on ) {
+		$before = $this->store->get( (int) $id );
+		if ( ! is_array( $before ) ) {
+			return self::fail( 'not_found', 'That snippet no longer exists.' );
+		}
+
+		if ( (bool) $before['active'] === (bool) $on ) {
+			return self::done( 'unchanged', $on ? 'It is already on.' : 'It is already off.', (int) $id, (int) $before['version'] );
+		}
+
+		if ( ! $on ) {
+			return $this->commit( $before, array_merge( self::fields_of( $before ), array( 'active' => 0 ) ), 'deactivate' );
+		}
+
+		$file = Db_Snippets::superseded_by( $before['slug'], $this->files() );
+		if ( '' !== $file ) {
+			return self::fail( 'superseded', 'Refused: the GitHub file ' . $file . ' supersedes this copy, so switching it on would change nothing. Switch the file on under Files, and delete this copy.' );
+		}
+
+		$check = Editor_Rules::validate( array_merge( $before, array( 'active' => 1 ) ), $before );
+		if ( ! $check['ok'] ) {
+			return self::fail( 'invalid', 'Refused: the stored snippet no longer validates — ' . implode( ' ', $check['errors'] ) );
+		}
+
+		return $this->commit( $before, $check['fields'], 'activate' );
+	}
+
+	/**
+	 * Restore a revision's code and fields as a new version (the snippet
+	 * keeps its current on / off state; on = test-run like a save).
+	 *
+	 * @param int        $id           Snippet id.
+	 * @param int        $revision_id  Revision id.
+	 * @param int|string $base_version The version the history page showed ('' = skip the check).
+	 * @return array
+	 */
+	public function restore_revision( $id, $revision_id, $base_version = '' ) {
+		$plan = $this->plan_restore( $id, $revision_id, $base_version );
+
+		return isset( $plan['ok'] ) ? $plan : $this->commit( $plan['before'], $plan['fields'], $plan['action'], $plan['opts'] );
+	}
+
+	/**
+	 * What save() would test-run for this input — WITHOUT writing anything:
+	 * the index-shaped entry of the code, and the fields, or null when the
+	 * save would not test-run (refused first, saved off, not PHP,
+	 * superseded, nothing changed). Loader asks at plugins_loaded:1 on the
+	 * editor's own save request, to run that code in the snippet's place.
+	 *
+	 * @param array $input Raw fields (+ base_version).
+	 * @param int   $id    Snippet id.
+	 * @return array{entry: array, fields: array}|null
+	 */
+	public function trial_save( array $input, $id ) {
+		$plan = $this->plan_save( $input, $id );
+		return isset( $plan['ok'] ) ? null : $this->trial_of( $plan );
+	}
+
+	/**
+	 * What restore_revision() would test-run — without writing anything
+	 * (see trial_save()).
+	 *
+	 * @param int        $id           Snippet id.
+	 * @param int        $revision_id  Revision id.
+	 * @param int|string $base_version The version the history page showed.
+	 * @return array{entry: array, fields: array}|null
+	 */
+	public function trial_restore( $id, $revision_id, $base_version = '' ) {
+		$plan = $this->plan_restore( $id, $revision_id, $base_version );
+		return isset( $plan['ok'] ) ? null : $this->trial_of( $plan );
+	}
+
+	/**
+	 * A save's decisions before the checks: a result (refused / unchanged)
+	 * or the plan { before, fields, action, opts }.
+	 *
+	 * @param array $input Raw fields (+ base_version when editing).
+	 * @param int   $id    Snippet id, 0 for a new one.
+	 * @return array
+	 */
+	private function plan_save( array $input, $id ) {
 		$id     = (int) $id;
 		$before = null;
 
 		if ( $id > 0 ) {
 			$before = $this->store->get( $id );
 			if ( ! is_array( $before ) ) {
-				return self::fail( 'not_found', 'Not saved: that snippet no longer exists (deleted meanwhile?). Your code is kept below.' );
+				return self::fail( 'not_found', 'Not saved: that snippet no longer exists (deleted meanwhile?). Your code is kept below — create it as a new snippet, or restore the deleted one from the Log tab.' );
 			}
 		}
 
@@ -173,8 +280,10 @@ class Editor {
 		}
 		$fields = $check['fields'];
 
-		if ( is_array( $before ) && isset( $input['base_version'] ) && '' !== (string) $input['base_version'] && (int) $input['base_version'] !== (int) $before['version'] ) {
-			return self::fail( 'conflict', 'Not saved: this snippet was changed since you opened it (it is now version ' . (int) $before['version'] . '). Your code is kept below — copy what you need, reload the snippet and merge.' );
+		if ( is_array( $before ) && isset( $input['base_version'] ) && '' !== (string) $input['base_version'] && (int) $input['base_version'] !== (int) $before['version'] && ! $this->only_switched_since( $before, (int) $input['base_version'] ) ) {
+			$out            = self::fail( 'conflict', 'Not saved: this snippet was changed since you opened it (it is now version ' . (int) $before['version'] . '). Your code is kept below — compare it with the History, merge what you need and save again: the next save replaces version ' . (int) $before['version'] . '.' );
+			$out['version'] = (int) $before['version'];
+			return $out;
 		}
 
 		if ( ! is_array( $before ) ) {
@@ -191,52 +300,23 @@ class Editor {
 			$action = self::meta_and_code_equal( $before, $fields, true ) ? ( $fields['active'] ? 'activate' : 'deactivate' ) : 'update';
 		}
 
-		return $this->commit( $before, $fields, $action );
+		return array(
+			'before' => $before,
+			'fields' => $fields,
+			'action' => $action,
+			'opts'   => array(),
+		);
 	}
 
 	/**
-	 * Switch a snippet on or off (the list's switch). On = the same checks
-	 * and test run as a save.
-	 *
-	 * @param int  $id Snippet id.
-	 * @param bool $on On?
-	 * @return array
-	 */
-	public function set_active( $id, $on ) {
-		$before = $this->store->get( (int) $id );
-		if ( ! is_array( $before ) ) {
-			return self::fail( 'not_found', 'That snippet no longer exists.' );
-		}
-
-		if ( (bool) $before['active'] === (bool) $on ) {
-			return self::done( 'unchanged', $on ? 'It is already on.' : 'It is already off.', (int) $id, (int) $before['version'] );
-		}
-
-		if ( $on ) {
-			$file = Db_Snippets::superseded_by( $before['slug'], $this->files() );
-			if ( '' !== $file ) {
-				return self::fail( 'superseded', 'Refused: the GitHub file ' . $file . ' supersedes this copy, so switching it on would change nothing. Switch the file on under Files, and delete this copy.' );
-			}
-		}
-
-		$check = Editor_Rules::validate( array_merge( $before, array( 'active' => $on ? 1 : 0 ) ), $before );
-		if ( ! $check['ok'] ) {
-			return self::fail( 'invalid', 'Refused: the stored snippet no longer validates — ' . implode( ' ', $check['errors'] ) );
-		}
-
-		return $this->commit( $before, $check['fields'], $on ? 'activate' : 'deactivate' );
-	}
-
-	/**
-	 * Restore a revision's code and fields as a new version (the snippet
-	 * keeps its current on / off state; on = test-run like a save).
+	 * A restore's decisions before the checks: a result or the plan.
 	 *
 	 * @param int        $id           Snippet id.
 	 * @param int        $revision_id  Revision id.
 	 * @param int|string $base_version The version the history page showed ('' = skip the check).
 	 * @return array
 	 */
-	public function restore_revision( $id, $revision_id, $base_version = '' ) {
+	private function plan_restore( $id, $revision_id, $base_version ) {
 		$before = $this->store->get( (int) $id );
 		$rev    = $this->store->revision( (int) $revision_id );
 
@@ -262,7 +342,47 @@ class Editor {
 			return self::done( 'unchanged', 'Version ' . (int) $rev['version'] . ' is the same as the current one; nothing to restore.', (int) $id, (int) $before['version'] );
 		}
 
-		return $this->commit( $before, $check['fields'], 'restore', array( 'from_version' => (int) $rev['version'] ) );
+		return array(
+			'before' => $before,
+			'fields' => $check['fields'],
+			'action' => 'restore',
+			'opts'   => array( 'from_version' => (int) $rev['version'] ),
+		);
+	}
+
+	/**
+	 * The test run of a plan, after the checks (null = none).
+	 *
+	 * @param array $plan { before, fields, action, opts }.
+	 * @return array{entry: array, fields: array}|null
+	 */
+	private function trial_of( array $plan ) {
+		$checked = $this->check( $plan['before'], $plan['fields'], $plan['action'], $plan['opts'] );
+		if ( isset( $checked['ok'] ) || null === $checked['test'] ) {
+			return null;
+		}
+
+		return array(
+			'entry'  => $checked['test'],
+			'fields' => array_merge( $plan['fields'], array( 'version' => $checked['version'] ) ),
+		);
+	}
+
+	/**
+	 * Whether everything that changed since $base_version is the on / off
+	 * state (the list's switch): the editor's form is then not stale.
+	 *
+	 * @param array $before       The row now.
+	 * @param int   $base_version The version the form was opened at.
+	 * @return bool
+	 */
+	private function only_switched_since( array $before, $base_version ) {
+		foreach ( (array) $this->store->revisions( (int) $before['id'] ) as $rev ) {
+			if ( (int) $rev['version'] === (int) $base_version ) {
+				return self::meta_and_code_equal( array_merge( self::decode_meta( $rev ), array( 'code' => (string) $rev['code'] ) ), $before, true );
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -278,31 +398,32 @@ class Editor {
 			return self::fail( 'not_found', 'That snippet no longer exists.' );
 		}
 
-		$this->store->begin();
-		try {
-			if ( ! $this->store->delete( (int) $id ) ) {
-				throw new \RuntimeException( 'the snippet row could not be deleted' );
+		$summary = Editor_Rules::audit_summary(
+			'delete',
+			array(
+				'version' => (int) $before['version'],
+				'before'  => $before,
+			)
+		);
+
+		$failed = $this->transaction(
+			function () use ( $id, $before, $summary ) {
+				if ( ! $this->store->delete( (int) $id ) ) {
+					throw new \RuntimeException( 'the snippet row could not be deleted' );
+				}
+				if ( ! $this->store->append_log( $this->log_row( 'delete', (int) $id, $before['slug'], $summary ) ) ) {
+					throw new \RuntimeException( 'the log entry could not be written' );
+				}
 			}
-			$summary = Editor_Rules::audit_summary(
-				'delete',
-				array(
-					'version' => (int) $before['version'],
-					'before'  => $before,
-				)
-			);
-			if ( ! $this->store->append_log( $this->log_row( 'delete', (int) $id, $before['slug'], $summary ) ) ) {
-				throw new \RuntimeException( 'the log entry could not be written' );
-			}
-			$this->store->commit();
-		} catch ( \Throwable $e ) {
-			$this->store->rollback();
-			return self::fail( 'db', 'Not deleted: the database refused the write (' . $e->getMessage() . ').' );
+		);
+		if ( '' !== $failed ) {
+			return self::fail( 'db', 'Not deleted: the database refused the write (' . $failed . ').' );
 		}
 
-		$this->rebuild_active();
+		$stale = $this->rebuild_after_write();
 		$this->emit( 'warning', 'delete', $before['slug'], (int) $id, $summary );
 
-		return self::done( 'deleted', 'Deleted "' . $before['name'] . '". Its history and log are kept; the Log tab can restore it.', (int) $id, (int) $before['version'] );
+		return self::done( 'deleted', 'Deleted "' . $before['name'] . '". Its history and log are kept; the Log tab can restore it.' . ( $stale ? self::STALE_TEXT : '' ), (int) $id, (int) $before['version'], $stale );
 	}
 
 	/**
@@ -386,18 +507,18 @@ class Editor {
 			)
 		);
 
-		$this->store->begin();
-		try {
-			if ( ! $this->store->set_exported( (int) $id, $this->now() ) ) {
-				throw new \RuntimeException( 'exported_at could not be written' );
+		$failed = $this->transaction(
+			function () use ( $id, $row, $summary ) {
+				if ( ! $this->store->set_exported( (int) $id, $this->now() ) ) {
+					throw new \RuntimeException( 'exported_at could not be written' );
+				}
+				if ( ! $this->store->append_log( $this->log_row( 'export', (int) $id, $row['slug'], $summary ) ) ) {
+					throw new \RuntimeException( 'the log entry could not be written' );
+				}
 			}
-			if ( ! $this->store->append_log( $this->log_row( 'export', (int) $id, $row['slug'], $summary ) ) ) {
-				throw new \RuntimeException( 'the log entry could not be written' );
-			}
-			$this->store->commit();
-		} catch ( \Throwable $e ) {
-			$this->store->rollback();
-			return self::fail( 'db', 'Not exported: the database refused the write (' . $e->getMessage() . ').' );
+		);
+		if ( '' !== $failed ) {
+			return self::fail( 'db', 'Not exported: the database refused the write (' . $failed . ').' );
 		}
 
 		$this->emit( 'info', 'export', $row['slug'], (int) $id, $summary );
@@ -479,7 +600,8 @@ class Editor {
 	 * cannot be read: an error must never empty the option (that would
 	 * stop every database snippet).
 	 *
-	 * @return array|null Active option result, or null when skipped.
+	 * @return array|null Active option result + written (whether the option
+	 *                    now holds it), or null when skipped.
 	 */
 	public function rebuild_active() {
 		$rows = $this->store->all();
@@ -487,17 +609,60 @@ class Editor {
 			return null;
 		}
 
-		$built = Db_Snippets::active_option( $rows );
+		$built            = Db_Snippets::active_option( $rows );
+		$built['written'] = true;
 		if ( is_callable( $this->deps['write_active'] ) ) {
-			call_user_func( $this->deps['write_active'], $built['map'] );
+			$built['written'] = false !== call_user_func( $this->deps['write_active'], $built['map'] );
 		}
 
 		return $built;
 	}
 
+	/**
+	 * My snippets: compare the stored active option with the one the table
+	 * gives, and rebuild it when they differ and $write (a named editor's
+	 * view) — a write that never reached the option, an entry the editor
+	 * did not write, new salts. A rebuild goes to the Health log.
+	 *
+	 * @param mixed $stored The stored option.
+	 * @param bool  $write  Rebuild it when it differs.
+	 * @return array{drift: string, rebuilt: bool} drift '' = they match (or the table cannot be read).
+	 */
+	public function sync_active( $stored, $write ) {
+		$rows = $this->store->all();
+		if ( ! is_array( $rows ) ) {
+			return array(
+				'drift'   => '',
+				'rebuilt' => false,
+			);
+		}
+
+		$built   = Db_Snippets::active_option( $rows );
+		$drift   = Db_Snippets::drift( $built['map'], $stored );
+		$rebuilt = false;
+
+		if ( '' !== $drift && $write && is_callable( $this->deps['write_active'] ) ) {
+			$rebuilt = false !== call_user_func( $this->deps['write_active'], $built['map'] );
+			$this->emit( 'warning', 'rebuild', '', 0, 'the list of snippets the site runs did not match the table (' . $drift . '); ' . ( $rebuilt ? 'rebuilt from the table' : 'rebuilding it failed' ) );
+		}
+
+		return array(
+			'drift'   => $drift,
+			'rebuilt' => $rebuilt,
+		);
+	}
+
 	/* ============================================================== */
 	/*  The pipeline                                                   */
 	/* ============================================================== */
+
+	/**
+	 * Appended to a write's message when the active option could not be
+	 * rebuilt after it.
+	 *
+	 * @var string
+	 */
+	const STALE_TEXT = ' BUT the list of snippets the site runs could not be updated, so the site still runs this snippet as it was before. Open My snippets to rebuild the list (if that fails too, check the database).';
 
 	/**
 	 * Checks, test run, then the write (row + revision + log), the active
@@ -510,6 +675,141 @@ class Editor {
 	 * @return array
 	 */
 	private function commit( $before, array $fields, $action, array $opts = array() ) {
+		$checked = $this->check( $before, $fields, $action, $opts );
+		if ( isset( $checked['ok'] ) ) {
+			return $checked;
+		}
+
+		$slug       = $fields['slug'];
+		$id         = $checked['id'];
+		$version    = $checked['version'];
+		$superseded = $checked['superseded'];
+
+		// The test run: PHP that will run from now on, run once here first.
+		if ( null !== $checked['test'] ) {
+			if ( is_callable( $this->deps['before_test'] ) ) {
+				call_user_func( $this->deps['before_test'], array_merge( $fields, array( 'version' => $version ) ), $id );
+			}
+
+			$failed = is_callable( $this->deps['test_run'] ) ? (string) call_user_func( $this->deps['test_run'], $checked['test'] ) : '';
+
+			if ( '' !== $failed ) {
+				$summary = Editor_Rules::audit_summary(
+					'test_failed',
+					array(
+						'version' => $version,
+						'after'   => $fields,
+						'message' => $failed,
+					)
+				);
+				$this->store->append_log( $this->log_row( 'test_failed', $id, $slug, $summary ) );
+				$this->emit( 'warning', 'test_failed', $slug, $id, $summary );
+
+				return self::fail( 'test_failed', 'Refused: the test run failed — ' . $failed . ' Nothing was saved; your code is kept below.', array( 'code' => $failed ) );
+			}
+		}
+
+		$now   = $this->now();
+		$actor = $this->actor();
+		$row   = array_merge(
+			$fields,
+			array(
+				'version'    => $version,
+				'updated_by' => (int) $actor['user_id'],
+				'updated_at' => $now,
+			)
+		);
+		if ( ! is_array( $before ) ) {
+			$row['created_by'] = (int) $actor['user_id'];
+			$row['created_at'] = $now;
+			if ( $id > 0 ) {
+				$row['id'] = $id;
+			}
+		}
+
+		$summary = Editor_Rules::audit_summary(
+			$action,
+			array(
+				'version'      => $version,
+				'from_version' => isset( $opts['from_version'] ) ? (int) $opts['from_version'] : 0,
+				'before'       => $before,
+				'after'        => $fields,
+			)
+		);
+
+		$failed = $this->transaction(
+			function () use ( $before, $row, $fields, $version, $now, $actor, $action, $slug, $summary, &$id ) {
+				if ( is_array( $before ) ) {
+					if ( ! $this->store->update( $id, $row, (int) $before['version'] ) ) {
+						throw new \RuntimeException( 'the snippet changed meanwhile or the row could not be written' );
+					}
+				} else {
+					$id = (int) $this->store->insert( $row );
+					if ( $id <= 0 ) {
+						throw new \RuntimeException( 'the snippet row could not be written' );
+					}
+				}
+
+				$rev = $this->store->add_revision(
+					array(
+						'snippet_id' => $id,
+						'version'    => $version,
+						'code'       => $fields['code'],
+						'meta'       => Editor_Rules::meta_of( $fields ),
+						'user_id'    => (int) $actor['user_id'],
+						'created_at' => $now,
+					)
+				);
+				if ( ! $rev ) {
+					throw new \RuntimeException( 'the revision could not be written' );
+				}
+
+				if ( ! $this->store->append_log( $this->log_row( $action, $id, $slug, $summary ) ) ) {
+					throw new \RuntimeException( 'the log entry could not be written' );
+				}
+			}
+		);
+		if ( '' !== $failed ) {
+			return self::fail( 'db', 'Not saved: the database refused the write (' . $failed . '). Nothing was changed; your code is kept below.' );
+		}
+
+		$stale = $this->rebuild_after_write();
+		$this->emit( 'info', $action, $slug, $id, $summary );
+
+		$verbs = array(
+			'create'     => 'Created',
+			'update'     => 'Saved',
+			'activate'   => 'Switched on',
+			'deactivate' => 'Switched off',
+			'restore'    => 'Restored',
+		);
+		$text  = ( isset( $verbs[ $action ] ) ? $verbs[ $action ] : 'Saved' ) . ' — version ' . $version . '.';
+		if ( null !== $checked['test'] ) {
+			$text .= ' The test run passed; it runs from the next request.';
+		} elseif ( '' !== $superseded ) {
+			$text .= ' Note: the GitHub file ' . $superseded . ' supersedes it, so this copy never runs.';
+		}
+		if ( $stale ) {
+			$text .= self::STALE_TEXT;
+		}
+
+		return self::done( $action, $text, $id, $version, $stale );
+	}
+
+	/**
+	 * The checks before a write, which write nothing: the parse check and
+	 * the clash scan for PHP (not when switching off — the code does not
+	 * run then), the size of everything switched on, and the test run it
+	 * needs. A refusal (a result with `ok`), or { id, version, superseded,
+	 * test: index-shaped entry to test-run | null }.
+	 *
+	 * @param array|null $before Row before (null = new or restored-deleted).
+	 * @param array      $fields Validated fields.
+	 * @param string     $action create|update|activate|deactivate|restore.
+	 * @param array      $opts   insert_id, version.
+	 * @return array
+	 */
+	private function check( $before, array $fields, $action, array $opts ) {
 		$files    = $this->files();
 		$file_map = isset( $files['snippets'] ) && is_array( $files['snippets'] ) ? $files['snippets'] : array();
 		$slug     = $fields['slug'];
@@ -518,7 +818,7 @@ class Editor {
 		$rows     = null;
 		$declares = array();
 
-		if ( 'php' === $fields['type'] ) {
+		if ( 'php' === $fields['type'] && 'deactivate' !== $action ) {
 			$syntax = Db_Snippets::syntax_error( $fields['code'] );
 			if ( '' !== $syntax['error'] ) {
 				$text = 'PHP syntax error on line ' . (int) $syntax['line'] . ': ' . $syntax['error'];
@@ -571,128 +871,66 @@ class Editor {
 			}
 		}
 
-		// The test run: PHP that will run from now on, run once here first.
+		$test = null;
 		if ( $fields['active'] && 'php' === $fields['type'] && '' === $superseded ) {
-			if ( is_callable( $this->deps['before_test'] ) ) {
-				call_user_func( $this->deps['before_test'], array_merge( $fields, array( 'version' => $version ) ), $id );
-			}
-
-			$failed = '';
-			if ( is_callable( $this->deps['test_run'] ) ) {
-				$entry           = Db_Snippets::entry(
-					array(
-						'id'       => $id,
-						'slug'     => $slug,
-						'type'     => 'php',
-						'scope'    => $fields['scope'],
-						'priority' => $fields['priority'],
-						'code'     => $fields['code'],
-						'version'  => $version,
-						'declares' => $declares,
-					)
-				);
-				$failed          = (string) call_user_func( $this->deps['test_run'], $entry );
-			}
-
-			if ( '' !== $failed ) {
-				$summary = Editor_Rules::audit_summary(
-					'test_failed',
-					array(
-						'version' => $version,
-						'after'   => $fields,
-						'message' => $failed,
-					)
-				);
-				$this->store->append_log( $this->log_row( 'test_failed', $id, $slug, $summary ) );
-				$this->emit( 'warning', 'test_failed', $slug, $id, $summary );
-
-				return self::fail( 'test_failed', 'Refused: the test run failed — ' . $failed . ' Nothing was saved; your code is kept below.', array( 'code' => $failed ) );
-			}
-		}
-
-		$now   = $this->now();
-		$actor = $this->actor();
-		$row   = array_merge(
-			$fields,
-			array(
-				'version'    => $version,
-				'updated_by' => (int) $actor['user_id'],
-				'updated_at' => $now,
-			)
-		);
-		if ( ! is_array( $before ) ) {
-			$row['created_by'] = (int) $actor['user_id'];
-			$row['created_at'] = $now;
-			if ( $id > 0 ) {
-				$row['id'] = $id;
-			}
-		}
-
-		$summary = Editor_Rules::audit_summary(
-			$action,
-			array(
-				'version'      => $version,
-				'from_version' => isset( $opts['from_version'] ) ? (int) $opts['from_version'] : 0,
-				'before'       => $before,
-				'after'        => $fields,
-			)
-		);
-
-		$this->store->begin();
-		try {
-			if ( is_array( $before ) ) {
-				if ( ! $this->store->update( $id, $row, (int) $before['version'] ) ) {
-					throw new \RuntimeException( 'the snippet changed meanwhile or the row could not be written' );
-				}
-			} else {
-				$id = (int) $this->store->insert( $row );
-				if ( $id <= 0 ) {
-					throw new \RuntimeException( 'the snippet row could not be written' );
-				}
-			}
-
-			$rev = $this->store->add_revision(
+			$test = Db_Snippets::entry(
 				array(
-					'snippet_id' => $id,
-					'version'    => $version,
-					'code'       => $fields['code'],
-					'meta'       => Editor_Rules::meta_of( $fields ),
-					'user_id'    => (int) $actor['user_id'],
-					'created_at' => $now,
+					'id'       => $id,
+					'slug'     => $slug,
+					'type'     => 'php',
+					'scope'    => $fields['scope'],
+					'priority' => $fields['priority'],
+					'code'     => $fields['code'],
+					'version'  => $version,
+					'declares' => $declares,
 				)
 			);
-			if ( ! $rev ) {
-				throw new \RuntimeException( 'the revision could not be written' );
-			}
+		}
 
-			if ( ! $this->store->append_log( $this->log_row( $action, $id, $slug, $summary ) ) ) {
-				throw new \RuntimeException( 'the log entry could not be written' );
-			}
+		return array(
+			'id'         => $id,
+			'version'    => $version,
+			'superseded' => $superseded,
+			'test'       => $test,
+		);
+	}
 
-			$this->store->commit();
+	/**
+	 * Run writes in one transaction: '' when they were kept, else why not
+	 * (the transaction would not start, a write failed — rolled back —, or
+	 * the COMMIT was refused, which keeps nothing).
+	 *
+	 * @param callable $writes Throws on a failed write.
+	 * @return string
+	 */
+	private function transaction( $writes ) {
+		if ( false === $this->store->begin() ) {
+			return 'the transaction could not be started';
+		}
+
+		try {
+			call_user_func( $writes );
+			if ( false === $this->store->commit() ) {
+				throw new \RuntimeException( 'the COMMIT was refused, so nothing was kept' );
+			}
 		} catch ( \Throwable $e ) {
 			$this->store->rollback();
-			return self::fail( 'db', 'Not saved: the database refused the write (' . $e->getMessage() . '). Nothing was changed; your code is kept below.' );
+			return $e->getMessage();
 		}
 
-		$this->rebuild_active();
-		$this->emit( 'info', $action, $slug, $id, $summary );
+		return '';
+	}
 
-		$verbs = array(
-			'create'     => 'Created',
-			'update'     => 'Saved',
-			'activate'   => 'Switched on',
-			'deactivate' => 'Switched off',
-			'restore'    => 'Restored',
-		);
-		$text  = ( isset( $verbs[ $action ] ) ? $verbs[ $action ] : 'Saved' ) . ' — version ' . $version . '.';
-		if ( $fields['active'] && 'php' === $fields['type'] && '' === $superseded ) {
-			$text .= ' The test run passed; it runs from the next request.';
-		} elseif ( '' !== $superseded ) {
-			$text .= ' Note: the GitHub file ' . $superseded . ' supersedes it, so this copy never runs.';
-		}
-
-		return self::done( $action, $text, $id, $version );
+	/**
+	 * After a kept write: rebuild the active option. True when it could not
+	 * be (the site still runs the previous state — the message says so, and
+	 * My snippets rebuilds it on the next view).
+	 *
+	 * @return bool
+	 */
+	private function rebuild_after_write() {
+		$built = $this->rebuild_active();
+		return ! is_array( $built ) || empty( $built['written'] );
 	}
 
 	/* ============================================================== */
@@ -716,6 +954,26 @@ class Editor {
 		}
 
 		return '';
+	}
+
+	/**
+	 * A row's editor fields as stored (no validation — switching off keeps
+	 * them exactly).
+	 *
+	 * @param array $row Row.
+	 * @return array
+	 */
+	private static function fields_of( array $row ) {
+		return array(
+			'slug'        => (string) $row['slug'],
+			'name'        => (string) $row['name'],
+			'description' => (string) $row['description'],
+			'type'        => (string) $row['type'],
+			'scope'       => (string) $row['scope'],
+			'priority'    => (int) $row['priority'],
+			'active'      => empty( $row['active'] ) ? 0 : 1,
+			'code'        => (string) $row['code'],
+		);
 	}
 
 	/**
@@ -880,6 +1138,7 @@ class Editor {
 			'errors'  => $errors,
 			'id'      => 0,
 			'version' => 0,
+			'stale'   => false,
 		);
 	}
 
@@ -890,9 +1149,11 @@ class Editor {
 	 * @param string $message Text.
 	 * @param int    $id      Snippet id.
 	 * @param int    $version Version.
+	 * @param bool   $stale   The write was kept but the active option could
+	 *                        not be rebuilt (the site runs the previous state).
 	 * @return array
 	 */
-	private static function done( $code, $message, $id, $version ) {
+	private static function done( $code, $message, $id, $version, $stale = false ) {
 		return array(
 			'ok'      => true,
 			'code'    => (string) $code,
@@ -900,6 +1161,7 @@ class Editor {
 			'errors'  => array(),
 			'id'      => (int) $id,
 			'version' => (int) $version,
+			'stale'   => (bool) $stale,
 		);
 	}
 }

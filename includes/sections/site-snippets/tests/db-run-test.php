@@ -20,9 +20,12 @@
 
 require_once __DIR__ . '/wp-stubs.php';
 require_once __DIR__ . '/fake-db-store.php';
+require_once dirname( __DIR__ ) . '/class-admin-editor.php';
 
+use FisHotel\Misc\Sections\Site_Snippets\Admin_Editor;
 use FisHotel\Misc\Sections\Site_Snippets\Catalog;
 use FisHotel\Misc\Sections\Site_Snippets\Db_Snippets;
+use FisHotel\Misc\Sections\Site_Snippets\Db_Store;
 use FisHotel\Misc\Sections\Site_Snippets\Editor;
 use FisHotel\Misc\Sections\Site_Snippets\Loader;
 use FisHotel\Misc\Sections\Site_Snippets\Output;
@@ -161,6 +164,22 @@ fh_request( $dir, false );
 check( 'no database snippet: the files run exactly as before, the map is the index\'s own', array( 'file-a', 'moved-file', 'file-late' ) === $GLOBALS['fh_ran'] && Catalog::get()['snippets'] === Loader::snippets( Catalog::get() ) );
 $GLOBALS['fh_options'][ Db_Snippets::OPTION_ACTIVE ] = $saved;
 
+echo "3b. Only what the editor signed runs\n";
+$saved  = $GLOBALS['fh_options'][ Db_Snippets::OPTION_ACTIVE ];
+$forged = $saved;
+// Any administrator can write any option through wp-admin/options.php.
+$forged['x']                = array( 'slug' => 'x', 'type' => 'php', 'scope' => 'global', 'code' => "\$GLOBALS['fh_ran'][] = 'injected via option';" );
+$forged['db-first']['code'] = "\$GLOBALS['fh_ran'][] = 'tampered';";
+$GLOBALS['fh_options'][ Db_Snippets::OPTION_ACTIVE ] = $forged;
+fh_request( $dir, false );
+check( 'an entry written straight into the option, or a signed one with its code changed: never run; the others are', ! in_array( 'injected via option', $GLOBALS['fh_ran'], true ) && ! in_array( 'tampered', $GLOBALS['fh_ran'], true ) && ! in_array( 'db-first', $GLOBALS['fh_ran'], true ) && in_array( 'db-same', $GLOBALS['fh_ran'], true ) && in_array( 'file-a', $GLOBALS['fh_ran'], true ) );
+$GLOBALS['fh_options'][ Db_Snippets::OPTION_ACTIVE ] = $saved;
+$GLOBALS['fh_salt']                                  = 'rotated-salts';
+fh_request( $dir, false );
+do_action( 'wp_enqueue_scripts' );
+check( 'new salts: no database snippet runs or prints until the option is rebuilt; the files do', array( 'file-a', 'moved-file', 'file-late' ) === $GLOBALS['fh_ran'] && array( "/* fh-snippet: style */\nbody { color: teal; }\n" ) === $GLOBALS['fh_styles']['fishotel-snippets-front']['inline'] );
+unset( $GLOBALS['fh_salt'] );
+
 echo "4. CSS / JS / HTML and [fh_snippet]\n";
 fh_request( $dir, false );
 do_action( 'wp_enqueue_scripts' );
@@ -180,43 +199,141 @@ check( 'nothing runs, nothing prints, nothing renders', array() === $GLOBALS['fh
 unset( $_GET[ Loader::SAFE_MODE_QUERY ] );
 fh_login( 0, '', false );
 
-echo "6. The editor's own save request does not run the snippet it saves\n";
+echo "6. The editor's own save request runs the code it saves in the snippet's place\n";
 define( 'FISHOTEL_SNIPPETS_EDITORS', 'jeff' );
 check( 'the loader knows the editor\'s save / restore actions', array( Editor::SAVE_ACTION, Editor::RESTORE_ACTION ) === Loader::EDIT_ACTIONS );
-$same_id                    = $GLOBALS['fh_options'][ Db_Snippets::OPTION_ACTIVE ]['db-same']['id'];
-$_SERVER['REQUEST_METHOD']  = 'POST';
-$_POST                      = array(
-	'action'           => Editor::SAVE_ACTION,
-	'snippet_id'       => (string) $same_id,
+update_option( Db_Store::DB_VERSION_OPTION, Db_Store::DB_VERSION, true );
+Admin_Editor::$halt = static function () {
+	throw new FH_Halt( 'exit' );
+};
+
+/**
+ * A store holding these active-option entries as rows (with version 1 as
+ * their first revision), used by the editor's handlers.
+ */
+function fh_table( array $active ) {
+	$store = new Fake_Db_Store();
+	foreach ( $active as $entry ) {
+		$store->insert( array( 'id' => $entry['id'], 'slug' => $entry['slug'], 'name' => ucfirst( $entry['slug'] ), 'description' => '', 'type' => $entry['type'], 'scope' => $entry['scope'], 'priority' => $entry['priority'], 'active' => 1, 'code' => $entry['code'], 'version' => $entry['version'], 'created_by' => 7, 'created_at' => '', 'updated_by' => 7, 'updated_at' => '' ) );
+		$store->add_revision( array( 'snippet_id' => $entry['id'], 'version' => $entry['version'], 'code' => $entry['code'], 'meta' => array( 'name' => ucfirst( $entry['slug'] ), 'type' => $entry['type'], 'scope' => $entry['scope'], 'priority' => $entry['priority'], 'active' => 1 ), 'user_id' => 7, 'created_at' => '' ) );
+	}
+	Admin_Editor::$store = $store;
+	return $store;
+}
+
+/** The edit form posted for a snippet. */
+function fh_save_post( $id, array $over = array() ) {
+	return array_merge(
+		array(
+			'action'            => Editor::SAVE_ACTION,
+			'snippet_id'        => (string) $id,
+			Editor::NONCE_FIELD => wp_create_nonce( Editor::NONCE ),
+			'base_version'      => '1',
+			'name'              => 'Db-same',
+			'type'              => 'php',
+			'scope'             => 'global',
+			'priority'          => '10',
+			'active'            => '1',
+			'code'              => '',
+		),
+		$over
+	);
+}
+
+/** Run an admin-post handler (it ends with a redirect). */
+function fh_handler( $method ) {
+	try {
+		( new Admin_Editor() )->$method();
+	} catch ( FH_Halt $e ) {
+		return $e;
+	}
+	return null;
+}
+
+$store   = fh_table( $GLOBALS['fh_options'][ Db_Snippets::OPTION_ACTIVE ] );
+$same_id = $GLOBALS['fh_options'][ Db_Snippets::OPTION_ACTIVE ]['db-same']['id'];
+$_SERVER['REQUEST_METHOD'] = 'POST';
+$_POST                     = fh_save_post( $same_id, array( 'code' => "\$GLOBALS['fh_ran'][] = 'db-same-new';" ) );
+fh_login( 7, 'jeff', true );
+fh_request( $dir, true );
+check( 'saving db-same (a named editor, a valid nonce): at plugins_loaded:1 its NEW code runs in its place, the old code does not', array( 'db-first', 'file-a', 'moved-file', 'db-admin', 'db-same-new', 'db-after', 'db-throws', 'file-late' ) === $GLOBALS['fh_ran'] && 'db:db-same' === Loader::state()['editing'], implode( ',', $GLOBALS['fh_ran'] ) );
+$draft = Admin_Editor::draft( 7, $same_id );
+check( '… after his draft was kept ("testing", the typed code, the version it is for)', is_array( $draft ) && 'testing' === $draft['state'] && "\$GLOBALS['fh_ran'][] = 'db-same-new';" === $draft['fields']['code'] && 2 === $draft['version'] );
+$GLOBALS['fh_ran'] = array();
+$halt              = fh_handler( 'handle_save' );
+check( 'the handler then saves it as version 2, taking that run as its test run (not run twice), and drops the draft', $halt instanceof FH_Halt && 2 === $store->get( $same_id )['version'] && array() === $GLOBALS['fh_ran'] && null === Admin_Editor::draft( 7, $same_id ) && "\$GLOBALS['fh_ran'][] = 'db-same-new';" === get_option( Db_Snippets::OPTION_ACTIVE )['db-same']['code'] );
+
+$_POST = fh_save_post( $same_id, array( 'base_version' => '2', 'code' => "\$GLOBALS['fh_ran'][] = 'db-same-throws';\nthrow new \\LogicException( 'posted boom' );" ) );
+fh_request( $dir, true );
+check( 'new code that throws: it ran in place, its throw is the save\'s test result — not the site\'s error (not stored, not in the Health log)', in_array( 'db-same-throws', $GLOBALS['fh_ran'], true ) && ! isset( Loader::state()['errors']['db:db-same'] ) && ! isset( Loader::stored_errors()['db:db-same'] ) && 1 === count( fh_logged( 'error' ) ) && 'ok' === Loader::state()['results']['db:db-after'] );
+$GLOBALS['fh_ran'] = array();
+fh_handler( 'handle_save' );
+check( '… the handler refuses the save with it (test_failed), without running it again; his code is kept', 2 === $store->get( $same_id )['version'] && array() === $GLOBALS['fh_ran'] && 'test_failed' === $store->log_rows( array(), 1 )[0]['action'] && false !== strpos( Admin_Editor::draft( 7, $same_id )['message'], 'LogicException: posted boom (line 2)' ) );
+
+$_POST = fh_save_post( $same_id, array( 'base_version' => '2', 'code' => '$broken = ;' ) );
+fh_request( $dir, true );
+check( 'new code with a syntax error (the save will refuse it before any test run): the old code runs as usual', in_array( 'db-same-new', $GLOBALS['fh_ran'], true ) && 'refused' === Admin_Editor::draft( 7, $same_id )['state'] );
+$_POST = fh_save_post( $same_id, array( 'base_version' => '2', 'code' => "function esc_html( \$t ) { return \$t; }\n\$GLOBALS['fh_ran'][] = 'db-same-esc';" ) );
+fh_request( $dir, true );
+check( 'new code declaring a function another plugin already has: the old code keeps running, the new one never does', in_array( 'db-same-new', $GLOBALS['fh_ran'], true ) && ! in_array( 'db-same-esc', $GLOBALS['fh_ran'], true ) );
+fh_handler( 'handle_save' );
+check( '… and the handler refuses the save with that reason', 2 === $store->get( $same_id )['version'] && false !== strpos( Admin_Editor::draft( 7, $same_id )['message'], 'function esc_html() already exists' ) );
+$_POST = fh_save_post( $same_id, array( 'base_version' => '2', 'name' => '', 'code' => '$x = 1;' ) );
+fh_request( $dir, true );
+check( 'a form the save will refuse (no name): the old code runs as usual', in_array( 'db-same-new', $GLOBALS['fh_ran'], true ) );
+$_POST = fh_save_post( $same_id, array( 'base_version' => '2', 'active' => '', 'code' => '$x = 1;' ) );
+fh_request( $dir, true );
+check( 'saved switched off (no test run): the old code runs for the rest of this request', in_array( 'db-same-new', $GLOBALS['fh_ran'], true ) );
+Admin_Editor::drop_draft( 7, $same_id );
+
+$_POST = array(
+	'action'            => Editor::RESTORE_ACTION,
+	'snippet_id'        => (string) $same_id,
+	'revision_id'       => (string) $store->revisions( $same_id )[1]['id'],
+	'base_version'      => '2',
 	Editor::NONCE_FIELD => wp_create_nonce( Editor::NONCE ),
 );
-fh_login( 7, 'jeff', true );
 fh_request( $dir, true );
-check( 'an editor saving db-same (valid nonce, admin-post): db-same is not run at plugins_loaded:1, the rest is', ! in_array( 'db-same', $GLOBALS['fh_ran'], true ) && in_array( 'db-first', $GLOBALS['fh_ran'], true ) && 'db:db-same' === Loader::state()['editing'] );
-$_POST['action'] = Editor::RESTORE_ACTION;
-fh_request( $dir, true );
-check( '… the same for a restore from history', ! in_array( 'db-same', $GLOBALS['fh_ran'], true ) );
-$_POST['action'] = Editor::SAVE_ACTION;
-$_POST[ Editor::NONCE_FIELD ] = 'forged';
-fh_request( $dir, true );
-check( 'a bad nonce: it runs as usual', in_array( 'db-same', $GLOBALS['fh_ran'], true ) );
-$_POST[ Editor::NONCE_FIELD ] = wp_create_nonce( Editor::NONCE );
-fh_login( 8, 'anna', true );
-fh_request( $dir, true );
-check( 'an administrator not named in FISHOTEL_SNIPPETS_EDITORS: it runs as usual', in_array( 'db-same', $GLOBALS['fh_ran'], true ) );
-fh_login( 7, 'jeff', true );
-fh_request( $dir, false );
-check( 'not an admin request: it runs', in_array( 'db-same', $GLOBALS['fh_ran'], true ) );
-$_SERVER['REQUEST_METHOD'] = 'GET';
-fh_request( $dir, true );
-check( 'not a POST: it runs', in_array( 'db-same', $GLOBALS['fh_ran'], true ) );
+check( 'a restore from history: version 1\'s code runs in its place at plugins_loaded:1', in_array( 'db-same', $GLOBALS['fh_ran'], true ) && ! in_array( 'db-same-new', $GLOBALS['fh_ran'], true ) && 'testing' === Admin_Editor::draft( 7, $same_id )['state'] );
+$GLOBALS['fh_ran'] = array();
+fh_handler( 'handle_restore' );
+check( '… the handler restores it as version 3 without running it again, and drops its marker', 3 === $store->get( $same_id )['version'] && "\$GLOBALS['fh_ran'][] = 'db-same';" === $store->get( $same_id )['code'] && array() === $GLOBALS['fh_ran'] && null === Admin_Editor::draft( 7, $same_id ) );
+
+$gates = array(
+	'a bad nonce'                                            => array( array( Editor::NONCE_FIELD => 'forged' ), 7, 'jeff', true, 'POST' ),
+	'an administrator not named in FISHOTEL_SNIPPETS_EDITORS' => array( array(), 8, 'anna', true, 'POST' ),
+	'not an admin request'                                   => array( array(), 7, 'jeff', false, 'POST' ),
+	'not a POST'                                             => array( array(), 7, 'jeff', true, 'GET' ),
+	'another action'                                         => array( array( 'action' => 'something_else' ), 7, 'jeff', true, 'POST' ),
+);
+foreach ( $gates as $label => $gate ) {
+	$_POST                     = fh_save_post( $same_id, array_merge( array( 'base_version' => '3', 'code' => "\$GLOBALS['fh_ran'][] = 'posted';" ), $gate[0] ) );
+	$_SERVER['REQUEST_METHOD'] = $gate[4];
+	fh_login( $gate[1], $gate[2], true );
+	fh_request( $dir, $gate[3] );
+	check( $label . ': the stored code runs, the posted code never does', in_array( 'db-same', $GLOBALS['fh_ran'], true ) && ! in_array( 'posted', $GLOBALS['fh_ran'], true ) && null === Admin_Editor::draft( 7, $same_id ) );
+}
 $_SERVER['REQUEST_METHOD'] = 'POST';
-$_POST['action']           = 'something_else';
+$_POST                     = fh_save_post( $same_id, array( 'base_version' => '3', 'code' => "\$GLOBALS['fh_ran'][] = 'posted';" ) );
+fh_login( 7, 'jeff', true );
+$GLOBALS['fh_doing_ajax'] = true;
 fh_request( $dir, true );
-check( 'another action: it runs, and the editor classes are not even needed', in_array( 'db-same', $GLOBALS['fh_ran'], true ) && '' === Loader::state()['editing'] );
+$GLOBALS['fh_doing_ajax'] = false;
+check( 'the save action sent to admin-ajax.php (no handler there): the stored code runs', in_array( 'db-same', $GLOBALS['fh_ran'], true ) && ! in_array( 'posted', $GLOBALS['fh_ran'], true ) && '' === Loader::state()['editing'] );
+
+// The reviewer's case: a file calls a database snippet's function on init.
+$dep_dir = fh_snippet_dir( array( 'uses-helper.php' => fh_php_snippet( 'Uses helper', "add_action( 'init', function () { \$GLOBALS['fh_note'] = fh_price_note_db(); } );", array( 'Default' => 'on' ) ) ) );
+$saved   = $GLOBALS['fh_options'][ Db_Snippets::OPTION_ACTIVE ];
+$helpers = fh_db( array( 'a-helpers' => array( 'priority' => 5, 'code' => "function fh_price_note_db() { return 'v1'; }" ) ) );
+$store2  = fh_table( $helpers );
+$_POST   = fh_save_post( $helpers['a-helpers']['id'], array( 'name' => 'A-helpers', 'priority' => '5', 'code' => "function fh_price_note_db() { return 'v2'; }" ) );
+fh_request( $dep_dir, true );
+do_action( 'init' ); // WordPress fires init before admin_post_{action}.
+$halt = fh_handler( 'handle_save' );
+check( 'saving a helper snippet whose function a file calls on init: the request lives to the handler (the new function exists), which saves it', 'v2' === $GLOBALS['fh_note'] && $halt instanceof FH_Halt && 2 === $store2->get( $helpers['a-helpers']['id'] )['version'], json_encode( $store2->log_rows( array(), 1 ) ) );
+$GLOBALS['fh_options'][ Db_Snippets::OPTION_ACTIVE ] = $saved;
 $_POST = array();
 unset( $_SERVER['REQUEST_METHOD'] );
-
 echo "7. The real test run on save\n";
 fh_request( $dir, true );
 $store  = new Fake_Db_Store();
@@ -300,7 +417,42 @@ $out   = implode( "\n", $out );
 $state = json_decode( (string) file_get_contents( $persist ), true );
 check( 'the AJAX switch: the fatal ends the request, answered as JSON naming the database snippet', 0 !== $code && false === strpos( $out, 'NOT REACHED' ) && false !== strpos( $out, '"success":false' ) && false !== strpos( $out, 'the test run of database snippet compile-off hit a fatal error' ), $out );
 check( '… and it stays off, nothing logged as switched on', 0 === (int) $state['snippets'][0]['active'] && array() === $state['log'] && ! is_file( $active ) );
-foreach ( array( $persist, $draft, $active, $child ) as $f ) {
+
+// A compile-stage fatal in the code saved for an active snippet, now at
+// plugins_loaded:1 where it runs in the snippet's place: the request dies
+// there — after the draft was kept.
+$early      = $tmp . '-early.php';
+$early_dump = $tmp . '-early.json';
+file_put_contents(
+	$early,
+	"<?php\nrequire " . var_export( __DIR__ . '/wp-stubs.php', true ) . ";\nrequire " . var_export( __DIR__ . '/fake-db-store.php', true ) . ";\nrequire " . var_export( dirname( __DIR__ ) . '/class-admin-editor.php', true ) . ";\n"
+	. "use FisHotel\\Misc\\Sections\\Site_Snippets as S;\n"
+	. "define( 'FISHOTEL_SNIPPETS_EDITORS', 'jeff' );\n"
+	. "update_option( S\\Db_Store::DB_VERSION_OPTION, S\\Db_Store::DB_VERSION, true );\n"
+	. "S\\Catalog::use_dir( fh_snippet_dir( array() ) );\n"
+	. "\$store = new S\\Tests\\Fake_Db_Store();\n"
+	. "\$store->insert( array( 'id' => 9, 'slug' => 'live', 'name' => 'Live', 'description' => '', 'type' => 'php', 'scope' => 'global', 'priority' => 10, 'active' => 1, 'code' => '\$GLOBALS[\"fh_ran\"][] = \"live\";', 'version' => 3, 'created_by' => 7, 'created_at' => '', 'updated_by' => 7, 'updated_at' => '' ) );\n"
+	. "update_option( S\\Db_Snippets::OPTION_ACTIVE, S\\Db_Snippets::active_option( \$store->all() )['map'], true );\n"
+	. "S\\Admin_Editor::\$store = \$store;\n"
+	. "\$GLOBALS['fh_is_admin'] = true;\n"
+	. "fh_login( 7, 'jeff', true );\n"
+	. "\$_SERVER['REQUEST_METHOD'] = 'POST';\n"
+	. "\$_POST = array( 'action' => S\\Editor::SAVE_ACTION, S\\Editor::NONCE_FIELD => wp_create_nonce( S\\Editor::NONCE ), 'snippet_id' => '9', 'base_version' => '3', 'name' => 'Live', 'type' => 'php', 'scope' => 'global', 'priority' => '10', 'active' => '1', 'code' => 'function fh_two_early( \$a, \$a ) { return \$a; }' );\n"
+	. "register_shutdown_function( function () use ( \$store ) { \$e = error_get_last(); file_put_contents( " . var_export( $early_dump, true ) . ", json_encode( array( 'fatal' => \$e ? \$e['message'] : '', 'drafts' => get_user_meta( 7, S\\Admin_Editor::DRAFTS_META, true ), 'version' => \$store->get( 9 )['version'], 'log' => count( \$store->log ) ) ) ); } );\n"
+	. "S\\Loader::hook();\n"
+	. "do_action( 'plugins_loaded' );\n"
+	. "echo \"\\nNOT REACHED\\n\";\n"
+);
+$out = array();
+exec( escapeshellarg( PHP_BINARY ) . ' ' . escapeshellarg( $early ) . ' 2>&1', $out, $code );
+$out  = implode( "\n", $out );
+$dump = is_file( $early_dump ) ? json_decode( (string) file_get_contents( $early_dump ), true ) : array();
+check( 'saving an active snippet whose new code has a compile-stage error: the request dies at plugins_loaded:1, where it runs in place', 0 !== $code && false === strpos( $out, 'NOT REACHED' ) && isset( $dump['fatal'] ) && false !== strpos( $dump['fatal'], 'Redefinition of parameter' ), $code . ' ' . $out );
+check( '… his code kept as a "testing" draft first (the next page view logs it as test_failed); nothing saved', isset( $dump['drafts'][9] ) && 'testing' === $dump['drafts'][9]['state'] && 'function fh_two_early( $a, $a ) { return $a; }' === $dump['drafts'][9]['fields']['code'] && 3 === $dump['version'] && 0 === $dump['log'] );
+$after = new Fake_Db_Store();
+$msg   = ( new Editor( $after, array( 'actor' => array( 'user_id' => 7, 'user_login' => 'jeff' ) ) ) )->settle_dead_test( $dump['drafts'][9] );
+check( '… which is what settles it on the next view', array( 'test_failed' ) === $after->actions() && 'live' === array_values( $after->log )[0]['slug'] && 0 === strpos( $msg, 'Refused: the test run ended the save request' ) );
+foreach ( array( $persist, $draft, $active, $child, $early, $early_dump ) as $f ) {
 	if ( is_file( $f ) ) {
 		unlink( $f );
 	}

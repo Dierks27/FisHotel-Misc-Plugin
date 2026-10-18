@@ -7,9 +7,17 @@
  * An ordinary request never queries the snippet tables. Every write in the
  * editor rebuilds ONE autoloaded option, fishotel_snippets_db_active, from
  * the active rows (active_option()): slug => { id, slug, type, scope,
- * priority, code, version, declares }. The loader reads only that option
- * and merge()s it with the file index:
+ * priority, code, version, declares, mac }. The loader reads only that
+ * option and merge()s it with the file index:
  *
+ *   - an entry runs only when its `mac` — an HMAC-SHA256 of everything
+ *     else in it, keyed with WordPress's auth salt (AUTH_KEY + AUTH_SALT in
+ *     wp-config.php, the secret behind every login cookie) — is right. Any
+ *     administrator can write any option through wp-admin/options.php;
+ *     without the signature that would run PHP for someone who is not in
+ *     FISHOTEL_SNIPPETS_EDITORS. New salts unsign every entry: nothing
+ *     runs until a named editor opens My snippets, which rebuilds the
+ *     option from the table;
  *   - a database snippet becomes an index-shaped entry keyed `db:<slug>`
  *     (a slug cannot contain a colon, so it never meets a file's key or the
  *     switch map), source 'db', switched on (only active ones are stored);
@@ -116,9 +124,9 @@ class Db_Snippets {
 				continue;
 			}
 
-			$type  = (string) $row['type'];
-			$code  = isset( $row['code'] ) ? (string) $row['code'] : '';
-			$entry = array(
+			$type         = (string) $row['type'];
+			$code         = isset( $row['code'] ) ? (string) $row['code'] : '';
+			$entry        = array(
 				'id'       => isset( $row['id'] ) ? (int) $row['id'] : 0,
 				'slug'     => (string) $row['slug'],
 				'type'     => $type,
@@ -128,6 +136,7 @@ class Db_Snippets {
 				'version'  => isset( $row['version'] ) ? (int) $row['version'] : 1,
 				'declares' => 'php' === $type ? self::declared( $code ) : array(),
 			);
+			$entry['mac'] = self::sign( $entry );
 
 			$map[ $entry['slug'] ] = $entry;
 		}
@@ -138,6 +147,125 @@ class Db_Snippets {
 			'map'   => $map,
 			'bytes' => strlen( serialize( $map ) ), // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- the size WordPress will store.
 		);
+	}
+
+	/**
+	 * The key the active option is signed with: WordPress's auth salt — the
+	 * secret behind every login cookie, so whoever could forge an entry
+	 * could already log in as an editor. '' when unavailable (then nothing
+	 * verifies and no database snippet runs).
+	 *
+	 * @return string
+	 */
+	private static function signing_key() {
+		static $keys = array();
+
+		$salt = function_exists( 'wp_salt' ) ? (string) wp_salt( 'auth' ) : '';
+		if ( '' === $salt ) {
+			return '';
+		}
+
+		// A key of its own, derived from the salt (never the salt itself).
+		if ( ! isset( $keys[ $salt ] ) ) {
+			$keys = array( $salt => hash_hmac( 'sha256', self::OPTION_ACTIVE, $salt ) );
+		}
+
+		return $keys[ $salt ];
+	}
+
+	/**
+	 * The signature of an active-option entry: HMAC-SHA256 over every field
+	 * the loader uses ('' when there is no key).
+	 *
+	 * @param array $entry Active-option entry (its own mac is ignored).
+	 * @return string
+	 */
+	public static function sign( array $entry ) {
+		$key = self::signing_key();
+		if ( '' === $key ) {
+			return '';
+		}
+
+		$signed = array(
+			'id'       => isset( $entry['id'] ) ? (int) $entry['id'] : 0,
+			'slug'     => isset( $entry['slug'] ) ? (string) $entry['slug'] : '',
+			'type'     => isset( $entry['type'] ) ? (string) $entry['type'] : '',
+			'scope'    => isset( $entry['scope'] ) ? (string) $entry['scope'] : '',
+			'priority' => isset( $entry['priority'] ) ? (int) $entry['priority'] : 10,
+			'code'     => isset( $entry['code'] ) ? (string) $entry['code'] : '',
+			'version'  => isset( $entry['version'] ) ? (int) $entry['version'] : 1,
+			'declares' => isset( $entry['declares'] ) && is_array( $entry['declares'] ) ? $entry['declares'] : array(),
+		);
+
+		return hash_hmac( 'sha256', serialize( $signed ), $key ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- a canonical text to sign, never unserialized.
+	}
+
+	/**
+	 * Whether an active-option entry was written by the editor (its
+	 * signature is right).
+	 *
+	 * @param mixed $entry Active-option entry.
+	 * @return bool
+	 */
+	public static function verified( $entry ) {
+		if ( ! is_array( $entry ) || ! isset( $entry['mac'] ) || ! is_string( $entry['mac'] ) || '' === $entry['mac'] ) {
+			return false;
+		}
+		$mac = self::sign( $entry );
+		return '' !== $mac && hash_equals( $mac, $entry['mac'] );
+	}
+
+	/**
+	 * How the stored active option differs from the one the table gives
+	 * ('' when it does not): entries missing from it, entries the table does
+	 * not have (or has switched off), out-of-date versions, and entries whose
+	 * signature is wrong (not written by the editor, or the salts changed).
+	 *
+	 * @param array $expected active_option( rows )['map'].
+	 * @param mixed $stored   The stored option.
+	 * @return string
+	 */
+	public static function drift( array $expected, $stored ) {
+		$stored = is_array( $stored ) ? $stored : array();
+		if ( $expected === $stored ) {
+			return '';
+		}
+
+		$parts = array(
+			'missing'     => array(),
+			'not on'      => array(),
+			'out of date' => array(),
+			'unsigned'    => array(),
+		);
+		foreach ( $expected as $slug => $entry ) {
+			if ( ! isset( $stored[ $slug ] ) ) {
+				$parts['missing'][] = $slug;
+			} elseif ( ! self::verified( $stored[ $slug ] ) ) {
+				$parts['unsigned'][] = $slug;
+			} elseif ( $stored[ $slug ] !== $entry ) {
+				$parts['out of date'][] = $slug;
+			}
+		}
+		foreach ( $stored as $slug => $entry ) {
+			if ( ! isset( $expected[ $slug ] ) ) {
+				$parts[ self::verified( $entry ) ? 'not on' : 'unsigned' ][] = (string) $slug;
+			}
+		}
+
+		$labels = array(
+			'missing'     => 'switched on but missing: ',
+			'not on'      => 'off or deleted but still listed: ',
+			'out of date' => 'an older version listed: ',
+			'unsigned'    => 'not written by the editor (or the salts changed): ',
+		);
+		$out    = array();
+		foreach ( $parts as $kind => $slugs ) {
+			if ( ! empty( $slugs ) ) {
+				$out[] = $labels[ $kind ] . implode( ', ', $slugs );
+			}
+		}
+
+		return empty( $out ) ? 'its contents differ' : implode( '; ', $out );
 	}
 
 	/**
@@ -201,6 +329,7 @@ class Db_Snippets {
 	/**
 	 * The file snippets plus the active database snippets, keyed slug /
 	 * `db:<slug>`, ready for Rules::php_plan() and Rules::output_plan().
+	 * An entry whose signature is wrong is left out (it never runs).
 	 * Without any active database snippet this is the index's own map,
 	 * untouched.
 	 *
@@ -226,11 +355,9 @@ class Db_Snippets {
 		}
 
 		foreach ( $db_active as $slug => $active ) {
-			if ( ! is_array( $active ) || ! isset( $active['type'] ) ) {
+			// Only what the editor wrote and signed runs (see verified()).
+			if ( ! is_array( $active ) || ! isset( $active['type'], $active['slug'] ) || (string) $slug !== (string) $active['slug'] || ! self::verified( $active ) ) {
 				continue;
-			}
-			if ( ! isset( $active['slug'] ) ) {
-				$active['slug'] = (string) $slug;
 			}
 
 			$entry = self::entry( $active );

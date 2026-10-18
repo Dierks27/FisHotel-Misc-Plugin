@@ -14,6 +14,8 @@
  * @var array|null $row          The snippet (null = new).
  * @var int        $id           Its id (0 = new).
  * @var array|null $draft        The user's draft of it.
+ * @var int        $draft_id     The draft's slot (the id; for $orphan, the deleted snippet's id).
+ * @var bool       $orphan       The snippet was deleted; its draft is offered as a new snippet.
  * @var array      $fields       Form values.
  * @var array      $errors       field => text.
  * @var string     $file         The GitHub file superseding it ('' = none).
@@ -69,6 +71,15 @@ $fh_error     = static function ( $field ) use ( $errors ) {
 		</div>
 	<?php endif; ?>
 
+	<?php if ( $orphan && $fh_can_write ) : ?>
+		<div class="fh-snip-notice is-error">
+			<?php
+			/* translators: %d: the deleted snippet's id */
+			echo esc_html( sprintf( __( 'Snippet #%d was deleted (in another tab?) while you were editing it. Your unsaved code is below: create it as a new snippet, or restore the deleted one from its delete row on the Log tab — your code then shows on it again.', 'fishotel-misc-plugin' ), (int) $draft_id ) );
+			?>
+		</div>
+	<?php endif; ?>
+
 	<?php if ( is_array( $draft ) && $fh_can_write ) : ?>
 		<div class="fh-snip-notice is-error fh-snip-draft">
 			<p>
@@ -82,7 +93,7 @@ $fh_error     = static function ( $field ) use ( $errors ) {
 			<?php endif; ?>
 			<form method="post" action="<?php echo esc_url( $post_url ); ?>" class="fh-snip-inline-form">
 				<input type="hidden" name="action" value="<?php echo esc_attr( Admin_Editor::DISCARD_ACTION ); ?>">
-				<input type="hidden" name="snippet_id" value="<?php echo esc_attr( (string) $id ); ?>">
+				<input type="hidden" name="snippet_id" value="<?php echo esc_attr( (string) $draft_id ); ?>">
 				<?php wp_nonce_field( $nonce_action, $nonce_field, false ); ?>
 				<button type="submit" class="button-link"><?php echo $fh_is_new ? esc_html__( 'Discard it', 'fishotel-misc-plugin' ) : esc_html__( 'Discard it and show the saved version', 'fishotel-misc-plugin' ); ?></button>
 			</form>
@@ -102,6 +113,9 @@ $fh_error     = static function ( $field ) use ( $errors ) {
 		<input type="hidden" name="action" value="<?php echo esc_attr( Editor::SAVE_ACTION ); ?>">
 		<input type="hidden" name="snippet_id" value="<?php echo esc_attr( (string) $id ); ?>">
 		<input type="hidden" name="base_version" value="<?php echo esc_attr( $fields['base_version'] ); ?>">
+		<?php if ( $orphan ) : ?>
+			<input type="hidden" name="draft_id" value="<?php echo esc_attr( (string) $draft_id ); ?>">
+		<?php endif; ?>
 		<?php wp_nonce_field( $nonce_action, $nonce_field, false ); ?>
 
 		<fieldset class="fh-snip-fields"<?php echo $fh_can_write ? '' : ' disabled'; ?>>
@@ -112,6 +126,8 @@ $fh_error     = static function ( $field ) use ( $errors ) {
 						<input type="text" id="fh-snip-slug" name="slug" value="<?php echo esc_attr( $fields['slug'] ); ?>" maxlength="64" pattern="[a-z0-9]+(-[a-z0-9]+)*" placeholder="hide-admin-bar" required autocomplete="off" spellcheck="false">
 					<?php else : ?>
 						<code class="fh-snip-slug-fixed"><?php echo esc_html( $fields['slug'] ); ?></code>
+						<?php // Never read on save (a slug is fixed); kept in a draft, so a snippet deleted meanwhile can be offered again under its slug. ?>
+						<input type="hidden" name="slug" value="<?php echo esc_attr( $fields['slug'] ); ?>">
 					<?php endif; ?>
 					<?php $fh_error( 'slug' ); ?>
 				</p>

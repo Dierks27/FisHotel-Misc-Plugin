@@ -13,6 +13,7 @@
  * @var array      $list         Rows: { row, status, error, draft }.
  * @var bool       $read_error   The table could not be read.
  * @var array|null $new_draft    The user's unsaved new snippet.
+ * @var int[]      $orphan_drafts Ids of deleted snippets the user still has unsaved code of.
  * @var string     $post_url     admin-post.php.
  * @var string     $nonce_action Nonce action.
  * @var string     $nonce_field  Nonce field.
@@ -45,6 +46,14 @@ $fh_can_write = ! empty( $perm['allowed'] );
 			<?php if ( is_array( $new_draft ) ) : ?>
 				<a class="fh-snip-draft-link" href="<?php echo esc_url( Admin_Editor::url( array( 'view' => 'new' ) ) ); ?>"><?php esc_html_e( 'You have an unsaved new snippet — open it', 'fishotel-misc-plugin' ); ?></a>
 			<?php endif; ?>
+			<?php foreach ( $orphan_drafts as $fh_orphan ) : ?>
+				<a class="fh-snip-draft-link" href="<?php echo esc_url( Admin_Editor::url( array( 'view' => 'edit', 'id' => (int) $fh_orphan ) ) ); ?>">
+					<?php
+					/* translators: %d: snippet id */
+					echo esc_html( sprintf( __( 'You have unsaved code of snippet #%d, which was deleted — open it', 'fishotel-misc-plugin' ), (int) $fh_orphan ) );
+					?>
+				</a>
+			<?php endforeach; ?>
 		<?php endif; ?>
 		<?php if ( ! empty( $safe['active'] ) ) : ?>
 			<span class="fh-snip-fact is-bad"><?php esc_html_e( 'Safe mode: nothing runs', 'fishotel-misc-plugin' ); ?></span>
@@ -125,9 +134,9 @@ $fh_can_write = ! empty( $perm['allowed'] );
 							<?php endif; ?>
 						</td>
 						<td class="fh-snip-actions">
-							<a href="<?php echo esc_url( Admin_Editor::url( array( 'view' => 'edit', 'id' => $fh_id ) ) ); ?>"><?php echo $fh_can_write ? esc_html__( 'Edit', 'fishotel-misc-plugin' ) : esc_html__( 'View', 'fishotel-misc-plugin' ); ?></a>
-							<a href="<?php echo esc_url( Admin_Editor::url( array( 'view' => 'history', 'id' => $fh_id ) ) ); ?>"><?php esc_html_e( 'History', 'fishotel-misc-plugin' ); ?></a>
-							<?php if ( $fh_can_write ) : ?>
+							<?php if ( $fh_can_write ) : // The code and its history are for the named editors only. ?>
+								<a href="<?php echo esc_url( Admin_Editor::url( array( 'view' => 'edit', 'id' => $fh_id ) ) ); ?>"><?php esc_html_e( 'Edit', 'fishotel-misc-plugin' ); ?></a>
+								<a href="<?php echo esc_url( Admin_Editor::url( array( 'view' => 'history', 'id' => $fh_id ) ) ); ?>"><?php esc_html_e( 'History', 'fishotel-misc-plugin' ); ?></a>
 								<form method="post" action="<?php echo esc_url( $post_url ); ?>" class="fh-snip-inline-form">
 									<input type="hidden" name="action" value="<?php echo esc_attr( Editor::EXPORT_ACTION ); ?>">
 									<input type="hidden" name="snippet_id" value="<?php echo esc_attr( (string) $fh_id ); ?>">

@@ -326,4 +326,100 @@ fh_editor( $store )->set_active( $id, false );
 fh_editor( $store )->delete( $id );
 check( 'after edits, a switch and a delete every earlier log row is byte-for-byte the same', array_slice( $store->log, 0, count( $snap ), true ) === $snap && array( 'create', 'update', 'deactivate', 'delete' ) === $store->actions() );
 
+echo "9. Switching off is never refused by the checks\n";
+$store = new Fake_Db_Store();
+$id    = fh_editor( $store )->save( fh_input( array( 'slug' => 'helper', 'code' => 'function fh_later_shared() { return 1; }' ) ) )['id'];
+$saved_files         = $GLOBALS['fh_files'];
+$GLOBALS['fh_files'] = Catalog::build( array( 'later.php' => fh_php_snippet( 'Later', 'function fh_later_shared() { return 2; }', array( 'Default' => 'on' ) ) ) );
+$r                   = fh_editor( $store )->set_active( $id, false );
+check( 'a GitHub file deployed later declares the same function: the switch turns the database copy off', $r['ok'] && 'deactivate' === $r['code'] && 0 === $store->get( $id )['active'] && array() === $GLOBALS['fh_rec']['active'][0], $r['message'] );
+fh_editor( $store )->set_active( $id, true );
+$store->snippets[ $id ]['active'] = 1; // On again, as it was before the file came.
+$r = fh_editor( $store )->save( fh_input( array( 'slug' => 'helper', 'active' => '', 'code' => 'function fh_later_shared() { return 1; }' ) ), $id );
+check( '… and so does the form with only "on" unticked', $r['ok'] && 'deactivate' === $r['code'] && 0 === $store->get( $id )['active'], $r['message'] );
+$GLOBALS['fh_files'] = $saved_files;
+$old_code            = "function match( \$a ) { return \$a; }\nfunction ( {\n" . str_repeat( '/', Editor_Rules::MAX_CODE_BYTES );
+$store->snippets[60] = array( 'id' => 60, 'slug' => 'old-php', 'name' => str_repeat( 'n', 200 ), 'description' => '', 'type' => 'php', 'scope' => 'global', 'priority' => 10, 'active' => 1, 'code' => $old_code, 'version' => 4, 'created_by' => 7, 'created_at' => '', 'updated_by' => 7, 'updated_at' => '', 'exported_at' => null );
+$r                   = fh_editor( $store )->set_active( 60, false );
+check( 'code that no longer parses (a newer PHP), a name and code over today\'s limits: the switch still turns it off, the rest kept exactly', $r['ok'] && 0 === $store->get( 60 )['active'] && 5 === $store->get( 60 )['version'] && $old_code === $store->get( 60 )['code'] && str_repeat( 'n', 200 ) === $store->get( 60 )['name'] && 'deactivate' === $store->log_rows( array(), 1 )[0]['action'], $r['message'] );
+check( '… switching it on again is checked (refused)', false === fh_editor( $store )->set_active( 60, true )['ok'] && 0 === $store->get( 60 )['active'] );
+
+echo "10. A write that did not land is never reported as done\n";
+$store = new Fake_Db_Store();
+$id    = fh_editor( $store )->save( fh_input( array( 'code' => "\$v = 1;" ) ) )['id'];
+$fail_write = array(
+	'write_active' => static function () {
+		return false;
+	},
+);
+$r = fh_editor( $store, $fail_write )->save( fh_input( array( 'code' => "\$v = 2;", 'base_version' => '1' ) ), $id );
+check( 'the active option cannot be written after an edit: the table has version 2, the result is flagged stale and says the site still runs the old one', $r['ok'] && true === $r['stale'] && 2 === $store->get( $id )['version'] && false !== strpos( $r['message'], 'BUT the list of snippets the site runs could not be updated, so the site still runs this snippet as it was before' ), $r['message'] );
+$r = fh_editor( $store, $fail_write )->delete( $id );
+check( '… after a delete too', $r['ok'] && true === $r['stale'] && null === $store->get( $id ) && false !== strpos( $r['message'], 'BUT the list' ) );
+check( 'a write that reached the option is not stale', false === fh_editor( new Fake_Db_Store() )->save( fh_input() )['stale'] );
+$store                 = new Fake_Db_Store();
+$store->fail['commit'] = true;
+$r                     = fh_editor( $store )->save( fh_input() );
+check( 'a COMMIT the database refuses (a cluster rolling back): not saved, nothing kept, the option untouched, the draft not dropped', false === $r['ok'] && 'db' === $r['code'] && false !== strpos( $r['message'], 'the COMMIT was refused' ) && array() === $store->snippets && array() === $store->log && array() === $GLOBALS['fh_rec']['active'], $r['message'] );
+$store = new Fake_Db_Store();
+$id    = fh_editor( $store )->save( fh_input() )['id'];
+$store->fail['commit'] = true;
+$r                     = fh_editor( $store )->delete( $id );
+check( '… a delete whose COMMIT is refused: not deleted, said so', false === $r['ok'] && is_array( $store->get( $id ) ) && 'Not deleted' === substr( $r['message'], 0, 11 ) );
+$store                = new Fake_Db_Store();
+$store->fail['begin'] = true;
+$r                    = fh_editor( $store )->save( fh_input() );
+check( 'a transaction that will not start: refused before any write (none would be undone)', false === $r['ok'] && 'db' === $r['code'] && array() === $store->snippets && array() === $store->log && false !== strpos( $r['message'], 'could not be started' ) );
+
+$store = new Fake_Db_Store();
+fh_editor( $store )->save( fh_input() );
+$good = $GLOBALS['fh_rec']['active'][0];
+$r    = fh_editor( $store )->sync_active( $good, true );
+check( 'sync: the option matches the table — nothing written, nothing logged', '' === $r['drift'] && false === $r['rebuilt'] && array() === $GLOBALS['fh_rec']['active'] && array() === $GLOBALS['fh_rec']['emit'] );
+$r = fh_editor( $store )->sync_active( array(), true );
+check( 'sync: an option that lost it is rebuilt from the table, with a Health warning', 'switched on but missing: hide-bar' === $r['drift'] && true === $r['rebuilt'] && $good === $GLOBALS['fh_rec']['active'][0] && 'warning' === $GLOBALS['fh_rec']['emit'][0][0] && false !== strpos( $GLOBALS['fh_rec']['emit'][0][1], 'rebuilt from the table' ) );
+$forged = array_merge( $good, array( 'x' => array( 'slug' => 'x', 'type' => 'php', 'scope' => 'global', 'code' => 'evil();' ) ) );
+$r      = fh_editor( $store )->sync_active( $forged, false );
+check( 'sync for someone who may not write: the drift is told, nothing written or logged', false !== strpos( $r['drift'], 'not written by the editor (or the salts changed): x' ) && false === $r['rebuilt'] && array() === $GLOBALS['fh_rec']['active'] && array() === $GLOBALS['fh_rec']['emit'] );
+$store->fail['all'] = true;
+check( 'sync: an unreadable table is never "drift" (the option is left alone)', '' === fh_editor( $store )->sync_active( array(), true )['drift'] && array() === $GLOBALS['fh_rec']['active'] );
+
+echo "11. A stale form\n";
+$store = new Fake_Db_Store();
+$id    = fh_editor( $store )->save( fh_input() )['id'];
+fh_editor( $store )->set_active( $id, false );
+fh_editor( $store )->set_active( $id, true );
+$r = fh_editor( $store )->save( fh_input( array( 'code' => "\$typed = 1;", 'active' => '', 'base_version' => '1' ) ), $id );
+check( 'opened at v1, then only switched off and on in the list (v3): not a conflict — saved as v4', $r['ok'] && 'update' === $r['code'] && 4 === $store->get( $id )['version'], $r['message'] );
+fh_editor( $store )->save( fh_input( array( 'name' => 'Changed elsewhere', 'code' => "\$typed = 1;", 'active' => '', 'base_version' => '4' ) ), $id );
+$r = fh_editor( $store )->save( fh_input( array( 'code' => "\$mine = 1;", 'active' => '', 'base_version' => '4' ) ), $id );
+check( 'a real change since: a conflict that names the version (and the result carries it for the draft)', false === $r['ok'] && 'conflict' === $r['code'] && 5 === $r['version'] && false !== strpos( $r['message'], 'the next save replaces version 5' ) && 5 === $store->get( $id )['version'] );
+$r = fh_editor( $store )->save( fh_input( array( 'code' => "\$mine = 1;", 'active' => '', 'base_version' => '5' ) ), $id );
+check( '… saved again on that version: goes through', $r['ok'] && 6 === $store->get( $id )['version'] && "\$mine = 1;" === $store->get( $id )['code'] );
+
+echo "12. The trial: what a save would test-run, with nothing written\n";
+$store      = new Fake_Db_Store();
+$id         = fh_editor( $store )->save( fh_input( array( 'code' => "\$v = 1;" ) ) )['id'];
+fh_editor( $store )->save( fh_input( array( 'code' => "\$v = 2;", 'base_version' => '1' ) ), $id );
+$log_before = $store->log;
+$tx_before  = $store->transactions;
+$t          = fh_editor( $store )->trial_save( fh_input( array( 'code' => "<?php\r\n\$v = 3;", 'base_version' => '2' ) ), $id );
+check( 'an edit of an active PHP snippet: the entry it would test-run (code normalised, the next version) and the fields', is_array( $t ) && 'db:hide-bar' === $t['entry']['key'] && '$v = 3;' === $t['entry']['code'] && 3 === $t['entry']['version'] && 3 === $t['fields']['version'] && 'Hide the bar' === $t['fields']['name'] );
+check( '… nothing written, run, kept or logged', $log_before === $store->log && $tx_before === $store->transactions && 2 === $store->get( $id )['version'] && array() === $GLOBALS['fh_rec']['tests'] && array() === $GLOBALS['fh_rec']['before'] && array() === $GLOBALS['fh_rec']['active'] );
+$nulls = array(
+	'saved off'      => fh_editor( $store )->trial_save( fh_input( array( 'active' => '', 'code' => '$v = 3;' ) ), $id ),
+	'a syntax error' => fh_editor( $store )->trial_save( fh_input( array( 'code' => '$v = ;' ) ), $id ),
+	'a missing name' => fh_editor( $store )->trial_save( fh_input( array( 'name' => '', 'code' => '$v = 3;' ) ), $id ),
+	'a conflict'     => fh_editor( $store )->trial_save( fh_input( array( 'name' => 'Stale', 'code' => '$v = 3;', 'base_version' => '1' ) ), $id ),
+	'nothing changed' => fh_editor( $store )->trial_save( fh_input( array( 'code' => '$v = 2;' ) ), $id ),
+	'CSS'            => fh_editor( $store )->trial_save( fh_input( array( 'type' => 'css', 'scope' => 'front-end', 'code' => 'p{}' ) ), $id ),
+	'a clash'        => fh_editor( $store )->trial_save( fh_input( array( 'code' => 'function fh_gh_func() {}' ) ), $id ),
+	'not found'      => fh_editor( $store )->trial_save( fh_input(), 999 ),
+);
+check( 'no trial when the save would not test-run (off, syntax, fields, conflict, unchanged, CSS, clash, gone)', array() === array_filter( $nulls ), json_encode( array_keys( array_filter( $nulls ) ) ) );
+$v1 = $store->revisions( $id )[1];
+$t  = fh_editor( $store )->trial_restore( $id, $v1['id'], 2 );
+check( 'a restore of an active snippet: version 1\'s code, as version 3', is_array( $t ) && '$v = 1;' === $t['entry']['code'] && 3 === $t['entry']['version'] && $log_before === $store->log );
+check( '… none for a stale history page or the current version', null === fh_editor( $store )->trial_restore( $id, $v1['id'], 1 ) && null === fh_editor( $store )->trial_restore( $id, $store->revisions( $id )[0]['id'], 2 ) );
+
 fh_finish();

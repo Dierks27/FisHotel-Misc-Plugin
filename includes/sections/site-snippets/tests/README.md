@@ -4,14 +4,18 @@ All run without WordPress or a database. `wp-stubs.php` supplies in-memory
 options (with the autoload flag recorded), an action / filter / shortcode
 registry with a tiny `do_shortcode()`, the style and script queue,
 `is_admin()` / `current_user_can()` switches, users (`fh_login()`),
-nonces, user meta, transients, `wp_enqueue_code_editor()`, a
+nonces, `wp_salt()` (`$GLOBALS['fh_salt']` rotates it), user meta,
+transients, an option write that fails on demand
+(`$GLOBALS['fh_option_fail']`), `wp_enqueue_code_editor()`, a
 `wp_text_diff()` stand-in, redirects and JSON answers that stop a handler
 (`FH_Halt`), a fake `$wpdb` that answers the Code Snippets guard query,
 `SHOW TABLES` and counts queries, and points `error_log()` at a temp file.
 `fake-db-store.php` is an in-memory `Db_Store` (same unique keys, the
 version lock, real rollback, optional persistence to a file for child
 processes). Snippet files are invented and written to temp folders. Both
-helpers exit 0 when CI runs them directly.
+helpers exit 0 when CI runs them directly. The in-memory store can also
+refuse `begin()` or the COMMIT (`$fail['begin']`, `$fail['commit']`, which
+keeps nothing, as a cluster does).
 
 ```
 php includes/sections/site-snippets/tests/header-test.php
@@ -85,7 +89,9 @@ php includes/sections/site-snippets/tests/editor-admin-test.php
 - **editor-rules-test.php** — the editor's pure half: who may write (the
   constant missing or empty, listed by login in any case, by user ID,
   digits never a login, not listed, no `manage_options`,
-  `DISALLOW_FILE_EDIT`, multisite super admin vs site administrator), the
+  `DISALLOW_FILE_EDIT`, multisite super admin vs site administrator; a
+  constant that is not a string — `true`, an array, a float — names nobody,
+  a whole number is one ID), the
   fields (slug rules, the slug kept on edit, name / description lengths
   and header-breaking `*/` / `-->`, type, every scope of every type,
   priority, on / off, empty and oversized code), opening-tag stripping and
@@ -96,7 +102,12 @@ php includes/sections/site-snippets/tests/editor-admin-test.php
   refused, a file deployed later wins, two database snippets refused, no
   database snippet = untouched), the merged order and the output plan
   never reading the file switch map, the active option (only active ones,
-  only the loader's fields, declarations, its serialized size), the
+  only the loader's fields, declarations, its serialized size), its
+  signature (an entry written straight into the option, any field changed
+  after signing, a made-up or missing signature, new salts: not verified;
+  `merge()` leaves such entries out), the drift between the stored option
+  and the table (missing, off or deleted but listed, out of date,
+  unsigned), the
   history and audit summaries (fields old -> new, code hash and line
   counts, never the code, cut to 2000), the CSV guard and row, the request
   fields (REMOTE_ADDR validated, first X-Forwarded-For only, user agent cut
@@ -119,23 +130,45 @@ php includes/sections/site-snippets/tests/editor-admin-test.php
   restore after a delete (same id, off, slug taken, not a delete row);
   export, denied, safe mode, a test run that never came back; the active
   option never emptied by a read error; the store file itself (updates /
-  deletes only the snippets table, no SQL touching the log but its INSERT).
+  deletes only the snippets table, no SQL touching the log but its INSERT);
+  switching off never refused (a GitHub file deployed later declaring the
+  same function, code that no longer parses, a name and code over today's
+  limits — kept exactly; switching on again is checked); a write that did
+  not land never reported as done (the option write failing after a save or
+  a delete: flagged stale and said so; a refused COMMIT or a transaction
+  that will not start: not saved, nothing kept); `sync_active()` (quiet
+  when the option matches, rebuilds a lost entry with a Health warning,
+  only tells someone who may not write, never treats an unreadable table as
+  drift); a stale form (an on / off switch since is no conflict, a real
+  change is — naming the version — and saving again on it goes through);
+  the trial (`trial_save()` / `trial_restore()`: the entry a save or restore
+  would test-run, nothing written, run or logged; none when it would not
+  test-run).
 - **db-run-test.php** — database snippets in whole requests beside
   invented files: the eval() runner (locals, output, a throw with the
   stored code's line, a ParseError, `return`), the merged order and
   scopes, superseded, a clash with a file, the exists-now preflight, the
   error in `error_log()` / `fishotel_log` / the stored errors under
   db:<slug>, no query and no write on a second request, nothing changed
-  without database snippets, CSS / JS / footer HTML and `[fh_snippet]`
-  (a file of the slug wins), safe mode by query, the editor's own save /
-  restore request not running the snippet it saves (and every case where
-  it does run: bad nonce, a user not named, not admin, not POST, another
-  action), the real test run on save (runs once, a throw refused, an
-  existing function refused, saved off not run); two child PHP processes
-  where a compile-stage fatal ends the save request before any row,
-  revision, log row or active option is written — the typed code kept as
-  a draft, logged as `test_failed` afterwards — and ends the AJAX switch
-  with a JSON answer naming the database snippet; safe mode by constant.
+  without database snippets, only signed entries run (one written straight
+  into the option or with its code changed never runs; new salts stop
+  every database snippet, the files still run), CSS / JS / footer HTML and
+  `[fh_snippet]` (a file of the slug wins), safe mode by query, the
+  editor's own save / restore request running the code it saves IN THE
+  SNIPPET'S PLACE at plugins_loaded:1 (after the draft is kept; the
+  handler then saves without running it again; a throw there is the save's
+  `test_failed`, not the site's error; the old code runs when the save will
+  be refused or saved off; a restore runs the restored version; a bad
+  nonce, a user not named, not admin, not POST, another action or
+  admin-ajax.php run the stored code, never the posted one; a file calling
+  the saved helper's function on `init` keeps working), the real test run
+  on save (runs once, a throw refused, an existing function refused, saved
+  off not run); three child PHP processes where a compile-stage fatal ends
+  the save request before any row, revision, log row or active option is
+  written — the typed code kept as a draft, logged as `test_failed`
+  afterwards —, ends the AJAX switch with a JSON answer naming the
+  database snippet, and ends the save of an active snippet at
+  plugins_loaded:1 after its draft was kept; safe mode by constant.
 - **editor-admin-test.php** — the My snippets / Log tabs and every
   handler: without the constant (read only, the `define()` line, every
   write refused with 403 and logged as denied), with it (not listed, by
@@ -148,11 +181,23 @@ php includes/sections/site-snippets/tests/editor-admin-test.php
   Restore after a delete, the log filter, export as a download, the CSV
   (every row, formula-guarded, nonce and `manage_options`), nothing
   printed unescaped on any tab (a script / img / `</textarea>` in the
-  name, description and code), the denied budget (30 an hour), safe mode
-  logged once an hour, the code editor by type and with highlighting
-  disabled, no REST route, the install gate (no query, `SHOW TABLES` or
-  `dbDelta` once installed; the first boot installs three tables and the
-  empty autoloaded active option; a failed install waits an hour and
+  name, description and code), an expired nonce giving the code back read
+  only and escaped without keeping a draft, other administrators (and a
+  site administrator on multisite) never shown the code — no edit,
+  history, diff or new screen, no links to them —, never losing typed code
+  (a switch since the form was opened, a real conflict then saved again, a
+  snippet deleted meanwhile offered as a new one with its slug and linked
+  from the list), the list the site runs following the table (an option
+  write that fails: the switch and the save say so; another
+  administrator's view only tells; the named editor's next view rebuilds
+  it, dropping an entry written through options.php, with a Health
+  warning), the denied budget (30 an hour per account, 100 for all
+  customer accounts together, an administrator's refusal still logged,
+  fixed hourly windows), safe mode logged once an hour, the code editor by
+  type and with highlighting disabled, no REST route, the install gate (no
+  query, `SHOW TABLES` or `dbDelta` once installed; the first boot installs
+  three tables, every column type exactly as MySQL / MariaDB report it, and
+  the empty autoloaded active option; a failed install waits an hour and
   retries only in wp-admin; activation installs) and `DISALLOW_FILE_EDIT`
   last.
 

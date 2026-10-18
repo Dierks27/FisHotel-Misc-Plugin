@@ -8,8 +8,12 @@
  * Every write first asks Editor_Rules::permission() (a user named in
  * FISHOTEL_SNIPPETS_EDITORS with manage_options, never with
  * DISALLOW_FILE_EDIT) and checks the nonce; a refusal is logged as
- * 'denied' (at most 30 rows per user an hour) and ends the request. The
- * pages only read; the log CSV needs manage_options and its own nonce.
+ * 'denied' (at most 30 rows per account an hour, 100 for all accounts
+ * without manage_options together) and ends the request. The pages only
+ * read — the code, its history and diffs only for the named editors —
+ * except that a named editor's view of My snippets rebuilds the active
+ * option when it no longer matches the table. The log CSV needs
+ * manage_options and its own nonce.
  *
  * Never lose his work: a refused save keeps what was typed as a per-user
  * draft (user meta) and the edit screen shows it with the reason. The draft
@@ -48,11 +52,15 @@ class Admin_Editor {
 	const SAFE_TRANSIENT   = 'fishotel_snippets_safe_logged_';
 
 	/**
-	 * Limits.
+	 * Limits: denied rows per account an hour, and per hour for every
+	 * account without manage_options together (a few hundred customer
+	 * accounts could otherwise still bury the log; an administrator's
+	 * refusals only count against their own budget).
 	 */
-	const DENIED_PER_HOUR = 30;
-	const DRAFT_SECONDS   = 604800;
-	const LOG_PER_PAGE    = 50;
+	const DENIED_PER_HOUR      = 30;
+	const DENIED_SITE_PER_HOUR = 100;
+	const DRAFT_SECONDS        = 604800;
+	const LOG_PER_PAGE         = 50;
 
 	/**
 	 * The admin-post action that discards a draft, and the CSV nonce.
@@ -107,8 +115,12 @@ class Admin_Editor {
 				'emit'         => static function ( $level, $message, $context ) {
 					do_action( 'fishotel_log', $level, Loader::LOG_SOURCE, $message, $context );
 				},
+				// False when the option does not hold the map afterwards
+				// (update_option() is also false for an unchanged value, so
+				// the option is read back instead).
 				'write_active' => static function ( array $map ) {
 					update_option( Db_Snippets::OPTION_ACTIVE, $map, true );
+					return get_option( Db_Snippets::OPTION_ACTIVE ) === $map;
 				},
 			),
 			$extra
@@ -258,12 +270,27 @@ class Admin_Editor {
 			wp_send_json_error( array( 'message' => 'Refused: ' . $reason ), 403 );
 		}
 
-		wp_die( esc_html( 'Refused: ' . $reason ), esc_html__( 'Snippets', 'fishotel-misc-plugin' ), array( 'response' => 403, 'back_link' => true ) );
+		$page = '<p>' . esc_html( 'Refused: ' . $reason ) . '</p>';
+
+		// An editor whose form went stale (an expired nonce): nothing may be
+		// kept for him — a forged request could plant a draft he later saves
+		// unread — but he gets what he typed back, read only, to copy.
+		$code = self::posted( 'code' );
+		if ( $perm['allowed'] && 'save' === $attempt && '' !== $code ) {
+			$page .= '<p>' . esc_html__( 'Nothing was saved. Your code is below, read only: copy it, reload the editor, paste it in and save again.', 'fishotel-misc-plugin' ) . '</p>'
+				. '<textarea readonly rows="20" cols="100" style="width:100%;font-family:monospace" aria-label="' . esc_attr__( 'Your unsaved code', 'fishotel-misc-plugin' ) . '">' . esc_textarea( $code ) . '</textarea>';
+		}
+
+		wp_die( $page, esc_html__( 'Snippets', 'fishotel-misc-plugin' ), array( 'response' => 403, 'back_link' => true ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- every part escaped above.
 	}
 
 	/**
-	 * Log a refused write, at most DENIED_PER_HOUR rows per user an hour
-	 * (a logged-in customer cannot flood the log).
+	 * Log a refused write — at most DENIED_PER_HOUR rows per account an
+	 * hour, and DENIED_SITE_PER_HOUR for all accounts without
+	 * manage_options together (many logged-in customers cannot flood the
+	 * log either; an administrator's refusals are never crowded out by
+	 * them). Fixed hourly windows; the counters are transients, so a burst
+	 * of parallel requests may write a few rows over the cap.
 	 *
 	 * @param string $attempt    What was tried.
 	 * @param string $slug       Slug.
@@ -275,14 +302,48 @@ class Admin_Editor {
 			return;
 		}
 
-		$key   = self::DENIED_TRANSIENT . get_current_user_id();
-		$count = (int) get_transient( $key );
-		if ( $count >= self::DENIED_PER_HOUR ) {
-			return;
+		$budgets = array( self::DENIED_TRANSIENT . get_current_user_id() => self::DENIED_PER_HOUR );
+		if ( ! current_user_can( Loader::CAPABILITY ) ) {
+			$budgets[ self::DENIED_TRANSIENT . 'site' ] = self::DENIED_SITE_PER_HOUR;
 		}
-		set_transient( $key, $count + 1, HOUR_IN_SECONDS );
+
+		$windows = array();
+		foreach ( $budgets as $key => $limit ) {
+			$windows[ $key ] = self::window( $key );
+			if ( $windows[ $key ]['n'] >= $limit ) {
+				return;
+			}
+		}
+		foreach ( $windows as $key => $window ) {
+			$window['n']++;
+			set_transient( $key, $window, max( 1, $window['start'] + HOUR_IN_SECONDS - time() ) );
+		}
 
 		self::editor()->deny( $attempt, $slug, $snippet_id, $reason );
+	}
+
+	/**
+	 * A denied-row counter's current hour: { start, n } (a new one once the
+	 * stored hour is over — the window never slides).
+	 *
+	 * @param string $key Transient.
+	 * @return array{start: int, n: int}
+	 */
+	private static function window( $key ) {
+		$now    = time();
+		$stored = get_transient( $key );
+
+		if ( is_array( $stored ) && isset( $stored['start'], $stored['n'] ) && $now - (int) $stored['start'] < HOUR_IN_SECONDS ) {
+			return array(
+				'start' => (int) $stored['start'],
+				'n'     => (int) $stored['n'],
+			);
+		}
+
+		return array(
+			'start' => $now,
+			'n'     => 0,
+		);
 	}
 
 	/* ============================================================== */
@@ -298,19 +359,23 @@ class Admin_Editor {
 
 		$input = self::read_input();
 		$uid   = get_current_user_id();
+		// The draft's slot: the snippet's id, or — for the new-snippet form
+		// that shows the code of a snippet deleted meanwhile — that id.
+		$slot = $id > 0 ? $id : self::posted_int( 'draft_id' );
+		$back = self::url( $slot > 0 ? array( 'view' => 'edit', 'id' => $slot ) : array( 'view' => 'new' ) );
 
 		if ( ! Db_Store::installed() ) {
-			self::keep_draft( $uid, $id, $input, 'refused', 'Not saved: the snippet tables are not installed yet (see the notice on My snippets).', array() );
-			self::redirect( self::url( $id > 0 ? array( 'view' => 'edit', 'id' => $id ) : array( 'view' => 'new' ) ) );
+			self::keep_draft( $uid, $slot, $input, 'refused', 'Not saved: the snippet tables are not installed yet (see the notice on My snippets).', array() );
+			self::redirect( $back );
 			return;
 		}
 
 		$editor = self::editor(
 			array(
-				'before_test' => static function ( array $fields ) use ( $uid, $id, $input ) {
+				'before_test' => static function ( array $fields ) use ( $uid, $slot, $input ) {
 					// Kept before the test run: a compile-stage fatal ends this
 					// request, and the code must survive it.
-					self::keep_draft( $uid, $id, array_merge( $input, array( 'code' => $fields['code'] ) ), 'testing', '', array(), (int) $fields['version'] );
+					self::keep_draft( $uid, $slot, array_merge( $input, array( 'code' => $fields['code'], 'slug' => $fields['slug'] ) ), 'testing', '', array(), (int) $fields['version'] );
 				},
 			)
 		);
@@ -318,15 +383,84 @@ class Admin_Editor {
 		$result = $editor->save( $input, $id );
 
 		if ( $result['ok'] ) {
-			self::drop_draft( $uid, $id );
-			self::notice( 'unchanged' === $result['code'] ? 'info' : 'ok', $result['message'] );
+			self::drop_draft( $uid, $slot );
+			self::notice( self::notice_kind( $result ), $result['message'] );
 			self::redirect( self::url( array( 'view' => 'edit', 'id' => $result['id'] ) ) );
 			return;
 		}
 
-		self::keep_draft( $uid, $id, $input, 'refused', $result['message'], $result['errors'] );
-		self::redirect( self::url( $id > 0 ? array( 'view' => 'edit', 'id' => $id ) : array( 'view' => 'new' ) ) );
+		if ( 'conflict' === $result['code'] ) {
+			// He has been told; his next save replaces the version he saw.
+			$input['base_version'] = (string) (int) $result['version'];
+		}
+
+		self::keep_draft( $uid, $slot, $input, 'refused', $result['message'], $result['errors'] );
+		self::redirect( $back );
 	}
+
+	/**
+	 * The notice kind for a result: a kept write whose active option could
+	 * not be rebuilt is an error too.
+	 *
+	 * @param array $result Editor result.
+	 * @return string ok|info|error
+	 */
+	private static function notice_kind( array $result ) {
+		if ( ! $result['ok'] || ! empty( $result['stale'] ) ) {
+			return 'error';
+		}
+		return 'unchanged' === $result['code'] ? 'info' : 'ok';
+	}
+
+	/**
+	 * plugins_loaded:1 on the editor's own save / restore request (Loader
+	 * has checked the action, the nonce and the permission): what the
+	 * handler will test-run, so the loader runs THAT code in the snippet's
+	 * place instead of its old code, and the handler reuses the result. The
+	 * draft is written first, exactly as the handler writes it before its
+	 * test run, so a fatal at plugins_loaded:1 still keeps the code. Null
+	 * when the handler will not test-run.
+	 *
+	 * @return array{entry: array, fields: array}|null
+	 */
+	public static function trial_for_request() {
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- Loader::editing_key() verified it.
+		$action = isset( $_POST['action'] ) && is_string( $_POST['action'] ) ? $_POST['action'] : '';
+		$id     = self::posted_int( 'snippet_id' );
+		$uid    = get_current_user_id();
+
+		if ( $id <= 0 || ! Db_Store::installed() ) {
+			return null;
+		}
+
+		if ( Editor::SAVE_ACTION === $action ) {
+			$input = self::read_input();
+			$trial = self::editor()->trial_save( $input, $id );
+			if ( is_array( $trial ) ) {
+				self::keep_draft( $uid, $id, array_merge( $input, array( 'code' => $trial['fields']['code'], 'slug' => $trial['fields']['slug'] ) ), 'testing', '', array(), (int) $trial['fields']['version'] );
+			}
+			return $trial;
+		}
+
+		if ( Editor::RESTORE_ACTION === $action ) {
+			$trial = self::editor()->trial_restore( $id, self::posted_int( 'revision_id' ), self::posted( 'base_version' ) );
+			if ( is_array( $trial ) && ! is_array( self::draft( $uid, $id ) ) ) {
+				self::keep_draft( $uid, $id, $trial['fields'], 'testing', '', array(), (int) $trial['fields']['version'] );
+				self::$early_marked = $id;
+			}
+			return $trial;
+		}
+
+		return null;
+	}
+
+	/**
+	 * The snippet id whose "testing" marker trial_for_request() wrote at
+	 * plugins_loaded:1 (the restore handler then treats it as its own).
+	 *
+	 * @var int|null
+	 */
+	private static $early_marked = null;
 
 	/**
 	 * admin-post: restore a revision (History).
@@ -339,7 +473,7 @@ class Admin_Editor {
 		$result = self::editor( self::marker( $uid, $id ) )->restore_revision( $id, self::posted_int( 'revision_id' ), self::posted( 'base_version' ) );
 		self::unmark( $uid, $id );
 
-		self::notice( $result['ok'] ? 'ok' : 'error', $result['message'] );
+		self::notice( self::notice_kind( $result ), $result['message'] );
 		self::redirect( self::url( array( 'view' => 'history', 'id' => $id ) ) );
 	}
 
@@ -355,7 +489,7 @@ class Admin_Editor {
 			self::drop_draft( get_current_user_id(), $id );
 		}
 
-		self::notice( $result['ok'] ? 'ok' : 'error', $result['message'] );
+		self::notice( self::notice_kind( $result ), $result['message'] );
 		self::redirect( self::url() );
 	}
 
@@ -367,7 +501,7 @@ class Admin_Editor {
 
 		$result = self::editor()->restore_deleted( self::posted_int( 'log_id' ) );
 
-		self::notice( $result['ok'] ? 'ok' : 'error', $result['ok'] ? $result['message'] . ' It is switched off — check it, then switch it on.' : $result['message'] );
+		self::notice( self::notice_kind( $result ), $result['ok'] ? $result['message'] . ' It is switched off — check it, then switch it on.' : $result['message'] );
 		self::redirect( $result['ok'] ? self::url( array( 'view' => 'edit', 'id' => $result['id'] ) ) : self::url( array( 'tab' => 'log' ) ) );
 	}
 
@@ -480,6 +614,7 @@ class Admin_Editor {
 				'message' => $result['message'],
 				'enabled' => is_array( $row ) && ! empty( $row['active'] ),
 				'version' => $result['version'],
+				'stale'   => ! empty( $result['stale'] ),
 				'status'  => $status,
 			)
 		);
@@ -580,7 +715,8 @@ class Admin_Editor {
 	 * @return array Editor dependencies (before_test).
 	 */
 	private static function marker( $user_id, $id ) {
-		self::$marked = is_array( self::draft( $user_id, $id ) ) ? null : (int) $id;
+		// A marker written at plugins_loaded:1 for this request is ours too.
+		self::$marked = is_array( self::draft( $user_id, $id ) ) && (int) $id !== self::$early_marked ? null : (int) $id;
 
 		return array(
 			'before_test' => static function ( array $fields ) use ( $user_id, $id ) {
@@ -602,7 +738,8 @@ class Admin_Editor {
 		if ( (int) $id === self::$marked ) {
 			self::drop_draft( $user_id, $id );
 		}
-		self::$marked = null;
+		self::$marked       = null;
+		self::$early_marked = null;
 	}
 
 	/**
@@ -707,9 +844,10 @@ class Admin_Editor {
 		}
 
 		if ( ! $on ) {
+			$listed = isset( $merged[ $key ] );
 			return array(
-				'key'    => 'off',
-				'label'  => __( 'Off', 'fishotel-misc-plugin' ),
+				'key'    => $listed ? 'pending' : 'off',
+				'label'  => $listed ? __( 'Off in the table, but the site still runs it (a write did not reach the list the site runs) — a named editor\'s next visit here rebuilds the list.', 'fishotel-misc-plugin' ) : __( 'Off', 'fishotel-misc-plugin' ),
 				'on'     => false,
 				'locked' => false,
 			);
@@ -727,7 +865,17 @@ class Admin_Editor {
 		if ( ! isset( $merged[ $key ] ) ) {
 			return array(
 				'key'    => 'pending',
-				'label'  => __( 'On in the table, but not in the list the site runs (a write did not finish) — switch it off and on again.', 'fishotel-misc-plugin' ),
+				'label'  => __( 'On in the table, but not in the list the site runs (a write did not reach it, or its entry there was not written by this editor) — a named editor\'s next visit here rebuilds the list.', 'fishotel-misc-plugin' ),
+				'on'     => true,
+				'locked' => false,
+			);
+		}
+
+		if ( (int) $merged[ $key ]['version'] !== (int) $row['version'] ) {
+			return array(
+				'key'    => 'pending',
+				/* translators: 1: version the site runs, 2: version in the table */
+				'label'  => sprintf( __( 'On, but the site still runs version %1$d, not %2$d (a write did not reach the list the site runs) — a named editor\'s next visit here rebuilds the list.', 'fishotel-misc-plugin' ), (int) $merged[ $key ]['version'], (int) $row['version'] ),
 				'on'     => true,
 				'locked' => false,
 			);
@@ -843,9 +991,31 @@ class Admin_Editor {
 		$view = isset( $_GET['view'] ) ? sanitize_key( wp_unslash( $_GET['view'] ) ) : 'list'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- which screen to show.
 		$id   = isset( $_GET['id'] ) ? absint( wp_unslash( $_GET['id'] ) ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- which snippet to show.
 
+		// The code (edit screen, history, diffs) is for the named editors
+		// only: a snippet may hold a key, and any other administrator would
+		// read it here. Others get the list — names and status, no code.
+		if ( ! $perm['allowed'] && in_array( $view, array( 'new', 'edit', 'history' ), true ) ) {
+			$notice = array(
+				'kind' => 'error',
+				'text' => __( 'Only the people named in FISHOTEL_SNIPPETS_EDITORS can open a snippet\'s code or its history.', 'fishotel-misc-plugin' ),
+			);
+			$view   = 'list';
+		}
+
 		if ( 'new' === $view || 'edit' === $view ) {
-			$row = $id > 0 ? $store->get( $id ) : null;
-			if ( 'edit' === $view && ! is_array( $row ) ) {
+			$row      = $id > 0 ? $store->get( $id ) : null;
+			$draft_id = is_array( $row ) ? (int) $row['id'] : 0;
+			$draft    = null;
+			if ( 'edit' === $view && ! is_array( $row ) && $id > 0 ) {
+				// Deleted (in another tab?) with his unsaved code still kept:
+				// offer it as a new snippet instead of losing it.
+				$draft    = self::draft( $uid, $id );
+				$draft_id = is_array( $draft ) ? $id : 0;
+			} else {
+				$draft = self::draft( $uid, $draft_id );
+			}
+
+			if ( 'edit' === $view && ! is_array( $row ) && ! is_array( $draft ) ) {
 				$notice = array(
 					'kind' => 'error',
 					'text' => __( 'That snippet does not exist (deleted?). The Log tab can restore a deleted snippet.', 'fishotel-misc-plugin' ),
@@ -853,7 +1023,7 @@ class Admin_Editor {
 				$view   = 'list';
 			} else {
 				$id         = is_array( $row ) ? (int) $row['id'] : 0;
-				$draft      = self::draft( $uid, $id );
+				$orphan     = ! is_array( $row ) && $draft_id > 0;
 				$fields     = self::form_fields( $row, $draft );
 				$errors     = is_array( $draft ) && isset( $draft['errors'] ) && is_array( $draft['errors'] ) ? $draft['errors'] : array();
 				$index      = Catalog::get( null, true );
@@ -903,20 +1073,47 @@ class Admin_Editor {
 			}
 		}
 
-		$rows   = $store->all();
-		$index  = Catalog::get( null, true );
+		$rows  = $store->all();
+		$index = Catalog::get( null, true );
+
+		// The list the site runs against the table: a write that never
+		// reached it, an entry someone else put there, new salts. A named
+		// editor's view rebuilds it; anyone else is told.
+		if ( is_array( $rows ) ) {
+			$sync = self::editor()->sync_active( Loader::db_active(), $perm['allowed'] );
+			if ( '' !== $sync['drift'] ) {
+				$text   = $sync['rebuilt']
+					/* translators: %s: what differed */
+					? sprintf( __( 'The list of snippets the site runs did not match this table (%s). It was rebuilt from the table just now.', 'fishotel-misc-plugin' ), $sync['drift'] )
+					/* translators: %s: what differs */
+					: sprintf( __( 'The list of snippets the site runs does not match this table (%s). A named editor\'s visit to this tab rebuilds it.', 'fishotel-misc-plugin' ), $sync['drift'] );
+				$notice = array(
+					'kind' => 'error',
+					'text' => is_array( $notice ) ? $notice['text'] . ' ' . $text : $text,
+				);
+			}
+		}
+
 		$merged = Db_Snippets::merge( $index, Loader::db_active() );
 		$list   = array();
+		$ids    = array();
 		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
-			$list[] = array(
+			$ids[ (int) $row['id'] ] = true;
+			$list[]                  = array(
 				'row'    => $row,
 				'status' => self::db_status( $row, $merged, $index, $safe ),
 				'error'  => self::stored_error( (string) $row['slug'] ),
 				'draft'  => self::draft( $uid, (int) $row['id'] ),
 			);
 		}
-		$read_error = ! is_array( $rows );
-		$new_draft  = self::draft( $uid, 0 );
+		$read_error    = ! is_array( $rows );
+		$new_draft     = self::draft( $uid, 0 );
+		$orphan_drafts = array();
+		foreach ( is_array( $rows ) ? array_keys( self::drafts( $uid ) ) : array() as $draft_id ) {
+			if ( (int) $draft_id > 0 && ! isset( $ids[ (int) $draft_id ] ) ) {
+				$orphan_drafts[] = (int) $draft_id;
+			}
+		}
 		include Site_Snippets::path() . 'views/editor-list.php';
 	}
 

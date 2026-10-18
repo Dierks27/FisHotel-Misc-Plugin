@@ -148,52 +148,56 @@ class Db_Store {
 			$log             = self::table( 'snippet_log' );
 
 			// dbDelta is whitespace-sensitive: each column on its own line,
-			// two spaces after PRIMARY KEY, KEY (not INDEX) with a name.
+			// two spaces after PRIMARY KEY, KEY (not INDEX) with a name. Column
+			// types are written as MySQL / MariaDB report them (lower case,
+			// int(11), int(10) unsigned): dbDelta compares the type
+			// case-sensitively and would otherwise ALTER every column on every
+			// install or schema bump.
 			$sql = array(
 				"CREATE TABLE {$snippets} (
-					id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-					slug VARCHAR(64) NOT NULL,
-					name VARCHAR(191) NOT NULL DEFAULT '',
-					description TEXT NULL,
-					type VARCHAR(8) NOT NULL DEFAULT 'php',
-					scope VARCHAR(20) NOT NULL DEFAULT 'global',
-					priority INT NOT NULL DEFAULT 10,
-					active TINYINT(1) NOT NULL DEFAULT 0,
-					code LONGTEXT NOT NULL,
-					version INT UNSIGNED NOT NULL DEFAULT 1,
-					created_by BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
-					created_at DATETIME NOT NULL,
-					updated_by BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
-					updated_at DATETIME NOT NULL,
-					exported_at DATETIME NULL,
+					id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+					slug varchar(64) NOT NULL,
+					name varchar(191) NOT NULL DEFAULT '',
+					description text NULL,
+					type varchar(8) NOT NULL DEFAULT 'php',
+					scope varchar(20) NOT NULL DEFAULT 'global',
+					priority int(11) NOT NULL DEFAULT 10,
+					active tinyint(1) NOT NULL DEFAULT 0,
+					code longtext NOT NULL,
+					version int(10) unsigned NOT NULL DEFAULT 1,
+					created_by bigint(20) unsigned NOT NULL DEFAULT 0,
+					created_at datetime NOT NULL,
+					updated_by bigint(20) unsigned NOT NULL DEFAULT 0,
+					updated_at datetime NOT NULL,
+					exported_at datetime NULL,
 					PRIMARY KEY  (id),
 					UNIQUE KEY slug (slug),
 					KEY active (active)
 				) {$charset_collate};",
 				"CREATE TABLE {$revisions} (
-					id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-					snippet_id BIGINT(20) UNSIGNED NOT NULL,
-					version INT UNSIGNED NOT NULL,
-					code LONGTEXT NOT NULL,
-					meta TEXT NOT NULL,
-					user_id BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
-					created_at DATETIME NOT NULL,
+					id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+					snippet_id bigint(20) unsigned NOT NULL,
+					version int(10) unsigned NOT NULL,
+					code longtext NOT NULL,
+					meta text NOT NULL,
+					user_id bigint(20) unsigned NOT NULL DEFAULT 0,
+					created_at datetime NOT NULL,
 					PRIMARY KEY  (id),
 					UNIQUE KEY snippet_version (snippet_id,version),
 					KEY created_at (created_at)
 				) {$charset_collate};",
 				"CREATE TABLE {$log} (
-					id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-					snippet_id BIGINT(20) UNSIGNED NULL,
-					slug VARCHAR(64) NOT NULL DEFAULT '',
-					action VARCHAR(20) NOT NULL,
-					user_id BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
-					user_login VARCHAR(60) NOT NULL DEFAULT '',
-					remote_addr VARCHAR(45) NOT NULL DEFAULT '',
-					forwarded_for VARCHAR(100) NOT NULL DEFAULT '',
-					user_agent VARCHAR(255) NOT NULL DEFAULT '',
-					summary TEXT NOT NULL,
-					created_at DATETIME NOT NULL,
+					id bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+					snippet_id bigint(20) unsigned NULL,
+					slug varchar(64) NOT NULL DEFAULT '',
+					action varchar(20) NOT NULL,
+					user_id bigint(20) unsigned NOT NULL DEFAULT 0,
+					user_login varchar(60) NOT NULL DEFAULT '',
+					remote_addr varchar(45) NOT NULL DEFAULT '',
+					forwarded_for varchar(100) NOT NULL DEFAULT '',
+					user_agent varchar(255) NOT NULL DEFAULT '',
+					summary text NOT NULL,
+					created_at datetime NOT NULL,
 					PRIMARY KEY  (id),
 					KEY snippet_id (snippet_id),
 					KEY slug (slug),
@@ -246,36 +250,44 @@ class Db_Store {
 	/**
 	 * Start a transaction (the row, its revision and its log entry are
 	 * written together or not at all).
+	 *
+	 * @return bool False when the database refused it.
 	 */
 	public function begin() {
-		$this->raw( 'START TRANSACTION' );
+		return $this->raw( 'START TRANSACTION' );
 	}
 
 	/**
 	 * Commit.
+	 *
+	 * @return bool False when the database refused it — the writes are then
+	 *              not kept (a Galera cluster, for one, rolls back on COMMIT).
 	 */
 	public function commit() {
-		$this->raw( 'COMMIT' );
+		return $this->raw( 'COMMIT' );
 	}
 
 	/**
 	 * Roll back.
+	 *
+	 * @return bool
 	 */
 	public function rollback() {
-		$this->raw( 'ROLLBACK' );
+		return $this->raw( 'ROLLBACK' );
 	}
 
 	/**
 	 * A statement without arguments, wrapped.
 	 *
 	 * @param string $sql Statement.
+	 * @return bool Whether the database accepted it (wpdb answers false on an error).
 	 */
 	private function raw( $sql ) {
 		global $wpdb;
 		try {
-			$wpdb->query( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery -- a constant statement.
+			return false !== $wpdb->query( $sql ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery -- a constant statement.
 		} catch ( \Throwable $e ) {
-			unset( $e );
+			return false;
 		}
 	}
 

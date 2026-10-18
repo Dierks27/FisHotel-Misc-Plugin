@@ -64,7 +64,10 @@ class Editor_Rules {
 	/* ============================================================== */
 
 	/**
-	 * The constant's value → user IDs and lower-cased logins.
+	 * The constant's value → user IDs and lower-cased logins. Only a string
+	 * (or one positive whole number, a user ID) names anyone: an array, true
+	 * or a float names nobody — cast to a string they would read as the
+	 * login "array" or user #1.
 	 *
 	 * @param mixed $value FISHOTEL_SNIPPETS_EDITORS.
 	 * @return array{ids: int[], logins: string[]}
@@ -75,7 +78,13 @@ class Editor_Rules {
 			'logins' => array(),
 		);
 
-		if ( ! is_scalar( $value ) ) {
+		if ( is_int( $value ) ) {
+			if ( $value > 0 ) {
+				$out['ids'][] = $value;
+			}
+			return $out;
+		}
+		if ( ! is_string( $value ) ) {
 			return $out;
 		}
 
@@ -103,7 +112,7 @@ class Editor_Rules {
 	 * Whether this user may write snippets here.
 	 *
 	 * @param array $who {
-	 *     @type string|null $constant           FISHOTEL_SNIPPETS_EDITORS, null when not defined.
+	 *     @type mixed       $constant           FISHOTEL_SNIPPETS_EDITORS as defined (any type), null when not defined.
 	 *     @type int         $user_id            Current user ID (0 = logged out).
 	 *     @type string      $user_login         Current user login.
 	 *     @type bool        $can_manage_options current_user_can( 'manage_options' ).
@@ -146,7 +155,7 @@ class Editor_Rules {
 
 		$list = self::parse_editors( $who['constant'] );
 		if ( empty( $list['ids'] ) && empty( $list['logins'] ) ) {
-			return $deny( 'empty_constant', 'Nobody may edit snippets: FISHOTEL_SNIPPETS_EDITORS in wp-config.php names no user.' );
+			return $deny( 'empty_constant', 'Nobody may edit snippets: FISHOTEL_SNIPPETS_EDITORS in wp-config.php names no user (it must be text such as \'jeff\' or \'jeff, 12\').' );
 		}
 
 		$user_id = (int) $who['user_id'];

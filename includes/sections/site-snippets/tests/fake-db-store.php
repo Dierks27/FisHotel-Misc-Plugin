@@ -54,14 +54,31 @@ class Fake_Db_Store {
 	/* -------------------------------------------------------------- */
 
 	public function begin() {
+		if ( ! empty( $this->fail['begin'] ) ) {
+			return false;
+		}
 		$this->snapshot       = $this->state();
 		$this->transactions[] = 'begin';
+		return true;
 	}
 
+	/**
+	 * $fail['commit']: the database refuses the COMMIT and keeps nothing (a
+	 * Galera certification failure does exactly that).
+	 */
 	public function commit() {
+		if ( ! empty( $this->fail['commit'] ) ) {
+			if ( null !== $this->snapshot ) {
+				$this->load_state( $this->snapshot );
+			}
+			$this->snapshot       = null;
+			$this->transactions[] = 'commit-refused';
+			return false;
+		}
 		$this->snapshot       = null;
 		$this->transactions[] = 'commit';
 		$this->write_state();
+		return true;
 	}
 
 	public function rollback() {
@@ -71,6 +88,7 @@ class Fake_Db_Store {
 		$this->snapshot       = null;
 		$this->transactions[] = 'rollback';
 		$this->write_state();
+		return true;
 	}
 
 	/* -------------------------------------------------------------- */

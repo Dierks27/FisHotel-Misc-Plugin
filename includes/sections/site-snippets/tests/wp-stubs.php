@@ -118,7 +118,12 @@ function get_option( $name, $default = false ) {
 	return array_key_exists( $name, $GLOBALS['fh_options'] ) ? $GLOBALS['fh_options'][ $name ] : $default;
 }
 
+$GLOBALS['fh_option_fail'] = array(); // name => true: update_option() fails (the database refuses the write).
+
 function update_option( $name, $value, $autoload = null ) {
+	if ( ! empty( $GLOBALS['fh_option_fail'][ $name ] ) ) {
+		return false;
+	}
 	if ( array_key_exists( $name, $GLOBALS['fh_options'] ) && $GLOBALS['fh_options'][ $name ] === $value ) {
 		return false;
 	}
@@ -465,6 +470,14 @@ function is_multisite() {
 
 function is_super_admin( $user_id = false ) {
 	return (bool) $GLOBALS['fh_super_admin'];
+}
+
+/**
+ * wp_salt(): a fixed secret per scheme ($GLOBALS['fh_salt'] overrides it —
+ * a test can "rotate the salts").
+ */
+function wp_salt( $scheme = 'auth' ) {
+	return isset( $GLOBALS['fh_salt'] ) ? (string) $GLOBALS['fh_salt'] : 'test-salt-' . $scheme;
 }
 
 function wp_create_nonce( $action = -1 ) {

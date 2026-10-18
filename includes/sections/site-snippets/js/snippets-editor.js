@@ -148,7 +148,9 @@
 						$row.find('[data-role="status"]')
 							.attr('class', 'fh-snip-state fh-snip-state--' + String(status.key || 'off'))
 							.text(String(status.label || ''));
-						say('ok', String(response.data.message || ''));
+						// stale: switched in the table, but the list the site runs
+						// could not be updated — the message says so.
+						say(response.data.stale ? 'error' : 'ok', String(response.data.message || ''));
 						return;
 					}
 					$input.prop('checked', !on);

@@ -80,9 +80,12 @@ class Loader {
 	/**
 	 * The editor's admin-post actions that test-run a database snippet in
 	 * their own request (Editor::SAVE_ACTION, Editor::RESTORE_ACTION). On
-	 * such a request the snippet being saved is not run at
-	 * plugins_loaded:1 — its old code would otherwise already have declared
-	 * what the new code's test run declares again.
+	 * such a request the snippet being saved does not run its OLD code at
+	 * plugins_loaded:1 — that would already have declared what the new
+	 * code's test run declares again. The code the handler will test-run
+	 * runs in its place instead (so whatever calls its functions later in
+	 * the request still finds them), and the handler's test run reuses that
+	 * result (see stand_in()).
 	 *
 	 * @var string[]
 	 */
@@ -98,8 +101,18 @@ class Loader {
 		'results' => array(), // key => ok|error|missing|skipped (key = slug, db:<slug> for a database snippet).
 		'skipped' => array(), // key => reason (a declared name exists already).
 		'errors'  => array(), // key => message.
-		'editing' => '',      // The database snippet this editor request saves (not run).
+		'editing' => '',      // The database snippet this editor request saves (its old code not run).
 	);
+
+	/**
+	 * On the editor's own save / restore request: the code that ran at
+	 * plugins_loaded:1 in place of the snippet being saved — { key, hash
+	 * (sha1 of the code), result: null until it ran, then '' or why it
+	 * failed } — or null.
+	 *
+	 * @var array|null
+	 */
+	private static $stand_in = null;
 
 	/**
 	 * Memo: safe mode, enabled map, guard result.
@@ -157,7 +170,7 @@ class Loader {
 				$key = Rules::key_of( $snippet );
 				if ( '' !== $editing && $key === $editing ) {
 					self::$state['editing'] = $key;
-					continue;
+					$snippet                = self::stand_in( $snippet );
 				}
 				$items[] = self::item( $snippet );
 			}
@@ -167,10 +180,75 @@ class Loader {
 				array( self::class, 'record_error' ),
 				array( self::class, 'preflight' )
 			);
+
+			if ( is_array( self::$stand_in ) && null === self::$stand_in['result'] && isset( self::$state['results'][ self::$stand_in['key'] ] ) ) {
+				$ran                      = self::$state['results'][ self::$stand_in['key'] ];
+				self::$stand_in['result'] = 'ok' === $ran ? '' : 'the code could not be run (' . $ran . ').';
+			}
 		} catch ( \Throwable $e ) {
 			// The loader itself must never take the site down.
 			self::record_error( '', $e );
 		}
+	}
+
+	/**
+	 * The editor's own save / restore of an active snippet that runs here:
+	 * the snippet with the code the handler will test-run in place of its
+	 * old code — or the snippet unchanged (its old code runs as on any
+	 * request) when the handler will not test-run (saved off, refused by
+	 * the field / parse / clash / size checks, nothing changed, the table
+	 * unreadable). The editor's draft is written first, as the handler
+	 * writes it before its own test run, so even a fatal here keeps the
+	 * typed code.
+	 *
+	 * @param array $snippet Merged-map entry of the database snippet.
+	 * @return array
+	 */
+	private static function stand_in( array $snippet ) {
+		try {
+			Site_Snippets::load_editor();
+			$trial = Admin_Editor::trial_for_request();
+		} catch ( \Throwable $e ) {
+			$trial = null;
+		}
+
+		if ( ! is_array( $trial ) || ! isset( $trial['entry']['key'], $trial['entry']['code'] ) || Rules::key_of( $snippet ) !== $trial['entry']['key'] ) {
+			return $snippet;
+		}
+
+		self::$stand_in = array(
+			'key'    => Rules::key_of( $snippet ),
+			'hash'   => sha1( (string) $trial['entry']['code'] ),
+			'result' => null,
+		);
+
+		// A name the new code declares exists already (another plugin): the
+		// save will be refused for it, and the old code keeps running.
+		$exists = self::declared_already( $trial['entry'] );
+		if ( '' !== $exists ) {
+			self::$stand_in['result'] = $exists;
+			return $snippet;
+		}
+
+		return array_merge(
+			$snippet,
+			array(
+				'code'     => (string) $trial['entry']['code'],
+				'declares' => isset( $trial['entry']['declares'] ) ? (array) $trial['entry']['declares'] : array(),
+				'version'  => isset( $trial['entry']['version'] ) ? (int) $trial['entry']['version'] : 0,
+			)
+		);
+	}
+
+	/**
+	 * Whether a key is the stand-in that has not finished yet (its error
+	 * or skip is the handler's test result, not the site's).
+	 *
+	 * @param string $key Key.
+	 * @return bool
+	 */
+	private static function is_stand_in( $key ) {
+		return is_array( self::$stand_in ) && null === self::$stand_in['result'] && (string) $key === self::$stand_in['key'];
 	}
 
 	/**
@@ -185,7 +263,9 @@ class Loader {
 	public static function preflight( array $item ) {
 		$reason = self::declared_already( $item['snippet'] );
 
-		if ( '' !== $reason ) {
+		if ( '' !== $reason && self::is_stand_in( $item['slug'] ) ) {
+			self::$stand_in['result'] = $reason;
+		} elseif ( '' !== $reason ) {
 			self::$state['skipped'][ $item['slug'] ] = $reason;
 			self::note( (string) $item['slug'], 'Snippet ' . self::label( $item['snippet'] ) . ' was not loaded: ' . $reason, 'warning', array() );
 		}
@@ -265,12 +345,12 @@ class Loader {
 	}
 
 	/**
-	 * On the editor's own save / restore request (admin-post, POST, a valid
-	 * nonce, a user the editor permission allows), the key of the active
-	 * database snippet being saved: it is not run at plugins_loaded:1, so
-	 * the test run of its new code is its only run in that request (Code
-	 * Snippets skips the snippet being edited the same way). '' otherwise —
-	 * an ordinary request pays one isset().
+	 * On the editor's own save / restore request (admin-post, POST, not
+	 * admin-ajax, a valid nonce, a user the editor permission allows), the
+	 * key of the active database snippet being saved: its old code is not
+	 * run at plugins_loaded:1 — the code the handler will test-run runs in
+	 * its place (stand_in()), so that is its only run in that request. ''
+	 * otherwise — an ordinary request pays one isset().
 	 *
 	 * @return string
 	 */
@@ -279,7 +359,7 @@ class Loader {
 		if ( ! isset( $_POST['action'], $_POST['snippet_id'] ) || ! is_string( $_POST['action'] ) || ! in_array( $_POST['action'], self::EDIT_ACTIONS, true ) ) {
 			return '';
 		}
-		if ( ! is_admin() || ! isset( $_SERVER['REQUEST_METHOD'] ) || 'POST' !== $_SERVER['REQUEST_METHOD'] ) {
+		if ( ! is_admin() || ! isset( $_SERVER['REQUEST_METHOD'] ) || 'POST' !== $_SERVER['REQUEST_METHOD'] || ( function_exists( 'wp_doing_ajax' ) && wp_doing_ajax() ) ) {
 			return '';
 		}
 
@@ -347,6 +427,14 @@ class Loader {
 	 * @return string '' when it ran cleanly, else why it cannot be switched on.
 	 */
 	public static function test_run( array $snippet ) {
+		// This exact code already ran at plugins_loaded:1 in the snippet's
+		// place (the editor's own save request): that was its test run, and
+		// running it again would declare its functions twice.
+		if ( is_array( self::$stand_in ) && null !== self::$stand_in['result'] && Rules::key_of( $snippet ) === self::$stand_in['key']
+			&& isset( $snippet['code'] ) && hash_equals( self::$stand_in['hash'], sha1( (string) $snippet['code'] ) ) ) {
+			return self::$stand_in['result'];
+		}
+
 		$reason = self::declared_already( $snippet );
 		if ( '' !== $reason ) {
 			return $reason;
@@ -428,6 +516,13 @@ class Loader {
 	 * @param \Throwable $e    What was thrown.
 	 */
 	public static function record_error( $slug, $e ) {
+		if ( self::is_stand_in( $slug ) ) {
+			// The code being saved threw in its test run: the save is refused
+			// with this (test_run() hands it over); it is not the site's error.
+			self::$stand_in['result'] = get_class( $e ) . ': ' . $e->getMessage() . ' (line ' . (int) $e->getLine() . ')';
+			return;
+		}
+
 		$where = false !== strpos( (string) $e->getFile(), "eval()'d code" )
 			? 'its stored code, line ' . $e->getLine()
 			: self::relative( $e->getFile() ) . ':' . $e->getLine();
@@ -673,8 +768,9 @@ class Loader {
 			'errors'  => array(),
 			'editing' => '',
 		);
-		self::$memo  = array();
-		self::$queue = array();
+		self::$memo     = array();
+		self::$queue    = array();
+		self::$stand_in = null;
 	}
 
 	/**

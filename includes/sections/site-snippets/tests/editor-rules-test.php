@@ -93,6 +93,15 @@ check( 'multisite: a listed super admin may', fh_perm( array( 'multisite' => tru
 check( 'multisite: a listed site administrator who is not super admin may not', 'no_capability' === fh_perm( array( 'multisite' => true, 'super_admin' => false, 'can_manage_options' => true ) )['reason'] );
 check( 'parse_editors: ids and lower-cased logins, deduplicated, 0 ignored', array( 'ids' => array( 7 ), 'logins' => array( 'jeff', 'anna' ) ) === Editor_Rules::parse_editors( 'Jeff, 7, anna,7, jeff, 0' ) );
 check( 'parse_editors: a non-string constant names nobody', array( 'ids' => array(), 'logins' => array() ) === Editor_Rules::parse_editors( array( 'jeff' ) ) );
+$fh_nobody = array(
+	'ids'    => array(),
+	'logins' => array(),
+);
+check( 'parse_editors: true, false, a float or an object name nobody (cast to a string they would be user #1 or a login)', $fh_nobody === Editor_Rules::parse_editors( true ) && $fh_nobody === Editor_Rules::parse_editors( false ) && $fh_nobody === Editor_Rules::parse_editors( 7.0 ) && $fh_nobody === Editor_Rules::parse_editors( (object) array() ) );
+check( 'parse_editors: a whole number is one user ID; 0 or less names nobody', array( 'ids' => array( 7 ), 'logins' => array() ) === Editor_Rules::parse_editors( 7 ) && $fh_nobody === Editor_Rules::parse_editors( 0 ) && $fh_nobody === Editor_Rules::parse_editors( -3 ) );
+check( 'define( …, array( \'jeff\' ) ): nobody — not the login "array", not jeff', 'empty_constant' === fh_perm( array( 'constant' => array( 'jeff' ), 'user_login' => 'array', 'user_id' => 50 ) )['reason'] && 'empty_constant' === fh_perm( array( 'constant' => array( 'jeff' ) ) )['reason'] );
+check( 'define( …, true ): nobody — not user #1; the message says what the constant must be', 'empty_constant' === fh_perm( array( 'constant' => true, 'user_id' => 1, 'user_login' => 'admin' ) )['reason'] && false !== strpos( fh_perm( array( 'constant' => true ) )['message'], "it must be text such as 'jeff'" ) );
+check( 'define( …, 7 ): user #7', fh_perm( array( 'constant' => 7, 'user_login' => 'someone' ) )['allowed'] && 'not_listed' === fh_perm( array( 'constant' => 7, 'user_id' => 8 ) )['reason'] );
 
 echo "2. Fields\n";
 $v = fh_valid( array() );
@@ -217,10 +226,45 @@ $built = Db_Snippets::active_option(
 	)
 );
 check( 'only the active ones, by slug', array( 'a-css', 'b-on' ) === array_keys( $built['map'] ) );
-check( 'only what the loader needs (no name, no description), typed', array( 'id', 'slug', 'type', 'scope', 'priority', 'code', 'version', 'declares' ) === array_keys( $built['map']['b-on'] ) && 3 === $built['map']['b-on']['priority'] && 4 === $built['map']['b-on']['version'] );
+check( 'only what the loader needs (no name, no description), typed, signed', array( 'id', 'slug', 'type', 'scope', 'priority', 'code', 'version', 'declares', 'mac' ) === array_keys( $built['map']['b-on'] ) && 3 === $built['map']['b-on']['priority'] && 4 === $built['map']['b-on']['version'] && 64 === strlen( $built['map']['b-on']['mac'] ) );
 check( 'PHP carries its declarations (the preflight needs no tokenizer per request); CSS none', 'function:fh_b_on' === fh_decl_names( $built['map']['b-on']['declares'] ) && array() === $built['map']['a-css']['declares'] );
 check( 'its size is the serialized size WordPress stores', strlen( serialize( $built['map'] ) ) === $built['bytes'] );
 check( 'nothing active: an empty map', array() === Db_Snippets::active_option( array() )['map'] );
+
+echo "7b. The active option is signed: only what the editor wrote runs\n";
+$entry = $built['map']['b-on'];
+check( 'an entry the editor built verifies', Db_Snippets::verified( $entry ) && Db_Snippets::verified( $built['map']['a-css'] ) );
+$forged = array(
+	'x' => array( 'slug' => 'x', 'type' => 'php', 'scope' => 'global', 'code' => "\$GLOBALS['fh_ran'][] = 'injected via option';" ),
+);
+check( 'an entry written straight into the option (wp-admin/options.php): no signature, not verified', ! Db_Snippets::verified( $forged['x'] ) );
+$tampered = array();
+foreach ( array( 'code' => 'evil();', 'scope' => 'front-end', 'type' => 'css', 'slug' => 'other', 'priority' => 1, 'id' => 99, 'version' => 9, 'declares' => array() ) as $field => $value ) {
+	$tampered[ $field ] = Db_Snippets::verified( array_merge( $entry, array( $field => $value ) ) );
+}
+check( 'any field changed after signing (code, scope, type, slug, priority, id, version, declarations): not verified', array() === array_filter( $tampered ), json_encode( $tampered ) );
+check( 'a signature made up, empty or missing: not verified', ! Db_Snippets::verified( array_merge( $entry, array( 'mac' => str_repeat( 'a', 64 ) ) ) ) && ! Db_Snippets::verified( array_merge( $entry, array( 'mac' => '' ) ) ) && ! Db_Snippets::verified( array_diff_key( $entry, array( 'mac' => 1 ) ) ) && ! Db_Snippets::verified( 'garbage' ) );
+$GLOBALS['fh_salt'] = 'rotated-salts';
+check( 'new salts: every entry unsigned until the option is rebuilt', ! Db_Snippets::verified( $entry ) && Db_Snippets::verified( Db_Snippets::active_option( array( array_merge( $entry, array( 'active' => 1 ) ) ) )['map']['b-on'] ) );
+unset( $GLOBALS['fh_salt'] );
+$with_forged = Db_Snippets::merge( $index, array_merge( $active, $forged, array( 'aaa' => array_merge( $active['aaa'], array( 'code' => 'evil();' ) ) ) ) );
+check( 'merge: a forged or tampered entry is left out; the signed ones stay', ! isset( $with_forged['db:x'] ) && ! isset( $with_forged['db:aaa'] ) && isset( $with_forged['db:first'], $with_forged['db:moved'] ) );
+check( 'merge: an entry filed under another slug than its own is left out', ! isset( Db_Snippets::merge( $index, array( 'other' => $active['aaa'] ) )['db:aaa'] ) );
+check( 'merge: only forged entries = the files untouched', $index['snippets'] === Db_Snippets::merge( $index, $forged ) );
+
+echo "7c. Drift between the stored option and the table\n";
+$rows_now = array(
+	array( 'id' => 1, 'slug' => 'one', 'type' => 'php', 'scope' => 'global', 'priority' => 10, 'active' => 1, 'code' => '$o = 1;', 'version' => 2 ),
+	array( 'id' => 2, 'slug' => 'two', 'type' => 'css', 'scope' => 'front-end', 'priority' => 10, 'active' => 1, 'code' => 'p{}', 'version' => 1 ),
+);
+$expected = Db_Snippets::active_option( $rows_now )['map'];
+check( 'the same: no drift', '' === Db_Snippets::drift( $expected, $expected ) );
+check( 'an empty option: both missing', 'switched on but missing: one, two' === Db_Snippets::drift( $expected, array() ) && 'switched on but missing: one, two' === Db_Snippets::drift( $expected, false ) );
+$older = Db_Snippets::active_option( array( array_merge( $rows_now[0], array( 'version' => 1, 'code' => '$o = 0;' ) ), $rows_now[1] ) )['map'];
+check( 'an older version still listed', 'an older version listed: one' === Db_Snippets::drift( $expected, $older ) );
+$gone = Db_Snippets::active_option( array( $rows_now[0], $rows_now[1], array( 'id' => 3, 'slug' => 'gone', 'type' => 'php', 'scope' => 'global', 'priority' => 10, 'active' => 1, 'code' => '$g = 1;', 'version' => 1 ) ) )['map'];
+check( 'off or deleted but still listed', 'off or deleted but still listed: gone' === Db_Snippets::drift( $expected, $gone ) );
+check( 'a forged or tampered entry', 'not written by the editor (or the salts changed): one, x' === Db_Snippets::drift( $expected, array_merge( $expected, $forged, array( 'one' => array_merge( $expected['one'], array( 'code' => 'evil();' ) ) ) ) ) );
 check( 'the cap on everything active together is below WordPress\'s large-option warning zone and above one full snippet', Editor_Rules::MAX_ACTIVE_BYTES > Editor_Rules::MAX_CODE_BYTES && Editor_Rules::MAX_ACTIVE_BYTES <= 262144 );
 
 echo "8. History and audit text — never the code\n";
