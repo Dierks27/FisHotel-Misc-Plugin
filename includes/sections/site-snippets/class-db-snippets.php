@@ -247,7 +247,7 @@ class Db_Snippets {
 			$out[ $entry['key'] ] = $entry;
 		}
 
-		if ( ! $has_decls ) {
+		if ( ! $has_decls || ! self::names_meet( $decls ) ) {
 			return $out;
 		}
 
@@ -265,6 +265,45 @@ class Db_Snippets {
 		}
 
 		return $out;
+	}
+
+	/**
+	 * Fast path of merge(), run on every request with an active database
+	 * snippet: whether any name a database snippet declares is declared
+	 * anywhere else (or twice by database snippets). Only then is the full
+	 * Symbols::conflicts() grouping worth running — usually it is not.
+	 *
+	 * @param array<string, array> $decls key => declarations (files by slug, database snippets by db:<slug>).
+	 * @return bool
+	 */
+	private static function names_meet( array $decls ) {
+		$db = array();
+
+		foreach ( $decls as $key => $list ) {
+			if ( ! self::is_key( (string) $key ) ) {
+				continue;
+			}
+			foreach ( $list as $decl ) {
+				$name = $decl['kind'] . ':' . $decl['name'];
+				if ( isset( $db[ $name ] ) ) {
+					return true;
+				}
+				$db[ $name ] = true;
+			}
+		}
+
+		foreach ( $decls as $key => $list ) {
+			if ( self::is_key( (string) $key ) ) {
+				continue;
+			}
+			foreach ( $list as $decl ) {
+				if ( isset( $db[ $decl['kind'] . ':' . $decl['name'] ] ) ) {
+					return true;
+				}
+			}
+		}
+
+		return false;
 	}
 
 	/**

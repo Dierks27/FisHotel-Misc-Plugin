@@ -216,6 +216,14 @@ check( 'switched on: test-run first, then on', true === $halt->data['success'] &
 $id_t = $store->insert( array( 'slug' => 'throws-off', 'name' => 'Throws', 'description' => '', 'type' => 'php', 'scope' => 'global', 'priority' => 10, 'active' => 0, 'code' => "throw new \\LogicException( 'toggle boom' );", 'version' => 1, 'created_by' => 7, 'created_at' => '2026-10-18 09:00:00', 'updated_by' => 7, 'updated_at' => '2026-10-18 09:00:00' ) );
 $halt = fh_call( 'ajax_toggle', array( 'snippet_id' => (string) $id_t, 'enabled' => '1', Editor::NONCE_FIELD => fh_nonce() ) );
 check( 'switching on a snippet that throws: refused with the reason (400), stays off', false === $halt->data['success'] && 400 === $halt->status && false !== strpos( $halt->data['data']['message'], 'LogicException: toggle boom' ) && 0 === $store->get( $id_t )['active'] );
+Admin_Editor::keep_draft( 7, $row['id'], array( 'name' => 'Typed but unsaved', 'code' => '$unsaved = 1;' ), 'refused', 'Not saved — kept.', array() );
+fh_call( 'ajax_toggle', array( 'snippet_id' => (string) $row['id'], 'enabled' => '0', Editor::NONCE_FIELD => fh_nonce() ) );
+fh_call( 'ajax_toggle', array( 'snippet_id' => (string) $row['id'], 'enabled' => '1', Editor::NONCE_FIELD => fh_nonce() ) );
+check( 'the switch never touches an unsaved draft of the snippet (and leaves no marker of its own)', '$unsaved = 1;' === Admin_Editor::draft( 7, $row['id'] )['fields']['code'] && 'refused' === Admin_Editor::draft( 7, $row['id'] )['state'] );
+fh_call( 'handle_discard', array( 'snippet_id' => (string) $row['id'], Editor::NONCE_FIELD => fh_nonce() ) );
+fh_call( 'ajax_toggle', array( 'snippet_id' => (string) $row['id'], 'enabled' => '0', Editor::NONCE_FIELD => fh_nonce() ) );
+fh_call( 'ajax_toggle', array( 'snippet_id' => (string) $row['id'], 'enabled' => '1', Editor::NONCE_FIELD => fh_nonce() ) );
+check( '… and without a draft, a switch that came back leaves none', null === Admin_Editor::draft( 7, $row['id'] ) );
 fh_call( 'handle_save', fh_form( array( 'snippet_id' => (string) $row['id'], 'base_version' => (string) $store->get( $row['id'] )['version'], 'name' => 'Second name', 'code' => "\$GLOBALS['fh_admin_ran'][] = 'v-new';" ) ) );
 $revs = $store->revisions( $row['id'] );
 $html = fh_page( array( 'tab' => 'mine', 'view' => 'history', 'id' => (string) $row['id'], 'rev' => (string) $revs[ count( $revs ) - 1 ]['id'] ) );
@@ -223,6 +231,7 @@ check( 'history: every version with who and what changed', count( $revs ) === su
 check( 'the diff against the current code (wp_text_diff), and Restore buttons for older versions', false !== strpos( $html, '<table class="diff">' ) && false !== strpos( $html, 'Version 1 against the current code' ) && count( $revs ) - 1 === substr_count( $html, 'name="revision_id"' ) );
 $GLOBALS['fh_admin_ran'] = array();
 $halt                    = fh_call( 'handle_restore', array( 'snippet_id' => (string) $row['id'], 'revision_id' => (string) $revs[ count( $revs ) - 1 ]['id'], 'base_version' => (string) $store->get( $row['id'] )['version'], Editor::NONCE_FIELD => fh_nonce() ) );
+check( 'restore leaves no draft behind', null === Admin_Editor::draft( 7, $row['id'] ) );
 check( 'restore: a new version with version 1\'s code, test-run (it is on), back to the history', $halt instanceof FH_Halt && false !== strpos( $halt->data, 'view=history' ) && "\$GLOBALS['fh_admin_ran'][] = 'hide-bar';" === $store->get( $row['id'] )['code'] && array( 'hide-bar' ) === $GLOBALS['fh_admin_ran'] && 'restore' === $store->log_rows( array(), 1 )[0]['action'] );
 fh_call( 'handle_delete', array( 'snippet_id' => (string) $row['id'], Editor::NONCE_FIELD => fh_nonce() ) );
 check( 'delete: gone from the table and the active option; revisions kept', null === $store->get( $row['id'] ) && ! isset( get_option( Db_Snippets::OPTION_ACTIVE )['hide-bar'] ) && count( $store->revisions( $row['id'] ) ) >= 4 );

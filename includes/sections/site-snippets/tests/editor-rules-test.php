@@ -184,6 +184,17 @@ $merged = Db_Snippets::merge( $index, $active );
 check( 'merge: database snippets keyed db:<slug> beside the files', isset( $merged['db:aaa'], $merged['moved'], $merged['db:moved'] ) && 'db' === $merged['db:aaa']['source'] && 'aaa' === $merged['db:aaa']['slug'] && true === $merged['db:aaa']['default_on'] );
 check( 'merge: a copy superseded by its GitHub file is refused (never runs) and says so', 'moved.php' === $merged['db:moved']['superseded'] && false !== strpos( $merged['db:moved']['refused'], 'Superseded by the GitHub file moved.php' ) );
 check( 'merge: a file deployed later that declares the same name refuses the database copy, not the file', false !== strpos( $merged['db:clashes']['refused'], 'function fh_z_file() is declared also by the file zfile.php' ) && '' === $merged['zfile']['refused'], $merged['db:clashes']['refused'] );
+$twin = Db_Snippets::merge(
+	$index,
+	Db_Snippets::active_option(
+		array(
+			array( 'id' => 20, 'slug' => 'twin-a', 'type' => 'php', 'scope' => 'global', 'priority' => 10, 'active' => 1, 'code' => 'function fh_twin() {}', 'version' => 1 ),
+			array( 'id' => 21, 'slug' => 'twin-b', 'type' => 'php', 'scope' => 'global', 'priority' => 10, 'active' => 1, 'code' => 'function FH_TWIN() {}', 'version' => 1 ),
+			array( 'id' => 22, 'slug' => 'loner', 'type' => 'php', 'scope' => 'global', 'priority' => 10, 'active' => 1, 'code' => 'function fh_loner() {}', 'version' => 1 ),
+		)
+	)['map']
+);
+check( 'merge: two database snippets declaring one name are both refused; an unrelated one is not', false !== strpos( $twin['db:twin-a']['refused'], 'also by database snippet twin-b' ) && false !== strpos( $twin['db:twin-b']['refused'], 'also by database snippet twin-a' ) && '' === $twin['db:loner']['refused'] );
 check( 'merge: without database snippets the file map is returned untouched', $index['snippets'] === Db_Snippets::merge( $index, array() ) && $index['snippets'] === Db_Snippets::merge( $index, 'garbage' ) );
 $plan = Rules::php_plan( $merged, array( 'aaa' => false, 'first' => false, 'early' => true, 'cs' => true ), false );
 $order = array_map(

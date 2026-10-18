@@ -336,23 +336,8 @@ class Admin_Editor {
 		$this->authorize( 'restore a version', $id );
 
 		$uid    = get_current_user_id();
-		$editor = self::editor(
-			array(
-				'before_test' => static function ( array $fields ) use ( $uid, $id ) {
-					self::keep_draft( $uid, $id, $fields, 'testing', '', array(), (int) $fields['version'] );
-				},
-			)
-		);
-		$result = $editor->restore_revision( $id, self::posted_int( 'revision_id' ), self::posted( 'base_version' ) );
-
-		if ( $result['ok'] || 'test_failed' !== $result['code'] ) {
-			self::drop_draft( $uid, $id );
-		} else {
-			$draft = self::draft( $uid, $id );
-			if ( is_array( $draft ) ) {
-				self::keep_draft( $uid, $id, $draft['fields'], 'refused', $result['message'], $result['errors'] );
-			}
-		}
+		$result = self::editor( self::marker( $uid, $id ) )->restore_revision( $id, self::posted_int( 'revision_id' ), self::posted( 'base_version' ) );
+		self::unmark( $uid, $id );
 
 		self::notice( $result['ok'] ? 'ok' : 'error', $result['message'] );
 		self::redirect( self::url( array( 'view' => 'history', 'id' => $id ) ) );
@@ -479,7 +464,9 @@ class Admin_Editor {
 		$this->authorize( 'switch', $id, true );
 
 		$on     = '1' === self::posted( 'enabled' );
-		$result = self::editor()->set_active( $id, $on );
+		$uid    = get_current_user_id();
+		$result = self::editor( self::marker( $uid, $id ) )->set_active( $id, $on );
+		self::unmark( $uid, $id );
 
 		if ( ! $result['ok'] ) {
 			wp_send_json_error( array( 'message' => $result['message'] ), 400 );
@@ -581,6 +568,49 @@ class Admin_Editor {
 
 		update_user_meta( (int) $user_id, self::DRAFTS_META, $all );
 	}
+
+	/**
+	 * For a switch or a restore (no typed code to keep): a "testing" marker
+	 * draft right before the test run, so a fatal there is still logged on
+	 * the next page view — but only when the user has no draft of that
+	 * snippet already (never overwrite unsaved work).
+	 *
+	 * @param int $user_id User.
+	 * @param int $id      Snippet id.
+	 * @return array Editor dependencies (before_test).
+	 */
+	private static function marker( $user_id, $id ) {
+		self::$marked = is_array( self::draft( $user_id, $id ) ) ? null : (int) $id;
+
+		return array(
+			'before_test' => static function ( array $fields ) use ( $user_id, $id ) {
+				if ( (int) $id === self::$marked ) {
+					self::keep_draft( $user_id, $id, $fields, 'testing', '', array(), (int) $fields['version'] );
+				}
+			},
+		);
+	}
+
+	/**
+	 * The test run came back: drop the marker marker() wrote (a user's own
+	 * draft is left alone).
+	 *
+	 * @param int $user_id User.
+	 * @param int $id      Snippet id.
+	 */
+	private static function unmark( $user_id, $id ) {
+		if ( (int) $id === self::$marked ) {
+			self::drop_draft( $user_id, $id );
+		}
+		self::$marked = null;
+	}
+
+	/**
+	 * The snippet id marker() may write a marker for (null = none).
+	 *
+	 * @var int|null
+	 */
+	private static $marked = null;
 
 	/**
 	 * Forget a draft.
@@ -822,14 +852,13 @@ class Admin_Editor {
 				);
 				$view   = 'list';
 			} else {
-				$id        = is_array( $row ) ? (int) $row['id'] : 0;
-				$draft     = self::draft( $uid, $id );
-				$fields    = self::form_fields( $row, $draft );
-				$errors    = is_array( $draft ) && isset( $draft['errors'] ) && is_array( $draft['errors'] ) ? $draft['errors'] : array();
-				$index     = Catalog::get( null, true );
-				$file      = is_array( $row ) ? Db_Snippets::superseded_by( $row['slug'], $index ) : '';
-				$editors   = Editor_Rules::parse_editors( null === $who['constant'] ? '' : $who['constant'] );
-				$scopes    = Header::SCOPES;
+				$id         = is_array( $row ) ? (int) $row['id'] : 0;
+				$draft      = self::draft( $uid, $id );
+				$fields     = self::form_fields( $row, $draft );
+				$errors     = is_array( $draft ) && isset( $draft['errors'] ) && is_array( $draft['errors'] ) ? $draft['errors'] : array();
+				$index      = Catalog::get( null, true );
+				$file       = is_array( $row ) ? Db_Snippets::superseded_by( $row['slug'], $index ) : '';
+				$scopes     = Header::SCOPES;
 				$last_error = is_array( $row ) ? self::stored_error( (string) $row['slug'] ) : null;
 				include Site_Snippets::path() . 'views/editor-edit.php';
 				return;
