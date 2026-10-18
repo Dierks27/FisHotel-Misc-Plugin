@@ -62,7 +62,7 @@ Origin: Code Snippets #9, imported 2026-10-20
 | `Description` | no | one line; indented continuation lines are appended | empty |
 | `Type` | no | `php` · `css` · `js` · `html` — must match the extension | from the extension |
 | `Scope` | no | see below | `global` / `front-end` / `front-end` / `shortcode` |
-| `Priority` | no | a whole number; lower runs (or prints) first, ties by file name | `10` |
+| `Priority` | no | a whole number; lower runs (or prints) first; ties by the Code Snippets id in `Origin` (imports first, as Code Snippets ordered them), then file name | `10` |
 | `Origin` | no | free text; `Code Snippets #N` in it links the file to that Code Snippets snippet (guard, `[code_snippet id=N]`) | empty |
 | `Default` | no | `on` · `off` — used until the page switches the snippet | `off` |
 
@@ -101,7 +101,10 @@ The PHP rule is Code Snippets' own (`global`, plus `admin` or `front-end` by
   main plugin file includes `early-loader.php` while plugins load: when the
   Snippets section is enabled (the Section Manager's own autoloaded option)
   it hooks the run at priority 1; when it is off it does nothing else.
-- Order: `Priority`, then file name.
+- Order: `Priority`, then the Code Snippets id from `Origin` (Code Snippets'
+  own `ORDER BY priority, id`, so a helper class from #3 exists before #8
+  uses it), then file name; files without an id come after the imports of
+  their priority.
 - Each file is included **inside a function** (Code Snippets `eval()`s
   inside `execute_snippet()`), so its top-level variables stay local. It
   sees no `$this` and no variable of ours.
@@ -136,14 +139,27 @@ read-only view of the code, plus the broken files and the clashes. The
 switch (AJAX, nonce, `manage_options`) stores `slug => true|false` in the
 autoloaded option `fishotel_snippets_enabled`; a slug never switched uses
 its file's `Default`. Turning on re-reads every file first and **refuses** a
-broken or clashing file. Turning off always works.
+broken or clashing file. A PHP snippet that is off is then **test-run once**
+in that request, as Code Snippets does when a snippet is saved active: if it
+throws, or declares a function / class that already exists, the switch is
+refused with the reason; an error PHP's parser does not catch (a parameter
+named twice, `break` outside a loop) is a fatal that ends only that switch
+request — the snippet stays off and the page shows the error, instead of
+every request after it dying.
+The test run really runs the code once (its hooks for the rest of that
+request), so a snippet with a side effect at load (an e-mail, a write) does
+it once more. Turning off works for any listed or broken file and any slug
+already stored; an unknown slug is refused.
 
 ## Shortcodes
 
 - `[fh_snippet slug="spring-sale"]` renders an `html` snippet of scope
   `shortcode` — nothing when it is off. `format` (wpautop & co.) and
   `shortcodes` (run shortcodes inside it) work as in Code Snippets:
-  `[fh_snippet slug="x" format shortcodes]`.
+  `[fh_snippet slug="x" format shortcodes]`. As there, a flag is off only
+  when its value is empty or `0` — `format=false` formats. The content is
+  the file's text without its final newline (Code Snippets returns the
+  stored code as is), so `Call [code_snippet id=7].` stays on one line.
 - `[code_snippet id=9]` — Code Snippets' own tag, still in old pages — is
   answered by the file whose `Origin` says `Code Snippets #9`, **only once
   the Code Snippets plugin is no longer active** (while it is, the tag is
@@ -171,10 +187,15 @@ broken or clashing file. Turning off always works.
   waits. The page and an admin notice name what waits and why. A
   `shortcode` snippet is never held (it only renders where placed).
 - **Clashes**: a function or class declared by two snippet files (or twice
-  in one) is listed and **both files are refused**. When every declaration
-  is inside a guard (`if ( ! function_exists( … ) )`) it is only a warning.
+  in one where both can run) is listed and **both files are refused**. It
+  is only a warning when every declaration is *guarded*: inside braces, in
+  a file that calls `function_exists( 'that_name' )` (`class_exists()`,
+  `interface_exists()`, `trait_exists()`, `enum_exists()` for a class) with
+  the exact name as a string (namespaced: the full name, or
+  `__NAMESPACE__ . '\\name'`) — Code Snippets' own exemption. Any other
+  `if` (`if ( ! is_admin() )`) guards nothing.
 - **Already declared**: right before a PHP snippet is included, every
-  function / class it declares unconditionally is checked; if another
+  function / class it declares without such a guard is checked; if another
   plugin, the theme or Code Snippets declared it first, the snippet is
   skipped (with a notice) instead of fataling.
 
@@ -205,9 +226,15 @@ snippet).
    `body-content` / `footer-content` → html head / body / footer; `site-css`
    → css front-end; `admin-css` → css admin; `site-head-js` → js head;
    `site-footer-js` → js footer). Single-use snippets, conditions and
-   trashed snippets are refused with the reason. Its report lists every
-   snippet, flags **secrets** (API keys, tokens, passwords, SMTP logins) to
-   move into `wp-config.php` first, condition-bound snippets, PHP inside
+   trashed snippets are refused with the reason. Tell it which Code
+   Snippets the site ran (`--edition=free`, the default, or `pro`): the
+   free plugin ignores conditions (a linked snippet ran on every request,
+   and the file keeps doing that) and never prints CSS / JS snippets (an
+   "active" one had no effect; switching its file on changes the site).
+   Its report lists every snippet, flags **secrets** (API keys, tokens,
+   passwords, SMTP logins — in the code, the name or the description) to
+   move into `wp-config.php` first, priorities missing from the export
+   (10, or 0 — the export drops both), condition-bound snippets, PHP inside
    content snippets (an `.html` file never runs PHP — `[code_snippet php=1]`
    has no equivalent; move that PHP into a PHP snippet with its own
    shortcode) and duplicate functions (Code Snippets often holds an old
@@ -215,11 +242,14 @@ snippet).
 3. Commit the files (all off) through a pull request and update the plugin.
    Nothing changes on the site yet. Enable the **Snippets** section on the
    FisHotel Tools dashboard.
-4. For each snippet that was active, lowest priority first:
+4. For each snippet that ran on the site, in the report's transition order
+   (priority, then Code Snippets id — the order Code Snippets ran them):
    1. in Code Snippets, **deactivate** snippet #N;
-   2. in FisHotel Tools → Snippets, **switch on** the file from #N
-      (switched on first, it simply waits — the guard holds it back while
-      #N is active);
+   2. in FisHotel Tools → Snippets, **switch on** the file from #N — in
+      this order: switching on test-runs the file, and while #N is still
+      active the functions it declares already exist, so the switch is
+      refused (one that declares nothing is accepted and simply waits — the
+      guard holds it back while #N is active);
    3. **check the site** (the page the snippet affects, checkout, wp-admin).
    If anything breaks: switch ours off, reactivate #N, and look at the
    snippet's last error on the Snippets page or in the Health log.
@@ -231,7 +261,7 @@ snippet).
 
 | Option | Autoload | Holds |
 |--------|----------|-------|
-| `fishotel_snippets_enabled` | yes | `slug => true\|false`, written by the switch |
+| `fishotel_snippets_enabled` | yes | `slug => true\|false`, written by the switch; created empty with the index (a missing option is a query on every request) |
 | `fishotel_snippets_index` | yes | the parsed folder: fields, declarations, refusals, broken files, clashes, signature |
 | `fishotel_snippets_errors` | no | the newest error per snippet (read by the page only) |
 

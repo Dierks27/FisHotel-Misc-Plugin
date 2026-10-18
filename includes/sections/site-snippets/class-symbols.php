@@ -7,11 +7,14 @@
  * WHY: two snippets that both declare `function fh_free_shipping()` take
  * the site down with "Cannot redeclare" — a compile error no try/catch can
  * stop. The admin page reports every such name and both files are refused
- * (never loaded, their switch will not turn on). A declaration inside
- * braces (`if ( ! function_exists( 'x' ) ) { function x() … }`) is
- * "conditional": two conditional declarations are only a warning; one
- * unconditional declaration plus any other refuses both, since whichever
- * runs second would fatal.
+ * (never loaded, their switch will not turn on). A declaration is
+ * "guarded" only when it sits inside braces AND the file calls
+ * function_exists() (class_exists(), interface_exists(), trait_exists(),
+ * enum_exists() for a class) with that exact name as a string — Code
+ * Snippets' own exemption. Any other `if` (`if ( ! is_admin() )`) guards
+ * nothing: both copies can run on the same request. Two guarded
+ * declarations are only a warning; an unguarded one plus any other
+ * refuses both, since whichever runs second would fatal.
  *
  * Names are compared case-insensitively with their namespace, as PHP does.
  * Methods, closures, arrow functions, `use function`, `Foo::class` and
@@ -56,8 +59,11 @@ class Symbols {
 	 * Functions and classes (interfaces, traits, enums) a PHP file declares.
 	 *
 	 * @param string $code Whole file text.
-	 * @return array<int, array{kind: string, name: string, display: string, conditional: bool, line: int}>
-	 *         kind function|class; name = lower-case namespaced key.
+	 * @return array<int, array{kind: string, name: string, display: string, nested: bool, guarded: bool, line: int}>
+	 *         kind function|class; name = lower-case namespaced key;
+	 *         nested = inside braces (declared only when that code runs);
+	 *         guarded = nested and the file checks function_exists() /
+	 *         class_exists() … for this exact name.
 	 */
 	public static function declared( $code ) {
 		$tokens = token_get_all( (string) $code );
@@ -73,7 +79,20 @@ class Symbols {
 			$name_parts[] = constant( 'T_NAME_QUALIFIED' );
 		}
 
+		$exists_calls = array(
+			'function_exists'  => 'function',
+			'class_exists'     => 'class',
+			'interface_exists' => 'class',
+			'trait_exists'     => 'class',
+			'enum_exists'      => 'class',
+		);
+		$call_names   = array( T_STRING );
+		if ( defined( 'T_NAME_FULLY_QUALIFIED' ) ) {
+			$call_names[] = constant( 'T_NAME_FULLY_QUALIFIED' ); // `\function_exists` on PHP 8.
+		}
+
 		$out          = array();
+		$guards       = array( 'function' => array(), 'class' => array() ); // kind => name => true.
 		$namespace    = '';
 		$stack        = array(); // One entry per open brace: ns|class|other.
 		$parens       = 0;
@@ -93,6 +112,12 @@ class Symbols {
 
 				if ( T_CURLY_OPEN === $id || T_DOLLAR_OPEN_CURLY_BRACES === $id ) {
 					$stack[] = 'other';
+				} elseif ( in_array( $id, $call_names, true ) && isset( $exists_calls[ strtolower( ltrim( $token[1], '\\' ) ) ] )
+					&& T_FUNCTION !== $prev && T_OBJECT_OPERATOR !== $prev && T_DOUBLE_COLON !== $prev ) {
+					$target = self::exists_target( $tokens, $i, $namespace );
+					if ( '' !== $target ) {
+						$guards[ $exists_calls[ strtolower( ltrim( $token[1], '\\' ) ) ] ][ $target ] = true;
+					}
 				} elseif ( T_NAMESPACE === $id ) {
 					$next = self::next_significant( $tokens, $i );
 					// `namespace\foo()` is a relative name, not a declaration.
@@ -163,16 +188,63 @@ class Symbols {
 			$prev = $token;
 		}
 
+		foreach ( $out as $n => $decl ) {
+			$out[ $n ]['guarded'] = $decl['nested'] && isset( $guards[ $decl['kind'] ][ $decl['name'] ] );
+		}
+
 		return $out;
 	}
 
 	/**
-	 * Names declared by two snippets (or twice, unconditionally, by one).
+	 * The name an exists check at $i tests (`function_exists( 'x' )`,
+	 * `class_exists( __NAMESPACE__ . '\\X' )`): the first string literal
+	 * in its parentheses, lower-case and namespaced like declared() names;
+	 * '' when it is not a call or names no literal.
+	 *
+	 * @param array  $tokens    Tokens.
+	 * @param int    $i         Index of the function name.
+	 * @param string $namespace Current namespace.
+	 * @return string
+	 */
+	private static function exists_target( array $tokens, $i, $namespace ) {
+		$open = self::next_significant( $tokens, $i );
+		if ( null === $open || '(' !== $tokens[ $open ] ) {
+			return '';
+		}
+
+		$count  = count( $tokens );
+		$depth  = 0;
+		$ns_ref = false;
+		for ( $j = $open; $j < $count; $j++ ) {
+			$t = $tokens[ $j ];
+			if ( '(' === $t ) {
+				$depth++;
+			} elseif ( ')' === $t && 0 === --$depth ) {
+				return '';
+			} elseif ( is_array( $t ) && T_NS_C === $t[0] ) {
+				$ns_ref = true;
+			} elseif ( is_array( $t ) && T_CONSTANT_ENCAPSED_STRING === $t[0] ) {
+				$name = str_replace( '\\\\', '\\', substr( $t[1], 1, -1 ) );
+				$name = ltrim( $name, '\\' );
+				if ( $ns_ref && '' !== $namespace ) {
+					$name = $namespace . '\\' . $name;
+				}
+				return strtolower( $name );
+			}
+		}
+
+		return '';
+	}
+
+	/**
+	 * Names declared by two snippets, or by one in two places that can both
+	 * run (twice at top level, or at top level and again unguarded inside
+	 * braces — `if / else` branches of one file are fine).
 	 *
 	 * @param array<string, array> $by_slug slug => declared() list.
 	 * @return array<int, array{kind: string, name: string, slugs: string[], refused: bool}>
-	 *         refused = at least one declaration is unconditional, so loading
-	 *         both would fatal; otherwise a warning only.
+	 *         refused = a declaration is unguarded, so loading both would
+	 *         fatal; otherwise (every one guarded) a warning only.
 	 */
 	public static function conflicts( array $by_slug ) {
 		$groups = array();
@@ -183,17 +255,19 @@ class Symbols {
 				$key = $decl['kind'] . ':' . $decl['name'];
 				if ( ! isset( $groups[ $key ] ) ) {
 					$groups[ $key ] = array(
-						'kind'          => $decl['kind'],
-						'name'          => $decl['display'],
-						'slugs'         => array(),
-						'unconditional' => 0,
-						'count'         => 0,
+						'kind'      => $decl['kind'],
+						'name'      => $decl['display'],
+						'slugs'     => array(),
+						'unguarded' => 0,
+						'top'       => 0,
 					);
 				}
 				$groups[ $key ]['slugs'][ (string) $slug ] = true;
-				$groups[ $key ]['count']++;
-				if ( empty( $decl['conditional'] ) ) {
-					$groups[ $key ]['unconditional']++;
+				if ( empty( $decl['guarded'] ) ) {
+					$groups[ $key ]['unguarded']++;
+				}
+				if ( empty( $decl['nested'] ) ) {
+					$groups[ $key ]['top']++;
 				}
 			}
 		}
@@ -203,8 +277,8 @@ class Symbols {
 			$slugs = array_keys( $group['slugs'] );
 
 			if ( count( $slugs ) >= 2 ) {
-				$refused = $group['unconditional'] > 0;
-			} elseif ( $group['unconditional'] >= 2 ) {
+				$refused = $group['unguarded'] > 0;
+			} elseif ( $group['top'] >= 1 && $group['unguarded'] >= 2 ) {
 				$refused = true;
 			} else {
 				continue;
@@ -257,7 +331,8 @@ class Symbols {
 			'kind'        => $kind,
 			'name'        => strtolower( $display ),
 			'display'     => $display,
-			'conditional' => in_array( 'other', $stack, true ),
+			'nested'      => in_array( 'other', $stack, true ),
+			'guarded'     => false, // Set by declared() once every exists check is known.
 			'line'        => (int) $line,
 		);
 	}

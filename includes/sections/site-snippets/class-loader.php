@@ -97,6 +97,13 @@ class Loader {
 	private static $queue = array();
 
 	/**
+	 * The slug test_run() is running ('' when none).
+	 *
+	 * @var string
+	 */
+	private static $trial = '';
+
+	/**
 	 * Hook the early run. Called by early-loader.php at plugin load time.
 	 */
 	public static function hook() {
@@ -147,28 +154,133 @@ class Loader {
 
 	/**
 	 * Right before a snippet's include: refuse it when a function or class
-	 * it declares unconditionally already exists (another plugin, the
-	 * theme, or Code Snippets declared it) — including it would fatal.
+	 * it declares without an exists-check guard already exists (another
+	 * plugin, the theme, or Code Snippets declared it) — including it would
+	 * fatal.
 	 *
 	 * @param array $item Runner item with 'snippet'.
 	 * @return string '' to include, else the reason.
 	 */
 	public static function preflight( array $item ) {
-		$declares = isset( $item['snippet']['declares'] ) ? (array) $item['snippet']['declares'] : array();
+		$reason = self::declared_already( $item['snippet'] );
+
+		if ( '' !== $reason ) {
+			self::$state['skipped'][ $item['slug'] ] = $reason;
+			self::note( (string) $item['slug'], 'Snippet ' . $item['snippet']['file'] . ' was not loaded: ' . $reason, 'warning', array() );
+		}
+
+		return $reason;
+	}
+
+	/**
+	 * Why including a snippet now would fatal with "Cannot redeclare": a
+	 * function or class it declares without an exists-check guard already
+	 * exists. '' when none does.
+	 *
+	 * @param array $snippet Index entry.
+	 * @return string
+	 */
+	public static function declared_already( array $snippet ) {
+		$declares = isset( $snippet['declares'] ) ? (array) $snippet['declares'] : array();
 
 		foreach ( $declares as $decl ) {
-			if ( empty( $decl['conditional'] ) && Symbols::exists_now( $decl ) ) {
-				$what   = 'function' === $decl['kind'] ? 'function ' . $decl['display'] . '()' : 'class ' . $decl['display'];
-				$reason = $what . ' already exists (declared by another plugin, the theme or Code Snippets), so loading it would fatal.';
-
-				self::$state['skipped'][ $item['slug'] ] = $reason;
-				self::note( (string) $item['slug'], 'Snippet ' . $item['snippet']['file'] . ' was not loaded: ' . $reason, 'warning', array() );
-
-				return $reason;
+			if ( empty( $decl['guarded'] ) && Symbols::exists_now( $decl ) ) {
+				$what = 'function' === $decl['kind'] ? 'function ' . $decl['display'] . '()' : 'class ' . $decl['display'];
+				return $what . ' already exists (declared by another plugin, the theme or Code Snippets), so loading it would fatal.';
 			}
 		}
 
 		return '';
+	}
+
+	/**
+	 * Run one PHP snippet once, now, before the switch stores it as on —
+	 * what Code Snippets does when a snippet is saved active. PHP's parser
+	 * (the index's syntax check) does not see compile-stage errors such as
+	 * a parameter named twice; including the file does. A fatal then ends
+	 * this one request (the AJAX switch) before the option is written,
+	 * instead of every request after it.
+	 *
+	 * The snippet's code really runs (its hooks are added for the rest of
+	 * this request, as Code Snippets' test run does); its output is
+	 * discarded and nothing is recorded or logged.
+	 *
+	 * @param array $snippet Index entry of a PHP snippet.
+	 * @return string '' when it ran cleanly, else why it cannot be switched on.
+	 */
+	public static function test_run( array $snippet ) {
+		$reason = self::declared_already( $snippet );
+		if ( '' !== $reason ) {
+			return $reason;
+		}
+
+		// A compile-stage fatal cannot be caught, but a shutdown function
+		// still runs: it answers the AJAX switch with the reason instead
+		// of an empty error page.
+		self::$trial = (string) $snippet['slug'];
+		register_shutdown_function( array( self::class, 'test_run_died' ) );
+
+		$error   = '';
+		$results = Runner::run(
+			array(
+				array(
+					'slug'    => (string) $snippet['slug'],
+					'path'    => Catalog::path_of( $snippet ),
+					'snippet' => $snippet,
+				),
+			),
+			static function ( $slug, $e ) use ( &$error ) {
+				$error = get_class( $e ) . ': ' . $e->getMessage() . ' (line ' . (int) $e->getLine() . ')';
+			}
+		);
+
+		self::$trial = '';
+
+		$result = isset( $results[ $snippet['slug'] ] ) ? $results[ $snippet['slug'] ] : 'missing';
+
+		if ( 'ok' === $result ) {
+			return '';
+		}
+
+		return '' !== $error ? $error : 'the file could not be included (' . $result . ').';
+	}
+
+	/**
+	 * Shutdown after a fatal inside test_run(): the switch request dies
+	 * before the option is written; tell the page why (JSON, as the AJAX
+	 * switch answers) instead of leaving it a bare 500.
+	 */
+	public static function test_run_died() {
+		if ( '' === self::$trial ) {
+			return;
+		}
+
+		$slug        = self::$trial;
+		self::$trial = '';
+		$fatal       = error_get_last();
+
+		if ( ! is_array( $fatal ) || ! in_array( $fatal['type'], array( E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR ), true ) ) {
+			return;
+		}
+		if ( ! function_exists( 'wp_doing_ajax' ) || ! wp_doing_ajax() ) {
+			return;
+		}
+
+		while ( ob_get_level() > 0 ) {
+			ob_end_clean();
+		}
+		if ( ! headers_sent() ) {
+			header( 'Content-Type: application/json; charset=utf-8' );
+		}
+
+		echo wp_json_encode( // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- JSON; the page sets it as text.
+			array(
+				'success' => false,
+				'data'    => array(
+					'message' => 'Refused: the test run of ' . $slug . ' hit a fatal error — ' . $fatal['message'] . ' (line ' . (int) $fatal['line'] . '). It stays off; fix the file.',
+				),
+			)
+		);
 	}
 
 	/**

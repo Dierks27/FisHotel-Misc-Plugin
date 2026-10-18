@@ -14,7 +14,9 @@
  *
  * What no runner can catch — a "Cannot redeclare" compile error, a fatal
  * from memory or time limits — is what the Catalog's symbol scan and
- * Loader's exists-now check keep away.
+ * Loader's exists-now check keep away; another compile-stage error (a
+ * parameter named twice) surfaces in the switch's test run, which dies
+ * before the snippet is stored as on.
  *
  * @package FisHotel\Misc\Sections\Site_Snippets
  */

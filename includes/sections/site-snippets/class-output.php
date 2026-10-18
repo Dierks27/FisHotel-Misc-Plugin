@@ -287,7 +287,10 @@ class Output {
 			return '';
 		}
 
-		$content = self::body( $snippet );
+		// Code Snippets returns the stored code as is; a file ends with a
+		// newline, which inline ("Call [code_snippet id=7].") would show as
+		// a space before the full stop.
+		$content = rtrim( self::body( $snippet ), "\r\n" );
 
 		if ( ! empty( $atts['format'] ) ) {
 			foreach ( array( 'wptexturize', 'convert_smilies', 'convert_chars', 'wpautop', 'capital_P_dangit' ) as $fn ) {

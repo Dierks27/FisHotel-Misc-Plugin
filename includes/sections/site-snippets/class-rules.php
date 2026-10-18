@@ -131,8 +131,12 @@ class Rules {
 	}
 
 	/**
-	 * Sort snippets by Priority (lower first), then slug — the order the
-	 * PHP snippets are included and the CSS / JS / HTML ones printed.
+	 * Sort snippets by Priority (lower first), then by Code Snippets id
+	 * (Code Snippets' own `ORDER BY priority, id`, so imports of equal
+	 * priority keep the order they ran in — a helper declared by #3 exists
+	 * before #8 uses it), then slug; snippets without a Code Snippets id come
+	 * after the imports of their priority. The order the PHP snippets are
+	 * included and the CSS / JS / HTML ones printed.
 	 *
 	 * @param array $snippets List (or slug-keyed map) of index entries.
 	 * @return array List, sorted.
@@ -147,6 +151,11 @@ class Rules {
 				$pb = (int) $b['priority'];
 				if ( $pa !== $pb ) {
 					return $pa < $pb ? -1 : 1;
+				}
+				$ia = empty( $a['cs_id'] ) ? PHP_INT_MAX : (int) $a['cs_id'];
+				$ib = empty( $b['cs_id'] ) ? PHP_INT_MAX : (int) $b['cs_id'];
+				if ( $ia !== $ib ) {
+					return $ia < $ib ? -1 : 1;
 				}
 				return strcmp( (string) $a['slug'], (string) $b['slug'] );
 			}
@@ -344,7 +353,9 @@ class Rules {
 
 	/**
 	 * Boolean shortcode flags the way Code Snippets reads them:
-	 * `[code_snippet id=3 format]` arrives as array( 'id' => 3, 0 => 'format' ).
+	 * `[code_snippet id=3 format]` arrives as array( 'id' => 3, 0 => 'format' ),
+	 * and a value is off only when empty() — `format="0"` or `format=""`;
+	 * `format=false` or `format=no` is on, as in Code Snippets.
 	 *
 	 * @param mixed    $atts  Shortcode attributes.
 	 * @param string[] $flags Flag names.
@@ -362,7 +373,7 @@ class Rules {
 
 		foreach ( $flags as $flag ) {
 			$v             = isset( $atts[ $flag ] ) ? $atts[ $flag ] : false;
-			$atts[ $flag ] = true === $v || ( is_string( $v ) && in_array( strtolower( $v ), array( '1', 'true', 'yes', 'on' ), true ) ) || 1 === $v;
+			$atts[ $flag ] = ! empty( $v );
 		}
 
 		return $atts;

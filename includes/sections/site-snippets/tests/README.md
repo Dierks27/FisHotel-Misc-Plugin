@@ -24,21 +24,27 @@ php includes/sections/site-snippets/tests/snippets-test.php
   `body()`, the Code Snippets id from an Origin.
 - **rules-test.php** — the enabled state (stored choice vs Default), Code
   Snippets' PHP scope rule, the CSS / JS / HTML slots per screen, priority
-  then slug ordering, the PHP and output plans, safe mode (constant, query
+  then Code Snippets id then slug ordering, the PHP and output plans, safe mode (constant, query
   flag with and without the capability, never resolving the user without
   the flag), the duplicate guard (inactive plugin, active ids, ids as
   strings, unreadable table = all held), its candidates, the
-  `[code_snippet id=N]` map with ambiguous ids, the shortcode flags.
+  `[code_snippet id=N]` map with ambiguous ids, the shortcode flags (only
+  empty / `0` is off, as in Code Snippets).
 - **symbols-test.php** — declarations found by `token_get_all` (reference
   functions, closures, arrow functions, `::class`, anonymous classes,
   methods, `use function`, namespaces plain and braced, nested and guarded
-  declarations, heredoc braces), the TOKEN_PARSE syntax check, clashes
+  declarations — guarded only by an exists check on that exact name, not
+  by `if ( true )` / `if ( ! is_admin() )`, another name or a top-level
+  declaration — heredoc braces), the TOKEN_PARSE syntax check, clashes
   (case-insensitive, guarded pairs as warnings, one guarded + one not
-  refused, twice in one file, if / else, function vs class, namespaces),
+  refused, the same name inside `if ( true )` in two files refused, twice
+  in one file, top level + unguarded if in one file, if / else, function vs
+  class, namespaces),
   `exists_now()`, `Catalog::build()` (refusals naming the other file,
   broken files, a slug shared by two files, size cap) and `Catalog::get()`
   (stored autoloaded, served from the option while the signature matches,
-  no write on a fresh read of an unchanged folder, rebuilt after a change).
+  no write on a fresh read of an unchanged folder, rebuilt after a change,
+  the switch map created empty with it).
 - **loader-test.php** — the early loader (nothing hooked while the section
   is off or the option is malformed; `run_php` at `plugins_loaded` 1 and
   the log flush at 20 when it is on; the main file includes it), then whole
@@ -49,11 +55,17 @@ php includes/sections/site-snippets/tests/snippets-test.php
   `error_log()`, in `fishotel_log` and stored non-autoloaded; a second
   request with no query and no write; CSS / JS on empty handles per screen
   and footer HTML; `[fh_snippet]` with `format` / `shortcodes` and no
-  recursion; `[code_snippet id=N]` registered only without Code Snippets;
+  recursion, no trailing newline inline; `[code_snippet id=N]` registered
+  only without Code Snippets, `format=false` formatting;
   safe mode by query (visitor vs administrator, no output, page link keeps
   the flag); the switch (refuses broken, clashing and unknown files, stores
-  autoloaded, off always allowed, clears the last error); the exists-now
-  preflight; the duplicate guard (one query for the request, held PHP and
+  autoloaded, off allowed for listed / broken / stored slugs but not an
+  unknown one, clears the last error); the switch's test run (a PHP snippet
+  run once before it is stored; a throw, an existing name — also inside a
+  plain `if` — refused and not stored; an already-on snippet not re-run;
+  CSS never run; a compile-stage error, in a child PHP process, fatals that
+  request before the option is written); the exists-now preflight (also for
+  a declaration inside a plain `if`); the duplicate guard (one query for the request, held PHP and
   CSS but never a shortcode, the notice, released after deactivation, fail
   closed, no query without an import switched on); the admin page render
   (escaping, held, broken, clashes, locked switches, the map, capability);

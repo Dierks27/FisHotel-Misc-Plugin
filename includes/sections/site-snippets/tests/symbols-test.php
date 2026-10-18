@@ -2,7 +2,8 @@
 /**
  * Symbols + Catalog tests — the declarations token_get_all finds, the
  * syntax check, duplicate function / class detection across files (both
- * refused, guarded pairs only warned), exists-now, and the index built
+ * refused, guarded pairs only warned — guarded meaning an exists check on
+ * that exact name, not any `if`), exists-now, and the index built
  * from a folder: broken files, a slug shared by two files, the cached
  * signature.
  *
@@ -22,7 +23,8 @@ function fh_names( array $decls ) {
 		',',
 		array_map(
 			static function ( $d ) {
-				return $d['kind'] . ':' . $d['display'] . ( $d['conditional'] ? '?' : '' );
+				// "?" guarded (an exists check names it), "~" nested in braces but unguarded.
+				return $d['kind'] . ':' . $d['display'] . ( $d['guarded'] ? '?' : ( $d['nested'] ? '~' : '' ) );
 			},
 			$decls
 		)
@@ -61,10 +63,17 @@ check( 'line numbers', 3 === Symbols::declared( $code )[0]['line'] );
 $ns = "<?php\nnamespace FisHotel\\Snips;\nuse function strlen;\nuse Foo\\Bar;\nfunction helper() {}\nclass Thing {}\n";
 check( 'namespaced: names carry the namespace; `use function` is not a declaration', 'function:FisHotel\\Snips\\helper,class:FisHotel\\Snips\\Thing' === fh_names( Symbols::declared( $ns ) ), fh_names( Symbols::declared( $ns ) ) );
 $braced = "<?php\nnamespace A { function f() {} }\nnamespace B { function f() {} class C {} }\nnamespace { function g() {} }\n";
-check( 'braced namespaces are not "conditional"', 'function:A\\f,function:B\\f,class:B\\C,function:g' === fh_names( Symbols::declared( $braced ) ), fh_names( Symbols::declared( $braced ) ) );
+check( 'braced namespaces are not "nested"', 'function:A\\f,function:B\\f,class:B\\C,function:g' === fh_names( Symbols::declared( $braced ) ), fh_names( Symbols::declared( $braced ) ) );
 check( 'namespace\\foo() is a call, not a namespace change', 'function:x' === fh_names( Symbols::declared( "<?php\nnamespace\\foo();\nfunction x() {}\n" ) ) );
-check( 'a function inside a function is conditional', 'function:outer,function:inner?' === fh_names( Symbols::declared( "<?php\nfunction outer() { function inner() {} }\n" ) ) );
-check( 'a class inside an if is conditional', 'class:Maybe?' === fh_names( Symbols::declared( "<?php\nif ( ! class_exists( 'Maybe' ) ) { class Maybe {} }\n" ) ) );
+check( 'a function inside a function is nested, not guarded', 'function:outer,function:inner~' === fh_names( Symbols::declared( "<?php\nfunction outer() { function inner() {} }\n" ) ) );
+check( 'a class inside class_exists( its name ) is guarded', 'class:Maybe?' === fh_names( Symbols::declared( "<?php\nif ( ! class_exists( 'Maybe' ) ) { class Maybe {} }\n" ) ) );
+check( 'any other if guards nothing: `if ( true )`, `if ( ! is_admin() )`', 'function:fh_dup~,function:fh_theme_helper~' === fh_names( Symbols::declared( "<?php\nif ( true ) { function fh_dup() {} }\nif ( ! is_admin() ) {\n\tfunction fh_theme_helper() {}\n}\n" ) ) );
+check( 'an exists check on another name guards nothing', 'function:fh_mine~' === fh_names( Symbols::declared( "<?php\nif ( ! function_exists( 'fh_other' ) ) { function fh_mine() {} }\n" ) ) );
+check( 'class_exists does not guard a function, function_exists not a class', 'function:Thing~' === fh_names( Symbols::declared( "<?php\nif ( ! class_exists( 'Thing' ) ) { function Thing() {} }\n" ) ) && 'class:Thing~' === fh_names( Symbols::declared( "<?php\nif ( ! function_exists( 'Thing' ) ) { class Thing {} }\n" ) ) );
+check( 'the exact name, any case, \\function_exists, double quotes, interface_exists', 'function:FH_Case?,class:FH_Iface?' === fh_names( Symbols::declared( "<?php\nif ( ! \\function_exists( \"fh_case\" ) ) { function FH_Case() {} }\nif ( ! interface_exists( 'FH_Iface', false ) ) { interface FH_Iface {} }\n" ) ) );
+check( 'namespaced: the qualified literal or __NAMESPACE__ . the name; a bare short name guards nothing', 'function:Demo\\Shop\\a?,function:Demo\\Shop\\b?,function:Demo\\Shop\\c~' === fh_names( Symbols::declared( "<?php\nnamespace Demo\\Shop;\nif ( ! function_exists( 'Demo\\\\Shop\\\\a' ) ) { function a() {} }\nif ( ! function_exists( __NAMESPACE__ . '\\\\b' ) ) { function b() {} }\nif ( ! function_exists( 'c' ) ) { function c() {} }\n" ) ), fh_names( Symbols::declared( "<?php\nnamespace Demo\\Shop;\nif ( ! function_exists( 'Demo\\\\Shop\\\\a' ) ) { function a() {} }\nif ( ! function_exists( __NAMESPACE__ . '\\\\b' ) ) { function b() {} }\nif ( ! function_exists( 'c' ) ) { function c() {} }\n" ) ) );
+check( 'a top-level declaration is never guarded (PHP binds it before any check runs)', 'function:fh_top' === fh_names( Symbols::declared( "<?php\nif ( function_exists( 'fh_top' ) ) { return; }\nfunction fh_top() {}\n" ) ) );
+check( 'a method named function_exists is not a check', 'function:fh_m~' === fh_names( Symbols::declared( "<?php\nif ( ! \$o->function_exists( 'fh_m' ) && ! X::function_exists( 'fh_m' ) ) { function fh_m() {} }\n" ) ) );
 check( 'heredoc interpolation braces do not confuse depth', 'function:a,function:b' === fh_names( Symbols::declared( "<?php\nfunction a() { \$s = <<<TXT\n{\$x['k']} \${y}\nTXT;\n}\nfunction b() {}\n" ) ) );
 check( 'an empty / non-PHP file declares nothing', array() === Symbols::declared( '' ) && array() === Symbols::declared( "/* css */ body { }" ) );
 
@@ -87,6 +96,12 @@ $soft = Symbols::conflicts( array( 'c' => $c, 'd' => $d ) );
 check( 'both guarded: a warning, not refused', 1 === count( $soft ) && false === $soft[0]['refused'] );
 $mixed = Symbols::conflicts( array( 'c' => $c, 'e' => $e ) );
 check( 'one guarded + one unconditional: refused (whichever runs second fatals)', 1 === count( $mixed ) && true === $mixed[0]['refused'] );
+$iftrue = Symbols::declared( "<?php\nif ( true ) { function fh_dup() {} }\n" );
+$nested = Symbols::conflicts( array( 'aaa' => $iftrue, 'bbb' => $iftrue ) );
+check( 'the same name inside `if ( true )` in two files: refused (both run)', 1 === count( $nested ) && true === $nested[0]['refused'], json_encode( $nested ) );
+$topnest = Symbols::conflicts( array( 'one' => Symbols::declared( "<?php\nfunction fh_tn() {}\nif ( PHP_OS ) { function fh_tn() {} }\n" ) ) );
+check( 'one file, top level + again unguarded in an if: refused', 1 === count( $topnest ) && true === $topnest[0]['refused'] );
+check( 'one file, top level + again behind its own exists check: fine', array() === Symbols::conflicts( array( 'one' => Symbols::declared( "<?php\nfunction fh_tg() {}\nif ( ! function_exists( 'fh_tg' ) ) { function fh_tg() {} }\n" ) ) ) );
 $twice = Symbols::conflicts( array( 'one' => Symbols::declared( "<?php\nfunction fh_dup() {}\nfunction fh_dup() {}\n" ) ) );
 check( 'twice in one file: refused', 1 === count( $twice ) && array( 'one' ) === $twice[0]['slugs'] && $twice[0]['refused'] );
 check( 'if / else branches in one file: fine', array() === Symbols::conflicts( array( 'one' => Symbols::declared( "<?php\nif ( PHP_OS ) { function v() {} } else { function v() {} }\n" ) ) ) );
@@ -132,6 +147,9 @@ check( 'broken: twin.php and twin.css share a slug, both out', isset( $broken['t
 check( 'broken: bad file name', isset( $broken['Bad_Name.js'] ) );
 check( 'broken: too large', isset( $broken['huge.css'] ) && false !== strpos( $broken['huge.css'], 'larger than' ) );
 check( 'css has no declarations', array() === $index['snippets']['style']['declares'] && 'admin' === $index['snippets']['style']['scope'] );
+$iftrue = "if ( true ) {\n\tfunction fh_iftrue() { return 1; }\n}";
+$index2 = Catalog::build( array( 'aaa.php' => fh_php_snippet( 'A', $iftrue ), 'bbb.php' => fh_php_snippet( 'B', $iftrue ) ) );
+check( 'two files declaring one name inside `if ( true )`: both refused, the clash listed as refused', '' !== $index2['snippets']['aaa']['refused'] && '' !== $index2['snippets']['bbb']['refused'] && true === $index2['conflicts'][0]['refused'] );
 
 echo "6. Catalog::get() — the cached index\n";
 $dir = fh_snippet_dir(
@@ -146,6 +164,8 @@ $GLOBALS['fh_writes'] = array();
 $first                = Catalog::get( $dir );
 check( 'only .php/.css/.js/.html (not hidden) are read', array( 'one', 'two' ) === array_keys( $first['snippets'] ) && array() === $first['broken'] );
 check( 'the index is stored, autoloaded', array( Catalog::OPTION_INDEX ) === $GLOBALS['fh_writes'] && true === $GLOBALS['fh_autoload'][ Catalog::OPTION_INDEX ] );
+$enabled_key = FisHotel\Misc\Sections\Site_Snippets\Loader::OPTION_ENABLED;
+check( 'the switch map is created empty and autoloaded with it (a missing option would cost a SELECT per request)', array( $enabled_key ) === $GLOBALS['fh_adds'] && array() === get_option( $enabled_key ) && true === $GLOBALS['fh_autoload'][ $enabled_key ] );
 check( 'with a signature and a build time', 32 === strlen( $first['sig'] ) && $first['built'] > 0 );
 Catalog::use_dir( null ); // Drops the memo.
 $GLOBALS['fh_writes'] = array();
@@ -158,6 +178,7 @@ file_put_contents( $dir . 'three.js', "/* Snippet: Three\n   Scope: head */\ncon
 Catalog::use_dir( null );
 $third = Catalog::get( $dir );
 check( 'a new file changes the signature and rebuilds once', $third['sig'] !== $first['sig'] && isset( $third['snippets']['three'] ) && array( Catalog::OPTION_INDEX ) === $GLOBALS['fh_writes'] );
+check( 'an existing switch map is left alone', array( $enabled_key ) === $GLOBALS['fh_adds'] );
 $GLOBALS['fh_options'][ Catalog::OPTION_INDEX ]['snippets']['one']['name'] = 'Tampered';
 Catalog::use_dir( null );
 check( 'while the signature matches, the stored copy is trusted (no file read)', 'Tampered' === Catalog::get( $dir )['snippets']['one']['name'] );

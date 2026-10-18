@@ -36,7 +36,7 @@ class Catalog {
 	 *
 	 * @var int
 	 */
-	const FORMAT = 1;
+	const FORMAT = 2;
 
 	/**
 	 * Files larger than this are refused (a snippet is a few KB).
@@ -291,6 +291,12 @@ class Catalog {
 
 		if ( $changed ) {
 			update_option( self::OPTION_INDEX, $index, true );
+
+			// The switch map is read on every request. Until the first
+			// switch it does not exist, and WordPress remembers a missing
+			// option only for the request (without a persistent object
+			// cache): one SELECT per request. Create it, empty, now.
+			add_option( Loader::OPTION_ENABLED, array(), '', true );
 		}
 
 		self::$memo = array(

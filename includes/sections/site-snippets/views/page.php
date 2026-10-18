@@ -186,7 +186,7 @@ $fh_ago = static function ( $time ) {
 							<?php
 							echo $fh_conflict['refused']
 								? esc_html__( 'All refused: loading two declarations would fatal. Rename or merge them.', 'fishotel-misc-plugin' )
-								: esc_html__( 'Warning only: every declaration is inside a guard (e.g. function_exists). Check the guards match.', 'fishotel-misc-plugin' );
+								: esc_html__( 'Warning only: each declaration sits inside braces and its file checks function_exists() / class_exists() for this exact name. Check each check wraps its declaration.', 'fishotel-misc-plugin' );
 							?>
 						</td>
 					</tr>

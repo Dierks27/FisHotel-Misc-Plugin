@@ -76,11 +76,13 @@ check( 'head JS prints on the site only', Rules::prints_on( 'js', 'head', 'front
 check( 'html footer prints on the site only', Rules::prints_on( 'html', 'footer', 'front' ) && ! Rules::prints_on( 'html', 'footer', 'admin' ) );
 check( 'an unknown screen prints nothing', ! Rules::prints_on( 'css', 'front-end', 'cli' ) );
 
-echo "4. sort() — priority, then slug\n";
+echo "4. sort() — priority, then Code Snippets id, then slug\n";
 $list = array( fh_entry( 'zeta', 'php', 'global', 10 ), fh_entry( 'alpha', 'php', 'global', 10 ), fh_entry( 'late', 'php', 'global', 99 ), fh_entry( 'first', 'php', 'global', -1 ), fh_entry( 'five', 'php', 'global', 5 ) );
 check( 'ordered', 'first,five,alpha,zeta,late' === fh_slugs( Rules::sort( $list ) ), fh_slugs( Rules::sort( $list ) ) );
 check( 'a slug-keyed map sorts to a list', 'first,five,alpha,zeta,late' === fh_slugs( Rules::sort( array( 'zeta' => $list[0], 'alpha' => $list[1], 'late' => $list[2], 'first' => $list[3], 'five' => $list[4] ) ) ) );
 check( 'priority "5" from a string compares as a number', 'b,a' === fh_slugs( Rules::sort( array( fh_entry( 'a', 'php', 'global', '10' ), fh_entry( 'b', 'php', 'global', '9' ) ) ) ) );
+$ties = array( fh_entry( 'add-cart-fee-label', 'php', 'global', 10, array( 'cs_id' => 8 ) ), fh_entry( 'zz-by-hand', 'php', 'global', 10 ), fh_entry( 'shared-helpers', 'php', 'global', 10, array( 'cs_id' => 3 ) ), fh_entry( 'aa-by-hand', 'php', 'global', 10 ), fh_entry( 'early', 'php', 'global', 5, array( 'cs_id' => 40 ) ) );
+check( 'equal priority: Code Snippets id first (its ORDER BY priority, id), then the files without one by slug', 'early,shared-helpers,add-cart-fee-label,aa-by-hand,zz-by-hand' === fh_slugs( Rules::sort( $ties ) ), fh_slugs( Rules::sort( $ties ) ) );
 
 echo "5. php_plan()\n";
 $snippets = array(
@@ -196,8 +198,10 @@ check( 'empty input', array( 'map' => array(), 'ambiguous' => array() ) === Rule
 echo "11. shortcode_flags()\n";
 $f = Rules::shortcode_flags( array( 'id' => '3', 0 => 'format', 1 => 'shortcodes' ), array( 'format', 'shortcodes', 'php' ) );
 check( 'bare flags become true', true === $f['format'] && true === $f['shortcodes'] && false === $f['php'] && '3' === $f['id'] );
-$f = Rules::shortcode_flags( array( 'format' => 'false', 'shortcodes' => '1' ), array( 'format', 'shortcodes' ) );
-check( 'explicit values', false === $f['format'] && true === $f['shortcodes'] );
+$f = Rules::shortcode_flags( array( 'format' => '0', 'shortcodes' => '1', 'php' => '' ), array( 'format', 'shortcodes', 'php' ) );
+check( 'explicit values: "0" and "" are off, "1" is on', false === $f['format'] && true === $f['shortcodes'] && false === $f['php'] );
+$f = Rules::shortcode_flags( array( 'format' => 'false', 'shortcodes' => 'no' ), array( 'format', 'shortcodes' ) );
+check( 'format=false and shortcodes=no are ON, as in Code Snippets (only empty() is off)', true === $f['format'] && true === $f['shortcodes'] );
 check( 'a non-array is empty with flags false', array( 'format' => false ) === Rules::shortcode_flags( '', array( 'format' ) ) );
 
 fh_finish();

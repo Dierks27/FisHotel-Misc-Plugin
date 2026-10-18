@@ -177,17 +177,19 @@ check( 'no front-end hooks registered for an admin screen are needed — front C
 
 echo "6. Shortcodes\n";
 fh_request( $dir, false );
-check( '[fh_snippet slug="banner"]', "<div class=\"banner\">Spring sale</div>\n" === do_shortcode( '[fh_snippet slug="banner"]' ) );
+check( '[fh_snippet slug="banner"] — the file text without its final newline (Code Snippets returns the code as is)', "<div class=\"banner\">Spring sale</div>" === do_shortcode( '[fh_snippet slug="banner"]' ) );
 check( 'format', "<p><div class=\"banner\">Spring sale</div></p>\n" === do_shortcode( '[fh_snippet slug="banner" format]' ) );
 check( 'an off snippet renders nothing', '' === do_shortcode( '[fh_snippet slug="quiet"]' ) );
 check( 'an unknown slug, a PHP snippet and a footer snippet render nothing', '' === do_shortcode( '[fh_snippet slug="nope"]' ) && '' === do_shortcode( '[fh_snippet slug="a-global"]' ) && '' === do_shortcode( '[fh_snippet slug="pixel"]' ) );
 $nested = do_shortcode( '[fh_snippet slug="nested" shortcodes]' );
-check( 'shortcodes: inner shortcodes run, our own tag is off meanwhile (no recursion), then back', "Before [fh_snippet slug=\"banner\"] [fh_snippet slug=\"nested\" shortcodes]\n" === $nested && shortcode_exists( 'fh_snippet' ), json_encode( $nested ) );
+check( 'shortcodes: inner shortcodes run, our own tag is off meanwhile (no recursion), then back', "Before [fh_snippet slug=\"banner\"] [fh_snippet slug=\"nested\" shortcodes]" === $nested && shortcode_exists( 'fh_snippet' ), json_encode( $nested ) );
 check( 'without the flag, inner shortcodes stay text', false !== strpos( do_shortcode( '[fh_snippet slug="nested"]' ), '[fh_snippet slug="banner"]' ) );
 do_action( 'init' );
 check( '[code_snippet] registered at init while Code Snippets is not loaded', shortcode_exists( 'code_snippet' ) );
-check( '[code_snippet id=31] → the file whose Origin is Code Snippets #31', "<div class=\"banner\">Spring sale</div>\n" === do_shortcode( '[code_snippet id=31]' ) );
-check( 'snippet_id= works too', "<div class=\"banner\">Spring sale</div>\n" === do_shortcode( '[code_snippet snippet_id="31"]' ) );
+check( '[code_snippet id=31] → the file whose Origin is Code Snippets #31', "<div class=\"banner\">Spring sale</div>" === do_shortcode( '[code_snippet id=31]' ) );
+check( 'snippet_id= works too', "<div class=\"banner\">Spring sale</div>" === do_shortcode( '[code_snippet snippet_id="31"]' ) );
+check( 'inline in a sentence: no newline before the full stop', "Sale: <div class=\"banner\">Spring sale</div>." === do_shortcode( 'Sale: [code_snippet id=31].' ), json_encode( do_shortcode( 'Sale: [code_snippet id=31].' ) ) );
+check( 'format=false formats, as Code Snippets reads it', "<p><div class=\"banner\">Spring sale</div></p>\n" === do_shortcode( '[code_snippet id=31 format=false]' ) );
 check( 'an off one (#32) and an unknown id render nothing', '' === do_shortcode( '[code_snippet id=32]' ) && '' === do_shortcode( '[code_snippet id=99]' ) );
 $plain = fh_snippet_dir( array( 'x.html' => "<!--\nSnippet: X\nDefault: on\n-->\nx\n" ) );
 fh_request( $plain, false );
@@ -220,11 +222,17 @@ check( 'refuses an unknown slug', false === $r['ok'] );
 check( 'refuses an empty slug', false === Admin::switch_snippet( '', true )['ok'] );
 $r = Admin::switch_snippet( 'e-off', true );
 check( 'switches on: autoloaded option slug => true', $r['ok'] && true === get_option( Loader::OPTION_ENABLED )['e-off'] && true === $GLOBALS['fh_autoload'][ Loader::OPTION_ENABLED ] && 'on' === $r['status']['key'] );
+check( 'a PHP snippet is test-run once before it is stored as on', 'e-off' === end( $GLOBALS['fh_ran'] ), implode( ',', $GLOBALS['fh_ran'] ) );
 fh_request( $dir, false );
 check( 'and it runs on the next request', in_array( 'e-off', $GLOBALS['fh_ran'], true ) );
 $r = Admin::switch_snippet( 'a-global', false );
 check( 'switching off a Default-on snippet stores false', $r['ok'] && false === get_option( Loader::OPTION_ENABLED )['a-global'] && 'off' === $r['status']['key'] );
 check( 'switching off is allowed even for a broken file', Admin::switch_snippet( 'no-header', false )['ok'] );
+$GLOBALS['fh_writes'] = array();
+$r                    = Admin::switch_snippet( 'nope-unknown', false );
+check( 'switching off an unknown slug is refused and stores nothing', false === $r['ok'] && array() === $GLOBALS['fh_writes'] && ! array_key_exists( 'nope-unknown', get_option( Loader::OPTION_ENABLED ) ) );
+update_option( Loader::OPTION_ENABLED, array_merge( get_option( Loader::OPTION_ENABLED ), array( 'deleted-file' => true ) ), true );
+check( 'a stored slug whose file is gone can still be switched off', Admin::switch_snippet( 'deleted-file', false )['ok'] && false === get_option( Loader::OPTION_ENABLED )['deleted-file'] );
 $r = Admin::switch_snippet( 'b-throws', false );
 check( 'switching clears the stored error', ! isset( Loader::stored_errors()['b-throws'] ) );
 fh_request( $dir, false );
@@ -237,18 +245,58 @@ check( 'status: off / on / held / safe', 'off' === Admin::status( $index['snippe
 	&& 'safe' === Admin::status( $index['snippets']['banner'], array(), array(), array( 'active' => true ) )['key'] );
 check( 'status: a refused file that is on can still be switched off (locked only against on)', true === Admin::status( $index['snippets']['clash-a'], array( 'clash-a' => true ), array(), array( 'active' => false ) )['on'] );
 
+echo "8b. The switch's test run\n";
+$trial = fh_snippet_dir(
+	array(
+		'throws-on.php'  => fh_php_snippet( 'Throws', "throw new \\DomainException( 'trial boom' );" ),
+		'exists-on.php'  => fh_php_snippet( 'Exists', 'function wp_unslash( $v ) { return $v; }' ),
+		'not-guard.php'  => fh_php_snippet( 'Not a guard', "if ( ! is_admin() ) {\n\tfunction get_option() {}\n}" ),
+		'already-on.php' => fh_php_snippet( 'Already on', "function fh_already_on_xyz() {}\n\$GLOBALS['fh_ran'][] = 'already-on';", array( 'Default' => 'on' ) ),
+		'trial-css.css'  => "/**\n * Snippet: Trial CSS\n */\nbody{}\n",
+		'compile.php'    => fh_php_snippet( 'Compile error', 'function fh_two( $a, $a ) { return $a; }' ),
+	)
+);
+fh_request( $trial, true );
+check( 'a compile-stage error passes the parse check (only running it shows it)', isset( Catalog::get()['snippets']['compile'] ) && '' === Catalog::get()['snippets']['compile']['refused'] );
+$GLOBALS['fh_writes'] = array();
+$r                    = Admin::switch_snippet( 'throws-on', true );
+check( 'a snippet that throws when run is refused, with the exception, and not stored', false === $r['ok'] && false !== strpos( $r['message'], 'DomainException: trial boom' ) && array() === $GLOBALS['fh_writes'], $r['message'] );
+$r = Admin::switch_snippet( 'exists-on', true );
+check( 'a snippet declaring a name that already exists is refused', false === $r['ok'] && false !== strpos( $r['message'], 'function wp_unslash() already exists' ), $r['message'] );
+$r = Admin::switch_snippet( 'not-guard', true );
+check( '… also inside an if that is not an exists check on that name', false === $r['ok'] && false !== strpos( $r['message'], 'function get_option() already exists' ), $r['message'] );
+$r = Admin::switch_snippet( 'already-on', true );
+check( 'an already-on snippet is not run a second time (it ran at plugins_loaded:1)', $r['ok'] && array( 'already-on' ) === $GLOBALS['fh_ran'], implode( ',', $GLOBALS['fh_ran'] ) );
+check( 'a CSS snippet is never run', Admin::switch_snippet( 'trial-css', true )['ok'] );
+$child = sys_get_temp_dir() . '/fh-snip-child-' . bin2hex( random_bytes( 4 ) ) . '.php';
+file_put_contents(
+	$child,
+	"<?php\nfunction wp_doing_ajax() { return true; }\nrequire " . var_export( __DIR__ . '/wp-stubs.php', true ) . ";\n"
+	. 'FisHotel\\Misc\\Sections\\Site_Snippets\\Catalog::use_dir( ' . var_export( $trial, true ) . " );\n"
+	. "register_shutdown_function( function () { fwrite( STDERR, \"\\nOPTION=\" . json_encode( get_option( 'fishotel_snippets_enabled' ) ) . \"\\n\" ); } );\n"
+	. "FisHotel\\Misc\\Sections\\Site_Snippets\\Admin::switch_snippet( 'compile', true );\n"
+	. "echo \"\\nNOT REACHED\\n\";\n"
+);
+$child_out = array();
+exec( escapeshellarg( PHP_BINARY ) . ' ' . escapeshellarg( $child ) . ' 2>&1', $child_out, $child_code );
+unlink( $child );
+$child_out = implode( "\n", $child_out );
+check( 'a compile-stage error: the fatal ends the switch request before the option is written', 0 !== $child_code && false === strpos( $child_out, 'NOT REACHED' ) && false !== strpos( $child_out, 'OPTION=[]' ), $child_code . ' ' . $child_out );
+check( '… and the AJAX answer says why, as JSON', false !== strpos( $child_out, '{"success":false,"data":{"message":"Refused: the test run of compile hit a fatal error \u2014 Redefinition of parameter $a (line ' ) || false !== strpos( $child_out, '"Refused: the test run of compile hit a fatal error — Redefinition of parameter $a (line ' ), $child_out );
+
 echo "9. Exists-now preflight\n";
 $exists = fh_snippet_dir(
 	array(
 		'redeclare.php' => fh_php_snippet( 'Redeclare', "function wp_unslash( \$v ) { return \$v; }\n\$GLOBALS['fh_ran'][] = 'redeclare';", array( 'Default' => 'on' ) ),
 		'guarded.php'   => fh_php_snippet( 'Guarded', "if ( ! function_exists( 'get_option' ) ) { function get_option() {} }\n\$GLOBALS['fh_ran'][] = 'guarded';", array( 'Default' => 'on' ) ),
+		'if-only.php'   => fh_php_snippet( 'If only', "if ( ! is_admin() ) {\n\tfunction esc_html() {}\n}\n\$GLOBALS['fh_ran'][] = 'if-only';", array( 'Default' => 'on' ) ),
 		'fresh.php'     => fh_php_snippet( 'Fresh', "function fh_fresh_name_xyz() {}\n\$GLOBALS['fh_ran'][] = 'fresh';", array( 'Default' => 'on' ) ),
 	)
 );
 fh_request( $exists, false );
 $state = Loader::state();
-check( 'a snippet declaring an existing function is not included (no fatal); a guarded one runs', array( 'fresh', 'guarded' ) === $GLOBALS['fh_ran'], implode( ',', $GLOBALS['fh_ran'] ) );
-check( 'the reason is kept and logged as a warning', false !== strpos( $state['skipped']['redeclare'], 'function wp_unslash() already exists' ) && 1 === count( fh_logged( 'warning' ) ) );
+check( 'a snippet declaring an existing function is not included (no fatal), nor one declaring it inside a plain if; a guarded one runs', array( 'fresh', 'guarded' ) === $GLOBALS['fh_ran'], implode( ',', $GLOBALS['fh_ran'] ) );
+check( 'the reasons are kept and logged as warnings', false !== strpos( $state['skipped']['redeclare'], 'function wp_unslash() already exists' ) && false !== strpos( $state['skipped']['if-only'], 'function esc_html() already exists' ) && 2 === count( fh_logged( 'warning' ) ) );
 
 echo "10. The Code Snippets duplicate guard\n";
 define( 'CODE_SNIPPETS_FILE', '/var/www/html/wp-content/plugins/code-snippets/code-snippets.php' );
@@ -272,7 +320,7 @@ do_action( 'wp_enqueue_scripts' );
 check( 'the held CSS is not printed', ! isset( $GLOBALS['fh_styles']['fishotel-snippets-front'] ) );
 do_action( 'init' );
 check( '[code_snippet] is left to Code Snippets while it is loaded', ! shortcode_exists( 'code_snippet' ) );
-check( 'our [fh_snippet] still renders a Code Snippets import', "short\n" === do_shortcode( '[fh_snippet slug="cs-short"]' ) );
+check( 'our [fh_snippet] still renders a Code Snippets import', "short" === do_shortcode( '[fh_snippet slug="cs-short"]' ) );
 $r = Admin::switch_snippet( 'cs-off', true );
 check( 'switching on an import whose original is active: allowed, with the warning', $r['ok'] && 'held' === $r['status']['key'] && false !== strpos( $r['message'], 'Code Snippets #14 is still active' ), $r['message'] );
 ob_start();
@@ -286,7 +334,7 @@ check( 'an admin notice names the held snippets', false !== strpos( $notice, 'cs
 $GLOBALS['fh_can'] = false;
 $GLOBALS['wpdb']->active[12] = 0;
 fh_request( $guard, false );
-check( 'once #12 is deactivated in Code Snippets, ours runs', array( 'cs-thirteen', 'cs-twelve', 'hand' ) === $GLOBALS['fh_ran'], implode( ',', $GLOBALS['fh_ran'] ) );
+check( 'once #12 is deactivated in Code Snippets, ours runs — equal priority in Code Snippets id order, the file without an id last', array( 'cs-twelve', 'cs-thirteen', 'hand' ) === $GLOBALS['fh_ran'], implode( ',', $GLOBALS['fh_ran'] ) );
 $GLOBALS['wpdb']->broken = true;
 fh_request( $guard, false );
 check( 'the table cannot be read: every import waits (fail closed), the rest run', array( 'hand' ) === $GLOBALS['fh_ran'] );

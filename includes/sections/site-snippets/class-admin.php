@@ -257,8 +257,14 @@ class Admin {
 	 * Switch a snippet (the AJAX handler minus the request plumbing).
 	 *
 	 * Turning on re-reads every file first and refuses a snippet whose
-	 * file no longer parses or that clashes with another file. Turning off
-	 * is always allowed.
+	 * file no longer parses or that clashes with another file; a PHP
+	 * snippet that is off is then test-run once (Loader::test_run(), as
+	 * Code Snippets does on save) and refused if it throws, hits an error
+	 * the parser did not catch, or declares a name that already exists — a
+	 * fatal there ends only this request, before the option is written.
+	 * Turning off is always allowed for a listed or broken file, or a slug
+	 * already stored; an unknown slug is refused (nothing to switch, and the
+	 * option is autoloaded on every request).
 	 *
 	 * @param string $slug   Slug.
 	 * @param bool   $enable On?
@@ -292,6 +298,27 @@ class Admin {
 					'message' => sprintf( __( 'Refused: %s', 'fishotel-misc-plugin' ), $index['snippets'][ $slug ]['refused'] ),
 				);
 			}
+
+			$snippet = $index['snippets'][ $slug ];
+			if ( 'php' === $snippet['type'] && ! Rules::is_enabled( $slug, ! empty( $snippet['default_on'] ), Loader::enabled_map() ) ) {
+				$failed = Loader::test_run( $snippet );
+				if ( '' !== $failed ) {
+					if ( ! empty( $snippet['cs_id'] ) && Loader::code_snippets_active() ) {
+						/* translators: %d: Code Snippets snippet id */
+						$failed .= ' ' . sprintf( __( 'If Code Snippets #%d is still active, deactivate it there first, then switch this on.', 'fishotel-misc-plugin' ), (int) $snippet['cs_id'] );
+					}
+					return array(
+						'ok'      => false,
+						/* translators: %s: what the test run hit */
+						'message' => sprintf( __( 'Refused: the test run failed — %s', 'fishotel-misc-plugin' ), $failed ),
+					);
+				}
+			}
+		} elseif ( ! isset( $index['snippets'][ $slug ] ) && '' === self::broken_reason( $index, $slug ) && ! array_key_exists( $slug, Loader::enabled_map() ) ) {
+			return array(
+				'ok'      => false,
+				'message' => __( 'Refused: no such snippet file.', 'fishotel-misc-plugin' ),
+			);
 		}
 
 		$map          = Loader::enabled_map();

@@ -107,7 +107,8 @@ function wpautop( $text ) {
 
 $GLOBALS['fh_options']  = array();
 $GLOBALS['fh_autoload'] = array();
-$GLOBALS['fh_writes']   = array();
+$GLOBALS['fh_writes']   = array(); // update_option() calls that changed a value.
+$GLOBALS['fh_adds']     = array(); // add_option() calls that created one.
 
 function get_option( $name, $default = false ) {
 	return array_key_exists( $name, $GLOBALS['fh_options'] ) ? $GLOBALS['fh_options'][ $name ] : $default;
@@ -120,6 +121,16 @@ function update_option( $name, $value, $autoload = null ) {
 	$GLOBALS['fh_options'][ $name ]  = $value;
 	$GLOBALS['fh_autoload'][ $name ] = $autoload;
 	$GLOBALS['fh_writes'][]          = $name;
+	return true;
+}
+
+function add_option( $name, $value = '', $deprecated = '', $autoload = null ) {
+	if ( array_key_exists( $name, $GLOBALS['fh_options'] ) ) {
+		return false;
+	}
+	$GLOBALS['fh_options'][ $name ]  = $value;
+	$GLOBALS['fh_autoload'][ $name ] = $autoload;
+	$GLOBALS['fh_adds'][]            = $name;
 	return true;
 }
 
