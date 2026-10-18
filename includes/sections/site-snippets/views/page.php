@@ -40,13 +40,13 @@ $fh_ago = static function ( $time ) {
 ?>
 <div class="wrap fishotel-misc-wrap fh-snip-wrap">
 
-	<div class="fishotel-misc-header">
-		<h1><?php esc_html_e( 'Snippets', 'fishotel-misc-plugin' ); ?></h1>
-		<span class="version-badge">v<?php echo esc_html( FISHOTEL_MISC_VERSION ); ?></span>
-	</div>
+	<?php
+	$fh_tab = 'files';
+	include __DIR__ . '/tabs.php';
+	?>
 
 	<p class="fh-snip-intro">
-		<?php esc_html_e( 'The site\'s own code, one file per snippet in the plugin\'s GitHub repository (includes/sections/site-snippets/snippets/). Switch a snippet here; change its code in GitHub — it arrives with the next plugin update. PHP snippets run at plugins_loaded priority 1, like Code Snippets.', 'fishotel-misc-plugin' ); ?>
+		<?php esc_html_e( 'The site\'s own code, one file per snippet in the plugin\'s GitHub repository (includes/sections/site-snippets/snippets/). Switch a snippet here; change its code in GitHub — it arrives with the next plugin update. PHP snippets run at plugins_loaded priority 1, like Code Snippets. Snippets written here in wp-admin are under My snippets.', 'fishotel-misc-plugin' ); ?>
 	</p>
 
 	<div class="fh-snip-facts">

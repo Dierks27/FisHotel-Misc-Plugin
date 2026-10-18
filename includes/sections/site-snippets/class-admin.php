@@ -5,9 +5,11 @@
  * admin notices (safe mode, snippets the Code Snippets guard holds back,
  * snippets that threw or were not loaded on this request).
  *
- * No code editor: a snippet is changed in GitHub and arrives with the
- * plugin update. Every write checks manage_options and a nonce; the view
- * escapes every value; the JS sets text only.
+ * The Files tab has no code editor: a file snippet is changed in GitHub and
+ * arrives with the plugin update. The My snippets and Log tabs (snippets
+ * written in wp-admin) are Admin_Editor's. Every write checks
+ * manage_options and a nonce; the view escapes every value; the JS sets
+ * text only.
  *
  * @package FisHotel\Misc\Sections\Site_Snippets
  */
@@ -185,6 +187,13 @@ class Admin {
 	public function render_page() {
 		if ( ! current_user_can( Loader::CAPABILITY ) ) {
 			wp_die( esc_html__( 'You do not have permission to access this page.', 'fishotel-misc-plugin' ) );
+		}
+
+		$tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'files'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- which tab to show.
+		if ( 'mine' === $tab || 'log' === $tab ) {
+			Site_Snippets::load_editor();
+			( new Admin_Editor() )->render( $tab );
+			return;
 		}
 
 		// Always a fresh read here: the page is where a new or edited file
@@ -391,11 +400,12 @@ class Admin {
 
 		foreach ( (array) $state['skipped'] as $slug => $reason ) {
 			/* translators: 1: slug, 2: reason */
-			echo '<div class="notice notice-error"><p>' . esc_html( sprintf( __( 'FisHotel Snippets: %1$s was not loaded — %2$s', 'fishotel-misc-plugin' ), $slug, $reason ) ) . '</p></div>';
+			echo '<div class="notice notice-error"><p>' . esc_html( sprintf( __( 'FisHotel Snippets: %1$s was not loaded — %2$s', 'fishotel-misc-plugin' ), $slug, $reason ) ) . ' <a href="' . esc_url( self::page_url( Db_Snippets::is_key( $slug ) ? array( 'tab' => 'mine' ) : array() ) ) . '">' . esc_html__( 'Open Snippets', 'fishotel-misc-plugin' ) . '</a></p></div>';
 		}
 
 		foreach ( (array) $state['errors'] as $slug => $message ) {
-			echo '<div class="notice notice-error"><p>' . esc_html( 'FisHotel Snippets: ' . $message ) . ' <a href="' . esc_url( self::page_url() ) . '">' . esc_html__( 'Open Snippets', 'fishotel-misc-plugin' ) . '</a></p></div>';
+			// A database snippet's key is db:<slug>; its page is My snippets.
+			echo '<div class="notice notice-error"><p>' . esc_html( 'FisHotel Snippets: ' . $message ) . ' <a href="' . esc_url( self::page_url( Db_Snippets::is_key( $slug ) ? array( 'tab' => 'mine' ) : array() ) ) . '">' . esc_html__( 'Open Snippets', 'fishotel-misc-plugin' ) . '</a></p></div>';
 		}
 	}
 

@@ -30,6 +30,15 @@
  *   - class-output.php    CSS / JS / HTML printing and the shortcodes.
  *   - class-admin.php     the page, the AJAX switch, the notices.
  *
+ * Snippets written in wp-admin (the editor — FISHOTEL_SNIPPETS_EDITORS
+ * only), stored in custom tables and run beside the files:
+ *   - class-db-snippets.php   the active option and the merge with the files.
+ *   - class-db-store.php      the tables (the only $wpdb file of the editor).
+ *   - class-editor-rules.php  PURE: who may write, validation, summaries.
+ *   - class-export.php        PURE: a database snippet as a snippet file.
+ *   - class-editor.php        the save pipeline (store as a parameter).
+ *   - class-admin-editor.php  My snippets / Log tabs, admin-post + AJAX.
+ *
  * @package FisHotel\Misc\Sections\Site_Snippets
  */
 
@@ -75,7 +84,7 @@ class Site_Snippets {
 	public static function get_section_info() {
 		return array(
 			'name'        => __( 'Snippets', 'fishotel-misc-plugin' ),
-			'description' => __( 'The site\'s own code snippets as files in GitHub, switched on or off here and run the way Code Snippets ran them — with safe mode, a duplicate guard while Code Snippets is still installed, and clash checks.', 'fishotel-misc-plugin' ),
+			'description' => __( 'The site\'s own code snippets as files in GitHub, switched on or off here and run the way Code Snippets ran them — with safe mode, a duplicate guard while Code Snippets is still installed, and clash checks. Plus an editor for snippets written in wp-admin (only for users named in wp-config), with history, roll back, an audit log and export to GitHub.', 'fishotel-misc-plugin' ),
 			'icon'        => 'dashicons-editor-code',
 		);
 	}
@@ -95,12 +104,34 @@ class Site_Snippets {
 	}
 
 	/**
+	 * Load the editor's classes (admin side, activation).
+	 */
+	public static function load_editor() {
+		self::load();
+		require_once __DIR__ . '/class-db-store.php';
+		require_once __DIR__ . '/class-editor-rules.php';
+		require_once __DIR__ . '/class-export.php';
+		require_once __DIR__ . '/class-editor.php';
+		require_once __DIR__ . '/class-admin.php';
+		require_once __DIR__ . '/class-admin-editor.php';
+	}
+
+	/**
 	 * Boot (plugins_loaded:10). The PHP snippets already ran at priority 1
 	 * through the early loader; this adds the CSS / JS / HTML output, the
-	 * shortcodes and the admin side.
+	 * shortcodes and the admin side. The editor's tables are installed on
+	 * the first boot (an autoloaded version option gates it: no query, no
+	 * SHOW TABLES, no dbDelta on any later request).
 	 */
 	public static function boot() {
 		self::load();
+
+		require_once __DIR__ . '/class-db-store.php';
+		try {
+			Db_Store::maybe_install( is_admin() );
+		} catch ( \Throwable $e ) {
+			unset( $e );
+		}
 
 		// Enabled in the dashboard during this request's lifetime without
 		// the early loader having seen it: run_php() is a no-op once it ran.
@@ -115,10 +146,13 @@ class Site_Snippets {
 		}
 
 		if ( is_admin() ) {
-			require_once __DIR__ . '/class-admin.php';
+			self::load_editor();
 
 			$admin = new Admin();
 			$admin->init();
+
+			$editor = new Admin_Editor();
+			$editor->init();
 		}
 	}
 
@@ -126,8 +160,7 @@ class Site_Snippets {
 	 * Register the admin submenu.
 	 */
 	public static function register_menu() {
-		self::load();
-		require_once __DIR__ . '/class-admin.php';
+		self::load_editor();
 
 		add_submenu_page(
 			'fishotel-misc',
@@ -140,7 +173,8 @@ class Site_Snippets {
 	}
 
 	/**
-	 * Plugin activation: build the index once.
+	 * Plugin activation: build the index once; install the editor's tables
+	 * (forced past the version gate, so a dropped table comes back).
 	 */
 	public static function activate() {
 		self::load();
@@ -149,11 +183,18 @@ class Site_Snippets {
 		} catch ( \Throwable $e ) {
 			unset( $e );
 		}
+
+		require_once __DIR__ . '/class-db-store.php';
+		try {
+			Db_Store::install( true );
+		} catch ( \Throwable $e ) {
+			unset( $e );
+		}
 	}
 
 	/**
-	 * Plugin deactivation: drop the cached index (the on/off choices and
-	 * the files are kept).
+	 * Plugin deactivation: drop the cached index (the on/off choices, the
+	 * files, the editor's tables and its active option are kept).
 	 */
 	public static function deactivate() {
 		self::load();

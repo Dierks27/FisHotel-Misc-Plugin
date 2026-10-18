@@ -93,6 +93,10 @@ function admin_url( $path = '' ) {
 }
 
 function add_query_arg( $args, $url = '' ) {
+	if ( ! is_array( $args ) ) { // add_query_arg( key, value, url ).
+		$args = array( (string) $args => $url );
+		$url  = func_num_args() > 2 ? func_get_arg( 2 ) : '';
+	}
 	$query = http_build_query( (array) $args );
 	return $url . ( false === strpos( (string) $url, '?' ) ? '?' : '&' ) . $query;
 }
@@ -342,12 +346,40 @@ class FH_Fake_WPDB {
 		return $old;
 	}
 
+	public $tables     = array(); // Tables that "exist" (SHOW TABLES), filled by a test's dbDelta().
+	public $calls      = array(); // Every other method called on $wpdb (names).
+
 	public function prepare( $sql, $args ) {
 		$args = is_array( $args ) ? $args : array_slice( func_get_args(), 1 );
 		foreach ( $args as $arg ) {
-			$sql = preg_replace( '/%d/', (string) (int) $arg, $sql, 1 );
+			$sql = preg_replace_callback(
+				'/%[ds]/',
+				static function ( $m ) use ( $arg ) {
+					return '%d' === $m[0] ? (string) (int) $arg : "'" . addslashes( (string) $arg ) . "'";
+				},
+				$sql,
+				1
+			);
 		}
 		return $sql;
+	}
+
+	public function get_charset_collate() {
+		$this->calls[] = 'get_charset_collate';
+		return 'DEFAULT CHARACTER SET utf8mb4';
+	}
+
+	public function get_var( $sql ) {
+		$this->queries[] = $sql;
+		if ( preg_match( "/^SHOW TABLES LIKE '(.+)'$/", $sql, $m ) ) {
+			return in_array( stripslashes( $m[1] ), $this->tables, true ) ? stripslashes( $m[1] ) : null;
+		}
+		return null;
+	}
+
+	public function __call( $name, $args ) {
+		$this->calls[] = $name;
+		return null;
 	}
 
 	public function get_col( $sql ) {
