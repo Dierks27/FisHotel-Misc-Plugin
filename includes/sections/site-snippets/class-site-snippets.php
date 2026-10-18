@@ -91,6 +91,7 @@ class Site_Snippets {
 		require_once __DIR__ . '/class-runner.php';
 		require_once __DIR__ . '/class-loader.php';
 		require_once __DIR__ . '/class-output.php';
+		require_once __DIR__ . '/class-db-snippets.php';
 	}
 
 	/**

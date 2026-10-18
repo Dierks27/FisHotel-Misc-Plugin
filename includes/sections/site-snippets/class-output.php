@@ -18,10 +18,16 @@
  *                                    `format` and `shortcodes` as Code
  *                                    Snippets reads them)
  *
+ * Database snippets (written in wp-admin) print the same way, merged with
+ * the files (Loader::snippets()), labelled `/* fh-snippet: db:<slug> *\/`;
+ * [fh_snippet slug="…"] renders a database html / shortcode snippet when
+ * no file has that slug.
+ *
  * Hooks are only added for slots that have a switched-on snippet, so a
  * site without CSS / JS snippets pays nothing here. Content files are
  * printed as they are (they are code from the repository, reviewed in
- * GitHub); nothing in an .html file is ever executed.
+ * GitHub, or written by a named editor); nothing in an .html snippet is
+ * ever executed.
  *
  * @package FisHotel\Misc\Sections\Site_Snippets
  */
@@ -75,7 +81,7 @@ class Output {
 		}
 
 		$index      = Catalog::get();
-		self::$plan = Rules::output_plan( $index['snippets'], Loader::enabled_map(), Loader::held( $index ) );
+		self::$plan = Rules::output_plan( Loader::snippets( $index ), Loader::enabled_map(), Loader::held( $index ) );
 
 		$has = static function ( array $slots ) {
 			foreach ( $slots as $slot ) {
@@ -169,7 +175,7 @@ class Output {
 		foreach ( self::$plan[ $slot ] as $snippet ) {
 			$css = self::body( $snippet );
 			if ( '' !== trim( $css ) ) {
-				wp_add_inline_style( $handle, '/* fh-snippet: ' . $snippet['slug'] . " */\n" . $css );
+				wp_add_inline_style( $handle, '/* fh-snippet: ' . Rules::key_of( $snippet ) . " */\n" . $css );
 			}
 		}
 	}
@@ -192,7 +198,7 @@ class Output {
 		foreach ( self::$plan[ $slot ] as $snippet ) {
 			$js = self::body( $snippet );
 			if ( '' !== trim( $js ) ) {
-				wp_add_inline_script( $handle, '/* fh-snippet: ' . $snippet['slug'] . " */\n" . $js );
+				wp_add_inline_script( $handle, '/* fh-snippet: ' . Rules::key_of( $snippet ) . " */\n" . $js );
 			}
 		}
 	}
@@ -209,7 +215,7 @@ class Output {
 		}
 
 		foreach ( self::$plan[ $slot ] as $snippet ) {
-			echo "\n" . self::body( $snippet ) . "\n"; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- the snippet IS markup, from a reviewed file in the plugin.
+			echo "\n" . self::body( $snippet ) . "\n"; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- the snippet IS markup, from a reviewed file in the plugin or written by a named editor.
 		}
 	}
 
@@ -275,15 +281,21 @@ class Output {
 		}
 
 		$index = Catalog::get();
-		if ( ! isset( $index['snippets'][ $slug ] ) ) {
+		$all   = Loader::snippets( $index );
+
+		// A file of the slug wins (it supersedes a database copy).
+		if ( isset( $all[ $slug ] ) ) {
+			$snippet = $all[ $slug ];
+		} elseif ( isset( $all[ Db_Snippets::key( $slug ) ] ) ) {
+			$snippet = $all[ Db_Snippets::key( $slug ) ];
+		} else {
 			return '';
 		}
 
-		$snippet = $index['snippets'][ $slug ];
 		if ( 'html' !== $snippet['type'] || 'shortcode' !== $snippet['scope'] || '' !== (string) $snippet['refused'] ) {
 			return '';
 		}
-		if ( ! Rules::is_enabled( $slug, $snippet['default_on'], Loader::enabled_map() ) ) {
+		if ( ! Rules::is_enabled( Rules::key_of( $snippet ), $snippet['default_on'], Loader::enabled_map() ) ) {
 			return '';
 		}
 
@@ -320,12 +332,17 @@ class Output {
 	}
 
 	/**
-	 * A content snippet's text after its header ('' if it no longer parses).
+	 * A content snippet's text after its header ('' if it no longer
+	 * parses); a database snippet's stored code.
 	 *
 	 * @param array $snippet Index entry.
 	 * @return string
 	 */
 	public static function body( array $snippet ) {
+		if ( isset( $snippet['source'] ) && 'db' === $snippet['source'] ) {
+			return isset( $snippet['code'] ) ? (string) $snippet['code'] : '';
+		}
+
 		$path = Catalog::path_of( $snippet );
 		$text = is_file( $path ) ? @file_get_contents( $path ) : false; // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged, WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- local plugin file.
 

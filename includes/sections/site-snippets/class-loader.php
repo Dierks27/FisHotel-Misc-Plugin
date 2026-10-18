@@ -11,10 +11,17 @@
  * framework only boots at plugins_loaded 10, which is too late for code
  * that hooks plugins_loaded, init or anything Code Snippets ran before.
  *
- * Cost on an ordinary request: two autoloaded options (the enabled map,
- * the index), one directory listing plus a stat per snippet file, and the
- * includes themselves. One prepared query on {prefix}snippets only while
- * Code Snippets is active AND a switched-on snippet came from it.
+ * Database snippets (written in wp-admin, see Editor) run here too, merged
+ * with the files by Db_Snippets::merge(): same scopes, same order rules
+ * (files before database snippets at equal priority), same runner (their
+ * stored code is eval()ed), same safe mode, same exists-now preflight.
+ * They come from ONE autoloaded option, never from a query.
+ *
+ * Cost on an ordinary request: three autoloaded options (the enabled map,
+ * the index, the active database snippets), one directory listing plus a
+ * stat per snippet file, and the includes / evals themselves. One prepared
+ * query on {prefix}snippets only while Code Snippets is active AND a
+ * switched-on snippet came from it.
  *
  * Errors: error_log() at once (the Health section has not booted at
  * priority 1), then at plugins_loaded 20 every recorded error is handed to
@@ -71,15 +78,27 @@ class Loader {
 	const LOG_SOURCE = 'snippets';
 
 	/**
+	 * The editor's admin-post actions that test-run a database snippet in
+	 * their own request (Editor::SAVE_ACTION, Editor::RESTORE_ACTION). On
+	 * such a request the snippet being saved is not run at
+	 * plugins_loaded:1 — its old code would otherwise already have declared
+	 * what the new code's test run declares again.
+	 *
+	 * @var string[]
+	 */
+	const EDIT_ACTIONS = array( 'fishotel_snippets_save', 'fishotel_snippets_restore' );
+
+	/**
 	 * What happened on this request.
 	 *
 	 * @var array
 	 */
 	private static $state = array(
 		'php_ran' => false,
-		'results' => array(), // slug => ok|error|missing|skipped.
-		'skipped' => array(), // slug => reason (a declared name exists already).
-		'errors'  => array(), // slug => message.
+		'results' => array(), // key => ok|error|missing|skipped (key = slug, db:<slug> for a database snippet).
+		'skipped' => array(), // key => reason (a declared name exists already).
+		'errors'  => array(), // key => message.
+		'editing' => '',      // The database snippet this editor request saves (not run).
 	);
 
 	/**
@@ -97,11 +116,11 @@ class Loader {
 	private static $queue = array();
 
 	/**
-	 * The slug test_run() is running ('' when none).
+	 * What test_run() is running: { label, after } (null when nothing).
 	 *
-	 * @var string
+	 * @var array|null
 	 */
-	private static $trial = '';
+	private static $trial = null;
 
 	/**
 	 * Hook the early run. Called by early-loader.php at plugin load time.
@@ -126,19 +145,21 @@ class Loader {
 			}
 
 			$index = Catalog::get();
-			$plan  = Rules::php_plan( $index['snippets'], self::enabled_map(), is_admin(), self::held( $index ) );
+			$plan  = Rules::php_plan( self::snippets( $index ), self::enabled_map(), is_admin(), self::held( $index ) );
 
 			if ( empty( $plan ) ) {
 				return;
 			}
 
-			$items = array();
+			$editing = self::editing_key();
+			$items   = array();
 			foreach ( $plan as $snippet ) {
-				$items[] = array(
-					'slug'    => $snippet['slug'],
-					'path'    => Catalog::path_of( $snippet ),
-					'snippet' => $snippet,
-				);
+				$key = Rules::key_of( $snippet );
+				if ( '' !== $editing && $key === $editing ) {
+					self::$state['editing'] = $key;
+					continue;
+				}
+				$items[] = self::item( $snippet );
 			}
 
 			self::$state['results'] = Runner::run(
@@ -166,10 +187,127 @@ class Loader {
 
 		if ( '' !== $reason ) {
 			self::$state['skipped'][ $item['slug'] ] = $reason;
-			self::note( (string) $item['slug'], 'Snippet ' . $item['snippet']['file'] . ' was not loaded: ' . $reason, 'warning', array() );
+			self::note( (string) $item['slug'], 'Snippet ' . self::label( $item['snippet'] ) . ' was not loaded: ' . $reason, 'warning', array() );
 		}
 
 		return $reason;
+	}
+
+	/**
+	 * A Runner item for a snippet: its file, or its stored code.
+	 *
+	 * @param array $snippet Index entry (file or database).
+	 * @return array{slug: string, snippet: array, path?: string, code?: string}
+	 */
+	public static function item( array $snippet ) {
+		$item = array(
+			'slug'    => Rules::key_of( $snippet ),
+			'snippet' => $snippet,
+		);
+
+		if ( isset( $snippet['source'] ) && 'db' === $snippet['source'] ) {
+			$item['code'] = isset( $snippet['code'] ) ? (string) $snippet['code'] : '';
+		} else {
+			$item['path'] = Catalog::path_of( $snippet );
+		}
+
+		return $item;
+	}
+
+	/**
+	 * How a snippet is named in messages: its file, or "database snippet <slug>".
+	 *
+	 * @param array $snippet Index entry.
+	 * @return string
+	 */
+	public static function label( array $snippet ) {
+		if ( isset( $snippet['source'] ) && 'db' === $snippet['source'] ) {
+			return 'database snippet ' . $snippet['slug'];
+		}
+		return isset( $snippet['file'] ) && '' !== (string) $snippet['file'] ? (string) $snippet['file'] : (string) $snippet['slug'];
+	}
+
+	/**
+	 * The file snippets plus the active database snippets (memoised per
+	 * index signature and per active-option fingerprint).
+	 *
+	 * @param array $index Catalog index.
+	 * @return array<string, array> key => entry.
+	 */
+	public static function snippets( array $index ) {
+		$active = self::db_active();
+
+		if ( empty( $active ) ) {
+			return isset( $index['snippets'] ) ? $index['snippets'] : array();
+		}
+
+		$fingerprint = isset( $index['sig'] ) ? (string) $index['sig'] : md5( serialize( array_keys( isset( $index['snippets'] ) ? $index['snippets'] : array() ) ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- a key only.
+		foreach ( $active as $slug => $entry ) {
+			$fingerprint .= '|' . $slug . ':' . ( is_array( $entry ) && isset( $entry['version'] ) ? (int) $entry['version'] : 0 );
+		}
+		$key = md5( $fingerprint );
+
+		if ( ! isset( self::$memo['merged'][ $key ] ) ) {
+			self::$memo['merged'] = array( $key => Db_Snippets::merge( $index, $active ) );
+		}
+
+		return self::$memo['merged'][ $key ];
+	}
+
+	/**
+	 * The active database snippets (autoloaded option, no query).
+	 *
+	 * @return array slug => entry.
+	 */
+	public static function db_active() {
+		$value = get_option( Db_Snippets::OPTION_ACTIVE, array() );
+		return is_array( $value ) ? $value : array();
+	}
+
+	/**
+	 * On the editor's own save / restore request (admin-post, POST, a valid
+	 * nonce, a user the editor permission allows), the key of the active
+	 * database snippet being saved: it is not run at plugins_loaded:1, so
+	 * the test run of its new code is its only run in that request (Code
+	 * Snippets skips the snippet being edited the same way). '' otherwise —
+	 * an ordinary request pays one isset().
+	 *
+	 * @return string
+	 */
+	public static function editing_key() {
+		// phpcs:disable WordPress.Security.NonceVerification.Missing -- the nonce is verified below, before anything is decided.
+		if ( ! isset( $_POST['action'], $_POST['snippet_id'] ) || ! is_string( $_POST['action'] ) || ! in_array( $_POST['action'], self::EDIT_ACTIONS, true ) ) {
+			return '';
+		}
+		if ( ! is_admin() || ! isset( $_SERVER['REQUEST_METHOD'] ) || 'POST' !== $_SERVER['REQUEST_METHOD'] ) {
+			return '';
+		}
+
+		$id   = is_scalar( $_POST['snippet_id'] ) ? (int) $_POST['snippet_id'] : 0;
+		$slug = '';
+		foreach ( self::db_active() as $entry ) {
+			if ( is_array( $entry ) && isset( $entry['id'], $entry['slug'] ) && $id > 0 && (int) $entry['id'] === $id ) {
+				$slug = (string) $entry['slug'];
+				break;
+			}
+		}
+		if ( '' === $slug ) {
+			return '';
+		}
+
+		require_once __DIR__ . '/class-editor-rules.php';
+		require_once __DIR__ . '/class-editor.php';
+
+		$nonce = isset( $_POST[ Editor::NONCE_FIELD ] ) && is_string( $_POST[ Editor::NONCE_FIELD ] ) ? $_POST[ Editor::NONCE_FIELD ] : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- compared by wp_verify_nonce() only.
+		// phpcs:enable WordPress.Security.NonceVerification.Missing
+		if ( '' === $nonce || ! function_exists( 'wp_verify_nonce' ) || ! wp_verify_nonce( $nonce, Editor::NONCE ) ) {
+			return '';
+		}
+		if ( ! Editor::permission_now()['allowed'] ) {
+			return '';
+		}
+
+		return Db_Snippets::key( $slug );
 	}
 
 	/**
@@ -214,35 +352,35 @@ class Loader {
 			return $reason;
 		}
 
+		$item = self::item( $snippet );
+		$db   = isset( $item['code'] );
+
 		// A compile-stage fatal cannot be caught, but a shutdown function
 		// still runs: it answers the AJAX switch with the reason instead
 		// of an empty error page.
-		self::$trial = (string) $snippet['slug'];
+		self::$trial = array(
+			'label' => $db ? 'database snippet ' . $snippet['slug'] : (string) $snippet['slug'],
+			'after' => $db ? 'Nothing was saved; it stays as it was — fix the code.' : 'It stays off; fix the file.',
+		);
 		register_shutdown_function( array( self::class, 'test_run_died' ) );
 
 		$error   = '';
 		$results = Runner::run(
-			array(
-				array(
-					'slug'    => (string) $snippet['slug'],
-					'path'    => Catalog::path_of( $snippet ),
-					'snippet' => $snippet,
-				),
-			),
+			array( $item ),
 			static function ( $slug, $e ) use ( &$error ) {
 				$error = get_class( $e ) . ': ' . $e->getMessage() . ' (line ' . (int) $e->getLine() . ')';
 			}
 		);
 
-		self::$trial = '';
+		self::$trial = null;
 
-		$result = isset( $results[ $snippet['slug'] ] ) ? $results[ $snippet['slug'] ] : 'missing';
+		$result = isset( $results[ $item['slug'] ] ) ? $results[ $item['slug'] ] : 'missing';
 
 		if ( 'ok' === $result ) {
 			return '';
 		}
 
-		return '' !== $error ? $error : 'the file could not be included (' . $result . ').';
+		return '' !== $error ? $error : ( $db ? 'the code could not be run (' . $result . ').' : 'the file could not be included (' . $result . ').' );
 	}
 
 	/**
@@ -251,12 +389,12 @@ class Loader {
 	 * switch answers) instead of leaving it a bare 500.
 	 */
 	public static function test_run_died() {
-		if ( '' === self::$trial ) {
+		if ( ! is_array( self::$trial ) ) {
 			return;
 		}
 
-		$slug        = self::$trial;
-		self::$trial = '';
+		$trial       = self::$trial;
+		self::$trial = null;
 		$fatal       = error_get_last();
 
 		if ( ! is_array( $fatal ) || ! in_array( $fatal['type'], array( E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR ), true ) ) {
@@ -277,7 +415,7 @@ class Loader {
 			array(
 				'success' => false,
 				'data'    => array(
-					'message' => 'Refused: the test run of ' . $slug . ' hit a fatal error — ' . $fatal['message'] . ' (line ' . (int) $fatal['line'] . '). It stays off; fix the file.',
+					'message' => 'Refused: the test run of ' . $trial['label'] . ' hit a fatal error — ' . $fatal['message'] . ' (line ' . (int) $fatal['line'] . '). ' . $trial['after'],
 				),
 			)
 		);
@@ -290,7 +428,9 @@ class Loader {
 	 * @param \Throwable $e    What was thrown.
 	 */
 	public static function record_error( $slug, $e ) {
-		$where = self::relative( $e->getFile() ) . ':' . $e->getLine();
+		$where = false !== strpos( (string) $e->getFile(), "eval()'d code" )
+			? 'its stored code, line ' . $e->getLine()
+			: self::relative( $e->getFile() ) . ':' . $e->getLine();
 		$label = '' === $slug ? 'The snippets loader' : 'Snippet ' . $slug;
 
 		$message = $label . ' threw ' . get_class( $e ) . ': ' . $e->getMessage() . ' in ' . $where;
@@ -531,6 +671,7 @@ class Loader {
 			'results' => array(),
 			'skipped' => array(),
 			'errors'  => array(),
+			'editing' => '',
 		);
 		self::$memo  = array();
 		self::$queue = array();
