@@ -15,7 +15,7 @@
  * option when it no longer matches the table. The log CSV needs
  * manage_options and its own nonce.
  *
- * Never lose his work: a refused save keeps what was typed as a per-user
+ * Never lose the editor's work: a refused save keeps what was typed as a per-user
  * draft (user meta) and the edit screen shows it with the reason. The draft
  * is written BEFORE the test run too, so a compile-stage fatal — which ends
  * the save request — still leaves the code; the next Snippets page view
@@ -273,8 +273,8 @@ class Admin_Editor {
 		$page = '<p>' . esc_html( 'Refused: ' . $reason ) . '</p>';
 
 		// An editor whose form went stale (an expired nonce): nothing may be
-		// kept for him — a forged request could plant a draft he later saves
-		// unread — but he gets what he typed back, read only, to copy.
+		// kept for them — a forged request could plant a draft they later save
+		// unread — but they get what they typed back, read only, to copy.
 		$code = self::posted( 'code' );
 		if ( $perm['allowed'] && 'save' === $attempt && '' !== $code ) {
 			$page .= '<p>' . esc_html__( 'Nothing was saved. Your code is below, read only: copy it, reload the editor, paste it in and save again.', 'fishotel-misc-plugin' ) . '</p>'
@@ -390,7 +390,7 @@ class Admin_Editor {
 		}
 
 		if ( 'conflict' === $result['code'] ) {
-			// He has been told; his next save replaces the version he saw.
+			// They have been told; their next save replaces the version they saw.
 			$input['base_version'] = (string) (int) $result['version'];
 		}
 
@@ -1007,7 +1007,7 @@ class Admin_Editor {
 			$draft_id = is_array( $row ) ? (int) $row['id'] : 0;
 			$draft    = null;
 			if ( 'edit' === $view && ! is_array( $row ) && $id > 0 ) {
-				// Deleted (in another tab?) with his unsaved code still kept:
+				// Deleted (in another tab?) with the editor's unsaved code still kept:
 				// offer it as a new snippet instead of losing it.
 				$draft    = self::draft( $uid, $id );
 				$draft_id = is_array( $draft ) ? $id : 0;

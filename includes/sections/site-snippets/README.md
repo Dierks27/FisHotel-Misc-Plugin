@@ -318,8 +318,8 @@ such rows per account an hour, and 100 an hour for all accounts without
 `manage_options` together (fixed hourly windows), so logged-in customers
 poking at the handlers cannot flood the log, nor crowd out an
 administrator's refused attempt. An editor whose form went stale (an
-expired nonce) gets his code back on the refusal page, read only, to copy —
-nothing is kept for him, so a forged request cannot plant a draft he might
+expired nonce) gets the code back on the refusal page, read only, to copy —
+nothing is kept for them, so a forged request cannot plant a draft they might
 later save unread.
 
 ### Writing one

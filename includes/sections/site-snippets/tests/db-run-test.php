@@ -258,7 +258,7 @@ fh_login( 7, 'jeff', true );
 fh_request( $dir, true );
 check( 'saving db-same (a named editor, a valid nonce): at plugins_loaded:1 its NEW code runs in its place, the old code does not', array( 'db-first', 'file-a', 'moved-file', 'db-admin', 'db-same-new', 'db-after', 'db-throws', 'file-late' ) === $GLOBALS['fh_ran'] && 'db:db-same' === Loader::state()['editing'], implode( ',', $GLOBALS['fh_ran'] ) );
 $draft = Admin_Editor::draft( 7, $same_id );
-check( '… after his draft was kept ("testing", the typed code, the version it is for)', is_array( $draft ) && 'testing' === $draft['state'] && "\$GLOBALS['fh_ran'][] = 'db-same-new';" === $draft['fields']['code'] && 2 === $draft['version'] );
+check( '… after the draft was kept ("testing", the typed code, the version it is for)', is_array( $draft ) && 'testing' === $draft['state'] && "\$GLOBALS['fh_ran'][] = 'db-same-new';" === $draft['fields']['code'] && 2 === $draft['version'] );
 $GLOBALS['fh_ran'] = array();
 $halt              = fh_handler( 'handle_save' );
 check( 'the handler then saves it as version 2, taking that run as its test run (not run twice), and drops the draft', $halt instanceof FH_Halt && 2 === $store->get( $same_id )['version'] && array() === $GLOBALS['fh_ran'] && null === Admin_Editor::draft( 7, $same_id ) && "\$GLOBALS['fh_ran'][] = 'db-same-new';" === get_option( Db_Snippets::OPTION_ACTIVE )['db-same']['code'] );
@@ -268,7 +268,7 @@ fh_request( $dir, true );
 check( 'new code that throws: it ran in place, its throw is the save\'s test result — not the site\'s error (not stored, not in the Health log)', in_array( 'db-same-throws', $GLOBALS['fh_ran'], true ) && ! isset( Loader::state()['errors']['db:db-same'] ) && ! isset( Loader::stored_errors()['db:db-same'] ) && 1 === count( fh_logged( 'error' ) ) && 'ok' === Loader::state()['results']['db:db-after'] );
 $GLOBALS['fh_ran'] = array();
 fh_handler( 'handle_save' );
-check( '… the handler refuses the save with it (test_failed), without running it again; his code is kept', 2 === $store->get( $same_id )['version'] && array() === $GLOBALS['fh_ran'] && 'test_failed' === $store->log_rows( array(), 1 )[0]['action'] && false !== strpos( Admin_Editor::draft( 7, $same_id )['message'], 'LogicException: posted boom (line 2)' ) );
+check( '… the handler refuses the save with it (test_failed), without running it again; the code is kept', 2 === $store->get( $same_id )['version'] && array() === $GLOBALS['fh_ran'] && 'test_failed' === $store->log_rows( array(), 1 )[0]['action'] && false !== strpos( Admin_Editor::draft( 7, $same_id )['message'], 'LogicException: posted boom (line 2)' ) );
 
 $_POST = fh_save_post( $same_id, array( 'base_version' => '2', 'code' => '$broken = ;' ) );
 fh_request( $dir, true );
@@ -392,7 +392,7 @@ check( 'the fatal ends the save request', 0 !== $code && false === strpos( $out,
 $state = is_file( $persist ) ? json_decode( (string) file_get_contents( $persist ), true ) : array( 'snippets' => array(), 'revisions' => array(), 'log' => array() );
 check( '… before any row, revision or log row was written, and before the active option', array() === $state['snippets'] && array() === $state['revisions'] && array() === $state['log'] && ! is_file( $active ) );
 $kept = is_file( $draft ) ? json_decode( (string) file_get_contents( $draft ), true ) : array();
-check( '… the typed code was kept as a draft first (never lose his work)', isset( $kept['fields']['code'] ) && 'function fh_two( $a, $a ) { return $a; }' === $kept['fields']['code'] && 'testing' === $kept['state'] );
+check( '… the typed code was kept as a draft first (never lose the work)', isset( $kept['fields']['code'] ) && 'function fh_two( $a, $a ) { return $a; }' === $kept['fields']['code'] && 'testing' === $kept['state'] );
 $after = new Fake_Db_Store();
 $msg   = ( new Editor( $after, array( 'actor' => array( 'user_id' => 7, 'user_login' => 'jeff' ) ) ) )->settle_dead_test( $kept );
 check( 'the next page load logs it as test_failed from the draft', array( 'test_failed' ) === $after->actions() && 'compile' === array_values( $after->log )[0]['slug'] && 0 === strpos( $msg, 'Refused: the test run ended the save request' ) );
@@ -448,7 +448,7 @@ exec( escapeshellarg( PHP_BINARY ) . ' ' . escapeshellarg( $early ) . ' 2>&1', $
 $out  = implode( "\n", $out );
 $dump = is_file( $early_dump ) ? json_decode( (string) file_get_contents( $early_dump ), true ) : array();
 check( 'saving an active snippet whose new code has a compile-stage error: the request dies at plugins_loaded:1, where it runs in place', 0 !== $code && false === strpos( $out, 'NOT REACHED' ) && isset( $dump['fatal'] ) && false !== strpos( $dump['fatal'], 'Redefinition of parameter' ), $code . ' ' . $out );
-check( '… his code kept as a "testing" draft first (the next page view logs it as test_failed); nothing saved', isset( $dump['drafts'][9] ) && 'testing' === $dump['drafts'][9]['state'] && 'function fh_two_early( $a, $a ) { return $a; }' === $dump['drafts'][9]['fields']['code'] && 3 === $dump['version'] && 0 === $dump['log'] );
+check( '… the code kept as a "testing" draft first (the next page view logs it as test_failed); nothing saved', isset( $dump['drafts'][9] ) && 'testing' === $dump['drafts'][9]['state'] && 'function fh_two_early( $a, $a ) { return $a; }' === $dump['drafts'][9]['fields']['code'] && 3 === $dump['version'] && 0 === $dump['log'] );
 $after = new Fake_Db_Store();
 $msg   = ( new Editor( $after, array( 'actor' => array( 'user_id' => 7, 'user_login' => 'jeff' ) ) ) )->settle_dead_test( $dump['drafts'][9] );
 check( '… which is what settles it on the next view', array( 'test_failed' ) === $after->actions() && 'live' === array_values( $after->log )[0]['slug'] && 0 === strpos( $msg, 'Refused: the test run ended the save request' ) );
