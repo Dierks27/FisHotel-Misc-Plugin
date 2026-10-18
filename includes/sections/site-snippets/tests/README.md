@@ -3,10 +3,15 @@
 All run without WordPress or a database. `wp-stubs.php` supplies in-memory
 options (with the autoload flag recorded), an action / filter / shortcode
 registry with a tiny `do_shortcode()`, the style and script queue,
-`is_admin()` / `current_user_can()` switches, a fake `$wpdb` that answers
-the Code Snippets guard query and counts queries, and points `error_log()`
-at a temp file. Snippet files are invented and written to temp folders. The
-helper exits 0 when CI runs it directly.
+`is_admin()` / `current_user_can()` switches, users (`fh_login()`),
+nonces, user meta, transients, `wp_enqueue_code_editor()`, a
+`wp_text_diff()` stand-in, redirects and JSON answers that stop a handler
+(`FH_Halt`), a fake `$wpdb` that answers the Code Snippets guard query,
+`SHOW TABLES` and counts queries, and points `error_log()` at a temp file.
+`fake-db-store.php` is an in-memory `Db_Store` (same unique keys, the
+version lock, real rollback, optional persistence to a file for child
+processes). Snippet files are invented and written to temp folders. Both
+helpers exit 0 when CI runs them directly.
 
 ```
 php includes/sections/site-snippets/tests/header-test.php
@@ -14,6 +19,10 @@ php includes/sections/site-snippets/tests/rules-test.php
 php includes/sections/site-snippets/tests/symbols-test.php
 php includes/sections/site-snippets/tests/loader-test.php
 php includes/sections/site-snippets/tests/snippets-test.php
+php includes/sections/site-snippets/tests/editor-rules-test.php
+php includes/sections/site-snippets/tests/editor-test.php
+php includes/sections/site-snippets/tests/db-run-test.php
+php includes/sections/site-snippets/tests/editor-admin-test.php
 ```
 
 - **header-test.php** — every field, the continuation line, the defaults
@@ -73,8 +82,83 @@ php includes/sections/site-snippets/tests/snippets-test.php
 - **snippets-test.php** — the shipped `snippets/` folder: `php -l` on every
   PHP file, every header parses, the `defined( 'ABSPATH' ) || exit;` guard
   in every PHP snippet, no broken file, no clash, the example off.
+- **editor-rules-test.php** — the editor's pure half: who may write (the
+  constant missing or empty, listed by login in any case, by user ID,
+  digits never a login, not listed, no `manage_options`,
+  `DISALLOW_FILE_EDIT`, multisite super admin vs site administrator), the
+  fields (slug rules, the slug kept on edit, name / description lengths
+  and header-breaking `*/` / `-->`, type, every scope of every type,
+  priority, on / off, empty and oversized code), opening-tag stripping and
+  CRLF / BOM normalising, the parse check with the stored code's line,
+  declarations, clashes with files and other database snippets (guarded,
+  the same slug's file left out, twice in one snippet, case), superseded
+  by a usable or broken file, the merge (db:<slug> keys, superseded
+  refused, a file deployed later wins, two database snippets refused, no
+  database snippet = untouched), the merged order and the output plan
+  never reading the file switch map, the active option (only active ones,
+  only the loader's fields, declarations, its serialized size), the
+  history and audit summaries (fields old -> new, code hash and line
+  counts, never the code, cut to 2000), the CSV guard and row, the request
+  fields (REMOTE_ADDR validated, first X-Forwarded-For only, user agent cut
+  to 255) and the export file (header, Default, Origin, the ABSPATH guard,
+  after `namespace` / `declare` / inside a braced namespace, read back by
+  the Header parser and the Symbols scan, `php -l` clean; CSS / JS / HTML
+  bodies equal to the code).
+- **editor-test.php** — the save pipeline on the in-memory store: a good
+  save writes row + revision + log + the active option, tested once after
+  the draft was kept; refused saves write nothing (invalid fields, syntax,
+  clashes with a file / another snippet, a slug taken or used by a GitHub
+  or broken file, the active size cap, a failing test run that writes only
+  its `test_failed` row, a database failure at the row / revision / log
+  that rolls back); edits (version 2, the version lock, nothing changed,
+  a stale form, saved off = not tested, CSS never tested); the switch
+  (revision + log, test run on, refused when it throws or a GitHub file
+  supersedes it); restore (a new version, test-run while on, the on / off
+  state kept, a stale page, another snippet's revision); delete (row gone,
+  revisions and earlier log rows byte-for-byte kept, last code hash) and
+  restore after a delete (same id, off, slug taken, not a delete row);
+  export, denied, safe mode, a test run that never came back; the active
+  option never emptied by a read error; the store file itself (updates /
+  deletes only the snippets table, no SQL touching the log but its INSERT).
+- **db-run-test.php** — database snippets in whole requests beside
+  invented files: the eval() runner (locals, output, a throw with the
+  stored code's line, a ParseError, `return`), the merged order and
+  scopes, superseded, a clash with a file, the exists-now preflight, the
+  error in `error_log()` / `fishotel_log` / the stored errors under
+  db:<slug>, no query and no write on a second request, nothing changed
+  without database snippets, CSS / JS / footer HTML and `[fh_snippet]`
+  (a file of the slug wins), safe mode by query, the editor's own save /
+  restore request not running the snippet it saves (and every case where
+  it does run: bad nonce, a user not named, not admin, not POST, another
+  action), the real test run on save (runs once, a throw refused, an
+  existing function refused, saved off not run); two child PHP processes
+  where a compile-stage fatal ends the save request before any row,
+  revision, log row or active option is written — the typed code kept as
+  a draft, logged as `test_failed` afterwards — and ends the AJAX switch
+  with a JSON answer naming the database snippet; safe mode by constant.
+- **editor-admin-test.php** — the My snippets / Log tabs and every
+  handler: without the constant (read only, the `define()` line, every
+  write refused with 403 and logged as denied), with it (not listed, by
+  ID, no `manage_options`, multisite), a stale nonce, save (redirect,
+  test run, row / revision / log / autoloaded option, the notice once),
+  a refused save keeping the typed code and showing it with the reason,
+  discard, a new snippet that throws, a draft still "testing" settled on
+  the next page view (logged once), the AJAX switch on / off / refused,
+  history with the diff and Restore buttons, restore, delete, the Log's
+  Restore after a delete, the log filter, export as a download, the CSV
+  (every row, formula-guarded, nonce and `manage_options`), nothing
+  printed unescaped on any tab (a script / img / `</textarea>` in the
+  name, description and code), the denied budget (30 an hour), safe mode
+  logged once an hour, the code editor by type and with highlighting
+  disabled, no REST route, the install gate (no query, `SHOW TABLES` or
+  `dbDelta` once installed; the first boot installs three tables and the
+  empty autoloaded active option; a failed install waits an hour and
+  retries only in wp-admin; activation installs) and `DISALLOW_FILE_EDIT`
+  last.
 
 ## By hand, once, on a real site
+
+The files:
 
 1. Enable **Snippets** on the FisHotel Tools dashboard. FisHotel Tools →
    Snippets lists *Example — footer marker*, off.
@@ -84,3 +168,20 @@ php includes/sections/site-snippets/tests/snippets-test.php
 3. Add `?fishotel-snippets-safe-mode=1` to an admin URL with the example
    on: the safe-mode notice shows, and the front end loaded through that
    flag (logged in) has no comment.
+
+The editor (with `define( 'FISHOTEL_SNIPPETS_EDITORS', '<your username>' );`
+in wp-config.php):
+
+1. My snippets → Add new: slug `test-footer`, type HTML, scope footer, on,
+   code `<!-- written in wp-admin -->`. Save: version 1. View the shop's
+   source: the comment is before `</body>`. Log: one `create` row.
+2. Add new PHP, on, code `throw new Exception( 'nope' );` — refused, the
+   code still in the form, a `test_failed` row in the Log. Change it to
+   `function fh_two( $a, $a ) {}` and save: the request dies (WordPress's
+   error page); open My snippets again — the code is still there, the Log
+   has the `test_failed` row.
+3. Edit `test-footer` twice, open History, Diff with current, Restore
+   version 1. Export it: the file downloads with the header. Delete it,
+   then Restore it from its delete row on the Log tab (it comes back off).
+4. Download the CSV. Remove the line from wp-config.php: the tabs turn
+   read only and Save is refused (a `denied` row).
