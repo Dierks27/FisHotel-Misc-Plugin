@@ -194,3 +194,384 @@
 	opacity: 0.5;
 	pointer-events: none;
 }
+
+/* ------------------------------------------------------------------ */
+/*  Tabs, notices (Files / My snippets / Log)                          */
+/* ------------------------------------------------------------------ */
+.fh-snip-tabs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin: -14px 0 20px;
+}
+
+.fh-snip-tab {
+	padding: 7px 14px;
+	border-radius: 999px;
+	font-size: 13px;
+	font-weight: 600;
+	text-decoration: none;
+	color: var(--fh-text-secondary, #a0a0a0);
+	background: var(--fh-bg-secondary, #2d2d2d);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+}
+
+.fh-snip-tab:hover,
+.fh-snip-tab:focus {
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-snip-tab.is-active {
+	color: #fff;
+	background: var(--fh-accent, #00a0d2);
+	border-color: var(--fh-accent, #00a0d2);
+}
+
+.fh-snip-notice {
+	max-width: 900px;
+	margin: 0 0 16px;
+	padding: 10px 14px;
+	font-size: 13px;
+	color: var(--fh-text-primary, #e0e0e0);
+	background: var(--fh-bg-secondary, #2d2d2d);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	border-left: 3px solid var(--fh-success, #46b450);
+	border-radius: 4px;
+}
+
+.fh-snip-notice.is-info {
+	border-left-color: var(--fh-accent, #00a0d2);
+}
+
+.fh-snip-notice.is-error {
+	border-left-color: var(--fh-danger, #dc3232);
+}
+
+.fh-snip-notice p {
+	margin: 0 0 6px;
+}
+
+.fh-snip-access {
+	max-width: 900px;
+	margin: 0 0 18px;
+	padding: 12px 16px;
+	font-size: 13px;
+	line-height: 1.6;
+	color: var(--fh-text-primary, #e0e0e0);
+	background: rgba(255, 185, 0, 0.08);
+	border: 1px solid rgba(255, 185, 0, 0.35);
+	border-radius: 6px;
+}
+
+.fh-snip-access p {
+	margin: 0 0 8px;
+}
+
+.fh-snip-pre {
+	margin: 0 0 8px;
+	padding: 8px 12px;
+	font-size: 12px;
+	color: var(--fh-text-primary, #e0e0e0);
+	background: var(--fh-bg-primary, #1a1a1a);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	border-radius: 4px;
+	white-space: pre-wrap;
+}
+
+/* ------------------------------------------------------------------ */
+/*  My snippets list                                                   */
+/* ------------------------------------------------------------------ */
+.fh-snip-toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 12px;
+	margin: 0 0 12px;
+}
+
+.fh-snip-toolbar label {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-snip-slug {
+	margin-left: 6px;
+}
+
+.fh-snip-draft-link {
+	display: block;
+	margin-top: 6px;
+	font-size: 12px;
+	color: var(--fh-warning, #ffb900) !important;
+}
+
+.fh-snip-actions a,
+.fh-snip-actions .fh-snip-inline-form {
+	margin-right: 10px;
+}
+
+.fh-snip-inline-form {
+	display: inline;
+	margin: 0;
+}
+
+.fh-snip-wrap .button-link {
+	color: var(--fh-accent, #00a0d2);
+	cursor: pointer;
+}
+
+.fh-snip-wrap .button-link.fh-snip-danger {
+	color: #ff8a8a;
+}
+
+.fh-snip-state--superseded,
+.fh-snip-state--pending {
+	color: var(--fh-warning, #ffb900);
+}
+
+.fh-snip-back {
+	margin: 0 0 8px;
+}
+
+.fh-snip-back a {
+	color: var(--fh-accent, #00a0d2);
+	text-decoration: none;
+}
+
+.fh-snip-title {
+	margin-top: 4px;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Edit form                                                          */
+/* ------------------------------------------------------------------ */
+.fh-snip-fields {
+	margin: 0;
+	padding: 0;
+	border: 0;
+	min-width: 0;
+}
+
+.fh-snip-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+	gap: 4px 18px;
+	max-width: 1100px;
+}
+
+.fh-snip-field {
+	margin: 0 0 12px;
+}
+
+.fh-snip-field--wide,
+.fh-snip-field--code {
+	grid-column: 1 / -1;
+}
+
+.fh-snip-field > label {
+	display: block;
+	margin: 0 0 4px;
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-snip-field input[type="text"],
+.fh-snip-field input[type="number"],
+.fh-snip-field select {
+	width: 100%;
+	max-width: 100%;
+	color: var(--fh-text-primary, #e0e0e0);
+	background: var(--fh-bg-primary, #1a1a1a);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.15));
+}
+
+.fh-snip-check {
+	display: flex;
+	gap: 8px;
+	align-items: flex-start;
+	font-size: 13px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-snip-slug-fixed {
+	display: inline-block;
+	padding: 4px 8px;
+}
+
+.fh-snip-field-error {
+	display: block;
+	margin-top: 4px;
+	font-size: 12px;
+	color: #ff8a8a;
+}
+
+.fh-snip-code-input {
+	width: 100%;
+	max-width: 1100px;
+	min-height: 360px;
+	font-family: Menlo, Consolas, Monaco, monospace;
+	font-size: 13px;
+	line-height: 1.5;
+	tab-size: 4;
+	color: var(--fh-text-primary, #e0e0e0);
+	background: var(--fh-bg-primary, #1a1a1a);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.15));
+	white-space: pre;
+}
+
+.fh-snip-field--code .CodeMirror {
+	max-width: 1100px;
+	height: 480px;
+	font-size: 13px;
+	color: #e0e0e0;
+	background: #161616;
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.15));
+	border-radius: 4px;
+}
+
+.fh-snip-field--code .CodeMirror-gutters {
+	background: #1f1f1f;
+	border-right-color: rgba(255, 255, 255, 0.08);
+}
+
+.fh-snip-field--code .CodeMirror-linenumber {
+	color: #707070;
+}
+
+.fh-snip-field--code .CodeMirror-cursor {
+	border-left-color: #e0e0e0;
+}
+
+.fh-snip-field--code .CodeMirror-selected,
+.fh-snip-field--code .CodeMirror-focused .CodeMirror-selected {
+	background: rgba(0, 160, 210, 0.3);
+}
+
+.fh-snip-field--code .cm-s-default .cm-keyword { color: #ff8fb0; }
+.fh-snip-field--code .cm-s-default .cm-def,
+.fh-snip-field--code .cm-s-default .cm-variable-2 { color: #8fd3ff; }
+.fh-snip-field--code .cm-s-default .cm-variable,
+.fh-snip-field--code .cm-s-default .cm-property { color: #e0e0e0; }
+.fh-snip-field--code .cm-s-default .cm-string { color: #b5e08c; }
+.fh-snip-field--code .cm-s-default .cm-comment { color: #8a8a8a; }
+.fh-snip-field--code .cm-s-default .cm-number,
+.fh-snip-field--code .cm-s-default .cm-atom { color: #ffc66d; }
+.fh-snip-field--code .cm-s-default .cm-tag { color: #8fd3ff; }
+.fh-snip-field--code .cm-s-default .cm-attribute { color: #ffc66d; }
+.fh-snip-field--code .cm-s-default .cm-meta,
+.fh-snip-field--code .cm-s-default .cm-builtin { color: #d7a8ff; }
+
+.fh-snip-submit {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+}
+
+.fh-snip-submit a {
+	color: var(--fh-accent, #00a0d2);
+}
+
+.fh-snip-export-form {
+	display: block;
+	margin-top: 8px;
+}
+
+/* ------------------------------------------------------------------ */
+/*  History, diff, log                                                 */
+/* ------------------------------------------------------------------ */
+.fh-snip-summary {
+	font-size: 12px;
+	word-break: break-word;
+}
+
+.fh-snip-diff-box {
+	max-width: 1100px;
+	margin: 0 0 20px;
+	padding: 12px 16px;
+	background: var(--fh-bg-secondary, #2d2d2d);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	border-radius: 6px;
+}
+
+.fh-snip-diff-box h3 {
+	margin: 0 0 6px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-snip-diff table.diff {
+	width: 100%;
+	border-collapse: collapse;
+	font-family: Menlo, Consolas, Monaco, monospace;
+	font-size: 12px;
+	color: #e0e0e0;
+	background: #161616;
+}
+
+.fh-snip-diff table.diff th {
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-snip-diff table.diff td {
+	padding: 1px 6px;
+	white-space: pre-wrap;
+	vertical-align: top;
+}
+
+.fh-snip-diff .diff-deletedline,
+.fh-snip-diff .diff-deletedline del {
+	background: rgba(220, 50, 50, 0.22);
+	color: #ffd0d0;
+}
+
+.fh-snip-diff .diff-addedline,
+.fh-snip-diff .diff-addedline ins {
+	background: rgba(70, 180, 80, 0.2);
+	color: #d4f5d0;
+}
+
+.fh-snip-diff .diff-context {
+	color: #a0a0a0;
+}
+
+.fh-snip-action {
+	display: inline-block;
+	padding: 1px 8px;
+	border-radius: 999px;
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--fh-text-primary, #e0e0e0);
+	background: rgba(70, 180, 80, 0.18);
+}
+
+.fh-snip-action.is-warn {
+	background: rgba(255, 185, 0, 0.2);
+}
+
+.fh-snip-action.is-bad {
+	background: rgba(220, 50, 50, 0.25);
+}
+
+.fh-snip-from .fh-snip-muted {
+	display: block;
+}
+
+.fh-snip-log .fh-snip-inline-form {
+	display: block;
+	margin-top: 6px;
+}
+
+.fh-snip-pager {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin-top: 12px;
+}
+
+@media (max-width: 782px) {
+	.fh-snip-field--code .CodeMirror {
+		height: 360px;
+	}
+}

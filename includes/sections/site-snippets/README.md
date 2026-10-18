@@ -11,8 +11,13 @@ way back — and its own updates have taken the site down. A file here is
 reviewed, versioned, linted on PHP 7.4 and 8.3 by CI before it can reach
 `main`, and deployed by the plugin's normal GitHub update.
 
-There is **no code editor**. A snippet is changed in GitHub and arrives with
-the next plugin update; the page only switches it.
+A file snippet has **no code editor**: it is changed in GitHub and arrives
+with the next plugin update; the page only switches it. For quick work on
+the live site there is a second home: **My snippets**, an editor in
+wp-admin for snippets stored in the database — only for the people named in
+`wp-config.php`, with history, roll back, an audit log and an Export that
+moves a finished snippet into GitHub. See
+[Snippets written in wp-admin](#snippets-written-in-wp-admin-my-snippets).
 
 ## What a snippet file looks like
 
@@ -122,10 +127,15 @@ The PHP rule is Code Snippets' own (`global`, plus `admin` or `front-end` by
   `-admin`, `-login`), each preceded by `/* fh-snippet: <slug> */`. HTML is
   echoed between newlines. Nothing in an `.html` file is ever executed.
 
-**Cost of an ordinary request:** two autoloaded options
-(`fishotel_snippets_enabled`, `fishotel_snippets_index`), one directory
-listing plus a size/mtime stat per file (≈ 25 µs for 10 files, measured),
-then the includes. No query, no write. The index (headers, declarations,
+**Cost of an ordinary request:** four autoloaded options
+(`fishotel_snippets_enabled`, `fishotel_snippets_index`,
+`fishotel_snippets_db_active`, `fishotel_snippets_db_version`), one
+directory listing plus a size/mtime stat per file, the merge with the
+database snippets, then the includes / evals. No query, no write. Measured
+headless: ≈ 40 µs to plan 10 files, ≈ 53 µs with 6 database snippets as
+well (the clash cross-check runs in full only when a name a database
+snippet declares appears elsewhere), plus ≈ 5 µs per database snippet for
+checking its signature (one HMAC-SHA256). The index (headers, declarations,
 clashes, broken files) is rebuilt only when the folder's signature (names +
 sizes + mtimes + PHP version) changes — once, on the first request after a
 deploy (≈ 2 ms for 10 files) — and every visit to the Snippets page reads
@@ -273,16 +283,222 @@ request since April 2025; WordPress already prefetches the font hosts the
 theme enqueues) and #32 "tester" (an inactive one-off that created a test
 order).
 
+## Snippets written in wp-admin (My snippets)
+
+FisHotel Tools → Snippets has three tabs: **Files (GitHub)** (everything
+above), **My snippets** (snippets written here, stored in the database) and
+**Log** (the audit log of My snippets).
+
+### Who can use it
+
+Only the people named in `wp-config.php` can write, switch, restore,
+export or delete a snippet here:
+
+```php
+define( 'FISHOTEL_SNIPPETS_EDITORS', 'jeff' );
+```
+
+- Put the line above *"That's all, stop editing!"*. Several people:
+  `'jeff, anna'`. A WordPress **username** or a **user ID** (an entry made
+  of digits is always an ID); usernames match in any case.
+- The person must also be an administrator (`manage_options`; a network
+  super admin on multisite).
+- Never while `DISALLOW_FILE_EDIT` is true — that switches off every code
+  editor in wp-admin, this one too.
+- Only a string (or one user ID as a number) counts: `define( …, true )`
+  or an array names nobody.
+- Without the line nobody can write: the tabs are read only and show the
+  line to add. Other administrators see the list — names, status, versions
+  — but **never the code**: the edit, history and diff screens are for the
+  named editors only (a snippet may hold a key).
+
+Every refused write (not named, not an administrator, `DISALLOW_FILE_EDIT`,
+a stale form) is refused with a 403 **and logged as `denied`** — at most 30
+such rows per account an hour, and 100 an hour for all accounts without
+`manage_options` together (fixed hourly windows), so logged-in customers
+poking at the handlers cannot flood the log, nor crowd out an
+administrator's refused attempt. An editor whose form went stale (an
+expired nonce) gets the code back on the refusal page, read only, to copy —
+nothing is kept for them, so a forged request cannot plant a draft they might
+later save unread.
+
+### Writing one
+
+**Add new** (or **Edit**): slug (its id and its file name on export — the
+same rule as a file name, fixed once created), name, description, type
+(php / css / js / html), where it runs (the same scopes as a file of that
+type), priority, on / off, and the code in WordPress's code editor
+(CodeMirror, highlighting by type; a plain textarea when *Disable syntax
+highlighting* is ticked in your profile). PHP is stored **without** the
+opening `<?php` tag (a leading one is removed on save).
+
+Saving, in this order — nothing is written until the end:
+
+1. the fields are checked (slug free — neither another snippet here nor a
+   GitHub file uses it —, scope fits the type, ≤ 64 KB of code);
+2. PHP is parse-checked (`token_get_all( TOKEN_PARSE )`, the error with its
+   line);
+3. a function or class another snippet declares — a file, or another one
+   here — is refused, as two files would be (guarded by
+   `function_exists()` on both sides is fine);
+4. when the snippet is or becomes **on**, the PHP is **test-run once** in
+   the save request, as the Files switch does: if it throws, nothing is
+   saved, the reason is shown and logged as `test_failed`; a fatal error
+   PHP cannot catch (a parameter named twice) ends only that request —
+   still nothing saved (WordPress may e-mail its "technical issue" notice
+   for that one request). When the snippet already runs on that request,
+   the test run happens **in its place at `plugins_loaded` 1**: the new code
+   runs where the old code would have (the old code never runs on the save
+   request, or the test run would declare its functions twice), so a file
+   or snippet that calls its functions later in the request — on `init`,
+   before the save handler — still finds them; the handler then takes that
+   run as the test run. If the save will be refused anyway (a field, the
+   parse check, a clash, the size, a stale form) or does not test-run
+   (saved off), the old code runs as on any request. A restore from
+   History does the same with the version it restores;
+5. then, together: the row (version + 1 — refused if someone else saved it
+   since you opened it; a switch on or off in the list meanwhile is not a
+   conflict), one revision, one log row, in one transaction (a COMMIT the
+   database refuses counts as a failed write); the list the site runs is
+   rebuilt and read back; the entry goes to the Health log. A save whose
+   list could not be rebuilt says so in red — the table has the new
+   version, the site still runs the old one — and the next visit to My
+   snippets rebuilds it.
+
+**Switching off** (the list's switch) always works: the code does not run,
+so no field rule, parse check (code that no longer parses on a newer PHP),
+clash (a GitHub file that now declares the same function) or size limit can
+keep a snippet on.
+
+**Never lose your work:** a refused save brings you back to the form with
+exactly what you typed and the reason. What you typed is kept as your
+draft (per user) *before* the test run too, so even after a fatal the
+form shows your code next time, and that failed save is logged as
+`test_failed` then. *Discard it* goes back to the saved version. A save
+refused because someone else changed the snippet keeps your code, based
+now on their version: compare, merge, and the next save replaces it. Code
+typed into a snippet that was deleted meanwhile (another tab) comes back
+as a new snippet with its slug filled in, and My snippets links to it.
+
+### How they run
+
+Exactly like the files: same scopes, same runner (the stored code is
+`eval()`ed inside a function — as Code Snippets does — locals local,
+output discarded, a `Throwable` caught and recorded as `db:<slug>` with
+its line), same order (priority, then files before database snippets,
+then slug), same safe mode, same "already declared" preflight. CSS / JS /
+HTML print on the same handles (`/* fh-snippet: db:<slug> */`), and
+`[fh_snippet slug="…"]` renders a database html / shortcode snippet when
+no file has that slug.
+
+They come from **one autoloaded option**, `fishotel_snippets_db_active`
+(the active snippets' id, slug, type, scope, priority, code, version and
+declarations), rebuilt on every write — never from a query. All active
+snippets together may be at most 256 KB.
+
+Every entry of that option is **signed** (HMAC-SHA256 keyed with
+WordPress's auth salt — `AUTH_KEY` and `AUTH_SALT` in `wp-config.php`, the
+secret behind every login cookie), and an entry whose signature is wrong
+never runs: any administrator can write any option through
+`wp-admin/options.php`, and without it that would run PHP for someone not
+named in `FISHOTEL_SNIPPETS_EDITORS`. New salts (a security plugin
+rotating them, a copy of the site with another `wp-config.php`) stop every
+database snippet until a named editor opens My snippets, which compares
+the option with the table and rebuilds it — so does every other
+difference (a write that never reached the option, an entry someone else
+put there); the page says what differed and the Health log gets a warning.
+Other administrators see the difference but rebuild nothing.
+
+**Superseded:** a database snippet whose slug a file in `snippets/` also
+has never runs — the page says *Superseded by the GitHub file …*. A file
+deployed later that declares a function a database snippet declares wins
+the same way: the database snippet is refused, the file keeps running.
+
+### History, roll back, delete
+
+- **History**: every version (every save, switch and restore writes one)
+  with who, when and what changed; **Diff with current** (WordPress's
+  `wp_text_diff()`) and **Restore**, which writes a *new* version with the
+  old code and fields — logged as `restore`, test-run like a save while
+  the snippet is on (it keeps its on / off state).
+- **Delete** removes the snippet but keeps its versions and its log rows;
+  the delete is logged with the last code's hash. The delete row on the
+  Log tab has **Restore**: the snippet comes back from its last version,
+  under its old id and slug, **switched off** (switching it on test-runs
+  it).
+
+### What is logged
+
+The **Log** tab (`{prefix}fh_snippet_log`) is append-only — no code path
+updates or deletes a row, and the page has no delete. One row per
+`create`, `update`, `activate`, `deactivate`, `delete`, `restore`,
+`export`, `test_failed`, `denied` and `safe_mode` (safe mode in use, once
+an hour per user), with: the snippet id and slug, the user (id + login at
+the time), `REMOTE_ADDR`, the first `X-Forwarded-For` value (stored as
+**untrusted** — anyone can send it), the user agent (≤ 255), the time
+(UTC) and what changed: fields old → new, the code's hash and line count
+before → after — **never the code itself**. Filters, pages of 50 and a
+CSV of every row (`manage_options` + nonce; every cell guarded against
+spreadsheet formulas like the Clean Room CSV). Each row also goes to the
+Health log (`fishotel_log`, source `snippets`, `info` or `warning`).
+
+### Move to GitHub
+
+When a snippet is final, **Export** downloads it as a snippet file: the
+header (Snippet, Description, Type, Scope, Priority, *Origin: written in
+wp-admin by jeff, exported 2026-10-18*, Default matching whether it is
+on), then for PHP the `<?php` tag and the `defined( 'ABSPATH' ) || exit;`
+guard (after a leading `namespace …;`), then the code. The export is
+logged. Then:
+
+1. send the file to Claude — it lands in GitHub through a pull request
+   (CI lints it on PHP 7.4 and 8.3) and arrives with the plugin update;
+2. under Files the snippet appears; under My snippets this copy now says
+   *Superseded by the GitHub file* and never runs;
+3. switch the file on (Files), check the site, then delete this copy.
+
+### The trade-off
+
+Anyone who controls an allowed administrator account can run PHP on the
+site through this editor — exactly as with Code Snippets or the theme
+editor. The limits are: the `FISHOTEL_SNIPPETS_EDITORS` list (one line in
+`wp-config.php`, which the web cannot change), the signed active option
+(only code a named editor saved can run; someone able to read the option
+could still put back an entry an editor once signed), `DISALLOW_FILE_EDIT`
+as an off switch, the test run before anything is stored, safe mode, and
+the append-only log of who did what from where. Files in GitHub stay the
+reviewed, versioned home; My snippets is for trying things on the live
+site, then moving them.
+
+### Tables
+
+Created with `dbDelta` the first time the section boots (or on plugin
+activation), gated by the autoloaded `fishotel_snippets_db_version` — an
+ordinary request never runs `SHOW TABLES` or `dbDelta`. A failed install
+is retried at most once an hour, only in wp-admin. Column types are
+written exactly as MySQL / MariaDB report them (`bigint(20) unsigned`,
+`int(11)`, `longtext` …): `dbDelta` compares them case-sensitively and would
+otherwise alter every column on every install.
+
+| Table | Holds |
+|-------|-------|
+| `{prefix}fh_snippets` | id, slug (unique), name, description, type, scope, priority, active, code, version, created_by / _at, updated_by / _at, exported_at |
+| `{prefix}fh_snippet_revisions` | id, snippet_id, version (unique per snippet), code, meta (JSON: name, description, type, scope, priority, active), user_id, created_at |
+| `{prefix}fh_snippet_log` | id, snippet_id, slug, action, user_id, user_login, remote_addr, forwarded_for, user_agent, summary, created_at (UTC) |
+
 ## Options
 
 | Option | Autoload | Holds |
 |--------|----------|-------|
 | `fishotel_snippets_enabled` | yes | `slug => true\|false`, written by the switch; created empty with the index (a missing option is a query on every request) |
 | `fishotel_snippets_index` | yes | the parsed folder: fields, declarations, refusals, broken files, clashes, signature |
-| `fishotel_snippets_errors` | no | the newest error per snippet (read by the page only) |
+| `fishotel_snippets_errors` | no | the newest error per snippet (read by the page only; a database snippet's key is `db:<slug>`) |
+| `fishotel_snippets_db_active` | yes | the active database snippets, each entry signed, rebuilt on every write; created empty with the tables |
+| `fishotel_snippets_db_version` | yes | the tables' schema version (or a failed-install marker) |
+| user meta `fishotel_snippets_drafts` | — | an editor's unsaved code per snippet (kept 7 days) |
 
 Plugin deactivation drops the index (rebuilt on the next request); the
-choices and the files stay.
+choices, the files, the tables and the database snippets stay.
 
 ## Files
 
@@ -297,10 +513,17 @@ site-snippets/
 ├── class-runner.php      # include inside a function + try/catch
 ├── class-loader.php      # the request: safe mode, guard query, run, errors
 ├── class-output.php      # CSS / JS / HTML printing, shortcodes
-├── class-admin.php       # page, switch, notices
-├── views/page.php
+├── class-admin.php       # page (Files tab), switch, notices
+├── class-db-snippets.php # the active option (signed), the merge with the files (superseded, clashes)
+├── class-db-store.php    # the editor's tables — its only $wpdb file
+├── class-editor-rules.php # PURE: who may write, fields, clashes, history / log text, CSV guard
+├── class-export.php      # PURE: a database snippet as a snippet file
+├── class-editor.php      # the save pipeline (store as a parameter)
+├── class-admin-editor.php # My snippets / Log tabs, admin-post + AJAX handlers, drafts
+├── views/                # page.php (Files), tabs.php, editor-*.php
 ├── css/snippets-admin.css
-├── js/snippets-admin.js
+├── js/snippets-admin.js  # the Files switch
+├── js/snippets-editor.js # code editor, scope list, the My snippets switch
 ├── snippets/             # one file per snippet (example.php, off)
 └── tests/                # headless: php includes/sections/site-snippets/tests/<name>-test.php
 ```
