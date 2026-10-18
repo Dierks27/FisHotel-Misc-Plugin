@@ -1,0 +1,196 @@
+/**
+ * Snippets admin styles — the section page under FisHotel Tools (dark,
+ * built on admin/css/admin-style.css and its --fh-* tokens).
+ *
+ * @package FisHotel\Misc\Sections\Site_Snippets
+ */
+
+.fh-snip-intro,
+.fh-snip-help {
+	max-width: 900px;
+	margin: 0 0 16px;
+	font-size: 13px;
+	line-height: 1.6;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-snip-help a {
+	color: var(--fh-accent, #00a0d2);
+}
+
+.fh-snip-facts {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin: 0 0 16px;
+}
+
+.fh-snip-fact {
+	padding: 4px 12px;
+	border-radius: 999px;
+	font-size: 12px;
+	color: var(--fh-text-primary, #e0e0e0);
+	background: var(--fh-bg-secondary, #2d2d2d);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	border-left: 3px solid var(--fh-success, #46b450);
+}
+
+.fh-snip-fact.is-warn {
+	border-left-color: var(--fh-warning, #ffb900);
+}
+
+.fh-snip-fact.is-bad {
+	border-left-color: var(--fh-danger, #dc3232);
+}
+
+.fh-snip-status {
+	min-height: 20px;
+	margin: 0 0 10px;
+	font-size: 13px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-snip-status.is-error {
+	color: var(--fh-danger, #dc3232);
+}
+
+.fh-snip-status.is-ok {
+	color: var(--fh-success, #46b450);
+}
+
+.fh-snip-status.is-warn {
+	color: var(--fh-warning, #ffb900);
+}
+
+.fh-snip-h2 {
+	margin: 28px 0 10px;
+	font-size: 16px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+/* Tables — core's list table assumes a light background; re-tint. */
+.fh-snip-wrap .widefat {
+	background: var(--fh-bg-secondary, #2d2d2d);
+	border-color: var(--fh-border, rgba(255, 255, 255, 0.1));
+}
+
+.fh-snip-wrap .widefat th,
+.fh-snip-wrap .widefat td,
+.fh-snip-wrap .widefat thead th {
+	color: var(--fh-text-primary, #e0e0e0);
+	border-color: var(--fh-border, rgba(255, 255, 255, 0.1));
+	vertical-align: top;
+}
+
+.fh-snip-wrap .widefat a {
+	color: var(--fh-accent, #00a0d2);
+	text-decoration: none;
+}
+
+.fh-snip-wrap .widefat.striped > tbody > :nth-child(odd) {
+	background: var(--fh-bg-primary, #1a1a1a);
+}
+
+.fh-snip-wrap code {
+	background: rgba(255, 255, 255, 0.06);
+	color: var(--fh-text-primary, #e0e0e0);
+	font-size: 12px;
+}
+
+.fh-snip-col-switch {
+	width: 56px;
+}
+
+.fh-snip-num {
+	text-align: right;
+	white-space: nowrap;
+}
+
+.fh-snip-name {
+	display: block;
+	font-size: 14px;
+}
+
+.fh-snip-desc,
+.fh-snip-muted {
+	display: block;
+	margin-top: 2px;
+	font-size: 12px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-snip-state {
+	display: block;
+	margin-top: 6px;
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-snip-state--on {
+	color: var(--fh-success, #46b450);
+}
+
+.fh-snip-state--held,
+.fh-snip-state--safe {
+	color: var(--fh-warning, #ffb900);
+}
+
+.fh-snip-state--refused {
+	color: var(--fh-danger, #dc3232);
+}
+
+.fh-snip-error {
+	display: block;
+	margin-top: 6px;
+	padding: 6px 10px;
+	font-size: 12px;
+	color: #ff8a8a;
+	background: rgba(220, 50, 50, 0.1);
+	border: 1px solid rgba(220, 50, 50, 0.25);
+	border-radius: 4px;
+}
+
+.fh-snip-code {
+	margin-top: 8px;
+}
+
+.fh-snip-code summary {
+	cursor: pointer;
+	font-size: 12px;
+	color: var(--fh-accent, #00a0d2);
+}
+
+.fh-snip-code pre {
+	max-height: 360px;
+	overflow: auto;
+	margin: 8px 0 0;
+	padding: 10px 12px;
+	font-size: 12px;
+	line-height: 1.5;
+	color: var(--fh-text-primary, #e0e0e0);
+	background: var(--fh-bg-primary, #1a1a1a);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	border-radius: 4px;
+	white-space: pre;
+}
+
+.fh-snip-list {
+	margin: 0 0 16px 18px;
+	list-style: disc;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-snip-list .is-bad {
+	color: #ff8a8a;
+}
+
+.fishotel-misc-toggle input:disabled + .slider {
+	cursor: not-allowed;
+	opacity: 0.4;
+}
+
+.fh-snip-row.is-saving .fishotel-misc-toggle {
+	opacity: 0.5;
+	pointer-events: none;
+}

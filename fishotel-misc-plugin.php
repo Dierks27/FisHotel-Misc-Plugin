@@ -2,7 +2,7 @@
 /**
  * Plugin Name: FisHotel Misc Plugin
  * Description: A modular container plugin with a dark theme admin interface for FisHotel tools.
- * Version:     0.41
+ * Version:     0.42
  * Author:      FisHotel
  * Text Domain: fishotel-misc-plugin
  * Domain Path: /languages
@@ -16,7 +16,7 @@ namespace FisHotel\Misc;
 
 defined( 'ABSPATH' ) || exit;
 
-define( 'FISHOTEL_MISC_VERSION', '0.41' );
+define( 'FISHOTEL_MISC_VERSION', '0.42' );
 define( 'FISHOTEL_MISC_FILE', __FILE__ );
 define( 'FISHOTEL_MISC_PATH', plugin_dir_path( __FILE__ ) );
 
@@ -49,6 +49,16 @@ spl_autoload_register( function ( $class ) {
 		require_once $path;
 	}
 } );
+
+/**
+ * Snippets section: PHP snippets run at plugins_loaded priority 1, as Code
+ * Snippets ran them — before the sections boot at priority 10 — so its
+ * early loader is included now. It does nothing unless the section is
+ * enabled.
+ */
+if ( file_exists( FISHOTEL_MISC_PATH . 'includes/sections/site-snippets/early-loader.php' ) ) {
+	require_once FISHOTEL_MISC_PATH . 'includes/sections/site-snippets/early-loader.php';
+}
 
 /**
  * Boot the plugin.
