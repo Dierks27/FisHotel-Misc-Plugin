@@ -51,6 +51,16 @@ spl_autoload_register( function ( $class ) {
 } );
 
 /**
+ * Snippets section: PHP snippets run at plugins_loaded priority 1, as Code
+ * Snippets ran them — before the sections boot at priority 10 — so its
+ * early loader is included now. It does nothing unless the section is
+ * enabled.
+ */
+if ( file_exists( FISHOTEL_MISC_PATH . 'includes/sections/site-snippets/early-loader.php' ) ) {
+	require_once FISHOTEL_MISC_PATH . 'includes/sections/site-snippets/early-loader.php';
+}
+
+/**
  * Boot the plugin.
  */
 function fishotel_misc_init() {

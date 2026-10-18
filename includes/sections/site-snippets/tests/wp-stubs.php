@@ -367,7 +367,7 @@ $GLOBALS['wpdb'] = new FH_Fake_WPDB();
 /* ------------------------------------------------------------------ */
 
 require_once FISHOTEL_MISC_PATH . 'includes/class-section-manager.php';
-foreach ( array( 'header', 'symbols', 'rules', 'catalog' ) as $fh_class ) {
+foreach ( array( 'site-snippets', 'header', 'symbols', 'rules', 'catalog', 'runner', 'loader', 'output', 'admin' ) as $fh_class ) {
 	require_once FISHOTEL_MISC_PATH . 'includes/sections/site-snippets/class-' . $fh_class . '.php';
 }
 

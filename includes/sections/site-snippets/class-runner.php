@@ -1,0 +1,110 @@
+<?php
+/**
+ * Runner — includes PHP snippet files the way Code Snippets eval()s them,
+ * so code moved over behaves the same:
+ *
+ *   - inside a function: the snippet's top-level variables stay local to
+ *     it (Code Snippets evaluates inside execute_snippet() too). The
+ *     include happens in an unbound static closure, so the snippet sees no
+ *     $this, no class scope and no variable of ours;
+ *   - its output is discarded (Code Snippets wraps eval() in
+ *     ob_start() / ob_end_clean());
+ *   - a Throwable is caught, handed to the error callback, and the next
+ *     snippet still runs.
+ *
+ * What no runner can catch — a "Cannot redeclare" compile error, a fatal
+ * from memory or time limits — is what the Catalog's symbol scan and
+ * Loader's exists-now check keep away.
+ *
+ * @package FisHotel\Misc\Sections\Site_Snippets
+ */
+
+namespace FisHotel\Misc\Sections\Site_Snippets;
+
+defined( 'ABSPATH' ) || exit;
+
+/**
+ * Class Runner
+ */
+class Runner {
+
+	/**
+	 * Include each file in order.
+	 *
+	 * @param array<int, array{slug: string, path: string}> $items     In run order.
+	 * @param callable|null                                 $on_error  Called with ( slug, \Throwable ).
+	 * @param callable|null                                 $preflight Called with the item right before
+	 *                                                                 its include; a non-empty string it
+	 *                                                                 returns skips the file (the reason).
+	 * @return array<string, string> slug => ok|error|missing|skipped.
+	 */
+	public static function run( array $items, $on_error = null, $preflight = null ) {
+		$include = self::includer();
+		$results = array();
+
+		foreach ( $items as $item ) {
+			$slug = (string) $item['slug'];
+			$path = (string) $item['path'];
+
+			if ( is_callable( $preflight ) && '' !== (string) call_user_func( $preflight, $item ) ) {
+				$results[ $slug ] = 'skipped';
+				continue;
+			}
+
+			if ( ! is_file( $path ) ) {
+				$results[ $slug ] = 'missing';
+				if ( is_callable( $on_error ) ) {
+					call_user_func( $on_error, $slug, new \RuntimeException( 'Snippet file is missing: ' . basename( $path ) ) );
+				}
+				continue;
+			}
+
+			$level = ob_get_level();
+			ob_start();
+
+			try {
+				$include( $path );
+				$results[ $slug ] = 'ok';
+			} catch ( \Throwable $e ) {
+				$results[ $slug ] = 'error';
+				if ( is_callable( $on_error ) ) {
+					try {
+						call_user_func( $on_error, $slug, $e );
+					} catch ( \Throwable $ignored ) {
+						unset( $ignored );
+					}
+				}
+			} finally {
+				// Drop what the snippet printed, and any buffer it left open.
+				while ( ob_get_level() > $level ) {
+					ob_end_clean();
+				}
+			}
+		}
+
+		return $results;
+	}
+
+	/**
+	 * The include, in a closure with no $this and no class scope.
+	 *
+	 * @return \Closure
+	 */
+	private static function includer() {
+		static $include = null;
+
+		if ( null === $include ) {
+			$include = \Closure::bind(
+				static function () {
+					// The path is read with func_get_arg() so not even a
+					// parameter name leaks into the snippet's scope.
+					include func_get_arg( 0 );
+				},
+				null,
+				null
+			);
+		}
+
+		return $include;
+	}
+}
