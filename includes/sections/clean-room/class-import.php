@@ -57,6 +57,13 @@ class Import {
 	 */
 	const BIG_SYSTEM_GALLONS = 150;
 
+	/**
+	 * The bytes of a tank-log note the Store keeps (Store::insert_log()).
+	 *
+	 * @var int
+	 */
+	const NOTE_BYTES = 2000;
+
 	/* ============================================================== */
 	/*  Markers                                                        */
 	/* ============================================================== */
@@ -349,10 +356,13 @@ class Import {
 				$stock = $stock_by_name[ $key ];
 			}
 
-			$fields = array(
+			// A per box of 0 (or junk) is a value the sheet lacks: Species::normalize()
+			// would turn it into the default 24 over the site's own figure.
+			$per_box = isset( $species['per_box'] ) && is_numeric( $species['per_box'] ) && (int) $species['per_box'] > 0 ? (int) $species['per_box'] : null;
+			$fields  = array(
 				'name'         => $name,
 				'sci_name'     => $sci,
-				'per_box'      => $species['per_box'] ?? null,
+				'per_box'      => $per_box,
 				'my_price'     => $species['my_price'] ?? null,
 				'online_price' => $species['online_price'] ?? null,
 				'online_site'  => $species['online_site'] ?? null,
@@ -689,6 +699,9 @@ class Import {
 		if ( '' !== $outcome ) {
 			$note = '' !== $note ? $note . ' — ' . $outcome : $outcome;
 		}
+		// The Store keeps NOTE_BYTES of a note: cut the text, never the marker
+		// at its end (without it a second run would write the row again).
+		$note = self::cut_bytes( $note, self::NOTE_BYTES - strlen( ' · ' . $marker ) );
 		$note = '' !== $note ? $note . ' · ' . $marker : $marker;
 
 		return array(
@@ -813,6 +826,27 @@ class Import {
 			return null;
 		}
 		return 1 === preg_match( '/-?\d+(?:\.\d+)?/', str_replace( ',', '', (string) $amount ), $m ) ? (float) $m[0] : null;
+	}
+
+	/**
+	 * At most $max bytes of a text, an "…" marking the cut, never half a
+	 * UTF-8 character.
+	 *
+	 * @param string $text Text.
+	 * @param int    $max  Bytes.
+	 * @return string
+	 */
+	public static function cut_bytes( $text, $max ) {
+		$text = (string) $text;
+		$max  = max( 0, (int) $max );
+		if ( strlen( $text ) <= $max ) {
+			return $text;
+		}
+		$cut = substr( $text, 0, max( 0, $max - strlen( '…' ) ) );
+		for ( $i = 0; $i < 3 && '' !== $cut && 1 !== preg_match( '//u', $cut ); $i++ ) {
+			$cut = substr( $cut, 0, -1 );
+		}
+		return rtrim( $cut ) . '…';
 	}
 
 	/**

@@ -133,6 +133,14 @@ $goby   = $store->species_by_name( 'Yellow Test Goby' );
 $wrasse = $store->species_by_name( 'Blue Test Wrasse' );
 check( 'a value the sheet lacks never blanks the site\'s (the goby keeps its price); the sheet\'s price wins where it has one; a group typed on the site is kept', near( $goby['my_price'], 12 ) && near( $wrasse['my_price'], 30 ) && 'My Group' === $wrasse['group_name'] && 'Testus caeruleus' === $wrasse['sci_name'] );
 check( 'an existing order is never overwritten (the closed old batch stays closed)', 'closed' === $store->order_by_ref( '2026-1' )['status'] );
+$zero = $map;
+foreach ( $zero['species'] as $i => $row ) {
+	if ( 'Red Test Blenny' === $row['name'] ) {
+		$zero['species'][ $i ]['per_box'] = 0;
+	}
+}
+Import::run( $zero, $store, $options );
+check( 'a per box of 0 in the sheet is a value it lacks: the site\'s 75 stays (not the default 24)', 75 === $store->species_by_name( 'Red Test Blenny' )['per_box'] );
 
 echo "9. Options: no stays, no logs, another building\n";
 $store2 = new Fake_Store();
@@ -170,7 +178,10 @@ check( 'an unknown medication keeps its name; no amount → no value', 'Kanamyci
 $e = Import::log_entry( array( 'process' => 'Lost Fish', 'amount' => 2, 'date' => '2026-03-03', 'time' => '09:00', 'result' => 'one wrasse' ), '2026-3', 4 );
 check( 'anything else is a note with the text, the amount and the result', array( 'kind' => 'note', 'value' => null, 'note' => 'Lost Fish 2 — one wrasse · import:2026-3#4', 'logged_at' => '2026-03-03 09:00' ) === $e );
 check( '"Tested Copper" / "Copper test" is a copper reading', 'copper' === Import::log_entry( array( 'process' => 'Tested Copper', 'amount' => 2.4, 'date' => '2026-03-03' ), '2026-3', 5 )['kind'] && 'copper' === Import::log_entry( array( 'process' => 'copper test', 'amount' => '2.4', 'date' => '2026-03-03' ), '2026-3', 5 )['kind'] && 2.4 === Import::log_entry( array( 'process' => 'copper test', 'amount' => '2.4', 'date' => '2026-03-03' ), '2026-3', 5 )['value'] );
-check( 'no date → null', null === Import::log_entry( array( 'process' => 'Dosed Metro', 'amount' => 5, 'date' => null ), '2026-3', 6 ) && null === Import::log_entry( array( 'process' => 'Dosed Metro', 'date' => 'soon' ), '2026-3', 6 ) );
+$e = Import::log_entry( array( 'process' => 'Notes', 'date' => '2026-03-03', 'result' => str_repeat( 'é long test note ', 200 ) ), '2026-3', 7 );
+check( 'a note longer than the Store keeps is cut before its marker: at most 2000 bytes, valid UTF-8, the marker found again (a second run skips it)', strlen( $e['note'] ) <= Import::NOTE_BYTES && 1 === preg_match( '//u', $e['note'] ) && 'import:2026-3#7' === Import::marker_of( $e['note'] ) && false !== strpos( $e['note'], '… · import:2026-3#7' ) );
+check( 'cut_bytes: short text untouched, never half a character', 'abc' === Import::cut_bytes( 'abc', 10 ) && 'éé…' === Import::cut_bytes( 'éééé', 7 ) && 'aa…' === Import::cut_bytes( 'aaééé', 6 ) );
+check( 'no date → null',null === Import::log_entry( array( 'process' => 'Dosed Metro', 'amount' => 5, 'date' => null ), '2026-3', 6 ) && null === Import::log_entry( array( 'process' => 'Dosed Metro', 'date' => 'soon' ), '2026-3', 6 ) );
 check( 'amount_text / amount_number', '55' === Import::amount_text( 55 ) && '5.125' === Import::amount_text( 5.125 ) && '5.125 G' === Import::amount_text( ' 5.125  G ' ) && '' === Import::amount_text( null ) && 5.125 === Import::amount_number( '5.125 G' ) && 8.0 === Import::amount_number( '8 & 20' ) && 1500.0 === Import::amount_number( '1,500 ml' ) && null === Import::amount_number( 'some' ) && null === Import::amount_number( null ) && 20.0 === Import::amount_number( 20 ) );
 check( 'within_days: today, 45 days back, not 46; junk never', Import::within_days( '2026-10-17', $today, 45 ) && Import::within_days( '2026-09-02', $today, 45 ) && ! Import::within_days( '2026-09-01', $today, 45 ) && Import::within_days( '2026-10-20', $today, 45 ) && ! Import::within_days( '', $today, 45 ) && ! Import::within_days( '2026-10-17', 'x', 45 ) );
 check( 'site_to_utc (Chicago, DST and not)', '2026-07-02 17:30:00' === Import::site_to_utc( '2026-07-02 12:30' ) && '2026-01-14 15:00:00' === Import::site_to_utc( '2026-01-14 09:00' ) );
@@ -186,5 +197,14 @@ $lines = Admin_Import::summary_lines( $r );
 check( 'the result in plain lines', 5 === count( $lines ) && 'Species: 5 added, 0 updated, 0 skipped.' === $lines[0] && 'Orders: 3 created with 7 lines, 0 already on the site (skipped).' === $lines[1] && 'Stays: 2 created from 1 recent orders, 0 lines skipped (already checked in or nothing received).' === $lines[2] && 'Treatment logs: 6 written, 0 skipped (already there, or undated).' === $lines[3] && 'Box rates: 5 rows in Settings now.' === $lines[4], json_encode( $lines ) );
 check( 'the .htaccess refuses both Apache generations; the file name is random with the extension', false !== strpos( Admin_Import::htaccess(), 'Require all denied' ) && false !== strpos( Admin_Import::htaccess(), 'Deny from all' ) && 1 === preg_match( '/^workbook-0-[A-Za-z0-9]{16}\.xlsm$/', Admin_Import::file_name( '/tmp', 'FisHotel-2026.xlsm', '.XLSM' ) ) && 20971520 === Admin_Import::MAX_BYTES && array( 'xlsx', 'xlsm' ) === array_keys( Admin_Import::MIMES ) );
 check( 'system_label on the panel\'s buildings', '205 gal system' === Layout::system_label( $spa[0]['gallons'] ) );
+$xlsx_mime = Admin_Import::MIMES['xlsx'];
+$refused   = array(
+	'ext'             => false,
+	'type'            => false,
+	'proper_filename' => false,
+);
+check( 'check_filetype: an .xlsm that fileinfo calls an .xlsx (what WordPress refuses) gets the .xlsm type back', array( 'ext' => 'xlsm', 'type' => Admin_Import::MIMES['xlsm'], 'proper_filename' => false ) === Admin_Import::check_filetype( $refused, 'FisHotel-2026.XLSM', $xlsx_mime ) );
+check( 'check_filetype: a renamed PHP or text file stays refused; an accepted file is left alone', $refused === Admin_Import::check_filetype( $refused, 'FisHotel-2026.xlsm', 'text/x-php' ) && $refused === Admin_Import::check_filetype( $refused, 'notes.txt', $xlsx_mime ) && $refused === Admin_Import::check_filetype( $refused, 'x.xlsm', false ) && array( 'ext' => 'xlsx', 'type' => $xlsx_mime, 'proper_filename' => false ) === Admin_Import::check_filetype( array( 'ext' => 'xlsx', 'type' => $xlsx_mime, 'proper_filename' => false ), 'a.xlsx', $xlsx_mime ) );
+check( 'workbook_year: the year in the client\'s name, else the site\'s — never the stored random name or the user id in it', 2025 === Admin_Import::workbook_year( 'FisHotel-2025 (1).xlsm', $today ) && 2026 === Admin_Import::workbook_year( 'fishotel.xlsm', $today ) && 2026 === Admin_Import::workbook_year( 'fishotel.xlsm', '' ) );
 
 fh_finish();

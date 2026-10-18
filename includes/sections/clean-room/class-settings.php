@@ -527,7 +527,8 @@ class Settings {
 				}
 				$renamed = array();
 				foreach ( $templates as $key => $steps ) {
-					$renamed[ $key === $template ? $name : $key ] = $steps;
+					// A digits-only name ("21") is an int key in PHP: compare as text.
+					$renamed[ (string) $key === $template ? $name : $key ] = $steps;
 				}
 				$templates = $renamed;
 				if ( $protocols['default'] === $template ) {
@@ -684,6 +685,24 @@ class Settings {
 	}
 
 	/**
+	 * The layout form's system gallons (pure): blank = null (the sum of
+	 * the tanks), a number as a whole number — a negative one kept so
+	 * Layout::validate_building() refuses it instead of absint() quietly
+	 * turning "-205" into 205 —, anything else as typed (refused there too,
+	 * never read as 0 = blank).
+	 *
+	 * @param mixed $value Raw field.
+	 * @return int|string|null
+	 */
+	public static function gallons_input( $value ) {
+		$text = is_scalar( $value ) ? trim( (string) $value ) : '';
+		if ( '' === $text ) {
+			return null;
+		}
+		return is_numeric( $text ) ? (int) round( (float) $text ) : $text;
+	}
+
+	/**
 	 * Validate and store a building from a raw payload.
 	 *
 	 * @param Store $store    Store.
@@ -700,7 +719,7 @@ class Settings {
 
 		$gallons = $current ? $current['system_gallons'] : null;
 		if ( array_key_exists( 'system_gallons', $raw ) && is_scalar( $raw['system_gallons'] ) ) {
-			$gallons = '' === trim( (string) $raw['system_gallons'] ) ? null : absint( $raw['system_gallons'] );
+			$gallons = self::gallons_input( $raw['system_gallons'] );
 		}
 
 		$building = array(

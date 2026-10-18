@@ -3,10 +3,14 @@
  * Dependency-free reader for Excel .xlsx / .xlsm workbooks.
  *
  * Reads cached cell values only (formulas are never evaluated). The zip
- * container is handled by ZipArchive, the big parts (worksheets, shared
- * strings) are streamed with XMLReader and the small parts (workbook,
- * relationships, styles) are parsed with SimpleXML. No WordPress functions
- * are used so the class can be unit-tested headless.
+ * container is handled by ZipArchive; every part is read through a
+ * bounded stream (never more than the entry limit, whatever the zip's
+ * directory claims, and refused when its length does not match it), the
+ * big parts (worksheets, shared strings) are then parsed with XMLReader
+ * and the small parts (workbook, relationships, styles) with SimpleXML. A
+ * sheet or a shared-strings table with more values than the cell limit is
+ * refused, so a small file cannot exhaust the memory. No WordPress
+ * functions are used so the class can be unit-tested headless.
  *
  * Values come back as PHP scalars: string, int, float, bool or null.
  * Serial numbers in cells styled with a date / time number format are
@@ -33,6 +37,14 @@ class Workbook {
 	/** Refuse any zip entry larger than this many bytes when uncompressed (zip-bomb guard). */
 	const DEFAULT_MAX_ENTRY_BYTES = 52428800;
 
+	/**
+	 * Refuse a sheet (or a shared-strings table) holding more values than
+	 * this: a 50 MB part of one-cell rows would otherwise grow to some
+	 * 800 MB of PHP arrays. The FisHotel workbook's sheets hold a few
+	 * thousand values each.
+	 */
+	const DEFAULT_MAX_CELLS = 300000;
+
 	/** Serial number of 1970-01-01 in the 1900 date system. */
 	const UNIX_EPOCH_SERIAL = 25569;
 
@@ -47,6 +59,12 @@ class Workbook {
 
 	/** @var int */
 	private $max_entry_bytes = self::DEFAULT_MAX_ENTRY_BYTES;
+
+	/** @var int */
+	private $max_cells = self::DEFAULT_MAX_CELLS;
+
+	/** @var string The shared strings' refusal ('' when they loaded whole). */
+	private $strings_error = '';
 
 	/** @var string[] Sheet names that are never opened (compared case-insensitively, trimmed). */
 	private $refused = array( 'PW' );
@@ -76,11 +94,14 @@ class Workbook {
 	private $cache = array();
 
 	/**
-	 * @param array $options Optional: 'max_entry_bytes' (int), 'refuse' (string[] of extra sheet names to refuse).
+	 * @param array $options Optional: 'max_entry_bytes' (int), 'max_cells' (int), 'refuse' (string[] of extra sheet names to refuse).
 	 */
 	public function __construct( $options = array() ) {
 		if ( isset( $options['max_entry_bytes'] ) && (int) $options['max_entry_bytes'] > 0 ) {
 			$this->max_entry_bytes = (int) $options['max_entry_bytes'];
+		}
+		if ( isset( $options['max_cells'] ) && (int) $options['max_cells'] > 0 ) {
+			$this->max_cells = (int) $options['max_cells'];
 		}
 		if ( isset( $options['refuse'] ) && is_array( $options['refuse'] ) ) {
 			foreach ( $options['refuse'] as $name ) {
@@ -189,14 +210,15 @@ class Workbook {
 			// Nothing was modified, so close() only releases the handle.
 			@$this->zip->close();
 		}
-		$this->zip         = null;
-		$this->path        = '';
-		$this->sheets      = array();
-		$this->sheet_index = array();
-		$this->strings     = null;
-		$this->style_kinds = null;
-		$this->cache       = array();
-		$this->date1904    = false;
+		$this->zip           = null;
+		$this->path          = '';
+		$this->sheets        = array();
+		$this->sheet_index   = array();
+		$this->strings       = null;
+		$this->strings_error = '';
+		$this->style_kinds   = null;
+		$this->cache         = array();
+		$this->date1904      = false;
 	}
 
 	/** @return string The last error message ('' if none). */
@@ -567,7 +589,10 @@ class Workbook {
 	}
 
 	/**
-	 * Read a (small) zip entry into a string.
+	 * Read a zip entry into a string through a bounded stream: never more
+	 * than the entry limit whatever the zip's directory claims (a crafted
+	 * zip can declare 1 KB for a part that inflates to gigabytes), and
+	 * refused when the bytes read do not match the declared size.
 	 *
 	 * @param string $entry
 	 * @return string|null
@@ -586,9 +611,28 @@ class Workbook {
 			$this->fail( sprintf( 'Refusing part %s: %d bytes uncompressed exceeds the %d byte limit.', $entry, $stat['size'], $this->max_entry_bytes ) );
 			return null;
 		}
-		$data = $this->zip->getFromIndex( $index );
-		if ( false === $data ) {
+		$name   = $this->zip->getNameIndex( $index );
+		$stream = false !== $name ? $this->zip->getStream( $name ) : false;
+		if ( ! $stream ) {
 			$this->fail( 'Cannot read part: ' . $entry );
+			return null;
+		}
+		$data = '';
+		while ( ! feof( $stream ) ) {
+			$chunk = fread( $stream, 1048576 );
+			if ( false === $chunk ) {
+				break;
+			}
+			$data .= $chunk;
+			if ( strlen( $data ) > $this->max_entry_bytes ) {
+				fclose( $stream );
+				$this->fail( sprintf( 'Refusing part %s: it inflates past the %d byte limit.', $entry, $this->max_entry_bytes ) );
+				return null;
+			}
+		}
+		fclose( $stream );
+		if ( false !== $stat && isset( $stat['size'] ) && strlen( $data ) !== (int) $stat['size'] ) {
+			$this->fail( sprintf( 'Refusing part %s: it is damaged (%d bytes where the zip says %d).', $entry, strlen( $data ), (int) $stat['size'] ) );
 			return null;
 		}
 		return $data;
@@ -674,8 +718,9 @@ class Workbook {
 	}
 
 	/**
-	 * Open an XMLReader on a zip entry, streaming through the zip:// wrapper
-	 * when possible and falling back to an in-memory string otherwise.
+	 * Open an XMLReader on a zip entry, read through the bounded
+	 * read_entry() (never the zip:// wrapper, which streams a part to its
+	 * real end whatever size the zip declares).
 	 *
 	 * @param string $entry
 	 * @return \XMLReader|null
@@ -684,21 +729,14 @@ class Workbook {
 		if ( ! $this->entry_size_ok( $entry ) ) {
 			return null;
 		}
-		$reader = new \XMLReader();
-		$opened = false;
-		if ( false === strpos( $this->path, '#' ) ) {
-			$opened = @$reader->open( 'zip://' . $this->path . '#' . $entry, null, LIBXML_NONET );
+		$xml = $this->read_entry( $entry );
+		if ( null === $xml ) {
+			return null;
 		}
-		if ( ! $opened ) {
-			$xml = $this->read_entry( $entry );
-			if ( null === $xml ) {
-				return null;
-			}
-			$reader = new \XMLReader();
-			if ( ! @$reader->XML( $xml, null, LIBXML_NONET ) ) {
-				$this->fail( 'Cannot parse part: ' . $entry );
-				return null;
-			}
+		$reader = new \XMLReader();
+		if ( '' === $xml || ! @$reader->XML( $xml, null, LIBXML_NONET ) ) {
+			$this->fail( 'Cannot parse part: ' . $entry );
+			return null;
 		}
 		$reader->setParserProperty( \XMLReader::SUBST_ENTITIES, false );
 		$reader->setParserProperty( \XMLReader::LOADDTD, false );
@@ -776,6 +814,11 @@ class Workbook {
 		$previous = libxml_use_internal_errors( true );
 		while ( $reader->read() ) {
 			if ( \XMLReader::ELEMENT === $reader->nodeType && 'si' === $reader->localName ) {
+				if ( count( $this->strings ) >= $this->max_cells ) {
+					$this->strings       = array();
+					$this->strings_error = sprintf( 'Refusing the shared strings %s: more than %d values.', $this->strings_entry, $this->max_cells );
+					break;
+				}
 				$this->strings[] = self::read_rich_text( $reader );
 			}
 		}
@@ -850,6 +893,8 @@ class Workbook {
 		$row_num  = 0;
 		$col_idx  = 0;
 		$in_data  = false;
+		$cells    = 0;
+		$refusal  = '';
 
 		while ( $reader->read() ) {
 			$type = $reader->nodeType;
@@ -925,13 +970,25 @@ class Workbook {
 			}
 
 			$value = $this->cell_value( $t, $s, $v, $is_text );
+			if ( 's' === $t && '' !== $this->strings_error ) {
+				$refusal = $this->strings_error;
+				break;
+			}
 			if ( null !== $value && $row_num > 0 && $col_idx > 0 ) {
+				if ( ++$cells > $this->max_cells ) {
+					$refusal = sprintf( 'Refusing part %s: more than %d values.', $entry, $this->max_cells );
+					break;
+				}
 				$rows[ $row_num ][ self::col_letter( $col_idx ) ] = $value;
 			}
 		}
 		$reader->close();
 		libxml_clear_errors();
 		libxml_use_internal_errors( $previous );
+		if ( '' !== $refusal ) {
+			$this->fail( $refusal );
+			return null;
+		}
 		return $rows;
 	}
 

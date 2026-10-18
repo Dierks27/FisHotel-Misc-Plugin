@@ -370,7 +370,9 @@ class Protocol {
 	/**
 	 * The medication a label or note names, by alias (whole words, any
 	 * case): "Copper Power to 2.0" → copper, "Dosed Metro" → metro,
-	 * "Praziquantel 1" → prazi; null when none is named.
+	 * "Praziquantel 1" → prazi; the one named FIRST when several are
+	 * ("Metronidazole 5 g — Cu 2.3" is a metro dose, not copper); null when
+	 * none is named.
 	 *
 	 * @param string $text Step label, log note or a typed name.
 	 * @return string|null Key of MEDICATIONS.
@@ -383,14 +385,17 @@ class Protocol {
 		if ( isset( self::MEDICATIONS[ $text ] ) ) {
 			return $text;
 		}
+		$found = null;
+		$first = null;
 		foreach ( self::MEDICATIONS as $key => $medication ) {
 			foreach ( $medication['aliases'] as $alias ) {
-				if ( 1 === preg_match( '/(?<![a-z])' . preg_quote( $alias, '/' ) . '(?![a-z])/', $text ) ) {
-					return $key;
+				if ( 1 === preg_match( '/(?<![a-z])' . preg_quote( $alias, '/' ) . '(?![a-z])/', $text, $m, PREG_OFFSET_CAPTURE ) && ( null === $first || $m[0][1] < $first ) ) {
+					$first = $m[0][1];
+					$found = $key;
 				}
 			}
 		}
-		return null;
+		return $found;
 	}
 
 	/**

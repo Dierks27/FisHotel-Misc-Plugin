@@ -1535,8 +1535,11 @@ class Store {
 		global $wpdb;
 
 		try {
+			// The newest reading per tank / building by its logged time, not by
+			// id: an import writes old readings with new ids, and they must not
+			// replace a reading taken on the phone today.
 			$rows = $wpdb->get_results(
-				'SELECT l.tank_id, l.building_id, l.value, l.logged_at FROM ' . self::table( 'tank_logs' ) . ' l INNER JOIN (SELECT tank_id, building_id, MAX(id) AS max_id FROM ' . self::table( 'tank_logs' ) . " WHERE kind = 'copper' AND value IS NOT NULL GROUP BY tank_id, building_id) m ON m.max_id = l.id", // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				'SELECT l.tank_id, l.building_id, l.value, l.logged_at FROM ' . self::table( 'tank_logs' ) . " l WHERE l.kind = 'copper' AND l.value IS NOT NULL AND NOT EXISTS (SELECT 1 FROM " . self::table( 'tank_logs' ) . " n WHERE n.kind = 'copper' AND n.value IS NOT NULL AND n.tank_id = l.tank_id AND n.building_id <=> l.building_id AND ( n.logged_at > l.logged_at OR ( n.logged_at = l.logged_at AND n.id > l.id ) ))", // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 				ARRAY_A
 			);
 		} catch ( \Throwable $e ) {

@@ -7,7 +7,9 @@
  * or skip, kept ten minutes in a transient per user → "Import now" with
  * the options (the stays cutoff, the Spa building the recent batches land
  * in, whether the treatment logs come along) → Import::run → a result
- * summary. The file is deleted after the import, on Discard, and when a
+ * summary. The file is deleted after the import, on Discard, by a one-off
+ * cron event scheduled for just after the preview expires (so a preview
+ * nobody comes back to does not leave the workbook behind) and when a
  * later upload finds it expired; the mapped data is never stored outside
  * the Clean Room tables.
  *
@@ -146,6 +148,48 @@ class Admin_Import {
 			}
 		}
 		return $removed;
+	}
+
+	/**
+	 * The wp_check_filetype_and_ext filter of the workbook upload (pure).
+	 * fileinfo reports every OOXML spreadsheet — an .xlsm included — as the
+	 * .xlsx type, which WordPress reads as a mismatch for an .xlsm name and
+	 * refuses ("not allowed to upload this file type"), so Jeff's
+	 * FisHotel-YEAR.xlsm could never be uploaded. An .xlsx / .xlsm name
+	 * whose content fileinfo calls a spreadsheet gets its type back;
+	 * anything else stays as WordPress decided (a renamed PHP or text file
+	 * is still refused), and the reader then insists on a real workbook.
+	 *
+	 * @param array        $data      ext, type, proper_filename.
+	 * @param string       $filename  The client's file name.
+	 * @param string|false $real_mime What fileinfo found (WordPress 5.1+).
+	 * @return array
+	 */
+	public static function check_filetype( $data, $filename, $real_mime ) {
+		$data = is_array( $data ) ? $data : array();
+		$ext  = strtolower( pathinfo( (string) $filename, PATHINFO_EXTENSION ) );
+		if ( ( empty( $data['ext'] ) || empty( $data['type'] ) ) && isset( self::MIMES[ $ext ] ) && in_array( (string) $real_mime, self::MIMES, true ) ) {
+			$data['ext']  = $ext;
+			$data['type'] = self::MIMES[ $ext ];
+		}
+		return $data;
+	}
+
+	/**
+	 * The year of the order refs of batches without a QT start date (pure):
+	 * a 4-digit year in the client's file name, else the site's year —
+	 * never the stored file's random name (or the user id in it).
+	 *
+	 * @param string $client_name The uploaded file's name.
+	 * @param string $today       Site date (Y-m-d).
+	 * @return int
+	 */
+	public static function workbook_year( $client_name, $today ) {
+		if ( 1 === preg_match( '/(20\d\d)/', (string) $client_name, $m ) ) {
+			return (int) $m[1];
+		}
+		$year = (int) substr( (string) $today, 0, 4 );
+		return $year > 2000 ? $year : Import_Map::FALLBACK_YEAR;
 	}
 
 	/**
@@ -332,6 +376,20 @@ class Admin_Import {
 	}
 
 	/**
+	 * fail(), unless a result is already waiting: the second request of a
+	 * double-clicked "Import now" must not replace the first one's result
+	 * with an error.
+	 *
+	 * @param string $message Message.
+	 */
+	private static function fail_unless_result( $message ) {
+		if ( false !== get_transient( self::RESULT_TRANSIENT . (int) get_current_user_id() ) ) {
+			self::redirect();
+		}
+		self::fail( $message );
+	}
+
+	/**
 	 * admin-post: the upload → the private folder → the preview.
 	 */
 	public function handle_upload() {
@@ -375,7 +433,12 @@ class Admin_Import {
 			$uploads['error']   = false;
 			return $uploads;
 		};
+		$filetype = static function ( $data, $tmp_file, $filename, $mimes = null, $real_mime = false ) {
+			unset( $tmp_file, $mimes );
+			return self::check_filetype( $data, $filename, $real_mime );
+		};
 		add_filter( 'upload_dir', $into );
+		add_filter( 'wp_check_filetype_and_ext', $filetype, 10, 5 );
 		$moved = wp_handle_upload(
 			$file,
 			array(
@@ -384,12 +447,15 @@ class Admin_Import {
 				'unique_filename_callback' => array( self::class, 'file_name' ),
 			)
 		);
+		remove_filter( 'wp_check_filetype_and_ext', $filetype, 10 );
 		remove_filter( 'upload_dir', $into );
 
 		if ( ! is_array( $moved ) || isset( $moved['error'] ) || empty( $moved['file'] ) ) {
 			self::fail( is_array( $moved ) && isset( $moved['error'] ) ? (string) $moved['error'] : __( 'The file could not be stored.', 'fishotel-misc-plugin' ) );
 		}
 		$path = (string) $moved['file'];
+		// The file goes even when nobody comes back to the preview.
+		wp_schedule_single_event( time() + self::TTL + MINUTE_IN_SECONDS, Clean_Room::IMPORT_CLEANUP_HOOK, array( basename( $path ) ) );
 
 		$workbook = new Workbook();
 		if ( ! $workbook->open( $path ) ) {
@@ -398,7 +464,7 @@ class Admin_Import {
 			/* translators: %s: the reader's error */
 			self::fail( sprintf( __( 'That file could not be read as a workbook: %s', 'fishotel-misc-plugin' ), $error ) );
 		}
-		$year = 1 === preg_match( '/(20\d\d)/', $client_name, $m ) ? (int) $m[1] : null;
+		$year = self::workbook_year( $client_name, Clean_Room::today() );
 		$map  = Import_Map::map( $workbook, $year );
 		$workbook->close();
 
@@ -451,7 +517,14 @@ class Admin_Import {
 
 		$pending = self::pending();
 		if ( ! $pending ) {
-			self::fail( __( 'The preview expired — upload the workbook again.', 'fishotel-misc-plugin' ) );
+			self::fail_unless_result( __( 'The preview expired — upload the workbook again.', 'fishotel-misc-plugin' ) );
+		}
+		// Claim the preview before importing: only one request can delete the
+		// transient, so a double-click on "Import now" cannot run the import
+		// twice and duplicate stays and logs. The file itself is removed by
+		// discard_pending() below (or by the scheduled cleanup).
+		if ( ! delete_transient( self::PENDING_TRANSIENT . (int) get_current_user_id() ) ) {
+			self::fail_unless_result( __( 'This import is already running or has finished — reload this page in a moment for its result.', 'fishotel-misc-plugin' ) );
 		}
 		if ( ! Store::tables_exist() ) {
 			self::fail( __( 'The Clean Room tables do not exist. Deactivate and reactivate the plugin to create them.', 'fishotel-misc-plugin' ) );
@@ -468,7 +541,7 @@ class Admin_Import {
 			/* translators: %s: the reader's error */
 			self::fail( sprintf( __( 'The stored workbook could not be read again: %s', 'fishotel-misc-plugin' ), $error ) );
 		}
-		$map = Import_Map::map( $workbook, isset( $pending['year'] ) ? $pending['year'] : null );
+		$map = Import_Map::map( $workbook, ! empty( $pending['year'] ) ? (int) $pending['year'] : self::workbook_year( (string) ( $pending['name'] ?? '' ), Clean_Room::today() ) );
 		$workbook->close();
 
 		try {

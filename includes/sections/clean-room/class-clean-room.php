@@ -122,6 +122,14 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 		const FACTS_FILTER = 'fishotel_product_qt_facts';
 
 		/**
+		 * The one-off cron event that deletes an uploaded workbook whose
+		 * import preview expired (Admin_Import).
+		 *
+		 * @var string
+		 */
+		const IMPORT_CLEANUP_HOOK = 'fishotel_cleanroom_import_cleanup';
+
+		/**
 		 * Section base path.
 		 *
 		 * @return string
@@ -195,6 +203,8 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 
 			add_filter( self::FACTS_FILTER, array( self::class, 'filter_facts' ), 10, 2 );
 			add_action( 'save_post_product', array( Store::class, 'clear_species_cache' ), 10, 0 );
+			// Cron runs outside wp-admin: the uploaded workbook's cleanup is hooked on every request.
+			add_action( self::IMPORT_CLEANUP_HOOK, array( self::class, 'import_cleanup' ), 10, 0 );
 
 			$front = new Front_Desk();
 			$front->init();
@@ -216,6 +226,15 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 				$import = new Admin_Import();
 				$import->init();
 			}
+		}
+
+		/**
+		 * The one-off cron event Admin_Import schedules for every upload:
+		 * delete the workbooks whose preview has expired.
+		 */
+		public static function import_cleanup() {
+			require_once self::path() . 'class-admin-import.php';
+			Admin_Import::cleanup();
 		}
 
 		/**

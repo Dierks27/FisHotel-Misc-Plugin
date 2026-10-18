@@ -61,7 +61,9 @@ system temp directory (`FH_TEST_TMP` overrides).
   seed's system gallons (205 / 100 on the Spa buildings, none elsewhere),
   `system_gallons()` (the typed figure, else the sum of the building's
   tanks by id or by the hundreds, offline tanks dry, 0 = blank),
-  `system_label()`, the schedule-name and gallons validation.
+  `system_label()`, the schedule-name and gallons validation (the layout
+  form's `Settings::gallons_input()`: "-205" and junk refused, never
+  stored as 205 or blank).
 - **replay-test.php** — `day_number()` across the March and November
   DST changes (and a whole year), `add_days()`, the sale-ready date (N
   days after check-in, the override), `note_date()`, event dates in
@@ -103,15 +105,17 @@ system temp directory (`FH_TEST_TMP` overrides).
   `steps_for()` / `template_for()` (the building's template, else the
   default, through Settings when nothing is passed); the medication
   aliases (`medication_key()` on step labels and log notes, whole words
-  — "Cumin" is not Cu), the dose suggestions (metro 5.1 g on 205 gal, 2.5
+  — "Cumin" is not Cu —, the medication named first when several are),
+  the dose suggestions (metro 5.1 g on 205 gal, 2.5
   on 100; two decimals below one gram; none for copper), `dose_text()`;
-  the dose tick (a metro dose ticks Metronidazole, not the copper test;
+  the dose tick (a metro dose ticks Metronidazole, not the copper test,
+  nor Copper Power when its note mentions Cu;
   the alias works through an import marker; a plain note ticks nothing;
   a copper dose ticks "Copper Power to 2.0", never the copper test);
   the Settings template operations (save, add — a seeded name brings its
   schedule back —, rename with the default following and the buildings
-  told, delete never the last one, make default, reset to the seed or to
-  the daily feeding).
+  told, a digits-only name renamed too, delete never the last one, make
+  default, reset to the seed or to the daily feeding).
 - **parser-test.php** — arrivals (Spa-only: a Clean Room tank, spoken or
   implied, needs a Spa tank), the loss family as the fastest path ("lost
   one cardinal in 521", "2 dead in 513", DOA / jumped / disease /
@@ -238,8 +242,11 @@ system temp directory (`FH_TEST_TMP` overrides).
   parentheses, the `PW` sheet refused by name / case / whitespace, cells
   and rows without `r` attributes, phonetic runs skipped, `close()`; the
   failure modes (missing, not a zip, no workbook.xml, a directory), the
-  1904 date system, the zip-bomb guard, extra refused names, every static
-  helper (column letters, serials around the 1900 leap-day phantom,
+  1904 date system, the zip-bomb guard (a part over the limit, a part whose
+  zip directory lies about its size — damaged, or refused at the limit —,
+  the value cap on a sheet and on the shared strings), external entities
+  never resolved in a sheet or the shared strings, extra refused names,
+  every static helper (column letters, serials around the 1900 leap-day phantom,
   format kinds).
 - **import-map-test.php** — the mapper on the synthetic fixture: only the
   known sheets opened (never `PW`), the species rows until the first blank
@@ -268,13 +275,15 @@ system temp directory (`FH_TEST_TMP` overrides).
   reading, the result appended, Chicago times to UTC) and the Board's last
   doses from them; the second run (species updated, nothing else created,
   a price the sheet lacks kept, a group typed on the site kept, the
-  sheet's price winning); the options (no stays / no logs, a long cutoff
+  sheet's price winning, a per box of 0 never replacing the site's); the options (no stays / no logs, a long cutoff
   on the other building, a Clean Room building ignored); the system →
   building rule in every branch; `log_entry()` for a dose, "Added X", an
-  unknown medication, a note, a copper test, no date; the amount, date and
+  unknown medication, a note, a copper test, no date, a note too long for
+  the Store cut before its marker (`cut_bytes()`); the amount, date and
   time helpers; the admin panel's pure helpers (the options sanitised and
   defaulted, the default building, the summary lines, the `.htaccess`, the
-  random file name).
+  random file name, `check_filetype()` — an .xlsm that fileinfo calls an
+  .xlsx accepted, a renamed PHP file still refused —, `workbook_year()`).
 - **fake-store.php** — not a test (exits 0 when run directly): the
   in-memory store the above drives (tanks and buildings from the seed,
   stays, events, logs — per tank or per building, with `logs_on_date()`,

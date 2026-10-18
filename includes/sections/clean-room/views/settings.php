@@ -106,7 +106,7 @@ $tab = 'settings';
 				<label class="fh-cr-label" for="fh-cr-template"><?php esc_html_e( 'Template', 'fishotel-misc-plugin' ); ?></label>
 				<select id="fh-cr-template" class="fh-cr-input fh-cr-template-pick">
 					<?php foreach ( array_keys( $protocols['templates'] ) as $fh_name ) : ?>
-						<option value="<?php echo esc_attr( $fh_name ); ?>" <?php selected( $template_name, $fh_name ); ?>><?php echo esc_html( $fh_name . ( $fh_name === $protocols['default'] ? ' ' . __( '(default)', 'fishotel-misc-plugin' ) : '' ) ); ?></option>
+						<option value="<?php echo esc_attr( $fh_name ); ?>" <?php selected( $template_name, $fh_name ); ?>><?php echo esc_html( $fh_name . ( (string) $fh_name === $protocols['default'] ? ' ' . __( '(default)', 'fishotel-misc-plugin' ) : '' ) ); ?></option>
 					<?php endforeach; ?>
 				</select>
 				<button type="button" class="button button-small fh-cr-template-add"><?php esc_html_e( 'Add', 'fishotel-misc-plugin' ); ?></button>

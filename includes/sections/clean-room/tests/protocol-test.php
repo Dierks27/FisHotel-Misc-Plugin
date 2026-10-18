@@ -174,7 +174,8 @@ check( 'Settings::protocols() with nothing stored is the seed set', Protocol::TE
 
 echo "10. Medications: aliases, suggestions, the dose text\n";
 check( 'medication_key by alias, whole words, any case', 'copper' === Protocol::medication_key( 'Copper Power to 2.0' ) && 'copper' === Protocol::medication_key( 'Dosed Copper' ) && 'copper' === Protocol::medication_key( 'cu 2.4' ) && 'metro' === Protocol::medication_key( 'Dosed Metro' ) && 'metro' === Protocol::medication_key( 'Metronidazole + Kanamycin + Furan-2' ) && 'prazi' === Protocol::medication_key( 'Praziquantel 2' ) && 'prazi' === Protocol::medication_key( 'prazi' ) && 'chloroquine' === Protocol::medication_key( 'Chloroquine 12 mg/gal' ) && 'chloroquine' === Protocol::medication_key( 'Dosed CP' ) && 'fenbendazole' === Protocol::medication_key( 'fenben 2 g' ) && 'salt' === Protocol::medication_key( 'Added Salt' ) && 'formalin' === Protocol::medication_key( 'FORMALIN 20 ml' ) );
-check( 'no medication: null (Cumin is not Cu, Furan-2 has no key, blank)', null === Protocol::medication_key( 'Cumin test' ) && null === Protocol::medication_key( 'Furan-2' ) && null === Protocol::medication_key( '' ) && null === Protocol::medication_key( 'Feed' ) );
+check( 'several named: the first one wins, not the first in the list (an imported metro dose whose result reads "Cu 2.3" is metro)', 'metro' === Protocol::medication_key( 'Metronidazole 5.125 G — Cu 2.3 before · import:2026-1#2' ) && 'prazi' === Protocol::medication_key( 'Praziquantel 2 g after the copper test' ) && 'copper' === Protocol::medication_key( 'Copper Power 55 ml, metro tomorrow' ) );
+check( 'no medication: null (Cumin is not Cu, Furan-2 has no key, blank)',null === Protocol::medication_key( 'Cumin test' ) && null === Protocol::medication_key( 'Furan-2' ) && null === Protocol::medication_key( '' ) && null === Protocol::medication_key( 'Feed' ) );
 check( 'labels', 'Metronidazole' === Protocol::medication_label( 'metro' ) && 'Copper Power' === Protocol::medication_label( 'copper' ) && '' === Protocol::medication_label( 'x' ) );
 check( 'dose_suggestion: metro 25 mg/gal → 5.1 g on 205, 2.5 g on 100', array( 'amount' => 5.1, 'unit' => 'g' ) === Protocol::dose_suggestion( 'metro', 205 ) && array( 'amount' => 2.5, 'unit' => 'g' ) === Protocol::dose_suggestion( 'metro', 100 ) );
 check( 'prazi 9.5 mg/gal → 1.9 g on 205; formalin 1 ml / 10 gal → 20.5 ml; chloroquine 10 mg/gal → 1 g on 100; fenbendazole 1 g / 100 gal → 0.4 g on 40', 1.9 === Protocol::dose_suggestion( 'prazi', 205 )['amount'] && array( 'amount' => 20.5, 'unit' => 'ml' ) === Protocol::dose_suggestion( 'formalin', 205 ) && 1.0 === Protocol::dose_suggestion( 'chloroquine', 100 )['amount'] && 0.4 === Protocol::dose_suggestion( 'fenbendazole', 40 )['amount'] );
@@ -189,6 +190,12 @@ foreach ( $todo as $item ) {
 	$done[ $item['label'] ] = $item['done'];
 }
 check( 'day 8 in the Spa: a metro dose ticks Metronidazole, not the copper test nor Praziquantel 1', true === $done['Metronidazole'] && false === $done['Copper test'] && false === $done['Praziquantel 1'] && false === $done['Feed'], json_encode( $done ) );
+$todo = Protocol::todo( $seed, array( array( 'id' => 12, 'species' => 'X', 'qty_live' => 2, 'checkin_date' => '2026-04-02', 'day' => 2 ) ), '2026-04-03', 'spa', array( array( 'kind' => 'dose', 'note' => 'Metronidazole 5.1 g — Cu 2.3 before' ) ) );
+$done = array();
+foreach ( $todo as $item ) {
+	$done[ $item['label'] ] = $item['done'];
+}
+check( 'day 2: a metro dose whose note mentions Cu ticks Metronidazole, not Copper Power to 2.4', true === $done['Metronidazole'] && false === $done['Copper Power to 2.4'], json_encode( $done ) );
 $todo = Protocol::todo( $seed, array( $stays[1] ), '2026-04-03', 'spa', array( array( 'kind' => 'dose', 'value' => 2, 'note' => 'prazi 2 g · import:2026-1#4' ), array( 'kind' => 'note', 'note' => 'Metronidazole 5.1 g' ) ) );
 $done = array();
 foreach ( $todo as $item ) {
@@ -218,7 +225,9 @@ check( 'add: a seeded name brings its schedule back', empty( $r['error'] ) && $c
 check( 'add: a blank or taken name, or the 21st template, is refused', ! empty( Settings::apply_protocol_op( $base, 'add', array( 'name' => '' ) )['error'] ) && ! empty( Settings::apply_protocol_op( $base, 'add', array( 'name' => 'CQ' ) )['error'] ) && ! empty( Settings::apply_protocol_op( Protocol::normalize_option( array( 'templates' => array_fill_keys( array_map( static function ( $i ) { return 't' . $i; }, range( 1, 20 ) ), $seed ) ) ), 'add', array( 'name' => 'one more' ) )['error'] ) );
 $r = Settings::apply_protocol_op( $base, 'rename', array( 'template' => '14 Day CM', 'name' => 'Copper + Metro' ) );
 check( 'rename: the key moves in place, the default follows, the buildings are told', empty( $r['error'] ) && array( 'Copper + Metro', '14 Day CF', 'Xtra 14 Day CF', 'CQ', 'Trifecta' ) === array_keys( $r['protocols']['templates'] ) && 'Copper + Metro' === $r['protocols']['default'] && array( '14 Day CM', 'Copper + Metro' ) === $r['renamed'] && 'Copper + Metro' === $r['template'] );
-check( 'rename: onto a taken name refused, onto its own name fine', ! empty( Settings::apply_protocol_op( $base, 'rename', array( 'template' => 'CQ', 'name' => 'Trifecta' ) )['error'] ) && empty( Settings::apply_protocol_op( $base, 'rename', array( 'template' => 'CQ', 'name' => 'CQ' ) )['error'] ) );
+$r = Settings::apply_protocol_op( Settings::apply_protocol_op( $base, 'add', array( 'name' => '21' ) )['protocols'], 'rename', array( 'template' => '21', 'name' => '21 Day' ) );
+check( 'rename a digits-only name ("21", an int key in PHP): the template really moves, as the buildings are told', empty( $r['error'] ) && isset( $r['protocols']['templates']['21 Day'] ) && ! isset( $r['protocols']['templates']['21'] ) && array( '21', '21 Day' ) === $r['renamed'], json_encode( array_keys( $r['protocols']['templates'] ) ) );
+check( 'rename: onto a taken name refused, onto its own name fine',! empty( Settings::apply_protocol_op( $base, 'rename', array( 'template' => 'CQ', 'name' => 'Trifecta' ) )['error'] ) && empty( Settings::apply_protocol_op( $base, 'rename', array( 'template' => 'CQ', 'name' => 'CQ' ) )['error'] ) );
 $r = Settings::apply_protocol_op( $base, 'delete', array( 'template' => '14 Day CM' ) );
 check( 'delete the default: gone, the first remaining is the default, the buildings are cleared', empty( $r['error'] ) && ! isset( $r['protocols']['templates']['14 Day CM'] ) && '14 Day CF' === $r['protocols']['default'] && array( '14 Day CM', '' ) === $r['renamed'] && '14 Day CF' === $r['template'] );
 $one = Protocol::normalize_option( array( 'templates' => array( 'Only' => $seed ) ) );

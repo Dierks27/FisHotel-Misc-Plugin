@@ -10,6 +10,34 @@ require_once __DIR__ . '/xlsx-builder.php';
 
 use FisHotel\Misc\Sections\Clean_Room\Workbook;
 
+/**
+ * Rewrite the uncompressed size a zip declares for one entry (local
+ * header and central directory) — a crafted zip that lies about a part.
+ *
+ * @param string $path  Zip file.
+ * @param string $entry Entry name.
+ * @param int    $size  The size to claim.
+ * @return bool Whether the entry was found and patched.
+ */
+function fh_test_patch_zip_size( $path, $entry, $size ) {
+	$bin   = file_get_contents( $path );
+	$found = false;
+	$pos   = strpos( $bin, "PK\x01\x02" );
+	for ( ; false !== $pos; $pos = strpos( $bin, "PK\x01\x02", $pos ) ) {
+		$name_len = unpack( 'v', substr( $bin, $pos + 28, 2 ) )[1];
+		$extra    = unpack( 'v', substr( $bin, $pos + 30, 2 ) )[1];
+		$comment  = unpack( 'v', substr( $bin, $pos + 32, 2 ) )[1];
+		if ( substr( $bin, $pos + 46, $name_len ) === $entry ) {
+			$local = unpack( 'V', substr( $bin, $pos + 42, 4 ) )[1];
+			$bin   = substr_replace( $bin, pack( 'V', $size ), $pos + 24, 4 );
+			$bin   = substr_replace( $bin, pack( 'V', $size ), $local + 22, 4 );
+			$found = true;
+		}
+		$pos += 46 + $name_len + $extra + $comment;
+	}
+	return $found && false !== file_put_contents( $path, $bin );
+}
+
 $dir  = fh_test_tmp_dir();
 $path = fh_test_write_xlsx(
 	$dir . '/tiny.xlsx',
@@ -171,6 +199,60 @@ check( 'open() with a small entry limit still opens', $guarded->open( $dir . '/b
 check_same( 'oversized sheet part is refused', null, $guarded->rows( 'Big' ) );
 check_contains( 'oversized refusal message', 'exceeds', $guarded->last_error() );
 check_same( 'small sheet part still reads', 1, $guarded->cell( 'Small', 'A1' ) );
+
+// A zip whose directory LIES about a part's size (declares 100 bytes for
+// the ~4 KB Big sheet): the read is bounded by the limit, not by the claim,
+// and a length that does not match the claim is refused as damaged.
+fh_test_write_xlsx( $dir . '/liar.xlsx', array( 'Big' => $big, 'Small' => array( 'A1' => 1 ) ) );
+check( 'the declared size of the Big sheet is patched to 100 bytes', fh_test_patch_zip_size( $dir . '/liar.xlsx', 'xl/worksheets/sheet1.xml', 100 ) );
+$liar = new Workbook();
+check( 'open() a zip with a lying part', $liar->open( $dir . '/liar.xlsx' ), $liar->last_error() );
+check_same( 'a part whose bytes do not match the declared size is refused', null, $liar->rows( 'Big' ) );
+check_contains( 'the refusal says it is damaged', 'damaged', $liar->last_error() );
+check_same( 'the honest part next to it still reads', 1, $liar->cell( 'Small', 'A1' ) );
+$liar_guarded = new Workbook( array( 'max_entry_bytes' => 1500 ) );
+$liar_guarded->open( $dir . '/liar.xlsx' );
+check_same( 'a lying part that inflates past the limit is refused at the limit', null, $liar_guarded->rows( 'Big' ) );
+check_contains( 'the refusal names the limit', 'inflates past the 1500 byte limit', $liar_guarded->last_error() );
+
+// The value cap: a sheet (or a shared-strings table) with more values than
+// max_cells is refused; a numeric sheet does not need the shared strings.
+fh_test_write_xlsx( $dir . '/cells.xlsx', array( 'Big' => $big, 'Words' => array( 'A1' => 'one', 'A2' => 'two', 'A3' => 'three' ), 'Nums' => array( 'A1' => 1, 'B1' => 2 ) ) );
+$capped = new Workbook( array( 'max_cells' => 50 ) );
+$capped->open( $dir . '/cells.xlsx' );
+check_same( 'a sheet with 120 values is refused under a 50-value cap', null, $capped->rows( 'Big' ) );
+check_contains( 'the refusal names the cap', 'more than 50 values', $capped->last_error() );
+check_same( 'a sheet under the cap reads', array( 1 => array( 'A' => 1, 'B' => 2 ) ), $capped->rows( 'Nums' ) );
+$capped = new Workbook( array( 'max_cells' => 2 ) );
+$capped->open( $dir . '/cells.xlsx' );
+check_same( 'three shared strings under a 2-value cap: the sheet that needs them is refused', null, $capped->rows( 'Words' ) );
+check_contains( 'the refusal names the shared strings', 'shared strings', $capped->last_error() );
+check_same( 'a numeric sheet still reads after that', array( 1 => array( 'A' => 1, 'B' => 2 ) ), $capped->rows( 'Nums' ) );
+check( 'the default cap is generous (300000 values)', 300000 === Workbook::DEFAULT_MAX_CELLS );
+
+// External entities and DTDs are never loaded (sheet, shared strings, styles).
+file_put_contents( $dir . '/secret.txt', 'LEAKED-MARKER' );
+$xxe_dtd = '<!DOCTYPE x [<!ENTITY xxe SYSTEM "file://' . $dir . '/secret.txt">]>';
+fh_test_write_xlsx(
+	$dir . '/xxe.xlsx',
+	array( 'Shared' => array( 'A1' => 'placeholder' ) ),
+	array(
+		'raw_sheets' => array(
+			'Doctype' => '<?xml version="1.0" encoding="UTF-8"?>' . $xxe_dtd
+				. '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+				. '<row r="1"><c r="A1" t="inlineStr"><is><t>a&xxe;b</t></is></c></row></sheetData></worksheet>',
+		),
+	)
+);
+$zip = new ZipArchive();
+$zip->open( $dir . '/xxe.xlsx' );
+$zip->addFromString( 'xl/sharedStrings.xml', '<?xml version="1.0" encoding="UTF-8"?>' . $xxe_dtd . '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="1" uniqueCount="1"><si><t>c&xxe;d</t></si></sst>' );
+$zip->addFromString( 'xl/styles.xml', '<?xml version="1.0" encoding="UTF-8"?>' . $xxe_dtd . '<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><numFmts count="1"><numFmt numFmtId="164" formatCode="&xxe;"/></numFmts><cellXfs count="1"><xf numFmtId="164"/></cellXfs></styleSheet>' );
+$zip->close();
+$xxe = new Workbook();
+check( 'open() a workbook whose parts declare an external entity', $xxe->open( $dir . '/xxe.xlsx' ), $xxe->last_error() );
+check_same( 'the sheet\'s external entity is not resolved', 'ab', $xxe->cell( 'Doctype', 'A1' ) );
+check_same( 'the shared string\'s external entity is not resolved', 'cd', $xxe->cell( 'Shared', 'A1' ) );
 
 // Extra refused names.
 $refusing = new Workbook( array( 'refuse' => array( 'Small' ) ) );

@@ -84,7 +84,8 @@ the species list.
   names copper / Cu) by itself. **Doses** are logged on the whole system
   or one tank (the Dose sheet, below); a dose logged today ticks the due
   `dose` step that names the same medication — by alias, so "Metro" ticks
-  "Metronidazole" and "Copper Power 55 ml" ticks "Copper Power to 2.0" —
+  "Metronidazole" and "Copper Power 55 ml" ticks "Copper Power to 2.0";
+  when a note names several, the one named first counts —
   and a dose on the system ticks it on every tank of that building.
 - Every building is one water: its **system gallons** (sump included —
   Spa 500 holds 205, Spa 600 100; blank = the sum of its tanks) drive the
@@ -362,10 +363,19 @@ whenever Jeff wants the latest Fishlist prices.
    created with an `.htaccess` that refuses every request (both Apache
    generations) and an empty `index.html`; on nginx it is only as private
    as the server's rules, which is why the name is random and the file
-   lives there ten minutes at most.
+   lives there ten minutes at most (a one-off cron event scheduled with
+   the upload deletes it even when nobody comes back to the preview).
+   fileinfo calls every OOXML spreadsheet an .xlsx, which WordPress reads
+   as a mismatch for an .xlsm, so the upload hands an .xlsx / .xlsm name
+   whose content fileinfo calls a spreadsheet its type back (a renamed PHP
+   or text file is still refused).
 2. **Preview.** The reader (`class-workbook.php`: ZipArchive + XMLReader,
    cached values only, formulas never evaluated, the `PW` sheet never
-   opened) and the mapper (`class-import-map.php`: `Fishlist`, `Data`,
+   opened, no DTD or external entity ever loaded, every part read through
+   a bounded stream — at most 50 MB whatever the zip's directory claims,
+   refused when its length does not match the claim — and a sheet or a
+   shared-strings table of more than 300 000 values refused, so a small
+   crafted file cannot exhaust the memory) and the mapper (`class-import-map.php`: `Fishlist`, `Data`,
    `FishSheetStock`, every `Recieved (N)` with its `QT Tanks (N)`, columns
    found by header text, labels by text) turn the file into species,
    orders with lines and logs, box rates and the stock list; the panel
@@ -380,14 +390,15 @@ whenever Jeff wants the latest Fishlist prices.
    treatment logs* — runs `Import::run()`:
    - **species** upserted by lower-cased name: the sheet fills name,
      scientific name, per box, FisHotel's price, the competitor's price /
-     site / date; a value the sheet lacks never blanks one the site has,
-     the site's spelling of a name stays; group, reef-safe and max size
-     come from the stock list (by scientific name, then by common name)
-     where the row has none;
+     site / date; a value the sheet lacks (a per box of 0 included) never
+     blanks one the site has, the site's spelling of a name stays; group,
+     reef-safe and max size come from the stock list (by scientific name,
+     then by common name) where the row has none;
    - **box rates** merged into Settings → Box rates by supplier + origin
      (the sheet's numbers win for a pair both have);
    - **orders** created by ref `YYYY-N` (the batch number and the QT start
-     year) with the supplier, origin, cost mode, tariffs / flight / import
+     year — without a QT date the year in the uploaded file's name, else
+     the site's year) with the supplier, origin, cost mode, tariffs / flight / import
      fees / credit, the QT start date as the received date, the sheet's
      schedule name and a note naming the sheet — status *received* within
      the stays cutoff, *closed* for older history, *ordered* without a
@@ -403,7 +414,9 @@ whenever Jeff wants the latest Fishlist prices.
    - **treatment logs** (when ticked): every row of a batch's `QT Tanks`
      log becomes a building-level log — "Dosed X" / "Added X" a `dose`
      (value = the numeric part of the amount, note "<Medication>
-     <amount>" with the medication by alias), "Tested Copper" a `copper`
+     <amount>" with the medication by alias — the one named first —, the
+     text cut so the marker always fits the 2000-byte note), "Tested
+     Copper" a `copper`
      reading, anything else a `note` with the text — dated as in the
      sheet in the site zone (noon without a time; a row without a date is
      skipped with a warning), on the Spa building the sheet's "Tanks"
@@ -411,8 +424,9 @@ whenever Jeff wants the latest Fishlist prices.
      (205 → Spa 500, 100 → Spa 600; without a match, 205 is the building
      with the most tanks and 100 the other one), "Both" is one log per
      building, blank is the order's building.
-4. The file is deleted after the import (also on *Discard*, and by the
-   cleanup the next upload runs), and the result — counts per entity, the
+4. The file is deleted after the import (also on *Discard*, by the
+   one-off cron event ten minutes after the upload, and by the cleanup
+   the next upload runs), and the result — counts per entity, the
    problems, the warnings — shows on the panel.
 
 **Idempotent.** Running the same file twice updates the species and
