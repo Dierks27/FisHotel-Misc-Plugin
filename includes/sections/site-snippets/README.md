@@ -257,6 +257,22 @@ snippet).
    Snippets plugin. Old `[code_snippet id=N]` shortcodes in pages are then
    answered by the matching files.
 
+### fishotel.com's own snippets (imported 2026-10-18)
+
+The live site's Code Snippets export held five snippets. Two that did
+real work were moved here, byte for byte, with `Default: on`:
+`tracking-page.php` (#33, the `[fishotel_tracking]` "Room Service Status"
+page) and `hide-category-counts.php` (#20). Neither declares a function or
+class, so while their Code Snippets copies are active the guard simply
+holds them back, and the moment Code Snippets is deactivated or deleted
+they take over — no per-snippet switching needed: enable the section, then
+remove Code Snippets. Not moved: #4 "Order snippets by name" (it only sorts
+the Code Snippets admin list), #21 "Manual DNS Prefetch" (its function is
+missing a closing brace, so Code Snippets has failed to run it on every
+request since April 2025; WordPress already prefetches the font hosts the
+theme enqueues) and #32 "tester" (an inactive one-off that created a test
+order).
+
 ## Options
 
 | Option | Autoload | Holds |
