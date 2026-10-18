@@ -90,7 +90,7 @@ $tab = 'events';
 						<?php foreach ( $logs as $fh_log ) : ?>
 							<tr>
 								<td class="fh-cr-when"><?php echo esc_html( Admin::site_time( $fh_log['logged_at'] ) ); ?></td>
-								<td><?php echo esc_html( $fh_log['tank_number'] ? $fh_log['tank_number'] : '—' ); ?></td>
+								<td><?php echo esc_html( $fh_log['tank_number'] ? $fh_log['tank_number'] : ( ! empty( $fh_log['building_number'] ) ? sprintf( /* translators: %d: building number */ __( 'Building %d', 'fishotel-misc-plugin' ), (int) $fh_log['building_number'] ) : '—' ) ); ?></td>
 								<td><?php echo esc_html( Admin::log_text( $fh_log ) ); ?></td>
 								<td><?php echo esc_html( '' !== $fh_log['actor_name'] ? $fh_log['actor_name'] : '—' ); ?> <span class="fh-cr-sub"><?php echo esc_html( $fh_log['source'] ); ?></span></td>
 							</tr>
@@ -102,6 +102,6 @@ $tab = 'events';
 	</div>
 
 	<p class="fh-cr-footnote">
-		<?php esc_html_e( 'Nothing is ever edited or deleted: Undo writes a compensating event (marked "undo") and is refused a second time for the same event. Times are stored in UTC and shown in site time.', 'fishotel-misc-plugin' ); ?>
+		<?php esc_html_e( 'Nothing is ever edited or deleted: Undo writes a compensating event (marked "undo") and is refused a second time for the same event. A dose has no undo — it cannot come back out of the water; note a correction instead. A log on a building ("whole system") counts for every tank of that building. Times are stored in UTC and shown in site time.', 'fishotel-misc-plugin' ); ?>
 	</p>
 </div>

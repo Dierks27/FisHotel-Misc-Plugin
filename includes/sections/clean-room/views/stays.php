@@ -30,7 +30,7 @@ $tab = 'stays';
  * @param array[] $rows  Stays.
  * @param bool    $open  Whether these are open stays (edits offered).
  */
-$fh_table = static function ( array $rows, $open ) {
+$fh_table = static function ( array $rows, $open ) use ( $today ) {
 	if ( ! $rows ) {
 		echo '<div class="fishotel-misc-empty"><span class="dashicons dashicons-location-alt"></span><p>' . esc_html__( 'Nothing here.', 'fishotel-misc-plugin' ) . '</p></div>';
 		return;
@@ -168,6 +168,9 @@ $fh_table = static function ( array $rows, $open ) {
 		</form>
 		<div class="fh-cr-actions">
 			<a class="button" href="<?php echo esc_url( $csv_url ); ?>"><?php esc_html_e( 'Export CSV', 'fishotel-misc-plugin' ); ?></a>
+			<?php if ( ! empty( $xlsx_url ) ) : ?>
+				<a class="button" href="<?php echo esc_url( $xlsx_url ); ?>"><?php esc_html_e( 'Export XLSX', 'fishotel-misc-plugin' ); ?></a>
+			<?php endif; ?>
 			<span class="fh-cr-status" aria-live="polite"></span>
 		</div>
 	</div>

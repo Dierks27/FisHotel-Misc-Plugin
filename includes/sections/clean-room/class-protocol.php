@@ -1,22 +1,35 @@
 <?php
 /**
- * Clean Room protocol — PURE: the treatment schedule as an editable
- * template (steps with a day offset, a label, a kind, an optional repeat
- * and an optional "where"), and the daily to-do it generates for a tank
- * from the stays in it.
+ * Clean Room protocol — PURE: the treatment schedules as editable, named
+ * templates (steps with a day offset, a label, a kind, an optional repeat
+ * and an optional "where"), and the daily to-do one of them generates for
+ * a tank from the stays in it.
  *
- * Nothing about the schedule is hard-coded: the seed below is the "14 Day
- * CM" schedule from Jeff's workbook (Treatment Schedule tab, the column
- * every 2026 batch since August runs): copper to 2.0 on arrival and 2.4
- * the next day, then held at 2.25 or higher (2.5 the target) with a daily
- * test; Metronidazole every other day, six times; Praziquantel twice for
- * flukes; a freshwater or formalin bath and the move to the Clean Room on
- * the sixteenth day. It is edited in Settings → Protocol.
+ * Nothing about a schedule is hard-coded: the seeds below are the five
+ * schedules of Jeff's workbook (Treatment Schedule tab) — "14 Day CM" (the
+ * default, the column every 2026 batch since August runs: copper to 2.0
+ * on arrival and 2.4 the next day, then held at 2.25 or higher with a
+ * daily test; Metronidazole every other day, six times; Praziquantel
+ * twice; a bath and the move to the Clean Room on the sixteenth day),
+ * "14 Day CF" and "Xtra 14 Day CF" (copper + formalin), "CQ" (copper +
+ * chloroquine) and "Trifecta" (the antibiotics for sick fish). Each Spa
+ * building runs one of them (fh_buildings.schedule, else the default);
+ * they are edited in Settings → Protocol.
+ *
+ * The option (OPTION_KEY) holds { default: name, templates: { name:
+ * steps[] } }; an older option that was a bare steps array is read as the
+ * "14 Day CM" template (normalize_option()).
  *
  * Day numbers follow Replay::day_number(): day 1 is the check-in day.
  * The workbook counts the arrival day as day 0, so site day = sheet day + 1.
  * A step is due on day d when d == day, or when it repeats (every > 0)
  * and d >= day, (d − day) % every == 0 and d <= until (when set).
+ *
+ * Doses: MEDICATIONS names the medications the Front Desk's Dose sheet
+ * offers (with the aliases a step label or a log note may use) and
+ * DOSE_RATES the amount per gallon a suggestion is computed from. A dose
+ * logged today whose medication matches a due dose step's label ticks
+ * that step, as a copper reading ticks the copper test.
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  */
@@ -40,8 +53,100 @@ class Protocol {
 	const KINDS  = array( 'feed', 'dose', 'test', 'water_change', 'other' );
 	const WHERES = array( 'any', 'spa', 'clean' );
 
-	const MAX_STEPS = 60;
-	const MAX_DAY   = 120;
+	const MAX_STEPS     = 60;
+	const MAX_DAY       = 120;
+	const MAX_TEMPLATES = 20;
+	const MAX_NAME      = 40;
+
+	/**
+	 * The template a building without one runs, and the first seed.
+	 *
+	 * @var string
+	 */
+	const DEFAULT_TEMPLATE = '14 Day CM';
+
+	/**
+	 * The seeded template names, in the order Settings lists them.
+	 *
+	 * @var string[]
+	 */
+	const TEMPLATE_NAMES = array( '14 Day CM', '14 Day CF', 'Xtra 14 Day CF', 'CQ', 'Trifecta' );
+
+	/**
+	 * The medications the Dose sheet offers: key => label, short label, the
+	 * unit the amount is usually in, and the aliases a step label or a log
+	 * note may use (matched as whole words, case-insensitively).
+	 *
+	 * @var array<string, array{label: string, short: string, unit: string, aliases: string[]}>
+	 */
+	const MEDICATIONS = array(
+		'copper'       => array(
+			'label'   => 'Copper Power',
+			'short'   => 'Copper',
+			'unit'    => 'ml',
+			'aliases' => array( 'copper power', 'copper', 'cu' ),
+		),
+		'metro'        => array(
+			'label'   => 'Metronidazole',
+			'short'   => 'Metro',
+			'unit'    => 'g',
+			'aliases' => array( 'metronidazole', 'metro' ),
+		),
+		'prazi'        => array(
+			'label'   => 'Praziquantel',
+			'short'   => 'Prazi',
+			'unit'    => 'g',
+			'aliases' => array( 'praziquantel', 'prazi' ),
+		),
+		'formalin'     => array(
+			'label'   => 'Formalin',
+			'short'   => 'Formalin',
+			'unit'    => 'ml',
+			'aliases' => array( 'formalin' ),
+		),
+		'chloroquine'  => array(
+			'label'   => 'Chloroquine',
+			'short'   => 'Chloroquine',
+			'unit'    => 'g',
+			'aliases' => array( 'chloroquine', 'cp', 'cq' ),
+		),
+		'fenbendazole' => array(
+			'label'   => 'Fenbendazole',
+			'short'   => 'Fenben',
+			'unit'    => 'g',
+			'aliases' => array( 'fenbendazole', 'fenben' ),
+		),
+		'salt'         => array(
+			'label'   => 'Salt',
+			'short'   => 'Salt',
+			'unit'    => 'tsp',
+			'aliases' => array( 'salt' ),
+		),
+	);
+
+	/**
+	 * Amount per gallon a dose suggestion multiplies the system's gallons
+	 * by (grams or millilitres per gallon, see MEDICATIONS for the unit):
+	 * Metronidazole 25 mg/gal, Praziquantel 9.5 mg/gal, Formalin 1 ml per
+	 * 10 gal, Chloroquine 10 mg/gal, Fenbendazole 1 g per 100 gal. Copper
+	 * has no rate: it is dosed to a test reading.
+	 *
+	 * @var array<string, float>
+	 */
+	const DOSE_RATES = array(
+		'metro'        => 0.025,
+		'prazi'        => 0.0095,
+		'formalin'     => 0.1,
+		'chloroquine'  => 0.010,
+		'fenbendazole' => 0.01,
+	);
+
+	/**
+	 * The units an amount may be typed in.
+	 *
+	 * @var string[]
+	 */
+	const UNITS = array( 'g', 'ml', 'tsp' );
 
 	/**
 	 * The seed: the workbook's "14 Day CM" schedule, one day later than the
@@ -51,7 +156,7 @@ class Protocol {
 	 */
 	public static function seed() {
 		return array(
-			self::step( 'Feed', 'feed', 1, 1, null, 'any', 'every tank with fish, every day' ),
+			self::feed_step(),
 			self::step( 'Copper Power to 2.0', 'dose', 1, 0, null, 'spa', 'check-in day: bring copper to 2.0 (the sheet\'s day 0)' ),
 			self::step( 'Copper Power to 2.4', 'dose', 2, 0, null, 'spa', 'raise to 2.4, then hold at 2.25 or higher — 2.5 is the target' ),
 			self::step( 'Copper test', 'test', 2, 1, 15, 'spa', 'hold at 2.25 or higher, target 2.5 — log it: "521 copper 2.4"' ),
@@ -60,6 +165,296 @@ class Protocol {
 			self::step( 'Praziquantel 2', 'dose', 14, 0, null, 'any', 'flukes, second treatment' ),
 			self::step( 'Bath, then move to the Clean Room', 'water_change', 16, 0, null, 'spa', 'freshwater or formalin bath; copper comes off and observation starts in the Clean Room (the sheet\'s day 15)' ),
 		);
+	}
+
+	/**
+	 * The daily feeding step every template starts with.
+	 *
+	 * @return array
+	 */
+	public static function feed_step() {
+		return self::step( 'Feed', 'feed', 1, 1, null, 'any', 'every tank with fish, every day' );
+	}
+
+	/**
+	 * The five seeded templates in order: "14 Day CM" (seed()), then the
+	 * sheet's other columns translated with site day = sheet day + 1.
+	 *
+	 * @return array<string, array[]> name => steps.
+	 */
+	public static function templates() {
+		$copper = array(
+			self::step( 'Copper Power to 2.0', 'dose', 1, 0, null, 'spa', 'check-in day: bring copper to 2.0 (the sheet\'s day 0)' ),
+			self::step( 'Copper Power to 2.4', 'dose', 2, 0, null, 'spa', 'raise to 2.4, then hold at 2.25 or higher — 2.5 is the target' ),
+			self::step( 'Copper test', 'test', 2, 1, 15, 'spa', 'hold at 2.25 or higher, target 2.5 — log it: "521 copper 2.4"' ),
+		);
+
+		return array(
+			'14 Day CM'      => self::seed(),
+			'14 Day CF'      => array_merge(
+				array( self::feed_step() ),
+				$copper,
+				array(
+					self::step( 'Formalin', 'dose', 5, 1, 14, 'spa', 'daily, 1 ml per 10 gallons (20 ml on the 205-gallon system, 10 ml on the 100) — the sheet\'s days 4–13' ),
+					self::step( 'Praziquantel 1', 'dose', 7, 0, null, 'any', 'flukes, first treatment; 9.5 mg per gallon (about 2 g on 205 gallons)' ),
+					self::step( 'Praziquantel 2', 'dose', 12, 0, null, 'any', 'flukes, second treatment' ),
+					self::step( 'Praziquantel 3', 'dose', 14, 0, null, 'any', 'flukes, third treatment' ),
+					self::step( 'Move to the Clean Room', 'other', 15, 0, null, 'spa', 'copper comes off and observation starts in the Clean Room (the sheet\'s day 14)' ),
+				)
+			),
+			'Xtra 14 Day CF' => array_merge(
+				array( self::feed_step() ),
+				$copper,
+				array(
+					self::step( 'Formalin', 'dose', 1, 1, 14, 'spa', 'daily from the check-in day, 1 ml per 10 gallons (20 ml on the 205-gallon system) — the sheet\'s days 0–13' ),
+					self::step( 'Praziquantel 1', 'dose', 6, 0, null, 'any', 'flukes, first treatment; 9.5 mg per gallon (about 2 g on 205 gallons)' ),
+					self::step( 'Praziquantel 2', 'dose', 11, 0, null, 'any', 'flukes, second treatment' ),
+					self::step( 'Praziquantel 3', 'dose', 13, 0, null, 'any', 'flukes, third treatment' ),
+					self::step( 'Move to the Clean Room', 'other', 15, 0, null, 'spa', 'copper comes off and observation starts in the Clean Room (the sheet\'s day 14)' ),
+				)
+			),
+			'CQ'             => array_merge(
+				array( self::feed_step() ),
+				$copper,
+				array(
+					self::step( 'Chloroquine 40 mg/gal', 'dose', 3, 0, null, 'spa', 'the loading dose: 40 mg per gallon (8.2 g on the 205-gallon system) — the sheet\'s day 2' ),
+					self::step( 'Chloroquine 12 mg/gal', 'dose', 6, 2, 12, 'spa', 'every other day, 12 mg per gallon (2.5 g on 205 gallons) — the sheet\'s days 5, 7, 9, 11' ),
+					self::step( 'Chloroquine 6 mg/gal', 'dose', 14, 0, null, 'spa', 'the last, half dose: 6 mg per gallon — the sheet\'s day 13' ),
+					self::step( 'Praziquantel 1', 'dose', 7, 0, null, 'any', 'flukes, first treatment; 9.5 mg per gallon (about 2 g on 205 gallons)' ),
+					self::step( 'Praziquantel 2', 'dose', 11, 0, null, 'any', 'flukes, second treatment' ),
+					self::step( 'Praziquantel 3', 'dose', 13, 0, null, 'any', 'flukes, third treatment' ),
+					self::step( 'Freshwater bath, then move to the Clean Room', 'water_change', 16, 0, null, 'spa', 'copper and chloroquine come off; observation starts in the Clean Room (the sheet\'s day 15)' ),
+				)
+			),
+			'Trifecta'       => array(
+				self::feed_step(),
+				self::step( 'Metronidazole + Kanamycin + Furan-2', 'dose', 1, 0, null, 'any', 'the antibiotic combo for sick fish (Spectrogram stands in for the Furan-2): day 1' ),
+				self::step( 'Furan-2', 'dose', 2, 2, 14, 'any', 'the even days: 2, 4, 6, 8, 10, 12, 14' ),
+				self::step( '25 % water change, then the combo', 'water_change', 3, 2, 15, 'any', 'the odd days: 3, 5, 7, 9, 11, 13, 15 — change a quarter of the water, then re-dose the combo' ),
+			),
+		);
+	}
+
+	/**
+	 * The seeded steps of one template name, or null when the name is not
+	 * a seed (Reset in Settings restores this; a custom template resets to
+	 * the daily feeding alone).
+	 *
+	 * @param string $name Template name.
+	 * @return array[]|null
+	 */
+	public static function seed_template( $name ) {
+		$templates = self::templates();
+		$name      = self::template_name( $name );
+		return isset( $templates[ $name ] ) ? $templates[ $name ] : null;
+	}
+
+	/**
+	 * A clean template name: trimmed, single spaces, no tags, at most
+	 * MAX_NAME characters ('' when nothing is left).
+	 *
+	 * @param mixed $name Raw name.
+	 * @return string
+	 */
+	public static function template_name( $name ) {
+		if ( ! is_scalar( $name ) ) {
+			return '';
+		}
+		$name = trim( preg_replace( '/\s+/', ' ', strip_tags( (string) $name ) ) );
+		return (string) substr( $name, 0, self::MAX_NAME );
+	}
+
+	/**
+	 * The protocol option in its current shape — { default, templates } —
+	 * from whatever is stored: the new shape (every template normalised,
+	 * nameless or extra ones dropped, the default made to exist), an older
+	 * bare steps array (it becomes the "14 Day CM" template next to the
+	 * other four seeds), or nothing at all (the seeds).
+	 *
+	 * @param mixed $raw The stored option.
+	 * @return array{default: string, templates: array<string, array[]>}
+	 */
+	public static function normalize_option( $raw ) {
+		$seeds = self::templates();
+		if ( ! is_array( $raw ) ) {
+			return array(
+				'default'   => self::DEFAULT_TEMPLATE,
+				'templates' => $seeds,
+			);
+		}
+
+		if ( ! isset( $raw['templates'] ) || ! is_array( $raw['templates'] ) ) {
+			// The old option: one bare list of steps = the schedule Jeff edited.
+			$templates                            = $seeds;
+			$templates[ self::DEFAULT_TEMPLATE ] = self::normalize( $raw );
+			return array(
+				'default'   => self::DEFAULT_TEMPLATE,
+				'templates' => $templates,
+			);
+		}
+
+		$templates = array();
+		foreach ( $raw['templates'] as $name => $steps ) {
+			$name = self::template_name( $name );
+			if ( '' === $name || isset( $templates[ $name ] ) ) {
+				continue;
+			}
+			$templates[ $name ] = self::normalize( $steps );
+			if ( count( $templates ) >= self::MAX_TEMPLATES ) {
+				break;
+			}
+		}
+		if ( ! $templates ) {
+			$templates = $seeds;
+		}
+
+		$default = isset( $raw['default'] ) ? self::template_name( $raw['default'] ) : '';
+		if ( ! isset( $templates[ $default ] ) ) {
+			$default = isset( $templates[ self::DEFAULT_TEMPLATE ] ) ? self::DEFAULT_TEMPLATE : (string) array_key_first( $templates );
+		}
+
+		return array(
+			'default'   => $default,
+			'templates' => $templates,
+		);
+	}
+
+	/**
+	 * The template a building runs: its own schedule when set and existing,
+	 * else the default (an unknown name falls back, never to nothing).
+	 *
+	 * @param array      $building  Building row (schedule).
+	 * @param array|null $protocols normalize_option() — null reads the option through Settings.
+	 * @return string
+	 */
+	public static function template_for( array $building, $protocols = null ) {
+		$protocols = self::resolve_protocols( $protocols );
+		$name      = self::template_name( isset( $building['schedule'] ) ? $building['schedule'] : '' );
+		if ( '' !== $name && isset( $protocols['templates'][ $name ] ) ) {
+			return $name;
+		}
+		return (string) $protocols['default'];
+	}
+
+	/**
+	 * The steps a building runs (see template_for()).
+	 *
+	 * @param array      $building  Building row (schedule).
+	 * @param array|null $protocols normalize_option() — null reads the option through Settings.
+	 * @return array[]
+	 */
+	public static function steps_for( array $building, $protocols = null ) {
+		$protocols = self::resolve_protocols( $protocols );
+		$name      = self::template_for( $building, $protocols );
+		return isset( $protocols['templates'][ $name ] ) ? $protocols['templates'][ $name ] : array();
+	}
+
+	/**
+	 * @param array|null $protocols Option or null.
+	 * @return array
+	 */
+	private static function resolve_protocols( $protocols ) {
+		if ( is_array( $protocols ) && isset( $protocols['templates'] ) ) {
+			return $protocols;
+		}
+		if ( null === $protocols && class_exists( __NAMESPACE__ . '\\Settings' ) ) {
+			return Settings::protocols();
+		}
+		return self::normalize_option( $protocols );
+	}
+
+	/* ============================================================== */
+	/*  Medications                                                    */
+	/* ============================================================== */
+
+	/**
+	 * The medication a label or note names, by alias (whole words, any
+	 * case): "Copper Power to 2.0" → copper, "Dosed Metro" → metro,
+	 * "Praziquantel 1" → prazi; the one named FIRST when several are
+	 * ("Metronidazole 5 g — Cu 2.3" is a metro dose, not copper); null when
+	 * none is named.
+	 *
+	 * @param string $text Step label, log note or a typed name.
+	 * @return string|null Key of MEDICATIONS.
+	 */
+	public static function medication_key( $text ) {
+		$text = strtolower( trim( (string) $text ) );
+		if ( '' === $text ) {
+			return null;
+		}
+		if ( isset( self::MEDICATIONS[ $text ] ) ) {
+			return $text;
+		}
+		$found = null;
+		$first = null;
+		foreach ( self::MEDICATIONS as $key => $medication ) {
+			foreach ( $medication['aliases'] as $alias ) {
+				if ( 1 === preg_match( '/(?<![a-z])' . preg_quote( $alias, '/' ) . '(?![a-z])/', $text, $m, PREG_OFFSET_CAPTURE ) && ( null === $first || $m[0][1] < $first ) ) {
+					$first = $m[0][1];
+					$found = $key;
+				}
+			}
+		}
+		return $found;
+	}
+
+	/**
+	 * The display name of a medication key ('' for an unknown key).
+	 *
+	 * @param string $key Key.
+	 * @return string
+	 */
+	public static function medication_label( $key ) {
+		$key = (string) $key;
+		return isset( self::MEDICATIONS[ $key ] ) ? self::MEDICATIONS[ $key ]['label'] : '';
+	}
+
+	/**
+	 * The suggested amount of a medication for a water volume: gallons ×
+	 * the rate, rounded to one decimal (two below 1), in the medication's
+	 * unit. Null for copper (dosed to the test), an unknown medication or
+	 * no volume.
+	 *
+	 * @param string $medication Key.
+	 * @param int    $gallons    System gallons.
+	 * @return array{amount: float, unit: string}|null
+	 */
+	public static function dose_suggestion( $medication, $gallons ) {
+		$medication = (string) $medication;
+		$gallons    = (float) $gallons;
+		if ( $gallons <= 0 || ! isset( self::DOSE_RATES[ $medication ] ) ) {
+			return null;
+		}
+		$amount = $gallons * self::DOSE_RATES[ $medication ];
+		$amount = round( $amount, $amount >= 1 ? 1 : 2 );
+		if ( $amount <= 0 ) {
+			return null;
+		}
+		return array(
+			'amount' => $amount,
+			'unit'   => self::MEDICATIONS[ $medication ]['unit'],
+		);
+	}
+
+	/**
+	 * "Metronidazole 5.1 g" — the note a dose log carries and the toast
+	 * starts with (an unknown medication key is shown as typed).
+	 *
+	 * @param string $medication Key (or a name).
+	 * @param float  $amount     Amount.
+	 * @param string $unit       Unit.
+	 * @return string
+	 */
+	public static function dose_text( $medication, $amount, $unit ) {
+		$label = self::medication_label( $medication );
+		if ( '' === $label ) {
+			$label = trim( (string) $medication );
+		}
+		$text = number_format( round( (float) $amount, 2 ), 2, '.', '' );
+		if ( false !== strpos( $text, '.' ) ) {
+			$text = rtrim( rtrim( $text, '0' ), '.' );
+		}
+		return trim( $label . ' ' . $text . ' ' . trim( (string) $unit ) );
 	}
 
 	/**
@@ -204,18 +599,29 @@ class Protocol {
 	 * @param array[] $stays  The tank's open stays (id, species, qty_live, checkin_date, day).
 	 * @param string  $today  Site date.
 	 * @param string  $area   The tank's area.
-	 * @param array[] $done   Tank logs of today (kind, note): a tick-off's note is the item
-	 *                        key; a 'copper' log ticks the copper test by itself.
+	 * @param array[] $done   Tank logs of today (kind, note) — the tank's own and its building's:
+	 *                        a tick-off's note is the item key; a 'copper' log ticks the copper
+	 *                        test by itself; a 'dose' log ticks the due dose steps that name the
+	 *                        same medication (by alias).
 	 * @return array[] key, label, kind, note, stay_id, species, day, done.
 	 */
 	public static function todo( array $steps, array $stays, $today, $area = '', array $done = array() ) {
 		$out    = array();
 		$ticked = array();
 		$copper = false;
+		$dosed  = array();
 		foreach ( $done as $log ) {
-			$ticked[ self::tick_key( (string) ( $log['note'] ?? '' ) ) ] = true;
-			if ( 'copper' === (string) ( $log['kind'] ?? '' ) ) {
+			$note = (string) ( $log['note'] ?? '' );
+			$kind = (string) ( $log['kind'] ?? '' );
+			$ticked[ self::tick_key( $note ) ] = true;
+			if ( 'copper' === $kind ) {
 				$copper = true;
+			}
+			if ( 'dose' === $kind ) {
+				$medication = self::medication_key( $note );
+				if ( null !== $medication ) {
+					$dosed[ $medication ] = true;
+				}
 			}
 		}
 
@@ -257,6 +663,11 @@ class Protocol {
 				}
 				$label = (string) $step['label'];
 				$key   = self::tick_key( $label . ' #' . (int) ( $stay['id'] ?? 0 ) );
+				$is_done = isset( $ticked[ $key ] ) || ( $copper && self::is_copper_test( $step ) );
+				if ( ! $is_done && $dosed && 'dose' === (string) $step['kind'] ) {
+					$medication = self::medication_key( $label );
+					$is_done    = null !== $medication && isset( $dosed[ $medication ] );
+				}
 				$out[] = array(
 					'key'     => $key,
 					'label'   => $label,
@@ -265,7 +676,7 @@ class Protocol {
 					'stay_id' => (int) ( $stay['id'] ?? 0 ),
 					'species' => (string) ( $stay['species'] ?? '' ),
 					'day'     => $day,
-					'done'    => isset( $ticked[ $key ] ) || ( $copper && self::is_copper_test( $step ) ),
+					'done'    => $is_done,
 				);
 			}
 		}

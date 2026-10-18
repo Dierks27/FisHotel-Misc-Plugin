@@ -8,6 +8,8 @@
  * @var array  $filters      area, species.
  * @var array  $totals       Admin::totals().
  * @var array  $settings     Settings.
+ * @var array  $protocols    Settings::protocols().
+ * @var array  $doses        Store::latest_doses(): building id => medication => { label, logged_at }.
  * @var string $today        Site date.
  * @var bool   $tables_ok    Whether the tables exist.
  * @var bool   $can_settings Whether the Settings tab is offered.
@@ -90,14 +92,17 @@ $fh_species = (string) $filters['species'];
 					$fh_in_qt += (int) ( $fh_t['in_qt'] ?? 0 );
 					$fh_ready += (int) ( $fh_t['ready'] ?? 0 );
 				}
-				$fh_coming = 'coming_soon' === $fh_building['status'];
-				$fh_off    = 'offline' === $fh_building['status'];
+				$fh_coming  = 'coming_soon' === $fh_building['status'];
+				$fh_off     = 'offline' === $fh_building['status'];
+				$fh_gallons = Layout::system_gallons( $fh_building, $fh_entry['tanks'] );
+				$fh_doses   = isset( $doses[ (int) $fh_building['id'] ] ) ? $doses[ (int) $fh_building['id'] ] : array();
 				?>
 				<div class="fh-cr-building<?php echo $fh_coming ? ' is-coming' : ''; ?><?php echo $fh_off ? ' is-offline' : ''; ?>">
 					<header class="fh-cr-building__head">
 						<h3><?php echo esc_html( $fh_entry['label'] ); ?></h3>
 						<span class="fh-cr-building__meta">
-							<?php esc_html_e( 'shared water (sump + skimmer)', 'fishotel-misc-plugin' ); ?>
+							<?php echo esc_html( $fh_gallons > 0 ? Layout::system_label( $fh_gallons ) : __( 'shared water (sump + skimmer)', 'fishotel-misc-plugin' ) ); ?>
+							· <?php echo esc_html( Protocol::template_for( $fh_building, $protocols ) ); ?>
 							<?php if ( $fh_coming ) : ?>
 								· <?php esc_html_e( 'coming soon', 'fishotel-misc-plugin' ); ?>
 							<?php elseif ( $fh_off ) : ?>
@@ -109,6 +114,17 @@ $fh_species = (string) $filters['species'];
 								<?php endif; ?>
 							<?php endif; ?>
 						</span>
+						<?php if ( $fh_doses ) : ?>
+							<span class="fh-cr-building__doses">
+								<?php
+								$fh_parts = array();
+								foreach ( $fh_doses as $fh_dose ) {
+									$fh_parts[] = $fh_dose['label'] . ' ' . Admin::site_time( $fh_dose['logged_at'] );
+								}
+								echo esc_html( __( 'last dose:', 'fishotel-misc-plugin' ) . ' ' . implode( ' · ', $fh_parts ) );
+								?>
+							</span>
+						<?php endif; ?>
 					</header>
 
 					<?php if ( ! $fh_entry['tanks'] ) : ?>

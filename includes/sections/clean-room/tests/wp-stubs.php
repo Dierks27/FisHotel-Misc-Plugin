@@ -2,12 +2,14 @@
 /**
  * Just enough WordPress to load the Clean Room section's classes headless.
  *
- * Layout, Replay, Parser and Qr touch no WordPress function at all;
- * Settings needs the translation helpers, wp_parse_args and options;
- * Admin::csv_cell() / csv_rows() need nothing. The Store class is loaded
- * for its constants and pure statics (hydrate_*, site_noon_utc) and
- * replaced by fake-store.php where a store is needed — no $wpdb method
- * is ever called in these tests.
+ * Layout, Replay, Parser, Qr, Costing, Stats, Species, Xlsx, Workbook and
+ * Import_Map touch no WordPress function at all; Settings needs the
+ * translation helpers, wp_parse_args and options; Admin::csv_cell() /
+ * csv_rows() need nothing.
+ * The Store class is loaded for its constants and pure statics
+ * (hydrate_*, site_noon_utc, fold_species_rows) and replaced by
+ * fake-store.php where a store is needed — no $wpdb method is ever called
+ * in these tests.
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  */
@@ -81,6 +83,18 @@ function add_query_arg( $args, $url = '' ) {
 		return $url;
 	}
 	return $url . ( false === strpos( $url, '?' ) ? '?' : '&' ) . http_build_query( $args );
+}
+
+function wp_create_nonce( $action = -1 ) {
+	return 'nonce-' . substr( md5( (string) $action ), 0, 10 );
+}
+
+function wp_nonce_url( $url, $action = -1, $name = '_wpnonce' ) {
+	return add_query_arg( array( $name => wp_create_nonce( $action ) ), (string) $url );
+}
+
+function wp_generate_password( $length = 12, $special_chars = true, $extra_special_chars = false ) {
+	return substr( bin2hex( random_bytes( max( 1, (int) $length ) ) ), 0, max( 1, (int) $length ) );
 }
 
 /**
@@ -190,10 +204,20 @@ require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-replay.php
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-protocol.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-parser.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-qr.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-costing.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-stats.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-species.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-orders.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-xlsx.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-workbook.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-import-map.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-import.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-store.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-settings.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-front-desk.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-admin.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-admin-workbook.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-admin-import.php';
 require_once __DIR__ . '/fake-store.php';
 
 /**
@@ -220,6 +244,90 @@ function fh_finish() {
 
 	echo "\n" . ( $failures ? "$failures of $checks checks FAILED\n" : "All $checks checks passed\n" );
 	exit( $failures ? 1 : 0 );
+}
+
+/**
+ * Strict equality check with an automatic detail string (the workbook
+ * reader and mapper tests lean on it).
+ *
+ * @param string $label    Label.
+ * @param mixed  $expected Expected.
+ * @param mixed  $actual   Actual.
+ */
+function check_same( $label, $expected, $actual ) {
+	check( $label, $expected === $actual, 'expected ' . fh_test_export( $expected ) . ', got ' . fh_test_export( $actual ) );
+}
+
+/**
+ * Substring check (case-insensitive) over a string or a list of strings.
+ *
+ * @param string          $label    Label.
+ * @param string          $needle   Needle.
+ * @param string|string[] $haystack One string or a list.
+ */
+function check_contains( $label, $needle, $haystack ) {
+	$list = is_array( $haystack ) ? $haystack : array( (string) $haystack );
+	foreach ( $list as $item ) {
+		if ( false !== stripos( (string) $item, $needle ) ) {
+			check( $label, true );
+			return;
+		}
+	}
+	check( $label, false, '"' . $needle . '" not found in ' . fh_test_export( $list ) );
+}
+
+/**
+ * Short var_export for failure details.
+ *
+ * @param mixed $value Value.
+ * @return string
+ */
+function fh_test_export( $value ) {
+	$text = var_export( $value, true );
+	$text = preg_replace( '/\s+/', ' ', $text );
+	return strlen( $text ) > 300 ? substr( $text, 0, 297 ) . '...' : $text;
+}
+
+/**
+ * A fresh, empty temporary directory for test files (FH_TEST_TMP when
+ * set, else the system temp directory).
+ *
+ * @return string
+ */
+function fh_test_tmp_dir() {
+	$base = getenv( 'FH_TEST_TMP' );
+	if ( false === $base || '' === $base ) {
+		$base = sys_get_temp_dir();
+	}
+	$dir = rtrim( $base, '/\\' ) . '/fh-cleanroom-test-' . getmypid() . '-' . substr( md5( uniqid( '', true ) ), 0, 8 );
+	if ( ! is_dir( $dir ) && ! mkdir( $dir, 0700, true ) ) {
+		fwrite( STDERR, "Cannot create temp dir {$dir}\n" );
+		exit( 1 );
+	}
+	return $dir;
+}
+
+/**
+ * Remove a test directory and its files.
+ *
+ * @param string $dir Directory.
+ */
+function fh_test_rmdir( $dir ) {
+	if ( ! is_dir( $dir ) ) {
+		return;
+	}
+	foreach ( scandir( $dir ) as $entry ) {
+		if ( '.' === $entry || '..' === $entry ) {
+			continue;
+		}
+		$path = $dir . '/' . $entry;
+		if ( is_dir( $path ) ) {
+			fh_test_rmdir( $path );
+		} else {
+			@unlink( $path );
+		}
+	}
+	@rmdir( $dir );
 }
 
 /**

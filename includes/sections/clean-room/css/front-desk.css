@@ -782,6 +782,25 @@ button.fh-fd-occ:active {
 .fh-fd-copper.is-ok  { border-color: rgba(61, 220, 132, 0.6); }
 .fh-fd-copper.is-low { border-color: var(--fd-danger); color: #ffb3b3; }
 
+/* The copper entry and the Dose button side by side in the Today head. */
+.fh-fd-today__tools {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.fh-fd-dose {
+	border-color: rgba(53, 184, 255, 0.6);
+}
+
+/* The amount and its unit on the Dose sheet: the unit stays narrow. */
+.fh-fd-row--amount > .fh-fd-unit {
+	flex: 0 0 96px;
+	font-size: 20px;
+	font-weight: 700;
+	text-align: center;
+}
+
 .fh-fd-chip--todo {
 	min-height: 52px;
 	border-radius: 12px;

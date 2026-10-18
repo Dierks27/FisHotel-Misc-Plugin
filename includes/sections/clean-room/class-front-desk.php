@@ -16,7 +16,8 @@
  *   a Spa tank), clear (the cleared date by hand), checkin (the check-in
  *   date by hand), ready (the sale-ready override), count (a full
  *   recount), note (on a stay, or on the tank), copper (a reading on the
- *   tank), tick (a to-do item done), undo, alias.
+ *   tank), dose (a medication on the whole system or on the tank — the
+ *   one write without an undo), tick (a to-do item done), undo, alias.
  * The reply carries the refreshed tank screen so the page re-renders
  * without a reload, and the ids of the stay events just written so the
  * toast (kept until the next action, at least Settings::UNDO_SECONDS) can
@@ -64,7 +65,8 @@ class Front_Desk {
 	 */
 	const COOKIE_LIFE = 365 * 86400;
 
-	const MAX_QTY = 999;
+	const MAX_QTY  = 999;
+	const MAX_DOSE = 9999;
 
 	const REASONS = array( 'doa', 'disease', 'jumped', 'unknown' );
 
@@ -276,6 +278,15 @@ class Front_Desk {
 			'bullying'    => __( 'Bullying', 'fishotel-misc-plugin' ),
 			'pairing'     => __( 'Pairing', 'fishotel-misc-plugin' ),
 			'other'       => __( 'Other', 'fishotel-misc-plugin' ),
+			'dose'        => __( 'Dose', 'fishotel-misc-plugin' ),
+			'medication'  => __( 'Medication', 'fishotel-misc-plugin' ),
+			'amount'      => __( 'Amount', 'fishotel-misc-plugin' ),
+			'wholeSystem' => __( 'Whole system — %s', 'fishotel-misc-plugin' ),
+			'thisTank'    => __( 'This tank only', 'fishotel-misc-plugin' ),
+			'suggested'   => __( 'Suggested: %s', 'fishotel-misc-plugin' ),
+			'noSuggest'   => __( 'Dosed to the test reading', 'fishotel-misc-plugin' ),
+			'noUndoDose'  => __( 'A dose cannot be undone — note a correction instead.', 'fishotel-misc-plugin' ),
+			'schedule'    => __( 'schedule', 'fishotel-misc-plugin' ),
 		);
 	}
 
@@ -318,7 +329,8 @@ class Front_Desk {
 			return $data;
 		}
 
-		$tanks     = $store->tanks_with_occupants( $today, $settings, Settings::protocol() );
+		$protocols = Settings::protocols();
+		$tanks     = $store->tanks_with_occupants( $today, $settings, $protocols );
 		$buildings = $store->buildings();
 		$current   = null;
 		foreach ( $tanks as $tank ) {
@@ -352,24 +364,67 @@ class Front_Desk {
 			);
 		}
 
+		$building_row = array();
+		foreach ( $buildings as $row ) {
+			if ( (int) $row['id'] === (int) $current['building_id'] ) {
+				$building_row = $row;
+				break;
+			}
+		}
+		$gallons = Layout::system_gallons( $building_row ? $building_row : $current['building'], $tanks );
+
 		$data['tank'] = array(
-			'id'         => (int) $current['id'],
-			'number'     => (int) $current['number'],
-			'title'      => Layout::tank_title( $current, $current['building'], $current['shares_with'] ),
-			'path'       => $current['path'],
-			'sizeLabel'  => (string) $current['size_label'],
-			'area'       => (string) $current['building']['area'],
-			'areaLabel'  => Layout::area_label( $current['building']['area'] ),
-			'building'   => Layout::building_label( $current['building'] ),
-			'isSpa'      => 'spa' === (string) $current['building']['area'],
-			'sharesWith' => $current['shares_with'],
-			'occupants'  => $occupants,
-			'todo'       => array_values( (array) $current['todo'] ),
-			'copper'     => $copper,
-			'url'        => Clean_Room::front_desk_url( (int) $current['number'] ),
+			'id'          => (int) $current['id'],
+			'number'      => (int) $current['number'],
+			'title'       => Layout::tank_title( $current, $current['building'], $current['shares_with'] ),
+			'path'        => $current['path'],
+			'sizeLabel'   => (string) $current['size_label'],
+			'gallons'     => (int) $current['gallons'],
+			'area'        => (string) $current['building']['area'],
+			'areaLabel'   => Layout::area_label( $current['building']['area'] ),
+			'building'    => Layout::building_label( $current['building'] ),
+			'buildingId'  => (int) $current['building_id'],
+			'isSpa'       => 'spa' === (string) $current['building']['area'],
+			'sharesWith'  => $current['shares_with'],
+			'system'      => array(
+				'gallons'  => $gallons,
+				'label'    => Layout::system_label( $gallons ),
+				'schedule' => Protocol::template_for( $building_row ? $building_row : array(), $protocols ),
+			),
+			'medications' => self::medications( $gallons, (int) $current['gallons'] ),
+			'occupants'   => $occupants,
+			'todo'        => array_values( (array) $current['todo'] ),
+			'copper'      => $copper,
+			'url'         => Clean_Room::front_desk_url( (int) $current['number'] ),
 		);
 
 		return $data;
+	}
+
+	/**
+	 * The medications the Dose sheet offers, with the suggested amount for
+	 * the whole system and for this one tank (null for copper, which is
+	 * dosed to the test).
+	 *
+	 * @param int $system_gallons The building's system volume.
+	 * @param int $tank_gallons   This tank's volume.
+	 * @return array[] key, label, short, unit, system (amount|null), tank (amount|null).
+	 */
+	public static function medications( $system_gallons, $tank_gallons ) {
+		$out = array();
+		foreach ( Protocol::MEDICATIONS as $key => $medication ) {
+			$system = Protocol::dose_suggestion( $key, $system_gallons );
+			$tank   = Protocol::dose_suggestion( $key, $tank_gallons );
+			$out[]  = array(
+				'key'    => $key,
+				'label'  => $medication['label'],
+				'short'  => $medication['short'],
+				'unit'   => $medication['unit'],
+				'system' => $system ? $system['amount'] : null,
+				'tank'   => $tank ? $tank['amount'] : null,
+			);
+		}
+		return $out;
 	}
 
 	/**
@@ -658,6 +713,9 @@ class Front_Desk {
 					break;
 				case 'copper':
 					$result = self::act_copper( $ctx, $raw );
+					break;
+				case 'dose':
+					$result = self::act_dose( $ctx, $raw );
 					break;
 				case 'tick':
 					$result = self::act_tick( $ctx, $raw );
@@ -1108,6 +1166,50 @@ class Front_Desk {
 		return array(
 			/* translators: 1: reading, 2: tank number */
 			'message'   => sprintf( __( 'Copper %1$s in Tank %2$d', 'fishotel-misc-plugin' ), $text, (int) $ctx['tank']['number'] ) . ( 'low' === $state ? ' · ' . __( 'below the floor', 'fishotel-misc-plugin' ) : '' ),
+			'event_ids' => array(),
+		);
+	}
+
+	/**
+	 * A dose: a medication (Protocol::MEDICATIONS), an amount with its unit,
+	 * on the whole system (the tank's building — the Spa is one water) or
+	 * on this tank alone. A dose log of the day ticks the dose step that
+	 * names the medication. No undo: a dose cannot be taken back out of the
+	 * water, so the log stands (a correction is a note).
+	 */
+	private static function act_dose( array $ctx, array $raw ) {
+		$tank       = $ctx['tank'];
+		$medication = isset( $raw['medication'] ) ? sanitize_key( $raw['medication'] ) : '';
+		if ( ! isset( Protocol::MEDICATIONS[ $medication ] ) ) {
+			return array( 'error' => __( 'Which medication? Pick one.', 'fishotel-misc-plugin' ) );
+		}
+		$amount = isset( $raw['amount'] ) && is_scalar( $raw['amount'] ) && is_numeric( $raw['amount'] ) ? round( (float) $raw['amount'], 2 ) : null;
+		if ( null === $amount || $amount <= 0 || $amount > self::MAX_DOSE ) {
+			return array( 'error' => __( 'How much? An amount above 0 and at most 9999.', 'fishotel-misc-plugin' ) );
+		}
+		$unit = isset( $raw['unit'] ) ? sanitize_key( $raw['unit'] ) : '';
+		if ( ! in_array( $unit, Protocol::UNITS, true ) ) {
+			return array( 'error' => __( 'Which unit? g, ml or tsp.', 'fishotel-misc-plugin' ) );
+		}
+		$whole       = ! empty( $raw['whole'] ) && '0' !== (string) $raw['whole'];
+		$building_id = (int) ( $tank['building']['id'] ?? $tank['building_id'] ?? 0 );
+		if ( $whole && $building_id <= 0 ) {
+			return array( 'error' => __( 'This tank has no building to dose as a system.', 'fishotel-misc-plugin' ) );
+		}
+
+		$id = $ctx['store']->log_dose( $building_id, $whole ? 0 : (int) $tank['id'], $medication, $amount, $unit, '', (int) $ctx['base']['actor_id'], (string) $ctx['base']['source'] );
+		if ( ! $id ) {
+			return array( 'error' => __( 'The dose could not be saved.', 'fishotel-misc-plugin' ) );
+		}
+
+		$place = $whole
+			/* translators: %s: building label */
+			? sprintf( __( '%s, whole system', 'fishotel-misc-plugin' ), Layout::building_label( $tank['building'] ) )
+			/* translators: %d: tank number */
+			: sprintf( __( 'Tank %d', 'fishotel-misc-plugin' ), (int) $tank['number'] );
+
+		return array(
+			'message'   => Protocol::dose_text( $medication, $amount, $unit ) . ' · ' . $place,
 			'event_ids' => array(),
 		);
 	}

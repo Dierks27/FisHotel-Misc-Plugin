@@ -43,6 +43,26 @@
  *   - class-admin.php       the Room Board page (Board / Stays / Events /
  *                           Settings), CSV, the label print page, the
  *                           product meta box.
+ *   - class-costing.php     PURE: the supplier order's landed-cost maths,
+ *                           replicating the workbook's order sheet.
+ *   - class-stats.php       PURE: the yearly figures, weighted and as the
+ *                           spreadsheet averaged them.
+ *   - class-species.php     PURE: the species master row and its merge into
+ *                           the candidate list.
+ *   - class-orders.php      the order from a form, the live figures of a
+ *                           checked-in line, the check-in that creates stays.
+ *   - class-xlsx.php        a dependency-free .xlsx writer.
+ *   - class-workbook.php    PURE: a dependency-free .xlsx / .xlsm reader
+ *                           (cached values only; the PW sheet is never opened).
+ *   - class-import-map.php  PURE: the FisHotel-YEAR workbook layout → species,
+ *                           orders, box rates, stock (columns found by header text).
+ *   - class-import.php      the mapped workbook into the Store (species upsert,
+ *                           box rates, orders + lines, recent batches as stays,
+ *                           treatment logs), idempotent; preview() pure.
+ *   - class-admin-workbook.php  the Arrivals / Species / Stats tabs, their
+ *                           AJAX and the XLSX / CSV exports.
+ *   - class-admin-import.php  Settings → Import workbook: upload to a private
+ *                           folder, preview, Import now (manage_options).
  *
  * The file uses bracketed namespaces because the facts helper must live in
  * the global namespace.
@@ -102,6 +122,14 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 		const FACTS_FILTER = 'fishotel_product_qt_facts';
 
 		/**
+		 * The one-off cron event that deletes an uploaded workbook whose
+		 * import preview expired (Admin_Import).
+		 *
+		 * @var string
+		 */
+		const IMPORT_CLEANUP_HOOK = 'fishotel_cleanroom_import_cleanup';
+
+		/**
 		 * Section base path.
 		 *
 		 * @return string
@@ -127,7 +155,7 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 		public static function get_section_info() {
 			return array(
 				'name'        => __( 'Clean Room', 'fishotel-misc-plugin' ),
-				'description' => __( 'Where every fish is, from landing to shipping: buildings and tanks with QR labels, a one-thumb phone screen with voice, a room board, stays with day counts and clearing, and the facts the fish page reads.', 'fishotel-misc-plugin' ),
+				'description' => __( 'Where every fish is, from landing to shipping: buildings and tanks with QR labels, a one-thumb phone screen with voice, a room board, stays with day counts and clearing, supplier orders with the workbook\'s landed-cost maths and a check-in that creates the stays, a species master, yearly stats, Excel exports, and the facts the fish page reads.', 'fishotel-misc-plugin' ),
 				'icon'        => 'dashicons-location-alt',
 			);
 		}
@@ -142,6 +170,14 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 			require_once self::path() . 'class-protocol.php';
 			require_once self::path() . 'class-parser.php';
 			require_once self::path() . 'class-qr.php';
+			require_once self::path() . 'class-costing.php';
+			require_once self::path() . 'class-stats.php';
+			require_once self::path() . 'class-species.php';
+			require_once self::path() . 'class-orders.php';
+			require_once self::path() . 'class-xlsx.php';
+			require_once self::path() . 'class-workbook.php';
+			require_once self::path() . 'class-import-map.php';
+			require_once self::path() . 'class-import.php';
 			require_once self::path() . 'class-store.php';
 			require_once self::path() . 'class-settings.php';
 			require_once self::path() . 'class-front-desk.php';
@@ -167,19 +203,38 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 
 			add_filter( self::FACTS_FILTER, array( self::class, 'filter_facts' ), 10, 2 );
 			add_action( 'save_post_product', array( Store::class, 'clear_species_cache' ), 10, 0 );
+			// Cron runs outside wp-admin: the uploaded workbook's cleanup is hooked on every request.
+			add_action( self::IMPORT_CLEANUP_HOOK, array( self::class, 'import_cleanup' ), 10, 0 );
 
 			$front = new Front_Desk();
 			$front->init();
 
 			if ( is_admin() ) {
 				require_once self::path() . 'class-admin.php';
+				require_once self::path() . 'class-admin-workbook.php';
+				require_once self::path() . 'class-admin-import.php';
 
 				$settings = new Settings();
 				$settings->init();
 
 				$admin = new Admin();
 				$admin->init();
+
+				$workbook = new Admin_Workbook();
+				$workbook->init();
+
+				$import = new Admin_Import();
+				$import->init();
 			}
+		}
+
+		/**
+		 * The one-off cron event Admin_Import schedules for every upload:
+		 * delete the workbooks whose preview has expired.
+		 */
+		public static function import_cleanup() {
+			require_once self::path() . 'class-admin-import.php';
+			Admin_Import::cleanup();
 		}
 
 		/**
@@ -188,6 +243,8 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 		public static function register_menu() {
 			self::load();
 			require_once self::path() . 'class-admin.php';
+			require_once self::path() . 'class-admin-workbook.php';
+			require_once self::path() . 'class-admin-import.php';
 
 			add_submenu_page(
 				'fishotel-misc',

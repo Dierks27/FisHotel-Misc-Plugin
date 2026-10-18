@@ -141,4 +141,34 @@ check( 'top second / third', 522 === Layout::tank_at( $b500, 2, 'second' )['numb
 check( 'no middle in an even row', null === Layout::tank_at( $b500, 2, 'middle' ) );
 check( 'out of range / no position → null', null === Layout::tank_at( $b500, 2, 'fifth' ) && null === Layout::tank_at( $b500, 2, '' ) && null === Layout::tank_at( array(), 2, 'left' ) );
 
+echo "7. The schedule and the system gallons of a building\n";
+check( 'the seed: 205 gal for building 500, 100 for 600 (Jeff\'s figures), nothing for the Clean Room buildings; no schedule yet', 205 === $seed[4]['system_gallons'] && 100 === $seed[5]['system_gallons'] && null === $seed[0]['system_gallons'] && null === $seed[3]['system_gallons'] && array( '', '', '', '', '', '' ) === array_column( $seed, 'schedule' ) && 205 === Layout::SPA_500_GALLONS && 100 === Layout::SPA_600_GALLONS );
+$b500_row = array( 'id' => 5, 'number' => 500, 'system_gallons' => 205 );
+$b100_row = array( 'id' => 1, 'number' => 100, 'system_gallons' => null );
+check( 'system_gallons: the typed figure wins over the tanks', 205 === Layout::system_gallons( $b500_row, $tanks ) );
+$sized = fh_seed_tanks();
+foreach ( $sized as &$t ) {
+	$t['gallons'] = 2 === (int) $t['level'] ? 20 : 40;
+}
+unset( $t );
+check( 'blank: the sum of the building\'s tanks (100: 3 × 20 + 2 × 40 = 140), by building id', 140 === Layout::system_gallons( $b100_row, $sized ) );
+check( 'by the hundreds of the numbers when no ids are given', 140 === Layout::system_gallons( array( 'number' => 100 ), array_map( static function ( $t ) { unset( $t['building_id'] ); return $t; }, $sized ) ) );
+$one_off = $sized;
+foreach ( $one_off as &$t ) {
+	if ( 121 === (int) $t['number'] ) {
+		$t['status'] = 'offline';
+	}
+}
+unset( $t );
+check( 'an offline tank is dry: 120', 120 === Layout::system_gallons( $b100_row, $one_off ) );
+check( 'a zero is "blank" too; nothing known → 0', 140 === Layout::system_gallons( array( 'id' => 1, 'number' => 100, 'system_gallons' => 0 ), $sized ) && 0 === Layout::system_gallons( array( 'id' => 9, 'number' => 900 ), $sized ) );
+check( 'system_label', '205 gal system' === Layout::system_label( 205 ) && '' === Layout::system_label( 0 ) );
+check( 'validate_building: a schedule name of 40 characters and gallons 0–9999 pass; blank gallons pass', array() === Layout::validate_building( array( 'area' => 'spa', 'number' => 700, 'status' => 'active', 'schedule' => str_repeat( 'x', 40 ), 'system_gallons' => 9999 ) ) && array() === Layout::validate_building( array( 'area' => 'spa', 'number' => 700, 'status' => 'active', 'schedule' => '', 'system_gallons' => null ) ) );
+check( 'validate_building: a 41-character schedule name, negative / huge / junk gallons are refused', in_array( 'schedule name is longer than 40 characters', Layout::validate_building( array( 'area' => 'spa', 'number' => 700, 'status' => 'active', 'schedule' => str_repeat( 'x', 41 ) ) ), true ) && in_array( 'system gallons must be blank or 0–9999', Layout::validate_building( array( 'area' => 'spa', 'number' => 700, 'status' => 'active', 'system_gallons' => -1 ) ), true ) && 1 === count( Layout::validate_building( array( 'area' => 'spa', 'number' => 700, 'status' => 'active', 'system_gallons' => 10000 ) ) ) && 1 === count( Layout::validate_building( array( 'area' => 'spa', 'number' => 700, 'status' => 'active', 'system_gallons' => 'lots' ) ) ) );
+$fh_gallons_form = static function ( $typed ) {
+	return Layout::validate_building( array( 'area' => 'spa', 'number' => 700, 'status' => 'active', 'system_gallons' => \FisHotel\Misc\Sections\Clean_Room\Settings::gallons_input( $typed ) ) );
+};
+check( 'the layout form\'s gallons: blank → null, "205" / " 205 " → 205, "12.6" → 13, the field\'s value reaches the validation as typed', null === \FisHotel\Misc\Sections\Clean_Room\Settings::gallons_input( ' ' ) && 205 === \FisHotel\Misc\Sections\Clean_Room\Settings::gallons_input( ' 205 ' ) && 13 === \FisHotel\Misc\Sections\Clean_Room\Settings::gallons_input( '12.6' ) && array() === $fh_gallons_form( '205' ) );
+check( 'the layout form\'s gallons: "-205" and "lots" are refused, not stored as 205 and 0 (= blank) the way absint() would', array( 'system gallons must be blank or 0–9999' ) === $fh_gallons_form( '-205' ) && array( 'system gallons must be blank or 0–9999' ) === $fh_gallons_form( 'lots' ) && array( 'system gallons must be blank or 0–9999' ) === $fh_gallons_form( '99999' ) );
+
 fh_finish();
