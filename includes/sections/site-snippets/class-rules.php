@@ -134,9 +134,10 @@ class Rules {
 	 * Sort snippets by Priority (lower first), then by Code Snippets id
 	 * (Code Snippets' own `ORDER BY priority, id`, so imports of equal
 	 * priority keep the order they ran in — a helper declared by #3 exists
-	 * before #8 uses it), then slug; snippets without a Code Snippets id come
-	 * after the imports of their priority. The order the PHP snippets are
-	 * included and the CSS / JS / HTML ones printed.
+	 * before #8 uses it), then files before database snippets (written in
+	 * wp-admin, source 'db'), then slug; snippets without a Code Snippets id
+	 * come after the imports of their priority. The order the PHP snippets
+	 * are included and the CSS / JS / HTML ones printed.
 	 *
 	 * @param array $snippets List (or slug-keyed map) of index entries.
 	 * @return array List, sorted.
@@ -157,11 +158,28 @@ class Rules {
 				if ( $ia !== $ib ) {
 					return $ia < $ib ? -1 : 1;
 				}
+				$da = isset( $a['source'] ) && 'db' === $a['source'] ? 1 : 0;
+				$db = isset( $b['source'] ) && 'db' === $b['source'] ? 1 : 0;
+				if ( $da !== $db ) {
+					return $da - $db;
+				}
 				return strcmp( (string) $a['slug'], (string) $b['slug'] );
 			}
 		);
 
 		return $list;
+	}
+
+	/**
+	 * The key a snippet has in the switch map and the guard's result: its
+	 * slug for a file, `db:<slug>` for a database snippet (never in the
+	 * switch map, so it is on exactly while it is active).
+	 *
+	 * @param array $snippet Index entry.
+	 * @return string
+	 */
+	public static function key_of( array $snippet ) {
+		return isset( $snippet['key'] ) ? (string) $snippet['key'] : (string) $snippet['slug'];
 	}
 
 	/**
@@ -205,10 +223,11 @@ class Rules {
 
 		foreach ( self::sort( $snippets ) as $s ) {
 			$slot = self::slot( $s['type'], $s['scope'] );
-			if ( '' === $slot || '' !== (string) $s['refused'] || isset( $held[ $s['slug'] ] ) ) {
+			$key  = self::key_of( $s );
+			if ( '' === $slot || '' !== (string) $s['refused'] || isset( $held[ $key ] ) ) {
 				continue;
 			}
-			if ( ! self::is_enabled( $s['slug'], $s['default_on'], $enabled_map ) ) {
+			if ( ! self::is_enabled( $key, $s['default_on'], $enabled_map ) ) {
 				continue;
 			}
 			$slots[ $slot ][] = $s;

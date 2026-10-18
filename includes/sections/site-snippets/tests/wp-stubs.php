@@ -374,11 +374,202 @@ class FH_Fake_WPDB {
 $GLOBALS['wpdb'] = new FH_Fake_WPDB();
 
 /* ------------------------------------------------------------------ */
+/*  Users, nonces, user meta, transients (the snippet editor)          */
+/* ------------------------------------------------------------------ */
+
+$GLOBALS['fh_user']        = (object) array( 'ID' => 0, 'user_login' => '' );
+$GLOBALS['fh_users']       = array(); // id => login, for get_userdata().
+$GLOBALS['fh_multisite']   = false;
+$GLOBALS['fh_super_admin'] = false;
+$GLOBALS['fh_user_meta']   = array();
+$GLOBALS['fh_transients']  = array();
+
+/**
+ * Stop a handler where WordPress would exit (redirect, JSON answer).
+ */
+class FH_Halt extends Exception {
+	public $kind;
+	public $data;
+	public $status;
+
+	public function __construct( $kind, $data = null, $status = 200 ) {
+		parent::__construct( $kind );
+		$this->kind   = $kind;
+		$this->data   = $data;
+		$this->status = $status;
+	}
+}
+
+/**
+ * Log in as a user for the next calls.
+ *
+ * @param int    $id    User id (0 = logged out).
+ * @param string $login Login.
+ * @param bool   $admin Whether current_user_can() answers yes.
+ */
+function fh_login( $id, $login = '', $admin = true ) {
+	$GLOBALS['fh_user'] = (object) array( 'ID' => (int) $id, 'user_login' => (string) $login );
+	$GLOBALS['fh_can']  = (bool) $admin;
+	if ( $id > 0 ) {
+		$GLOBALS['fh_users'][ (int) $id ] = (string) $login;
+	}
+}
+
+function wp_get_current_user() {
+	return $GLOBALS['fh_user'];
+}
+
+function get_current_user_id() {
+	return (int) $GLOBALS['fh_user']->ID;
+}
+
+function get_userdata( $id ) {
+	return isset( $GLOBALS['fh_users'][ (int) $id ] ) ? (object) array( 'ID' => (int) $id, 'user_login' => $GLOBALS['fh_users'][ (int) $id ] ) : false;
+}
+
+function is_multisite() {
+	return (bool) $GLOBALS['fh_multisite'];
+}
+
+function is_super_admin( $user_id = false ) {
+	return (bool) $GLOBALS['fh_super_admin'];
+}
+
+function wp_create_nonce( $action = -1 ) {
+	return 'nonce-' . $action;
+}
+
+function wp_verify_nonce( $nonce, $action = -1 ) {
+	return is_string( $nonce ) && 'nonce-' . $action === $nonce ? 1 : false;
+}
+
+function wp_nonce_field( $action = -1, $name = '_wpnonce', $referer = true, $echo = true ) {
+	$field = '<input type="hidden" name="' . esc_attr( $name ) . '" value="' . esc_attr( wp_create_nonce( $action ) ) . '" />';
+	if ( $echo ) {
+		echo $field; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- test stub.
+	}
+	return $field;
+}
+
+function absint( $value ) {
+	return abs( (int) $value );
+}
+
+function sanitize_text_field( $text ) {
+	return trim( preg_replace( '/[\r\n\t ]+/', ' ', strip_tags( (string) $text ) ) );
+}
+
+function esc_textarea( $text ) {
+	return htmlspecialchars( (string) $text, ENT_QUOTES, 'UTF-8' );
+}
+
+function esc_attr__( $text, $domain = null ) {
+	return esc_attr( $text );
+}
+
+function esc_attr_e( $text, $domain = null ) {
+	echo esc_attr( $text );
+}
+
+function selected( $value, $current = true, $echo = true ) {
+	$out = (string) $value === (string) $current ? " selected='selected'" : '';
+	if ( $echo ) {
+		echo $out; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- test stub.
+	}
+	return $out;
+}
+
+function wp_kses_post( $html ) {
+	return (string) $html;
+}
+
+function number_format_i18n( $number, $decimals = 0 ) {
+	return number_format( (float) $number, (int) $decimals );
+}
+
+function get_date_from_gmt( $date, $format = 'Y-m-d H:i:s' ) {
+	return gmdate( $format, (int) strtotime( $date . ' UTC' ) );
+}
+
+/**
+ * wp_text_diff(): '' for equal texts, else a two-cell table of the escaped
+ * texts (the real one escapes its lines too).
+ */
+function wp_text_diff( $left, $right, $args = array() ) {
+	if ( (string) $left === (string) $right ) {
+		return '';
+	}
+	return '<table class="diff"><tr><td class="diff-deletedline">' . htmlspecialchars( (string) $left, ENT_QUOTES, 'UTF-8' ) . '</td><td class="diff-addedline">' . htmlspecialchars( (string) $right, ENT_QUOTES, 'UTF-8' ) . '</td></tr></table>';
+}
+
+function wp_safe_redirect( $location, $status = 302 ) {
+	throw new FH_Halt( 'redirect', (string) $location, $status );
+}
+
+function wp_send_json_success( $data = null, $status = null ) {
+	throw new FH_Halt( 'json', array( 'success' => true, 'data' => $data ), null === $status ? 200 : $status );
+}
+
+function wp_send_json_error( $data = null, $status = null ) {
+	throw new FH_Halt( 'json', array( 'success' => false, 'data' => $data ), null === $status ? 200 : $status );
+}
+
+function nocache_headers() {
+}
+
+if ( ! function_exists( 'wp_doing_ajax' ) ) {
+	function wp_doing_ajax() {
+		return ! empty( $GLOBALS['fh_doing_ajax'] );
+	}
+}
+
+function get_user_meta( $user_id, $key = '', $single = false ) {
+	$value = isset( $GLOBALS['fh_user_meta'][ (int) $user_id ][ $key ] ) ? $GLOBALS['fh_user_meta'][ (int) $user_id ][ $key ] : '';
+	return $single ? $value : array( $value );
+}
+
+function update_user_meta( $user_id, $key, $value ) {
+	$GLOBALS['fh_user_meta'][ (int) $user_id ][ $key ] = $value;
+	return true;
+}
+
+function delete_user_meta( $user_id, $key ) {
+	unset( $GLOBALS['fh_user_meta'][ (int) $user_id ][ $key ] );
+	return true;
+}
+
+function get_transient( $key ) {
+	return array_key_exists( $key, $GLOBALS['fh_transients'] ) ? $GLOBALS['fh_transients'][ $key ] : false;
+}
+
+function set_transient( $key, $value, $expiration = 0 ) {
+	$GLOBALS['fh_transients'][ $key ] = $value;
+	return true;
+}
+
+function delete_transient( $key ) {
+	unset( $GLOBALS['fh_transients'][ $key ] );
+	return true;
+}
+
+$GLOBALS['fh_code_editor'] = array( 'codemirror' => array( 'mode' => 'php' ) );
+
+function wp_enqueue_code_editor( $args ) {
+	$GLOBALS['fh_code_editor_args'] = $args;
+	return $GLOBALS['fh_code_editor'];
+}
+
+function wp_localize_script( $handle, $name, $data ) {
+	$GLOBALS['fh_scripts'][ $handle ]['localized'][ $name ] = $data;
+	return true;
+}
+
+/* ------------------------------------------------------------------ */
 /*  The section                                                        */
 /* ------------------------------------------------------------------ */
 
 require_once FISHOTEL_MISC_PATH . 'includes/class-section-manager.php';
-foreach ( array( 'site-snippets', 'header', 'symbols', 'rules', 'catalog', 'runner', 'loader', 'output', 'admin' ) as $fh_class ) {
+foreach ( array( 'site-snippets', 'header', 'symbols', 'rules', 'catalog', 'runner', 'loader', 'output', 'admin', 'db-snippets', 'editor-rules', 'export', 'db-store', 'editor' ) as $fh_class ) {
 	require_once FISHOTEL_MISC_PATH . 'includes/sections/site-snippets/class-' . $fh_class . '.php';
 }
 
