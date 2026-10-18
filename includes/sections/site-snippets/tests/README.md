@@ -39,7 +39,10 @@ php includes/sections/site-snippets/tests/snippets-test.php
   broken files, a slug shared by two files, size cap) and `Catalog::get()`
   (stored autoloaded, served from the option while the signature matches,
   no write on a fresh read of an unchanged folder, rebuilt after a change).
-- **loader-test.php** — whole requests: the Runner (a throwing snippet
+- **loader-test.php** — the early loader (nothing hooked while the section
+  is off or the option is malformed; `run_php` at `plugins_loaded` 1 and
+  the log flush at 20 when it is on; the main file includes it), then whole
+  requests: the Runner (a throwing snippet
   recorded and the next one run, missing files, a preflight skip, output
   discarded, locals local, a ParseError, a buffer left open, a failing
   callback); priority order on the front end and in admin; the error in

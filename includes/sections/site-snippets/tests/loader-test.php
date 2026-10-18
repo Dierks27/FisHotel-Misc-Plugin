@@ -1,6 +1,7 @@
 <?php
 /**
- * Loader / Runner / Output / switch tests — whole requests on a temp
+ * Loader / Runner / Output / switch tests — the early loader's hook, then
+ * whole requests on a temp
  * folder of invented snippets: the run at plugins_loaded:1 in priority
  * order, a snippet that throws recorded (error_log, the fishotel_log
  * action, the stored error) while the next one still runs, output
@@ -83,6 +84,21 @@ $dir = fh_snippet_dir(
 		'clash-b.php'   => fh_php_snippet( 'Clash B', 'function fh_test_clash() {}' ),
 	)
 );
+
+echo "0. The early loader\n";
+fh_reset_hooks();
+$GLOBALS['fh_options'][ FisHotel\Misc\Section_Manager::OPTION_KEY ] = array( 'health', 'today' );
+require_once FISHOTEL_MISC_PATH . 'includes/sections/site-snippets/early-loader.php';
+check( 'section off: nothing hooked', false === has_action( 'plugins_loaded' ) );
+$GLOBALS['fh_options'][ FisHotel\Misc\Section_Manager::OPTION_KEY ] = array( 'health', 'site-snippets' );
+FisHotel\Misc\Sections\Site_Snippets\early_load();
+check( 'section on (the Section Manager\'s option): the PHP run at plugins_loaded 1, the log flush at 20', 1 === has_action( 'plugins_loaded', array( Loader::class, 'run_php' ) ) && 20 === has_action( 'plugins_loaded', array( Loader::class, 'flush_log' ) ) );
+$GLOBALS['fh_options'][ FisHotel\Misc\Section_Manager::OPTION_KEY ] = 'garbage';
+fh_reset_hooks();
+FisHotel\Misc\Sections\Site_Snippets\early_load();
+check( 'a malformed option hooks nothing', false === has_action( 'plugins_loaded' ) );
+unset( $GLOBALS['fh_options'][ FisHotel\Misc\Section_Manager::OPTION_KEY ] );
+check( 'the main plugin file includes the early loader', false !== strpos( (string) file_get_contents( FISHOTEL_MISC_PATH . 'fishotel-misc-plugin.php' ), "require_once FISHOTEL_MISC_PATH . 'includes/sections/site-snippets/early-loader.php';" ) );
 
 echo "1. Runner\n";
 $GLOBALS['fh_ran'] = array();
