@@ -18,11 +18,16 @@
  *     with qty −1 unsets it;
  *   - the check-in date is the SITE date of the first arrival, corrected
  *     by a note event "checkin:YYYY-MM-DD";
- *   - sale-ready = N days after check-in (N = the sale_ready_days setting,
- *     default 28 — Jeff offers a group for sale after the full four weeks),
- *     or the stay's own override (a note event "sale_ready:YYYY-MM-DD";
- *     "sale_ready:" clears it); a stay is ready only once it is cleared
- *     AND that day has come;
+ *   - the sale date is CHOSEN, never computed: the stay's own date (a note
+ *     event "sale_ready:YYYY-MM-DD"; "sale_ready:" clears it) when set,
+ *     else its batch's date (the supplier order it was checked in from —
+ *     the Store hands it in as the stay's batch_sale_date), else none;
+ *     a stay is ready (for sale) once that date is set, the site-local
+ *     today is that date or later and the stay is not closed — cleared or
+ *     not. One that is ready while still in the Spa (not cleared) says so
+ *     (ready_in_spa), so every screen can warn. Without a date a stay is
+ *     not for sale; check-in + N days (the sale_ready_days setting) is
+ *     only the suggestion the screens show;
  *   - a move with a quantity smaller than the group splits it: that many
  *     leave this stay (the Store creates the sister stay), the rest stay
  *     put; a negative quantity is the undo of a split;
@@ -60,7 +65,9 @@ class Replay {
 	const STATUSES = array( 'in_qt', 'cleared', 'closed' );
 
 	/**
-	 * Default day number on which a stay is sale-ready.
+	 * Default number of days after check-in the SUGGESTED sale date falls
+	 * on (the hint and the date pickers' "suggested" fill — never what puts
+	 * a stay on sale).
 	 *
 	 * @var int
 	 */
@@ -68,11 +75,20 @@ class Replay {
 
 	/**
 	 * A note event starting with this sets (or, with nothing after it,
-	 * clears) the stay's sale-ready override.
+	 * clears) the stay's own sale date.
 	 *
 	 * @var string
 	 */
 	const NOTE_SALE_READY = 'sale_ready:';
+
+	/**
+	 * Where a stay's sale date comes from (sale_date_source()): its own
+	 * date, its batch's, or '' (none).
+	 *
+	 * @var string
+	 */
+	const SALE_OWN   = 'own';
+	const SALE_BATCH = 'batch';
 
 	/**
 	 * A clear event whose note starts with this carries the cleared date
@@ -188,19 +204,100 @@ class Replay {
 	}
 
 	/**
-	 * The sale-ready date: the stay's override when set, else N days after
-	 * check-in (check-in + N: the full N days have passed).
+	 * The SUGGESTED sale date: N days after check-in (check-in + N: the
+	 * full N days have passed). Only a hint and what the "suggested" fill
+	 * of a date picker puts in — never saved by itself, never what makes
+	 * a stay ready.
 	 *
-	 * @param string      $checkin  Y-m-d.
-	 * @param string|null $override Y-m-d or null.
-	 * @param int         $days     N (the sale_ready_days setting).
+	 * @param string $checkin Y-m-d.
+	 * @param int    $days    N (the sale_ready_days setting).
 	 * @return string Y-m-d ('' when there is no check-in)
 	 */
-	public static function sale_ready_date( $checkin, $override, $days = self::DEFAULT_SALE_READY_DAYS ) {
-		if ( self::is_date( $override ) ) {
-			return (string) $override;
-		}
+	public static function suggested_sale_date( $checkin, $days = self::DEFAULT_SALE_READY_DAYS ) {
 		return self::add_days( $checkin, max( 1, (int) $days ) );
+	}
+
+	/**
+	 * The effective sale date: the stay's own date when set, else its
+	 * batch's date, else none.
+	 *
+	 * @param string|null $own   The stay's own date (the note event's).
+	 * @param string|null $batch The batch's date (its supplier order's).
+	 * @return string|null Y-m-d, or null when neither is set.
+	 */
+	public static function sale_date( $own, $batch ) {
+		if ( self::is_date( $own ) ) {
+			return (string) $own;
+		}
+		if ( self::is_date( $batch ) ) {
+			return (string) $batch;
+		}
+		return null;
+	}
+
+	/**
+	 * Where the effective sale date comes from.
+	 *
+	 * @param string|null $own   The stay's own date.
+	 * @param string|null $batch The batch's date.
+	 * @return string SALE_OWN, SALE_BATCH or '' (none).
+	 */
+	public static function sale_date_source( $own, $batch ) {
+		if ( self::is_date( $own ) ) {
+			return self::SALE_OWN;
+		}
+		if ( self::is_date( $batch ) ) {
+			return self::SALE_BATCH;
+		}
+		return '';
+	}
+
+	/**
+	 * Whether a stay is for sale: a sale date is set, the site-local today
+	 * is that date or later (the date itself counts), and the stay is not
+	 * closed. Cleared or not does not matter — the chosen date rules.
+	 *
+	 * @param string|null $sale_date The effective sale date.
+	 * @param string      $today     Site date Y-m-d.
+	 * @param string      $status    in_qt|cleared|closed.
+	 * @return bool
+	 */
+	public static function is_sale_ready( $sale_date, $today, $status ) {
+		return 'closed' !== (string) $status
+			&& self::is_date( $sale_date )
+			&& self::is_date( $today )
+			&& strcmp( (string) $today, (string) $sale_date ) >= 0;
+	}
+
+	/**
+	 * Every sale field of a stay, from its own date, its batch's date, the
+	 * check-in, today and its status (pure; state() and effective() both
+	 * return these).
+	 *
+	 * @param string|null $own     The stay's own date.
+	 * @param string|null $batch   The batch's date.
+	 * @param string      $checkin Check-in date.
+	 * @param string      $today   Site date.
+	 * @param string      $status  in_qt|cleared|closed.
+	 * @param int         $days    The sale_ready_days setting (the suggestion only).
+	 * @return array{sale_ready_override: string|null, batch_sale_date: string|null, sale_ready_date: string|null,
+	 *               sale_date_source: string, sale_ready_suggested: string, sale_ready: bool, ready_in_spa: bool}
+	 */
+	public static function sale_fields( $own, $batch, $checkin, $today, $status, $days = self::DEFAULT_SALE_READY_DAYS ) {
+		$own   = self::is_date( $own ) ? (string) $own : null;
+		$batch = self::is_date( $batch ) ? (string) $batch : null;
+		$date  = self::sale_date( $own, $batch );
+		$ready = self::is_sale_ready( $date, $today, $status );
+
+		return array(
+			'sale_ready_override'  => $own,
+			'batch_sale_date'      => $batch,
+			'sale_ready_date'      => $date,
+			'sale_date_source'     => self::sale_date_source( $own, $batch ),
+			'sale_ready_suggested' => self::suggested_sale_date( $checkin, $days ),
+			'sale_ready'           => $ready,
+			'ready_in_spa'         => $ready && 'in_qt' === (string) $status,
+		);
 	}
 
 	/**
@@ -244,16 +341,18 @@ class Replay {
 	/**
 	 * Rebuild a stay's state from its events.
 	 *
-	 * @param array   $stay   The stay row (checkin_date as a fallback, tank_id as a fallback).
+	 * @param array   $stay   The stay row (checkin_date as a fallback, tank_id as a fallback,
+	 *                        batch_sale_date = its supplier order's sale date, when it has one).
 	 * @param array[] $events Its events (any order).
 	 * @param string  $today  Site date Y-m-d.
-	 * @param array   $opts   sale_ready_days (int, default 28),
+	 * @param array   $opts   sale_ready_days (int, default 28 — the suggested date only),
 	 *                        tz (DateTimeZone|string|null) for event dates,
 	 *                        tank_areas (array tank_id => 'clean'|'spa') to spot a move into the Clean Room.
 	 * @return array{
 	 *   qty_arrived: int, qty_live: int, qty_lost: int, qty_sold: int, overdrawn: bool,
 	 *   checkin_date: string, cleared_date: string|null, closed_date: string|null,
-	 *   sale_ready_override: string|null, sale_ready_date: string, sale_ready: bool,
+	 *   sale_ready_override: string|null, batch_sale_date: string|null, sale_ready_date: string|null,
+	 *   sale_date_source: string, sale_ready_suggested: string, sale_ready: bool, ready_in_spa: bool,
 	 *   tank_id: int|null, status: string, stored_status: string, day: int|null,
 	 *   state_label: string, last_event_at: string
 	 * }
@@ -386,79 +485,84 @@ class Replay {
 			$checkin = $checkin_set;
 		}
 
-		$day        = self::day_number( $checkin, (string) $today );
-		$ready_date = self::sale_ready_date( $checkin, $override, $days );
-		$status     = null !== $closed_date ? 'closed' : ( null !== $cleared_date ? 'cleared' : 'in_qt' );
-		$ready      = 'cleared' === $status && '' !== $ready_date && self::is_date( $today ) && strcmp( (string) $today, $ready_date ) >= 0;
+		$day    = self::day_number( $checkin, (string) $today );
+		$status = null !== $closed_date ? 'closed' : ( null !== $cleared_date ? 'cleared' : 'in_qt' );
+		$sale   = self::sale_fields( $override, $stay['batch_sale_date'] ?? null, $checkin, (string) $today, $status, $days );
 
-		return array(
-			'qty_arrived'         => $qty_arrived,
-			'qty_live'            => $qty_live,
-			'qty_lost'            => $qty_lost,
-			'qty_sold'            => $qty_sold,
-			'overdrawn'           => $overdrawn,
-			'checkin_date'        => $checkin,
-			'cleared_date'        => $cleared_date,
-			'closed_date'         => $closed_date,
-			'sale_ready_override' => $override,
-			'sale_ready_date'     => $ready_date,
-			'sale_ready'          => $ready,
-			'tank_id'             => $tank_id,
-			'status'              => $status,
-			'stored_status'       => $status,
-			'day'                 => $day,
-			'state_label'         => self::state_label( $status, $ready ),
-			'last_event_at'       => $last_at,
+		return array_merge(
+			array(
+				'qty_arrived'   => $qty_arrived,
+				'qty_live'      => $qty_live,
+				'qty_lost'      => $qty_lost,
+				'qty_sold'      => $qty_sold,
+				'overdrawn'     => $overdrawn,
+				'checkin_date'  => $checkin,
+				'cleared_date'  => $cleared_date,
+				'closed_date'   => $closed_date,
+			),
+			$sale,
+			array(
+				'tank_id'       => $tank_id,
+				'status'        => $status,
+				'stored_status' => $status,
+				'day'           => $day,
+				'state_label'   => self::state_label( $status, $sale['sale_ready'] ),
+				'last_event_at' => $last_at,
+			)
 		);
 	}
 
 	/**
 	 * The effective state of a cached row today — the stored status plus
-	 * the day number and the sale-ready flag (the only parts that move
-	 * without an event).
+	 * the day number and the sale fields (the only parts that move without
+	 * an event: today, and the batch's date on its supplier order).
 	 *
-	 * @param array  $row   Stay row (status, checkin_date, cleared_date, sale_ready_date = override).
+	 * @param array  $row   Stay row (status, checkin_date, cleared_date, sale_ready_date = the stay's
+	 *                      own date, batch_sale_date = its supplier order's).
 	 * @param string $today Site date.
-	 * @param array  $opts  sale_ready_days.
-	 * @return array{status: string, day: int|null, sale_ready_date: string, sale_ready: bool, state_label: string}
+	 * @param array  $opts  sale_ready_days (the suggested date only).
+	 * @return array{status: string, day: int|null, sale_ready_override: string|null, batch_sale_date: string|null,
+	 *               sale_ready_date: string|null, sale_date_source: string, sale_ready_suggested: string,
+	 *               sale_ready: bool, ready_in_spa: bool, state_label: string}
 	 */
 	public static function effective( array $row, $today, array $opts = array() ) {
-		$days       = max( 1, (int) ( $opts['sale_ready_days'] ?? self::DEFAULT_SALE_READY_DAYS ) );
-		$checkin    = (string) ( $row['checkin_date'] ?? '' );
-		$day        = self::day_number( $checkin, (string) $today );
-		$status     = (string) ( $row['status'] ?? 'in_qt' );
-		$override   = self::is_date( $row['sale_ready_date'] ?? null ) ? (string) $row['sale_ready_date'] : null;
-		$ready_date = self::sale_ready_date( $checkin, $override, $days );
+		$days    = max( 1, (int) ( $opts['sale_ready_days'] ?? self::DEFAULT_SALE_READY_DAYS ) );
+		$checkin = (string) ( $row['checkin_date'] ?? '' );
+		$day     = self::day_number( $checkin, (string) $today );
+		$status  = (string) ( $row['status'] ?? 'in_qt' );
 
 		if ( 'closed' !== $status ) {
 			$status = ! empty( $row['cleared_date'] ) ? 'cleared' : 'in_qt';
 		}
-		$ready = 'cleared' === $status && '' !== $ready_date && self::is_date( $today ) && strcmp( (string) $today, $ready_date ) >= 0;
+		$sale = self::sale_fields( $row['sale_ready_date'] ?? null, $row['batch_sale_date'] ?? null, $checkin, (string) $today, $status, $days );
 
-		return array(
-			'status'          => $status,
-			'day'             => $day,
-			'sale_ready_date' => $ready_date,
-			'sale_ready'      => $ready,
-			'state_label'     => self::state_label( $status, $ready ),
+		return array_merge(
+			array(
+				'status' => $status,
+				'day'    => $day,
+			),
+			$sale,
+			array( 'state_label' => self::state_label( $status, $sale['sale_ready'] ) )
 		);
 	}
 
 	/**
-	 * 'in QT' / 'cleared' / 'ready' / 'closed'.
+	 * 'in QT' / 'cleared' / 'ready' / 'closed'. A stay whose sale date has
+	 * come is 'ready' whether it is cleared or not (the screens add the
+	 * "still in the Spa" warning from ready_in_spa).
 	 *
 	 * @param string $status Status.
-	 * @param bool   $ready  Sale-ready.
+	 * @param bool   $ready  For sale (is_sale_ready()).
 	 * @return string
 	 */
 	public static function state_label( $status, $ready ) {
 		if ( 'closed' === $status ) {
 			return 'closed';
 		}
-		if ( 'cleared' === $status ) {
-			return $ready ? 'ready' : 'cleared';
+		if ( $ready ) {
+			return 'ready';
 		}
-		return 'in QT';
+		return 'cleared' === $status ? 'cleared' : 'in QT';
 	}
 
 	/* ============================================================== */
@@ -471,7 +575,7 @@ class Replay {
 	 *
 	 * @param array $event        The event to undo (type, qty, from_tank_id, to_tank_id, note).
 	 * @param array $state_before The state just before that event (for a count's previous
-	 *                            qty_live and a sale-ready note's previous override).
+	 *                            qty_live and a sale-date note's previous own date).
 	 * @return array|null type, qty, from_tank_id, to_tank_id, note.
 	 */
 	public static function compensating( array $event, array $state_before = array() ) {

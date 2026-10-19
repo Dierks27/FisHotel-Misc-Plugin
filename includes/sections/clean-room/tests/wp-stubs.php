@@ -38,6 +38,10 @@ function esc_attr( $text ) {
 	return htmlspecialchars( (string) $text, ENT_QUOTES, 'UTF-8' );
 }
 
+function esc_attr__( $text, $domain = null ) {
+	return htmlspecialchars( (string) $text, ENT_QUOTES, 'UTF-8' );
+}
+
 function esc_url( $url ) {
 	return (string) $url;
 }

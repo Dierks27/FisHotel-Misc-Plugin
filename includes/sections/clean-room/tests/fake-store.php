@@ -205,8 +205,15 @@ class Fake_Store {
 		return $id;
 	}
 
+	/**
+	 * A stay row with the columns the real Store's stay_select() joins:
+	 * the tank and building, and the batch (the order line → its order,
+	 * with the order's sale date).
+	 */
 	private function joined_row( array $row ) {
-		$tank = $row['tank_id'] ? $this->tank( $row['tank_id'] ) : null;
+		$tank  = $row['tank_id'] ? $this->tank( $row['tank_id'] ) : null;
+		$line  = ! empty( $row['order_line_id'] ) && isset( $this->lines[ (int) $row['order_line_id'] ] ) ? $this->lines[ (int) $row['order_line_id'] ] : null;
+		$order = $line && isset( $this->orders[ (int) $line['order_id'] ] ) ? $this->orders[ (int) $line['order_id'] ] : null;
 		return array_merge(
 			$row,
 			array(
@@ -216,8 +223,19 @@ class Fake_Store {
 				'building_number' => $tank ? $tank['building']['number'] : null,
 				'building_area'   => $tank ? $tank['building']['area'] : '',
 				'building_name'   => $tank ? $tank['building']['name'] : '',
+				'batch_order_id'  => $order ? (int) $order['id'] : null,
+				'batch_order_ref' => $order ? (string) $order['ref'] : null,
+				'batch_sale_date' => $order ? ( $order['sale_date'] ?? null ) : null,
 			)
 		);
+	}
+
+	/**
+	 * The supplier order a stay row belongs to (its order line's order), or 0.
+	 */
+	private function batch_of( array $row ) {
+		$line = ! empty( $row['order_line_id'] ) && isset( $this->lines[ (int) $row['order_line_id'] ] ) ? $this->lines[ (int) $row['order_line_id'] ] : null;
+		return $line ? (int) $line['order_id'] : 0;
 	}
 
 	public function stay( $id, $today = '', array $settings = array() ) {
@@ -241,7 +259,14 @@ class Fake_Store {
 			if ( ! empty( $filters['product_id'] ) && (int) $row['product_id'] !== (int) $filters['product_id'] ) {
 				continue;
 			}
-			$out[] = Store::hydrate_stay( $this->joined_row( $row ), $today, $settings );
+			if ( ! empty( $filters['order_id'] ) && $this->batch_of( $row ) !== (int) $filters['order_id'] ) {
+				continue;
+			}
+			$stay = Store::hydrate_stay( $this->joined_row( $row ), $today, $settings );
+			if ( ! empty( $filters['ready'] ) && empty( $stay['sale_ready'] ) ) {
+				continue;
+			}
+			$out[] = $stay;
 		}
 		usort(
 			$out,
@@ -249,6 +274,54 @@ class Fake_Store {
 				return strcmp( $a['checkin_date'], $b['checkin_date'] ) ?: ( $a['id'] <=> $b['id'] );
 			}
 		);
+		return $out;
+	}
+
+	/**
+	 * Every stay of a product, open first, then closed (Store::stays_for_product()).
+	 */
+	public function stays_for_product( $product_id, $today, array $settings ) {
+		$out = array();
+		foreach ( $this->stays as $row ) {
+			if ( (int) $product_id > 0 && (int) $row['product_id'] === (int) $product_id ) {
+				$out[] = Store::hydrate_stay( $this->joined_row( $row ), $today, $settings );
+			}
+		}
+		usort(
+			$out,
+			static function ( $a, $b ) {
+				$closed = (int) ( 'closed' === $a['status'] ) <=> (int) ( 'closed' === $b['status'] );
+				return $closed ?: ( strcmp( $a['checkin_date'], $b['checkin_date'] ) ?: ( $a['id'] <=> $b['id'] ) );
+			}
+		);
+		return $out;
+	}
+
+	/**
+	 * The facts of a product (Store::product_facts() → the same pure facts_from_stays()).
+	 */
+	public function product_facts( $product_id, $today, array $settings ) {
+		return Store::facts_from_stays( $this->stays_for_product( $product_id, $today, $settings ) );
+	}
+
+	/**
+	 * Per order: its open stays and how many carry their own sale date (Store::batch_sale_counts()).
+	 */
+	public function batch_sale_counts() {
+		$out = array();
+		foreach ( $this->stays as $row ) {
+			$order_id = $this->batch_of( $row );
+			if ( $order_id <= 0 || 'closed' === $row['status'] ) {
+				continue;
+			}
+			if ( ! isset( $out[ $order_id ] ) ) {
+				$out[ $order_id ] = array( 'open' => 0, 'own' => 0 );
+			}
+			$out[ $order_id ]['open']++;
+			if ( null !== $row['sale_ready_date'] ) {
+				$out[ $order_id ]['own']++;
+			}
+		}
 		return $out;
 	}
 
@@ -398,12 +471,16 @@ class Fake_Store {
 		}
 		$sister = $this->create_stay(
 			array(
-				'product_id'   => $stay['product_id'],
-				'species'      => $stay['species'],
-				'checkin_date' => $stay['checkin_date'],
-				'tank_id'      => $stay['tank_id'],
-				'source'       => (string) ( $base['source'] ?? 'manual' ),
-				'notes'        => 'split from #' . (int) $stay['id'],
+				'product_id'    => $stay['product_id'],
+				'species'       => $stay['species'],
+				'checkin_date'  => $stay['checkin_date'],
+				'tank_id'       => $stay['tank_id'],
+				'source'        => (string) ( $base['source'] ?? 'manual' ),
+				'order_line_id' => $stay['order_line_id'],
+				'supplier'      => $stay['supplier'],
+				'order_ref'     => $stay['order_ref'],
+				'landed_cost'   => $stay['landed_cost'],
+				'notes'         => 'split from #' . (int) $stay['id'],
 			)
 		);
 		$ids   = array();

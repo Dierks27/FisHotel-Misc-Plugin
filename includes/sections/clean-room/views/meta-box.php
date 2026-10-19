@@ -26,17 +26,19 @@ use FisHotel\Misc\Sections\Clean_Room\Clean_Room;
 			<strong><?php echo esc_html( sprintf( /* translators: %d: fish alive */ __( '%d alive', 'fishotel-misc-plugin' ), (int) $facts['live_total'] ) ); ?></strong>
 			· <?php echo esc_html( sprintf( /* translators: %d: groups */ __( '%d in QT', 'fishotel-misc-plugin' ), count( $facts['in_qt'] ) ) ); ?>
 			· <?php echo esc_html( sprintf( /* translators: %d: groups */ __( '%d cleared', 'fishotel-misc-plugin' ), count( $facts['cleared'] ) ) ); ?>
-			· <?php echo esc_html( sprintf( /* translators: %d: fish */ __( '%d sale-ready', 'fishotel-misc-plugin' ), (int) $facts['ready_total'] ) ); ?>
+			· <?php echo esc_html( sprintf( /* translators: %d: fish */ __( '%d for sale', 'fishotel-misc-plugin' ), (int) $facts['ready_total'] ) ); ?>
 		</p>
 		<?php if ( ! empty( $facts['next'] ) ) : ?>
 			<p class="fh-cr-metabox__muted">
 				<?php
 				if ( ! empty( $facts['next']['sale_ready'] ) ) {
 					/* translators: 1: tank path */
-					echo esc_html( sprintf( __( 'Ready to ship now from %s.', 'fishotel-misc-plugin' ), $facts['next']['tank'] ) );
-				} else {
+					echo esc_html( sprintf( __( 'For sale now from %s.', 'fishotel-misc-plugin' ), $facts['next']['tank'] ) );
+				} elseif ( null !== $facts['next']['sale_ready_date'] ) {
 					/* translators: 1: date, 2: tank path */
-					echo esc_html( sprintf( __( 'Next ready %1$s (%2$s).', 'fishotel-misc-plugin' ), $facts['next']['sale_ready_date'], $facts['next']['tank'] ) );
+					echo esc_html( sprintf( __( 'Next on sale %1$s (%2$s).', 'fishotel-misc-plugin' ), $facts['next']['sale_ready_date'], $facts['next']['tank'] ) );
+				} else {
+					esc_html_e( 'No sale date set yet: set the batch\'s on its supplier order (Arrivals), or a group\'s own date.', 'fishotel-misc-plugin' );
 				}
 				?>
 			</p>
@@ -52,8 +54,8 @@ use FisHotel\Misc\Sections\Clean_Room\Clean_Room;
 					<?php if ( $fh_stay['tank_number'] ) : ?>
 						· <a href="<?php echo esc_url( Clean_Room::front_desk_url( (int) $fh_stay['tank_number'] ) ); ?>" target="_blank" rel="noopener"><?php echo esc_html( $fh_stay['tank_path'] ); ?></a>
 					<?php endif; ?>
-					<?php if ( 'closed' !== $fh_stay['status'] && '' !== $fh_stay['sale_ready_date'] ) : ?>
-						<span class="fh-cr-metabox__muted"><?php echo esc_html( sprintf( /* translators: %s: date */ __( 'ready %s', 'fishotel-misc-plugin' ), $fh_stay['sale_ready_date'] ) ); ?></span>
+					<?php if ( 'closed' !== $fh_stay['status'] ) : ?>
+						<span class="fh-cr-metabox__muted"><?php echo esc_html( Admin::sale_words( $fh_stay )['text'] ); ?></span>
 					<?php endif; ?>
 				</li>
 			<?php endforeach; ?>

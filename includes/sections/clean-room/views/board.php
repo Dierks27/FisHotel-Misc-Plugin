@@ -68,7 +68,13 @@ $fh_species = (string) $filters['species'];
 	<div class="fh-cr-summary">
 		<span class="fh-cr-chip"><strong><?php echo esc_html( $totals['in_qt'] ); ?></strong> <?php esc_html_e( 'groups in QT', 'fishotel-misc-plugin' ); ?></span>
 		<span class="fh-cr-chip"><strong><?php echo esc_html( $totals['cleared'] ); ?></strong> <?php esc_html_e( 'cleared', 'fishotel-misc-plugin' ); ?></span>
-		<span class="fh-cr-chip fh-cr-chip--ready"><strong><?php echo esc_html( $totals['ready'] ); ?></strong> <?php esc_html_e( 'sale-ready', 'fishotel-misc-plugin' ); ?></span>
+		<span class="fh-cr-chip fh-cr-chip--ready"><strong><?php echo esc_html( $totals['ready'] ); ?></strong> <?php esc_html_e( 'for sale', 'fishotel-misc-plugin' ); ?></span>
+		<?php if ( $totals['ready_in_spa'] > 0 ) : ?>
+			<span class="fh-cr-chip fh-cr-chip--warn"><strong><?php echo esc_html( $totals['ready_in_spa'] ); ?></strong> <?php esc_html_e( 'for sale but still in the Spa', 'fishotel-misc-plugin' ); ?></span>
+		<?php endif; ?>
+		<?php if ( $totals['no_sale_date'] > 0 ) : ?>
+			<a class="fh-cr-chip fh-cr-chip--muted" href="<?php echo esc_url( Admin::page_url( 'arrivals' ) ); ?>" title="<?php esc_attr_e( 'Set the batch\'s sale date on its supplier order (Arrivals), or a group\'s own date on its product page.', 'fishotel-misc-plugin' ); ?>"><strong><?php echo esc_html( $totals['no_sale_date'] ); ?></strong> <?php esc_html_e( 'without a sale date', 'fishotel-misc-plugin' ); ?></a>
+		<?php endif; ?>
 		<span class="fh-cr-chip"><strong><?php echo esc_html( $totals['live'] ); ?></strong> <?php esc_html_e( 'fish alive', 'fishotel-misc-plugin' ); ?></span>
 		<span class="fh-cr-chip"><strong><?php echo esc_html( $totals['empty'] ); ?></strong> / <?php echo esc_html( $totals['tanks'] ); ?> <?php esc_html_e( 'tanks empty', 'fishotel-misc-plugin' ); ?></span>
 		<span class="fh-cr-summary__meta"><?php echo esc_html( $today ); ?></span>
@@ -110,7 +116,7 @@ $fh_species = (string) $filters['species'];
 							<?php else : ?>
 								· <?php echo esc_html( sprintf( /* translators: %d: groups in QT */ __( '%d in QT', 'fishotel-misc-plugin' ), $fh_in_qt ) ); ?>
 								<?php if ( $fh_ready > 0 ) : ?>
-									· <?php echo esc_html( sprintf( /* translators: %d: sale-ready groups */ __( '%d sale-ready', 'fishotel-misc-plugin' ), $fh_ready ) ); ?>
+									· <?php echo esc_html( sprintf( /* translators: %d: groups for sale */ __( '%d for sale', 'fishotel-misc-plugin' ), $fh_ready ) ); ?>
 								<?php endif; ?>
 							<?php endif; ?>
 						</span>
@@ -171,6 +177,10 @@ $fh_species = (string) $filters['species'];
 															· <?php echo esc_html( sprintf( /* translators: %d: day number */ __( 'day %d', 'fishotel-misc-plugin' ), $fh_stay['day'] ) ); ?>
 														<?php endif; ?>
 														<?php echo Admin::badge_html( $fh_stay ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by badge_html(). ?>
+														<?php $fh_sale = Admin::sale_words( $fh_stay ); ?>
+														<?php if ( empty( $fh_stay['sale_ready'] ) ) : ?>
+															<span class="fh-cr-tank__sale"><?php echo esc_html( $fh_sale['text'] ); ?></span>
+														<?php endif; ?>
 													</li>
 												<?php endforeach; ?>
 											</ul>
@@ -200,6 +210,6 @@ $fh_species = (string) $filters['species'];
 	<?php endforeach; ?>
 
 	<p class="fh-cr-footnote">
-		<?php echo esc_html( sprintf( /* translators: %d: days after check-in (the sale-ready setting) */ __( 'Numbering: hundreds = building, tens = level (1 bottom, 2 top), ones = position from the left. Every building is one water system. Arrivals land in the Spa; a stay is cleared the day it moves from the Spa into the Clean Room and sale-ready %d days after check-in (Settings). Each tank card lists what is still due today; each tank\'s QR opens its Front Desk screen.', 'fishotel-misc-plugin' ), (int) $settings['sale_ready_days'] ) ); ?>
+		<?php esc_html_e( 'Numbering: hundreds = building, tens = level (1 bottom, 2 top), ones = position from the left. Every building is one water system. Arrivals land in the Spa; a stay is cleared the day it moves from the Spa into the Clean Room. A group goes on sale on the date you choose — its batch\'s "Goes on sale" date on the supplier order, or its own date on the product page — and not before; one whose date has come while it is still in the Spa is flagged. Each tank card lists what is still due today; each tank\'s QR opens its Front Desk screen.', 'fishotel-misc-plugin' ); ?>
 	</p>
 </div>

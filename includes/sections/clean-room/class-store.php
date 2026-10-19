@@ -19,7 +19,8 @@
  *   {prefix}fh_species      the species master (the workbook's Fishlist): name,
  *                           scientific name, group, per box, prices, product link
  *   {prefix}fh_orders       a supplier order's header: ref, supplier, origin, dates,
- *                           status, cost mode, tariffs / flight / import fees / credit
+ *                           status, cost mode, tariffs / flight / import fees / credit,
+ *                           sale_date (the day the batch goes on sale, chosen by hand)
  *   {prefix}fh_order_lines  its lines: species, ordered / received / DOA / survived,
  *                           per box or bags, price, worth, tank, the stay it became
  *
@@ -27,8 +28,13 @@
  * (Replay::state), writing the result back into the stays row — the row is
  * a cache, the events are the truth, nothing is ever deleted. A move with
  * a quantity smaller than the group is a split: split_stay() writes the
- * sister stay with backdated arrival / clear / override events so its
+ * sister stay with backdated arrival / clear / own-sale-date events so its
  * history reads the same.
+ *
+ * Every stay read joins its order line and supplier order, so a hydrated
+ * stay carries its batch (batch_order_id / batch_order_ref) and the
+ * batch's sale date, and Replay::effective() gives every reader the same
+ * effective sale date: the stay's own, else the batch's, else none.
  *
  * Every write is wrapped: missing tables or a database error mean the call
  * returns false / an empty array and nothing else happens. The species
@@ -53,11 +59,12 @@ class Store {
 	 * column: it re-saves the version option autoloaded on a site that
 	 * stored 1.0 without autoload, so boot() stops costing a query there.
 	 * 1.2 adds the species, orders and order_lines tables, the buildings'
-	 * schedule and system_gallons and the tank logs' building_id.
+	 * schedule and system_gallons and the tank logs' building_id. 1.3 adds
+	 * the orders' sale_date (the batch's chosen sale date).
 	 *
 	 * @var string
 	 */
-	const DB_VERSION = '1.2';
+	const DB_VERSION = '1.3';
 
 	/**
 	 * Option holding the installed schema version.
@@ -146,20 +153,45 @@ class Store {
 
 		global $wpdb;
 
-		$charset_collate = $wpdb->get_charset_collate();
-		$buildings       = self::table( 'buildings' );
-		$tanks           = self::table( 'tanks' );
-		$stays           = self::table( 'stays' );
-		$events          = self::table( 'stay_events' );
-		$logs            = self::table( 'tank_logs' );
-		$aliases         = self::table( 'aliases' );
-		$species         = self::table( 'species' );
-		$orders          = self::table( 'orders' );
-		$lines           = self::table( 'order_lines' );
+		$sql = self::schema( $wpdb->get_charset_collate() );
+
+		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+		foreach ( $sql as $statement ) {
+			dbDelta( $statement );
+		}
+
+		self::$tables_exist = null;
+
+		if ( self::tables_exist() ) {
+			update_option( self::DB_VERSION_OPTION, self::DB_VERSION, true );
+			self::seed_if_empty();
+			self::backfill_system_gallons();
+		}
+
+		return true;
+	}
+
+	/**
+	 * The CREATE TABLE statements dbDelta runs (pure apart from the table
+	 * prefix, so a test can read the schema).
+	 *
+	 * @param string $charset_collate The charset / collation clause.
+	 * @return string[]
+	 */
+	public static function schema( $charset_collate = '' ) {
+		$buildings = self::table( 'buildings' );
+		$tanks     = self::table( 'tanks' );
+		$stays     = self::table( 'stays' );
+		$events    = self::table( 'stay_events' );
+		$logs      = self::table( 'tank_logs' );
+		$aliases   = self::table( 'aliases' );
+		$species   = self::table( 'species' );
+		$orders    = self::table( 'orders' );
+		$lines     = self::table( 'order_lines' );
 
 		// dbDelta is whitespace-sensitive: each column on its own line,
 		// two spaces after PRIMARY KEY, KEY (not INDEX) with a name.
-		$sql = array(
+		return array(
 			"CREATE TABLE {$buildings} (
 				id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
 				area ENUM('clean','spa') NOT NULL DEFAULT 'clean',
@@ -281,6 +313,7 @@ class Store {
 				origin VARCHAR(80) NOT NULL DEFAULT '',
 				order_date DATE NULL,
 				received_date DATE NULL,
+				sale_date DATE NULL,
 				status ENUM('draft','ordered','received','closed') NOT NULL DEFAULT 'draft',
 				boxes SMALLINT NULL,
 				cost_mode ENUM('box','bag') NOT NULL DEFAULT 'box',
@@ -324,21 +357,6 @@ class Store {
 				KEY stay_id (stay_id)
 			) {$charset_collate};",
 		);
-
-		require_once ABSPATH . 'wp-admin/includes/upgrade.php';
-		foreach ( $sql as $statement ) {
-			dbDelta( $statement );
-		}
-
-		self::$tables_exist = null;
-
-		if ( self::tables_exist() ) {
-			update_option( self::DB_VERSION_OPTION, self::DB_VERSION, true );
-			self::seed_if_empty();
-			self::backfill_system_gallons();
-		}
-
-		return true;
 	}
 
 	/**
@@ -767,12 +785,15 @@ class Store {
 	/* ============================================================== */
 
 	/**
-	 * The base SELECT for stays with their tank / building columns.
+	 * The base SELECT for stays with their tank / building columns and
+	 * their batch: the supplier order the stay was checked in from (its
+	 * order line → the order) with that order's sale date. Every join is
+	 * on a primary key.
 	 *
 	 * @return string
 	 */
 	private static function stay_select() {
-		return 'SELECT s.*, t.number AS tank_number, t.size_label AS tank_size, b.id AS building_id, b.number AS building_number, b.area AS building_area, b.name AS building_name FROM ' . self::table( 'stays' ) . ' s LEFT JOIN ' . self::table( 'tanks' ) . ' t ON t.id = s.tank_id LEFT JOIN ' . self::table( 'buildings' ) . ' b ON b.id = t.building_id';
+		return 'SELECT s.*, t.number AS tank_number, t.size_label AS tank_size, b.id AS building_id, b.number AS building_number, b.area AS building_area, b.name AS building_name, o.id AS batch_order_id, o.ref AS batch_order_ref, o.sale_date AS batch_sale_date FROM ' . self::table( 'stays' ) . ' s LEFT JOIN ' . self::table( 'tanks' ) . ' t ON t.id = s.tank_id LEFT JOIN ' . self::table( 'buildings' ) . ' b ON b.id = t.building_id LEFT JOIN ' . self::table( 'order_lines' ) . ' ol ON ol.id = s.order_line_id LEFT JOIN ' . self::table( 'orders' ) . ' o ON o.id = ol.order_id';
 	}
 
 	/**
@@ -780,9 +801,11 @@ class Store {
 	 * number and the effective state for today.
 	 *
 	 * @param array  $filters  area (clean|spa), species (search), product_id, tank_id, building_id,
-	 *                         status (in_qt|cleared — effective), ready (bool), include_closed (bool), limit (int).
+	 *                         order_id (the batch: the supplier order the stays were checked in from),
+	 *                         status (in_qt|cleared — effective), ready (bool: for sale today — the
+	 *                         effective sale date has come), include_closed (bool), limit (int).
 	 * @param string $today    Site date.
-	 * @param array  $settings Settings (sale_ready_days).
+	 * @param array  $settings Settings (sale_ready_days, for the suggested date).
 	 * @return array[]
 	 */
 	public function open_stays( array $filters, $today, array $settings ) {
@@ -817,6 +840,10 @@ class Store {
 		if ( ! empty( $filters['building_id'] ) ) {
 			$where[]  = 'b.id = %d';
 			$params[] = (int) $filters['building_id'];
+		}
+		if ( ! empty( $filters['order_id'] ) ) {
+			$where[]  = 'ol.order_id = %d';
+			$params[] = (int) $filters['order_id'];
 		}
 
 		$limit = isset( $filters['limit'] ) ? max( 1, min( 2000, (int) $filters['limit'] ) ) : 1000;
@@ -1126,7 +1153,7 @@ class Store {
 	 * @param int    $stay_id  Stay id.
 	 * @param array  $event    type, qty, from_tank_id, to_tank_id, note, event_at (UTC), actor_id, source.
 	 * @param string $today    Site date.
-	 * @param array  $settings Settings (sale_ready_days).
+	 * @param array  $settings Settings (sale_ready_days, for the suggested date).
 	 * @return array{event_id: int, state: array, overdrawn: bool}|false
 	 */
 	public function record_event( $stay_id, array $event, $today, array $settings ) {
@@ -1254,7 +1281,7 @@ class Store {
 
 	/**
 	 * The Replay state of a stay just before one of its events — what a
-	 * compensating 'count' or sale-ready note needs.
+	 * compensating 'count' or sale-date note needs.
 	 *
 	 * @param array  $stay     Stay with events.
 	 * @param int    $event_id The event.
@@ -1278,7 +1305,8 @@ class Store {
 	 * destination tank. The original gets a move event with the quantity
 	 * (Replay subtracts them); the sister gets a backdated arrival (same
 	 * check-in), a clear carrying the original's cleared date when it had
-	 * one, the same sale-ready override, and the move itself — so its
+	 * one, the same own sale date (the batch's comes with the order line),
+	 * and the move itself — so its
 	 * history reads the same and the move into the Clean Room clears it as
 	 * usual.
 	 *
@@ -2862,7 +2890,9 @@ class Store {
 
 	/**
 	 * Change some header fields of an order (status, received_date, …) —
-	 * what the check-in does.
+	 * what the check-in does — or its sale_date (the batch calendar on the
+	 * order page; a date or null). The order editor's Save goes through
+	 * save_order(), which never touches sale_date.
 	 *
 	 * @param int   $id     Order id.
 	 * @param array $fields Any header column except id / ref / created_at.
@@ -2879,7 +2909,7 @@ class Store {
 				$data[ $key ] = (string) $fields[ $key ];
 			}
 		}
-		foreach ( array( 'order_date', 'received_date' ) as $key ) {
+		foreach ( array( 'order_date', 'received_date', 'sale_date' ) as $key ) {
 			if ( array_key_exists( $key, $fields ) ) {
 				$data[ $key ] = Replay::is_date( $fields[ $key ] ) ? (string) $fields[ $key ] : null;
 			}
@@ -3151,15 +3181,44 @@ class Store {
 		return $out;
 	}
 
+	/**
+	 * Per supplier order, its open stays (groups still in tanks) and how
+	 * many of them carry their own sale date — the Arrivals list's "On
+	 * sale" column, in one query.
+	 *
+	 * @return array<int, array{open: int, own: int}> order id → counts.
+	 */
+	public function batch_sale_counts() {
+		if ( ! self::tables_exist() ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		try {
+			$rows = $wpdb->get_results( 'SELECT ol.order_id AS order_id, COUNT(*) AS open_groups, SUM(CASE WHEN s.sale_ready_date IS NULL THEN 0 ELSE 1 END) AS own_dated FROM ' . self::table( 'stays' ) . ' s INNER JOIN ' . self::table( 'order_lines' ) . " ol ON ol.id = s.order_line_id WHERE s.status <> 'closed' GROUP BY ol.order_id", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+
+		$out = array();
+		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
+			$out[ (int) $row['order_id'] ] = array(
+				'open' => (int) $row['open_groups'],
+				'own'  => (int) $row['own_dated'],
+			);
+		}
+
+		return $out;
+	}
+
 	/* ============================================================== */
 	/*  Product facts                                                  */
 	/* ============================================================== */
 
 	/**
-	 * What the fish page will read: how many are alive here, the stays
-	 * in QT (with day numbers), the cleared stays (with their sale-ready
-	 * dates), and 'next' — the stay that can ship first: a sale-ready one
-	 * with fish left, else the one with the earliest sale-ready date.
+	 * What the fish page will read (facts_from_stays() over this
+	 * product's stays).
 	 *
 	 * @param int    $product_id Product ID.
 	 * @param string $today      Site date.
@@ -3167,6 +3226,23 @@ class Store {
 	 * @return array{live_total: int, ready_total: int, in_qt: array[], cleared: array[], next: array|null}
 	 */
 	public function product_facts( $product_id, $today, array $settings ) {
+		return self::facts_from_stays( $this->stays_for_product( $product_id, $today, $settings ) );
+	}
+
+	/**
+	 * The facts of a product from its hydrated stays (pure): how many are
+	 * alive here, the stays in QT (with day numbers), the cleared stays,
+	 * every one with its effective sale date (its own, else its batch's,
+	 * else null) and whether it is for sale today, and 'next' — the stay
+	 * that can ship first: one for sale with fish left, else the one with
+	 * the earliest sale date (a stay without a date sorts last), then the
+	 * earliest check-in. ready_total counts the fish of every stay that is
+	 * for sale, cleared or still in the Spa.
+	 *
+	 * @param array[] $stays Hydrated stays (any status; closed ones and empty ones are skipped).
+	 * @return array{live_total: int, ready_total: int, in_qt: array[], cleared: array[], next: array|null}
+	 */
+	public static function facts_from_stays( array $stays ) {
 		$facts = array(
 			'live_total'  => 0,
 			'ready_total' => 0,
@@ -3176,26 +3252,29 @@ class Store {
 		);
 
 		$candidates = array();
-		foreach ( $this->stays_for_product( $product_id, $today, $settings ) as $stay ) {
-			if ( 'closed' === $stay['status'] || (int) $stay['qty_live'] <= 0 ) {
+		foreach ( $stays as $stay ) {
+			if ( 'closed' === ( $stay['status'] ?? '' ) || (int) ( $stay['qty_live'] ?? 0 ) <= 0 ) {
 				continue;
 			}
-			$entry = array(
-				'stay_id'         => (int) $stay['id'],
-				'qty_live'        => (int) $stay['qty_live'],
-				'checkin_date'    => (string) $stay['checkin_date'],
-				'cleared_date'    => $stay['cleared_date'],
-				'sale_ready_date' => (string) $stay['sale_ready_date'],
-				'sale_ready'      => ! empty( $stay['sale_ready'] ),
-				'day'             => $stay['day'],
-				'tank'            => (string) $stay['tank_path'],
+			$date   = isset( $stay['sale_ready_date'] ) && Replay::is_date( $stay['sale_ready_date'] ) ? (string) $stay['sale_ready_date'] : null;
+			$source = (string) ( $stay['sale_date_source'] ?? '' );
+			$entry  = array(
+				'stay_id'          => (int) $stay['id'],
+				'qty_live'         => (int) $stay['qty_live'],
+				'checkin_date'     => (string) $stay['checkin_date'],
+				'cleared_date'     => $stay['cleared_date'] ?? null,
+				'sale_ready_date'  => $date,
+				'sale_date_source' => null !== $date && '' !== $source ? $source : null,
+				'sale_ready'       => ! empty( $stay['sale_ready'] ),
+				'day'              => $stay['day'] ?? null,
+				'tank'             => (string) ( $stay['tank_path'] ?? '' ),
 			);
 			$facts['live_total'] += (int) $stay['qty_live'];
-			if ( 'cleared' === $stay['status'] ) {
+			if ( $entry['sale_ready'] ) {
+				$facts['ready_total'] += (int) $stay['qty_live'];
+			}
+			if ( 'cleared' === ( $stay['status'] ?? '' ) ) {
 				$facts['cleared'][] = $entry;
-				if ( $entry['sale_ready'] ) {
-					$facts['ready_total'] += (int) $stay['qty_live'];
-				}
 			} else {
 				$facts['in_qt'][] = $entry;
 			}
@@ -3208,20 +3287,24 @@ class Store {
 				if ( $a['sale_ready'] !== $b['sale_ready'] ) {
 					return $a['sale_ready'] ? -1 : 1;
 				}
-				$d = strcmp( $a['sale_ready_date'], $b['sale_ready_date'] );
+				if ( ( null === $a['sale_ready_date'] ) !== ( null === $b['sale_ready_date'] ) ) {
+					return null === $a['sale_ready_date'] ? 1 : -1;
+				}
+				$d = strcmp( (string) $a['sale_ready_date'], (string) $b['sale_ready_date'] );
 				return 0 !== $d ? $d : strcmp( $a['checkin_date'], $b['checkin_date'] );
 			}
 		);
 		if ( $candidates ) {
-			$first          = $candidates[0];
-			$facts['next']  = array(
-				'checkin_date'    => $first['checkin_date'],
-				'cleared_date'    => $first['cleared_date'],
-				'sale_ready_date' => $first['sale_ready_date'],
-				'sale_ready'      => $first['sale_ready'],
-				'day'             => $first['day'],
-				'tank'            => $first['tank'],
-				'qty_live'        => $first['qty_live'],
+			$first         = $candidates[0];
+			$facts['next'] = array(
+				'checkin_date'     => $first['checkin_date'],
+				'cleared_date'     => $first['cleared_date'],
+				'sale_ready_date'  => $first['sale_ready_date'],
+				'sale_date_source' => $first['sale_date_source'],
+				'sale_ready'       => $first['sale_ready'],
+				'day'              => $first['day'],
+				'tank'             => $first['tank'],
+				'qty_live'         => $first['qty_live'],
 			);
 		}
 
@@ -3288,10 +3371,14 @@ class Store {
 	}
 
 	/**
-	 * A stay row with ints, its tank path and the effective state today.
+	 * A stay row with ints, its tank path, its batch (order id, ref and
+	 * sale date) and the effective state today — the effective sale date
+	 * (sale_ready_date: own, else the batch's, else null), where it comes
+	 * from, the suggestion, whether it is for sale and the "still in the
+	 * Spa" flag (Replay::effective()).
 	 *
 	 * @param array  $row      Raw row (joined).
-	 * @param string $today    Site date ('' = skip the day math).
+	 * @param string $today    Site date ('' = today in the site zone, Clean_Room::today()).
 	 * @param array  $settings Settings.
 	 * @return array
 	 */
@@ -3335,6 +3422,9 @@ class Store {
 			'notes'               => (string) ( $row['notes'] ?? '' ),
 			'created_at'          => (string) ( $row['created_at'] ?? '' ),
 			'updated_at'          => (string) ( $row['updated_at'] ?? '' ),
+			'batch_order_id'      => ! empty( $row['batch_order_id'] ) ? (int) $row['batch_order_id'] : null,
+			'batch_order_ref'     => isset( $row['batch_order_ref'] ) && null !== $row['batch_order_ref'] && '' !== $row['batch_order_ref'] ? (string) $row['batch_order_ref'] : null,
+			'batch_sale_date'     => $date( $row['batch_sale_date'] ?? null ),
 		);
 
 		$effective = Replay::effective(
@@ -3343,8 +3433,9 @@ class Store {
 				'checkin_date'    => $stay['checkin_date'],
 				'cleared_date'    => $stay['cleared_date'],
 				'sale_ready_date' => $stay['sale_ready_override'],
+				'batch_sale_date' => $stay['batch_sale_date'],
 			),
-			'' !== (string) $today ? (string) $today : gmdate( 'Y-m-d' ),
+			'' !== (string) $today ? (string) $today : Clean_Room::today(), // The SITE date: a sale date flips at local midnight.
 			array( 'sale_ready_days' => (int) ( $settings['sale_ready_days'] ?? Replay::DEFAULT_SALE_READY_DAYS ) )
 		);
 
@@ -3447,6 +3538,7 @@ class Store {
 			'origin'          => (string) ( $row['origin'] ?? '' ),
 			'order_date'      => self::date_or_null( $row['order_date'] ?? null ),
 			'received_date'   => self::date_or_null( $row['received_date'] ?? null ),
+			'sale_date'       => self::date_or_null( $row['sale_date'] ?? null ),
 			'status'          => (string) ( $row['status'] ?? 'draft' ),
 			'boxes'           => self::int_or_null( $row['boxes'] ?? null ),
 			'cost_mode'       => 'bag' === (string) ( $row['cost_mode'] ?? 'box' ) ? 'bag' : 'box',

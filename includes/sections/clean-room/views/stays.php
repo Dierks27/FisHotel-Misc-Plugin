@@ -8,7 +8,7 @@
  * @var array[] $stays        Open stays.
  * @var bool    $show_closed  Whether closed stays are listed.
  * @var array[] $closed_stays Closed stays (when shown).
- * @var array   $filters      area, species.
+ * @var array   $filters      area, species, ready.
  * @var string  $csv_url      Nonced CSV URL.
  * @var array   $settings     Settings.
  * @var string  $today        Site date.
@@ -19,8 +19,10 @@
 defined( 'ABSPATH' ) || exit;
 
 use FisHotel\Misc\Sections\Clean_Room\Admin;
+use FisHotel\Misc\Sections\Clean_Room\Admin_Workbook;
 use FisHotel\Misc\Sections\Clean_Room\Clean_Room;
 use FisHotel\Misc\Sections\Clean_Room\Layout;
+use FisHotel\Misc\Sections\Clean_Room\Replay;
 
 $tab = 'stays';
 
@@ -45,7 +47,7 @@ $fh_table = static function ( array $rows, $open ) use ( $today ) {
 				<th scope="col" class="fh-cr-num"><?php esc_html_e( 'Day', 'fishotel-misc-plugin' ); ?></th>
 				<th scope="col"><?php esc_html_e( 'State', 'fishotel-misc-plugin' ); ?></th>
 				<th scope="col"><?php esc_html_e( 'Cleared', 'fishotel-misc-plugin' ); ?></th>
-				<th scope="col"><?php esc_html_e( 'Sale-ready', 'fishotel-misc-plugin' ); ?></th>
+				<th scope="col"><?php esc_html_e( 'On sale', 'fishotel-misc-plugin' ); ?></th>
 				<th scope="col"><?php esc_html_e( 'Tank', 'fishotel-misc-plugin' ); ?></th>
 				<th scope="col"><?php esc_html_e( 'Supplier / order', 'fishotel-misc-plugin' ); ?></th>
 				<th scope="col"></th>
@@ -53,6 +55,7 @@ $fh_table = static function ( array $rows, $open ) use ( $today ) {
 		</thead>
 		<tbody>
 			<?php foreach ( $rows as $fh_stay ) : ?>
+				<?php $fh_sale = Admin::sale_words( $fh_stay ); ?>
 				<tr data-stay="<?php echo esc_attr( $fh_stay['id'] ); ?>" data-live="<?php echo esc_attr( $fh_stay['qty_live'] ); ?>">
 					<td>
 						<strong><?php echo esc_html( $fh_stay['species'] ); ?></strong>
@@ -71,9 +74,14 @@ $fh_table = static function ( array $rows, $open ) use ( $today ) {
 					<td><?php echo Admin::badge_html( $fh_stay ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by badge_html(). ?></td>
 					<td><?php echo $fh_stay['cleared_date'] ? esc_html( $fh_stay['cleared_date'] ) : '—'; ?></td>
 					<td>
-						<?php echo '' !== $fh_stay['sale_ready_date'] ? esc_html( $fh_stay['sale_ready_date'] ) : '—'; ?>
-						<?php if ( $fh_stay['sale_ready_override'] ) : ?>
-							<span class="fh-cr-sub"><?php esc_html_e( 'set by hand', 'fishotel-misc-plugin' ); ?></span>
+						<?php if ( '' !== $fh_sale['date'] ) : ?>
+							<?php echo esc_html( $fh_sale['date'] ); ?>
+							<span class="fh-cr-sub"><?php echo esc_html( $fh_sale['source'] ); ?></span>
+						<?php else : ?>
+							<span class="fh-cr-muted"><?php echo esc_html( $fh_sale['text'] ); ?></span>
+							<?php if ( '' !== $fh_sale['hint'] ) : ?>
+								<span class="fh-cr-sub"><?php echo esc_html( $fh_sale['hint'] ); ?></span>
+							<?php endif; ?>
 						<?php endif; ?>
 					</td>
 					<td>
@@ -85,7 +93,11 @@ $fh_table = static function ( array $rows, $open ) use ( $today ) {
 						<?php endif; ?>
 					</td>
 					<td>
-						<?php echo esc_html( trim( (string) $fh_stay['supplier'] . ' ' . (string) $fh_stay['order_ref'] ) ); ?>
+						<?php if ( ! empty( $fh_stay['batch_order_id'] ) ) : ?>
+							<?php echo esc_html( (string) $fh_stay['supplier'] ); ?> <a href="<?php echo esc_url( Admin_Workbook::order_url( (int) $fh_stay['batch_order_id'] ) ); ?>"><?php echo esc_html( (string) ( $fh_stay['batch_order_ref'] ?? $fh_stay['order_ref'] ) ); ?></a>
+						<?php else : ?>
+							<?php echo esc_html( trim( (string) $fh_stay['supplier'] . ' ' . (string) $fh_stay['order_ref'] ) ); ?>
+						<?php endif; ?>
 						<?php if ( null !== $fh_stay['landed_cost'] ) : ?>
 							<span class="fh-cr-sub"><?php echo esc_html( number_format( (float) $fh_stay['landed_cost'], 2 ) ); ?></span>
 						<?php endif; ?>
@@ -97,10 +109,10 @@ $fh_table = static function ( array $rows, $open ) use ( $today ) {
 							<button type="button" class="button button-small fh-cr-act" data-op="sold"><?php esc_html_e( 'Shipped', 'fishotel-misc-plugin' ); ?></button>
 							<button type="button" class="button button-small fh-cr-act" data-op="count"><?php esc_html_e( 'Count', 'fishotel-misc-plugin' ); ?></button>
 							<button type="button" class="button button-small fh-cr-act" data-op="clear"><?php esc_html_e( 'Cleared…', 'fishotel-misc-plugin' ); ?></button>
-							<button type="button" class="button button-small fh-cr-act" data-op="ready"><?php esc_html_e( 'Sale-ready…', 'fishotel-misc-plugin' ); ?></button>
+							<button type="button" class="button button-small fh-cr-act" data-op="ready" data-default="<?php echo esc_attr( (string) ( $fh_stay['sale_ready_override'] ? $fh_stay['sale_ready_override'] : $fh_stay['sale_ready_suggested'] ) ); ?>" data-batch="<?php echo esc_attr( (string) $fh_stay['batch_sale_date'] ); ?>"><?php esc_html_e( 'Sale date…', 'fishotel-misc-plugin' ); ?></button>
 							<button type="button" class="button button-small fh-cr-act" data-op="move" data-tank="<?php echo esc_attr( (string) $fh_stay['tank_number'] ); ?>"><?php esc_html_e( 'Move…', 'fishotel-misc-plugin' ); ?></button>
-							<?php if ( $fh_stay['product_id'] && '' !== $fh_stay['sale_ready_date'] ) : ?>
-								<button type="button" class="button button-small fh-cr-release" title="<?php esc_attr_e( 'Set the product\'s Coming Soon countdown to this sale-ready date', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'Coming Soon', 'fishotel-misc-plugin' ); ?></button>
+							<?php if ( $fh_stay['product_id'] && Replay::is_date( $fh_stay['sale_ready_date'] ) ) : ?>
+								<button type="button" class="button button-small fh-cr-release" title="<?php esc_attr_e( 'Set the product\'s Coming Soon countdown to this sale date', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'Coming Soon', 'fishotel-misc-plugin' ); ?></button>
 							<?php endif; ?>
 							<button type="button" class="button button-small fh-cr-fields-toggle"><?php esc_html_e( 'Edit', 'fishotel-misc-plugin' ); ?></button>
 						<?php endif; ?>
@@ -161,6 +173,10 @@ $fh_table = static function ( array $rows, $open ) use ( $today ) {
 				<input type="search" name="s" class="fh-cr-input" value="<?php echo esc_attr( $filters['species'] ); ?>">
 			</label>
 			<label class="fh-cr-filter fh-cr-filter--check">
+				<input type="checkbox" name="ready" value="1" <?php checked( ! empty( $filters['ready'] ) ); ?>>
+				<span><?php esc_html_e( 'For sale now', 'fishotel-misc-plugin' ); ?></span>
+			</label>
+			<label class="fh-cr-filter fh-cr-filter--check">
 				<input type="checkbox" name="closed" value="1" <?php checked( $show_closed ); ?>>
 				<span><?php esc_html_e( 'Show closed', 'fishotel-misc-plugin' ); ?></span>
 			</label>
@@ -175,7 +191,7 @@ $fh_table = static function ( array $rows, $open ) use ( $today ) {
 		</div>
 	</div>
 
-	<p class="fh-cr-count"><?php echo esc_html( sprintf( /* translators: %d: open stays */ __( '%d open stays · oldest check-in first', 'fishotel-misc-plugin' ), count( $stays ) ) ); ?></p>
+	<p class="fh-cr-count"><?php echo esc_html( sprintf( /* translators: %d: open stays */ ! empty( $filters['ready'] ) ? __( '%d open stays for sale today · oldest check-in first', 'fishotel-misc-plugin' ) : __( '%d open stays · oldest check-in first', 'fishotel-misc-plugin' ), count( $stays ) ) ); ?></p>
 	<?php $fh_table( $stays, true ); ?>
 
 	<?php if ( $show_closed ) : ?>
@@ -184,6 +200,6 @@ $fh_table = static function ( array $rows, $open ) use ( $today ) {
 	<?php endif; ?>
 
 	<p class="fh-cr-footnote">
-		<?php echo esc_html( sprintf( /* translators: %d: days after check-in (the sale-ready setting) */ __( 'Lost / Shipped / Count / Move… write events (the counts stay editable at any time — the order itself is edited in WooCommerce). Cleared… sets the cleared date by hand (empty removes it); Sale-ready… overrides the date %d days after check-in (empty goes back to it); Edit corrects the check-in date and the supplier fields. Coming Soon sets the product\'s release countdown to the sale-ready date at 09:00. A mistake is undone from the Events tab. The CSV guards every cell against spreadsheet formulas.', 'fishotel-misc-plugin' ), (int) $settings['sale_ready_days'] ) ); ?>
+		<?php esc_html_e( 'Lost / Shipped / Count / Move… write events (the counts stay editable at any time — the order itself is edited in WooCommerce). Cleared… sets the cleared date by hand (empty removes it). A group is on sale from its own date (Sale date…, the product page, or Dates on the phone) or else its batch\'s date (Goes on sale, on the supplier order); Sale date… with nothing typed goes back to the batch\'s. Edit corrects the check-in date and the supplier fields. Coming Soon sets the product\'s release countdown to the sale date at 09:00. A mistake is undone from the Events tab. The CSV guards every cell against spreadsheet formulas.', 'fishotel-misc-plugin' ); ?>
 	</p>
 </div>

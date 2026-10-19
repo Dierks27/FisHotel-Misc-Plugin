@@ -469,12 +469,21 @@
 				if (fields.qty === 0 && !root.confirm(i18n.confirmZero || 'Close this group?')) {
 					return;
 				}
-			} else if (op === 'clear' || op === 'ready') {
+			} else if (op === 'clear') {
 				var date = root.prompt(i18n.which || 'Which date (YYYY-MM-DD)? Leave empty to clear.', '');
 				if (date === null) {
 					return;
 				}
 				fields.date = $.trim(date);
+			} else if (op === 'ready') {
+				// Pre-filled with the group's own date, else the suggestion (check-in + the setting); nothing is saved until OK.
+				var batch = String($(this).data('batch') || '');
+				var ask = batch ? (i18n.whichSaleBatch || 'This group\'s own sale date (YYYY-MM-DD)? Leave empty to use the batch date (%s).').replace('%s', batch) : (i18n.whichSale || 'This group\'s own sale date (YYYY-MM-DD)? Leave empty for none — the batch has no date yet.');
+				var sale = root.prompt(ask, String($(this).data('default') || ''));
+				if (sale === null) {
+					return;
+				}
+				fields.date = $.trim(sale);
 			} else if (op === 'move') {
 				var to = root.prompt(i18n.whichTank || 'Move to which tank number?', String($(this).data('tank') || ''));
 				if (to === null) {

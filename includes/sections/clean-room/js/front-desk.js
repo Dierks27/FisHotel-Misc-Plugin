@@ -14,8 +14,12 @@
  * tapped. Arrivals only ever go into a Spa tank. A move with a smaller
  * quantity splits the group; a tank with one group skips "Which fish?".
  *
+ * A group's sale state (saleSummary) reads its chosen sale date — its
+ * own, else its batch's — or "Sale date not set" with the suggestion, and
+ * warns "still in the Spa" when the date has come before it was cleared.
+ *
  * The pure helpers (normalizeNumberWords, previewSentence, tankValue,
- * englishValue, fmt, escapeHtml) are exported for tests/front-desk.test.js
+ * englishValue, fmt, escapeHtml, saleSummary) are exported for tests/front-desk.test.js
  * and the file skips the DOM wiring when there is no document / config.
  *
  * @package FisHotel\Misc\Sections\Clean_Room
@@ -276,13 +280,41 @@
 		}
 	}
 
+	/**
+	 * A group's sale state in words: "on sale 2026-10-30 · from the batch",
+	 * "on sale … · own date", or "Sale date not set · suggested …"; and the
+	 * "still in the Spa" warning when it is for sale but not cleared.
+	 *
+	 * @param {Object} o       Occupant (saleReadyDate, saleSource, saleSuggested, readyInSpa).
+	 * @param {Object} strings readyOn, saleOwn, saleBatch, noSaleDate, suggestedOn, stillInSpa (English fallbacks).
+	 * @return {{text: string, short: string, warning: string}}
+	 */
+	function saleSummary(o, strings) {
+		var s = strings || {};
+		var get = function (key, fallback) { return s[key] ? s[key] : fallback; };
+		o = o || {};
+		var out = { text: '', short: '', warning: '' };
+		if (o.saleReadyDate) {
+			out.short = fmt(get('readyOn', 'on sale %s'), o.saleReadyDate);
+			out.text = out.short + ' · ' + (o.saleSource === 'own' ? get('saleOwn', 'own date') : get('saleBatch', 'from the batch'));
+		} else {
+			out.short = get('noSaleDate', 'Sale date not set');
+			out.text = out.short + (o.saleSuggested ? ' · ' + fmt(get('suggestedOn', 'suggested %s'), o.saleSuggested) : '');
+		}
+		if (o.readyInSpa) {
+			out.warning = get('stillInSpa', 'still in the Spa');
+		}
+		return out;
+	}
+
 	var api = {
 		normalizeNumberWords: normalizeNumberWords,
 		previewSentence: previewSentence,
 		tankValue: tankValue,
 		englishValue: englishValue,
 		fmt: fmt,
-		escapeHtml: escapeHtml
+		escapeHtml: escapeHtml,
+		saleSummary: saleSummary
 	};
 
 	root.fhFrontDeskHelpers = api;
@@ -645,11 +677,13 @@
 			attrs.type = 'button';
 			attrs.on = { click: onClick };
 		}
+		var sale = saleSummary(o, i18n);
 		var meta = [
 			el('span', { class: 'fh-fd-badge fh-fd-badge--' + (o.saleReady ? 'ready' : o.status), text: o.stateLabel }),
+			sale.warning ? el('span', { class: 'fh-fd-warn', text: sale.warning }) : null,
 			dayText(o.day) ? el('span', { text: dayText(o.day) }) : null,
 			o.status === 'in_qt' && o.checkinDate ? el('span', { text: fmt(t('inSince', 'in since %s'), o.checkinDate) }) : null,
-			o.status === 'cleared' && !o.saleReady && o.saleReadyDate ? el('span', { text: fmt(t('readyOn', 'ready %s'), o.saleReadyDate) }) : null,
+			!o.saleReady ? el('span', { text: sale.short }) : null,
 			o.qtyArrived !== o.qtyLive ? el('span', { text: o.qtyLive + '/' + o.qtyArrived }) : null
 		];
 		var node = el(tag, attrs, [
@@ -1058,12 +1092,14 @@
 		}
 		app.appendChild(header(o.species, ['Tank ' + tk.number + ' · ' + o.qtyLive + ' ' + t('live', 'live') + ' / ' + o.qtyArrived]));
 		var screen = el('div', { class: 'fh-fd-screen' });
+		var sale = saleSummary(o, i18n);
 		screen.appendChild(el('div', { class: 'fh-fd-facts' }, [
 			el('span', { class: 'fh-fd-badge fh-fd-badge--' + (o.saleReady ? 'ready' : o.status), text: o.stateLabel }),
+			sale.warning ? el('span', { class: 'fh-fd-warn', text: sale.warning }) : null,
 			el('span', { text: dayText(o.day) }),
 			el('span', { text: fmt(t('inSince', 'in since %s'), o.checkinDate) }),
 			o.clearedDate ? el('span', { text: fmt(t('clearedOn', 'cleared %s'), o.clearedDate) }) : null,
-			o.saleReadyDate ? el('span', { text: fmt(t('readyOn', 'ready %s'), o.saleReadyDate) + (o.saleReadyManual ? ' *' : '') }) : null
+			el('span', { text: sale.text })
 		]));
 		screen.appendChild(el('div', { class: 'fh-fd-grid2' }, [
 			button(t('lostOne', '−1 lost'), 'fh-fd-btn--danger fh-fd-btn--big', function () { act({ act: 'loss', tank: tk.number, stay_id: o.stayId, qty: 1, via: 'qr' }); }, o.qtyLive < 1),
@@ -1168,7 +1204,7 @@
 		})]);
 	}
 
-	/* Dates: the check-in date, the cleared date (both by hand) and the sale-ready override */
+	/* Dates: the check-in date, the cleared date (both by hand) and the group's own sale date */
 	function renderDates() {
 		var tk = tank();
 		var o = (state.pending || {}).stay;
@@ -1211,13 +1247,16 @@
 			]),
 			o.clearedDate ? el('button', { type: 'button', class: 'fh-fd-chip fh-fd-chip--ghost', text: t('unsetDate', 'Not cleared'), on: { click: function () { act({ act: 'clear', tank: tk.number, stay_id: o.stayId, unset: 1, via: 'qr' }); } } }) : null
 		]));
+		// The suggestion (check-in + the setting) only fills the picker on a tap; Save writes it.
+		var readyInput = el('input', { id: 'fh-fd-rdate', class: 'fh-fd-input', type: 'date', value: f.ready, on: { change: function (e) { f.ready = e.target.value; } } });
 		screen.appendChild(el('div', { class: 'fh-fd-field' }, [
-			el('label', { class: 'fh-fd-label', for: 'fh-fd-rdate', text: t('readyDate', 'Sale-ready date') }),
+			el('label', { class: 'fh-fd-label', for: 'fh-fd-rdate', text: t('readyDate', 'Sale date (this group)') }),
 			el('div', { class: 'fh-fd-row' }, [
-				el('input', { id: 'fh-fd-rdate', class: 'fh-fd-input', type: 'date', value: f.ready, on: { change: function (e) { f.ready = e.target.value; } } }),
+				readyInput,
 				button(t('save', 'Save'), 'fh-fd-btn--primary', function () { act({ act: 'ready', tank: tk.number, stay_id: o.stayId, date: f.ready || '', via: 'qr' }); })
 			]),
-			el('p', { class: 'fh-fd-muted', text: fmt(t('readyAuto', 'Leave empty for %d days after check-in'), settings().saleReadyDays || 28) + (o.saleReadyDate ? ' (' + o.saleReadyDate + ')' : '') })
+			o.saleSuggested && o.saleSuggested !== f.ready ? el('button', { type: 'button', class: 'fh-fd-chip fh-fd-chip--ghost', text: fmt(t('suggestedOn', 'suggested %s'), o.saleSuggested), on: { click: function () { f.ready = o.saleSuggested; readyInput.value = o.saleSuggested; } } }) : null,
+			el('p', { class: 'fh-fd-muted', text: o.batchSaleDate ? fmt(t('readyBatch', 'Empty = the batch date (%s).'), o.batchSaleDate) : t('readyNone', 'Empty = no sale date: the batch has none yet (set it on the supplier order).') })
 		]));
 		app.appendChild(screen);
 		bar([button(t('back', 'Back'), 'fh-fd-btn--quiet', function () { go('occupant', { stay: o }); })]);

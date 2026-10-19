@@ -140,6 +140,38 @@
 	border-left-color: var(--fh-success, #46b450);
 }
 
+.fh-cr-chip--warn {
+	color: var(--fh-warning, #ffb900);
+	border-left-color: var(--fh-warning, #ffb900);
+}
+
+a.fh-cr-chip--muted {
+	color: var(--fh-text-secondary, #a0a0a0);
+	text-decoration: none;
+	border-left-color: var(--fh-text-secondary, #a0a0a0);
+}
+
+/* A group for sale whose date came before it left the Spa. */
+.fh-cr-warn {
+	display: inline-block;
+	font-size: 11px;
+	font-weight: 600;
+	color: #996300;
+}
+
+.fh-cr-wrap .fh-cr-warn {
+	color: var(--fh-warning, #ffb900);
+}
+
+.fh-cr-muted {
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-tank__sale {
+	font-size: 11px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
 .fh-cr-summary__meta {
 	margin-left: auto;
 	font-size: 12px;

@@ -1052,7 +1052,9 @@ class Admin_Workbook {
 	}
 
 	/**
-	 * The stays sheet (pure): the CSV's columns, typed.
+	 * The stays sheet (pure): the CSV's columns, typed; sale_ready_date is
+	 * the effective sale date (the stay's own, else its batch's), empty
+	 * when none is set.
 	 *
 	 * @param array[] $stays Hydrated stays.
 	 * @return array[]
@@ -1071,7 +1073,7 @@ class Admin_Workbook {
 				isset( $stay['day'] ) ? $stay['day'] : null,
 				(string) ( $stay['state_label'] ?? $stay['status'] ?? '' ),
 				isset( $stay['cleared_date'] ) ? $stay['cleared_date'] : null,
-				(string) ( $stay['sale_ready_date'] ?? '' ),
+				isset( $stay['sale_ready_date'] ) && Replay::is_date( $stay['sale_ready_date'] ) ? (string) $stay['sale_ready_date'] : null,
 				isset( $stay['closed_date'] ) ? $stay['closed_date'] : null,
 				$tank,
 				null !== $tank ? (int) ( floor( $tank / 100 ) * 100 ) : null,

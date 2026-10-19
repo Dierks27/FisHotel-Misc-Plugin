@@ -6,8 +6,12 @@
  * nonce.
  *
  * Three options:
- *   fishotel_cleanroom_settings   sale_ready_days (a stay is sale-ready that
- *                                 many days after check-in, default 28), the
+ *   fishotel_cleanroom_settings   sale_ready_days (the SUGGESTED sale date:
+ *                                 that many days after check-in, default 28 —
+ *                                 only the hint the screens show and what a
+ *                                 "suggested" tap fills a date picker with;
+ *                                 a sale date is always chosen, on the
+ *                                 supplier order or per stay), the
  *                                 copper floor and target the
  *                                 tank screen warns against (2.25 / 2.5),
  *                                 the voice preview's auto-confirm seconds
@@ -340,7 +344,7 @@ class Settings {
 
 		$days = isset( $raw['sale_ready_days'] ) && is_scalar( $raw['sale_ready_days'] ) ? (int) $raw['sale_ready_days'] : self::DEFAULTS['sale_ready_days'];
 		if ( $days < self::SALE_READY_MIN || $days > self::SALE_READY_MAX ) {
-			$dropped[] = __( 'sale-ready days after check-in must be 1–120 (default 28 used)', 'fishotel-misc-plugin' );
+			$dropped[] = __( 'the suggested sale date (days after check-in) must be 1–120 (default 28 used)', 'fishotel-misc-plugin' );
 			$days      = self::DEFAULTS['sale_ready_days'];
 		}
 

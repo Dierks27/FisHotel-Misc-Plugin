@@ -2,7 +2,8 @@
 /**
  * Replay — events → stay state: alive = received − losses − sold with a
  * recount override, cleared by the first move into the Clean Room (or
- * by hand), the sale-ready date and its override, closing at zero, the
+ * by hand), the chosen sale date (the stay's own note, else its batch's)
+ * with the suggestion beside it, closing at zero, the
  * day math across both DST changes in America/Chicago, splits, and the
  * compensating (undo) events.
  *
@@ -47,11 +48,11 @@ check( 'a whole year of DST changes still counts calendar days', 366 === Replay:
 check( 'a check-in in the future is day 0', 0 === Replay::day_number( '2026-04-02', '2026-04-01' ) );
 check( 'bad dates → null', null === Replay::day_number( '', '2026-04-01' ) && null === Replay::day_number( '2026-04-01', 'soon' ) );
 check( 'add_days across the March change', '2026-03-09' === Replay::add_days( '2026-03-07', 2 ) && '' === Replay::add_days( 'x', 2 ) );
-check( 'sale-ready date = 28 days after check-in (the full four weeks, so day 29)', '2026-04-29' === Replay::sale_ready_date( '2026-04-01', null, 28 ) && 29 === Replay::day_number( '2026-04-01', '2026-04-29' ) );
-check( 'sale-ready with 14 days', '2026-04-15' === Replay::sale_ready_date( '2026-04-01', null, 14 ) );
+check( 'the SUGGESTED sale date = 28 days after check-in (the full four weeks, so day 29)', '2026-04-29' === Replay::suggested_sale_date( '2026-04-01', 28 ) && 29 === Replay::day_number( '2026-04-01', '2026-04-29' ) );
+check( 'suggested with 14 days; no check-in → no suggestion', '2026-04-15' === Replay::suggested_sale_date( '2026-04-01', 14 ) && '' === Replay::suggested_sale_date( '', 28 ) );
 check( 'note_date', '2026-04-10' === Replay::note_date( 'cleared:2026-04-10', Replay::NOTE_CLEARED ) && '2026-04-10' === Replay::note_date( 'checkin: 2026-04-10 ', Replay::NOTE_CHECKIN ) && '' === Replay::note_date( 'cleared:2026-02-30', Replay::NOTE_CLEARED ) && '' === Replay::note_date( 'cleared:', Replay::NOTE_CLEARED ) && '' === Replay::note_date( 'checkin:2026-04-10', Replay::NOTE_CLEARED ) );
-check( 'an override wins', '2026-05-20' === Replay::sale_ready_date( '2026-04-01', '2026-05-20', 28 ) );
-check( 'no check-in → no date', '' === Replay::sale_ready_date( '', null, 28 ) );
+check( 'the stay\'s own date wins over its batch\'s', '2026-05-20' === Replay::sale_date( '2026-05-20', '2026-05-01' ) && Replay::SALE_OWN === Replay::sale_date_source( '2026-05-20', '2026-05-01' ) );
+check( 'no own date → the batch\'s; neither → null, never a computed date', '2026-05-01' === Replay::sale_date( null, '2026-05-01' ) && Replay::SALE_BATCH === Replay::sale_date_source( '', '2026-05-01' ) && null === Replay::sale_date( null, null ) && '' === Replay::sale_date_source( null, null ) && null === Replay::sale_date( '2026-02-30', 'soon' ) );
 check( 'event date in Chicago, CST: 05:30 UTC on Mar 8 is still Mar 7', '2026-03-07' === Replay::event_date( '2026-03-08 05:30:00', $chicago ) );
 check( 'event date in Chicago, the DST morning: 08:30 UTC on Mar 8 is Mar 8', '2026-03-08' === Replay::event_date( '2026-03-08 08:30:00', $chicago ) );
 check( 'event date in Chicago, the November change: 06:30 UTC and 07:30 UTC on Nov 1 are both Nov 1', '2026-11-01' === Replay::event_date( '2026-11-01 06:30:00', $chicago ) && '2026-11-01' === Replay::event_date( '2026-11-01 07:30:00', $chicago ) );
@@ -62,7 +63,7 @@ echo "2. A stay's life: arrival → losses → sold → recount → move into th
 $events = array( ev( 'arrival', '2026-04-01 15:00:00', 5, 10 ) );
 $s      = Replay::state( array(), $events, '2026-04-03', $opts );
 check( 'arrival 5 into a Spa tank: received 5, alive 5, checkin from the event (site date), tank 10, in QT', 5 === $s['qty_arrived'] && 5 === $s['qty_live'] && '2026-04-01' === $s['checkin_date'] && 10 === $s['tank_id'] && 'in_qt' === $s['status'] && 'in QT' === $s['state_label'] && 3 === $s['day'] );
-check( 'not cleared, sale-ready date is Apr 29 (28 days after check-in), not ready', null === $s['cleared_date'] && '2026-04-29' === $s['sale_ready_date'] && false === $s['sale_ready'] && null === $s['closed_date'] && false === $s['overdrawn'] );
+check( 'not cleared, no sale date chosen (none, the suggestion Apr 29 = 28 days after check-in), not for sale', null === $s['cleared_date'] && null === $s['sale_ready_date'] && '' === $s['sale_date_source'] && '2026-04-29' === $s['sale_ready_suggested'] && false === $s['sale_ready'] && null === $s['closed_date'] && false === $s['overdrawn'] );
 
 $events[] = ev( 'loss', '2026-04-02 12:00:00', 2 );
 $s        = Replay::state( array(), $events, '2026-04-03', $opts );
@@ -79,11 +80,14 @@ check( 'a recount overrides: alive 4, the stats untouched', 4 === $s['qty_live']
 $events[] = ev( 'move', '2026-04-15 14:00:00', null, 20, 10 );
 $s        = Replay::state( array(), $events, '2026-04-20', $opts );
 check( 'the first move into a Clean Room tank clears the stay on that date', 20 === $s['tank_id'] && '2026-04-15' === $s['cleared_date'] && 'cleared' === $s['status'] && 'cleared' === $s['state_label'] );
-check( 'day 20: cleared but not yet sale-ready', 20 === $s['day'] && false === $s['sale_ready'] );
+check( 'day 20: cleared but not for sale', 20 === $s['day'] && false === $s['sale_ready'] );
 $s = Replay::state( array(), $events, '2026-04-29', $opts );
-check( 'Apr 29 (28 days after check-in): ready', true === $s['sale_ready'] && 'ready' === $s['state_label'] && 'cleared' === $s['status'] && 29 === $s['day'] );
-$s = Replay::state( array(), $events, '2026-04-28', $opts );
-check( 'Apr 28 (day 28, only 27 days passed): not yet', false === $s['sale_ready'] );
+check( 'Apr 29 (the suggested date) with no date chosen: still not for sale — the suggestion never puts a group on sale', false === $s['sale_ready'] && 'cleared' === $s['state_label'] && 29 === $s['day'] );
+$batch = array( 'batch_sale_date' => '2026-04-29' );
+$s     = Replay::state( $batch, $events, '2026-04-29', $opts );
+check( 'with the batch going on sale Apr 29: for sale on Apr 29 (the date itself counts), from the batch', true === $s['sale_ready'] && 'ready' === $s['state_label'] && 'cleared' === $s['status'] && '2026-04-29' === $s['sale_ready_date'] && Replay::SALE_BATCH === $s['sale_date_source'] && false === $s['ready_in_spa'] );
+$s = Replay::state( $batch, $events, '2026-04-28', $opts );
+check( 'Apr 28: not yet', false === $s['sale_ready'] && 'cleared' === $s['state_label'] );
 
 $events[] = ev( 'move', '2026-04-21 14:00:00', null, 21, 20 );
 $s        = Replay::state( array(), $events, '2026-04-28', $opts );
@@ -130,13 +134,15 @@ check( 'a source tank the layout no longer knows counts as unknown: clears', '20
 echo "4. The sale-ready override (a note event)\n";
 $e = array( ev( 'arrival', '2026-04-01 15:00:00', 3, 10 ), ev( 'move', '2026-04-14 10:00:00', null, 20, 10 ) );
 $e[] = ev( 'note', '2026-04-15 10:00:00', null, null, null, 'sale_ready:2026-05-20' );
-$s   = Replay::state( array(), $e, '2026-05-01', $opts );
-check( 'the override is read from the note', '2026-05-20' === $s['sale_ready_override'] && '2026-05-20' === $s['sale_ready_date'] && false === $s['sale_ready'] );
+$s   = Replay::state( array( 'batch_sale_date' => '2026-04-25' ), $e, '2026-05-01', $opts );
+check( 'the own date is read from the note and wins over the batch\'s (Apr 25)', '2026-05-20' === $s['sale_ready_override'] && '2026-05-20' === $s['sale_ready_date'] && Replay::SALE_OWN === $s['sale_date_source'] && '2026-04-25' === $s['batch_sale_date'] && false === $s['sale_ready'] );
 $s = Replay::state( array(), $e, '2026-05-20', $opts );
-check( 'ready on the override date', true === $s['sale_ready'] );
+check( 'for sale on the own date', true === $s['sale_ready'] );
 $e[] = ev( 'note', '2026-04-16 10:00:00', null, null, null, 'sale_ready:' );
 $s   = Replay::state( array(), $e, '2026-05-01', $opts );
-check( 'an empty override clears it: back to 28 days after check-in (Apr 29), so ready on May 1', null === $s['sale_ready_override'] && '2026-04-29' === $s['sale_ready_date'] && true === $s['sale_ready'] );
+check( 'an empty note clears the own date: without a batch date, no date at all and not for sale (the suggestion Apr 29 is only a hint)', null === $s['sale_ready_override'] && null === $s['sale_ready_date'] && '2026-04-29' === $s['sale_ready_suggested'] && false === $s['sale_ready'] );
+$s = Replay::state( array( 'batch_sale_date' => '2026-04-25' ), $e, '2026-05-01', $opts );
+check( '…and with one, back to the batch\'s date: for sale since Apr 25', '2026-04-25' === $s['sale_ready_date'] && Replay::SALE_BATCH === $s['sale_date_source'] && true === $s['sale_ready'] );
 $e[] = ev( 'note', '2026-04-17 10:00:00', null, null, null, 'looking thin' );
 $s   = Replay::state( array(), $e, '2026-05-01', $opts );
 check( 'a plain note changes nothing', null === $s['sale_ready_override'] && 3 === $s['qty_live'] );
@@ -148,7 +154,7 @@ echo "4b. The check-in date corrected by a note\n";
 $e = array( ev( 'arrival', '2026-04-05 15:00:00', 3, 10 ) );
 $e[] = ev( 'note', '2026-04-20 10:00:00', null, null, null, 'checkin:2026-04-01' );
 $s   = Replay::state( array(), $e, '2026-04-20', $opts );
-check( '"checkin:2026-04-01" moves the check-in back: day 20, sale-ready Apr 29', '2026-04-01' === $s['checkin_date'] && 20 === $s['day'] && '2026-04-29' === $s['sale_ready_date'] );
+check( '"checkin:2026-04-01" moves the check-in back: day 20, the suggestion Apr 29 (no date chosen)', '2026-04-01' === $s['checkin_date'] && 20 === $s['day'] && '2026-04-29' === $s['sale_ready_suggested'] && null === $s['sale_ready_date'] );
 $e[] = ev( 'arrival', '2026-04-21 10:00:00', 1, 10 );
 $s   = Replay::state( array(), $e, '2026-04-21', $opts );
 check( 'a later arrival never overrides the corrected date', '2026-04-01' === $s['checkin_date'] && 4 === $s['qty_live'] );
@@ -210,14 +216,19 @@ check( 'the check-in is the SITE date of the arrival (03:30 UTC Apr 1 is Mar 31 
 echo "8. effective() on a cached row\n";
 $row = array( 'status' => 'cleared', 'checkin_date' => '2026-04-01', 'cleared_date' => '2026-04-14', 'sale_ready_date' => null );
 $e   = Replay::effective( $row, '2026-04-29', array( 'sale_ready_days' => 28 ) );
-check( 'cleared row 28 days after check-in → ready', 'cleared' === $e['status'] && 29 === $e['day'] && true === $e['sale_ready'] && 'ready' === $e['state_label'] && '2026-04-29' === $e['sale_ready_date'] );
+check( 'a cleared row 28 days after check-in without a chosen date: not for sale, "suggested Apr 29" only', 'cleared' === $e['status'] && 29 === $e['day'] && false === $e['sale_ready'] && 'cleared' === $e['state_label'] && null === $e['sale_ready_date'] && '2026-04-29' === $e['sale_ready_suggested'] );
+$row['batch_sale_date'] = '2026-04-29';
+$e                      = Replay::effective( $row, '2026-04-29', array( 'sale_ready_days' => 28 ) );
+check( 'its batch on sale Apr 29: for sale that day', true === $e['sale_ready'] && 'ready' === $e['state_label'] && '2026-04-29' === $e['sale_ready_date'] && Replay::SALE_BATCH === $e['sale_date_source'] );
 check( 'the day before: not yet', false === Replay::effective( $row, '2026-04-28', array( 'sale_ready_days' => 28 ) )['sale_ready'] );
 $e = Replay::effective( array_merge( $row, array( 'sale_ready_date' => '2026-05-05' ) ), '2026-04-29', array( 'sale_ready_days' => 28 ) );
-check( 'the stored override holds it back', false === $e['sale_ready'] && '2026-05-05' === $e['sale_ready_date'] );
+check( 'the stored own date holds it back past the batch\'s', false === $e['sale_ready'] && '2026-05-05' === $e['sale_ready_date'] && Replay::SALE_OWN === $e['sale_date_source'] );
 $e = Replay::effective( array( 'status' => 'in_qt', 'checkin_date' => '2026-04-01', 'cleared_date' => null ), '2026-05-10', array( 'sale_ready_days' => 28 ) );
-check( 'still in the Spa at day 40: in QT, never ready', 'in_qt' === $e['status'] && 40 === $e['day'] && false === $e['sale_ready'] && 'in QT' === $e['state_label'] );
-$e = Replay::effective( array( 'status' => 'closed', 'checkin_date' => '2026-04-01', 'cleared_date' => '2026-04-14' ), '2026-05-10' );
-check( 'closed stays closed', 'closed' === $e['status'] && 'closed' === $e['state_label'] );
+check( 'still in the Spa at day 40 with no date: in QT, not for sale', 'in_qt' === $e['status'] && 40 === $e['day'] && false === $e['sale_ready'] && 'in QT' === $e['state_label'] && false === $e['ready_in_spa'] );
+$e = Replay::effective( array( 'status' => 'in_qt', 'checkin_date' => '2026-04-01', 'cleared_date' => null, 'batch_sale_date' => '2026-05-01' ), '2026-05-10', array( 'sale_ready_days' => 28 ) );
+check( 'still in the Spa past its batch\'s date: for sale (the chosen date rules) and flagged "still in the Spa"', 'in_qt' === $e['status'] && true === $e['sale_ready'] && 'ready' === $e['state_label'] && true === $e['ready_in_spa'] );
+$e = Replay::effective( array( 'status' => 'closed', 'checkin_date' => '2026-04-01', 'cleared_date' => '2026-04-14', 'batch_sale_date' => '2026-04-20' ), '2026-05-10' );
+check( 'closed stays closed, never for sale, even past its date', 'closed' === $e['status'] && 'closed' === $e['state_label'] && false === $e['sale_ready'] && false === $e['ready_in_spa'] );
 $e = Replay::effective( array( 'status' => 'in_qt', 'checkin_date' => '2026-04-01', 'cleared_date' => '2026-04-14' ), '2026-04-20' );
 check( 'a stored in_qt with a cleared date reads as cleared', 'cleared' === $e['status'] );
 
@@ -236,7 +247,7 @@ check( 'an un-clear cannot be undone', null === Replay::compensating( ev( 'clear
 check( 'count → count back to what it was', 4 === Replay::compensating( ev( 'count', 'x', 1 ), array( 'qty_live' => 4 ) )['qty'] );
 check( 'a plain note has nothing to undo', null === Replay::compensating( ev( 'note', 'x', null, null, null, 'hello' ) ) );
 $c = Replay::compensating( ev( 'note', 'x', null, null, null, 'sale_ready:2026-05-20' ), array( 'sale_ready_override' => '2026-05-01' ) );
-check( 'a sale-ready note → the previous override', 'note' === $c['type'] && 'sale_ready:2026-05-01' === $c['note'] );
+check( 'a sale-date note → the previous own date', 'note' === $c['type'] && 'sale_ready:2026-05-01' === $c['note'] );
 $c = Replay::compensating( ev( 'note', 'x', null, null, null, 'sale_ready:2026-05-20' ), array( 'sale_ready_override' => null ) );
 check( '…or none', 'sale_ready:' === $c['note'] );
 check( 'arrival 0 → nothing', null === Replay::compensating( ev( 'arrival', 'x', 0 ) ) );
