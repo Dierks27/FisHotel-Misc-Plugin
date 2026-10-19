@@ -156,11 +156,15 @@ $r = act( $store, 521, 'checkin', array( 'stay_id' => 2, 'date' => 'soon' ) );
 check( 'not a date: refused', 'That is not a date.' === ( $r['error'] ?? '' ) );
 $r = act( $store, 521, 'checkin', array( 'stay_id' => 2, 'date' => Replay::add_days( $today, -10 ) ) );
 $s = $store->stay( 2, $today, $settings );
-check( 'a check-in corrected: the note, the date, day 11, sale-ready 28 days after it', empty( $r['error'] ) && 'checkin:' . Replay::add_days( $today, -10 ) === $store->last_event()['note'] && Replay::add_days( $today, -10 ) === $s['checkin_date'] && 11 === $s['day'] && Replay::add_days( $today, 18 ) === $s['sale_ready_date'], json_encode( $s ) );
+check( 'a check-in corrected: the note, the date, day 11, the SUGGESTED sale date 28 days after it (no date chosen, so none and not for sale)', empty( $r['error'] ) && 'checkin:' . Replay::add_days( $today, -10 ) === $store->last_event()['note'] && Replay::add_days( $today, -10 ) === $s['checkin_date'] && 11 === $s['day'] && Replay::add_days( $today, 18 ) === $s['sale_ready_suggested'] && null === $s['sale_ready_date'] && false === $s['sale_ready'], json_encode( $s ) );
 $r = act( $store, 521, 'undo', array( 'event_ids' => $r['event_ids'] ) );
 check( 'undone: back to the arrival\'s date (day 5)', empty( $r['error'] ) && 5 === $store->stay( 2, $today, $settings )['day'] );
+$r = act( $store, 521, 'ready', array( 'stay_id' => 2, 'date' => Replay::add_days( $today, 3 ) ) );
+check( 'an own sale date set: "on sale <date>", the note event, not for sale yet', 'Ocellaris Clownfish on sale ' . Replay::add_days( $today, 3 ) === ( $r['message'] ?? '' ) && 'sale_ready:' . Replay::add_days( $today, 3 ) === $store->last_event()['note'] && false === $store->stay( 2, $today, $settings )['sale_ready'], json_encode( $r ) );
 $r = act( $store, 521, 'ready', array( 'stay_id' => 2, 'date' => '' ) );
-check( 'the sale-ready override removed: the toast says N days after check-in', 'Ocellaris Clownfish sale-ready 28 days after check-in again' === ( $r['message'] ?? '' ), json_encode( $r ) );
+check( 'the own date removed with no batch date: the toast says there is no sale date now and where to set one', 'Ocellaris Clownfish: no sale date now — set one on its supplier order' === ( $r['message'] ?? '' ) && null === $store->stay( 2, $today, $settings )['sale_ready_date'], json_encode( $r ) );
+$r = act( $store, 521, 'ready', array( 'stay_id' => 2, 'date' => 'soon' ) );
+check( 'a sale date that is not a date: refused', 'That is not a date.' === ( $r['error'] ?? '' ) );
 
 echo "6. A copper reading ticks the copper test\n";
 $r = act( $store, 521, 'copper', array( 'value' => '2.4' ) );

@@ -9,8 +9,9 @@
  * with their lines and the landed totals cached, the recent batches
  * checked in as stays (source import, the DOA loss) on the chosen Spa
  * building, the treatment logs by system (205 / 100 / Both / blank)
- * including the copper reading, and a second run that creates nothing.
- * Then the pure helpers of the admin panel.
+ * including the copper reading, a second run that creates nothing, and
+ * the groups left without a sale date (the workbook carries none) counted
+ * with where to set one. Then the pure helpers of the admin panel.
  *
  * Run from the plugin root:  php includes/sections/clean-room/tests/import-test.php
  */
@@ -49,6 +50,8 @@ echo "2. The preview (pure)\n";
 $p = Import::preview( $map, array( 'species' => array(), 'order_refs' => array(), 'box_rates' => array() ), array( 'today' => $today, 'stays_days' => 45 ) );
 check( 'an empty site: 5 species to create, 3 orders with 7 lines and 5 log rows, 5 box rates, 4 stock rows, the reader\'s 10 warnings', array( 'create' => 5, 'update' => 0, 'skip' => 0 ) === $p['species'] && array( 'create' => 3, 'skip' => 0, 'lines' => 7, 'logs' => 5 ) === $p['orders'] && array( 'create' => 5, 'update' => 0, 'skip' => 0 ) === $p['box_rates'] && 4 === $p['stock'] && 10 === count( $p['warnings'] ), json_encode( $p ) );
 check( 'the stays estimate: the one batch received within 45 days of today, its 2 lines with fish', array( 'orders' => 1, 'lines' => 2 ) === $p['stays'] );
+check( 'those 2 groups would have no sale date (the workbook carries none): counted, with the order to set it on', array( 'groups' => 2, 'refs' => array( '2026-2' ) ) === $p['sale_dates'], json_encode( $p['sale_dates'] ) );
+check( '… unless that order is already on the site with a date', array( 'groups' => 0, 'refs' => array() ) === Import::preview( $map, array( 'order_refs' => array( '2026-2' ), 'dated_refs' => array( '2026-2' ) ), array( 'today' => $today, 'stays_days' => 45 ) )['sale_dates'] );
 check( 'with 0 days (or no today) no stays are estimated', array( 'orders' => 0, 'lines' => 0 ) === Import::preview( $map, array(), array( 'today' => $today, 'stays_days' => 0 ) )['stays'] && array( 'orders' => 0, 'lines' => 0 ) === Import::preview( $map, array() )['stays'] );
 $p = Import::preview( $map, array( 'species' => array( 'blue test WRASSE', array( 'name' => 'Green Test Tang' ) ), 'order_refs' => array( '2026-1', 'x' ), 'box_rates' => array( array( 'supplier' => 'test supplier co', 'origin' => 'TESTLAND' ), 'test supplier two|fakeisland' ) ) );
 check( 'what exists updates or skips: 2 species update (any case, names or rows), 1 order skipped by ref, 2 rates update (rows or keys)', array( 'create' => 3, 'update' => 2, 'skip' => 0 ) === $p['species'] && array( 'create' => 2, 'skip' => 1, 'lines' => 3, 'logs' => 1 ) === $p['orders'] && array( 'create' => 3, 'update' => 2, 'skip' => 0 ) === $p['box_rates'], json_encode( $p ) );
@@ -109,6 +112,7 @@ $ev = $store->events( $s1['id'] );
 check( 'the arrival and the doa loss carry source import, the actor, the batch date', 2 === count( $ev ) && 'arrival' === $ev[0]['type'] && 'import' === $ev[0]['source'] && 3 === $ev[0]['actor_id'] && 'loss' === $ev[1]['type'] && 'doa' === $ev[1]['note'] && 'import' === $ev[1]['source'] && 1 === $ev[1]['qty'] );
 check( 'the wrasse: 3 live in 512, linked to the product by the species row? no — the species row has no product, so none', 3 === $s2['qty_live'] && 512 === $s2['tank_number'] && null === $s2['product_id'] );
 check( 'the old batch got no stays', null === $l[0]['stay_id'] && null === $l[1]['stay_id'] );
+check( 'no sale date was invented: the order has none, its groups none (not for sale), and the result says so with the order', null === $o2['sale_date'] && null === $s1['sale_ready_date'] && false === $s1['sale_ready'] && null === $s2['sale_ready_date'] && array( 'missing' => 2, 'refs' => array( '2026-2' ) ) === $r['sale_dates'], json_encode( $r['sale_dates'] ) );
 
 echo "7. The run: the treatment logs by system\n";
 check( '6 logs written (205 → 500, 100 → 600, Both → both), none skipped', array( 'created' => 6, 'skipped' => 0 ) === $r['logs'], json_encode( $r['logs'] ) );
@@ -133,6 +137,9 @@ $goby   = $store->species_by_name( 'Yellow Test Goby' );
 $wrasse = $store->species_by_name( 'Blue Test Wrasse' );
 check( 'a value the sheet lacks never blanks the site\'s (the goby keeps its price); the sheet\'s price wins where it has one; a group typed on the site is kept', near( $goby['my_price'], 12 ) && near( $wrasse['my_price'], 30 ) && 'My Group' === $wrasse['group_name'] && 'Testus caeruleus' === $wrasse['sci_name'] );
 check( 'an existing order is never overwritten (the closed old batch stays closed)', 'closed' === $store->order_by_ref( '2026-1' )['status'] );
+check( 'the second run still names the 2 groups without a sale date', array( 'missing' => 2, 'refs' => array( '2026-2' ) ) === $r2['sale_dates'] );
+$store->update_order_fields( $o2['id'], array( 'sale_date' => '2026-11-01' ) );
+check( 'once the order has a date, a run counts none (and never touches the date)', array( 'missing' => 0, 'refs' => array() ) === Import::run( $map, $store, $options )['sale_dates'] && '2026-11-01' === $store->order( $o2['id'] )['sale_date'] );
 $zero = $map;
 foreach ( $zero['species'] as $i => $row ) {
 	if ( 'Red Test Blenny' === $row['name'] ) {
@@ -194,7 +201,9 @@ $o = Admin_Import::sanitize_options( array( 'stays_days' => '-4', 'stays_buildin
 check( 'clamped and defaulted: negative days → 0, an unknown building → the 205-gallon one, no checkbox → off; 9999 days → 365', array( 'stays_days' => 0, 'stays_building_id' => 5, 'dose_logs' => false ) === $o && 365 === Admin_Import::sanitize_options( array( 'stays_days' => '9999' ), $spa )['stays_days'] && 45 === Admin_Import::sanitize_options( array( 'stays_days' => 'x' ), $spa )['stays_days'] );
 check( 'default_building: the 205-gallon system, else the most tanks, else null', 5 === Admin_Import::default_building( $spa ) && 5 === Admin_Import::default_building( $unknown ) && null === Admin_Import::default_building( array() ) && 6 === Admin_Import::default_building( array( $spa[1] ) ) );
 $lines = Admin_Import::summary_lines( $r );
-check( 'the result in plain lines', 5 === count( $lines ) && 'Species: 5 added, 0 updated, 0 skipped.' === $lines[0] && 'Orders: 3 created with 7 lines, 0 already on the site (skipped).' === $lines[1] && 'Stays: 2 created from 1 recent orders, 0 lines skipped (already checked in or nothing received).' === $lines[2] && 'Treatment logs: 6 written, 0 skipped (already there, or undated).' === $lines[3] && 'Box rates: 5 rows in Settings now.' === $lines[4], json_encode( $lines ) );
+check( 'the result in plain lines, the sale dates last', 6 === count( $lines ) && 'Species: 5 added, 0 updated, 0 skipped.' === $lines[0] && 'Orders: 3 created with 7 lines, 0 already on the site (skipped).' === $lines[1] && 'Stays: 2 created from 1 recent orders, 0 lines skipped (already checked in or nothing received).' === $lines[2] && 'Treatment logs: 6 written, 0 skipped (already there, or undated).' === $lines[3] && 'Box rates: 5 rows in Settings now.' === $lines[4] && 'Sale dates: 2 groups in tanks have no sale date yet, so they are not for sale — set "Goes on sale" on their supplier orders (Arrivals → 2026-2), or a group\'s own date on its product page.' === $lines[5], json_encode( $lines ) );
+check( 'no sale-date line when every group has one; the preview\'s wording', 5 === count( Admin_Import::summary_lines( array_merge( $r, array( 'sale_dates' => array( 'missing' => 0, 'refs' => array() ) ) ) ) ) && '1 group would be in tanks with no sale date (the workbook carries none): after the import, set "Goes on sale" on its supplier order (Arrivals → 2026-2).' === Admin_Import::sale_dates_line( 1, array( '2026-2', '2026-2' ), false ) && '' === Admin_Import::sale_dates_line( 0, array(), false ) );
+check( 'existing(): the site\'s orders with a sale date', array( '2026-2' ) === Admin_Import::existing( $store )['dated_refs'] );
 check( 'the .htaccess refuses both Apache generations; the file name is random with the extension', false !== strpos( Admin_Import::htaccess(), 'Require all denied' ) && false !== strpos( Admin_Import::htaccess(), 'Deny from all' ) && 1 === preg_match( '/^workbook-0-[A-Za-z0-9]{16}\.xlsm$/', Admin_Import::file_name( '/tmp', 'FisHotel-2026.xlsm', '.XLSM' ) ) && 20971520 === Admin_Import::MAX_BYTES && array( 'xlsx', 'xlsm' ) === array_keys( Admin_Import::MIMES ) );
 check( 'system_label on the panel\'s buildings', '205 gal system' === Layout::system_label( $spa[0]['gallons'] ) );
 $xlsx_mime = Admin_Import::MIMES['xlsx'];

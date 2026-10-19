@@ -4,7 +4,7 @@
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  *
- * @var array[] $rows         Resolved orders, each with 'summary'.
+ * @var array[] $rows         Resolved orders, each with 'summary' and 'on_sale' (Admin_Workbook::on_sale_cell()).
  * @var int[]   $years        Years with orders.
  * @var int     $year         The year shown (0 = all).
  * @var array   $exports      xlsx / csv URLs.
@@ -73,6 +73,7 @@ $tab = 'arrivals';
 						<th scope="col"><?php esc_html_e( 'Ordered', 'fishotel-misc-plugin' ); ?></th>
 						<th scope="col"><?php esc_html_e( 'Received', 'fishotel-misc-plugin' ); ?></th>
 						<th scope="col"><?php esc_html_e( 'Status', 'fishotel-misc-plugin' ); ?></th>
+						<th scope="col"><?php esc_html_e( 'On sale', 'fishotel-misc-plugin' ); ?></th>
 						<th scope="col" class="fh-cr-num"><?php esc_html_e( 'Lines', 'fishotel-misc-plugin' ); ?></th>
 						<th scope="col" class="fh-cr-num"><?php esc_html_e( 'Ordered / received', 'fishotel-misc-plugin' ); ?></th>
 						<th scope="col" class="fh-cr-num"><?php esc_html_e( 'Fill', 'fishotel-misc-plugin' ); ?></th>
@@ -93,6 +94,12 @@ $tab = 'arrivals';
 							<td><?php echo esc_html( $fh_order['order_date'] ? $fh_order['order_date'] : '—' ); ?></td>
 							<td><?php echo esc_html( $fh_order['received_date'] ? $fh_order['received_date'] : '—' ); ?></td>
 							<td><span class="fh-cr-badge fh-cr-badge--order-<?php echo esc_attr( $fh_order['status'] ); ?>"><?php echo esc_html( $fh_order['status'] ); ?></span></td>
+							<td>
+								<a href="<?php echo esc_url( Admin_Workbook::order_url( (int) $fh_order['id'] ) ); ?>" class="<?php echo '' === $fh_order['on_sale']['date'] ? 'fh-cr-muted' : ''; ?>"><?php echo esc_html( $fh_order['on_sale']['text'] ); ?></a>
+								<?php if ( '' !== $fh_order['on_sale']['note'] ) : ?>
+									<span class="fh-cr-sub"><?php echo esc_html( $fh_order['on_sale']['note'] ); ?></span>
+								<?php endif; ?>
+							</td>
 							<td class="fh-cr-num"><?php echo esc_html( $fh_s['lines'] ); ?></td>
 							<td class="fh-cr-num"><?php echo esc_html( $fh_s['ordered'] . ' / ' . $fh_s['received'] ); ?></td>
 							<td class="fh-cr-num"><?php echo esc_html( Costing::pct( $fh_s['fill_rate'] ) ); ?></td>
@@ -109,6 +116,6 @@ $tab = 'arrivals';
 	<?php endif; ?>
 
 	<p class="fh-cr-footnote">
-		<?php esc_html_e( 'Landed = what the fish cost once tariffs, the domestic flight and the import & re-ox fees are spread over them (the workbook\'s order sheet, in box or bag mode). Revenue = every survivor at FisHotel\'s price; up / down = revenue minus the grand total. Survival is counted over the fish that did not arrive dead; a line that became a stay reads its survivors live from the stay.', 'fishotel-misc-plugin' ); ?>
+		<?php esc_html_e( 'On sale = the batch\'s "Goes on sale" date (set on the order): every group checked in from it goes on sale that day, unless it has its own date on its product page. Landed = what the fish cost once tariffs, the domestic flight and the import & re-ox fees are spread over them (the workbook\'s order sheet, in box or bag mode). Revenue = every survivor at FisHotel\'s price; up / down = revenue minus the grand total. Survival is counted over the fish that did not arrive dead; a line that became a stay reads its survivors live from the stay.', 'fishotel-misc-plugin' ); ?>
 	</p>
 </div>

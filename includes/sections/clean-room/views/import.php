@@ -100,6 +100,10 @@ $fh_spa     = $import['spa_buildings'];
 				</tr>
 			</tbody>
 		</table>
+		<?php $fh_sale = Admin_Import::sale_dates_line( (int) ( $fh_p['sale_dates']['groups'] ?? 0 ), (array) ( $fh_p['sale_dates']['refs'] ?? array() ), false ); ?>
+		<?php if ( '' !== $fh_sale ) : ?>
+			<p class="fishotel-misc-notice fishotel-misc-notice--warning"><?php echo esc_html( $fh_sale ); ?></p>
+		<?php endif; ?>
 		<?php if ( ! empty( $fh_p['warnings'] ) ) : ?>
 			<details class="fh-cr-import__details">
 				<summary><?php echo esc_html( sprintf( /* translators: %d: count */ __( '%d warnings from the reader (a species on a batch that is not in the Fishlist, a label not found, a sheet skipped …)', 'fishotel-misc-plugin' ), count( (array) $fh_p['warnings'] ) ) ); ?></summary>

@@ -4,8 +4,9 @@
  * (counts, dates, a move with an optional reason, the fields incl. the
  * check-in date), the Events-tab Undo, the Coming Soon release button,
  * the order editor (lines, species suggestions, Save with the recomputed
- * figures, Check in, Delete, the import-fees suggestion) and the Species
- * tab (inline edit, add, delete, the product link).
+ * figures, Check in, Delete, the import-fees suggestion), the Species
+ * tab (inline edit, add, delete, the product link) and the "suggested"
+ * fill of the sale-date pickers (order page, product page).
  *
  * The server renders every row; this file posts and fills in. The pure
  * helpers (renumber(), suggestImportFees()) are exported for the node
@@ -91,6 +92,18 @@
 
 	var cfg = root.fhCleanRoomAdmin || {};
 	var i18n = cfg.i18n || {};
+
+	// "suggested <date>" beside a sale-date picker (the order page, the
+	// product page): fills that picker — nothing is saved until Save /
+	// Update, and the suggestion is never stored by itself.
+	$(document).on('click', '.fh-cr-suggest-date', function (e) {
+		e.preventDefault();
+		var target = root.document.getElementById(String($(this).data('target') || ''));
+		if (target) {
+			target.value = String($(this).data('date') || '');
+			$(target).trigger('change');
+		}
+	});
 
 	function notice(cls, msg) {
 		var $wrap = $('.fh-cr-wrap');
@@ -469,12 +482,21 @@
 				if (fields.qty === 0 && !root.confirm(i18n.confirmZero || 'Close this group?')) {
 					return;
 				}
-			} else if (op === 'clear' || op === 'ready') {
+			} else if (op === 'clear') {
 				var date = root.prompt(i18n.which || 'Which date (YYYY-MM-DD)? Leave empty to clear.', '');
 				if (date === null) {
 					return;
 				}
 				fields.date = $.trim(date);
+			} else if (op === 'ready') {
+				// Pre-filled with the group's own date; empty when the batch has a date (OK keeps the batch's); else the suggestion (check-in + the setting). Nothing is saved until OK, and an unchanged date writes nothing.
+				var batch = String($(this).data('batch') || '');
+				var ask = batch ? (i18n.whichSaleBatch || 'This group\'s own sale date (YYYY-MM-DD)? Leave empty to use the batch date (%s).').replace('%s', batch) : (i18n.whichSale || 'This group\'s own sale date (YYYY-MM-DD)? Leave empty for none — the batch has no date yet.');
+				var sale = root.prompt(ask, String($(this).data('default') || ''));
+				if (sale === null) {
+					return;
+				}
+				fields.date = $.trim(sale);
 			} else if (op === 'move') {
 				var to = root.prompt(i18n.whichTank || 'Move to which tank number?', String($(this).data('tank') || ''));
 				if (to === null) {

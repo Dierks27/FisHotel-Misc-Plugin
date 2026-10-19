@@ -11,7 +11,8 @@ daily to-do, a **dose log** on the whole system or one tank; the
 **supplier orders** with the workbook's landed-cost maths and a check-in
 that turns an order's lines into stays; a **species master**; the yearly
 **stats**; Excel exports; the **workbook import** that brings the
-spreadsheet's history onto the site; and the facts the fish page will
+spreadsheet's history onto the site; and the **sale dates** — the day each batch (or one
+group) goes on sale, chosen by hand —; and the facts the fish page will
 read.
 
 Nothing here needs WooCommerce: a stay may or may not be linked to a
@@ -35,12 +36,15 @@ the species list.
 - The **check-in date** is the site date of the first arrival and can be
   corrected too (Dates on the phone, *Edit* on the Stays tab): a
   `checkin:YYYY-MM-DD` note the replay honours; the day number and the
-  sale-ready date follow from it.
-- **Sale-ready** is N days after check-in (N = *Sale-ready: days after
-  check-in*, default 28 — Jeff offers a group for sale after the full four
-  weeks, so check-in + 28 days = day 29), with a per-stay override. A
-  group is ready only once it is cleared **and** that day has come; a
-  group still in the Spa on day 40 is still "in QT".
+  suggested sale date follow from it.
+- **A group goes on sale the day it is marked to** — a date that is
+  chosen, never computed (see *Sale dates* below): the batch's "Goes on
+  sale" date on its supplier order, or the group's own date on its
+  product page. From that date on it is *ready*, cleared or not; one
+  whose date has come while it is still in the Spa says **still in the
+  Spa** on every screen. Without a date it is not for sale; check-in + N
+  days (*Suggested sale date: days after check-in*, default 28) is only
+  the "suggested" hint beside the pickers.
 - **Alive = received − losses − shipped**, with an optional full recount
   that overrides. Head counts are unreliable (fish hide), Jeff counts
   bodies, so a **loss is the fastest path**: one tap on *−1 lost* on the
@@ -134,7 +138,9 @@ log in again every two days; logged in without `manage_woocommerce` →
 **Tank screen** — title ("Tank 521 · Spa · Building 500 · 20G long ·
 shares water with 511, 512, 513, 522, 523, 524 · 205 gal system ·
 schedule 14 Day CM"), the occupants first (species, live, day N, state
-badge, in since / ready date, each with a **−1 lost** button — the
+badge, "still in the Spa" when a group's sale date came before it was
+cleared, in since / "on sale <date>" or "Sale date not set", each with
+a **−1 lost** button — the
 fastest path is never below the fold), then the **Today** strip folded
 to one line ("Today · 3 to do ▸", plus "Cu low" when the last reading is
 under the floor) that opens on tap — the to-do from the building's
@@ -143,8 +149,9 @@ with its age, red when below the floor; a Copper entry and a **Dose**
 entry — and stays open for the session; and the bar: **Lost · Shipped ·
 Move · Arrival · Note · Mic** (Copper takes the Mic's place when voice is
 off). Tapping an occupant opens its sheet: −1 lost, Lost…, Shipped, Move,
-Full recount, Note, Dates (check-in date, cleared date, sale-ready
-override).
+Full recount, Note, Dates (check-in date, cleared date, the group's own
+sale date — empty goes back to the batch's, a "suggested …" chip fills
+the picker).
 
 **Dose** — medication chips (Copper · Metro · Prazi · Formalin ·
 Chloroquine · Fenben · Salt), the amount with its unit (g / ml / tsp; the
@@ -215,12 +222,18 @@ system"), its schedule, the count in QT and the last dose per medication
 (a system dose or a tank dose in that building, with its time), the last
 copper reading, the to-do count and what is still due today (printed on
 the card — a tooltip is invisible on a tablet) per tank, area and species
-filters, a *Front Desk* link per tank. **Stays** — every open
-stay (species, live / arrived, check-in, day, state, cleared, sale-ready,
-tank, supplier / order ref) with Lost / Shipped / Count / Cleared… /
-Sale-ready… / Move… / Coming Soon / Edit (species, product, check-in
-date, supplier, order ref, landed cost, a note), closed stays with a
-toggle, a CSV and an XLSX export with the formula-cell guard.
+filters, a *Front Desk* link per tank, and in the summary the groups for
+sale, those for sale but still in the Spa and those without a sale date
+(linked to Arrivals). **Stays** — every open
+stay (species, live / arrived, check-in, day, state, cleared, on sale —
+the effective date with "from the batch" / "own date", or "Sale date not
+set" with the suggestion —, tank, supplier / order ref linked to its
+order) with Lost / Shipped / Count / Cleared… / Sale date… (the group's
+own date: pre-filled with it, else empty when the batch has a date — OK
+then keeps the batch's —, else the suggestion; empty = the batch's; the
+date it already has writes nothing) / Move… / Coming Soon / Edit (species, product, check-in date, supplier,
+order ref, landed cost, a note), a *For sale now* filter, closed stays
+with a toggle, a CSV and an XLSX export with the formula-cell guard.
 **Arrivals**, **Species** and **Stats** — the workbook replacement, below.
 **Events** — the latest 200 stay events and 100 tank-log entries in plain
 words (a dose row reads like the toast — "Metronidazole 5.1 g · Building
@@ -270,6 +283,9 @@ survived, the Spa tank). The costing replicates the sheet exactly
   precision inside, rounding only on display and when a figure is
   stored.
 
+**Goes on sale** — a card at the top of a saved order: the day every
+group checked in from this order goes on sale (see *Sale dates*).
+
 **Check in received fish** creates the stays — one per line that received
 fish and has no stay yet — through the same `Store::create_stay()` +
 `record_event()` path the Front Desk uses: an `arrival` of the received
@@ -292,6 +308,71 @@ and origin (a row with no origin stands for every origin of that
 supplier) — on request, never on its own. The box rates and the pick
 lists start empty; nothing is seeded in code — the workbook import fills
 them from the Data sheet.
+
+## Sale dates
+
+"They should be ready to sell the day I mark them ready to sell." A
+group's **effective sale date** is chosen, never computed:
+
+1. its **own date**, when it has one — set in the *Clean room* box on its
+   product page (saved with the product's Update button), with *Sale
+   date…* on the Stays tab, or under Dates on the phone;
+2. else its **batch's date** — the *Goes on sale* date of the supplier
+   order it was checked in from (its order line → the order's
+   `sale_date`; a group split off another keeps that order line, so it
+   keeps the batch);
+3. else **none**: the group is not for sale, and the screens say *Sale
+   date not set* with "suggested <date>" = check-in + the *Suggested sale
+   date* setting (28 by default) — a hint, and what a tap on it fills a
+   picker with; it is never saved by itself.
+
+A group is **for sale** (ready) once its effective date is set, today —
+the site's own date, so it flips at local midnight — is that date or
+later (the date itself counts), and it is not closed. Cleared or not
+does not matter any more; a group for sale while still in the Spa (not
+cleared) is flagged **still in the Spa** on the badge, the Board (a
+summary chip), the Stays tab, the order page's card, the product box,
+the phone, and the state column of the stays CSV / XLSX ("ready (still
+in the Spa)"). The Board's building line counts the way its summary
+does: a group for sale counts as for sale, not as in QT.
+
+**Where to set them.** *Arrivals → the order → Goes on sale*: a date
+picker (empty until chosen, the suggestion beside it), Save and Clear —
+its own nonce'd admin-post form, `manage_woocommerce` like every order
+edit, an invalid date refused with nothing changed, and every change
+written to the Health log through `fishotel_log` ("Sale date of
+supplier order 2026-7 changed by <login>: not set → 2026-10-30"). Under
+it: how many groups still in tanks the date applies to (and how many of
+those are still in the Spa), and the groups with their own date (product
+linked to its edit screen, tank, date, "still in the Spa").
+The Arrivals list's *On sale* column shows each order's date, "not
+set", or "N of M groups have their own date". **The product page**: one
+row per open stay of the product — the supplier order (linked), tank,
+check-in, live count, a date picker holding the effective date labelled
+"from the batch" or "own date", and *Use the batch date* on a group with
+its own date. Only a group whose own date really changes gets an event;
+a picker left as shown (on the batch's date, say) writes nothing; an
+invalid date is ignored and named in a notice after the save; emptying a
+picker that shows the batch's date changes nothing, and the notice says
+to change or clear it on that supplier order.
+
+**Sensible dates only.** Every place a sale date is chosen — the order
+card, the product box, the Stays tab, the phone — takes a date from
+2000-01-01 to two years after today (`Replay::SALE_DATE_MIN`,
+`sale_date_max()`; the pickers carry the same `min` / `max`). A date
+field turns a typed "26" into the year 0026, which would put a group on
+sale at once; anything outside is refused with nothing changed. Saving
+the date a group (or a batch) already has writes no event and no log
+entry ("nothing changed").
+
+**What is stored.** A group's own date is the history it always was: a
+note event `sale_ready:YYYY-MM-DD` (`sale_ready:` removes it), mirrored
+in `fh_stays.sale_ready_date`, so the Replay, the Events tab and the
+undo see every change. The batch's date is the column
+`fh_orders.sale_date` (its changes are in the Health log). Nothing on the
+storefront moves by itself: stock, visibility and purchasability stay
+manual; *Coming Soon* on the Stays tab still sets the product's
+countdown to the effective date on request.
 
 ## Species
 
@@ -410,7 +491,10 @@ whenever Jeff wants the latest Fishlist prices.
      `Orders::check_in()` the Arrivals button uses — an arrival on the
      batch date into the line's tank, else the first empty Spa tank of the
      chosen building, else any empty one, a `doa` loss, the seam fields
-     filled — with `source = import` on the stay and its events;
+     filled — with `source = import` on the stay and its events. The
+     workbook carries **no sale date**, so none is set: the preview and
+     the result count the groups in tanks without one and name their
+     orders, to set *Goes on sale* on after the import;
    - **treatment logs** (when ticked): every row of a batch's `QT Tanks`
      log becomes a building-level log — "Dosed X" / "Added X" a `dose`
      (value = the numeric part of the amount, note "<Medication>
@@ -461,19 +545,30 @@ otherwise:
 
 ```
 live_total   fish alive across every open stay of the product
-ready_total  of those, in stays that are cleared and past their sale-ready date
-in_qt[]      stays still in the Spa: stay_id, qty_live, checkin_date, day, sale_ready_date, tank
-cleared[]    stays in the Clean Room: + cleared_date, sale_ready (bool)
-next         the stay that can ship first (a ready one, else the earliest sale-ready
-             date): checkin_date, cleared_date, sale_ready_date, sale_ready, day,
-             tank ('Clean Room · Building 100 · Tank 121'), qty_live — or null
+ready_total  of those, in stays that are for sale today (their sale date has come —
+             cleared or still in the Spa)
+in_qt[]      stays still in the Spa: stay_id, qty_live, checkin_date, cleared_date, day,
+             sale_ready_date, sale_date_source, sale_ready (bool), tank
+cleared[]    stays in the Clean Room: the same fields
+next         the stay that can ship first (one for sale, else the earliest sale date;
+             a stay without one sorts last): checkin_date, cleared_date, sale_ready_date,
+             sale_date_source, sale_ready, day, tank ('Clean Room · Building 100 ·
+             Tank 121'), qty_live — or null
 ```
+
+**For theme authors (0.44):** `sale_ready_date` is now `string|null` — the
+stay's effective sale date (its own, else its batch's, Y-m-d) or **null**
+when none has been chosen; it used to be a date always computed as
+check-in + 28 days. Treat null as "not for sale yet, date to be
+announced". `sale_date_source` is `'own'`, `'batch'` or null. `sale_ready`
+is true from the sale date on whether or not the stay is cleared.
 
 Most fish are pre-sold custom orders and never listed; when one is listed
 it is Coming Soon with a countdown (the Coming Soon section's
 `_fh_release_datetime`). The Stays tab's **Coming Soon** button sets that
-release moment to the stay's sale-ready date at 09:00 site time — only
-when the product exists; a stay never assumes one does. Photos are stock
+release moment to the stay's effective sale date at 09:00 site time —
+only when the product exists and the stay has a date; a stay never
+assumes one does, and nothing sets it on its own. Photos are stock
 photos; nothing here touches them. The lottery for contested fish is the
 Lottery Draw section.
 
@@ -491,18 +586,21 @@ its orders, species and stays through the same Store methods.
 ## Data
 
 Nine tables, created by dbDelta on first boot (gated by the autoloaded
-`fishotel_cleanroom_db_version` option, 1.2, so a booted site pays no
+`fishotel_cleanroom_db_version` option, 1.3, so a booted site pays no
 query and no `SHOW TABLES`) and on activation, the layout seeded in the
-same step; everything kept on deactivation.
+same step; the version is written only once every table — and the
+orders' `sale_date`, which every stay read selects — is there, so a
+failed CREATE or ALTER is retried on the next boot; everything kept on
+deactivation.
 
 - `{prefix}fh_buildings` — id, area, number (unique), name, status, sort, notes, schedule (the template the building runs, '' = the default), system_gallons (NULL = the sum of its tanks; the seed and the 1.2 backfill give Spa 500 205 and Spa 600 100)
 - `{prefix}fh_tanks` — id, building_id, number (unique), level, position, size_label, gallons, status, sort
-- `{prefix}fh_stays` — the cached state: product_id, species, qty_arrived, qty_live, checkin_date, cleared_date, sale_ready_date (the override), closed_date, status, tank_id, source, order_line_id, supplier, order_ref, landed_cost, notes
+- `{prefix}fh_stays` — the cached state: product_id, species, qty_arrived, qty_live, checkin_date, cleared_date, sale_ready_date (the stay's OWN sale date, from its note events; the effective one is computed on read with the batch's), closed_date, status, tank_id, source, order_line_id (→ its batch), supplier, order_ref, landed_cost, notes
 - `{prefix}fh_stay_events` — the truth: stay_id, type (arrival · move · loss · clear · sold · count · note), qty, from/to tank, note, event_at (UTC), actor, source
 - `{prefix}fh_tank_logs` — per tank, or per building: copper readings, doses (value = the amount, note "<Medication> <amount> <unit>"), test / water-change / feed tick-offs, tank notes; a building-level entry has tank_id 0 and building_id set and counts for every tank of the building (the day's to-do, the last copper reading when newer than the tank's own); an imported entry carries `import:<ref>#<row>` at the end of its note
 - `{prefix}fh_aliases` — spoken words → product / species
 - `{prefix}fh_species` — the species master: name (unique), sci_name, group_name, per_box, my_price, online_price, online_site, online_date, reef_safe, max_size, product_id, notes
-- `{prefix}fh_orders` — a supplier order: ref (unique), supplier, origin, order_date, received_date, status, boxes, cost_mode, tariffs, domestic_flight, import_fees, credit, markup, worth_threshold, schedule, building_id, notes
+- `{prefix}fh_orders` — a supplier order: ref (unique), supplier, origin, order_date, received_date, sale_date (the batch's "Goes on sale", NULL = not set; added in 1.3), status, boxes, cost_mode, tariffs, domestic_flight, import_fees, credit, markup, worth_threshold, schedule, building_id, notes
 - `{prefix}fh_order_lines` — its lines: order_id, species_id, species, sci_name, qty_ordered, qty_received, per_box, bags, unit_price, worth, qty_doa, qty_survived, landed_total (a cache of the costing), stay_id, tank_id, sort, notes
 
 Three options: `fishotel_cleanroom_settings`, `fishotel_cleanroom_protocol`
@@ -520,7 +618,8 @@ reverses (the undo, note `undo of #<id>` — which is how the same undo is
 refused a second time), a `clear` carries its date in the note
 (`cleared:YYYY-MM-DD`; an old-shape one without a note is dated by its
 `event_at`) and with −1 unsets the cleared date, a note of
-`sale_ready:YYYY-MM-DD` sets the override, a note of `checkin:YYYY-MM-DD`
+`sale_ready:YYYY-MM-DD` sets the stay's own sale date (`sale_ready:`
+removes it), a note of `checkin:YYYY-MM-DD`
 corrects the check-in, a move's note is its reason. Day number =
 floor((today − check-in) / 86400) + 1 over the two calendar dates, never
 stored.
@@ -535,7 +634,8 @@ clean-room/
 │                           (append + replay), splits, species search + candidates, aliases, facts,
 │                           the species master, the orders and their lines, stay figures
 ├── class-layout.php        PURE: numbering rule, seed, shares-water, titles / labels, grouping
-├── class-replay.php        PURE: events → state, day math, sale-ready, splits, compensating events
+├── class-replay.php        PURE: events → state, day math, the chosen sale date (own > batch > none,
+│                           the suggestion, ready, "still in the Spa"), splits, compensating events
 ├── class-protocol.php      PURE: the named treatment templates (the five seeds, the option's
 │                           shape, steps_for a building) → a tank's daily to-do; the medications,
 │                           their aliases and dose rates, the dose suggestion and the dose tick
@@ -558,8 +658,10 @@ clean-room/
 │                           their operations, box rates), layout editor, aliases
 ├── class-front-desk.php    the phone page (query var fh_front_desk), the label-login cookie life,
 │                           its AJAX (act / parse / suggest) with perform() = the testable switch
-├── class-admin.php         the Room Board page, CSV, labels, stay edits + move + undo, Coming Soon release, meta box
-├── class-admin-workbook.php  the Arrivals / Species / Stats tabs, their AJAX, the XLSX / CSV exports
+├── class-admin.php         the Room Board page, CSV, labels, stay edits + move + undo, Coming Soon release,
+│                           the product meta box and its sale dates (save_post_product)
+├── class-admin-workbook.php  the Arrivals / Species / Stats tabs, their AJAX, the XLSX / CSV exports,
+│                           the batch's "Goes on sale" (admin-post)
 ├── class-admin-import.php  Settings → Import workbook: the private folder, upload → preview → import
 ├── css/front-desk.css, js/front-desk.js      the phone screen (inlined into the page)
 ├── css/clean-room-admin.css, js/clean-room-admin.js
