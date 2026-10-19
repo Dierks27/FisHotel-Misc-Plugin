@@ -91,6 +91,15 @@ class Replay {
 	const SALE_BATCH = 'batch';
 
 	/**
+	 * The earliest sale date a screen accepts (the latest is two years
+	 * after today, sale_date_max()). A date field turns a typed "26" into
+	 * the year 0026, which would put a group on sale at once.
+	 *
+	 * @var string
+	 */
+	const SALE_DATE_MIN = '2000-01-01';
+
+	/**
 	 * A clear event whose note starts with this carries the cleared date
 	 * (the event itself is recorded when the date was typed, so a later
 	 * correction always wins — even to an earlier date).
@@ -250,6 +259,60 @@ class Replay {
 			return self::SALE_BATCH;
 		}
 		return '';
+	}
+
+	/**
+	 * The latest sale date a screen accepts: two years after today (Feb 29
+	 * → Feb 28).
+	 *
+	 * @param string $today Site date.
+	 * @return string Y-m-d ('' when today is not a date).
+	 */
+	public static function sale_date_max( $today ) {
+		if ( ! self::is_date( $today ) ) {
+			return '';
+		}
+		$max = sprintf( '%04d', (int) substr( (string) $today, 0, 4 ) + 2 ) . substr( (string) $today, 4 );
+		return self::is_date( $max ) ? $max : substr( $max, 0, 8 ) . '28';
+	}
+
+	/**
+	 * Whether a chosen sale date is a real date from SALE_DATE_MIN to two
+	 * years after today (no upper bound when today is not a date).
+	 *
+	 * @param mixed  $ymd   The date typed.
+	 * @param string $today Site date.
+	 * @return bool
+	 */
+	public static function is_sale_date_in_range( $ymd, $today ) {
+		if ( ! self::is_date( $ymd ) || strcmp( (string) $ymd, self::SALE_DATE_MIN ) < 0 ) {
+			return false;
+		}
+		$max = self::sale_date_max( $today );
+		return '' === $max || strcmp( (string) $ymd, $max ) <= 0;
+	}
+
+	/**
+	 * What a typed own sale date means for a stay (pure): 'invalid' (not
+	 * a date), 'range' (a real date outside is_sale_date_in_range()),
+	 * 'same' (what the stay already has — nothing to write; '' = no own
+	 * date) or 'ok'.
+	 *
+	 * @param string      $typed   The date typed ('' = no own date).
+	 * @param string|null $current The stay's own date now.
+	 * @param string      $today   Site date.
+	 * @return string
+	 */
+	public static function own_sale_date_check( $typed, $current, $today ) {
+		$typed   = (string) $typed;
+		$current = self::is_date( $current ) ? (string) $current : '';
+		if ( '' !== $typed && ! self::is_date( $typed ) ) {
+			return 'invalid';
+		}
+		if ( '' !== $typed && ! self::is_sale_date_in_range( $typed, $today ) ) {
+			return 'range';
+		}
+		return $typed === $current ? 'same' : 'ok';
 	}
 
 	/**

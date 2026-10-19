@@ -1248,7 +1248,7 @@
 			o.clearedDate ? el('button', { type: 'button', class: 'fh-fd-chip fh-fd-chip--ghost', text: t('unsetDate', 'Not cleared'), on: { click: function () { act({ act: 'clear', tank: tk.number, stay_id: o.stayId, unset: 1, via: 'qr' }); } } }) : null
 		]));
 		// The suggestion (check-in + the setting) only fills the picker on a tap; Save writes it.
-		var readyInput = el('input', { id: 'fh-fd-rdate', class: 'fh-fd-input', type: 'date', value: f.ready, on: { change: function (e) { f.ready = e.target.value; } } });
+		var readyInput = el('input', { id: 'fh-fd-rdate', class: 'fh-fd-input', type: 'date', value: f.ready, min: state.screen.saleDateMin || null, max: state.screen.saleDateMax || null, on: { change: function (e) { f.ready = e.target.value; } } });
 		screen.appendChild(el('div', { class: 'fh-fd-field' }, [
 			el('label', { class: 'fh-fd-label', for: 'fh-fd-rdate', text: t('readyDate', 'Sale date (this group)') }),
 			el('div', { class: 'fh-fd-row' }, [

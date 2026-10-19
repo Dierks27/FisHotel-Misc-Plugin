@@ -316,13 +316,15 @@ class Front_Desk {
 		$today    = Clean_Room::today();
 
 		$data = array(
-			'today'    => $today,
-			'tablesOk' => Store::tables_exist(),
-			'tank'     => null,
-			'grid'     => array(),
-			'spaTanks' => array(),
-			'recent'   => array(),
-			'settings' => array(
+			'today'       => $today,
+			'saleDateMin' => Replay::SALE_DATE_MIN,
+			'saleDateMax' => Replay::sale_date_max( $today ),
+			'tablesOk'    => Store::tables_exist(),
+			'tank'        => null,
+			'grid'        => array(),
+			'spaTanks'    => array(),
+			'recent'      => array(),
+			'settings'    => array(
 				'autoConfirmSeconds' => (int) $settings['auto_confirm_seconds'],
 				'voiceEnabled'       => ! empty( $settings['voice_enabled'] ),
 				'undoSeconds'        => Settings::UNDO_SECONDS,
@@ -1070,17 +1072,31 @@ class Front_Desk {
 
 	/**
 	 * The stay's own sale date ('' = none: back to the batch's date, or no
-	 * date at all when the batch has none).
+	 * date at all when the batch has none). A date outside
+	 * Replay::SALE_DATE_MIN – two years after today is refused; the date
+	 * the group already has writes nothing.
 	 */
 	private static function act_ready( array $ctx, array $raw ) {
 		$stays = self::targets( $ctx, $raw, false );
 		if ( ! is_array( $stays ) ) {
 			return array( 'error' => $stays );
 		}
-		$stay = $stays[0];
-		$date = self::text( $raw, 'date', 10 );
-		if ( '' !== $date && ! Replay::is_date( $date ) ) {
+		$stay  = $stays[0];
+		$date  = self::text( $raw, 'date', 10 );
+		$check = Replay::own_sale_date_check( $date, $stay['sale_ready_override'] ?? null, (string) $ctx['today'] );
+		if ( 'invalid' === $check ) {
 			return array( 'error' => __( 'That is not a date.', 'fishotel-misc-plugin' ) );
+		}
+		if ( 'range' === $check ) {
+			/* translators: 1: earliest date, 2: latest date */
+			return array( 'error' => sprintf( __( 'Pick a sale date from %1$s to %2$s.', 'fishotel-misc-plugin' ), Replay::SALE_DATE_MIN, Replay::sale_date_max( (string) $ctx['today'] ) ) );
+		}
+		if ( 'same' === $check ) {
+			return array(
+				/* translators: %s: species */
+				'message'   => sprintf( __( '%s: nothing changed', 'fishotel-misc-plugin' ), (string) $stay['species'] ),
+				'event_ids' => array(),
+			);
 		}
 
 		$written = self::write( $ctx, $stay['id'], array( 'type' => 'note', 'note' => Replay::NOTE_SALE_READY . $date, 'event_at' => gmdate( 'Y-m-d H:i:s' ) ) );

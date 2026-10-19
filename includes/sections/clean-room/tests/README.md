@@ -325,8 +325,17 @@ system temp directory (`FH_TEST_TMP` overrides).
   — the batch's date never copied —, the second save_post of the same
   request, one changed picker = one event with the actor, the success
   notice printed once, "Use the batch date", an invalid date ignored and
-  named, an emptied picker, a group without an own date, a closed group,
-  a failing store caught and logged, an autosave).
+  named, a two-digit year (0026) and the day after two years from today
+  refused, an emptied picker, an emptied picker that showed the batch's
+  date reported with its supplier order, a group without an own date, a
+  closed group, a failing store caught and logged, an autosave); the
+  date bounds (`sale_date_max()` with Feb 29, `is_sale_date_in_range()`,
+  `own_sale_date_check()`), the batch calendar refusing dates outside
+  them, the phone writing nothing for an unchanged date and refusing a
+  far one, the Stays tab prompt's default (`sale_prompt_default()`: empty
+  when the batch has a date), "ready (still in the Spa)" in the CSV and
+  XLSX state column, the order card's Spa count and own-date flag, and
+  the Board's building line counting as its summary does.
 - **fake-store.php** — not a test (exits 0 when run directly): the
   in-memory store the above drives (tanks and buildings from the seed,
   stays — joined with their batch's order and sale date like the real

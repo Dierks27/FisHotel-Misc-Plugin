@@ -419,24 +419,29 @@ class Admin_Workbook {
 	/**
 	 * What the order page's "Goes on sale" card shows (pure): the batch's
 	 * date (or none), the suggestion, how many groups still in tanks the
-	 * date applies to, and the groups that have their own date (product,
-	 * tank, date, the product's edit link).
+	 * date applies to (and how many of those are for sale while still in
+	 * the Spa), and the groups that have their own date (product, tank,
+	 * date, the product's edit link, the "still in the Spa" flag).
 	 *
 	 * @param array   $order    The order (id, ref, sale_date, received_date).
 	 * @param array[] $stays    Its open stays (Store::open_stays( order_id )).
 	 * @param array   $titles   Product titles by id.
 	 * @param array   $settings Settings.
-	 * @return array{date: string, suggested: string, open: int, applies: int, own: array[], nonce_action: string}
+	 * @return array{date: string, suggested: string, open: int, applies: int, in_spa: int, own: array[], nonce_action: string}
 	 */
 	public static function batch_sale_panel( array $order, array $stays, array $titles, array $settings ) {
 		$own     = array();
 		$applies = 0;
+		$in_spa  = 0;
 		foreach ( $stays as $stay ) {
 			if ( 'closed' === (string) ( $stay['status'] ?? '' ) ) {
 				continue;
 			}
 			if ( ! Replay::is_date( $stay['sale_ready_override'] ?? null ) ) {
 				$applies++;
+				if ( ! empty( $stay['ready_in_spa'] ) ) {
+					$in_spa++;
+				}
 				continue;
 			}
 			$product = ! empty( $stay['product_id'] ) ? (int) $stay['product_id'] : 0;
@@ -449,6 +454,7 @@ class Admin_Workbook {
 				'tank'       => ! empty( $stay['tank_number'] ) ? (int) $stay['tank_number'] : null,
 				'date'       => (string) $stay['sale_ready_override'],
 				'ready'      => ! empty( $stay['sale_ready'] ),
+				'in_spa'     => ! empty( $stay['ready_in_spa'] ),
 			);
 		}
 
@@ -457,6 +463,7 @@ class Admin_Workbook {
 			'suggested'    => self::suggested_batch_date( $order, $stays, $settings ),
 			'open'         => $applies + count( $own ),
 			'applies'      => $applies,
+			'in_spa'       => $in_spa,
 			'own'          => $own,
 			'nonce_action' => self::NONCE_SALE_DATE . (int) ( $order['id'] ?? 0 ),
 		);
@@ -464,8 +471,8 @@ class Admin_Workbook {
 
 	/**
 	 * The line under the "Goes on sale" picker (pure): how many groups
-	 * still in tanks the batch's date applies to, and whether they are for
-	 * sale yet.
+	 * still in tanks the batch's date applies to, whether they are for
+	 * sale yet, and how many of those are still in the Spa.
 	 *
 	 * @param array  $batch batch_sale_panel().
 	 * @param string $today Site date.
@@ -485,7 +492,13 @@ class Admin_Workbook {
 		}
 		if ( Replay::is_sale_ready( $date, $today, 'cleared' ) ) {
 			/* translators: 1: groups, 2: date */
-			return sprintf( _n( 'Applies to %1$d group still in tanks — for sale since %2$s.', 'Applies to %1$d groups still in tanks — for sale since %2$s.', $applies, 'fishotel-misc-plugin' ), $applies, $date );
+			$line   = sprintf( _n( 'Applies to %1$d group still in tanks — for sale since %2$s.', 'Applies to %1$d groups still in tanks — for sale since %2$s.', $applies, 'fishotel-misc-plugin' ), $applies, $date );
+			$in_spa = (int) ( $batch['in_spa'] ?? 0 );
+			if ( $in_spa > 0 ) {
+				/* translators: %d: groups */
+				$line .= ' ' . sprintf( _n( '%d of them is still in the Spa.', '%d of them are still in the Spa.', $in_spa, 'fishotel-misc-plugin' ), $in_spa );
+			}
+			return $line;
 		}
 		/* translators: %d: groups */
 		return sprintf( _n( 'Applies to %d group still in tanks.', 'Applies to %d groups still in tanks.', $applies, 'fishotel-misc-plugin' ), $applies );
@@ -869,16 +882,18 @@ class Admin_Workbook {
 	 * The batch sale date from the order page's form — the testable half
 	 * of handle_sale_date(): the capability (manage_woocommerce, as every
 	 * order edit) and the nonce (per order) first, then op "save" with a
-	 * date (type=date, Y-m-d; anything else is refused and nothing
-	 * changes) or op "clear". A real change is written with
-	 * Store::update_order_fields() and logged through fishotel_log — who,
-	 * the order and old → new; an unchanged date writes nothing.
+	 * date (type=date, Y-m-d from Replay::SALE_DATE_MIN to two years after
+	 * today; anything else is refused and nothing changes) or op "clear".
+	 * A real change is written with Store::update_order_fields() and
+	 * logged through fishotel_log — who, the order and old → new; an
+	 * unchanged date writes nothing.
 	 *
 	 * @param object $store Store (or the tests' stand-in).
 	 * @param array  $raw   Unslashed POST: order_id, _wpnonce, op (save|clear), sale_date.
+	 * @param string $today Site date ('' = Clean_Room::today()).
 	 * @return array{status: int, ok: bool, message: string, redirect: string, old: string|null, new: string|null}
 	 */
-	public static function sale_date_request( $store, array $raw ) {
+	public static function sale_date_request( $store, array $raw, $today = '' ) {
 		$order_id = isset( $raw['order_id'] ) && is_scalar( $raw['order_id'] ) ? absint( $raw['order_id'] ) : 0;
 		$out      = array(
 			'status'   => 403,
@@ -921,6 +936,13 @@ class Admin_Workbook {
 				$out['status']  = 400;
 				/* translators: %s: what was typed */
 				$out['message'] = sprintf( __( '"%s" is not a date. Nothing was changed.', 'fishotel-misc-plugin' ), substr( $date, 0, 40 ) );
+				return $out;
+			}
+			$today = Replay::is_date( $today ) ? (string) $today : Clean_Room::today();
+			if ( ! Replay::is_sale_date_in_range( $date, $today ) ) {
+				$out['status']  = 400;
+				/* translators: 1: what was typed, 2: earliest date, 3: latest date */
+				$out['message'] = sprintf( __( '%1$s is outside the dates a sale can be set to (%2$s to %3$s). Nothing was changed.', 'fishotel-misc-plugin' ), $date, Replay::SALE_DATE_MIN, Replay::sale_date_max( $today ) );
 				return $out;
 			}
 			$new = $date;
@@ -1357,7 +1379,7 @@ class Admin_Workbook {
 				(int) ( $stay['qty_live'] ?? 0 ),
 				(string) ( $stay['checkin_date'] ?? '' ),
 				isset( $stay['day'] ) ? $stay['day'] : null,
-				(string) ( $stay['state_label'] ?? $stay['status'] ?? '' ),
+				Admin::state_cell( $stay ),
 				isset( $stay['cleared_date'] ) ? $stay['cleared_date'] : null,
 				isset( $stay['sale_ready_date'] ) && Replay::is_date( $stay['sale_ready_date'] ) ? (string) $stay['sale_ready_date'] : null,
 				isset( $stay['closed_date'] ) ? $stay['closed_date'] : null,

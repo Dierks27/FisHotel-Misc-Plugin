@@ -229,8 +229,9 @@ stay (species, live / arrived, check-in, day, state, cleared, on sale —
 the effective date with "from the batch" / "own date", or "Sale date not
 set" with the suggestion —, tank, supplier / order ref linked to its
 order) with Lost / Shipped / Count / Cleared… / Sale date… (the group's
-own date, pre-filled with it or the suggestion; empty = the batch's) /
-Move… / Coming Soon / Edit (species, product, check-in date, supplier,
+own date: pre-filled with it, else empty when the batch has a date — OK
+then keeps the batch's —, else the suggestion; empty = the batch's; the
+date it already has writes nothing) / Move… / Coming Soon / Edit (species, product, check-in date, supplier,
 order ref, landed cost, a note), a *For sale now* filter, closed stays
 with a toggle, a CSV and an XLSX export with the formula-cell guard.
 **Arrivals**, **Species** and **Stats** — the workbook replacement, below.
@@ -330,7 +331,10 @@ the site's own date, so it flips at local midnight — is that date or
 later (the date itself counts), and it is not closed. Cleared or not
 does not matter any more; a group for sale while still in the Spa (not
 cleared) is flagged **still in the Spa** on the badge, the Board (a
-summary chip), the Stays tab, the product box and the phone.
+summary chip), the Stays tab, the order page's card, the product box,
+the phone, and the state column of the stays CSV / XLSX ("ready (still
+in the Spa)"). The Board's building line counts the way its summary
+does: a group for sale counts as for sale, not as in QT.
 
 **Where to set them.** *Arrivals → the order → Goes on sale*: a date
 picker (empty until chosen, the suggestion beside it), Save and Clear —
@@ -338,8 +342,9 @@ its own nonce'd admin-post form, `manage_woocommerce` like every order
 edit, an invalid date refused with nothing changed, and every change
 written to the Health log through `fishotel_log` ("Sale date of
 supplier order 2026-7 changed by <login>: not set → 2026-10-30"). Under
-it: how many groups still in tanks the date applies to, and the groups
-with their own date (product linked to its edit screen, tank, date).
+it: how many groups still in tanks the date applies to (and how many of
+those are still in the Spa), and the groups with their own date (product
+linked to its edit screen, tank, date, "still in the Spa").
 The Arrivals list's *On sale* column shows each order's date, "not
 set", or "N of M groups have their own date". **The product page**: one
 row per open stay of the product — the supplier order (linked), tank,
@@ -347,7 +352,18 @@ check-in, live count, a date picker holding the effective date labelled
 "from the batch" or "own date", and *Use the batch date* on a group with
 its own date. Only a group whose own date really changes gets an event;
 a picker left as shown (on the batch's date, say) writes nothing; an
-invalid date is ignored and named in a notice after the save.
+invalid date is ignored and named in a notice after the save; emptying a
+picker that shows the batch's date changes nothing, and the notice says
+to change or clear it on that supplier order.
+
+**Sensible dates only.** Every place a sale date is chosen — the order
+card, the product box, the Stays tab, the phone — takes a date from
+2000-01-01 to two years after today (`Replay::SALE_DATE_MIN`,
+`sale_date_max()`; the pickers carry the same `min` / `max`). A date
+field turns a typed "26" into the year 0026, which would put a group on
+sale at once; anything outside is refused with nothing changed. Saving
+the date a group (or a batch) already has writes no event and no log
+entry ("nothing changed").
 
 **What is stored.** A group's own date is the history it always was: a
 note event `sale_ready:YYYY-MM-DD` (`sale_ready:` removes it), mirrored

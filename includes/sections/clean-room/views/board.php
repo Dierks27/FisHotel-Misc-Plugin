@@ -92,16 +92,13 @@ $fh_species = (string) $filters['species'];
 			<?php foreach ( $fh_group['buildings'] as $fh_entry ) : ?>
 				<?php
 				$fh_building = $fh_entry['building'];
-				$fh_in_qt    = 0;
-				$fh_ready    = 0;
-				foreach ( $fh_entry['tanks'] as $fh_t ) {
-					$fh_in_qt += (int) ( $fh_t['in_qt'] ?? 0 );
-					$fh_ready += (int) ( $fh_t['ready'] ?? 0 );
-				}
-				$fh_coming  = 'coming_soon' === $fh_building['status'];
-				$fh_off     = 'offline' === $fh_building['status'];
-				$fh_gallons = Layout::system_gallons( $fh_building, $fh_entry['tanks'] );
-				$fh_doses   = isset( $doses[ (int) $fh_building['id'] ] ) ? $doses[ (int) $fh_building['id'] ] : array();
+				$fh_counts   = Admin::totals( $fh_entry['tanks'] ); // The summary's rule: a group for sale counts as for sale, not in QT.
+				$fh_in_qt    = $fh_counts['in_qt'];
+				$fh_ready    = $fh_counts['ready'];
+				$fh_coming   = 'coming_soon' === $fh_building['status'];
+				$fh_off      = 'offline' === $fh_building['status'];
+				$fh_gallons  = Layout::system_gallons( $fh_building, $fh_entry['tanks'] );
+				$fh_doses    = isset( $doses[ (int) $fh_building['id'] ] ) ? $doses[ (int) $fh_building['id'] ] : array();
 				?>
 				<div class="fh-cr-building<?php echo $fh_coming ? ' is-coming' : ''; ?><?php echo $fh_off ? ' is-offline' : ''; ?>">
 					<header class="fh-cr-building__head">

@@ -189,10 +189,28 @@ $ctx = array(
 	'tank'     => $store->tank( $w['tank_id'] ),
 	'base'     => array( 'actor_id' => 4, 'source' => 'qr' ),
 );
+$n = $store->event_count();
 $r = Front_Desk::perform( 'ready', $ctx, array( 'stay_id' => $w['id'], 'date' => '' ) );
-check( 'perform("ready") with nothing typed on a group without an own date: the batch\'s toast with the warning', 'Blue Test Wrasse back to the batch date (2026-10-15) · still in the Spa' === ( $r['message'] ?? '' ), json_encode( $r ) );
+check( 'perform("ready") with nothing typed on a group without an own date (Save with nothing changed): "nothing changed", no event', 'Blue Test Wrasse: nothing changed' === ( $r['message'] ?? '' ) && array() === $r['event_ids'] && $n === $store->event_count(), json_encode( $r ) );
 $r = Front_Desk::perform( 'ready', $ctx, array( 'stay_id' => $w['id'], 'date' => '2026-12-01' ) );
 check( 'perform("ready") with a date: the own date, written as the note event', 'Blue Test Wrasse on sale 2026-12-01' === ( $r['message'] ?? '' ) && 'sale_ready:2026-12-01' === $store->last_event()['note'] && false === $store->stay( $w['id'], $today, $settings )['sale_ready'] );
+$n = $store->event_count();
+$r = Front_Desk::perform( 'ready', $ctx, array( 'stay_id' => $w['id'], 'date' => '2026-12-01' ) );
+check( '… the same date again: "nothing changed", no event', 'Blue Test Wrasse: nothing changed' === ( $r['message'] ?? '' ) && $n === $store->event_count() );
+$r = Front_Desk::perform( 'ready', $ctx, array( 'stay_id' => $w['id'], 'date' => '' ) );
+check( 'emptied: the own date removed, back to the batch\'s, the toast with the warning', 'Blue Test Wrasse back to the batch date (2026-10-15) · still in the Spa' === ( $r['message'] ?? '' ) && 'sale_ready:' === $store->last_event()['note'] && $n + 1 === $store->event_count(), json_encode( $r ) );
+$n   = $store->event_count();
+$bad = 0;
+foreach ( array( '0026-11-01', '1999-12-31', '2028-10-20', '9999-12-31' ) as $far ) {
+	$r = Front_Desk::perform( 'ready', $ctx, array( 'stay_id' => $w['id'], 'date' => $far ) );
+	if ( 'Pick a sale date from 2000-01-01 to 2028-10-19.' === ( $r['error'] ?? '' ) ) {
+		$bad++;
+	}
+}
+check( 'a date outside 2000-01-01 – two years after today (a typed "26" lands in 0026): refused, no event', 4 === $bad && $n === $store->event_count() && true === $store->stay( $w['id'], $today, $settings )['sale_ready'] );
+$r = Front_Desk::perform( 'ready', $ctx, array( 'stay_id' => $w['id'], 'date' => '2028-10-19' ) );
+check( '… two years after today itself is accepted', 'Blue Test Wrasse on sale 2028-10-19' === ( $r['message'] ?? '' ) && $n + 1 === $store->event_count() );
+Front_Desk::perform( 'ready', $ctx, array( 'stay_id' => $w['id'], 'date' => '' ) );
 $i18n = Front_Desk::i18n();
 check( 'the screen strings name the chosen date, never "N days after check-in"', 'on sale %s' === $i18n['readyOn'] && isset( $i18n['readyBatch'], $i18n['readyNone'], $i18n['stillInSpa'], $i18n['noSaleDate'] ) && ! isset( $i18n['readyAuto'] ) );
 
@@ -359,7 +377,7 @@ $r = $admin->save_meta_box( 43, null, true, $s4 );
 check( '"Use the batch date" ticked: the own date cleared by a "sale_ready:" event, the group back to the batch\'s date', 1 === $r['events'] && array( $b1 ) === $r['changed'] && 'sale_ready:' === $s4->event( $before + 1 )['note'] && '2026-10-25' === $s4->stay( $b1, $today, $settings )['sale_ready_date'] && 'batch' === $s4->stay( $b1, $today, $settings )['sale_date_source'] );
 check( 'an invalid date (Feb 30): ignored, the group keeps its own date, reported', 1 === count( $r['invalid'] ) && false !== strpos( $r['invalid'][0], '2026-02-30' ) && '2026-11-20' === $s4->stay( $b2, $today, $settings )['sale_ready_date'] && $before + 1 === $s4->event_count() );
 $notice = get_transient( Admin::SALE_NOTICE . 6 );
-check( 'the notice after the redirect names it as a warning', 'warning' === $notice['type'] && 2 === count( $notice['lines'] ) && false !== strpos( $notice['lines'][1], 'is not a date — ignored' ) );
+check( 'the notice after the redirect names it as a warning, with the dates a sale can be set to', 'warning' === $notice['type'] && 2 === count( $notice['lines'] ) && false !== strpos( $notice['lines'][1], 'is not a date from 2000-01-01 to ' . Replay::sale_date_max( Clean_Room::today() ) . ' — ignored' ), json_encode( $notice ) );
 delete_transient( Admin::SALE_NOTICE . 6 );
 
 $st5 = fh_batch( '2026-10-01' );
@@ -374,6 +392,28 @@ check( '"Use the batch date" on a group without an own date: no event', 0 === $r
 $s5->record_event( $c1, array( 'type' => 'sold', 'qty' => 6, 'event_at' => gmdate( 'Y-m-d H:i:s' ) ), $today, $settings );
 $r = Admin::save_product_sale_dates( $s5, 44, array( $c1 => array( 'date' => '2026-12-01', 'shown' => '' ) ), $today, $settings, 6 );
 check( 'a closed group is never touched', 0 === $r['events'] && null === $s5->stay( $c1, $today, $settings )['sale_ready_override'] );
+
+$st6 = fh_batch( '2026-10-01', '2026-10-15' );
+$s6  = $st6['store'];
+list( $d1, $d2 ) = $st6['stays'];
+$s6->update_stay_fields( $d1, array( 'product_id' => 47 ) );
+$s6->update_stay_fields( $d2, array( 'product_id' => 47 ) );
+$before = $s6->event_count();
+$r      = Admin::save_product_sale_dates( $s6, 47, array( $d1 => array( 'date' => '0026-11-01', 'shown' => '2026-10-15' ) ), $today, $settings, 6 );
+check( 'a two-digit year typed (0026-11-01): reported as invalid, no event, the group keeps the batch date', 0 === $r['events'] && 1 === count( $r['invalid'] ) && false !== strpos( $r['invalid'][0], '0026-11-01' ) && $before === $s6->event_count() && 'batch' === $s6->stay( $d1, $today, $settings )['sale_date_source'] );
+$r = Admin::save_product_sale_dates( $s6, 47, array( $d1 => array( 'date' => '2028-10-20', 'shown' => '2026-10-15' ) ), $today, $settings, 6 );
+check( '… the day after two years from today: refused too; the last day allowed is taken', 1 === count( $r['invalid'] ) && 0 === $r['events'] && 1 === Admin::save_product_sale_dates( $s6, 47, array( $d1 => array( 'date' => '2028-10-19', 'shown' => '2026-10-15' ) ), $today, $settings, 6 )['events'] );
+Admin::save_product_sale_dates( $s6, 47, array( $d1 => array( 'date' => '', 'shown' => '2028-10-19' ) ), $today, $settings, 6 );
+$before = $s6->event_count();
+$tank1  = (int) $s6->stay( $d1, $today, $settings )['tank_number'];
+$_POST  = $form( array( $d1 => array( 'date' => '', 'shown' => '2026-10-15' ) ), 47 );
+$r      = $admin->save_meta_box( 47, null, true, $s6 );
+check( 'a picker showing the batch date, emptied: no event, reported with the batch date and its supplier order', 0 === $r['events'] && $before === $s6->event_count() && array( array( 'label' => 'Blue Test Wrasse (Tank ' . $tank1 . ')', 'date' => '2026-10-15', 'ref' => '2026-7' ) ) === $r['follows_batch'], json_encode( $r ) );
+$notice = get_transient( Admin::SALE_NOTICE . 6 );
+check( '… the notice after the redirect says where that date lives', is_array( $notice ) && 'warning' === $notice['type'] && array( 'Clean room: Blue Test Wrasse (Tank ' . $tank1 . ') follows the batch date (2026-10-15) — change or clear it on supplier order 2026-7.' ) === $notice['lines'], json_encode( $notice ) );
+delete_transient( Admin::SALE_NOTICE . 6 );
+$r = Admin::save_product_sale_dates( $s6, 47, array( $d2 => array( 'date' => '', 'shown' => '' ) ), $today, $settings, 6 );
+check( '… an empty picker left empty is untouched: no report', array() === $r['follows_batch'] && 0 === $r['events'] );
 
 /**
  * A store that fails on read, as a database error would.
@@ -392,5 +432,64 @@ define( 'DOING_AUTOSAVE', true );
 $_POST = $form( array( $b2 => array( 'date' => '2026-12-05', 'shown' => '2026-11-20' ) ), 46 );
 check( 'an autosave with the field present: nothing', false === $admin->save_meta_box( 46, null, true, $s4 ) );
 $_POST = array();
+
+echo "13. Chosen dates stay sensible, unchanged dates write nothing, the warning everywhere\n";
+check( 'sale_date_max: two years after today; Feb 29 → Feb 28; no today, no bound', '2028-10-19' === Replay::sale_date_max( '2026-10-19' ) && '2030-02-28' === Replay::sale_date_max( '2028-02-29' ) && '' === Replay::sale_date_max( '' ) );
+check( 'is_sale_date_in_range: 2000-01-01 and the max itself count; 0026, 1999, the day after the max, 9999 and Feb 30 do not', Replay::is_sale_date_in_range( '2000-01-01', $today ) && Replay::is_sale_date_in_range( '2028-10-19', $today ) && ! Replay::is_sale_date_in_range( '0026-10-30', $today ) && ! Replay::is_sale_date_in_range( '1999-12-31', $today ) && ! Replay::is_sale_date_in_range( '2028-10-20', $today ) && ! Replay::is_sale_date_in_range( '9999-12-31', $today ) && ! Replay::is_sale_date_in_range( '2026-02-30', $today ) );
+check( 'own_sale_date_check (the Stays tab and the phone): invalid / range / same (\'\' = no own date) / ok', 'invalid' === Replay::own_sale_date_check( 'soon', null, $today ) && 'range' === Replay::own_sale_date_check( '0026-11-01', null, $today ) && 'same' === Replay::own_sale_date_check( '2026-11-02', '2026-11-02', $today ) && 'same' === Replay::own_sale_date_check( '', null, $today ) && 'ok' === Replay::own_sale_date_check( '', '2026-11-02', $today ) && 'ok' === Replay::own_sale_date_check( '2026-11-03', '2026-11-02', $today ) );
+
+$q   = fh_batch( '2026-10-01', '2026-10-15' );
+$qs  = $q['store'];
+$qid = $q['order_id'];
+list( $q1, $q2 ) = $q['stays'];
+$GLOBALS['fh_current_user']                    = 5;
+$GLOBALS['fh_user_caps']['manage_woocommerce'] = array( 5 );
+$GLOBALS['fh_log']                             = array();
+$qraw = static function ( $date ) use ( $qid ) {
+	return array(
+		'order_id'  => (string) $qid,
+		'_wpnonce'  => wp_create_nonce( Admin_Workbook::NONCE_SALE_DATE . $qid ),
+		'op'        => 'save',
+		'sale_date' => $date,
+	);
+};
+$far = 0;
+foreach ( array( '0026-10-30', '1999-12-31', '2028-10-20', '9999-12-31' ) as $date ) {
+	$r = Admin_Workbook::sale_date_request( $qs, $qraw( $date ), $today );
+	if ( 400 === $r['status'] && $date . ' is outside the dates a sale can be set to (2000-01-01 to 2028-10-19). Nothing was changed.' === $r['message'] && '2026-10-15' === $qs->order( $qid )['sale_date'] ) {
+		$far++;
+	}
+}
+check( 'the batch calendar refuses a date outside 2000-01-01 – two years after today: 400 each, the date kept, nothing logged', 4 === $far && array() === $GLOBALS['fh_log'] );
+$r = Admin_Workbook::sale_date_request( $qs, $qraw( '2028-10-19' ), $today );
+check( '… and takes the last day allowed (logged)', 200 === $r['status'] && '2028-10-19' === $qs->order( $qid )['sale_date'] && 1 === count( $GLOBALS['fh_log'] ) );
+$r = Admin_Workbook::sale_date_request( $qs, $qraw( '0026-10-30' ) );
+check( 'without a date passed the handler bounds by the site date', 400 === $r['status'] && false !== strpos( $r['message'], 'to ' . Replay::sale_date_max( Clean_Room::today() ) . ')' ) );
+$qs->update_order_fields( $qid, array( 'sale_date' => '2026-10-15' ) );
+
+$qa = $qs->stay( $q1, $today, $settings );
+check( 'the Stays tab prompt on a group with a batch date and no own date opens empty (OK keeps the batch date)', '' === Admin::sale_prompt_default( $qa ) && '2026-10-29' === $qa['sale_ready_suggested'] );
+$qs->record_event( $q2, array( 'type' => 'note', 'note' => Replay::NOTE_SALE_READY . '2026-10-16', 'event_at' => gmdate( 'Y-m-d H:i:s' ) ), $today, $settings );
+$qb = $qs->stay( $q2, $today, $settings );
+check( '… with its own date: that date; with no date at all: the suggestion', '2026-10-16' === Admin::sale_prompt_default( $qb ) && '2026-10-29' === Admin::sale_prompt_default( array_merge( $qa, array( 'batch_sale_date' => null ) ) ) && '' === Admin::sale_prompt_default( array() ) );
+check( 'the Stays tab with the prompt pre-filled and OK pressed: own_sale_date_check says "same" (nothing written)', 'same' === Replay::own_sale_date_check( Admin::sale_prompt_default( $qb ), $qb['sale_ready_override'], $today ) && 'same' === Replay::own_sale_date_check( Admin::sale_prompt_default( $qa ), $qa['sale_ready_override'], $today ) );
+
+check( 'both groups still in the Spa and on sale: ready_in_spa', true === $qa['ready_in_spa'] && true === $qb['ready_in_spa'] );
+check( 'the stays CSV state cell: "ready (still in the Spa)"; a cleared group for sale stays "ready"', 'ready (still in the Spa)' === Admin::csv_row( $qa )[7] && 'ready' === Admin::csv_row( array_merge( $qa, array( 'ready_in_spa' => false ) ) )[7] && 'in QT' === Admin::state_cell( array( 'state_label' => 'in QT' ) ) );
+$xrows = Admin_Workbook::stays_rows( array( $qa ) );
+check( '… and the XLSX stays sheet the same', 'state' === $xrows[0][7] && 'ready (still in the Spa)' === $xrows[1][7], json_encode( $xrows ) );
+
+$qstays = $qs->open_stays( array( 'order_id' => $qid ), $today, $settings );
+$qpanel = Admin_Workbook::batch_sale_panel( $qs->order( $qid ), $qstays, array(), $settings );
+check( 'the order page card counts the batch-dated groups still in the Spa and flags each own-dated one', 1 === $qpanel['applies'] && 1 === $qpanel['in_spa'] && 1 === count( $qpanel['own'] ) && true === $qpanel['own'][0]['in_spa'] && true === $qpanel['own'][0]['ready'], json_encode( $qpanel ) );
+check( '… and the line under the picker says so', 'Applies to 1 group still in tanks — for sale since 2026-10-15. 1 of them is still in the Spa.' === Admin_Workbook::batch_sale_status( $qpanel, $today ) && 'Applies to 2 groups still in tanks — for sale since 2026-10-15. 2 of them are still in the Spa.' === Admin_Workbook::batch_sale_status( array( 'applies' => 2, 'in_spa' => 2, 'open' => 2, 'date' => '2026-10-15' ), $today ) && 'Applies to 1 group still in tanks — for sale since 2026-10-15.' === Admin_Workbook::batch_sale_status( array( 'applies' => 1, 'in_spa' => 0, 'open' => 1, 'date' => '2026-10-15' ), $today ) );
+
+$qs->record_event( $q2, array( 'type' => 'note', 'note' => Replay::NOTE_SALE_READY . '2026-11-30', 'event_at' => gmdate( 'Y-m-d H:i:s' ) ), $today, $settings );
+$building = array(
+	array( 'status' => 'active', 'occupants' => array( $qs->stay( $q1, $today, $settings ) ) ),
+	array( 'status' => 'active', 'occupants' => array( $qs->stay( $q2, $today, $settings ) ) ),
+);
+$bcount = Admin::totals( $building );
+check( 'the Board\'s building line (Admin::totals over its tanks, as the summary): two groups in the Spa, one past its batch date → 1 in QT, 1 for sale', 1 === $bcount['in_qt'] && 1 === $bcount['ready'] && 1 === $bcount['ready_in_spa'], json_encode( $bcount ) );
 
 fh_finish();

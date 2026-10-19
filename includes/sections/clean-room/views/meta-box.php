@@ -20,6 +20,7 @@
  * @var string  $board_url    Stays tab URL.
  * @var int     $release_ts   The product's Coming Soon release timestamp (0 = none).
  * @var string  $nonce_action The sale dates' nonce action (Admin::NONCE_PRODUCT + the product id).
+ * @var string  $today        Site date.
  */
 
 defined( 'ABSPATH' ) || exit;
@@ -98,7 +99,7 @@ foreach ( $stays as $fh_stay ) {
 						</div>
 						<label class="fh-cr-metabox__date" for="<?php echo esc_attr( $fh_input ); ?>">
 							<span><?php esc_html_e( 'On sale', 'fishotel-misc-plugin' ); ?></span>
-							<input type="date" id="<?php echo esc_attr( $fh_input ); ?>" name="<?php echo esc_attr( $fh_field . '[date]' ); ?>" value="<?php echo esc_attr( $fh_words['date'] ); ?>">
+							<input type="date" id="<?php echo esc_attr( $fh_input ); ?>" name="<?php echo esc_attr( $fh_field . '[date]' ); ?>" value="<?php echo esc_attr( $fh_words['date'] ); ?>" min="<?php echo esc_attr( Replay::SALE_DATE_MIN ); ?>" max="<?php echo esc_attr( Replay::sale_date_max( (string) $today ) ); ?>">
 						</label>
 						<input type="hidden" name="<?php echo esc_attr( $fh_field . '[shown]' ); ?>" value="<?php echo esc_attr( $fh_words['date'] ); ?>">
 						<span class="fh-cr-metabox__muted">
