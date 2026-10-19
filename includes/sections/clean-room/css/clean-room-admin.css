@@ -921,3 +921,34 @@ a.fh-cr-chip--muted {
 	font-size: 10px;
 	padding: 1px 7px;
 }
+
+.fh-cr-metabox__head {
+	margin: 10px 0 2px;
+	font-weight: 600;
+}
+
+.fh-cr-metabox__sale > div,
+.fh-cr-metabox__sale > label,
+.fh-cr-metabox__sale > span {
+	display: block;
+	margin: 2px 0;
+}
+
+.fh-cr-metabox__date {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.fh-cr-metabox__date input[type="date"] {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.fh-cr-metabox__batch {
+	font-size: 12px;
+}
+
+.fh-cr-metabox .fh-cr-suggest-date {
+	font-size: 12px;
+}

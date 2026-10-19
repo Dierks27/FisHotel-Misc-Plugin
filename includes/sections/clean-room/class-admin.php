@@ -5,7 +5,11 @@
  * handed to Admin_Workbook), the stays CSV, the printable QR labels, the
  * stay edits from the Stays tab (counts, dates, a move, the seam fields),
  * the per-row Undo on the Events tab, the Coming Soon release button and
- * the product meta box.
+ * the product meta box — which also edits the sale date of each open
+ * stay of the product, saved with the product's Update button
+ * (save_meta_box(): its own nonce, edit_post AND manage_woocommerce;
+ * nothing on autosave, quick / bulk edit or REST; never in the way of
+ * the product save).
  *
  * Every write path checks manage_woocommerce (settings: manage_options)
  * and a nonce. The CSV guards every cell that starts with = + - @ or a
@@ -58,6 +62,16 @@ class Admin {
 	const RELEASE_TIME = '09:00:00';
 
 	/**
+	 * The product meta box's sale dates: the nonce action (+ the product
+	 * id), its field name, the posted array (fh_cr_sale[<stay id>][date |
+	 * shown | batch]) and the per-user notice carried across the redirect.
+	 */
+	const NONCE_PRODUCT       = 'fishotel_cleanroom_product_sale_dates_';
+	const NONCE_PRODUCT_FIELD = 'fh_cr_sale_nonce';
+	const SALE_FIELD          = 'fh_cr_sale';
+	const SALE_NOTICE         = 'fishotel_cleanroom_sale_notice_';
+
+	/**
 	 * Register hooks.
 	 */
 	public function init() {
@@ -67,6 +81,8 @@ class Admin {
 		add_action( 'wp_ajax_fishotel_cleanroom_stay', array( $this, 'ajax_stay' ) );
 		add_action( 'wp_ajax_fishotel_cleanroom_release', array( $this, 'ajax_release' ) );
 		add_action( 'add_meta_boxes_product', array( $this, 'add_meta_box' ) );
+		add_action( 'save_post_product', array( $this, 'save_meta_box' ), 20, 3 );
+		add_action( 'admin_notices', array( $this, 'sale_date_notices' ) );
 	}
 
 	/**
@@ -300,8 +316,9 @@ class Admin {
 	}
 
 	/**
-	 * The meta box: this product's stays with day counts, the facts line
-	 * and a link to the board.
+	 * The meta box: this product's stays with day counts, the facts line,
+	 * a sale-date row per open stay (saved with the product's Update
+	 * button) and a link to the board.
 	 *
 	 * @param \WP_Post $post The product.
 	 */
@@ -324,11 +341,204 @@ class Admin {
 			return;
 		}
 
-		$board_url   = self::page_url( 'stays' );
-		$release_ts  = (int) get_post_meta( $product_id, self::RELEASE_META, true );
-		$release_url = '';
+		$board_url    = self::page_url( 'stays' );
+		$release_ts   = (int) get_post_meta( $product_id, self::RELEASE_META, true );
+		$release_url  = '';
+		$nonce_action = self::NONCE_PRODUCT . $product_id;
 
 		include Clean_Room::path() . 'views/meta-box.php';
+	}
+
+	/**
+	 * save_post_product: the sale dates typed in the meta box, saved with
+	 * the product. Only the classic edit form carries the box's nonce
+	 * field, so an autosave, a quick or bulk edit and a REST save do
+	 * nothing here; the nonce (per product), edit_post on the product AND
+	 * the section's capability are checked; it runs once per request (the
+	 * product save can fire this hook twice). Anything that goes wrong is
+	 * caught and logged — the product save itself is never stopped.
+	 *
+	 * @param int           $post_id Product id.
+	 * @param \WP_Post|null $post    The product (unused).
+	 * @param bool          $update  Whether an existing post was updated (unused).
+	 * @param object|null   $store   A store to use instead of the real one (the tests' stand-in).
+	 * @return array|false save_product_sale_dates() — false when nothing was looked at.
+	 */
+	public function save_meta_box( $post_id, $post = null, $update = false, $store = null ) {
+		static $done = array();
+		unset( $post, $update );
+
+		$post_id = (int) $post_id;
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- the nonce is verified below; its absence means "not our form".
+		if ( $post_id <= 0 || empty( $_POST[ self::NONCE_PRODUCT_FIELD ] ) || isset( $done[ $post_id ] ) ) {
+			return false;
+		}
+		if ( ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) {
+			return false;
+		}
+		if ( ( function_exists( 'wp_is_post_revision' ) && wp_is_post_revision( $post_id ) ) || ( function_exists( 'wp_is_post_autosave' ) && wp_is_post_autosave( $post_id ) ) ) {
+			return false;
+		}
+		$nonce = sanitize_text_field( wp_unslash( (string) $_POST[ self::NONCE_PRODUCT_FIELD ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		if ( ! wp_verify_nonce( $nonce, self::NONCE_PRODUCT . $post_id ) ) {
+			return false;
+		}
+		if ( ! current_user_can( 'edit_post', $post_id ) || ! current_user_can( Clean_Room::CAPABILITY ) ) {
+			return false;
+		}
+		$done[ $post_id ] = true;
+
+		$raw = isset( $_POST[ self::SALE_FIELD ] ) && is_array( $_POST[ self::SALE_FIELD ] ) ? wp_unslash( $_POST[ self::SALE_FIELD ] ) : array(); // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified above; every value is checked in save_product_sale_dates().
+
+		try {
+			$result = self::save_product_sale_dates( $store ? $store : new Store(), $post_id, (array) $raw, Clean_Room::today(), Settings::get(), (int) get_current_user_id() );
+		} catch ( \Throwable $e ) {
+			do_action(
+				'fishotel_log',
+				'error',
+				'clean-room',
+				sprintf( 'The sale dates of product #%1$d could not be saved: %2$s', $post_id, $e->getMessage() ),
+				array( 'product_id' => $post_id )
+			);
+			self::queue_sale_notice( array( __( 'The Clean room sale dates could not be saved (see FisHotel Health). The product itself was saved.', 'fishotel-misc-plugin' ) ), 'error' );
+			return false;
+		}
+
+		$lines = array();
+		if ( $result['events'] > 0 ) {
+			/* translators: %d: groups */
+			$lines[] = sprintf( _n( 'Clean room: the sale date of %d group was saved.', 'Clean room: the sale dates of %d groups were saved.', $result['events'], 'fishotel-misc-plugin' ), $result['events'] );
+		}
+		foreach ( $result['invalid'] as $label ) {
+			/* translators: %s: the group (species, tank) and what was typed */
+			$lines[] = sprintf( __( 'Clean room: %s is not a date — ignored, that group keeps its sale date.', 'fishotel-misc-plugin' ), $label );
+		}
+		foreach ( $result['failed'] as $label ) {
+			/* translators: %s: the group */
+			$lines[] = sprintf( __( 'Clean room: the sale date of %s could not be saved.', 'fishotel-misc-plugin' ), $label );
+		}
+		if ( $lines ) {
+			self::queue_sale_notice( $lines, $result['invalid'] || $result['failed'] ? 'warning' : 'success' );
+		}
+
+		return $result;
+	}
+
+	/**
+	 * The sale dates from the meta box into the stays (the testable core
+	 * of save_meta_box()). Per open stay of the product present in the
+	 * post: "Use the batch date" ticked → no own date; else a date equal
+	 * to what the box showed → untouched (so the batch's date shown in the
+	 * picker is never copied into an own date); else empty → no own date;
+	 * else a real Y-m-d → that own date; anything else is reported and
+	 * ignored. Only a stay whose own date really changes gets an event —
+	 * the same "sale_ready:" note event the Stays tab and the phone write,
+	 * so the Replay and the stay's history stay complete.
+	 *
+	 * @param object $store      Store (or stand-in) with stays_for_product() and record_event().
+	 * @param int    $product_id Product id.
+	 * @param array  $raw        Unslashed fh_cr_sale: stay id => { date, shown, batch }.
+	 * @param string $today      Site date.
+	 * @param array  $settings   Settings.
+	 * @param int    $actor_id   User.
+	 * @return array{events: int, changed: int[], invalid: string[], failed: string[]}
+	 */
+	public static function save_product_sale_dates( $store, $product_id, array $raw, $today, array $settings, $actor_id = 0 ) {
+		$out = array(
+			'events'  => 0,
+			'changed' => array(),
+			'invalid' => array(),
+			'failed'  => array(),
+		);
+		if ( ! $raw ) {
+			return $out;
+		}
+
+		foreach ( $store->stays_for_product( (int) $product_id, $today, $settings ) as $stay ) {
+			$id = (int) $stay['id'];
+			if ( 'closed' === (string) $stay['status'] || ! isset( $raw[ $id ] ) || ! is_array( $raw[ $id ] ) ) {
+				continue;
+			}
+			$row   = $raw[ $id ];
+			$date  = isset( $row['date'] ) && is_scalar( $row['date'] ) ? trim( sanitize_text_field( (string) $row['date'] ) ) : '';
+			$shown = isset( $row['shown'] ) && is_scalar( $row['shown'] ) ? trim( sanitize_text_field( (string) $row['shown'] ) ) : '';
+			$label = sprintf( '%s (%s)', (string) $stay['species'], ! empty( $stay['tank_number'] ) ? 'Tank ' . (int) $stay['tank_number'] : '#' . $id );
+
+			if ( ! empty( $row['batch'] ) && '0' !== (string) $row['batch'] ) {
+				$wanted = null;
+			} elseif ( $date === $shown ) {
+				continue; // Untouched.
+			} elseif ( '' === $date ) {
+				$wanted = null;
+			} elseif ( Replay::is_date( $date ) ) {
+				$wanted = $date;
+			} else {
+				$out['invalid'][] = $label . ': "' . substr( $date, 0, 20 ) . '"';
+				continue;
+			}
+
+			$current = Replay::is_date( $stay['sale_ready_override'] ?? null ) ? (string) $stay['sale_ready_override'] : null;
+			if ( $wanted === $current ) {
+				continue;
+			}
+
+			$written = $store->record_event(
+				$id,
+				array(
+					'type'     => 'note',
+					'note'     => Replay::NOTE_SALE_READY . ( null !== $wanted ? $wanted : '' ),
+					'event_at' => gmdate( 'Y-m-d H:i:s' ),
+					'actor_id' => (int) $actor_id,
+					'source'   => 'manual',
+				),
+				$today,
+				$settings
+			);
+			if ( $written ) {
+				$out['events']++;
+				$out['changed'][] = $id;
+			} else {
+				$out['failed'][] = $label;
+			}
+		}
+
+		return $out;
+	}
+
+	/**
+	 * Keep notice lines for this user's next admin page (the product edit
+	 * screen after the redirect).
+	 *
+	 * @param string[] $lines Lines.
+	 * @param string   $type  success|warning|error.
+	 */
+	private static function queue_sale_notice( array $lines, $type ) {
+		set_transient(
+			self::SALE_NOTICE . (int) get_current_user_id(),
+			array(
+				'type'  => in_array( $type, array( 'success', 'warning', 'error' ), true ) ? $type : 'warning',
+				'lines' => array_values( array_map( 'strval', $lines ) ),
+			),
+			5 * MINUTE_IN_SECONDS
+		);
+	}
+
+	/**
+	 * admin_notices: the meta box's notice, once.
+	 */
+	public function sale_date_notices() {
+		$key    = self::SALE_NOTICE . (int) get_current_user_id();
+		$notice = get_transient( $key );
+		if ( ! is_array( $notice ) || empty( $notice['lines'] ) ) {
+			return;
+		}
+		delete_transient( $key );
+
+		echo '<div class="notice notice-' . esc_attr( (string) $notice['type'] ) . ' is-dismissible">';
+		foreach ( (array) $notice['lines'] as $line ) {
+			echo '<p>' . esc_html( (string) $line ) . '</p>';
+		}
+		echo '</div>';
 	}
 
 	/* ============================================================== */

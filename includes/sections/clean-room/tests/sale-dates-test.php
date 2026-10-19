@@ -9,7 +9,10 @@
  * schema's new column, the product facts with a null date, the Front
  * Desk's words, and the batch calendar's save handler (capability,
  * nonce, valid / invalid / clear, the log entry) with the order page's
- * and the Arrivals list's helpers.
+ * and the Arrivals list's helpers, and the product page's sale dates
+ * saved with the product (only changed stays get an event, no nonce = no
+ * work, the capabilities, invalid dates reported after the redirect,
+ * "Use the batch date", a failing store never stopping the save).
  *
  * Run from the plugin root:  php includes/sections/clean-room/tests/sale-dates-test.php
  */
@@ -264,5 +267,130 @@ check( '… "not set" without a date, no note without own dates', array( 'date' 
 $sheets = Admin_Workbook::orders_sheets( array( Admin_Workbook::resolve_order( $store, $store->order( $oid ) ) ) );
 $row    = array_combine( $sheets['Orders'][0], $sheets['Orders'][1] );
 check( 'the orders export carries the batch\'s sale date', '2026-10-30' === $row['sale_date'] && count( $sheets['Orders'][0] ) === count( $sheets['Orders'][1] ) );
+
+echo "12. The product page: sale dates saved with the product\n";
+$p     = fh_batch( '2026-10-01', '2026-10-25' );
+$store = $p['store'];
+list( $s1, $s2 ) = $p['stays'];
+$store->update_stay_fields( $s1, array( 'product_id' => 40 ) );
+$store->update_stay_fields( $s2, array( 'product_id' => 40 ) );
+$store->record_event( $s2, array( 'type' => 'note', 'note' => Replay::NOTE_SALE_READY . '2026-11-15', 'event_at' => gmdate( 'Y-m-d H:i:s' ) ), $today, $settings );
+$other = $store->create_stay( array( 'product_id' => 41, 'species' => 'Elsewhere Test Fish', 'checkin_date' => '2026-10-01', 'tank_id' => $store->tank_by_number( 524 )['id'] ) );
+$store->record_event( $other, array( 'type' => 'arrival', 'qty' => 1, 'to_tank_id' => $store->tank_by_number( 524 )['id'], 'event_at' => '2026-10-01 17:00:00' ), $today, $settings );
+$admin = new Admin();
+$GLOBALS['fh_current_user'] = 6;
+$GLOBALS['fh_user_caps']    = array(
+	'edit_post'          => array( 6 ),
+	'manage_woocommerce' => array( 6 ),
+);
+$events = $store->event_count();
+$form   = static function ( array $rows, $product = 40 ) {
+	return array(
+		Admin::NONCE_PRODUCT_FIELD => wp_create_nonce( Admin::NONCE_PRODUCT . $product ),
+		Admin::SALE_FIELD          => $rows,
+	);
+};
+$untouched = array(
+	$s1 => array( 'date' => '2026-10-25', 'shown' => '2026-10-25' ),
+	$s2 => array( 'date' => '2026-11-15', 'shown' => '2026-11-15' ),
+);
+
+$_POST = array( Admin::SALE_FIELD => array( $s1 => array( 'date' => '2026-12-01', 'shown' => '2026-10-25' ) ) );
+check( 'no nonce field (autosave, quick edit, bulk edit, REST): no work at all', false === $admin->save_meta_box( 40, null, true, $store ) && $events === $store->event_count() );
+$_POST = array_merge( $form( array( $s1 => array( 'date' => '2026-12-01', 'shown' => '2026-10-25' ) ) ), array( Admin::NONCE_PRODUCT_FIELD => wp_create_nonce( Admin::NONCE_PRODUCT . 41 ) ) );
+check( 'another product\'s nonce: nothing', false === $admin->save_meta_box( 40, null, true, $store ) && $events === $store->event_count() );
+$_POST = $form( array( $s1 => array( 'date' => '2026-12-01', 'shown' => '2026-10-25' ) ) );
+$GLOBALS['fh_user_caps']['edit_post'] = array();
+check( 'without edit_post on the product: nothing', false === $admin->save_meta_box( 40, null, true, $store ) && $events === $store->event_count() );
+$GLOBALS['fh_user_caps']['edit_post']          = array( 6 );
+$GLOBALS['fh_user_caps']['manage_woocommerce'] = array();
+check( 'without the section\'s capability: nothing', false === $admin->save_meta_box( 40, null, true, $store ) && $events === $store->event_count() );
+$GLOBALS['fh_user_caps']['manage_woocommerce'] = array( 6 );
+
+$_POST = $form( $untouched );
+$r     = $admin->save_meta_box( 40, null, true, $store );
+check( 'Update with both pickers untouched (one showing the batch date): no event — the batch\'s date is never copied into an own date', is_array( $r ) && 0 === $r['events'] && $events === $store->event_count() && null === $store->stay( $s1, $today, $settings )['sale_ready_override'] && false === get_transient( Admin::SALE_NOTICE . 6 ) );
+$r = $admin->save_meta_box( 40, null, true, $store );
+check( 'the hook firing again in the same request (WooCommerce saves the product twice): skipped', false === $r );
+
+$store3 = fh_batch( '2026-10-01', '2026-10-25' );
+$st     = $store3['store'];
+list( $a1, $a2 ) = $store3['stays'];
+$st->update_stay_fields( $a1, array( 'product_id' => 42 ) );
+$st->update_stay_fields( $a2, array( 'product_id' => 42 ) );
+$st->record_event( $a2, array( 'type' => 'note', 'note' => Replay::NOTE_SALE_READY . '2026-11-15', 'event_at' => gmdate( 'Y-m-d H:i:s' ) ), $today, $settings );
+$before = $st->event_count();
+$_POST  = $form(
+	array(
+		$a1    => array( 'date' => '2026-12-01', 'shown' => '2026-10-25' ),
+		$a2    => array( 'date' => '2026-11-15', 'shown' => '2026-11-15' ),
+		$other => array( 'date' => '2026-12-24', 'shown' => '' ),
+	),
+	42
+);
+$r = $admin->save_meta_box( 42, null, true, $st );
+check( 'one picker changed: exactly one event, on that stay, the own-date note with the actor; the untouched one and a foreign stay id get nothing', 1 === $r['events'] && array( $a1 ) === $r['changed'] && $before + 1 === $st->event_count() && 'sale_ready:2026-12-01' === $st->last_event()['note'] && $a1 === $st->last_event()['stay_id'] && 6 === $st->last_event()['actor_id'] && '2026-12-01' === $st->stay( $a1, $today, $settings )['sale_ready_date'] && 'own' === $st->stay( $a1, $today, $settings )['sale_date_source'], json_encode( $r ) );
+$notice = get_transient( Admin::SALE_NOTICE . 6 );
+check( 'a success notice waits for the edit screen after the redirect', is_array( $notice ) && 'success' === $notice['type'] && 'Clean room: the sale date of 1 group was saved.' === $notice['lines'][0] );
+ob_start();
+$admin->sale_date_notices();
+$html = ob_get_clean();
+check( 'admin_notices prints it once (escaped) and drops it', false !== strpos( $html, 'notice-success' ) && false !== strpos( $html, 'the sale date of 1 group was saved' ) && false === get_transient( Admin::SALE_NOTICE . 6 ) );
+ob_start();
+$admin->sale_date_notices();
+check( '… and prints nothing the next time', '' === ob_get_clean() );
+
+$st4 = fh_batch( '2026-10-01', '2026-10-25' );
+$s4  = $st4['store'];
+list( $b1, $b2 ) = $st4['stays'];
+$s4->update_stay_fields( $b1, array( 'product_id' => 43 ) );
+$s4->update_stay_fields( $b2, array( 'product_id' => 43 ) );
+$s4->record_event( $b1, array( 'type' => 'note', 'note' => Replay::NOTE_SALE_READY . '2026-11-15', 'event_at' => gmdate( 'Y-m-d H:i:s' ) ), $today, $settings );
+$s4->record_event( $b2, array( 'type' => 'note', 'note' => Replay::NOTE_SALE_READY . '2026-11-20', 'event_at' => gmdate( 'Y-m-d H:i:s' ) ), $today, $settings );
+$before = $s4->event_count();
+$_POST  = $form(
+	array(
+		$b1 => array( 'date' => '2026-11-15', 'shown' => '2026-11-15', 'batch' => '1' ),
+		$b2 => array( 'date' => '2026-02-30', 'shown' => '2026-11-20' ),
+	),
+	43
+);
+$r = $admin->save_meta_box( 43, null, true, $s4 );
+check( '"Use the batch date" ticked: the own date cleared by a "sale_ready:" event, the group back to the batch\'s date', 1 === $r['events'] && array( $b1 ) === $r['changed'] && 'sale_ready:' === $s4->event( $before + 1 )['note'] && '2026-10-25' === $s4->stay( $b1, $today, $settings )['sale_ready_date'] && 'batch' === $s4->stay( $b1, $today, $settings )['sale_date_source'] );
+check( 'an invalid date (Feb 30): ignored, the group keeps its own date, reported', 1 === count( $r['invalid'] ) && false !== strpos( $r['invalid'][0], '2026-02-30' ) && '2026-11-20' === $s4->stay( $b2, $today, $settings )['sale_ready_date'] && $before + 1 === $s4->event_count() );
+$notice = get_transient( Admin::SALE_NOTICE . 6 );
+check( 'the notice after the redirect names it as a warning', 'warning' === $notice['type'] && 2 === count( $notice['lines'] ) && false !== strpos( $notice['lines'][1], 'is not a date — ignored' ) );
+delete_transient( Admin::SALE_NOTICE . 6 );
+
+$st5 = fh_batch( '2026-10-01' );
+$s5  = $st5['store'];
+list( $c1, $c2 ) = $st5['stays'];
+$s5->update_stay_fields( $c1, array( 'product_id' => 44 ) );
+$s5->record_event( $c1, array( 'type' => 'note', 'note' => Replay::NOTE_SALE_READY . '2026-11-15', 'event_at' => gmdate( 'Y-m-d H:i:s' ) ), $today, $settings );
+$r = Admin::save_product_sale_dates( $s5, 44, array( $c1 => array( 'date' => '', 'shown' => '2026-11-15' ) ), $today, $settings, 6 );
+check( 'the picker emptied: the own date removed; with no batch date the group has none', 1 === $r['events'] && null === $s5->stay( $c1, $today, $settings )['sale_ready_date'] );
+$r = Admin::save_product_sale_dates( $s5, 44, array( $c1 => array( 'date' => '', 'shown' => '', 'batch' => '1' ) ), $today, $settings, 6 );
+check( '"Use the batch date" on a group without an own date: no event', 0 === $r['events'] );
+$s5->record_event( $c1, array( 'type' => 'sold', 'qty' => 6, 'event_at' => gmdate( 'Y-m-d H:i:s' ) ), $today, $settings );
+$r = Admin::save_product_sale_dates( $s5, 44, array( $c1 => array( 'date' => '2026-12-01', 'shown' => '' ) ), $today, $settings, 6 );
+check( 'a closed group is never touched', 0 === $r['events'] && null === $s5->stay( $c1, $today, $settings )['sale_ready_override'] );
+
+/**
+ * A store that fails on read, as a database error would.
+ */
+class Broken_Store {
+	public function stays_for_product() {
+		throw new \RuntimeException( 'database gone' );
+	}
+}
+$GLOBALS['fh_log'] = array();
+$_POST             = $form( array( 1 => array( 'date' => '2026-12-01', 'shown' => '' ) ), 45 );
+$r                 = $admin->save_meta_box( 45, null, true, new Broken_Store() );
+check( 'a failing store never stops the product save: caught, false, logged as an error naming the product, an error notice queued', false === $r && 1 === count( $GLOBALS['fh_log'] ) && 'error' === $GLOBALS['fh_log'][0][0] && false !== strpos( $GLOBALS['fh_log'][0][2], 'product #45' ) && 'error' === get_transient( Admin::SALE_NOTICE . 6 )['type'] );
+delete_transient( Admin::SALE_NOTICE . 6 );
+define( 'DOING_AUTOSAVE', true );
+$_POST = $form( array( $b2 => array( 'date' => '2026-12-05', 'shown' => '2026-11-20' ) ), 46 );
+check( 'an autosave with the field present: nothing', false === $admin->save_meta_box( 46, null, true, $s4 ) );
+$_POST = array();
 
 fh_finish();
