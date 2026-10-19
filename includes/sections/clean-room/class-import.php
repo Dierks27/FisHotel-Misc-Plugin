@@ -12,6 +12,12 @@
  * in-memory one) and the box-rates option, exactly as Orders::check_in()
  * is; preview() is pure outright.
  *
+ * Sale dates: the workbook carries none, so an imported order has no
+ * "Goes on sale" date and the groups checked in from it are not for sale
+ * until one is chosen on the order (Arrivals) or per group on the product
+ * page; the preview and the result count those groups and name the
+ * orders. Nothing is ever computed for them.
+ *
  * Idempotent: a second run of the same file updates the species (never
  * blanking a value the site has with one the sheet lacks), merges the
  * same box rates, skips every order whose ref exists, skips every line
@@ -114,10 +120,12 @@ class Import {
 	 * update or skip, given what the site already has.
 	 *
 	 * @param array $map      Import_Map::map().
-	 * @param array $existing species (names), order_refs (refs), box_rates (rows or "supplier|origin" keys).
+	 * @param array $existing species (names), order_refs (refs), box_rates (rows or "supplier|origin" keys),
+	 *                        dated_refs (refs of the site's orders that already have a sale date).
 	 * @param array $options  Optional today (Y-m-d) and stays_days to count the lines that would become stays.
 	 * @return array species{create,update,skip}, orders{create,skip,lines,logs}, box_rates{create,update,skip},
-	 *               stock (int), stays{orders,lines}, warnings[].
+	 *               stock (int), stays{orders,lines}, sale_dates{groups,refs} (the would-be groups in tanks
+	 *               without a sale date, and their orders), warnings[].
 	 */
 	public static function preview( array $map, array $existing, array $options = array() ) {
 		$out = array(
@@ -138,12 +146,21 @@ class Import {
 				'skip'   => 0,
 			),
 			'stock'     => count( (array) ( $map['stock'] ?? array() ) ),
-			'stays'     => array(
+			'stays'      => array(
 				'orders' => 0,
 				'lines'  => 0,
 			),
-			'warnings'  => array_values( array_map( 'strval', (array) ( $map['warnings'] ?? array() ) ) ),
+			'sale_dates' => array(
+				'groups' => 0,
+				'refs'   => array(),
+			),
+			'warnings'   => array_values( array_map( 'strval', (array) ( $map['warnings'] ?? array() ) ) ),
 		);
+
+		$dated = array();
+		foreach ( (array) ( $existing['dated_refs'] ?? array() ) as $ref ) {
+			$dated[ trim( (string) $ref ) ] = true;
+		}
 
 		$names = array();
 		foreach ( (array) ( $existing['species'] ?? array() ) as $name ) {
@@ -185,6 +202,10 @@ class Import {
 				if ( $lines > 0 ) {
 					$out['stays']['orders']++;
 					$out['stays']['lines'] += $lines;
+					if ( '' !== $ref && ! isset( $dated[ $ref ] ) && empty( $order['sale_date'] ) ) {
+						$out['sale_dates']['groups'] += $lines;
+						$out['sale_dates']['refs'][]  = $ref;
+					}
 				}
 			}
 		}
@@ -217,7 +238,9 @@ class Import {
 	 *                        stays_building_id (the Spa building the recent batches land in),
 	 *                        dose_logs (bool: the QT logs → tank logs).
 	 * @return array species{created,updated,skipped}, box_rates{rows}, orders{created,skipped,lines},
-	 *               stays{created,skipped,orders}, logs{created,skipped}, warnings[], errors[].
+	 *               stays{created,skipped,orders}, logs{created,skipped},
+	 *               sale_dates{missing,refs} (the groups of the checked-in orders still in tanks
+	 *               without a sale date, and those orders' refs), warnings[], errors[].
 	 */
 	public static function run( array $map, $store, array $options = array() ) {
 		$today    = isset( $options['today'] ) && Replay::is_date( $options['today'] ) ? (string) $options['today'] : Clean_Room::today();
@@ -248,12 +271,16 @@ class Import {
 				'skipped' => 0,
 				'orders'  => 0,
 			),
-			'logs'      => array(
+			'logs'       => array(
 				'created' => 0,
 				'skipped' => 0,
 			),
-			'warnings'  => array_values( array_map( 'strval', (array) ( $map['warnings'] ?? array() ) ) ),
-			'errors'    => array(),
+			'sale_dates' => array(
+				'missing' => 0,
+				'refs'    => array(),
+			),
+			'warnings'   => array_values( array_map( 'strval', (array) ( $map['warnings'] ?? array() ) ) ),
+			'errors'     => array(),
 		);
 
 		$species_ids = self::import_species( $map, $store, $result );
@@ -293,6 +320,20 @@ class Import {
 				$result['stays']['skipped'] += (int) $outcome['skipped'];
 				foreach ( (array) $outcome['errors'] as $error ) {
 					$result['errors'][] = $ref . ': ' . (string) $error;
+				}
+
+				// The groups of this batch in tanks without a sale date (the
+				// workbook carries none): counted so the result can say where
+				// to set one — never computed here.
+				$missing = 0;
+				foreach ( $store->open_stays( array( 'order_id' => $order_id ), $today, $settings ) as $stay ) {
+					if ( empty( $stay['sale_ready_date'] ) ) {
+						$missing++;
+					}
+				}
+				if ( $missing > 0 ) {
+					$result['sale_dates']['missing'] += $missing;
+					$result['sale_dates']['refs'][]   = $ref;
 				}
 			}
 

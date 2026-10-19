@@ -341,6 +341,10 @@ class Admin_Import {
 			/* translators: %d: rows */
 			sprintf( __( 'Box rates: %d rows in Settings now.', 'fishotel-misc-plugin' ), (int) ( $b['rows'] ?? 0 ) ),
 		);
+		$sale = self::sale_dates_line( (int) ( $result['sale_dates']['missing'] ?? 0 ), (array) ( $result['sale_dates']['refs'] ?? array() ), true );
+		if ( '' !== $sale ) {
+			$lines[] = $sale;
+		}
 		return $lines;
 	}
 
@@ -498,14 +502,44 @@ class Admin_Import {
 	 * What the site already has, for the preview.
 	 *
 	 * @param Store $store Store.
-	 * @return array species, order_refs, box_rates.
+	 * @return array species, order_refs, box_rates, dated_refs (orders that already have a sale date).
 	 */
 	public static function existing( $store ) {
+		$dated = array();
+		foreach ( $store->orders() as $order ) {
+			if ( ! empty( $order['sale_date'] ) ) {
+				$dated[] = (string) $order['ref'];
+			}
+		}
 		return array(
 			'species'    => array_column( $store->species_brief(), 'name' ),
 			'order_refs' => $store->order_refs(),
 			'box_rates'  => Settings::box_rates(),
+			'dated_refs' => $dated,
 		);
+	}
+
+	/**
+	 * The sale-date line of a preview or a result (pure): how many groups
+	 * in tanks have no sale date yet and where to set one — their supplier
+	 * order's "Goes on sale" (Arrivals). '' when there are none.
+	 *
+	 * @param int      $groups The groups without a sale date.
+	 * @param string[] $refs   Their orders' refs.
+	 * @param bool     $done   True for a result (they are in tanks), false for a preview (they would be).
+	 * @return string
+	 */
+	public static function sale_dates_line( $groups, array $refs, $done ) {
+		$groups = (int) $groups;
+		if ( $groups <= 0 ) {
+			return '';
+		}
+		$refs = implode( ', ', array_values( array_unique( array_map( 'strval', $refs ) ) ) );
+		return $done
+			/* translators: 1: groups, 2: order refs */
+			? sprintf( _n( 'Sale dates: %1$d group in tanks has no sale date yet, so it is not for sale — set "Goes on sale" on its supplier order (Arrivals → %2$s), or a group\'s own date on its product page.', 'Sale dates: %1$d groups in tanks have no sale date yet, so they are not for sale — set "Goes on sale" on their supplier orders (Arrivals → %2$s), or a group\'s own date on its product page.', $groups, 'fishotel-misc-plugin' ), $groups, $refs )
+			/* translators: 1: groups, 2: order refs */
+			: sprintf( _n( '%1$d group would be in tanks with no sale date (the workbook carries none): after the import, set "Goes on sale" on its supplier order (Arrivals → %2$s).', '%1$d groups would be in tanks with no sale date (the workbook carries none): after the import, set "Goes on sale" on their supplier orders (Arrivals → %2$s).', $groups, 'fishotel-misc-plugin' ), $groups, $refs );
 	}
 
 	/**
