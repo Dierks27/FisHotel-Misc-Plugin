@@ -3,8 +3,9 @@
 All run without WordPress, WooCommerce or a database. `wp-stubs.php`
 supplies the handful of WordPress functions the classes touch (the
 translation helpers, `sanitize_*`, options, transients, `current_time`,
-`wp_timezone` = America/Chicago, `user_can`, the action and filter
-registries — all in-memory), the `check()` / `check_same()` /
+`wp_timezone` = America/Chicago, `user_can` / `current_user_can`,
+`wp_verify_nonce` matching `wp_create_nonce`, `wp_get_current_user`, the
+action and filter registries — all in-memory), the `check()` / `check_same()` /
 `check_contains()` / `fh_finish()` harness and the temp-dir helpers, and
 loads the section's classes; the Store
 class (the only `$wpdb` file) is loaded for its constants and pure
@@ -31,6 +32,7 @@ php  includes/sections/clean-room/tests/workbook-admin-test.php
 php  includes/sections/clean-room/tests/workbook-test.php
 php  includes/sections/clean-room/tests/import-map-test.php
 php  includes/sections/clean-room/tests/import-test.php
+php  includes/sections/clean-room/tests/sale-dates-test.php
 node includes/sections/clean-room/tests/front-desk.test.js
 node includes/sections/clean-room/tests/clean-room-admin.test.js
 ```
@@ -65,24 +67,29 @@ system temp directory (`FH_TEST_TMP` overrides).
   form's `Settings::gallons_input()`: "-205" and junk refused, never
   stored as 205 or blank).
 - **replay-test.php** — `day_number()` across the March and November
-  DST changes (and a whole year), `add_days()`, the sale-ready date (N
-  days after check-in, the override), `note_date()`, event dates in
+  DST changes (and a whole year), `add_days()`, the suggested sale date
+  (N days after check-in, only a hint), `sale_date()` / its source (own >
+  batch > none, junk = none), `note_date()`, event dates in
   Chicago on both DST mornings; a stay's life (arrival → loss → shipped →
-  recount → the first move into the Clean Room clears it → ready 28 days
-  after check-in and not the day before, an old-shape hand-set cleared
+  recount → the first move into the Clean Room clears it → NOT for sale
+  on the suggested date without a chosen one, for sale on its batch's
+  date and not the day before, an old-shape hand-set cleared
   date, un-clearing, a `cleared:` note dated now that wins even to an
   EARLIER date and after an unset, an invalid note date); Spa-to-Spa
   moves never clear, a later move back keeps the date, no tank areas =
   no auto-clear, after a hand unset a Clean → Clean move does not
   re-clear but back through the Spa does, an unknown source tank clears;
-  the sale-ready override note (set, clear, invalid); the `checkin:` note
+  the own sale-date note (set and winning over the batch's, cleared back
+  to none or to the batch's, invalid); the `checkin:` note
   (corrects, survives a later arrival, empty = back to the arrival,
   invalid ignored, its undo); closing at zero by loss / recount / shipped
   and re-opening on undo, the `overdrawn` flag when two phones record
   against one count and its clearing by an undo or a recount; splits (a
   move with a smaller quantity, its undo, a whole-count move = whole
   move); event ordering and the checkin fallback (the SITE date of an
-  arrival); `effective()` on cached rows; every compensating event,
+  arrival); `effective()` on cached rows (no date = not for sale, the
+  batch's date, an own date holding it back, a group still in the Spa
+  past its date = ready and flagged, closed never); every compensating event,
   `is_undone()` / `undone_ids()` and two undo round trips.
 - **protocol-test.php** — the seed (the workbook's 14 Day CM schedule as
   eight steps, site day = sheet day + 1 — no "observation ends" chip —,
@@ -144,8 +151,10 @@ system temp directory (`FH_TEST_TMP` overrides).
 - **csv-test.php** — the formula guard on `= + - @ \t \r`, numbers,
   arrays; the 19-column row with guarded species / supplier / order ref
   and the building derived from the tank; `write_csv()`; the Board /
-  Stays filters and totals; the Events-tab wording for every event type
-  (move reasons, split markers, the `cleared:` and `checkin:` notes) and
+  Stays filters (the *For sale now* flag) and totals (for sale, for sale
+  but still in the Spa, without a sale date); the Events-tab wording for every event type
+  (move reasons, split markers, the `cleared:`, `checkin:` and
+  `sale_ready:` notes) and
   tank log kind, `move_reason()`; the Coming Soon release moment (09:00
   site time on both sides of DST).
 - **front-desk-test.php** — the server guards behind the phone's one
@@ -164,7 +173,9 @@ system temp directory (`FH_TEST_TMP` overrides).
   same ids again, a whole move's undo sending the screen back; the
   cleared date typed (now + note, corrected to an earlier date, set again
   after an unset, today by default), the check-in date (future / junk
-  refused, corrected, undone), the sale-ready override removed; a copper
+  refused, corrected, undone; the suggested sale date following it), an
+  own sale date set (the toast, the note event) and removed with no batch
+  date (the toast says where to set one), a junk date refused; a copper
   reading that ticks the copper test and a tick-off; the dose action (an
   unknown medication, an amount of 0 / below 0 / above 9999 / junk, a
   unit other than g / ml / tsp refused; the whole-system log on the
@@ -270,7 +281,10 @@ system temp directory (`FH_TEST_TMP` overrides).
   received in bag mode, the undated one ordered) and their lines (species
   ids by name, an unknown fish without, the landed totals cached); the
   recent batch's stays (the DOA loss, source `import` on the stay and its
-  events, the seam fields, the first empty tank of the chosen building);
+  events, the seam fields, the first empty tank of the chosen building;
+  no sale date invented — the preview and the result count the groups
+  without one and name the order, an order already dated is left out,
+  a dated order counts none);
   the logs by system (205 → 500, 100 → 600, "Both" → both, the copper
   reading, the result appended, Chicago times to UTC) and the Board's last
   doses from them; the second run (species updated, nothing else created,
@@ -284,11 +298,42 @@ system temp directory (`FH_TEST_TMP` overrides).
   defaulted, the default building, the summary lines, the `.htaccess`, the
   random file name, `check_filetype()` — an .xlsm that fileinfo calls an
   .xlsx accepted, a renamed PHP file still refused —, `workbook_year()`).
+- **sale-dates-test.php** — a group goes on sale on a CHOSEN date, on the
+  fake store through a real check-in: the precedence (none → the batch's
+  date on the order → a group's own date wins → removed back to the
+  batch's → the batch's cleared back to none; a phone-only group has no
+  batch), a split-off group keeping its batch; the boundary (the day
+  before / the date itself / after; 23:30 site time on the eve is not yet
+  even though UTC has moved on, five past midnight is); closed stays
+  never for sale (and left out of the *For sale now* filter); the "still
+  in the Spa" warning on the badge, the Front Desk occupant, the Board
+  totals and `sale_words()`; the Replay history unchanged by a batch date
+  (every history field identical, only the sale fields differ, the undo
+  of a sale-date note unchanged); the schema (nine tables, `sale_date
+  DATE NULL,` after `received_date`, version 1.3, `hydrate_order()`); the
+  product facts with null dates (dated before undated, ready_total for a
+  group still in the Spa, closed skipped); the Front Desk's toast in
+  every case and through `perform()`, its strings; the batch calendar's
+  `sale_date_request()` (no capability, a wrong or another order's nonce,
+  a missing order, a valid date with its `fishotel_log` entry naming who
+  and old → new, unchanged = nothing written or logged, five invalid
+  dates refused, a change, Clear, Clear with nothing set), the order
+  editor's Save keeping the date, the order card / its status line /
+  the suggestion / the Arrivals "On sale" cell / the orders export; the
+  product page's `save_meta_box()` (no nonce field = no work, another
+  product's nonce, no edit_post, no section capability, untouched pickers
+  — the batch's date never copied —, the second save_post of the same
+  request, one changed picker = one event with the actor, the success
+  notice printed once, "Use the batch date", an invalid date ignored and
+  named, an emptied picker, a group without an own date, a closed group,
+  a failing store caught and logged, an autosave).
 - **fake-store.php** — not a test (exits 0 when run directly): the
   in-memory store the above drives (tanks and buildings from the seed,
-  stays, events, logs — per tank or per building, with `logs_on_date()`,
-  `latest_doses()`, `imported_log_keys()` —, aliases, species rows,
-  orders and lines).
+  stays — joined with their batch's order and sale date like the real
+  `stay_select()`, `stays_for_product()`, `product_facts()`,
+  `batch_sale_counts()` —, events, logs — per tank or per building, with
+  `logs_on_date()`, `latest_doses()`, `imported_log_keys()` —, aliases,
+  species rows, orders and lines).
 - **xlsx-builder.php**, **fixture-builder.php** — not tests (exit 0 when
   run directly): the tiny .xlsx writer and the synthetic FisHotel-style
   workbook the reader, mapper and import tests use.
@@ -296,7 +341,9 @@ system temp directory (`FH_TEST_TMP` overrides).
   `normalizeNumberWords()` (known tanks, the rule without a list, "four
   six line wrasse" left alone, "a couple" / "two point four" left for the
   server), `previewSentence()` for every intent including the Spa-tank
-  ask and the "Which fish?" prefix, `fmt()`, `escapeHtml()`.
+  ask and the "Which fish?" prefix, `fmt()`, `escapeHtml()`,
+  `saleSummary()` (a batch date, an own date, none with the suggestion,
+  the "still in the Spa" warning, the page's strings).
 - **clean-room-admin.test.js** — `renumber()` with a prefix and a
   template row's `__i__`, `suggestImportFees()` (the exact pair, the
   origin-less fallback, nulls, cents).
@@ -329,19 +376,20 @@ system temp directory (`FH_TEST_TMP` overrides).
 6. Move (with one group in the tank it goes straight to "Where to?") →
    chip *bullying* → Tank 121: the toast reads "… moved to Tank 121 ·
    cleared today · bullying", the Board shows it in 121 as cleared with the
-   cleared date = today and the sale-ready date = check-in + 28 days, and
+   cleared date = today and "Sale date not set" (no date chosen yet), and
    the Events tab shows "moved Tank 521 → Tank 121 (bullying)". From 121,
    Arrival must offer only Spa tanks; a second Move 121 → 122 does not
    say "cleared".
 7. Occupant → Dates: set the cleared date to yesterday, then to the day
    before — each sticks (the Stays tab agrees); *Not cleared*, then a date
    again — it sticks. Set the check-in date a week back: the day number
-   and the sale-ready date move with it.
+   and the "suggested" sale date move with it.
 8. Stays tab: Lost / Shipped / Count / Cleared… / Sale-ready… / Move…
-   reload with the new numbers; Edit → Check-in writes a `checkin:` note;
+   reload with the new numbers (Sale date… opens pre-filled with the
+   suggestion); Edit → Check-in writes a `checkin:` note;
    Export CSV opens in a spreadsheet with no formula execution; on a stay
-   linked to a product, *Coming Soon* sets the product's
-   `_fh_release_datetime` to the sale-ready date at 09:00. Events tab:
+   linked to a product and with a sale date, *Coming Soon* sets the
+   product's `_fh_release_datetime` to that date at 09:00. Events tab:
    Undo on a loss row writes the compensating event and the row then says
    "undone"; the Board card lists what is still due today under the
    to-do count.
@@ -405,3 +453,25 @@ system temp directory (`FH_TEST_TMP` overrides).
     Box rates filled; the file is gone. Upload the same file again and
     Import now: every count but the species updates is 0, nothing new on
     the Board or the Events tab. Upload and Discard: the file is gone.
+17. Sale dates. Arrivals → an order with checked-in fish: the *Goes on
+    sale* card shows an empty picker and "suggested <check-in + 28>";
+    click the suggestion — the picker fills, nothing is saved; reload —
+    still empty. Pick a date in the past and Save: the notice "Order … goes
+    on sale … (was not set)", the line "Applies to N groups still in tanks
+    — for sale since …", the Arrivals list's *On sale* column shows the
+    date, FisHotel Health → Log has "Sale date of supplier order …
+    changed by <you>: not set → …". The Board: those groups read *ready*,
+    the ones still in the Spa with "still in the Spa", the summary chip
+    counts them. Post a bad date (for example with the browser's dev
+    tools): "… is not a date. Nothing was changed." Clear: back to "not
+    set", logged.
+18. On a product with one of those groups, the *Clean room* box: the row
+    shows the order (linked), tank, check-in, live, the picker on the
+    batch's date "from the batch". Update the product without touching
+    it: no new event on the Events tab. Change the date and Update: one
+    "own sale date set to …" event, the row now says "own date" with *Use
+    the batch date (…)*; the order's card lists the group under "These
+    groups have their own date". Tick *Use the batch date* and Update:
+    "own sale date removed (the batch date applies)". Quick Edit the
+    product from the list: no event. The shop page of the product does
+    not change by itself (stock and visibility stay as they were).
