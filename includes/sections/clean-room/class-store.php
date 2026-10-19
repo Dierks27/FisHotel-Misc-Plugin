@@ -162,13 +162,36 @@ class Store {
 
 		self::$tables_exist = null;
 
-		if ( self::tables_exist() ) {
+		// Every stay read selects the orders' sale_date: the version is
+		// written only once that column is really there too, so an ALTER
+		// that failed is retried on the next boot like a failed CREATE.
+		if ( self::tables_exist() && self::column_exists( 'orders', 'sale_date' ) ) {
 			update_option( self::DB_VERSION_OPTION, self::DB_VERSION, true );
 			self::seed_if_empty();
 			self::backfill_system_gallons();
 		}
 
 		return true;
+	}
+
+	/**
+	 * Whether a column exists on one of the section's tables (install
+	 * only — never on an ordinary request).
+	 *
+	 * @param string $table  Table name without the prefix (e.g. "orders").
+	 * @param string $column Column.
+	 * @return bool
+	 */
+	private static function column_exists( $table, $column ) {
+		global $wpdb;
+
+		try {
+			$found = $wpdb->get_var( $wpdb->prepare( 'SHOW COLUMNS FROM ' . self::table( $table ) . ' LIKE %s', (string) $column ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+
+		return (string) $column === (string) $found;
 	}
 
 	/**

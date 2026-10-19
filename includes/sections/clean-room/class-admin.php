@@ -379,8 +379,8 @@ class Admin {
 		if ( ( function_exists( 'wp_is_post_revision' ) && wp_is_post_revision( $post_id ) ) || ( function_exists( 'wp_is_post_autosave' ) && wp_is_post_autosave( $post_id ) ) ) {
 			return false;
 		}
-		$nonce = sanitize_text_field( wp_unslash( (string) $_POST[ self::NONCE_PRODUCT_FIELD ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
-		if ( ! wp_verify_nonce( $nonce, self::NONCE_PRODUCT . $post_id ) ) {
+		$nonce = is_scalar( $_POST[ self::NONCE_PRODUCT_FIELD ] ) ? sanitize_text_field( wp_unslash( (string) $_POST[ self::NONCE_PRODUCT_FIELD ] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		if ( '' === $nonce || ! wp_verify_nonce( $nonce, self::NONCE_PRODUCT . $post_id ) ) {
 			return false;
 		}
 		if ( ! current_user_can( 'edit_post', $post_id ) || ! current_user_can( Clean_Room::CAPABILITY ) ) {
