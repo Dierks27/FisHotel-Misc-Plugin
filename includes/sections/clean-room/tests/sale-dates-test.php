@@ -6,8 +6,10 @@
  * through a real check-in, the boundary (the date itself counts, in the
  * site zone), closed stays never for sale, the "still in the Spa" warning
  * on every reader, the Replay history unchanged apart from the rule, the
- * schema's new column, the product facts with a null date and the Front
- * Desk's words.
+ * schema's new column, the product facts with a null date, the Front
+ * Desk's words, and the batch calendar's save handler (capability,
+ * nonce, valid / invalid / clear, the log entry) with the order page's
+ * and the Arrivals list's helpers.
  *
  * Run from the plugin root:  php includes/sections/clean-room/tests/sale-dates-test.php
  */
@@ -15,6 +17,7 @@
 require_once __DIR__ . '/wp-stubs.php';
 
 use FisHotel\Misc\Sections\Clean_Room\Admin;
+use FisHotel\Misc\Sections\Clean_Room\Admin_Workbook;
 use FisHotel\Misc\Sections\Clean_Room\Clean_Room;
 use FisHotel\Misc\Sections\Clean_Room\Front_Desk;
 use FisHotel\Misc\Sections\Clean_Room\Orders;
@@ -189,5 +192,77 @@ $r = Front_Desk::perform( 'ready', $ctx, array( 'stay_id' => $w['id'], 'date' =>
 check( 'perform("ready") with a date: the own date, written as the note event', 'Blue Test Wrasse on sale 2026-12-01' === ( $r['message'] ?? '' ) && 'sale_ready:2026-12-01' === $store->last_event()['note'] && false === $store->stay( $w['id'], $today, $settings )['sale_ready'] );
 $i18n = Front_Desk::i18n();
 check( 'the screen strings name the chosen date, never "N days after check-in"', 'on sale %s' === $i18n['readyOn'] && isset( $i18n['readyBatch'], $i18n['readyNone'], $i18n['stillInSpa'], $i18n['noSaleDate'] ) && ! isset( $i18n['readyAuto'] ) );
+
+echo "10. The batch calendar: the save handler\n";
+$GLOBALS['fh_log'] = array();
+add_action(
+	'fishotel_log',
+	static function ( $level, $source, $message, $context = array() ) {
+		$GLOBALS['fh_log'][] = array( $level, $source, $message, $context );
+	},
+	10,
+	4
+);
+$b     = fh_batch( '2026-10-01' );
+$store = $b['store'];
+$oid   = $b['order_id'];
+$good  = array(
+	'order_id'  => (string) $oid,
+	'_wpnonce'  => wp_create_nonce( Admin_Workbook::NONCE_SALE_DATE . $oid ),
+	'op'        => 'save',
+	'sale_date' => '2026-10-30',
+);
+$GLOBALS['fh_current_user'] = 5;
+$GLOBALS['fh_user_logins']  = array( 5 => 'crew' );
+$GLOBALS['fh_user_caps']    = array();
+$r = Admin_Workbook::sale_date_request( $store, $good );
+check( 'without manage_woocommerce: 403, nothing written, nothing logged', 403 === $r['status'] && false === $r['ok'] && null === $store->order( $oid )['sale_date'] && array() === $GLOBALS['fh_log'] );
+$GLOBALS['fh_user_caps']['manage_woocommerce'] = array( 5 );
+$r = Admin_Workbook::sale_date_request( $store, array_merge( $good, array( '_wpnonce' => 'nonce-wrong' ) ) );
+check( 'a wrong nonce: 403 "expired", nothing written', 403 === $r['status'] && false !== strpos( $r['message'], 'expired' ) && null === $store->order( $oid )['sale_date'] );
+$r = Admin_Workbook::sale_date_request( $store, array_merge( $good, array( '_wpnonce' => wp_create_nonce( Admin_Workbook::NONCE_SALE_DATE . ( $oid + 1 ) ) ) ) );
+check( 'another order\'s nonce: 403 (the nonce is per order)', 403 === $r['status'] && null === $store->order( $oid )['sale_date'] );
+$r = Admin_Workbook::sale_date_request( $store, array_merge( $good, array( 'order_id' => '99', '_wpnonce' => wp_create_nonce( Admin_Workbook::NONCE_SALE_DATE . '99' ) ) ) );
+check( 'an order that no longer exists: 404, back to the Arrivals list', 404 === $r['status'] && false !== strpos( $r['redirect'], 'tab=arrivals' ) && false === strpos( $r['redirect'], 'order=' ) );
+$r = Admin_Workbook::sale_date_request( $store, $good );
+check( 'a valid date: saved on the order, 200, back to the order with the message', 200 === $r['status'] && true === $r['ok'] && '2026-10-30' === $store->order( $oid )['sale_date'] && null === $r['old'] && '2026-10-30' === $r['new'] && false !== strpos( $r['redirect'], 'order=' . $oid ) && 'Order 2026-7 goes on sale 2026-10-30 (was not set).' === $r['message'], json_encode( $r ) );
+check( 'logged once through fishotel_log: info, clean-room, who and old → new, the order in the context', 1 === count( $GLOBALS['fh_log'] ) && 'info' === $GLOBALS['fh_log'][0][0] && 'clean-room' === $GLOBALS['fh_log'][0][1] && 'Sale date of supplier order 2026-7 changed by crew: not set → 2026-10-30' === $GLOBALS['fh_log'][0][2] && $oid === $GLOBALS['fh_log'][0][3]['order_id'] && 5 === $GLOBALS['fh_log'][0][3]['user_id'] && null === $GLOBALS['fh_log'][0][3]['old'] && '2026-10-30' === $GLOBALS['fh_log'][0][3]['new'], json_encode( $GLOBALS['fh_log'] ) );
+$resave = Admin_Workbook::save_order( $store, array( 'ref' => '2026-7', 'supplier' => 'Test Supplier One', 'received_date' => '2026-10-01', 'status' => 'received', 'lines' => array() ), $oid, $today );
+check( 'the order editor\'s Save (header + lines) never touches the sale date', empty( $resave['error'] ) && '2026-10-30' === $store->order( $oid )['sale_date'] );
+check( 'its groups read the date at once', '2026-10-30' === $store->stay( $b['stays'][0], $today, $settings )['sale_ready_date'] && '2026-10-30' === $store->stay( $b['stays'][1], $today, $settings )['sale_ready_date'] );
+$r = Admin_Workbook::sale_date_request( $store, $good );
+check( 'the same date again: fine, nothing written, nothing logged', 200 === $r['status'] && true === $r['ok'] && false !== strpos( $r['message'], 'nothing changed' ) && 1 === count( $GLOBALS['fh_log'] ) );
+$bad = 0;
+foreach ( array( '2026-02-30', 'tomorrow', '10/30/2026', '2026-10-30x', '' ) as $junk ) {
+	$r = Admin_Workbook::sale_date_request( $store, array_merge( $good, array( 'sale_date' => $junk ) ) );
+	if ( 400 === $r['status'] && false === $r['ok'] && false !== strpos( $r['message'], 'Nothing was changed' ) && '2026-10-30' === $store->order( $oid )['sale_date'] ) {
+		$bad++;
+	}
+}
+check( 'an invalid date (Feb 30, words, US order, junk after it, nothing): 400 each, the date kept, nothing logged', 5 === $bad && 1 === count( $GLOBALS['fh_log'] ) );
+$r = Admin_Workbook::sale_date_request( $store, array_merge( $good, array( 'sale_date' => '2026-11-04' ) ) );
+check( 'changed to another date: old → new in the log', '2026-11-04' === $store->order( $oid )['sale_date'] && 'Sale date of supplier order 2026-7 changed by crew: 2026-10-30 → 2026-11-04' === end( $GLOBALS['fh_log'] )[2] );
+$r = Admin_Workbook::sale_date_request( $store, array_merge( $good, array( 'op' => 'clear', 'sale_date' => '2026-12-01' ) ) );
+check( 'Clear: the date gone (whatever the picker held), logged, the groups back to none', 200 === $r['status'] && null === $store->order( $oid )['sale_date'] && 'Sale date of supplier order 2026-7 changed by crew: 2026-11-04 → not set' === end( $GLOBALS['fh_log'] )[2] && null === $store->stay( $b['stays'][0], $today, $settings )['sale_ready_date'] && 3 === count( $GLOBALS['fh_log'] ) );
+$r = Admin_Workbook::sale_date_request( $store, array_merge( $good, array( 'op' => 'clear' ) ) );
+check( 'Clear with no date: nothing written, nothing logged', 200 === $r['status'] && 3 === count( $GLOBALS['fh_log'] ) );
+
+echo "11. The order page and the Arrivals list\n";
+Admin_Workbook::sale_date_request( $store, $good );
+$store->update_stay_fields( $b['stays'][1], array( 'product_id' => 22 ) );
+$store->record_event( $b['stays'][1], array( 'type' => 'note', 'note' => Replay::NOTE_SALE_READY . '2026-11-15', 'event_at' => gmdate( 'Y-m-d H:i:s' ) ), $today, $settings );
+$stays = $store->open_stays( array( 'order_id' => $oid ), $today, $settings );
+$panel = Admin_Workbook::batch_sale_panel( $store->order( $oid ), $stays, Admin_Workbook::product_titles( $store, array_column( $stays, 'product_id' ) ), $settings );
+check( 'the card: the date, the suggestion (check-in + 28), 2 groups in tanks, the date applies to 1, the other listed with its own date, product and edit link', '2026-10-30' === $panel['date'] && '2026-10-29' === $panel['suggested'] && 2 === $panel['open'] && 1 === $panel['applies'] && 1 === count( $panel['own'] ) && 'Red Test Goby' === $panel['own'][0]['product'] && '2026-11-15' === $panel['own'][0]['date'] && false !== strpos( $panel['own'][0]['edit_url'], 'post=22' ) && 511 <= (int) $panel['own'][0]['tank'] && Admin_Workbook::NONCE_SALE_DATE . $oid === $panel['nonce_action'], json_encode( $panel ) );
+check( 'the line under the picker: before the date, on and after it', 'Applies to 1 group still in tanks.' === Admin_Workbook::batch_sale_status( $panel, '2026-10-29' ) && 'Applies to 1 group still in tanks — for sale since 2026-10-30.' === Admin_Workbook::batch_sale_status( $panel, '2026-10-30' ) );
+check( '… with no date, with no group in a tank, with every group dated', 'Not set: 3 groups of this batch still in tanks are not for sale until a date is chosen.' === Admin_Workbook::batch_sale_status( array( 'applies' => 3, 'open' => 3, 'date' => '' ), $today ) && 'No group of this batch is in a tank now.' === Admin_Workbook::batch_sale_status( array( 'applies' => 0, 'open' => 0, 'date' => '' ), $today ) && 0 === strpos( Admin_Workbook::batch_sale_status( array( 'applies' => 0, 'open' => 2, 'date' => '2026-10-30' ), $today ), 'Every group' ) );
+check( 'the suggestion before any check-in: from the received date, else none', '2026-11-28' === Admin_Workbook::suggested_batch_date( array( 'received_date' => '2026-10-31' ), array(), $settings ) && '' === Admin_Workbook::suggested_batch_date( array(), array(), $settings ) );
+$counts = $store->batch_sale_counts();
+$cell   = Admin_Workbook::on_sale_cell( $store->order( $oid ), $counts[ $oid ] ?? array() );
+check( 'the Arrivals "On sale" cell: the date and "1 of 2 groups has its own date"', array( 'open' => 2, 'own' => 1 ) === $counts[ $oid ] && '2026-10-30' === $cell['text'] && '1 of 2 groups has its own date' === $cell['note'], json_encode( $cell ) );
+check( '… "not set" without a date, no note without own dates', array( 'date' => '', 'text' => 'not set', 'note' => '' ) === Admin_Workbook::on_sale_cell( array(), array( 'open' => 3, 'own' => 0 ) ) );
+$sheets = Admin_Workbook::orders_sheets( array( Admin_Workbook::resolve_order( $store, $store->order( $oid ) ) ) );
+$row    = array_combine( $sheets['Orders'][0], $sheets['Orders'][1] );
+check( 'the orders export carries the batch\'s sale date', '2026-10-30' === $row['sale_date'] && count( $sheets['Orders'][0] ) === count( $sheets['Orders'][1] ) );
 
 fh_finish();

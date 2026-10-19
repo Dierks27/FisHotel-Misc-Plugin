@@ -11,6 +11,14 @@
  * download is an admin-post action with its own nonce. The XLSX writer
  * never writes a formula; the CSV guards every cell (Admin::csv_cell).
  *
+ * The batch calendar: the order page's "Goes on sale" date is the day
+ * every group checked in from that order goes on sale (unless a group
+ * has its own date, set on its product page). It is saved by its own
+ * nonce'd admin-post form (sale_date_request(), manage_woocommerce like
+ * every order edit) and every change goes to the Health log through
+ * fishotel_log with who and old → new. Nothing on the storefront moves
+ * by itself: stock, visibility and purchasability stay manual.
+ *
  * @package FisHotel\Misc\Sections\Clean_Room
  */
 
@@ -42,11 +50,26 @@ class Admin_Workbook {
 
 	/**
 	 * Transient (per user) carrying a one-time notice across a download
-	 * (the CSV fallback of an XLSX export).
+	 * (the CSV fallback of an XLSX export) or a redirect (the batch sale
+	 * date).
 	 *
 	 * @var string
 	 */
 	const FLASH_TRANSIENT = 'fishotel_cleanroom_flash_';
+
+	/**
+	 * Nonce action of the batch sale-date form (+ the order id).
+	 *
+	 * @var string
+	 */
+	const NONCE_SALE_DATE = 'fishotel_cleanroom_sale_date_';
+
+	/**
+	 * The admin-post action of that form.
+	 *
+	 * @var string
+	 */
+	const SALE_DATE_ACTION = 'fishotel_cleanroom_sale_date';
 
 	/**
 	 * Register hooks.
@@ -55,6 +78,7 @@ class Admin_Workbook {
 		add_action( 'wp_ajax_fishotel_cleanroom_order', array( $this, 'ajax_order' ) );
 		add_action( 'wp_ajax_fishotel_cleanroom_species', array( $this, 'ajax_species' ) );
 		add_action( 'admin_post_fishotel_cleanroom_export', array( $this, 'download_export' ) );
+		add_action( 'admin_post_' . self::SALE_DATE_ACTION, array( $this, 'handle_sale_date' ) );
 	}
 
 	/* ============================================================== */
@@ -195,7 +219,12 @@ class Admin_Workbook {
 			$pick        = self::pick_lists( $store, $box_rates );
 			$can_checkin = self::can_check_in( $order );
 			$is_new      = 0 === (int) $order['id'];
-			$list_url = Admin::page_url( 'arrivals' );
+			$list_url    = Admin::page_url( 'arrivals' );
+			$batch       = array();
+			if ( ! $is_new ) {
+				$batch_stays = $store->open_stays( array( 'order_id' => (int) $order['id'] ), $today, $settings );
+				$batch       = self::batch_sale_panel( $order, $batch_stays, self::product_titles( $store, array_column( $batch_stays, 'product_id' ) ), $settings );
+			}
 
 			include Clean_Room::path() . 'views/order.php';
 			return;
@@ -203,9 +232,16 @@ class Admin_Workbook {
 
 		$years = $store->order_years();
 		$year  = isset( $_GET['year'] ) ? absint( wp_unslash( $_GET['year'] ) ) : ( $years ? (int) $years[0] : 0 ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		$rows  = array();
+		$rows   = array();
+		$counts = $store->batch_sale_counts();
 		foreach ( self::resolved_orders( $store, $year > 0 ? array( 'year' => $year ) : array() ) as $order ) {
-			$rows[] = array_merge( $order, array( 'summary' => Orders::summary( $order ) ) );
+			$rows[] = array_merge(
+				$order,
+				array(
+					'summary' => Orders::summary( $order ),
+					'on_sale' => self::on_sale_cell( $order, isset( $counts[ (int) $order['id'] ] ) ? $counts[ (int) $order['id'] ] : array() ),
+				)
+			);
 		}
 		$exports = array(
 			'xlsx' => self::export_url( 'orders', 'xlsx', $year > 0 ? array( 'year' => $year ) : array() ),
@@ -354,6 +390,129 @@ class Admin_Workbook {
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * The suggested sale date of a batch (pure): the earliest check-in of
+	 * its groups still in tanks, else its received date, plus the
+	 * sale_ready_days setting — only the hint beside the date picker.
+	 *
+	 * @param array   $order    The order (received_date).
+	 * @param array[] $stays    Its open stays (hydrated).
+	 * @param array   $settings Settings (sale_ready_days).
+	 * @return string Y-m-d, or '' when the fish are not in yet.
+	 */
+	public static function suggested_batch_date( array $order, array $stays, array $settings ) {
+		$checkin = '';
+		foreach ( $stays as $stay ) {
+			$date = (string) ( $stay['checkin_date'] ?? '' );
+			if ( Replay::is_date( $date ) && ( '' === $checkin || strcmp( $date, $checkin ) < 0 ) ) {
+				$checkin = $date;
+			}
+		}
+		if ( '' === $checkin && Replay::is_date( $order['received_date'] ?? null ) ) {
+			$checkin = (string) $order['received_date'];
+		}
+		return Replay::suggested_sale_date( $checkin, (int) ( $settings['sale_ready_days'] ?? Replay::DEFAULT_SALE_READY_DAYS ) );
+	}
+
+	/**
+	 * What the order page's "Goes on sale" card shows (pure): the batch's
+	 * date (or none), the suggestion, how many groups still in tanks the
+	 * date applies to, and the groups that have their own date (product,
+	 * tank, date, the product's edit link).
+	 *
+	 * @param array   $order    The order (id, ref, sale_date, received_date).
+	 * @param array[] $stays    Its open stays (Store::open_stays( order_id )).
+	 * @param array   $titles   Product titles by id.
+	 * @param array   $settings Settings.
+	 * @return array{date: string, suggested: string, open: int, applies: int, own: array[], nonce_action: string}
+	 */
+	public static function batch_sale_panel( array $order, array $stays, array $titles, array $settings ) {
+		$own     = array();
+		$applies = 0;
+		foreach ( $stays as $stay ) {
+			if ( 'closed' === (string) ( $stay['status'] ?? '' ) ) {
+				continue;
+			}
+			if ( ! Replay::is_date( $stay['sale_ready_override'] ?? null ) ) {
+				$applies++;
+				continue;
+			}
+			$product = ! empty( $stay['product_id'] ) ? (int) $stay['product_id'] : 0;
+			$own[]   = array(
+				'stay_id'    => (int) $stay['id'],
+				'species'    => (string) $stay['species'],
+				'product_id' => $product,
+				'product'    => $product && isset( $titles[ $product ] ) ? (string) $titles[ $product ] : '',
+				'edit_url'   => $product && function_exists( 'get_edit_post_link' ) ? (string) get_edit_post_link( $product, 'raw' ) : '',
+				'tank'       => ! empty( $stay['tank_number'] ) ? (int) $stay['tank_number'] : null,
+				'date'       => (string) $stay['sale_ready_override'],
+				'ready'      => ! empty( $stay['sale_ready'] ),
+			);
+		}
+
+		return array(
+			'date'         => Replay::is_date( $order['sale_date'] ?? null ) ? (string) $order['sale_date'] : '',
+			'suggested'    => self::suggested_batch_date( $order, $stays, $settings ),
+			'open'         => $applies + count( $own ),
+			'applies'      => $applies,
+			'own'          => $own,
+			'nonce_action' => self::NONCE_SALE_DATE . (int) ( $order['id'] ?? 0 ),
+		);
+	}
+
+	/**
+	 * The line under the "Goes on sale" picker (pure): how many groups
+	 * still in tanks the batch's date applies to, and whether they are for
+	 * sale yet.
+	 *
+	 * @param array  $batch batch_sale_panel().
+	 * @param string $today Site date.
+	 * @return string
+	 */
+	public static function batch_sale_status( array $batch, $today ) {
+		$applies = (int) ( $batch['applies'] ?? 0 );
+		$date    = (string) ( $batch['date'] ?? '' );
+		if ( 0 === $applies ) {
+			return 0 === (int) ( $batch['open'] ?? 0 )
+				? __( 'No group of this batch is in a tank now.', 'fishotel-misc-plugin' )
+				: __( 'Every group of this batch still in tanks has its own date (below).', 'fishotel-misc-plugin' );
+		}
+		if ( '' === $date ) {
+			/* translators: %d: groups */
+			return sprintf( _n( 'Not set: %d group of this batch still in tanks is not for sale until a date is chosen.', 'Not set: %d groups of this batch still in tanks are not for sale until a date is chosen.', $applies, 'fishotel-misc-plugin' ), $applies );
+		}
+		if ( Replay::is_sale_ready( $date, $today, 'cleared' ) ) {
+			/* translators: 1: groups, 2: date */
+			return sprintf( _n( 'Applies to %1$d group still in tanks — for sale since %2$s.', 'Applies to %1$d groups still in tanks — for sale since %2$s.', $applies, 'fishotel-misc-plugin' ), $applies, $date );
+		}
+		/* translators: %d: groups */
+		return sprintf( _n( 'Applies to %d group still in tanks.', 'Applies to %d groups still in tanks.', $applies, 'fishotel-misc-plugin' ), $applies );
+	}
+
+	/**
+	 * The Arrivals list's "On sale" cell (pure): the batch's date or "not
+	 * set", and a note when some of its groups in tanks have their own.
+	 *
+	 * @param array $order  The order (sale_date).
+	 * @param array $counts Store::batch_sale_counts() for it: open, own.
+	 * @return array{date: string, text: string, note: string}
+	 */
+	public static function on_sale_cell( array $order, array $counts ) {
+		$date = Replay::is_date( $order['sale_date'] ?? null ) ? (string) $order['sale_date'] : '';
+		$own  = (int) ( $counts['own'] ?? 0 );
+		$open = (int) ( $counts['open'] ?? 0 );
+		$note = '';
+		if ( $own > 0 ) {
+			/* translators: 1: groups with their own date, 2: groups in tanks */
+			$note = sprintf( _n( '%1$d of %2$d groups has its own date', '%1$d of %2$d groups have their own date', $own, 'fishotel-misc-plugin' ), $own, $open );
+		}
+		return array(
+			'date' => $date,
+			'text' => '' !== $date ? $date : __( 'not set', 'fishotel-misc-plugin' ),
+			'note' => $note,
+		);
 	}
 
 	/**
@@ -689,6 +848,132 @@ class Admin_Workbook {
 	}
 
 	/* ============================================================== */
+	/*  The batch sale date (admin-post)                               */
+	/* ============================================================== */
+
+	/**
+	 * admin-post: save or clear the batch's "Goes on sale" date, then back
+	 * to the order with a notice.
+	 */
+	public function handle_sale_date() {
+		$outcome = self::sale_date_request( new Store(), wp_unslash( $_POST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified in sale_date_request().
+		if ( 403 === $outcome['status'] ) {
+			wp_die( esc_html( $outcome['message'] ), '', array( 'response' => 403 ) );
+		}
+		self::flash( $outcome['message'] );
+		wp_safe_redirect( $outcome['redirect'] );
+		exit;
+	}
+
+	/**
+	 * The batch sale date from the order page's form — the testable half
+	 * of handle_sale_date(): the capability (manage_woocommerce, as every
+	 * order edit) and the nonce (per order) first, then op "save" with a
+	 * date (type=date, Y-m-d; anything else is refused and nothing
+	 * changes) or op "clear". A real change is written with
+	 * Store::update_order_fields() and logged through fishotel_log — who,
+	 * the order and old → new; an unchanged date writes nothing.
+	 *
+	 * @param object $store Store (or the tests' stand-in).
+	 * @param array  $raw   Unslashed POST: order_id, _wpnonce, op (save|clear), sale_date.
+	 * @return array{status: int, ok: bool, message: string, redirect: string, old: string|null, new: string|null}
+	 */
+	public static function sale_date_request( $store, array $raw ) {
+		$order_id = isset( $raw['order_id'] ) && is_scalar( $raw['order_id'] ) ? absint( $raw['order_id'] ) : 0;
+		$out      = array(
+			'status'   => 403,
+			'ok'       => false,
+			'message'  => '',
+			'redirect' => $order_id > 0 ? self::order_url( $order_id ) : Admin::page_url( 'arrivals' ),
+			'old'      => null,
+			'new'      => null,
+		);
+
+		if ( ! current_user_can( Clean_Room::CAPABILITY ) ) {
+			$out['message'] = __( 'You do not have permission to change sale dates.', 'fishotel-misc-plugin' );
+			return $out;
+		}
+		$nonce = isset( $raw['_wpnonce'] ) && is_scalar( $raw['_wpnonce'] ) ? (string) $raw['_wpnonce'] : '';
+		if ( $order_id <= 0 || ! wp_verify_nonce( $nonce, self::NONCE_SALE_DATE . $order_id ) ) {
+			$out['message'] = __( 'This form has expired. Reload the order and try again.', 'fishotel-misc-plugin' );
+			return $out;
+		}
+
+		$order = $store->order( $order_id );
+		if ( ! $order ) {
+			$out['status']   = 404;
+			$out['message']  = __( 'That order no longer exists.', 'fishotel-misc-plugin' );
+			$out['redirect'] = Admin::page_url( 'arrivals' );
+			return $out;
+		}
+
+		$op  = isset( $raw['op'] ) && is_scalar( $raw['op'] ) ? sanitize_key( (string) $raw['op'] ) : 'save';
+		$old = Replay::is_date( $order['sale_date'] ?? null ) ? (string) $order['sale_date'] : null;
+		$new = null;
+		if ( 'clear' !== $op ) {
+			$date = isset( $raw['sale_date'] ) && is_scalar( $raw['sale_date'] ) ? trim( sanitize_text_field( (string) $raw['sale_date'] ) ) : '';
+			if ( '' === $date ) {
+				$out['status']  = 400;
+				$out['message'] = __( 'Pick a date first (or use Clear). Nothing was changed.', 'fishotel-misc-plugin' );
+				return $out;
+			}
+			if ( ! Replay::is_date( $date ) ) {
+				$out['status']  = 400;
+				/* translators: %s: what was typed */
+				$out['message'] = sprintf( __( '"%s" is not a date. Nothing was changed.', 'fishotel-misc-plugin' ), substr( $date, 0, 40 ) );
+				return $out;
+			}
+			$new = $date;
+		}
+		$out['old'] = $old;
+		$out['new'] = $new;
+
+		$ref = (string) $order['ref'];
+		if ( $old === $new ) {
+			$out['status']  = 200;
+			$out['ok']      = true;
+			$out['message'] = null === $new
+				/* translators: %s: order ref */
+				? sprintf( __( 'Order %s has no sale date; nothing changed.', 'fishotel-misc-plugin' ), $ref )
+				/* translators: 1: order ref, 2: date */
+				: sprintf( __( 'Order %1$s already goes on sale %2$s; nothing changed.', 'fishotel-misc-plugin' ), $ref, $new );
+			return $out;
+		}
+
+		if ( ! $store->update_order_fields( $order_id, array( 'sale_date' => $new ) ) ) {
+			$out['status']  = 500;
+			$out['message'] = __( 'The sale date could not be saved.', 'fishotel-misc-plugin' );
+			return $out;
+		}
+
+		$user  = function_exists( 'wp_get_current_user' ) ? wp_get_current_user() : null;
+		$login = is_object( $user ) && ! empty( $user->user_login ) ? (string) $user->user_login : 'user #' . (int) get_current_user_id();
+		do_action(
+			'fishotel_log',
+			'info',
+			'clean-room',
+			sprintf( 'Sale date of supplier order %1$s changed by %2$s: %3$s → %4$s', $ref, $login, null !== $old ? $old : 'not set', null !== $new ? $new : 'not set' ),
+			array(
+				'order_id'   => $order_id,
+				'order_ref'  => $ref,
+				'user_id'    => (int) get_current_user_id(),
+				'user_login' => $login,
+				'old'        => $old,
+				'new'        => $new,
+			)
+		);
+
+		$out['status']  = 200;
+		$out['ok']      = true;
+		$out['message'] = null === $new
+			/* translators: 1: order ref, 2: the old date */
+			? sprintf( __( 'Order %1$s: sale date cleared (was %2$s). Its groups without their own date are not for sale until a date is set.', 'fishotel-misc-plugin' ), $ref, (string) $old )
+			/* translators: 1: order ref, 2: date, 3: the old date or "not set" */
+			: sprintf( __( 'Order %1$s goes on sale %2$s (was %3$s).', 'fishotel-misc-plugin' ), $ref, $new, null !== $old ? $old : __( 'not set', 'fishotel-misc-plugin' ) );
+		return $out;
+	}
+
+	/* ============================================================== */
 	/*  Exports                                                        */
 	/* ============================================================== */
 
@@ -833,7 +1118,7 @@ class Admin_Workbook {
 	 * @return array{Orders: array[], Lines: array[]}
 	 */
 	public static function orders_sheets( array $orders ) {
-		$head  = array( 'id', 'ref', 'supplier', 'origin', 'order_date', 'received_date', 'status', 'cost_mode', 'boxes', 'tariffs', 'domestic_flight', 'import_fees', 'credit', 'markup', 'worth_threshold', 'schedule', 'building', 'lines', 'ordered', 'received', 'survived', 'doa', 'fill_rate', 'survival_rate', 'doa_rate', 'fee_rate', 'total', 'grand_total', 'revenue', 'up_down', 'ratio', 'doa_cost_sheet', 'doa_cost_per_fish', 'notes' );
+		$head  = array( 'id', 'ref', 'supplier', 'origin', 'order_date', 'received_date', 'sale_date', 'status', 'cost_mode', 'boxes', 'tariffs', 'domestic_flight', 'import_fees', 'credit', 'markup', 'worth_threshold', 'schedule', 'building', 'lines', 'ordered', 'received', 'survived', 'doa', 'fill_rate', 'survival_rate', 'doa_rate', 'fee_rate', 'total', 'grand_total', 'revenue', 'up_down', 'ratio', 'doa_cost_sheet', 'doa_cost_per_fish', 'notes' );
 		$lhead = array( 'order_ref', 'line_id', 'species', 'sci_name', 'species_id', 'group', 'ordered', 'received', 'per_box', 'bags', 'units', 'unit_price', 'landed_total', 'landed_per_fish', 'suggested_price', 'worth', 'profit', 'margin', 'worth_it', 'survived', 'doa', 'revenue', 'doa_cost', 'live', 'sold', 'stay_id', 'tank', 'notes' );
 		$rows  = array( $head );
 		$lines = array( $lhead );
@@ -847,6 +1132,7 @@ class Admin_Workbook {
 				(string) $order['origin'],
 				$order['order_date'],
 				$order['received_date'],
+				$order['sale_date'] ?? null,
 				(string) $order['status'],
 				(string) $order['cost_mode'],
 				$order['boxes'],

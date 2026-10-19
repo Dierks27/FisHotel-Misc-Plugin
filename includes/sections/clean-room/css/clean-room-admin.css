@@ -670,6 +670,34 @@ a.fh-cr-chip--muted {
 	align-items: center;
 }
 
+/* The batch's "Goes on sale" card on the order page. */
+.fh-cr-sale {
+	margin: 0 0 16px;
+}
+
+.fh-cr-sale__row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px;
+}
+
+.fh-cr-sale__status {
+	margin: 10px 0 6px;
+	font-size: 13px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-wrap .fh-cr-suggest-date {
+	color: var(--fh-accent, #00a0d2);
+	font-size: 12px;
+}
+
+.fh-cr-sale__own {
+	max-width: 640px;
+	margin-top: 6px;
+}
+
 .fh-cr-order__title {
 	display: flex;
 	align-items: center;

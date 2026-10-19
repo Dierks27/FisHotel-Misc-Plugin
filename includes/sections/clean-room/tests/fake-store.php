@@ -1022,6 +1022,8 @@ class Fake_Store {
 			$fields['created_at'] = $now;
 		} else {
 			$fields['created_at'] = $this->orders[ $id ]['created_at'];
+			// The real save_order() never writes sale_date (the batch calendar does, through update_order_fields()).
+			$fields['sale_date'] = $this->orders[ $id ]['sale_date'] ?? null;
 		}
 		$fields['id']         = $id;
 		$fields['updated_at'] = $now;

@@ -4,8 +4,9 @@
  * (counts, dates, a move with an optional reason, the fields incl. the
  * check-in date), the Events-tab Undo, the Coming Soon release button,
  * the order editor (lines, species suggestions, Save with the recomputed
- * figures, Check in, Delete, the import-fees suggestion) and the Species
- * tab (inline edit, add, delete, the product link).
+ * figures, Check in, Delete, the import-fees suggestion), the Species
+ * tab (inline edit, add, delete, the product link) and the "suggested"
+ * fill of the sale-date pickers (order page, product page).
  *
  * The server renders every row; this file posts and fills in. The pure
  * helpers (renumber(), suggestImportFees()) are exported for the node
@@ -91,6 +92,18 @@
 
 	var cfg = root.fhCleanRoomAdmin || {};
 	var i18n = cfg.i18n || {};
+
+	// "suggested <date>" beside a sale-date picker (the order page, the
+	// product page): fills that picker — nothing is saved until Save /
+	// Update, and the suggestion is never stored by itself.
+	$(document).on('click', '.fh-cr-suggest-date', function (e) {
+		e.preventDefault();
+		var target = root.document.getElementById(String($(this).data('target') || ''));
+		if (target) {
+			target.value = String($(this).data('date') || '');
+			$(target).trigger('change');
+		}
+	});
 
 	function notice(cls, msg) {
 		var $wrap = $('.fh-cr-wrap');
