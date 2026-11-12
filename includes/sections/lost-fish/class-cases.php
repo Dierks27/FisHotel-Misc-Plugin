@@ -476,6 +476,9 @@ class Cases {
 		if ( empty( $holder['paid_known'] ) ) {
 			$check[] = __( 'What was paid for this fish is not on the order line — type it in.', 'fishotel-misc-plugin' );
 		}
+		if ( $this->due_to_ship( (int) $holder['order_id'] ) ) {
+			$check[] = __( 'This order is due to ship today or earlier — make sure its fish has not already left before writing to the customer.', 'fishotel-misc-plugin' );
+		}
 
 		$name = trim( (string) ( $holder['name'] ?? '' ) );
 		$id   = $this->store->insert_case(
@@ -523,6 +526,24 @@ class Cases {
 		$this->fire( 'fishotel_lostfish_case_opened', $case );
 
 		return $case;
+	}
+
+	/**
+	 * Whether an order is due to ship today or earlier: its box may be
+	 * packed — fish marked as shipped in the Clean Room — before its
+	 * shipment is recorded, so a case on it always asks for a look.
+	 *
+	 * @param int $order_id Order id.
+	 * @return bool
+	 */
+	private function due_to_ship( $order_id ) {
+		$order = $this->orders->get( (int) $order_id );
+		if ( ! $order ) {
+			return false;
+		}
+		$ship = Orders::ship_date_for( $this->orders->delivery_date( $order ), $order );
+
+		return '' !== $ship && strcmp( $ship, Lost_Fish::today() ) <= 0;
 	}
 
 	/**

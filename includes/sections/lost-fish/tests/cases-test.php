@@ -45,7 +45,7 @@ function fh_world() {
 	fh_product( 812, array( 'class' => 'premium' ) );
 	fh_product( 813, array( 'class' => 'premium' ) );
 
-	fh_order( 501, array( 'paid' => 1000, 'shipping' => 15.00, 'first_name' => 'Avery', 'last_name' => 'Example', 'email' => 'avery@example.test', 'customer_id' => 41, 'meta' => array( '_fishotel_shipping_date' => '2026-11-18' ), 'lines' => array( 51 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'qty' => 1, 'total' => 60.00 ), 52 => array( 'name' => 'Harbor Tang', 'product_id' => 813, 'qty' => 2, 'total' => 460.00 ) ) ) );
+	fh_order( 501, array( 'paid' => 1000, 'shipping' => 15.00, 'first_name' => 'Avery', 'last_name' => 'Example', 'email' => 'avery@example.test', 'customer_id' => 41, 'meta' => array( '_fishotel_shipping_date' => '2031-03-12' ), 'lines' => array( 51 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'qty' => 1, 'total' => 60.00 ), 52 => array( 'name' => 'Harbor Tang', 'product_id' => 813, 'qty' => 2, 'total' => 460.00 ) ) ) );
 	fh_order( 502, array( 'paid' => 3000, 'shipping' => 15.00, 'first_name' => 'Blake', 'last_name' => 'Sample', 'email' => 'blake@example.test', 'customer_id' => 42, 'lines' => array( 53 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'qty' => 2, 'total' => 120.00 ), 54 => array( 'name' => 'Harbor Tang', 'product_id' => 813, 'qty' => 3, 'total' => 690.00 ) ) ) );
 	fh_order( 503, array( 'paid' => 2000, 'shipping' => 40.00, 'first_name' => 'Casey', 'last_name' => 'Tester', 'email' => 'casey@example.test', 'customer_id' => 0, 'lines' => array( 55 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'qty' => 1, 'total' => 60.00 ) ) ) );
 
@@ -619,6 +619,17 @@ check_contains( '…', 'by NAME only', $case['check_note'] );
 $cases->run_tick( time() + 5000 );
 check_same( '… and is never sent by itself', array( 'open', array() ), array( $store->get_case( 1 )['status'], $GLOBALS['fh_mail'] ) );
 check( '… the owner can still send it with the click', $cases->send( 1, 5 )['ok'] );
+
+list( $cases, $store, $rooms ) = fh_world();
+Settings::save( array( 'auto_send' => '1' ) );
+$GLOBALS['fh_orders'][502]->meta['_fishotel_shipping_date'] = gmdate( 'Y-m-d', time() + 86400 ); // Delivered tomorrow: it ships today.
+fh_loss( $rooms, 1, 9001 );
+fh_loss( $rooms, 1, 9002 );
+$case = $store->get_case( 1 );
+check_same( 'an order due to ship today: its box may already be packed — the case is marked "check"', array( 'product', 1 ), array( $case['line_match'], $case['needs_check'] ) );
+check_contains( '… saying why', 'due to ship today or earlier', $case['check_note'] );
+$cases->run_tick( time() + 5000 );
+check_same( '… and is never sent by itself', array( 'open', array() ), array( $store->get_case( 1 )['status'], $GLOBALS['fh_mail'] ) );
 
 /* ================================================================== */
 echo "\nA case by hand, from an order line\n";

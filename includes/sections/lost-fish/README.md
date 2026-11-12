@@ -77,6 +77,10 @@ for — is handed to the holders, **the most recently paid order first**
 (first paid, first served). Each holder line that is short gets **one
 case**, for as many fish as that line is short.
 
+A case on an order that is **due to ship today or earlier** is marked
+"check": its box may already be packed — the fish marked as shipped in
+the Clean Room — before the shipment is recorded.
+
 What never opens a case: a `sold`, `count` (recount) or `move` event; a
 loss that came in with a workbook import (history, not news); a group
 whose fish nobody has identified yet; a loss nobody is owed (no log line
@@ -253,7 +257,8 @@ whose links go nowhere.
 switched on. On, a case goes out by itself once the loss can no longer be
 undone on the phone (15 minutes) — and only when everything about it is
 certain: a loss opened it, the order line was found by its product (or
-by the Invoices section), nothing marks it "check", the shipping
+by the Invoices section), nothing marks it "check" (a name match, a
+price that is not on the line, an order due to ship today), the shipping
 difference was worked out and not typed, and the tanks are still short
 of that fish. Everything else waits for the click.
 
@@ -334,6 +339,28 @@ screen can reach* says plainly what is not there.
 | Batch Manager | the link to the wallets screen; its ship-date rule | no link; the ship date is the day before the delivery date all the same |
 | Theme | the delivery date through its helper (combined boxes) | the same two meta reads |
 | Health section | the log lines also go to the Health log | they stay in this section's log |
+
+---
+
+## What it does not do (yet)
+
+- **Two losses, one order.** Each loss opens its own case, so a customer
+  who loses two fish of one order at different moments gets two cases —
+  and while both wait, neither shipping difference can be worked out (it
+  depends on the other answer): the owner types the figures, or sends
+  one and waits for its answer before the other. Several fish lost in
+  ONE loss on one order line are one case.
+- **A recount** that comes up short opens nothing by itself (it is not a
+  `loss` event) — open the case by hand.
+- **Sizes of a product.** Every group of a product is one kind, whatever
+  its size: a customer owed a large one is "covered" by a small one of
+  the same product. The case shows the size; the owner decides.
+- **A line found by name** is only as good as the name: it is marked
+  "check", and never sent by itself.
+- **The shipping difference** is worked out only when the order's own
+  shipping method can price a package outside a checkout and reproduces
+  what was charged. A method that needs the cart, or rates that changed
+  since, give "not known" — by design, never a guess.
 
 ---
 

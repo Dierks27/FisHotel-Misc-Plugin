@@ -37,7 +37,7 @@ function fh_two_sent() {
 
 	fh_product( 812, array( 'class' => 'premium' ) );
 	fh_product( 813, array( 'class' => 'premium' ) );
-	fh_order( 501, array( 'paid' => 1000, 'shipping' => 15.00, 'email' => 'avery@example.test', 'meta' => array( '_fishotel_shipping_date' => '2026-11-18' ), 'lines' => array( 51 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'qty' => 1, 'total' => 60.00 ), 52 => array( 'name' => 'Harbor Tang', 'product_id' => 813, 'qty' => 2, 'total' => 460.00 ) ) ) );
+	fh_order( 501, array( 'paid' => 1000, 'shipping' => 15.00, 'email' => 'avery@example.test', 'meta' => array( '_fishotel_shipping_date' => '2031-03-12' ), 'lines' => array( 51 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'qty' => 1, 'total' => 60.00 ), 52 => array( 'name' => 'Harbor Tang', 'product_id' => 813, 'qty' => 2, 'total' => 460.00 ) ) ) );
 	fh_order( 503, array( 'paid' => 2000, 'shipping' => 40.00, 'first_name' => 'Casey', 'email' => 'casey@example.test', 'lines' => array( 55 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'qty' => 1, 'total' => 60.00 ) ) ) );
 
 	$store = new Fh_Fake_Store();
@@ -90,7 +90,7 @@ check_contains( '… and the very sentence of the e-mail', '$60.00 for the fish,
 check_contains( '…', 'less $25.00 shipping. Without this fish your order is no longer over the amount for reduced shipping, so its shipping is $40.00 instead of the $15.00 you paid.', $GLOBALS['fh_mail'][0]['message'] );
 check_contains( 'which fish, which order', '1 × Lagoon Goby', $html );
 check_contains( '…', 'About your order #501', $html );
-check_contains( 'when the rest ships', 'it ships on Tuesday, November 17, 2026', $html );
+check_contains( 'when the rest ships', 'it ships on Tuesday, March 11, 2031', $html );
 check_contains( 'a Confirm button, in a form that POSTs', '<form method="post"', $html );
 check_contains( '… carrying the token and the Confirm field', 'name="fh_lost_fish" value="' . $t1['refund'] . '"', $html );
 check_contains( '…', 'name="fh_lf_confirm" value="1"', $html );

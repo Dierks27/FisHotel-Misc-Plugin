@@ -255,6 +255,20 @@ namespace FisHotel\Misc\Sections\Lost_Fish {
 		}
 
 		/**
+		 * Today's calendar date in the site zone.
+		 *
+		 * @return string Y-m-d
+		 */
+		public static function today() {
+			try {
+				$now = new \DateTimeImmutable( 'now', self::timezone() );
+				return $now->format( 'Y-m-d' );
+			} catch ( \Exception $e ) {
+				return gmdate( 'Y-m-d' );
+			}
+		}
+
+		/**
 		 * A UTC 'Y-m-d H:i:s' as a site-time label.
 		 *
 		 * @param string|null $utc    UTC datetime.

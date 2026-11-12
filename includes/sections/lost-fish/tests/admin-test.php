@@ -72,7 +72,7 @@ function fh_shop() {
 
 	fh_product( 812, array( 'class' => 'premium' ) );
 	fh_product( 813, array( 'class' => 'premium' ) );
-	fh_order( 501, array( 'paid' => 1000, 'shipping' => 15.00, 'first_name' => 'Avery', 'last_name' => 'Example', 'email' => 'avery@example.test', 'customer_id' => 41, 'meta' => array( '_fishotel_shipping_date' => '2026-11-18' ), 'lines' => array( 51 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'qty' => 1, 'total' => 60.00 ), 52 => array( 'name' => 'Harbor Tang', 'product_id' => 813, 'qty' => 2, 'total' => 460.00 ) ) ) );
+	fh_order( 501, array( 'paid' => 1000, 'shipping' => 15.00, 'first_name' => 'Avery', 'last_name' => 'Example', 'email' => 'avery@example.test', 'customer_id' => 41, 'meta' => array( '_fishotel_shipping_date' => '2031-03-12' ), 'lines' => array( 51 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'qty' => 1, 'total' => 60.00 ), 52 => array( 'name' => 'Harbor Tang', 'product_id' => 813, 'qty' => 2, 'total' => 460.00 ) ) ) );
 	fh_order( 502, array( 'paid' => 3000, 'shipping' => 15.00, 'first_name' => 'Blake', 'last_name' => 'Sample', 'email' => 'blake@example.test', 'customer_id' => 42, 'lines' => array( 53 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'qty' => 2, 'total' => 120.00 ), 54 => array( 'name' => 'Harbor Tang', 'product_id' => 813, 'qty' => 3, 'total' => 690.00 ) ) ) );
 	fh_order( 503, array( 'paid' => 2000, 'shipping' => 40.00, 'first_name' => 'Casey', 'last_name' => 'Tester', 'email' => 'casey@example.test', 'lines' => array( 55 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'qty' => 1, 'total' => 60.00 ) ) ) );
 
