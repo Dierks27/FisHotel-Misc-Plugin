@@ -114,6 +114,12 @@ class Settings {
 	public function init() {
 		add_action( 'wp_ajax_fishotel_cleanroom_save', array( $this, 'save_settings' ) );
 		add_action( 'wp_ajax_fishotel_cleanroom_protocol', array( $this, 'save_protocol' ) );
+
+		// Settings → Medications (the list's editor) and the Board's Calculator.
+		require_once Clean_Room::path() . 'class-medications-admin.php';
+		$medications = new Medications_Admin();
+		$medications->init();
+
 		add_action( 'wp_ajax_fishotel_cleanroom_layout', array( $this, 'ajax_layout' ) );
 		add_action( 'wp_ajax_fishotel_cleanroom_alias_delete', array( $this, 'ajax_alias_delete' ) );
 		add_action( 'wp_ajax_fishotel_cleanroom_box_rates', array( $this, 'save_box_rates' ) );

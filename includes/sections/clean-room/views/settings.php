@@ -98,6 +98,9 @@ $fh_from_attr = Sizes::SOURCE_ATTRIBUTE === $fh_standard['source'];
 			</p>
 		</form>
 
+		<?php /* ── Medications ───────────────────────────────────── */ ?>
+		<?php include Clean_Room::path() . 'views/medications.php'; ?>
+
 		<?php /* ── Protocol ──────────────────────────────────────── */ ?>
 		<form id="fishotel-cleanroom-protocol" class="fishotel-misc-card fh-cr-card fh-cr-card--wide" method="post" action="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>" onsubmit="return false;" data-template="<?php echo esc_attr( $template_name ); ?>" data-page-url="<?php echo esc_url( Admin::page_url( 'settings' ) ); ?>">
 			<?php wp_nonce_field( Settings::NONCE_ACTION ); ?>

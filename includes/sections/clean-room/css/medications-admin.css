@@ -1,0 +1,227 @@
+/**
+ * Clean Room medications, the admin side — Settings → Medications (the
+ * list and its forms) and the Board's Calculator. Dark, on the --fh-*
+ * tokens of admin/css/admin-style.css like clean-room-admin.css; in a
+ * file of its own so nothing else has to change for it.
+ *
+ * @package FisHotel\Misc\Sections\Clean_Room
+ */
+
+/* ------------------------------------------------------------------ */
+/*  Settings → Medications                                             */
+/* ------------------------------------------------------------------ */
+.fh-cr-meds td {
+	vertical-align: top;
+}
+
+.fh-cr-med.is-retired td {
+	opacity: 0.55;
+}
+
+.fh-cr-med.is-retired td.fh-cr-row__actions {
+	opacity: 1;
+}
+
+.fh-cr-med-badge {
+	display: inline-block;
+	margin-left: 6px;
+	padding: 1px 8px;
+	border-radius: 999px;
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--fh-text-primary, #e0e0e0);
+	background: var(--fh-bg-primary, #1a1a1a);
+	border: 1px solid var(--fh-accent, #00a0d2);
+	cursor: help;
+}
+
+.fh-cr-med-badge--retired {
+	border-color: var(--fh-border, rgba(255, 255, 255, 0.25));
+	color: var(--fh-text-secondary, #a0a0a0);
+	cursor: default;
+}
+
+/* The store's public calculator's figure beside ours. */
+.fh-cr-med-theme {
+	display: block;
+	margin-top: 4px;
+	padding-left: 8px;
+	border-left: 3px solid var(--fh-border, rgba(255, 255, 255, 0.2));
+	font-size: 12px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-med-theme--same {
+	border-left-color: var(--fh-success, #46b450);
+}
+
+.fh-cr-med-theme--differs {
+	border-left-color: var(--fh-danger, #dc3232);
+	color: #ffb3b3;
+}
+
+.fh-cr-med-editor > td {
+	background: var(--fh-bg-primary, #1a1a1a);
+}
+
+.fh-cr-med-form {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-end;
+	gap: 10px 12px;
+	padding: 6px 0;
+}
+
+.fh-cr-med-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+	gap: 10px 12px;
+	flex: 1 1 100%;
+}
+
+.fh-cr-med-field {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	font-size: 12px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-med-field--wide {
+	grid-column: span 2;
+}
+
+.fh-cr-med-rate {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 13px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-wrap .fh-cr-med-rate .fh-cr-input {
+	width: auto;
+}
+
+.fh-cr-wrap .fh-cr-med-rate .fh-cr-med-level {
+	max-width: 90px;
+}
+
+.fh-cr-med-hint {
+	flex: 1 1 200px;
+	padding-bottom: 6px;
+}
+
+.fh-cr-med-block {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px 12px;
+	flex: 1 1 100%;
+}
+
+.fh-cr-med-block__title {
+	flex: 1 1 100%;
+	font-size: 12px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-med-dose {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.fh-cr-wrap .fh-cr-med-dose .fh-cr-input {
+	width: auto;
+	max-width: 170px;
+}
+
+.fh-cr-med-form .fh-cr-actions-row {
+	flex: 1 1 100%;
+	margin: 4px 0 0;
+}
+
+.fh-cr-med-form [hidden],
+.fh-cr-med-editor[hidden] {
+	display: none;
+}
+
+/* ------------------------------------------------------------------ */
+/*  The Board's Calculator                                             */
+/* ------------------------------------------------------------------ */
+.fh-cr-calc {
+	margin: 0 0 16px;
+	padding: 14px 16px;
+	background: var(--fh-bg-secondary, #2d2d2d);
+	border: 1px solid var(--fh-accent, #00a0d2);
+	border-radius: var(--fh-radius, 8px);
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-calc[hidden],
+.fh-cr-calc [hidden] {
+	display: none;
+}
+
+.fh-cr-calc__head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px 12px;
+	margin: 0 0 12px;
+}
+
+.fh-cr-calc__head .fh-cr-sub {
+	flex: 1 1 240px;
+}
+
+.fh-cr-calc__fields {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-end;
+	gap: 12px;
+	margin: 0 0 10px;
+}
+
+.fh-cr-calc__waters {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin: 0 0 12px;
+}
+
+.fh-cr-calc__result {
+	padding: 10px 14px;
+	border-left: 4px solid var(--fh-text-secondary, #a0a0a0);
+	background: var(--fh-bg-primary, #1a1a1a);
+	border-radius: 4px;
+	min-height: 24px;
+}
+
+.fh-cr-calc__result.is-ok {
+	border-left-color: var(--fh-success, #46b450);
+}
+
+.fh-cr-calc__result.is-nothing {
+	border-left-color: var(--fh-accent, #00a0d2);
+}
+
+.fh-cr-calc__line {
+	margin: 0;
+	font-size: 14px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-calc__result.is-ok .fh-cr-calc__line,
+.fh-cr-calc__result.is-nothing .fh-cr-calc__line {
+	font-size: 20px;
+	font-weight: 700;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-calc__work {
+	margin: 4px 0 0;
+	font-size: 13px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
