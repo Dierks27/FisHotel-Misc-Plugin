@@ -1,7 +1,10 @@
 <?php
 /**
  * Stats tab — the yearly figures: per-order rows, the weighted totals,
- * the sheet-style averages, by supplier / origin / species group.
+ * the sheet-style averages, by supplier / origin / species group; and,
+ * by supplier and by origin, how the labels held up: the mislabeled
+ * lines with their rate over the lines that received fish, and the
+ * unknown fish not identified yet.
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  *
@@ -25,12 +28,28 @@ $fh_t     = $stats['totals'];
 $fh_sheet = $stats['sheet'];
 
 /**
+ * "2 of 14 · 14.3%" — the mislabeled lines of a row over its received lines.
+ *
+ * @param array $row received_lines, mislabeled, mislabeled_rate.
+ * @return string
+ */
+$fh_mislabeled = static function ( array $row ) {
+	$lines = (int) ( $row['received_lines'] ?? 0 );
+	if ( $lines < 1 ) {
+		return '—';
+	}
+	/* translators: 1: mislabeled lines, 2: lines that received fish, 3: rate */
+	return sprintf( __( '%1$d of %2$d · %3$s', 'fishotel-misc-plugin' ), (int) ( $row['mislabeled'] ?? 0 ), $lines, Costing::pct( $row['mislabeled_rate'] ?? null ) );
+};
+
+/**
  * A grouping table.
  *
  * @param array[] $groups Finished buckets.
  * @param string  $label  The first column's heading.
+ * @param bool    $labels Whether the Mislabeled / Not identified yet columns are shown.
  */
-$fh_group_table = static function ( array $groups, $label ) {
+$fh_group_table = static function ( array $groups, $label, $labels = false ) use ( $fh_mislabeled ) {
 	if ( ! $groups ) {
 		echo '<p class="fh-cr-sub">' . esc_html__( 'Nothing here.', 'fishotel-misc-plugin' ) . '</p>';
 		return;
@@ -52,6 +71,10 @@ $fh_group_table = static function ( array $groups, $label ) {
 				<th scope="col" class="fh-cr-num"><?php esc_html_e( 'Landed', 'fishotel-misc-plugin' ); ?></th>
 				<th scope="col" class="fh-cr-num"><?php esc_html_e( 'Revenue', 'fishotel-misc-plugin' ); ?></th>
 				<th scope="col" class="fh-cr-num"><?php esc_html_e( 'Up / down', 'fishotel-misc-plugin' ); ?></th>
+				<?php if ( $labels ) : ?>
+					<th scope="col" class="fh-cr-num" title="<?php esc_attr_e( 'Lines that received fish whose label named another fish than the one they turned out to be, over the lines that received fish.', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'Mislabeled', 'fishotel-misc-plugin' ); ?></th>
+					<th scope="col" class="fh-cr-num" title="<?php esc_attr_e( 'Lines that received fish nobody has identified yet (??). Counted apart: they are not mislabeled until they are named.', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'Not identified yet', 'fishotel-misc-plugin' ); ?></th>
+				<?php endif; ?>
 			</tr>
 		</thead>
 		<tbody>
@@ -70,6 +93,10 @@ $fh_group_table = static function ( array $groups, $label ) {
 					<td class="fh-cr-num"><?php echo esc_html( Costing::money( $fh_g['total'] ) ); ?></td>
 					<td class="fh-cr-num"><?php echo esc_html( Costing::money( $fh_g['revenue'] ) ); ?></td>
 					<td class="fh-cr-num <?php echo $fh_g['up_down'] >= 0 ? 'fh-cr-up' : 'fh-cr-down'; ?>"><?php echo esc_html( ( $fh_g['up_down'] > 0 ? '+' : '' ) . Costing::money( $fh_g['up_down'] ) ); ?></td>
+					<?php if ( $labels ) : ?>
+						<td class="fh-cr-num<?php echo (int) ( $fh_g['mislabeled'] ?? 0 ) > 0 ? ' fh-cr-down' : ''; ?>"><?php echo esc_html( $fh_mislabeled( $fh_g ) ); ?></td>
+						<td class="fh-cr-num"><?php echo esc_html( (int) ( $fh_g['unidentified'] ?? 0 ) ); ?></td>
+					<?php endif; ?>
 				</tr>
 			<?php endforeach; ?>
 		</tbody>
@@ -119,6 +146,12 @@ $fh_group_table = static function ( array $groups, $label ) {
 		<span class="fh-cr-chip"><strong><?php echo esc_html( $fh_t['received'] ); ?></strong> <?php esc_html_e( 'received', 'fishotel-misc-plugin' ); ?></span>
 		<span class="fh-cr-chip fh-cr-chip--ready"><strong><?php echo esc_html( $fh_sheet['through_qt'] ); ?></strong> <?php esc_html_e( 'fish through QT', 'fishotel-misc-plugin' ); ?></span>
 		<span class="fh-cr-chip"><strong><?php echo esc_html( $fh_t['doa'] ); ?></strong> <?php esc_html_e( 'DOA', 'fishotel-misc-plugin' ); ?></span>
+		<?php if ( (int) ( $fh_t['mislabeled'] ?? 0 ) > 0 ) : ?>
+			<span class="fh-cr-chip fh-cr-chip--warn"><strong><?php echo esc_html( (int) $fh_t['mislabeled'] ); ?></strong> <?php esc_html_e( 'mislabeled', 'fishotel-misc-plugin' ); ?></span>
+		<?php endif; ?>
+		<?php if ( (int) ( $fh_t['unidentified'] ?? 0 ) > 0 ) : ?>
+			<span class="fh-cr-chip fh-cr-chip--warn"><strong><?php echo esc_html( (int) $fh_t['unidentified'] ); ?></strong> <?php esc_html_e( 'not identified yet', 'fishotel-misc-plugin' ); ?></span>
+		<?php endif; ?>
 		<span class="fh-cr-summary__meta"><?php echo esc_html( $year > 0 ? (string) $year : __( 'all years', 'fishotel-misc-plugin' ) ); ?></span>
 	</div>
 
@@ -136,6 +169,8 @@ $fh_group_table = static function ( array $groups, $label ) {
 				<div><dt><?php esc_html_e( 'Revenue (survivors at FisHotel prices)', 'fishotel-misc-plugin' ); ?></dt><dd><?php echo esc_html( Costing::money( $fh_t['revenue'] ) ); ?></dd></div>
 				<div><dt><?php esc_html_e( 'Up or down', 'fishotel-misc-plugin' ); ?></dt><dd class="<?php echo $fh_t['up_down'] >= 0 ? 'fh-cr-up' : 'fh-cr-down'; ?>"><?php echo esc_html( ( $fh_t['up_down'] > 0 ? '+' : '' ) . Costing::money( $fh_t['up_down'] ) ); ?></dd></div>
 				<div><dt><?php esc_html_e( 'Revenue ÷ landed', 'fishotel-misc-plugin' ); ?></dt><dd><?php echo esc_html( Costing::num( $fh_t['ratio'] ) ); ?></dd></div>
+				<div><dt><?php esc_html_e( 'Mislabeled (of the lines that received fish)', 'fishotel-misc-plugin' ); ?></dt><dd><?php echo esc_html( $fh_mislabeled( $fh_t ) ); ?></dd></div>
+				<div><dt><?php esc_html_e( 'Not identified yet', 'fishotel-misc-plugin' ); ?></dt><dd><?php echo esc_html( (int) ( $fh_t['unidentified'] ?? 0 ) ); ?></dd></div>
 			</dl>
 			<p class="fishotel-misc-card-desc"><?php esc_html_e( 'Survival counts only the orders whose survivors are known, in both the top and the bottom of the fraction.', 'fishotel-misc-plugin' ); ?></p>
 		</div>
@@ -223,15 +258,15 @@ $fh_group_table = static function ( array $groups, $label ) {
 	<?php endif; ?>
 
 	<h2 class="fh-cr-h2"><?php esc_html_e( 'By supplier', 'fishotel-misc-plugin' ); ?></h2>
-	<div class="fh-cr-grid-wrap"><?php $fh_group_table( $stats['by_supplier'], __( 'Supplier', 'fishotel-misc-plugin' ) ); ?></div>
+	<div class="fh-cr-grid-wrap"><?php $fh_group_table( $stats['by_supplier'], __( 'Supplier', 'fishotel-misc-plugin' ), true ); ?></div>
 
 	<h2 class="fh-cr-h2"><?php esc_html_e( 'By origin', 'fishotel-misc-plugin' ); ?></h2>
-	<div class="fh-cr-grid-wrap"><?php $fh_group_table( $stats['by_origin'], __( 'Origin', 'fishotel-misc-plugin' ) ); ?></div>
+	<div class="fh-cr-grid-wrap"><?php $fh_group_table( $stats['by_origin'], __( 'Origin', 'fishotel-misc-plugin' ), true ); ?></div>
 
 	<h2 class="fh-cr-h2"><?php esc_html_e( 'By species group', 'fishotel-misc-plugin' ); ?></h2>
 	<div class="fh-cr-grid-wrap"><?php $fh_group_table( $stats['by_group'], __( 'Species group', 'fishotel-misc-plugin' ) ); ?></div>
 
 	<p class="fh-cr-footnote">
-		<?php esc_html_e( 'A species group comes from the species list (Species tab); lines whose species has no group are "(no group)". Fill = received ÷ ordered; survival = survived ÷ (received − DOA); DOA rate = DOA ÷ received. A year is the order\'s received date, else its order date.', 'fishotel-misc-plugin' ); ?>
+		<?php esc_html_e( 'A species group comes from the species list (Species tab); lines whose species has no group are "(no group)". Fill = received ÷ ordered; survival = survived ÷ (received − DOA); DOA rate = DOA ÷ received. A year is the order\'s received date, else its order date. Mislabeled = the lines that received fish whose label named another fish than the one they turned out to be (a line keeps what its label said the first time its fish is corrected), with their rate over the lines that received fish; a fish nobody has named yet (??) is counted apart as not identified yet.', 'fishotel-misc-plugin' ); ?>
 	</p>
 </div>

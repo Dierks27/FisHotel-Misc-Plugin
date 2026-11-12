@@ -1613,14 +1613,17 @@ class Admin_Workbook {
 
 	/**
 	 * The stats workbook (pure): Orders, Totals (weighted and sheet-style),
-	 * By supplier, By origin, By group.
+	 * By supplier, By origin, By group. How the labels held up — the lines
+	 * that received fish, the mislabeled ones, their rate, the unknown fish
+	 * not identified yet — are the last columns of Orders (so the CSV has
+	 * them), By supplier and By origin, and the last rows of Totals.
 	 *
 	 * @param array $stats Stats::build().
 	 * @param int   $year  The year (0 = all).
 	 * @return array<string, array[]>
 	 */
 	public static function stats_sheets( array $stats, $year = 0 ) {
-		$orders = array( array( 'ref', 'supplier', 'origin', 'year', 'order_date', 'received_date', 'status', 'cost_mode', 'lines', 'ordered', 'received', 'survived', 'doa', 'fill_rate', 'survival_rate', 'doa_rate', 'total', 'grand_total', 'revenue', 'up_down', 'ratio' ) );
+		$orders = array( array( 'ref', 'supplier', 'origin', 'year', 'order_date', 'received_date', 'status', 'cost_mode', 'lines', 'ordered', 'received', 'survived', 'doa', 'fill_rate', 'survival_rate', 'doa_rate', 'total', 'grand_total', 'revenue', 'up_down', 'ratio', 'received_lines', 'mislabeled', 'mislabeled_rate', 'not_identified' ) );
 		foreach ( (array) $stats['orders'] as $row ) {
 			$orders[] = array(
 				(string) $row['ref'],
@@ -1644,6 +1647,10 @@ class Admin_Workbook {
 				(float) $row['revenue'],
 				(float) $row['up_down'],
 				self::rate( $row['ratio'] ),
+				(int) ( $row['received_lines'] ?? 0 ),
+				(int) ( $row['mislabeled'] ?? 0 ),
+				self::rate( $row['mislabeled_rate'] ?? null ),
+				(int) ( $row['unidentified'] ?? 0 ),
 			);
 		}
 
@@ -1664,12 +1671,16 @@ class Admin_Workbook {
 			array( 'revenue', (float) $t['revenue'], null ),
 			array( 'up_down', (float) $t['up_down'], null ),
 			array( 'ratio', self::rate( $t['ratio'] ), null ),
+			array( 'received_lines', (int) ( $t['received_lines'] ?? 0 ), null ),
+			array( 'mislabeled', (int) ( $t['mislabeled'] ?? 0 ), null ),
+			array( 'mislabeled_rate', self::rate( $t['mislabeled_rate'] ?? null ), null ),
+			array( 'not_identified', (int) ( $t['unidentified'] ?? 0 ), null ),
 		);
 
-		$group_sheet = static function ( array $groups, $label ) {
-			$rows = array( array( $label, 'orders', 'lines', 'ordered', 'received', 'survived', 'doa', 'fill_rate', 'survival_rate', 'doa_rate', 'total', 'revenue', 'up_down', 'ratio' ) );
+		$group_sheet = static function ( array $groups, $label, $labels = false ) {
+			$rows = array( array_merge( array( $label, 'orders', 'lines', 'ordered', 'received', 'survived', 'doa', 'fill_rate', 'survival_rate', 'doa_rate', 'total', 'revenue', 'up_down', 'ratio' ), $labels ? array( 'received_lines', 'mislabeled', 'mislabeled_rate', 'not_identified' ) : array() ) );
 			foreach ( $groups as $g ) {
-				$rows[] = array(
+				$cells = array(
 					(string) $g['name'],
 					(int) $g['orders'],
 					(int) $g['lines'],
@@ -1685,6 +1696,13 @@ class Admin_Workbook {
 					(float) $g['up_down'],
 					self::rate( $g['ratio'] ),
 				);
+				if ( $labels ) {
+					$cells[] = (int) ( $g['received_lines'] ?? 0 );
+					$cells[] = (int) ( $g['mislabeled'] ?? 0 );
+					$cells[] = self::rate( $g['mislabeled_rate'] ?? null );
+					$cells[] = (int) ( $g['unidentified'] ?? 0 );
+				}
+				$rows[] = $cells;
 			}
 			return $rows;
 		};
@@ -1692,8 +1710,8 @@ class Admin_Workbook {
 		return array(
 			'Orders'      => $orders,
 			'Totals'      => $totals,
-			'By supplier' => $group_sheet( (array) $stats['by_supplier'], 'supplier' ),
-			'By origin'   => $group_sheet( (array) $stats['by_origin'], 'origin' ),
+			'By supplier' => $group_sheet( (array) $stats['by_supplier'], 'supplier', true ),
+			'By origin'   => $group_sheet( (array) $stats['by_origin'], 'origin', true ),
 			'By group'    => $group_sheet( (array) $stats['by_group'], 'species_group' ),
 		);
 	}

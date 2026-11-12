@@ -14,7 +14,7 @@
  * this line" note), the Stays tab's Identify and Edit, the order page's
  * "Correct the fish…" and its grid, the Front Desk's unknown arrival and
  * identify, the flags and filters (Board chip, Stays filter, markers),
- * the exports, the importer that flags nothing, and
+ * the mislabel stats, the exports, the importer that flags nothing, and
  * the capability and nonce in front of the three AJAX endpoints.
  *
  * Run from the plugin root:  php includes/sections/clean-room/tests/identify-test.php
@@ -35,6 +35,7 @@ use FisHotel\Misc\Sections\Clean_Room\Import_Map;
 use FisHotel\Misc\Sections\Clean_Room\Orders;
 use FisHotel\Misc\Sections\Clean_Room\Replay;
 use FisHotel\Misc\Sections\Clean_Room\Settings;
+use FisHotel\Misc\Sections\Clean_Room\Stats;
 use FisHotel\Misc\Sections\Clean_Room\Store;
 use FisHotel\Misc\Sections\Clean_Room\Tests\Fake_Store;
 use FisHotel\Misc\Sections\Clean_Room\Workbook;
@@ -463,7 +464,67 @@ check( 'its chip links to the Stays tab filtered to them', false !== strpos( Adm
 check( 'the marker: "needs identifying" on a flagged row only, escaped', '' === Admin::unknown_html( array( 'needs_id' => false ) ) && '' === Admin::unknown_html( array() ) && false !== strpos( Admin::unknown_html( array( 'needs_id' => true ) ), '>needs identifying</span>' ) && false !== strpos( Admin::unknown_html( array( 'needs_id' => 1 ) ), 'class="fh-cr-warn fh-cr-unknown"' ) );
 check( 'the tank screens print the "??" with the species, whatever reads it', '?? ghost' === $need[2]['species'] && 0 === strpos( Admin::csv_row( $need[2] )[1], '?? ghost' ) );
 
-echo "14. Exports\n";
+echo "14. Stats: mislabeled, and not identified yet\n";
+$L = static function ( $species, $received, array $extra = array() ) {
+	return array_merge( array( 'species' => $species, 'qty_ordered' => 5, 'qty_received' => $received, 'unit_price' => 1.0, 'worth' => 5.0, 'qty_doa' => 0, 'qty_survived' => null, 'group_name' => 'Test Tangs' ), $extra );
+};
+$orders = array(
+	array(
+		'id'            => 1,
+		'ref'           => 'T-1',
+		'supplier'      => 'Test Supplier One',
+		'origin'        => 'Testland',
+		'received_date' => '2026-03-01',
+		'cost_mode'     => 'box',
+		'lines'         => array(
+			$L( 'Powder Test Tang', 4, array( 'label_name' => 'Blue Test Tang' ) ),            // mislabeled
+			$L( '?? small wrasse', 2, array( 'needs_id' => true, 'label_name' => 'Red Test Goby', 'group_name' => '' ) ), // not identified yet (not "mislabeled" while unknown)
+			$L( 'Blue Test Tang', 3, array( 'label_name' => 'blue test  TANG' ) ),              // corrected back to its label: fine
+			$L( 'Green Test Blenny', 0, array( 'label_name' => 'Something Else' ) ),            // nothing received: not counted at all
+			$L( 'Lined Test Wrasse', 6 ),                                                      // never corrected: fine
+		),
+	),
+	array(
+		'id'            => 2,
+		'ref'           => 'T-2',
+		'supplier'      => 'test supplier one',
+		'origin'        => 'Otherland',
+		'received_date' => '2026-03-08',
+		'cost_mode'     => 'box',
+		'lines'         => array(
+			$L( 'Lined Test Wrasse', 5, array( 'label_name' => 'Red Test Goby' ) ),            // mislabeled
+			$L( 'Red Test Goby', 5 ),
+		),
+	),
+	array(
+		'id'            => 3,
+		'ref'           => 'T-3',
+		'supplier'      => 'Test Supplier Two',
+		'origin'        => 'Testland',
+		'received_date' => '2026-03-09',
+		'cost_mode'     => 'bag',
+		'lines'         => array( $L( 'Red Test Goby', 5 ), $L( 'Blue Test Tang', null ) ),
+	),
+);
+check( 'label_counts(): of the lines that received fish — mislabeled, and not identified yet apart', array( 'received_lines' => 4, 'mislabeled' => 1, 'unidentified' => 1 ) === Stats::label_counts( $orders[0]['lines'] ) && array( 'received_lines' => 0, 'mislabeled' => 0, 'unidentified' => 0 ) === Stats::label_counts( array( 'junk', array( 'species' => 'x', 'label_name' => 'y' ) ) ) );
+$stats = Stats::build( $orders );
+$row   = $stats['orders'][0];
+check( 'each order row carries them, with the rate over its received lines', 4 === $row['received_lines'] && 1 === $row['mislabeled'] && near( $row['mislabeled_rate'], 0.25 ) && 1 === $row['unidentified'] && near( $stats['orders'][1]['mislabeled_rate'], 0.5 ) && 0 === $stats['orders'][2]['mislabeled'] && near( $stats['orders'][2]['mislabeled_rate'], 0.0 ) );
+$sup = array();
+foreach ( $stats['by_supplier'] as $g ) {
+	$sup[ strtolower( $g['name'] ) ] = $g;
+}
+check( 'by supplier (any case): Test Supplier One 2 mislabeled of 6 received lines (33.3 %), 1 not identified yet; Test Supplier Two none of 1', 2 === $sup['test supplier one']['mislabeled'] && 6 === $sup['test supplier one']['received_lines'] && near( $sup['test supplier one']['mislabeled_rate'], 2 / 6 ) && 1 === $sup['test supplier one']['unidentified'] && 0 === $sup['test supplier two']['mislabeled'] && 1 === $sup['test supplier two']['received_lines'] && 0 === $sup['test supplier two']['unidentified'], json_encode( $stats['by_supplier'] ) );
+$org = array();
+foreach ( $stats['by_origin'] as $g ) {
+	$org[ $g['name'] ] = $g;
+}
+check( 'by origin: Testland 1 of 5 (20 %) and 1 not identified yet; Otherland 1 of 2 (50 %)', 1 === $org['Testland']['mislabeled'] && 5 === $org['Testland']['received_lines'] && near( $org['Testland']['mislabeled_rate'], 0.2 ) && 1 === $org['Testland']['unidentified'] && 1 === $org['Otherland']['mislabeled'] && near( $org['Otherland']['mislabeled_rate'], 0.5 ) && 0 === $org['Otherland']['unidentified'] );
+check( 'the totals: 2 mislabeled of 7 received lines, 1 not identified yet', 2 === $stats['totals']['mislabeled'] && 7 === $stats['totals']['received_lines'] && near( $stats['totals']['mislabeled_rate'], 2 / 7 ) && 1 === $stats['totals']['unidentified'] );
+check( 'no received line: the rate is undefined, not 0', null === Stats::build( array() )['totals']['mislabeled_rate'] && null === Stats::row( array(), Costing::compute( array(), array() )['order'] )['mislabeled_rate'] && 0 === Stats::row( array(), Costing::compute( array(), array() )['order'] )['mislabeled'] );
+check( 'the older figures do not move', 3 === $stats['totals']['orders'] && 30 === $stats['totals']['received'] && 2 === count( $stats['by_group'] ) && array_key_exists( 'mislabeled', $stats['by_group'][0] ) );
+
+echo "15. Exports\n";
 $head = Admin::csv_header();
 check( 'the stays CSV ends with needs_id: 1 while the fish still has to be identified, else 0', 'needs_id' === $head[ count( $head ) - 1 ] && '1' === Admin::csv_row( $need[0] )[ count( $head ) - 1 ] && '0' === Admin::csv_row( $store->stay( 1, $today, $settings ) )[ count( $head ) - 1 ] && count( $head ) === count( Admin::csv_row( $need[0] ) ) );
 $rows = Admin_Workbook::stays_rows( array( $need[0], $store->stay( 1, $today, $settings ) ) );
@@ -479,8 +540,11 @@ rewind( $out );
 $csv = stream_get_contents( $out );
 fclose( $out );
 check( 'the lines CSV: the flag as 1 / 0, the label as text', false !== strpos( $csv, ',needs_id,label_name' ) && false !== strpos( $csv, ',0,"Blue Test Tang"' ) && 1 === preg_match( '/,1,\n?$/', rtrim( $csv, "\n" ) . "\n" ), $csv );
+$st = Admin_Workbook::stats_sheets( $stats, 2026 );
+check( 'the stats workbook: Orders (so the CSV too), By supplier and By origin end with received_lines, mislabeled, mislabeled_rate, not_identified', array( 'received_lines', 'mislabeled', 'mislabeled_rate', 'not_identified' ) === array_slice( $st['Orders'][0], -4 ) && array( 4, 1, 0.25, 1 ) === array_slice( $st['Orders'][1], -4 ) && array( 'received_lines', 'mislabeled', 'mislabeled_rate', 'not_identified' ) === array_slice( $st['By supplier'][0], -4 ) && array( 'received_lines', 'mislabeled', 'mislabeled_rate', 'not_identified' ) === array_slice( $st['By origin'][0], -4 ) && count( $st['By supplier'][0] ) === count( $st['By supplier'][1] ) && 2 === $st['By supplier'][1][15] && 1 === $st['By supplier'][1][17] );
+check( 'By group keeps the columns it had; Totals ends with the four rows', 'ratio' === $st['By group'][0][ count( $st['By group'][0] ) - 1 ] && array( 'received_lines', 'mislabeled', 'mislabeled_rate', 'not_identified' ) === array_column( array_slice( $st['Totals'], -4 ), 0 ) && array( 7, 2, 2 / 7, 1 ) === array_column( array_slice( $st['Totals'], -4 ), 1 ) );
 
-echo "15. The importer flags nothing\n";
+echo "16. The importer flags nothing\n";
 $dir  = fh_test_tmp_dir();
 $path = fh_fixture_build( $dir . '/FisHotel-2031-fixture.xlsx' );
 $wb   = new Workbook();
@@ -507,7 +571,7 @@ foreach ( $istore->stays as $row ) {
 }
 check( 'and so are the stays the import checks in', count( $istore->stays ) > 0 && 0 === $flagged );
 
-echo "16. The three AJAX endpoints: capability and nonce before the new action\n";
+echo "17. The three AJAX endpoints: capability and nonce before the new action\n";
 $call = static function ( $handler, array $post ) {
 	$_POST    = $post;
 	$_REQUEST = $post;
