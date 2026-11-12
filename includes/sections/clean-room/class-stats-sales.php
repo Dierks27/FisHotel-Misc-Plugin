@@ -217,6 +217,21 @@ class Stats_Sales {
 	}
 
 	/**
+	 * The statuses WooCommerce leaves out of its own reports (its
+	 * Analytics setting, and whatever a theme or plugin adds through
+	 * woocommerce_analytics_excluded_order_statuses — a wrapper order
+	 * that copies the lines of other orders, for one). The Settings card
+	 * marks them: ticking one would count such lines a second time.
+	 *
+	 * @return string[]
+	 */
+	public static function excluded_statuses() {
+		$excluded = get_option( 'woocommerce_excluded_report_order_statuses', array( 'pending', 'failed', 'cancelled' ) );
+		$excluded = apply_filters( 'woocommerce_analytics_excluded_order_statuses', is_array( $excluded ) ? $excluded : array() );
+		return self::normalize_statuses( $excluded );
+	}
+
+	/**
 	 * The statuses a site starts with: default_statuses() over what
 	 * WooCommerce says now.
 	 *

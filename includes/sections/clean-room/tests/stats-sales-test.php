@@ -248,11 +248,12 @@ $n      = Stats_Sales::add_rows(
 		array( 'row_id' => 3, 'order_id' => 12, 'product_id' => 12, 'variation_id' => 0, 'qty' => -1, 'revenue' => -40.0, 'parent_id' => 11, 'status' => 'wc-completed', 'date_created' => '2026-01-03 00:00:00', 'parent_status' => 'wc-completed', 'parent_date' => '2025-12-31 23:59:59', 'refunded_item_id' => 2 ),
 		array( 'row_id' => 4, 'order_id' => 13, 'product_id' => 12, 'variation_id' => 0, 'qty' => -1, 'revenue' => -40.0, 'parent_id' => 10, 'status' => 'wc-processing', 'date_created' => '2027-02-01 00:00:00', 'parent_status' => 'wc-completed', 'parent_date' => '2026-01-02 00:00:00', 'refunded_item_id' => 1 ),
 		array( 'row_id' => 5, 'order_id' => 14, 'product_id' => 12, 'variation_id' => 0, 'qty' => -2, 'revenue' => -80.0, 'parent_id' => 15, 'status' => 'wc-completed', 'date_created' => '2026-03-01 00:00:00', 'parent_status' => 'wc-refunded', 'parent_date' => '2026-02-01 00:00:00', 'refunded_item_id' => 9 ),
+		array( 'row_id' => 6, 'order_id' => 16, 'product_id' => 12, 'variation_id' => 0, 'qty' => -1, 'revenue' => -40.0, 'parent_id' => 17, 'status' => 'wc-shipped', 'date_created' => '2026-03-02 00:00:00', 'parent_status' => 'wc-fulfillment', 'parent_date' => '2026-02-02 00:00:00', 'refunded_item_id' => 0 ),
 		'not a row',
 	),
 	array()
 );
-check( 'add_rows() itself checks the year and the status of the ORDER — a refund takes its order\'s: the 2025 sale and its 2026 refund are out, a 2027 refund of a 2026 sale is in, a refund of a "refunded" order is out', 2 === $n && 3 === $direct['skipped'] && 0 === $direct['products']['12:0']['qty'] && near( $direct['products']['12:0']['revenue'], 0 ) && 1 === $direct['products']['12:0']['lines'] );
+check( 'add_rows() itself checks the year and the status of the ORDER — a refund takes its order\'s, whatever status its own row carries: the 2025 sale and its 2026 refund are out, a 2027 refund of a 2026 sale is in, a refund of a "refunded" order is out, and so is a refund booked on a wrapper order that is kept out of the reports', 2 === $n && 4 === $direct['skipped'] && 0 === $direct['products']['12:0']['qty'] && near( $direct['products']['12:0']['revenue'], 0 ) && 1 === $direct['products']['12:0']['lines'] );
 check( 'a refund that names no line: 20.00 came off order S17 without a line and a quantity — counted apart, off no fish', 1 === $ledger['refunds']['count'] && near( $ledger['refunds']['amount'], -20 ) );
 $fin = Stats_Sales::finish( Stats_Sales::new_ledger( 2026, $statuses ), array(), array( array( 'order_id' => 1, 'net_total' => -40.0, 'on_lines' => -40.0 ), array( 'order_id' => 2, 'net_total' => -12.5, 'on_lines' => -10.0 ), 'junk' ) );
 check( 'a refund wholly on its lines is not counted; one partly on them counts the rest (−2.50)', 1 === $fin['refunds']['count'] && near( $fin['refunds']['amount'], -2.5 ) );
@@ -499,6 +500,11 @@ for ( $y = 2001; $y <= 2000 + Stats_Sales::CACHE_YEARS; $y++ ) {
 set_transient( Stats_Sales::TRANSIENT, $cache, 60 );
 Admin_Stats::ledger( $store, 2026, $statuses );
 check( 'the cache keeps a bounded number of years: reading one more drops the one read first', Stats_Sales::CACHE_YEARS === count( get_transient( Stats_Sales::TRANSIENT )['years'] ) && ! isset( get_transient( Stats_Sales::TRANSIENT )['years'][2001] ) && isset( get_transient( Stats_Sales::TRANSIENT )['years'][2026] ) );
+$without                        = Stats_Sales::new_ledger( 2026, $statuses );
+$without['invoices']['provider'] = false;
+set_transient( Stats_Sales::TRANSIENT, array( 'v' => Stats_Sales::CACHE_VERSION, 'statuses' => $statuses, 'years' => array( 2026 => $without ), 'sales_years' => array( 2026 ) ), 60 );
+$reread = Admin_Stats::ledger( $store, 2026, $statuses );
+check( 'a year cached while the Invoices section was not there is read again now that it is — what it knows about invoice lines is part of the ledger', false === $reread['cached'] && true === $reread['invoices']['provider'] && $reread['rows'] > 0 && true === Admin_Stats::ledger( $store, 2026, $statuses )['cached'] );
 set_transient( Stats_Sales::TRANSIENT, array( 'v' => Stats_Sales::CACHE_VERSION + 1, 'statuses' => $statuses, 'years' => array( 2026 => array( 'junk' => true ) ) ), 60 );
 check( 'a cache of another shape (an older or newer version) is not read', false === Admin_Stats::ledger( $store, 2026, $statuses )['cached'] );
 delete_transient( Stats_Sales::TRANSIENT );
@@ -525,6 +531,17 @@ foreach ( $panel['rows'] as $row ) {
 	$rows[ $row['slug'] ] = $row;
 }
 check( 'the card lists every status of the store, ticked for the ones that count, the suggested ones marked; nothing saved yet', 7 === count( $rows ) && true === $rows['completed']['counts'] && true === $rows['shipped']['counts'] && true === $rows['shipped']['suggested'] && false === $rows['pending']['counts'] && false === $rows['refunded']['suggested'] && false === $panel['saved'] && true === $panel['woocommerce'] && 'Pending payment' === $rows['pending']['label'] );
+check( 'the statuses WooCommerce leaves out of its own reports are marked (pending and cancelled here; refunded and the paid ones are not)', true === $rows['pending']['excluded'] && true === $rows['cancelled']['excluded'] && false === $rows['completed']['excluded'] && false === $rows['shipped']['excluded'] && array( 'pending', 'failed', 'cancelled' ) === Stats_Sales::excluded_statuses() );
+add_filter(
+	'woocommerce_analytics_excluded_order_statuses',
+	static function ( $statuses ) {
+		$statuses[] = 'wc-on-hold';
+		return $statuses;
+	}
+);
+$marked = array_column( Admin_Stats::statuses_panel()['rows'], 'excluded', 'slug' );
+check( '… and so is one a theme or plugin keeps out of them (a wrapper order that copies other orders\' lines): it is not suggested, and the card says why not to tick it', true === $marked['on-hold'] && ! in_array( 'on-hold', Stats_Sales::suggested_statuses(), true ) && array( 'pending', 'failed', 'cancelled', 'on-hold' ) === Stats_Sales::excluded_statuses() );
+$GLOBALS['fh_filters']['woocommerce_analytics_excluded_order_statuses'] = array();
 $post = static function ( array $fields ) {
 	return Admin_Stats::statuses_request( array_merge( array( '_wpnonce' => wp_create_nonce( Admin_Stats::STATUSES_ACTION ) ), $fields ) );
 };
@@ -583,7 +600,10 @@ foreach ( array_slice( $missed, 1 ) as $line ) {
 }
 check( '… and the items in words: the unlinked product, the product that is gone, the name, why each invoice was not split, the credits', 48.0 === $items['Unlinked Test Shrimp'] && 9.0 === $items['#99 (no longer a product)'] && 25.0 === $items['Mystery Test Eel'] && 90.0 === $items['its lines do not add up to what was paid'] && 77.0 === $items['no fish lines recorded on the order'] && 50.0 === $items['a fish on it has no price'] && -10.0 === $items['credits'] && 5.0 === $items['Gift wrap'] );
 $export = Admin_Stats::export( 'sales', 'xlsx', $store, array( 'year' => '2026' ), '2026-11-12' );
-check( 'the export of the view is these sheets; a CSV carries Sales by species; the link names the year', $sheets == $export['sheets'] && 'Sales by species' === $export['csv'] && false !== strpos( $data['exports']['csv'], 'what=sales' ) && false !== strpos( $data['exports']['xlsx'], 'year=2026' ) );
+check( 'the export of the view is these sheets; a CSV carries Sales by species; the link names the year', $sheets == $export['sheets'] && 'Sales by species' === $export['csv'] && false !== strpos( $data['exports']['csv'], 'what=sales' ) && false !== strpos( $data['exports']['xlsx'], 'year=2026' ) && false === strpos( $data['exports']['xlsx'], 'sort=' ) );
+$shown = Admin_Stats::sales_data( $store, array( 'year' => 2026, 'search' => 'gob', 'sort' => 'units', 'dir' => 'asc' ) );
+$as    = Admin_Stats::export( 'sales', 'csv', $store, array( 'year' => '2026', 's' => 'gob', 'sort' => 'units', 'dir' => 'asc' ), '2026-11-12' );
+check( 'a searched and sorted view exports as shown: the link carries the search and the sort, and the sheet has that one fish', false !== strpos( $shown['exports']['csv'], 's=gob' ) && false !== strpos( $shown['exports']['csv'], 'sort=units' ) && false !== strpos( $shown['exports']['csv'], 'dir=asc' ) && 2 === count( $as['sheets']['Sales by species'] ) && 'Red Test Goby' === $as['sheets']['Sales by species'][1][0] );
 check( 'the words on the screen: how a sale was matched, the kinds of "not matched"', 'product link' === Admin_Stats::via_label( 'product' ) && 'invoice line' === Admin_Stats::via_label( 'invoice' ) && 'exact name' === Admin_Stats::via_label( 'name' ) && 'exact product title' === Admin_Stats::via_label( 'title' ) && 'learned alias' === Admin_Stats::via_label( 'alias' ) && array( 'products', 'names', 'invoices', 'other', 'credits' ) === array_keys( Admin_Stats::unmatched_labels() ) && array_keys( $data['match']['unmatched'] ) === array_keys( Admin_Stats::unmatched_labels() ) );
 
 echo "16. Nothing was written anywhere but the cache and the statuses option\n";

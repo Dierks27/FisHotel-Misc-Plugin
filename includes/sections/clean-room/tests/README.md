@@ -32,6 +32,9 @@ php  includes/sections/clean-room/tests/csv-test.php
 php  includes/sections/clean-room/tests/front-desk-test.php
 php  includes/sections/clean-room/tests/costing-test.php
 php  includes/sections/clean-room/tests/stats-test.php
+php  includes/sections/clean-room/tests/stats-prices-test.php
+php  includes/sections/clean-room/tests/stats-sales-test.php
+php  includes/sections/clean-room/tests/stats-admin-test.php
 php  includes/sections/clean-room/tests/species-test.php
 php  includes/sections/clean-room/tests/orders-test.php
 php  includes/sections/clean-room/tests/xlsx-test.php
@@ -223,7 +226,79 @@ system temp directory (`FH_TEST_TMP` overrides).
   averages (the empty batch out, the unknown batch out of the survival
   average, total fish through QT); by supplier / origin (merged
   case-insensitively) / species group ("(no group)" last); one year at
-  a time.
+  a time. **Year by year** (`Stats::compare()`): the figures of each
+  year, the change between consecutive years — a count and money as the
+  difference with the percent where one is defined (never from zero), a
+  rate in points, up / down in money only —, a supplier, origin or
+  group with no order in a year (no figure there — null, never 0 — and
+  no change into or out of it; a real 0 stays a 0), three years with
+  one skipped, one year alone, and how the screen prints a figure and a
+  change ("+2 (+200.0%)", "-44.0 pts", a dash). **Per species**
+  (`Stats::by_species()`): the rows of a year and their estimates, the
+  rows adding up to the year's weighted totals, which fish a line is (a
+  list row by id or by its exact name, the unidentified ones as one
+  row), and the sort (numbers, text, empties last, stable) and the
+  search the report views use.
+- **stats-prices-test.php** — Prices to raise: which lines give a fish
+  a row (received at a price; not a free, unknown or nameless one), the
+  landed cost per fish of the latest order (by date, then id; two lines
+  of one fish weighted) and the plain average of the last three, the
+  suggested price — the rounding to the nearest 5 at the halves, the
+  ORDER's markup, and equal to `Costing::compute()`'s line figure with
+  tariffs, fees and a percent of a box —, the price source in order
+  (the linked product; the variation of the size; a product without a
+  price → the species list; neither → none, never 0), the gap, the
+  margin and who is under (a price AT the suggestion is not), the
+  selection (under only, biggest gap first; "show all"), the group and
+  supplier filters, and on the fake store that the view writes nothing
+  — not a species, order, product, price or option; the export sheet.
+- **stats-sales-test.php** — Real sales over a FAKE of WooCommerce's
+  order tables (`fake-store.php`: order stats, lookup rows, order items
+  and their meta): the statuses list (the suggestion from the paid
+  statuses and every registered status with "ship" in it, a saved list,
+  no WooCommerce); a year read — statuses in and out of the list,
+  refunds netted into their line and into the year of the order they
+  refund, a refund without a line counted apart, a zero-quantity refund
+  row, a whole-order refund stored under the order's line ids, the same
+  ledger read three rows (and one row) at a time, a read that is cut
+  off saying so; a variation rolled up to its species; invoice fish
+  lines and invoices kept as one line (split when the lines add up,
+  whole with the reason when not, the credit apart); the exact names
+  (species name, the linked product's title, a learned alias — and what
+  is no name); **not matched** by kind with units and money, and
+  matched + not matched = every paid line; what another section may
+  hand over about an order's invoices (`invoice_parts()`: every shape);
+  the Invoices section absent, then present (asked only about orders
+  with invoice lines, a line matched by its species id, a kept invoice
+  split by the section's lines, an exception over there harmless, the
+  filter before the function, an unknown species id not believed); the
+  rows beside the landed cost (the profit, **no profit without a landed
+  cost that year**, the earlier cost for reference, a fish that landed
+  but did not sell, no estimate without a survivor count); the cache
+  (one transient, a second view reading nothing, another year, a new
+  species link showing without a re-read, dropped by an order's status
+  change — every time —, not used for another list of statuses, a
+  bounded number of years, another version ignored), Refresh and the
+  Sales statuses form (capability, nonce, an empty or unknown list
+  refused, save, reset — each dropping the cache), no WooCommerce
+  tables, and the export sheets.
+- **stats-admin-test.php** — the Stats tab's further views on the fake
+  store: which view a request asks for, the years of a comparison (the
+  last two with orders by default, one picked → the default and a
+  notice, at most six), the comparison as sheets (a row per year, the
+  change and change-% rows, empty cells for a missing year, the one
+  table of the CSV, written as CSV), the Species view's year (the
+  latest, or 0 = all, kept in its export link), search, sort and
+  heading links, its sheet, the export switch (every "what", every
+  sheet built into an .xlsx); and the SCREENS, rendered through
+  `Admin_Workbook::render()` with a PHP notice turned into a failure:
+  the strip of views, which numbers each view calls an estimate and
+  which actual, a dash in every cell of a supplier's missing year and
+  of the change next to it, a change in points, the sorted heading, a
+  name with markup escaped, Prices' read-only page without a form that
+  posts, Real sales' statuses, profit, "no landed cost in …", the not
+  matched lists, "How it adds up", the Refresh form and — without
+  WooCommerce's tables — the plain notice; the Settings card.
 - **species-test.php** — a form row normalised (whitespace, per box,
   money, dates, reef-safe, product); the candidate merge (a species row
   folding into a same-named or linked product, a duplicate dropped, a
@@ -437,7 +512,14 @@ system temp directory (`FH_TEST_TMP` overrides).
   per building, with `logs_on_date()`, `latest_doses()`,
   `imported_log_keys()` —, aliases, species rows, orders and lines with
   `update_line_fields()`, the remembered box shares, and what the real
-  Store reads from WooCommerce for the sizes, seeded by a test).
+  Store reads from WooCommerce for the sizes, seeded by a test). It also
+  fakes WooCommerce's order tables for Real sales — `sale()`, `refund()`
+  and `full_refund()` seed the order stats, the lookup rows and the order
+  items with their meta; `sales_rows()` joins them as the real query does
+  (a refund row carries its parent's status and date and the line it
+  refunds; pages by line id, then order id) but hands over the rows of
+  EVERY status, so the tests prove that `Stats_Sales::add_rows()` is what
+  keeps the unpaid ones out — and the products' current prices.
 - **xlsx-builder.php**, **fixture-builder.php** — not tests (exit 0 when
   run directly): the tiny .xlsx writer and the synthetic FisHotel-style
   workbook the reader, mapper and import tests use.
@@ -629,3 +711,30 @@ system temp directory (`FH_TEST_TMP` overrides).
     and "Not identified yet"; the XLSX has the four columns on Orders,
     By supplier and By origin, the stays export a needs_id column, the
     orders export needs_id and label_name on Lines.
+23. Stats → Compare years: the last two years with orders are ticked;
+    each supplier has a row per year and, under the later one, the
+    change (fish and percent, rates in "pts"). Tick a year in which a
+    supplier had no order: that row is dashes, not zeros, and so is the
+    change next to it. Export XLSX: four sheets; the CSV is one table.
+24. Stats → Species: a row per fish of the year; click "Landed" — the
+    most expensive first, again — the cheapest; search a group name;
+    "All years" lists a fish once per year. A fish whose survivors are
+    not typed reads "survivors not known yet", not a loss.
+25. Stats → Prices to raise: the fish priced under what their latest
+    order suggests, the biggest gap first; the suggested price equals
+    the "Suggested" of that fish's line on its order page. Tick "Show
+    all fish"; filter by a supplier — the costs are then that
+    supplier's. Nothing on the page saves anything; no price changed.
+26. Stats → Real sales: the statuses named at the top are WooCommerce's
+    paid ones plus "Shipped". Compare a linked product's units and
+    revenue for the year with WooCommerce → Analytics → Products (same
+    statuses; a refund made in another year than its order is the one
+    difference). A fish sold but not landed that year reads "no landed
+    cost in <year>", with no profit. "Not matched" lists what is no
+    species — link one of those products on the Species tab and reload:
+    its sales moved up, without a Refresh. "How it adds up" balances.
+    Complete a pending order, wait a minute (WooCommerce updates its
+    tables in the background) and reload: it is counted. Refresh reads
+    again at once. Settings → Sales statuses: untick "Shipped", Save —
+    Real sales names the shorter list and its figures drop; "Back to
+    the suggested list" restores it.

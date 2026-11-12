@@ -360,7 +360,7 @@ echo "12. The screens: Settings → Sales statuses\n";
 ob_start();
 include Clean_Room::path() . 'views/settings-sales.php';
 $html = (string) ob_get_clean();
-check( 'the card: a checkbox per status of the store, the paid ones and "shipped" ticked and marked as suggested', 4 === substr_count( $html, 'name="statuses[]"' ) && 3 === substr_count( $html, 'checked="checked"' ) && 3 === substr_count( $html, '>suggested<' ) && false !== strpos( $html, 'value="shipped"  checked="checked"' ) && false !== strpos( $html, 'value="pending" >' ) );
+check( 'the card: a checkbox per status of the store, the paid ones and "shipped" ticked and marked as suggested; "pending" is marked as left out of WooCommerce\'s own reports', 4 === substr_count( $html, 'name="statuses[]"' ) && 3 === substr_count( $html, 'checked="checked"' ) && 3 === substr_count( $html, '>suggested<' ) && false !== strpos( $html, 'value="shipped"  checked="checked"' ) && false !== strpos( $html, 'value="pending" >' ) && 1 === substr_count( $html, 'left out of WooCommerce&#039;s reports' ) );
 check( '… its own admin-post action and nonce, a note that nothing is saved yet, and no reset button until something is', false !== strpos( $html, 'name="action" value="' . Admin_Stats::STATUSES_ACTION . '"' ) && false !== strpos( $html, 'name="_wpnonce" value="' . wp_create_nonce( Admin_Stats::STATUSES_ACTION ) . '"' ) && false !== strpos( $html, 'Not saved yet' ) && false === strpos( $html, 'value="reset"' ) && false !== strpos( $html, 'id="fishotel-cleanroom-sales-statuses"' ) );
 update_option( Stats_Sales::OPTION, array( 'completed', 'old-custom' ) );
 ob_start();

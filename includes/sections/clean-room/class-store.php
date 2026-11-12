@@ -52,6 +52,12 @@
  * batch's sale date, and Replay::effective() gives every reader the same
  * effective sale date: the stay's own, else the batch's, else none.
  *
+ * Two groups of readers look outside those tables, for the Stats tab only
+ * and never to write: the sales readers (sales_rows() and its helpers —
+ * WooCommerce's wc_order_stats and wc_order_product_lookup, with the
+ * order items and their meta, the same tables with HPOS on or off) and
+ * product_prices() (the active price of a product and of its variations).
+ *
  * Every write is wrapped: missing tables or a database error mean the call
  * returns false / an empty array and nothing else happens. The species
  * search reads products straight from the posts / terms / postmeta tables

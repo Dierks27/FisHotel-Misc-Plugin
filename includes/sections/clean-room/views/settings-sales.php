@@ -43,6 +43,9 @@ $fh_sales = Admin_Stats::statuses_panel();
 					<?php if ( ! $fh_status['registered'] && $fh_sales['woocommerce'] ) : ?>
 						<span class="fh-cr-sub fh-cr-sub--inline"><?php esc_html_e( 'not a status of this store now', 'fishotel-misc-plugin' ); ?></span>
 					<?php endif; ?>
+					<?php if ( $fh_status['excluded'] ) : ?>
+						<span class="fh-cr-sub fh-cr-sub--inline" title="<?php esc_attr_e( 'WooCommerce leaves orders in this status out of its own reports — unpaid ones, or an order that only copies the lines of other orders. Ticking it could count fish twice, or count fish nobody paid for.', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'left out of WooCommerce\'s reports', 'fishotel-misc-plugin' ); ?></span>
+					<?php endif; ?>
 				</span>
 			</label>
 		<?php endforeach; ?>

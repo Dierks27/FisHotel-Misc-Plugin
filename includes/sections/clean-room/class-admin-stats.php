@@ -851,7 +851,10 @@ class Admin_Stats {
 
 	/**
 	 * One year's ledger: the cached one, else read now and cached (the
-	 * cache keeps the Stats_Sales::CACHE_YEARS years read last).
+	 * cache keeps the Stats_Sales::CACHE_YEARS years read last). A cached
+	 * year that was read while the Invoices section was not there is read
+	 * again once it is (and the other way round): what it knows about the
+	 * invoice lines is part of the ledger.
 	 *
 	 * @param object   $store    Store.
 	 * @param int      $year     The year.
@@ -863,7 +866,7 @@ class Admin_Stats {
 		$statuses = Stats_Sales::normalize_statuses( $statuses );
 		$cache    = self::cache( $statuses );
 
-		if ( isset( $cache['years'][ $year ] ) && is_array( $cache['years'][ $year ] ) ) {
+		if ( isset( $cache['years'][ $year ] ) && is_array( $cache['years'][ $year ] ) && ! empty( $cache['years'][ $year ]['invoices']['provider'] ) === self::invoices_available() ) {
 			return array_merge( $cache['years'][ $year ], array( 'cached' => true ) );
 		}
 
@@ -956,7 +959,18 @@ class Admin_Stats {
 			$rows = Stats::sort_rows( $rows, $sort, $dir );
 		}
 
-		$args = array( 'year' => $year );
+		// The export is the view as shown: its year, its search, its sort.
+		$args = array_merge(
+			array( 'year' => $year ),
+			array_filter(
+				array(
+					's'    => $search,
+					'sort' => $sort,
+					'dir'  => '' !== $sort ? $dir : '',
+				),
+				'strlen'
+			)
+		);
 
 		return array(
 			'filters'   => array(
@@ -1301,8 +1315,9 @@ class Admin_Stats {
 
 	/**
 	 * What the Settings card shows: every registered status (and any saved
-	 * one that is no longer registered) with whether it counts, the
-	 * suggested list, and whether a list was ever saved.
+	 * one that is no longer registered) with whether it counts, whether it
+	 * is suggested, and whether WooCommerce leaves it out of its own
+	 * reports; the suggested list, and whether a list was ever saved.
 	 *
 	 * @return array{rows: array[], saved: bool, suggested: string[], woocommerce: bool}
 	 */
@@ -1310,6 +1325,7 @@ class Admin_Stats {
 		$registered = Stats_Sales::registered_statuses();
 		$current    = Stats_Sales::statuses();
 		$suggested  = Stats_Sales::suggested_statuses();
+		$excluded   = Stats_Sales::excluded_statuses();
 		$stored     = Stats_Sales::normalize_statuses( get_option( Stats_Sales::OPTION, array() ) );
 
 		$rows = array();
@@ -1320,6 +1336,7 @@ class Admin_Stats {
 				'counts'     => in_array( $slug, $current, true ),
 				'suggested'  => in_array( $slug, $suggested, true ),
 				'registered' => true,
+				'excluded'   => in_array( $slug, $excluded, true ),
 			);
 		}
 		foreach ( array_merge( $current, $suggested ) as $slug ) {
@@ -1330,6 +1347,7 @@ class Admin_Stats {
 					'counts'     => in_array( $slug, $current, true ),
 					'suggested'  => in_array( $slug, $suggested, true ),
 					'registered' => false,
+					'excluded'   => in_array( $slug, $excluded, true ),
 				);
 			}
 		}
