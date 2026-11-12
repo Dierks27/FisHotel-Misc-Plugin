@@ -515,6 +515,31 @@ async function run() {
 	await later( function () {} );
 	check( '…picking one asks the server again for that tank', 2 === asked && '611' === page.posts[1].dose_tank && -1 !== page.text().indexOf( 'Add 16.6 ml Copper Power' ) );
 
+	console.log( '8. What went in today already' );
+	page = start( { screen: screen( true ) } );
+	page.tap( 'Dose +' );
+	page.tap( 'Copper' );
+	check( 'nothing dosed today: no "Already logged today" on the sheet', -1 === page.text().indexOf( 'Already logged today' ) && 0 === page.byClass( 'fh-fd-dosed' ).length );
+	var dosedScreen = screen( true );
+	dosedScreen.tank.dose.system.meds.copper.dosed = { text: 'Copper Power 16.6 ml', at: '09:20', after: true };
+	dosedScreen.tank.dose.system.meds.metro.dosed  = { text: 'Metronidazole 2.5 g', at: '08:05', after: false };
+	page = start( { screen: dosedScreen } );
+	page.tap( 'Dose +' );
+	check( 'no medication picked: nothing told yet', 0 === page.byClass( 'fh-fd-dosed' ).length );
+	page.tap( 'Copper' );
+	check( 'copper dosed after today\'s reading: the sheet says what went in, when, and to read the level again — above the sum', -1 !== page.text().indexOf( 'Already logged today: Copper Power 16.6 ml, at 09:20. That went in after the reading — read the level again before adding more.' ) && 1 === page.byClass( 'is-after' ).length && page.text().indexOf( 'Already logged today' ) < page.text().indexOf( 'Add 16.6 ml' ), page.text() );
+	check( '…the sum and Save stay the page\'s to use', 'Add 16.6 ml Copper Power 100 gal × 0.24 ppm × 0.692' === result( page ) && ! page.button( 'Save' ).disabled );
+	page.tap( 'Metro' );
+	check( 'another medication: its own dose, and no "read again"', -1 !== page.text().indexOf( 'Already logged today: Metronidazole 2.5 g, at 08:05.' ) && -1 === page.text().indexOf( 'read the level again' ) && -1 === page.text().indexOf( 'Copper Power 16.6 ml, at' ) && 0 === page.byClass( 'is-after' ).length, page.text() );
+	page.tap( 'This tank only' );
+	check( 'the other water (this tank alone, nothing dosed in it): not told', -1 === page.text().indexOf( 'Already logged today' ) );
+
+	var again = JSON.parse( JSON.stringify( preview ) );
+	again.dose.dosed = { text: 'Copper Power 16.6 ml', at: '09:20', after: true };
+	page = phrase( function () { return again; } );
+	await later( function () {} );
+	check( 'a dose phrase: the preview tells of it too, before Confirm', -1 !== page.text().indexOf( 'Already logged today: Copper Power 16.6 ml, at 09:20. That went in after the reading' ) && ! page.button( 'Confirm now' ).disabled, page.text() );
+
 	console.log( '\n' + ( failures ? failures + ' of ' + checks + ' checks FAILED' : 'All ' + checks + ' checks passed' ) );
 	process.exit( failures ? 1 : 0 );
 }

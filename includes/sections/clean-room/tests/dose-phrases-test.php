@@ -177,7 +177,9 @@ check( '"copper 2.16 to 2.4" on 621: "Add 16.6 ml Copper Power", the working, th
 $n = count( $room->logs );
 $r = fh_act( $room, 621, fh_confirm_fields( $p ), 8, 'voice' );
 check( 'Confirm: the same Save — the reading and the dose with its working, by voice', 'Copper Power 16.6 ml · Building 600, whole system · 2.16 → 2.40 ppm, 100 gal · copper reading 2.16 logged' === ( $r['message'] ?? '' ) && array( 'copper|0|' . $rb . '|2.16|', 'dose|0|' . $rb . '|16.6|Copper Power 16.6 ml · 2.16 → 2.40 ppm, 100 gal' ) === fh_new_logs( $room, $n ) && 'voice' === end( $room->logs )['source'], json_encode( $r ) );
+check( 'nothing dosed there yet today: the preview has none to tell of', null === $d['dosed'] );
 $p = fh_preview( $room, 'raise copper to 2.4' );
+check( '…asked again after that Save: the preview tells of the dose already logged today, and that the reading is older than it', 'Copper Power 16.6 ml' === ( $p['dose']['dosed']['text'] ?? '' ) && true === $p['dose']['dosed']['after'] && 1 === preg_match( '/^\d\d:\d\d$/', $p['dose']['dosed']['at'] ), json_encode( $p['dose']['dosed'] ) );
 check( '"raise copper to 2.4": Now is today\'s latest reading (2.16, with its time) — 16.6 ml again', 2.16 === $p['dose']['now'] && 1 === preg_match( '/^\d\d:\d\d$/', $p['dose']['now_at'] ) && 16.6 === $p['dose']['plan']['amount'] && array() === $p['needs'] );
 $n = count( $room->logs );
 fh_act( $room, 621, fh_confirm_fields( $p ), 8, 'voice' );

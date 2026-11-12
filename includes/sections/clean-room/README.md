@@ -182,7 +182,11 @@ the copper reading too; the toast says all of it: "Copper Power 16.6 ml
 · Building 600, whole system · 2.16 → 2.40 ppm, 100 gal · copper reading
 2.16 logged". **A dose has no undo**: it cannot come back out of the
 water, so the log stands and a correction is a note; the sheet says so
-before Save. All of it is in *Medications and the dose sum*, below.
+before Save — and, when that medication went into that water today
+already, it says that too ("Already logged today: Copper Power 16.6 ml,
+at 09:20."), with, for the copper product, "read the level again before
+adding more" while the reading is older than that dose. All of it is in
+*Medications and the dose sum*, below.
 
 **Calculator** (in the links under the fish rows, on the tank picker, and
 at `/?fh_front_desk=1&calc=1`) — a medication and any number of gallons
@@ -371,6 +375,16 @@ for that water already. The day's to-do then ticks as it always did: the
 dose step that names the medication, and the copper test by the
 reading. A plain typed dose (no sum behind it) logs exactly what it
 always logged.
+
+**Twice is said, not blocked.** The sheet and a dose phrase's preview
+show the medication's latest dose logged in that water today
+(`Dose::doses_today()`: a dose for the whole system counts in the system
+and in each tank of it, a dose in one tank in the system and in that
+tank), so a second person at the same tank — or a page reopened after a
+Save — sees it before adding more. For the copper product "Now" is
+today's reading; when the dose went in after that reading the water
+holds more than "Now" says, and the note asks for a new reading first.
+Nothing is refused: a second dose on purpose is still one Save.
 
 **Afterwards** the working is in the log's own note, so everything that
 shows or lists a dose shows it: the Events tab line, the Board's "last

@@ -405,7 +405,8 @@
 	 *
 	 * @param {Object} med   A medication of screen.medications.
 	 * @param {Object} water tank.dose.system or tank.dose.tank: gallons, reading, meds.
-	 * @return {{rate: number|null, rateFrom: string, now: string, nowAt: string, target: string, targetFrom: string, options: Object[]}}
+	 * @return {{rate: number|null, rateFrom: string, now: string, nowAt: string, target: string, targetFrom: string, options: Object[], dosed: Object|null}}
+	 *         dosed = the medication's latest dose in that water today ({text, at, after}), or null.
 	 */
 	function doseStart(med, water) {
 		var start = (med && water && water.meds && water.meds[med.key]) || {};
@@ -416,7 +417,8 @@
 			nowAt: start.nowAt || '',
 			target: present(start.target) ? String(start.target) : '',
 			targetFrom: start.targetFrom || '',
-			options: Array.isArray(start.options) ? start.options : []
+			options: Array.isArray(start.options) ? start.options : [],
+			dosed: start.dosed && typeof start.dosed === 'object' ? start.dosed : null
 		};
 	}
 
@@ -1663,6 +1665,15 @@
 		return med && med.unit === 'mg' ? 'g' : (med ? med.unit : 'g');
 	}
 
+	/* What went into this water today already — and, for copper, that the reading is older than it. */
+	function dosedNote(dosed) {
+		var text = fmt(t('dosedToday', 'Already logged today: %1$s, at %2$s.'), dosed.text, dosed.at);
+		if (dosed.after) {
+			text += ' ' + t('dosedAfter', 'That went in after the reading — read the level again before adding more.');
+		}
+		return el('p', { class: 'fh-fd-dosed' + (dosed.after ? ' is-after' : ''), text: text });
+	}
+
 	/* The medication chips; a tap picks one. */
 	function medField(current, onPick) {
 		var list = meds();
@@ -1878,6 +1889,10 @@
 				})
 			])
 		]));
+
+		if (med && start.dosed) {
+			screen.appendChild(dosedNote(start.dosed));
+		}
 
 		var result = resultBox();
 		var plan = null;
@@ -2201,6 +2216,9 @@
 			}
 			if (d.now_at && present(d.now)) {
 				box.appendChild(el('p', { class: 'fh-fd-muted', text: t('nowLabel', 'Now') + ' ' + doseMath.levelText(Number(d.now)) + ' · ' + fmt(t('nowFrom', 'today\'s reading, %s'), d.now_at) }));
+			}
+			if (d.dosed) {
+				box.appendChild(dosedNote(d.dosed));
 			}
 			var missing = needs.indexOf('now') !== -1 ? 'now' : (needs.indexOf('target') !== -1 ? 'target' : '');
 			if (missing && med) {

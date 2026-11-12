@@ -1002,3 +1002,18 @@ button.fh-fd-occ:active {
 .fh-fd-voice .fh-fd-result__work {
 	margin: 0 0 10px;
 }
+
+/* "Already logged today: …" on the Dose sheet and a dose preview. */
+.fh-fd-dosed {
+	margin: 0 0 14px;
+	padding: 10px 14px;
+	border: 1px solid var(--fd-border);
+	border-left: 4px solid var(--fd-warn);
+	border-radius: var(--fd-radius);
+	font-size: 15px;
+	color: var(--fd-text);
+}
+
+.fh-fd-dosed.is-after {
+	border-left-color: var(--fd-danger);
+}

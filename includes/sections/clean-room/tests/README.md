@@ -517,7 +517,10 @@ system temp directory (`FH_TEST_TMP` overrides).
   (day 1, day 2, a day with no copper step, two groups on different days
   — the lower first —, the CQ rates, the first medication a step names);
   today's copper reading (from today with its site time, from yesterday,
-  none, the site day rather than the UTC day); what "Now" and "Bring it
+  none, the site day rather than the UTC day); the doses logged today
+  per water (`doses_today()`: the system's and each tank's, the latest
+  of several, not yesterday's, not the other building's, and for copper
+  whether it went in after the reading); what "Now" and "Bring it
   to" start with (`defaults()`); the two waters of a tank's page against
   the in-memory store (a reading on another tank of the building reads
   the system, not this tank; a building reading reads both; the due
@@ -593,7 +596,10 @@ system temp directory (`FH_TEST_TMP` overrides).
   medication offered; the phrase preview is never auto-confirmed, asks
   for a missing reading and runs the sum on the page, Confirm posts the
   Save by voice, a spoken amount posts no sum, *Open the Dose sheet*
-  carries what was said, an unknown tank asks the server again.
+  carries what was said, an unknown tank asks the server again; and
+  "Already logged today: …" on the sheet and the preview — per
+  medication and water, with "read the level again" only for copper
+  dosed after the reading.
 - **medications-admin.test.js** — the pure parts of
   `js/medications-admin.js`: what 100 gallons take at a rate (the
   editor's hint), the rates the Board's Calculator offers, its sum.

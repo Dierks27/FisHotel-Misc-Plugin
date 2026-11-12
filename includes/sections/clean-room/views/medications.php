@@ -13,6 +13,8 @@ use FisHotel\Misc\Sections\Clean_Room\Clean_Room;
 use FisHotel\Misc\Sections\Clean_Room\Medications;
 use FisHotel\Misc\Sections\Clean_Room\Medications_Admin;
 
+require_once Clean_Room::path() . 'class-medications-admin.php'; // Settings::init() loads it; this view does not rely on that.
+
 $fh_meds  = Medications_Admin::panel();
 $fh_blank = array(
 	'key'        => '',

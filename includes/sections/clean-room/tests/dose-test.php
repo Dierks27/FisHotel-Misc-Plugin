@@ -212,7 +212,40 @@ $w = Dose::waters( $store, $t521, $now_day, $settings );
 check( 'a day-2 group in 523: its dose steps are due in the system, not in tank 521 alone', array( 'Copper Power to 2.4', 'Metronidazole' ) === array_column( $w['system']['items'], 'label' ) && array() === $w['tank']['items'] && array( 'Copper Power to 2.4', 'Metronidazole' ) === array_column( Dose::waters( $store, $t523, $now_day, $settings )['tank']['items'], 'label' ), json_encode( $w['system']['items'] ) );
 check( '…and not in the other building', array() === Dose::waters( $store, $t621, $now_day, $settings )['system']['items'] );
 $sheet = Dose::sheet_data( Medications::active( $seed ), $w, $settings, $seed );
-check( 'the sheet\'s data: per water the gallons, today\'s reading and each medication\'s start (no entry for a typed one)', 205.0 === $sheet['system']['gallons'] && array( 'value' => 2.2, 'at' => $w['system']['reading']['at'] ) === $sheet['system']['reading'] && 2.2 === $sheet['system']['meds']['copper']['now'] && 2.4 === $sheet['system']['meds']['copper']['target'] && 'schedule' === $sheet['system']['meds']['copper']['targetFrom'] && 2.5 === $sheet['tank']['meds']['copper']['target'] && 'settings' === $sheet['tank']['meds']['copper']['targetFrom'] && 25.0 === $sheet['system']['meds']['metro']['rate'] && ! isset( $sheet['system']['meds']['salt'] ) && 20.0 === $sheet['tank']['gallons'], json_encode( $sheet['system']['meds']['copper'] ) );
+check( 'the sheet\'s data: per water the gallons, today\'s reading and each medication\'s start (a typed one has none to start from)', 205.0 === $sheet['system']['gallons'] && array( 'value' => 2.2, 'at' => $w['system']['reading']['at'] ) === $sheet['system']['reading'] && 2.2 === $sheet['system']['meds']['copper']['now'] && 2.4 === $sheet['system']['meds']['copper']['target'] && 'schedule' === $sheet['system']['meds']['copper']['targetFrom'] && 2.5 === $sheet['tank']['meds']['copper']['target'] && 'settings' === $sheet['tank']['meds']['copper']['targetFrom'] && 25.0 === $sheet['system']['meds']['metro']['rate'] && null === $sheet['system']['meds']['salt']['rate'] && null === $sheet['system']['meds']['salt']['dosed'] && null === $sheet['system']['meds']['copper']['dosed'] && 20.0 === $sheet['tank']['gallons'], json_encode( $sheet['system']['meds']['copper'] ) );
+
+echo "9b. What went in today already\n";
+$b500 = (int) $t521['building_id'];
+check( 'no dose logged today: none to tell of', array() === $w['system']['doses'] && array() === $w['tank']['doses'] );
+// The building's 2.2 reading above was stamped a second ahead; this dose goes in with it, as a Save writes both.
+$store->log_building( $b500, array( 'kind' => 'dose', 'value' => 16.6, 'note' => 'Copper Power 16.6 ml · 2.20 → 2.40 ppm, 205 gal', 'logged_at' => gmdate( 'Y-m-d H:i:s', time() + 1 ) ) );
+$store->log_dose( 0, (int) $t523['id'], 'metro', 500, 'mg', '25 mg per gallon, 20 gal' );
+$store->log_tank( (int) $t523['id'], array( 'kind' => 'dose', 'value' => 9.9, 'note' => 'Copper Power 9.9 ml', 'logged_at' => gmdate( 'Y-m-d H:i:s', time() - 86400 * 2 ) ) );
+$w = Dose::waters( $store, $t521, $now_day, $settings );
+check( 'a dose for the whole system is told of in the system and in each tank of it: the dose as logged, with its time', 'Copper Power 16.6 ml' === ( $w['system']['doses']['copper']['text'] ?? '' ) && 'Copper Power 16.6 ml' === ( $w['tank']['doses']['copper']['text'] ?? '' ) && Dose::site_clock( $w['system']['doses']['copper']['logged_at'] ) === $w['system']['doses']['copper']['at'] && '' !== $w['system']['doses']['copper']['at'], json_encode( $w['system']['doses'] ) );
+check( 'a dose in tank 523 alone: in the system and in 523, not in tank 521', 'Metronidazole 500 mg' === ( $w['system']['doses']['metro']['text'] ?? '' ) && ! isset( $w['tank']['doses']['metro'] ) && isset( Dose::waters( $store, $t523, $now_day, $settings )['tank']['doses']['metro'] ) );
+check( '…and none of it in the other building; a dose two days old is not today\'s', array() === Dose::waters( $store, $t621, $now_day, $settings )['system']['doses'] );
+$d = Dose::defaults( $seed['metro'], $w['system'], $settings, $seed );
+check( 'the sheet starts with it: "Metronidazole 500 mg" and its time; no "read again" for a medication with no level', is_array( $d['dosed'] ) && 'Metronidazole 500 mg' === $d['dosed']['text'] && false === $d['dosed']['after'] && null === Dose::defaults( $seed['metro'], $w['tank'], $settings, $seed )['dosed'], json_encode( $d['dosed'] ) );
+$d = Dose::defaults( $seed['copper'], $w['system'], $settings, $seed );
+check( 'copper dosed in the same second as the reading (a Save logs both): the reading is older than the dose', true === $d['dosed']['after'] && 2.2 === $d['now'], json_encode( $d ) );
+check( 'a typed medication is told of too', null === Dose::defaults( $seed['salt'], $w['system'], $settings, $seed )['dosed'] && 'Salt 2 each' === Dose::defaults( $seed['salt'], array( 'reading' => null, 'items' => array(), 'doses' => Dose::doses_today( array( array( 'kind' => 'dose', 'note' => 'Salt 2 each', 'logged_at' => gmdate( 'Y-m-d H:i:s' ) ) ), $now_day, $seed ) ), $settings, $seed )['dosed']['text'] );
+$store->log_building( $b500, array( 'kind' => 'copper', 'value' => 2.38, 'logged_at' => gmdate( 'Y-m-d H:i:s', time() + 5 ) ) );
+$w = Dose::waters( $store, $t521, $now_day, $settings );
+$d = Dose::defaults( $seed['copper'], $w['system'], $settings, $seed );
+check( 'a reading taken after the dose: "Now" is that reading, and nothing asks to read again', 2.38 === $d['now'] && false === $d['dosed']['after'] && 'Copper Power 16.6 ml' === $d['dosed']['text'] );
+$store->log_building( $b500, array( 'kind' => 'dose', 'value' => 1.4, 'note' => 'Copper Power 1.4 ml · 2.38 → 2.40 ppm, 205 gal', 'logged_at' => gmdate( 'Y-m-d H:i:s', time() + 6 ) ) );
+$rows = array(
+	array( 'kind' => 'dose', 'note' => 'Copper Power 16.6 ml · 2.20 → 2.40 ppm, 205 gal', 'logged_at' => gmdate( 'Y-m-d H:i:s', time() - 60 ) ),
+	array( 'kind' => 'dose', 'note' => 'Copper Power 1.4 ml', 'logged_at' => gmdate( 'Y-m-d H:i:s' ) ),
+	array( 'kind' => 'copper', 'value' => 2.4, 'note' => 'Copper Power', 'logged_at' => gmdate( 'Y-m-d H:i:s' ) ),
+	array( 'kind' => 'dose', 'note' => 'Something not on the list 3 ml', 'logged_at' => gmdate( 'Y-m-d H:i:s' ) ),
+);
+$t = Dose::doses_today( $rows, $now_day, $seed );
+check( 'several doses of one medication: the latest; a reading or a dose of nothing on the list is no dose of it', array( 'copper' ) === array_keys( $t ) && 'Copper Power 1.4 ml' === $t['copper']['text'], json_encode( $t ) );
+check( 'no date, no rows: nothing', array() === Dose::doses_today( $rows, '', $seed ) && array() === Dose::doses_today( array(), $now_day, $seed ) );
+$sheet = Dose::sheet_data( Medications::active( $seed ), Dose::waters( $store, $t521, $now_day, $settings ), $settings, $seed );
+check( 'the sheet\'s data carries it per water and medication', 'Copper Power 1.4 ml' === $sheet['system']['meds']['copper']['dosed']['text'] && true === $sheet['system']['meds']['copper']['dosed']['after'] && 'Metronidazole 500 mg' === $sheet['system']['meds']['metro']['dosed']['text'] && null === $sheet['tank']['meds']['metro']['dosed'] && null === $sheet['system']['meds']['salt']['dosed'], json_encode( $sheet['system']['meds'] ) );
 
 echo "10. What a Save's post turns into\n";
 $a = Dose::args_from_request( $seed['copper'], array( 'calc' => '1', 'now' => '2.16', 'target' => '2.4', 'rate' => '99' ), 100 );

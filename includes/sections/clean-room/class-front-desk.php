@@ -322,6 +322,8 @@ class Front_Desk {
 			'ofTheWater'  => __( 'of the water', 'fishotel-misc-plugin' ),
 			'useResult'   => __( 'Use the result: %s', 'fishotel-misc-plugin' ),
 			'alsoReading' => __( 'Saving also logs the copper reading %s (once).', 'fishotel-misc-plugin' ),
+			'dosedToday'  => __( 'Already logged today: %1$s, at %2$s.', 'fishotel-misc-plugin' ),
+			'dosedAfter'  => __( 'That went in after the reading — read the level again before adding more.', 'fishotel-misc-plugin' ),
 			'noMeds'      => __( 'No medication is offered — add or bring one back in Settings → Medications (Room board).', 'fishotel-misc-plugin' ),
 			'calculator'  => __( 'Calculator', 'fishotel-misc-plugin' ),
 			'calcHint'    => __( 'Any water — a bucket, a tub, a tank that is not set up. Nothing is saved.', 'fishotel-misc-plugin' ),

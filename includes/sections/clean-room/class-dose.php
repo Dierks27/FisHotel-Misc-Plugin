@@ -705,9 +705,45 @@ class Dose {
 	}
 
 	/**
+	 * Today's latest dose of each medication among log rows (pure) — so the
+	 * sheet can say what went in already, before more is added.
+	 *
+	 * @param array[] $rows  Tank log rows (kind, note, logged_at UTC).
+	 * @param string  $today Site date.
+	 * @param array   $list  key => medication.
+	 * @return array<string, array{text: string, logged_at: string, at: string}> By medication key; text =
+	 *                       the dose as it was logged ("Copper Power 16.6 ml").
+	 */
+	public static function doses_today( array $rows, $today, array $list ) {
+		if ( ! Replay::is_date( $today ) ) {
+			return array();
+		}
+		list( $start, $end ) = Store::site_day_bounds( $today );
+		$out                 = array();
+		foreach ( $rows as $row ) {
+			$at = (string) ( $row['logged_at'] ?? '' );
+			if ( 'dose' !== (string) ( $row['kind'] ?? '' ) || strcmp( $at, $start ) < 0 || strcmp( $at, $end ) > 0 ) {
+				continue;
+			}
+			$note = trim( Import::strip_marker( (string) ( $row['note'] ?? '' ) ) );
+			$key  = Medications::key_for( $note, $list );
+			if ( null === $key || ( isset( $out[ $key ] ) && strcmp( $at, $out[ $key ]['logged_at'] ) < 0 ) ) {
+				continue;
+			}
+			$out[ $key ] = array(
+				'text'      => explode( ' · ', $note, 2 )[0],
+				'logged_at' => $at,
+				'at'        => self::site_clock( $at ),
+			);
+		}
+		return $out;
+	}
+
+	/**
 	 * The two waters a dose on a tank's page can go into — the building's
 	 * whole system and this tank alone — each with its gallons, today's
-	 * latest copper reading for it and the dose steps due today in it.
+	 * latest copper reading for it, the doses logged in it today and the
+	 * dose steps due today in it.
 	 *
 	 * A reading on any tank of the building (or on the building itself)
 	 * reads the system's water; a tank's own water is read by its own
@@ -718,7 +754,8 @@ class Dose {
 	 * @param string     $today     Site date.
 	 * @param array      $settings  Settings.
 	 * @param array|null $protocols Settings::protocols() (null = read them).
-	 * @return array{system: array, tank: array, building_id: int} Each water: gallons (float), reading (array|null), items (array[]).
+	 * @return array{system: array, tank: array, building_id: int} Each water: gallons (float), reading
+	 *               (array|null), doses (doses_today()), items (array[]).
 	 */
 	public static function waters( $store, array $tank, $today, array $settings, $protocols = null ) {
 		$tank_id     = (int) ( $tank['id'] ?? 0 );
@@ -746,18 +783,22 @@ class Dose {
 				$tank_stays[] = $stay;
 			}
 		}
-		$steps = Protocol::steps_for( is_array( $building ) ? $building : array(), $protocols );
+		$steps     = Protocol::steps_for( is_array( $building ) ? $building : array(), $protocols );
+		$list      = Medications::from_settings( $settings );
+		$tank_rows = isset( $logs[ $tank_id ] ) ? (array) $logs[ $tank_id ] : array();
 
 		return array(
 			'building_id' => $building_id,
 			'system'      => array(
 				'gallons' => (float) Layout::system_gallons( is_array( $building ) ? $building : (array) ( $tank['building'] ?? array() ), $tanks ),
 				'reading' => self::reading_today( $system_rows, $today ),
+				'doses'   => self::doses_today( $system_rows, $today, $list ),
 				'items'   => self::due_items( $system_stays, $steps, $today, $area ),
 			),
 			'tank'        => array(
 				'gallons' => (float) max( 0, (int) ( $tank['gallons'] ?? 0 ) ),
-				'reading' => self::reading_today( isset( $logs[ $tank_id ] ) ? (array) $logs[ $tank_id ] : array(), $today ),
+				'reading' => self::reading_today( $tank_rows, $today ),
+				'doses'   => self::doses_today( $tank_rows, $today, $list ),
 				'items'   => self::due_items( $tank_stays, $steps, $today, $area ),
 			),
 		);
@@ -772,13 +813,17 @@ class Dose {
 	 *           days), else for the copper product the copper target of
 	 *           the settings, else nothing;
 	 *   rate    the rate a due step names ("Chloroquine 40 mg/gal"; the
-	 *           lowest of several), else the medication's own.
+	 *           lowest of several), else the medication's own;
+	 *   dosed   the medication's latest dose logged in that water today
+	 *           (text, at), and whether it went in AFTER today's reading
+	 *           (after) — then "Now" is no longer what the water holds,
+	 *           and the sheet says to read again before adding more.
 	 *
 	 * @param array $medication Medication.
-	 * @param array $water      One of waters(): reading, items.
+	 * @param array $water      One of waters(): reading, doses, items.
 	 * @param array $settings   Settings (copper_target).
 	 * @param array $list       key => medication.
-	 * @return array{now: float|null, now_at: string, target: float|null, target_from: string, rate: float|null, rate_from: string, options: array[]}
+	 * @return array{now: float|null, now_at: string, target: float|null, target_from: string, rate: float|null, rate_from: string, options: array[], dosed: array|null}
 	 */
 	public static function defaults( array $medication, array $water, array $settings, array $list ) {
 		$out  = array(
@@ -789,8 +834,18 @@ class Dose {
 			'rate'        => null,
 			'rate_from'   => '',
 			'options'     => array(),
+			'dosed'       => null,
 		);
 		$mode = (string) ( $medication['mode'] ?? 'typed' );
+		$key  = (string) ( $medication['key'] ?? '' );
+		if ( isset( $water['doses'][ $key ] ) && is_array( $water['doses'][ $key ] ) ) {
+			$dosed        = $water['doses'][ $key ];
+			$out['dosed'] = array(
+				'text'  => (string) $dosed['text'],
+				'at'    => (string) $dosed['at'],
+				'after' => Medications::is_copper( $medication ) && ! empty( $water['reading'] ) && strcmp( (string) $dosed['logged_at'], (string) $water['reading']['logged_at'] ) >= 0,
+			);
+		}
 		if ( 'typed' === $mode ) {
 			return $out;
 		}
@@ -836,9 +891,6 @@ class Dose {
 			$water = isset( $waters[ $scope ] ) && is_array( $waters[ $scope ] ) ? $waters[ $scope ] : array();
 			$meds  = array();
 			foreach ( $medications as $medication ) {
-				if ( 'typed' === (string) $medication['mode'] ) {
-					continue;
-				}
 				$d                                  = self::defaults( $medication, $water, $settings, $list );
 				$meds[ (string) $medication['key'] ] = array(
 					'now'        => $d['now'],
@@ -848,6 +900,7 @@ class Dose {
 					'rate'       => $d['rate'],
 					'rateFrom'   => $d['rate_from'],
 					'options'    => $d['options'],
+					'dosed'      => $d['dosed'],
 				);
 			}
 			$out[ $scope ] = array(
@@ -996,8 +1049,9 @@ class Dose {
 	 * that amount is what is logged.
 	 *
 	 * Adds to $preview['dose']: whole, place, gallons, now, now_at, target,
-	 * rate, rate_label, plan (plan(), or state 'spoken'); asks for 'now' /
-	 * 'target' in needs when a level is still missing.
+	 * rate, rate_label, dosed (the medication's latest dose in that water
+	 * today, see defaults()), plan (plan(), or state 'spoken'); asks for
+	 * 'now' / 'target' in needs when a level is still missing.
 	 *
 	 * @param array      $preview   Parser::parse() with intent 'dose'.
 	 * @param object     $store     Store (or stand-in).
@@ -1026,6 +1080,7 @@ class Dose {
 
 		$dose['whole']      = $whole;
 		$dose['place']      = self::place( $tank, $whole );
+		$dose['dosed']      = $defaults['dosed'];
 		$dose['gallons']    = (float) $water['gallons'];
 		$dose['now_at']     = '';
 		$dose['rate']       = null;
