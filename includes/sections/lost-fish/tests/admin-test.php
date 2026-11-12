@@ -72,9 +72,9 @@ function fh_shop() {
 
 	fh_product( 812, array( 'class' => 'premium' ) );
 	fh_product( 813, array( 'class' => 'premium' ) );
-	fh_order( 501, array( 'paid' => 1000, 'shipping' => 19.00, 'first_name' => 'Avery', 'last_name' => 'Example', 'email' => 'avery@example.test', 'customer_id' => 41, 'meta' => array( '_fishotel_shipping_date' => '2026-11-18' ), 'lines' => array( 51 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'qty' => 1, 'total' => 60.00 ), 52 => array( 'name' => 'Harbor Tang', 'product_id' => 813, 'qty' => 2, 'total' => 460.00 ) ) ) );
-	fh_order( 502, array( 'paid' => 3000, 'shipping' => 19.00, 'first_name' => 'Blake', 'last_name' => 'Sample', 'email' => 'blake@example.test', 'customer_id' => 42, 'lines' => array( 53 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'qty' => 2, 'total' => 120.00 ), 54 => array( 'name' => 'Harbor Tang', 'product_id' => 813, 'qty' => 3, 'total' => 690.00 ) ) ) );
-	fh_order( 503, array( 'paid' => 2000, 'shipping' => 49.99, 'first_name' => 'Casey', 'last_name' => 'Tester', 'email' => 'casey@example.test', 'lines' => array( 55 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'qty' => 1, 'total' => 60.00 ) ) ) );
+	fh_order( 501, array( 'paid' => 1000, 'shipping' => 15.00, 'first_name' => 'Avery', 'last_name' => 'Example', 'email' => 'avery@example.test', 'customer_id' => 41, 'meta' => array( '_fishotel_shipping_date' => '2026-11-18' ), 'lines' => array( 51 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'qty' => 1, 'total' => 60.00 ), 52 => array( 'name' => 'Harbor Tang', 'product_id' => 813, 'qty' => 2, 'total' => 460.00 ) ) ) );
+	fh_order( 502, array( 'paid' => 3000, 'shipping' => 15.00, 'first_name' => 'Blake', 'last_name' => 'Sample', 'email' => 'blake@example.test', 'customer_id' => 42, 'lines' => array( 53 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'qty' => 2, 'total' => 120.00 ), 54 => array( 'name' => 'Harbor Tang', 'product_id' => 813, 'qty' => 3, 'total' => 690.00 ) ) ) );
+	fh_order( 503, array( 'paid' => 2000, 'shipping' => 40.00, 'first_name' => 'Casey', 'last_name' => 'Tester', 'email' => 'casey@example.test', 'lines' => array( 55 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'qty' => 1, 'total' => 60.00 ) ) ) );
 
 	$rooms = new Fh_Fake_Rooms();
 	$rooms->add( 1, array( 'product_id' => 812, 'species' => 'Lagoon Goby', 'size_slug' => 'm', 'size_label' => 'Medium', 'qty_live' => 3 ) );
@@ -223,7 +223,7 @@ $c = $cases->open_by_hand( 502, 'i:54', 1, 5 )['case']['id'];                   
 $d = $cases->open_by_hand( 503, 'i:55', 1, 5 )['case']['id'];
 $cases->send( $d, 5 );                                                           // Sent, waiting.
 foreach ( array( 505, 506, 507, 508, 509 ) as $id ) {
-	fh_order( $id, array( 'paid' => 100 + $id, 'shipping' => 49.99, 'first_name' => 'Dana', 'last_name' => 'Trial', 'email' => 'dana' . $id . '@example.test', 'customer_id' => $id, 'lines' => array( $id * 10 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'qty' => 1, 'total' => 60.00 ) ) ) );
+	fh_order( $id, array( 'paid' => 100 + $id, 'shipping' => 40.00, 'first_name' => 'Dana', 'last_name' => 'Trial', 'email' => 'dana' . $id . '@example.test', 'customer_id' => $id, 'lines' => array( $id * 10 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'qty' => 1, 'total' => 60.00 ) ) ) );
 }
 $ids = array();
 foreach ( array( 505 => 'refund', 506 => 'credit', 507 => 'retry', 508 => 'cancel' ) as $order_id => $choice ) {
@@ -257,21 +257,22 @@ check_same( '… two of them cannot be pressed: two cases wait on one order, so 
 check_contains( '… and the case says why', 'other lost-fish case on this order still waits for an answer', $html );
 check_contains( '… and what blocks it', 'fill it in, or confirm zero', $html );
 check_contains( 'the numbers of every choice: the fish', 'Paid for the fish', $html );
-check_contains( '… the shipping difference, worked out', '$30.99', $html );
-check_contains( '… refund and credit less the difference', '$29.01', $html );
-check_contains( '… cancel the whole order', '$539.00', $html );
+check_contains( '… the shipping difference, worked out', '$25.00', $html );
+check_contains( '… refund and credit less the difference', '$35.00', $html );
+check_contains( '… cancel the whole order', '$535.00', $html );
 check_contains( 'the e-mail preview, in a frame that can run nothing', '<iframe class="fh-lf-preview__frame" sandbox=""', $html );
 check_contains( '… with the words of the e-mail', 'we lost 1 × Lagoon Goby from your order #501', $html );
 check_lacks( '… and no live link in it', 'fh_lost_fish=', $html );
-check_contains( 'the form carries the refund the page shows', 'name="shown_refund" value="2901"', $html );
+check_contains( 'the form carries the refund the page shows', 'name="shown_refund" value="3500"', $html );
 check_contains( 'every form carries its case\'s nonce', 'name="_wpnonce" value="' . wp_create_nonce( Admin::NONCE_CASE . $a ) . '"', $html );
-check_contains( 'after an answer: what to do — refund', 'Cancel order #508 and refund $109.99.', $html );
+check_contains( 'after an answer: what to do — refund', 'Cancel order #508 and refund $100.00.', $html );
 check_contains( '… credit', 'to the customer&#039;s wallet.', $html );
 check_contains( '… try again, with the reminder to note it', 'note it yourself', $html );
 check_contains( '… and that the site did none of it', 'the site did none of it', $html );
 check_contains( 'a Done button with a note', 'placeholder="Note (optional)', $html );
 check_contains( 'a case without an answer after its reminder is flagged', 'No answer', $html );
 check_contains( 'a finished case shows its note', 'Note: Refunded through the card.', $html );
+check_contains( '… and what was chosen, with its amount', 'The customer chose: refund the lost fish — $60.00', $html );
 check_contains( 'reopen is offered on what is not open', '>Reopen</button>', $html );
 check_contains( 'what the screen can reach is said plainly', 'ShipTracker is not active', $html );
 check_contains( '…', 'The Requests section is not available', $html );

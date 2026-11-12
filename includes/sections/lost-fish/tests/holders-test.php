@@ -234,8 +234,8 @@ $order = fh_order(
 	701,
 	array(
 		'paid'         => 5000,
-		'shipping'     => 19.00,
-		'shipping_tax' => 1.90,
+		'shipping'     => 15.00,
+		'shipping_tax' => 1.50,
 		'refunded'     => 10.00,
 		'customer_id'  => 44,
 		'meta'         => array( '_fishotel_shipping_date' => '2026-11-18' ),
@@ -248,7 +248,7 @@ $order = fh_order(
 $orders = new Orders( $store );
 $facts  = $orders->facts( $order );
 check_same( 'who', array( 701, '701', 'Avery Example', 'Avery', 'avery@example.test', 44 ), array( $facts['id'], $facts['number'], $facts['customer_name'], $facts['first_name'], $facts['email'], $facts['customer_id'] ) );
-check_same( 'the money, in cents: total, refunded, shipping, shipping tax', array( 12090, 1000, 1900, 190 ), array( $facts['total'], $facts['refunded'], $facts['ship_charged'], $facts['ship_tax'] ) );
+check_same( 'the money, in cents: total, refunded, shipping, shipping tax', array( 11650, 1000, 1500, 150 ), array( $facts['total'], $facts['refunded'], $facts['ship_charged'], $facts['ship_tax'] ) );
 check_same( 'the currency symbol as plain text', '$', $facts['symbol'] );
 check_same( 'paid, open, not a wrapper, nothing shipped', array( true, false, false, false ), array( $facts['paid'], $facts['closed'], $facts['wrapper'], $facts['any_shipped'] ) );
 check_same( 'the delivery date the checkout stored, and the ship date: the day before', array( '2026-11-18', '2026-11-17' ), array( $facts['delivery_date'], $facts['ship_date'] ) );

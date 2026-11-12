@@ -7,7 +7,7 @@
  * gone, no rate, another case still waiting) — which must come back as
  * unknown, never as a guess.
  *
- * The rates here are invented (fakes.php: 49.99, or 19.00 from 500.00 of
+ * The rates here are invented (fakes.php: 40.00, or 15.00 from 480.00 of
  * "premium" goods; "free" goods ship for nothing). The second half prices
  * through stand-ins for WooCommerce's zone and method, to prove which
  * method is asked, with which package, and that the session and the cart
@@ -45,7 +45,7 @@ $order = fh_order(
 	101,
 	array(
 		'paid'     => 1000,
-		'shipping' => 19.00,
+		'shipping' => 15.00,
 		'lines'    => array(
 			11 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'qty' => 1, 'total' => 60.00 ),
 			12 => array( 'name' => 'Harbor Tang', 'product_id' => 813, 'qty' => 2, 'total' => 460.00 ),
@@ -53,17 +53,17 @@ $order = fh_order(
 	)
 );
 $d = Shipping::difference( $order, $fish, array(), $opts );
-check_same( '520.00 of fish at 19.00 shipping; without the 60.00 fish it is 460.00 and ships at 49.99: the difference is 30.99', array( Shipping::DROP, 3099, 1900, 4999 ), array( $d['status'], $d['diff'], $d['charged'], $d['reduced'] ) );
+check_same( '520.00 of fish at 15.00 shipping; without the 60.00 fish it is 460.00 and ships at 40.00: the difference is 25.00', array( Shipping::DROP, 2500, 1500, 4000 ), array( $d['status'], $d['diff'], $d['charged'], $d['reduced'] ) );
 check_same( 'the goods that ship, before and after', array( 52000, 46000 ), array( $d['goods'], $d['goods_after'] ) );
-check_contains( 'the note says both rates', '$49.99', $d['note'] );
-check_contains( '…', '$19.00', $d['note'] );
+check_contains( 'the note says both rates', '$40.00', $d['note'] );
+check_contains( '…', '$15.00', $d['note'] );
 
 echo "\nStays over the threshold\n";
 $order = fh_order(
 	102,
 	array(
 		'paid'     => 1000,
-		'shipping' => 19.00,
+		'shipping' => 15.00,
 		'lines'    => array(
 			11 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'qty' => 1, 'total' => 60.00 ),
 			12 => array( 'name' => 'Harbor Tang', 'product_id' => 813, 'qty' => 3, 'total' => 690.00 ),
@@ -71,13 +71,13 @@ $order = fh_order(
 	)
 );
 $d = Shipping::difference( $order, $fish, array(), $opts );
-check_same( '750.00 of fish; without the 60.00 fish still 690.00: no difference', array( Shipping::NONE, 0, 1900 ), array( $d['status'], $d['diff'], $d['reduced'] ) );
+check_same( '750.00 of fish; without the 60.00 fish still 690.00: no difference', array( Shipping::NONE, 0, 1500 ), array( $d['status'], $d['diff'], $d['reduced'] ) );
 
 $order = fh_order(
 	103,
 	array(
 		'paid'     => 1000,
-		'shipping' => 49.99,
+		'shipping' => 40.00,
 		'lines'    => array(
 			11 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'qty' => 1, 'total' => 60.00 ),
 			12 => array( 'name' => 'Sand Shrimp', 'product_id' => 900, 'qty' => 1, 'total' => 20.00 ),
@@ -92,22 +92,22 @@ $order = fh_order(
 	104,
 	array(
 		'paid'     => 1000,
-		'shipping' => 19.00,
+		'shipping' => 15.00,
 		'lines'    => array(
-			11 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'qty' => 9, 'total' => 540.00 ),
+			11 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'qty' => 8, 'total' => 480.00 ),
 		),
 	)
 );
 $d = Shipping::difference( $order, $fish, array(), $opts );
-check_same( 'one of nine at 60.00: 480.00 are left, under the threshold', array( Shipping::DROP, 3099, 48000 ), array( $d['status'], $d['diff'], $d['goods_after'] ) );
+check_same( 'one of eight at 60.00: 420.00 are left, under the threshold', array( Shipping::DROP, 2500, 42000 ), array( $d['status'], $d['diff'], $d['goods_after'] ) );
 
 echo "\nThe order's own shipping tax\n";
 $order = fh_order(
 	105,
 	array(
 		'paid'         => 1000,
-		'shipping'     => 19.00,
-		'shipping_tax' => 1.90,
+		'shipping'     => 15.00,
+		'shipping_tax' => 1.50,
 		'lines'        => array(
 			11 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'qty' => 1, 'total' => 60.00 ),
 			12 => array( 'name' => 'Harbor Tang', 'product_id' => 813, 'qty' => 2, 'total' => 460.00 ),
@@ -115,7 +115,7 @@ $order = fh_order(
 	)
 );
 $d = Shipping::difference( $order, $fish, array(), $opts );
-check_same( 'shipping was taxed at 10%: so is the difference', array( 3409, 190 ), array( $d['diff'], $d['charged_tax'] ) );
+check_same( 'shipping was taxed at 10%: so is the difference', array( 2750, 150 ), array( $d['diff'], $d['charged_tax'] ) );
 
 echo "\nFree on purpose\n";
 $order = fh_order(
@@ -137,7 +137,7 @@ $d     = Shipping::difference(
 	array(
 		'rater' => static function () use ( &$asked ) {
 			$asked++;
-			return 4999;
+			return 4000;
 		},
 	)
 );
@@ -165,7 +165,7 @@ $order = fh_order(
 	301,
 	array(
 		'paid'     => 1000,
-		'shipping' => 19.00,
+		'shipping' => 15.00,
 		'lines'    => array(
 			11 => array( 'name' => 'Lagoon Goby', 'qty' => 2, 'total' => 120.00, 'meta' => array( '_fh_invoice_fish' => 1, '_fh_invoice_product_id' => 7001 ) ),
 			12 => array( 'name' => 'Harbor Tang', 'qty' => 2, 'total' => 460.00, 'meta' => array( '_fh_invoice_fish' => 1, '_fh_invoice_product_id' => 7001 ) ),
@@ -177,26 +177,26 @@ $order->fees        = array( 13 => $fee );
 $model              = Shipping::model( $order );
 check_same( 'two fish lines and a credit are ONE row again: the invoice product, once, at the invoice\'s total', array( array( 'inv:7001' ), 1, 53000, true ), array( array_keys( $model['rows'] ), $model['rows']['inv:7001']['qty'], $model['rows']['inv:7001']['total'], $model['rows']['inv:7001']['group'] ) );
 $d = Shipping::difference( $order, $fish, array(), $opts );
-check_same( '530.00 at 19.00; without one 60.00 goby 470.00: the difference', array( Shipping::DROP, 3099, 47000 ), array( $d['status'], $d['diff'], $d['goods_after'] ) );
+check_same( '530.00 at 15.00; without one 60.00 goby 470.00: the difference', array( Shipping::DROP, 2500, 47000 ), array( $d['status'], $d['diff'], $d['goods_after'] ) );
 
 echo "\nA fish inside an invoice kept as one line\n";
 $order = fh_order(
 	302,
 	array(
 		'paid'     => 1000,
-		'shipping' => 19.00,
+		'shipping' => 15.00,
 		'lines'    => array( 11 => array( 'name' => 'Example Invoice', 'product_id' => 7001, 'qty' => 1, 'total' => 520.00 ) ),
 	)
 );
 $d = Shipping::difference( $order, array( array( 'ref' => 'i:11:0', 'qty' => 1, 'unit_paid' => 6000 ) ), array(), $opts );
-check_same( 'its price leaves the invoice line: 460.00, under the threshold', array( Shipping::DROP, 3099 ), array( $d['status'], $d['diff'] ) );
+check_same( 'its price leaves the invoice line: 460.00, under the threshold', array( Shipping::DROP, 2500 ), array( $d['status'], $d['diff'] ) );
 
 echo "\nNothing else to ship\n";
 $order = fh_order(
 	303,
 	array(
 		'paid'     => 1000,
-		'shipping' => 49.99,
+		'shipping' => 40.00,
 		'lines'    => array(
 			11 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'qty' => 1, 'total' => 60.00 ),
 			12 => array( 'name' => 'Gift Card', 'product_id' => 950, 'qty' => 1, 'total' => 25.00 ),
@@ -211,7 +211,7 @@ $order = fh_order(
 	401,
 	array(
 		'paid'     => 1000,
-		'shipping' => 25.00,
+		'shipping' => 22.00,
 		'lines'    => array(
 			11 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'qty' => 1, 'total' => 60.00 ),
 			12 => array( 'name' => 'Harbor Tang', 'product_id' => 813, 'qty' => 2, 'total' => 460.00 ),
@@ -219,10 +219,10 @@ $order = fh_order(
 	)
 );
 $d = Shipping::difference( $order, $fish, array(), $opts );
-check_same( 'the settings give 19.00 for the order as placed, but 25.00 was charged: unknown, no figure', array( Shipping::UNKNOWN, null, null ), array( $d['status'], $d['diff'], $d['alone'] ) );
-check_contains( '… and the note says why', '$19.00', $d['note'] );
+check_same( 'the settings give 15.00 for the order as placed, but 22.00 was charged: unknown, no figure', array( Shipping::UNKNOWN, null, null ), array( $d['status'], $d['diff'], $d['alone'] ) );
+check_contains( '… and the note says why', '$15.00', $d['note'] );
 
-$order->shipping_total = 19.00;
+$order->shipping_total = 15.00;
 $d                     = Shipping::difference( $order, $fish, array(), array( 'rater' => static function () { return null; } ) );
 check_same( 'the settings give no rate: unknown', array( Shipping::UNKNOWN, null ), array( $d['status'], $d['diff'] ) );
 
@@ -238,7 +238,7 @@ $d     = Shipping::difference(
 	array(
 		'rater' => static function ( $o, $rows ) use ( &$calls ) {
 			$calls++;
-			return 1 === $calls ? 1900 : array( 'cents' => null, 'error' => 'no rate for the smaller order' );
+			return 1 === $calls ? 1500 : array( 'cents' => null, 'error' => 'no rate for the smaller order' );
 		},
 	)
 );
@@ -271,9 +271,9 @@ $d = Shipping::difference( $GLOBALS['fh_orders'][101], $fish, array(), array() )
 check_same( 'without WooCommerce\'s shipping zones (and no stand-in): unknown', array( Shipping::UNKNOWN, null ), array( $d['status'], $d['diff'] ) );
 
 echo "\nOther cases of the same order\n";
-$order = $GLOBALS['fh_orders'][101]; // 520.00 at 19.00: a 60.00 goby (line 11) and two 230.00 tangs (line 12).
+$order = $GLOBALS['fh_orders'][101]; // 520.00 at 15.00: a 60.00 goby (line 11) and two 230.00 tangs (line 12).
 $d     = Shipping::difference( $order, $fish, array( 'pending' => 1 ), $opts );
-check_same( 'another case still waits for an answer: unknown — the figure for this fish alone is only a hint', array( Shipping::UNKNOWN, null, 3099 ), array( $d['status'], $d['diff'], $d['alone'] ) );
+check_same( 'another case still waits for an answer: unknown — the figure for this fish alone is only a hint', array( Shipping::UNKNOWN, null, 2500 ), array( $d['status'], $d['diff'], $d['alone'] ) );
 check_contains( '… and the note says so', 'alone', $d['note'] );
 
 $tang = array( array( 'ref' => 'i:12', 'qty' => 1, 'unit_paid' => 23000 ) );
@@ -282,31 +282,30 @@ $d    = Shipping::difference(
 	$tang,
 	array(
 		'removed'  => $fish,
-		'withheld' => 3099,
+		'withheld' => 2500,
 	),
 	$opts
 );
-check_same( 'an earlier refund already took the order under the threshold and withheld the 30.99: this one withholds nothing more', array( Shipping::NONE, 0 ), array( $d['status'], $d['diff'] ) );
+check_same( 'an earlier refund already took the order under the threshold and withheld the 25.00: this one withholds nothing more', array( Shipping::NONE, 0 ), array( $d['status'], $d['diff'] ) );
 
 $order = fh_order(
 	501,
 	array(
 		'paid'     => 1000,
-		'shipping' => 19.00,
+		'shipping' => 15.00,
 		'lines'    => array(
 			11 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'qty' => 1, 'total' => 40.00 ),
-			12 => array( 'name' => 'Harbor Tang', 'product_id' => 813, 'qty' => 13, 'total' => 520.00 ),
+			12 => array( 'name' => 'Harbor Tang', 'product_id' => 813, 'qty' => 12, 'total' => 480.00 ),
 		),
 	)
 );
 $one = array( array( 'ref' => 'i:11', 'qty' => 1, 'unit_paid' => 4000 ) );
 $two = array( array( 'ref' => 'i:12', 'qty' => 1, 'unit_paid' => 4000 ) );
-check_same( 'each alone leaves the order over the threshold (560.00 → 520.00)', array( Shipping::NONE, Shipping::NONE ), array( Shipping::difference( $order, $one, array(), $opts )['status'], Shipping::difference( $order, $two, array(), $opts )['status'] ) );
+check_same( 'each alone leaves the order over the threshold (520.00 → 480.00)', array( Shipping::NONE, Shipping::NONE ), array( Shipping::difference( $order, $one, array(), $opts )['status'], Shipping::difference( $order, $two, array(), $opts )['status'] ) );
 $d = Shipping::difference( $order, $two, array( 'removed' => $one, 'withheld' => 0 ), $opts );
-check_same( '… but after the first was refunded, the second takes it under (480.00): the difference lands on the second', array( Shipping::DROP, 3099 ), array( $d['status'], $d['diff'] ) );
+check_same( '… but after the first was refunded, the second takes it under (440.00): the difference lands on the second', array( Shipping::DROP, 2500 ), array( $d['status'], $d['diff'] ) );
 
-$order->shipping_tax = 1.90;
-$d                   = Shipping::difference( $GLOBALS['fh_orders'][105], $tang, array( 'removed' => $fish, 'withheld' => 3409 ), $opts );
+$d                   = Shipping::difference( $GLOBALS['fh_orders'][105], $tang, array( 'removed' => $fish, 'withheld' => 2750 ), $opts );
 check_same( 'what was withheld with tax is taken off before tax', array( Shipping::NONE, 0 ), array( $d['status'], $d['diff'] ) );
 
 echo "\nThrough WooCommerce's zone and method (stand-ins)\n";
@@ -393,7 +392,7 @@ class Fh_Method {
 		foreach ( $package['contents'] as $line ) {
 			$sum += $line['data']->get_price() * $line['quantity'];
 		}
-		$rates = array( 'r1' => new Fh_Rate( $sum >= 500 ? '19.00' : '49.99', 'Overnight' ) );
+		$rates = array( 'r1' => new Fh_Rate( $sum >= 480 ? '15.00' : '40.00', 'Overnight' ) );
 		if ( $this->extra ) {
 			$rates['r2'] = new Fh_Rate( '5.00', 'Pickup' );
 		}
@@ -428,7 +427,7 @@ WC_Shipping_Zones::$zone->methods = array( 9 => $other, 4 => $overnight );
 
 $order = $GLOBALS['fh_orders'][101];
 $d     = Shipping::difference( $order, $fish, array(), array() );
-check_same( 'the order\'s own method prices it as placed (19.00) and without the fish (49.99)', array( Shipping::DROP, 3099 ), array( $d['status'], $d['diff'] ) );
+check_same( 'the order\'s own method prices it as placed (15.00) and without the fish (40.00)', array( Shipping::DROP, 2500 ), array( $d['status'], $d['diff'] ) );
 check_same( '… the method of the order\'s instance, not another instance of the same method', array( 2, 0 ), array( count( $overnight->seen ), count( $other->seen ) ) );
 
 $package = $overnight->seen[0]['package'];
@@ -451,7 +450,7 @@ check_same( 'a method that gives no rate: unknown', Shipping::UNKNOWN, Shipping:
 $overnight->no_rates = false;
 
 $overnight->extra = true;
-check_same( 'two rates, one with the label the order was charged under: that one', array( Shipping::DROP, 3099 ), array_values( array_intersect_key( Shipping::difference( $order, $fish, array(), array() ), array( 'status' => 1, 'diff' => 1 ) ) ) );
+check_same( 'two rates, one with the label the order was charged under: that one', array( Shipping::DROP, 2500 ), array_values( array_intersect_key( Shipping::difference( $order, $fish, array(), array() ), array( 'status' => 1, 'diff' => 1 ) ) ) );
 $order->ship_lines[1]->name = 'Something else';
 check_same( 'two rates and none can be told apart as the one charged: unknown', Shipping::UNKNOWN, Shipping::difference( $order, $fish, array(), array() )['status'] );
 $order->ship_lines[1]->name = 'Overnight';

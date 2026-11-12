@@ -237,7 +237,7 @@ $clean = Store::clean_fields(
 		'qty'           => '2',
 		'unit_paid'     => '6000',
 		'ship_diff'     => null,
-		'amount_refund' => '2901',
+		'amount_refund' => '3500',
 		'sent_at'       => '',
 		'done_note'     => null,
 		'fish_name'     => str_repeat( 'x', 300 ),
@@ -245,7 +245,7 @@ $clean = Store::clean_fields(
 		'needs_check'   => true,
 	)
 );
-check_same( 'integers are integers', array( 2, 6000, 2901, 1 ), array( $clean['qty'], $clean['unit_paid'], $clean['amount_refund'], $clean['needs_check'] ) );
+check_same( 'integers are integers', array( 2, 6000, 3500, 1 ), array( $clean['qty'], $clean['unit_paid'], $clean['amount_refund'], $clean['needs_check'] ) );
 check_same( 'a column that may be NULL keeps null — and an empty date is NULL, not 0000-00-00', array( null, null, null ), array( $clean['ship_diff'], $clean['sent_at'], $clean['done_note'] ) );
 check_same( 'text is cut to its column', 200, strlen( $clean['fish_name'] ) );
 check( 'what is not a column is dropped', ! array_key_exists( 'not_a_column', $clean ) );
@@ -258,12 +258,12 @@ $case = Store::hydrate_case(
 		'qty'           => '2',
 		'unit_paid'     => '6000',
 		'ship_diff'     => null,
-		'amount_refund' => '2901',
+		'amount_refund' => '3500',
 		'sent_at'       => '2026-11-12 15:00:00',
 		'reminded_at'   => null,
 	)
 );
-check_same( 'a row comes back typed: ints, strings, and null where the database had NULL', array( 12, 'sent', 2, 6000, null, 2901, '2026-11-12 15:00:00', null ), array( $case['id'], $case['status'], $case['qty'], $case['unit_paid'], $case['ship_diff'], $case['amount_refund'], $case['sent_at'], $case['reminded_at'] ) );
+check_same( 'a row comes back typed: ints, strings, and null where the database had NULL', array( 12, 'sent', 2, 6000, null, 3500, '2026-11-12 15:00:00', null ), array( $case['id'], $case['status'], $case['qty'], $case['unit_paid'], $case['ship_diff'], $case['amount_refund'], $case['sent_at'], $case['reminded_at'] ) );
 check( 'every column is there, even ones the row did not carry', ! array_diff( array_keys( Store::CASE_COLUMNS ), array_keys( $case ) ) );
 
 echo "\nA status change is one conditional UPDATE\n";
@@ -281,9 +281,9 @@ check_same( 'a status that is not one: no query at all', array( false, $before )
 check_same( '… nor from a status that is not one', array( false, $before ), array( $store->transition( 12, array( 'nowhere' ), 'answered', array() ), count( $GLOBALS['wpdb']->queries ) ) );
 
 $GLOBALS['wpdb']->affected = 1;
-$store->update_case( 12, array( 'status' => 'done', 'ship_diff' => 3099 ) );
+$store->update_case( 12, array( 'status' => 'done', 'ship_diff' => 2500 ) );
 $sql = end( $GLOBALS['wpdb']->queries );
-check( 'update_case() never changes the status', false === strpos( $sql, 'status =' ) && false !== strpos( $sql, 'ship_diff = 3099' ) && 1 === preg_match( '/WHERE id = 12$/', $sql ), $sql );
+check( 'update_case() never changes the status', false === strpos( $sql, 'status =' ) && false !== strpos( $sql, 'ship_diff = 2500' ) && 1 === preg_match( '/WHERE id = 12$/', $sql ), $sql );
 
 $GLOBALS['wpdb']->affected = 1;
 check( 'a reminder is marked only on a sent case that has none yet', $store->mark_reminded( 12, '2026-11-28 15:00:00' ) && 1 === preg_match( "/WHERE id = 12 AND status = 'sent' AND reminded_at IS NULL$/", end( $GLOBALS['wpdb']->queries ) ) );

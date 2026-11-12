@@ -220,6 +220,8 @@ check( 'the files are there', count( $files ) >= 18 );
 $wpdb_files = array();
 $unguarded  = array();
 $rates      = array();
+$fh_money   = '/(?<![\w.])\d+\.\d{2}(?![\w.])|\$\d/';
+check( 'the check itself: it sees an amount written as 12.34 or with a dollar sign, and not a version, a line height or a %1$s', 1 === preg_match( $fh_money, '$cost = 12.34;' ) && 1 === preg_match( $fh_money, "'over $" . "12'" ) && 0 === preg_match( $fh_money, "'1.0' line-height:1.6 %1\$s 16px 2.5.1 .08em" ) );
 foreach ( $files as $file ) {
 	$text = (string) file_get_contents( $file );
 	$code = preg_replace( '~/\*.*?\*/|//[^\n]*~s', '', $text ); // Without comments.
@@ -229,15 +231,15 @@ foreach ( $files as $file ) {
 	if ( 1 !== preg_match( "/defined\(\s*'ABSPATH'\s*\)\s*\|\|\s*exit\s*;/", $text ) ) {
 		$unguarded[] = basename( $file );
 	}
-	if ( 'class-admin.php' !== basename( $file ) && 1 === preg_match( '/\b(?:49\.99|4999|19\.00|1900|499|50000)\b|\$\s?500\b|\b500\.00\b/', $code ) ) {
+	// A rate or a threshold in code would be money written out: 12.34, or $12.
+	if ( 'class-admin.php' !== basename( $file ) && 1 === preg_match( $fh_money, $code ) ) {
 		$rates[] = basename( $file );
 	}
 }
 check_same( 'class-store.php is the only file that touches $wpdb', array( 'class-store.php' ), $wpdb_files );
 check_same( 'every file refuses to be opened directly', array(), $unguarded );
-check_same( 'no shipping rate and no threshold is written in the code', array(), $rates );
-$admin = preg_replace( '~/\*.*?\*/|//[^\n]*~s', '', (string) file_get_contents( $folder . '/class-admin.php' ) );
-check( '… the settings preview\'s invented sample aside, which says it is invented', 1 === preg_match( '/Sample Reef Fish/', $admin ) && false !== strpos( (string) file_get_contents( $folder . '/class-admin.php' ), 'invented sample data' ) );
+check_same( 'no shipping rate and no threshold is written in the code that decides: no amount of money appears in it', array(), $rates );
+check( 'the Settings preview\'s sample (class-admin.php, the one file set aside) says it is invented', false !== strpos( (string) file_get_contents( $folder . '/class-admin.php' ), 'invented sample data' ) );
 
 $mail_calls = array();
 foreach ( $files as $file ) {

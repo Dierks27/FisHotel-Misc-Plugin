@@ -26,7 +26,7 @@ $case = array(
 	'species'        => 'Lagoon Goby',
 	'qty'            => 1,
 	'order_id'       => 501,
-	'ship_charged'   => 1900,
+	'ship_charged'   => 1500,
 	'unit_paid'      => 6000,
 	'customer_name'  => 'Avery Example',
 	'customer_email' => 'avery@example.test',
@@ -46,8 +46,8 @@ $links = array(
 	'retry'  => 'https://example.test/?fh_lost_fish=12.retry.1.cccc',
 	'cancel' => 'https://example.test/?fh_lost_fish=12.cancel.1.dddd',
 );
-$drop     = Money::choices( array( 'unit_paid' => 6000, 'qty' => 1, 'ship_diff' => 3099, 'order_total' => 53900 ) );
-$stays    = Money::choices( array( 'unit_paid' => 6000, 'qty' => 1, 'ship_diff' => 0, 'order_total' => 71900 ) );
+$drop     = Money::choices( array( 'unit_paid' => 6000, 'qty' => 1, 'ship_diff' => 2500, 'order_total' => 53500 ) );
+$stays    = Money::choices( array( 'unit_paid' => 6000, 'qty' => 1, 'ship_diff' => 0, 'order_total' => 71500 ) );
 $settings = Settings::normalize( array( 'store_design' => false ) );
 
 echo "When the rest of the order ships\n";
@@ -59,11 +59,11 @@ check_same( 'a date that is no date is no date', '', Email::date_label( '2026-02
 echo "\nThe four choices — the order drops under the threshold\n";
 $rows = Email::choice_rows( $case, $drop, $facts, $links );
 check_same( 'four, in order', array( 'refund', 'credit', 'retry', 'cancel' ), array_column( $rows, 'choice' ) );
-check_same( 'refund and credit carry the fish MINUS the shipping difference; try again no money; cancel everything paid', array( '$29.01', '$29.01', '', '$539.00' ), array_column( $rows, 'money' ) );
-check_same( 'the refund, spelled out', 'We refund $29.01 to the way you paid: $60.00 for the fish, less $30.99 shipping. Without this fish your order is no longer over the amount for reduced shipping, so its shipping is $49.99 instead of the $19.00 you paid.', $rows[0]['text'] );
-check_same( 'the credit says the same about shipping — a credit does not keep the cheaper shipping', 'We add $29.01 to your store credit: $60.00 for the fish, less $30.99 shipping. Without this fish your order is no longer over the amount for reduced shipping, so its shipping is $49.99 instead of the $19.00 you paid.', $rows[1]['text'] );
+check_same( 'refund and credit carry the fish MINUS the shipping difference; try again no money; cancel everything paid', array( '$35.00', '$35.00', '', '$535.00' ), array_column( $rows, 'money' ) );
+check_same( 'the refund, spelled out', 'We refund $35.00 to the way you paid: $60.00 for the fish, less $25.00 shipping. Without this fish your order is no longer over the amount for reduced shipping, so its shipping is $40.00 instead of the $15.00 you paid.', $rows[0]['text'] );
+check_same( 'the credit says the same about shipping — a credit does not keep the cheaper shipping', 'We add $35.00 to your store credit: $60.00 for the fish, less $25.00 shipping. Without this fish your order is no longer over the amount for reduced shipping, so its shipping is $40.00 instead of the $15.00 you paid.', $rows[1]['text'] );
 check_contains( 'try again leaves this order\'s shipping as it is', 'the shipping of your order stays as it is', $rows[2]['text'] );
-check_same( 'cancel names the order and the whole amount', 'We cancel order #501 and refund everything you paid for it: $539.00.', $rows[3]['text'] );
+check_same( 'cancel names the order and the whole amount', 'We cancel order #501 and refund everything you paid for it: $535.00.', $rows[3]['text'] );
 check_same( 'each choice has its own link', array_values( $links ), array_column( $rows, 'url' ) );
 
 echo "\n… stays over it\n";
@@ -72,12 +72,12 @@ check_same( 'the whole price of the fish, and not a word about shipping', array(
 check_lacks( '…', 'shipping', $rows[1]['text'] );
 
 echo "\n… the difference is more than the fish\n";
-$more = Money::choices( array( 'unit_paid' => 1500, 'qty' => 1, 'ship_diff' => 3099, 'order_total' => 51900 ) );
+$more = Money::choices( array( 'unit_paid' => 1000, 'qty' => 1, 'ship_diff' => 2500, 'order_total' => 51500 ) );
 $rows = Email::choice_rows( $case, $more, $facts, $links );
-check_same( 'nothing to refund, and it says why', array( '$0.00', true, true ), array( $rows[0]['money'], false !== strpos( $rows[0]['text'], 'There would be nothing to refund: you paid $15.00 for the fish, and the shipping difference is $30.99.' ), false !== strpos( $rows[0]['text'], 'instead of the $19.00 you paid' ) ) );
+check_same( 'nothing to refund, and it says why', array( '$0.00', true, true ), array( $rows[0]['money'], false !== strpos( $rows[0]['text'], 'There would be nothing to refund: you paid $10.00 for the fish, and the shipping difference is $25.00.' ), false !== strpos( $rows[0]['text'], 'instead of the $15.00 you paid' ) ) );
 
 echo "\n… part of the order has shipped\n";
-$shipped = Money::choices( array( 'unit_paid' => 6000, 'qty' => 1, 'ship_diff' => 0, 'order_total' => 71900, 'offer_cancel' => false ) );
+$shipped = Money::choices( array( 'unit_paid' => 6000, 'qty' => 1, 'ship_diff' => 0, 'order_total' => 71500, 'offer_cancel' => false ) );
 check_same( 'three choices: cancelling the whole order is not offered', array( 'refund', 'credit', 'retry' ), array_column( Email::choice_rows( $case, $shipped, $facts, $links ), 'choice' ) );
 
 echo "\nThe message\n";
@@ -90,9 +90,9 @@ check_contains( 'it says when the rest ships', 'it ships on Tuesday, November 17
 foreach ( $links as $choice => $url ) {
 	check_contains( 'the ' . $choice . ' link is in it', 'href="' . $url . '"', $message['html'] );
 }
-check_contains( 'the money sits beside refund', 'Refund the lost fish — $29.01</a>', $message['html'] );
-check_contains( '… and beside credit', 'Take a store credit — $29.01</a>', $message['html'] );
-check_contains( 'it makes the shipping plain', 'its shipping is $49.99 instead of the $19.00 you paid', $message['html'] );
+check_contains( 'the money sits beside refund', 'Refund the lost fish — $35.00</a>', $message['html'] );
+check_contains( '… and beside credit', 'Take a store credit — $35.00</a>', $message['html'] );
+check_contains( 'it makes the shipping plain', 'its shipping is $40.00 instead of the $15.00 you paid', $message['html'] );
 check_contains( 'it says nothing changes until they confirm', 'Nothing changes until you pick one and press Confirm', $message['html'] );
 check_same( 'four links, no more', 4, substr_count( $message['html'], 'fh_lost_fish=' ) );
 check_same( 'sent as HTML', array( 'Content-Type: text/html; charset=UTF-8' ), $message['headers'] );

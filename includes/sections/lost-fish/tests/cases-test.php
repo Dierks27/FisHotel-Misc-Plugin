@@ -31,9 +31,9 @@ use FisHotel\Misc\Sections\Lost_Fish\Token;
  * A small shop: five Lagoon Gobies alive in two tank groups, four owed
  * on three paid orders.
  *
- *   501  paid first   1 goby (60.00) + 2 tangs (460.00) = 520.00, shipping 19.00 — one goby less: 460.00
- *   502  paid last    2 gobies (120.00) + 3 tangs (690.00) = 810.00, shipping 19.00 — stays over
- *   503  paid second  1 goby (60.00), shipping 49.99
+ *   501  paid first   1 goby (60.00) + 2 tangs (460.00) = 520.00, shipping 15.00 — one goby less: 460.00
+ *   502  paid last    2 gobies (120.00) + 3 tangs (690.00) = 810.00, shipping 15.00 — stays over
+ *   503  paid second  1 goby (60.00), shipping 40.00
  *
  * @return array{0: Cases, 1: Fh_Fake_Store, 2: Fh_Fake_Rooms}
  */
@@ -45,9 +45,9 @@ function fh_world() {
 	fh_product( 812, array( 'class' => 'premium' ) );
 	fh_product( 813, array( 'class' => 'premium' ) );
 
-	fh_order( 501, array( 'paid' => 1000, 'shipping' => 19.00, 'first_name' => 'Avery', 'last_name' => 'Example', 'email' => 'avery@example.test', 'customer_id' => 41, 'meta' => array( '_fishotel_shipping_date' => '2026-11-18' ), 'lines' => array( 51 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'qty' => 1, 'total' => 60.00 ), 52 => array( 'name' => 'Harbor Tang', 'product_id' => 813, 'qty' => 2, 'total' => 460.00 ) ) ) );
-	fh_order( 502, array( 'paid' => 3000, 'shipping' => 19.00, 'first_name' => 'Blake', 'last_name' => 'Sample', 'email' => 'blake@example.test', 'customer_id' => 42, 'lines' => array( 53 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'qty' => 2, 'total' => 120.00 ), 54 => array( 'name' => 'Harbor Tang', 'product_id' => 813, 'qty' => 3, 'total' => 690.00 ) ) ) );
-	fh_order( 503, array( 'paid' => 2000, 'shipping' => 49.99, 'first_name' => 'Casey', 'last_name' => 'Tester', 'email' => 'casey@example.test', 'customer_id' => 0, 'lines' => array( 55 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'qty' => 1, 'total' => 60.00 ) ) ) );
+	fh_order( 501, array( 'paid' => 1000, 'shipping' => 15.00, 'first_name' => 'Avery', 'last_name' => 'Example', 'email' => 'avery@example.test', 'customer_id' => 41, 'meta' => array( '_fishotel_shipping_date' => '2026-11-18' ), 'lines' => array( 51 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'qty' => 1, 'total' => 60.00 ), 52 => array( 'name' => 'Harbor Tang', 'product_id' => 813, 'qty' => 2, 'total' => 460.00 ) ) ) );
+	fh_order( 502, array( 'paid' => 3000, 'shipping' => 15.00, 'first_name' => 'Blake', 'last_name' => 'Sample', 'email' => 'blake@example.test', 'customer_id' => 42, 'lines' => array( 53 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'qty' => 2, 'total' => 120.00 ), 54 => array( 'name' => 'Harbor Tang', 'product_id' => 813, 'qty' => 3, 'total' => 690.00 ) ) ) );
+	fh_order( 503, array( 'paid' => 2000, 'shipping' => 40.00, 'first_name' => 'Casey', 'last_name' => 'Tester', 'email' => 'casey@example.test', 'customer_id' => 0, 'lines' => array( 55 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'qty' => 1, 'total' => 60.00 ) ) ) );
 
 	$rooms = new Fh_Fake_Rooms();
 	$rooms->add( 1, array( 'product_id' => 812, 'species' => 'Lagoon Goby', 'size_slug' => 'm', 'size_label' => 'Medium', 'qty_live' => 3, 'tank_number' => 521 ) );
@@ -127,7 +127,7 @@ check_same( 'on the most recently PAID order — 502, not the oldest (501) nor t
 check_same( 'it names the fish, the customer and what was paid for one', array( 'Lagoon Goby', 1, 'Blake Sample', 'blake@example.test', 42, 6000, 1 ), array( $case['fish_name'], $case['qty'], $case['customer_name'], $case['customer_email'], $case['customer_id'], $case['unit_paid'], $case['paid_known'] ) );
 check_same( 'it remembers the tank group and the loss event it came from', array( 1, 9002, 'auto', 'p:812', 7 ), array( $case['stay_id'], $case['loss_event_id'], $case['origin'], $case['kind_key'], $case['created_by'] ) );
 check_same( 'open, nothing sent', array( 'open', null, '' ), array( $case['status'], $case['sent_at'], $case['token_salt'] ) );
-check_same( 'the shipping difference is already worked out: 810.00 less 60.00 stays over the threshold', array( Shipping::NONE, 0, 0, 1900 ), array( $case['ship_status'], $case['ship_diff'], $case['ship_manual'], $case['ship_charged'] ) );
+check_same( 'the shipping difference is already worked out: 810.00 less 60.00 stays over the threshold', array( Shipping::NONE, 0, 0, 1500 ), array( $case['ship_status'], $case['ship_diff'], $case['ship_manual'], $case['ship_charged'] ) );
 check_same( 'NO E-MAIL', array(), $GLOBALS['fh_mail'] );
 check_same( 'a private note on that order, and only that order', array( 1, 0, 0 ), array( count( fh_notes( 502 ) ), count( fh_notes( 501 ) ), count( fh_notes( 503 ) ) ) );
 check_contains( '… "case opened", naming the fish', 'Lost fish case #1 — Opened: 1 × Lagoon Goby was lost and there is no spare', fh_notes( 502 )[0] );
@@ -155,7 +155,7 @@ $by_order = array();
 foreach ( $store->cases() as $c ) {
 	$by_order[ $c['order_id'] ][] = $cases->refresh( $c );
 }
-check_same( '501 alone would drop under the threshold: 30.99', array( Shipping::DROP, 3099 ), array( $by_order[501][0]['ship_status'], $by_order[501][0]['ship_diff'] ) );
+check_same( '501 alone would drop under the threshold: 25.00', array( Shipping::DROP, 2500 ), array( $by_order[501][0]['ship_status'], $by_order[501][0]['ship_diff'] ) );
 check_same( '503 was under it already: none', array( Shipping::NONE, 0 ), array( $by_order[503][0]['ship_status'], $by_order[503][0]['ship_diff'] ) );
 check_same( '502 has two cases waiting: each one\'s difference depends on the other — not known, the figure alone as a hint', array( Shipping::UNKNOWN, null, 0 ), array( $by_order[502][0]['ship_status'], $by_order[502][0]['ship_diff'], $by_order[502][0]['ship_reduced'] ) );
 
@@ -276,7 +276,7 @@ check_same( 'ONE e-mail', 1, count( $GLOBALS['fh_mail'] ) );
 check_same( '… to the address on the order', 'blake@example.test', $GLOBALS['fh_mail'][0]['to'] );
 $case = $store->get_case( 1 );
 check_same( 'the case is sent', 'sent', $case['status'] );
-check_same( 'the numbers are frozen: refund 55.00, cancel the whole order 829.00 (810.00 + 19.00 shipping)', array( 5500, 82900, 1 ), array( $case['amount_refund'], $case['amount_cancel'], $case['offer_cancel'] ) );
+check_same( 'the numbers are frozen: refund 55.00, cancel the whole order 825.00 (810.00 + 15.00 shipping)', array( 5500, 82500, 1 ), array( $case['amount_refund'], $case['amount_cancel'], $case['offer_cancel'] ) );
 check( 'the links got a salt and an expiry 14 days out', 1 === preg_match( '/^[a-f0-9]{32}$/', $case['token_salt'] ) && abs( strtotime( $case['link_expires'] . ' UTC' ) - ( $before + 14 * 86400 ) ) <= 2 );
 check_contains( 'the order note: sent, to whom, how much, by hand', 'E-mail sent to blake@example.test with the four choices (refund or credit: $55.00). Sent by hand.', fh_notes( 502 )[1] );
 check_same( '… written as the owner\'s note', true, $GLOBALS['fh_orders'][502]->notes[1]['by_user'] );
@@ -319,14 +319,14 @@ $typed = $cases->set_numbers( 1, array( 'ship_diff' => '0' ), 5 );
 $case  = $store->get_case( 1 );
 check_same( 'the owner confirms zero: now it is known, by hand', array( true, 0, 1, Shipping::NONE ), array( $typed['ok'], $case['ship_diff'], $case['ship_manual'], $case['ship_status'] ) );
 check_same( '… logged', 'numbers', $store->events()[ count( $store->events() ) - 1 ] );
-$typed = $cases->set_numbers( 1, array( 'ship_diff' => '30.99' ), 5 );
+$typed = $cases->set_numbers( 1, array( 'ship_diff' => '25.00' ), 5 );
 $case  = $store->get_case( 1 );
 $nums  = $cases->numbers( $case, $cases->orders()->facts( $GLOBALS['fh_orders'][502] ) );
-check_same( 'or types the difference: the refund and the credit come down by it', array( 3099, Shipping::DROP, 2901, 2901, true ), array( $case['ship_diff'], $case['ship_status'], $nums['refund'], $nums['credit'], $nums['ready'] ) );
-$ok = $cases->send( 1, 5, array( 'refund' => 2901 ) );
-check_same( 'and Send goes through, with that amount frozen', array( true, 1, 2901 ), array( $ok['ok'], count( $GLOBALS['fh_mail'] ), $store->get_case( 1 )['amount_refund'] ) );
+check_same( 'or types the difference: the refund and the credit come down by it', array( 2500, Shipping::DROP, 3500, 3500, true ), array( $case['ship_diff'], $case['ship_status'], $nums['refund'], $nums['credit'], $nums['ready'] ) );
+$ok = $cases->send( 1, 5, array( 'refund' => 3500 ) );
+check_same( 'and Send goes through, with that amount frozen', array( true, 1, 3500 ), array( $ok['ok'], count( $GLOBALS['fh_mail'] ), $store->get_case( 1 )['amount_refund'] ) );
 $late = $cases->set_numbers( 1, array( 'ship_diff' => '0' ), 5 );
-check_same( 'after the send the numbers are fixed', array( false, 3099 ), array( $late['ok'], $store->get_case( 1 )['ship_diff'] ) );
+check_same( 'after the send the numbers are fixed', array( false, 2500 ), array( $late['ok'], $store->get_case( 1 )['ship_diff'] ) );
 
 list( $cases, $store, $rooms ) = fh_world();
 fh_loss( $rooms, 1, 9001 );
@@ -384,7 +384,7 @@ check_contains( 'the order note: the choice and the amount, and that the site di
 check_same( '… not as the owner\'s note', false, $GLOBALS['fh_orders'][502]->notes[2]['by_user'] );
 check_same( 'other sections are told the choice', array( 'refund', 'customer' ), array_slice( fh_fired( 'fishotel_lostfish_case_answered' )[0], 1 ) );
 check_same( 'the menu count: the owner has something to do', 1, Store::needs_you_count() );
-check_same( 'the order was not touched: its status, its total, what was refunded', array( 'processing', '829', '0' ), array( $GLOBALS['fh_orders'][502]->status, $GLOBALS['fh_orders'][502]->get_total(), $GLOBALS['fh_orders'][502]->get_total_refunded() ) );
+check_same( 'the order was not touched: its status, its total, what was refunded', array( 'processing', '825', '0' ), array( $GLOBALS['fh_orders'][502]->status, $GLOBALS['fh_orders'][502]->get_total(), $GLOBALS['fh_orders'][502]->get_total_refunded() ) );
 
 $second = $cases->answer( 1, 'cancel', 'customer' );
 check_same( 'a second answer changes nothing: one choice per case', array( false, 'taken', 'refund' ), array( $second['ok'], $second['code'], $store->get_case( 1 )['choice'] ) );
@@ -404,7 +404,7 @@ check_contains( '… and, without the Batch Manager here, that its wallets scree
 
 $store->update_case( 1, array( 'choice' => 'cancel' ) );
 $todo = $cases->todo( $store->get_case( 1 ), $facts );
-check_same( 'cancel: the order and everything paid on it', 'Cancel order #502 and refund $829.00.', $todo['text'] );
+check_same( 'cancel: the order and everything paid on it', 'Cancel order #502 and refund $825.00.', $todo['text'] );
 
 $store->update_case( 1, array( 'choice' => 'retry' ) );
 $todo = $cases->todo( $store->get_case( 1 ), $facts );
@@ -465,7 +465,7 @@ fh_loss( $rooms, 1, 9001 );
 fh_loss( $rooms, 1, 9002 );
 $hand = $cases->answer( 1, 'credit', 'owner', 5 );
 $case = $store->get_case( 1 );
-check_same( 'from a case that was never sent: recorded, the numbers frozen as a send would', array( true, 'answered', 'credit', 'owner', 6000, 82900 ), array( $hand['ok'], $case['status'], $case['choice'], $case['choice_via'], $case['amount_refund'], $case['amount_cancel'] ) );
+check_same( 'from a case that was never sent: recorded, the numbers frozen as a send would', array( true, 'answered', 'credit', 'owner', 6000, 82500 ), array( $hand['ok'], $case['status'], $case['choice'], $case['choice_via'], $case['amount_refund'], $case['amount_cancel'] ) );
 check_same( '… without any e-mail', array(), $GLOBALS['fh_mail'] );
 check_contains( '… and the note says it was by hand', 'recorded by hand: take a store credit — $60.00', fh_notes( 502 )[1] );
 
@@ -627,7 +627,7 @@ Settings::save( array( 'auto_send' => '1' ) );
 $hand = $cases->open_by_hand( 502, 'i:54', 2, 5 );
 $case = $hand['case'];
 check_same( 'opened for two of the three tangs', array( true, 'manual', 'manual', 2, 'Harbor Tang', 23000, 'p:813', 5 ), array( $hand['ok'], $case['origin'], $case['line_match'], $case['qty'], $case['fish_name'], $case['unit_paid'], $case['kind_key'], $case['created_by'] ) );
-check_same( 'its shipping difference: 810.00 less 460.00 is under the threshold', array( Shipping::DROP, 3099 ), array( $case['ship_status'], $case['ship_diff'] ) );
+check_same( 'its shipping difference: 810.00 less 460.00 is under the threshold', array( Shipping::DROP, 2500 ), array( $case['ship_status'], $case['ship_diff'] ) );
 check_contains( 'the order note says it was by hand', 'Opened by hand for 2 × Harbor Tang. Nothing was sent', fh_notes( 502 )[0] );
 check_same( 'no e-mail', array(), $GLOBALS['fh_mail'] );
 $cases->run_tick( time() + 5000 );
@@ -648,7 +648,7 @@ check_same( 'the other holders of the same fish, most recently paid first', arra
 $moved = $cases->reassign( 1, 501, 'i:51', 5 );
 $case  = $store->get_case( 1 );
 check_same( 'moved to order 501: its line, its customer, what was paid there', array( true, 501, 'i:51', 'Avery Example', 'avery@example.test', 6000 ), array( $moved['ok'], $case['order_id'], $case['line_ref'], $case['customer_name'], $case['customer_email'], $case['unit_paid'] ) );
-check_same( '… and the shipping difference of THAT order: it drops under the threshold', array( Shipping::DROP, 3099 ), array( $case['ship_status'], $case['ship_diff'] ) );
+check_same( '… and the shipping difference of THAT order: it drops under the threshold', array( Shipping::DROP, 2500 ), array( $case['ship_status'], $case['ship_diff'] ) );
 check_contains( 'the old order is told it keeps its fish', 'Moved to order #501: this order keeps its fish', fh_notes( 502 )[1] );
 check_contains( 'the new order is told', 'Given to this order by hand: 1 × Lagoon Goby was lost', fh_notes( 501 )[0] );
 check_same( 'no e-mail', array(), $GLOBALS['fh_mail'] );
@@ -663,18 +663,18 @@ list( $cases, $store, $rooms ) = fh_world();
 $first  = $cases->open_by_hand( 501, 'i:51', 1, 5 )['case']; // The 60.00 goby.
 $second = $cases->open_by_hand( 501, 'i:52', 1, 5 )['case']; // One 230.00 tang.
 $first  = $cases->refresh( $store->get_case( $first['id'] ) );
-check_same( 'while both wait, neither difference is known — the first shows what it would be alone', array( Shipping::UNKNOWN, null, 3099 ), array( $first['ship_status'], $first['ship_diff'], $first['ship_reduced'] ) );
+check_same( 'while both wait, neither difference is known — the first shows what it would be alone', array( Shipping::UNKNOWN, null, 2500 ), array( $first['ship_status'], $first['ship_diff'], $first['ship_reduced'] ) );
 check_same( '… and neither can be sent as it is', false, $cases->send( $first['id'], 5 )['ok'] );
-$cases->set_numbers( $first['id'], array( 'ship_diff' => '30.99' ), 5 );
+$cases->set_numbers( $first['id'], array( 'ship_diff' => '25.00' ), 5 );
 $cases->answer( $first['id'], 'refund', 'owner', 5 );
 $second = $cases->refresh( $store->get_case( $second['id'] ) );
-check_same( 'the first is answered (refund, 30.99 withheld): the second is worked out on what is left — nothing more to withhold', array( Shipping::NONE, 0 ), array( $second['ship_status'], $second['ship_diff'] ) );
+check_same( 'the first is answered (refund, 25.00 withheld): the second is worked out on what is left — nothing more to withhold', array( Shipping::NONE, 0 ), array( $second['ship_status'], $second['ship_diff'] ) );
 check_same( '… its refund is the whole tang', 23000, $cases->numbers( $second, $cases->orders()->facts( $GLOBALS['fh_orders'][501] ) )['refund'] );
 
 /* ================================================================== */
 echo "\nFor other sections\n";
 $summary = Cases::summary( $store->get_case( $first['id'] ) );
-check_same( 'a case in short: its status, the fish, the choice and the amount', array( 'answered', 'Lagoon Goby', 1, 501, 51, 'refund', 2901 ), array( $summary['status'], $summary['fish'], $summary['qty'], $summary['order_id'], $summary['order_item_id'], $summary['choice'], $summary['amount'] ) );
+check_same( 'a case in short: its status, the fish, the choice and the amount', array( 'answered', 'Lagoon Goby', 1, 501, 51, 'refund', 3500 ), array( $summary['status'], $summary['fish'], $summary['qty'], $summary['order_id'], $summary['order_item_id'], $summary['choice'], $summary['amount'] ) );
 check_contains( '… and where to find it', 'page=fishotel-misc-lost-fish#fh-lf-case-' . $first['id'], $summary['url'] );
 check_same( 'no choice yet: no amount', array( '', null ), array( Cases::summary( $second )['choice'], Cases::summary( $second )['amount'] ) );
 

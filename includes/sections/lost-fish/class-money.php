@@ -63,7 +63,7 @@ class Money {
 
 	/**
 	 * What a person typed as an amount → cents, or null when it is not an
-	 * amount from zero to MAX_CENTS ("$30.99", "30.99", "30", "1,250.50";
+	 * amount from zero to MAX_CENTS ("$12.50", "12.50", "12", "1,250.50";
 	 * an empty field, a negative number and words are not amounts).
 	 *
 	 * @param mixed $typed The field.
@@ -85,7 +85,7 @@ class Money {
 	}
 
 	/**
-	 * Cents as a plain decimal string for a form field ("30.99").
+	 * Cents as a plain decimal string for a form field ("12.50").
 	 *
 	 * @param int|null $cents Cents.
 	 * @return string '' for null.

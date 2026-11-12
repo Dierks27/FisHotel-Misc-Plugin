@@ -70,7 +70,7 @@ function fh_sent_case() {
 	Shipping::$rater                                   = 'fh_rater';
 
 	fh_product( 812, array( 'class' => 'premium' ) );
-	fh_order( 502, array( 'paid' => 3000, 'shipping' => 49.99, 'first_name' => 'Blake', 'last_name' => 'Sample', 'email' => 'blake@example.test', 'customer_id' => 42, 'lines' => array( 53 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'qty' => 2, 'total' => 120.00 ) ) ) );
+	fh_order( 502, array( 'paid' => 3000, 'shipping' => 40.00, 'first_name' => 'Blake', 'last_name' => 'Sample', 'email' => 'blake@example.test', 'customer_id' => 42, 'lines' => array( 53 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'qty' => 2, 'total' => 120.00 ) ) ) );
 
 	$rooms = new Fh_Fake_Rooms();
 	$rooms->add( 1, array( 'product_id' => 812, 'species' => 'Lagoon Goby', 'size_slug' => 'm', 'size_label' => 'Medium', 'qty_live' => 2 ) );

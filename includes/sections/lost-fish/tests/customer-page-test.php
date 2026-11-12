@@ -25,7 +25,7 @@ use FisHotel\Misc\Sections\Lost_Fish\Token;
 
 /**
  * Two sent cases on two orders. Case 1: order 501 drops under the
- * threshold (60.00 fish, 30.99 shipping difference). Case 2: order 503.
+ * threshold (60.00 fish, 25.00 shipping difference). Case 2: order 503.
  *
  * @return array{0: Cases, 1: Fh_Fake_Store, 2: array<string, string>, 3: array<string, string>} The cases, the store, the
  *         tokens of case 1 and of case 2 by choice (read out of the e-mails that went out).
@@ -37,8 +37,8 @@ function fh_two_sent() {
 
 	fh_product( 812, array( 'class' => 'premium' ) );
 	fh_product( 813, array( 'class' => 'premium' ) );
-	fh_order( 501, array( 'paid' => 1000, 'shipping' => 19.00, 'email' => 'avery@example.test', 'meta' => array( '_fishotel_shipping_date' => '2026-11-18' ), 'lines' => array( 51 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'qty' => 1, 'total' => 60.00 ), 52 => array( 'name' => 'Harbor Tang', 'product_id' => 813, 'qty' => 2, 'total' => 460.00 ) ) ) );
-	fh_order( 503, array( 'paid' => 2000, 'shipping' => 49.99, 'first_name' => 'Casey', 'email' => 'casey@example.test', 'lines' => array( 55 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'qty' => 1, 'total' => 60.00 ) ) ) );
+	fh_order( 501, array( 'paid' => 1000, 'shipping' => 15.00, 'email' => 'avery@example.test', 'meta' => array( '_fishotel_shipping_date' => '2026-11-18' ), 'lines' => array( 51 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'qty' => 1, 'total' => 60.00 ), 52 => array( 'name' => 'Harbor Tang', 'product_id' => 813, 'qty' => 2, 'total' => 460.00 ) ) ) );
+	fh_order( 503, array( 'paid' => 2000, 'shipping' => 40.00, 'first_name' => 'Casey', 'email' => 'casey@example.test', 'lines' => array( 55 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'qty' => 1, 'total' => 60.00 ) ) ) );
 
 	$store = new Fh_Fake_Store();
 	$cases = fh_cases( $store, new Fh_Fake_Rooms() );
@@ -84,10 +84,10 @@ check_same( 'a POST without the Confirm field: still nothing', $before, fh_state
 
 echo "\nThe same numbers as the e-mail\n";
 $html = Customer_Page::render( $view );
-check_same( 'the money', array( 2901, '$29.01' ), array( $view['row']['amount'], $view['row']['money'] ) );
-check_contains( 'the page shows the choice with its amount', 'Refund the lost fish — $29.01', $html );
-check_contains( '… and the very sentence of the e-mail', '$60.00 for the fish, less $30.99 shipping. Without this fish your order is no longer over the amount for reduced shipping, so its shipping is $49.99 instead of the $19.00 you paid.', $html );
-check_contains( '…', 'less $30.99 shipping. Without this fish your order is no longer over the amount for reduced shipping, so its shipping is $49.99 instead of the $19.00 you paid.', $GLOBALS['fh_mail'][0]['message'] );
+check_same( 'the money', array( 3500, '$35.00' ), array( $view['row']['amount'], $view['row']['money'] ) );
+check_contains( 'the page shows the choice with its amount', 'Refund the lost fish — $35.00', $html );
+check_contains( '… and the very sentence of the e-mail', '$60.00 for the fish, less $25.00 shipping. Without this fish your order is no longer over the amount for reduced shipping, so its shipping is $40.00 instead of the $15.00 you paid.', $html );
+check_contains( '…', 'less $25.00 shipping. Without this fish your order is no longer over the amount for reduced shipping, so its shipping is $40.00 instead of the $15.00 you paid.', $GLOBALS['fh_mail'][0]['message'] );
 check_contains( 'which fish, which order', '1 × Lagoon Goby', $html );
 check_contains( '…', 'About your order #501', $html );
 check_contains( 'when the rest ships', 'it ships on Tuesday, November 17, 2026', $html );
@@ -104,7 +104,7 @@ check_contains( 'no index, no script', 'noindex', $html );
 check_lacks( '…', '<script', $html );
 
 $view = Customer_Page::handle( $t1['cancel'], 'GET', false, $cases, $now );
-check_same( 'the cancel link shows everything paid on the order', array( 'cancel', 53900 ), array( $view['row']['choice'], $view['row']['amount'] ) );
+check_same( 'the cancel link shows everything paid on the order', array( 'cancel', 53500 ), array( $view['row']['choice'], $view['row']['amount'] ) );
 check_lacks( '… and no line about the rest of the order shipping', 'it ships on', Customer_Page::render( $view ) );
 
 echo "\nConfirm\n";
@@ -113,9 +113,9 @@ $case = $store->get_case( 1 );
 check_same( 'the Confirm on the credit link records: take a store credit', array( 'recorded', 200, 'answered', 'credit', 'customer' ), array( $view['state'], $view['http'], $case['status'], $case['choice'], $case['choice_via'] ) );
 $html = Customer_Page::render( $view );
 check_contains( 'the page thanks and says what was chosen', 'Thank you — your choice is recorded.', $html );
-check_contains( '…', 'Take a store credit — $29.01', $html );
+check_contains( '…', 'Take a store credit — $35.00', $html );
 check_lacks( '… with no button left', '<form', $html );
-check_contains( 'the order note', 'The customer chose: take a store credit — $29.01', fh_notes( 501 )[2] );
+check_contains( 'the order note', 'The customer chose: take a store credit — $35.00', fh_notes( 501 )[2] );
 check_same( 'case 2 is untouched', 'sent', $store->get_case( 2 )['status'] );
 
 echo "\nOne choice per case\n";
@@ -198,8 +198,8 @@ $store->fail = array();
 
 unset( $GLOBALS['fh_orders'][501] );
 $view = Customer_Page::handle( $t1['refund'], 'GET', false, $cases, $now );
-check_same( 'the order is gone: the page still shows what the e-mail promised', array( 'confirm', 2901 ), array( $view['state'], $view['row']['amount'] ) );
-check( '… and renders', false !== strpos( Customer_Page::render( $view ), 'Refund the lost fish — $29.01' ) );
+check_same( 'the order is gone: the page still shows what the e-mail promised', array( 'confirm', 3500 ), array( $view['state'], $view['row']['amount'] ) );
+check( '… and renders', false !== strpos( Customer_Page::render( $view ), 'Refund the lost fish — $35.00' ) );
 
 echo "\nAn ordinary request\n";
 $_GET  = array();

@@ -803,7 +803,7 @@ function fh_reset() {
 
 /**
  * The invented shipping rule the tests price with: goods that ship in the
- * "premium" class cost 49.99, or 19.00 once they come to 500.00 or more;
+ * "premium" class cost 40.00, or 15.00 once they come to 480.00 or more;
  * a package of "free" class goods ships for nothing.
  *
  * @param object $order Order (unused).
@@ -822,5 +822,5 @@ function fh_rater( $order, array $rows ) {
 	if ( ! $any ) {
 		return 0;
 	}
-	return $premium >= 50000 ? 1900 : 4999;
+	return $premium >= 48000 ? 1500 : 4000;
 }

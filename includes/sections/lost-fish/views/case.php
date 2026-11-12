@@ -114,14 +114,15 @@ $fh_matches = array(
 	<?php endif; ?>
 
 	<?php if ( in_array( $fh_status, array( 'answered', 'done' ), true ) ) : ?>
+		<?php $fh_amount = Money::amount_for( $fh_case['choice'], $fh_numbers ); ?>
 		<p class="fh-lf-answer">
 			<?php
 			echo esc_html(
 				sprintf(
-					/* translators: 1: who, 2: the choice, 3: date */
+					/* translators: 1: who, 2: the choice (with its amount), 3: date */
 					__( '%1$s: %2$s (%3$s)', 'fishotel-misc-plugin' ),
 					'owner' === $fh_case['choice_via'] ? __( 'Answer recorded by hand', 'fishotel-misc-plugin' ) : __( 'The customer chose', 'fishotel-misc-plugin' ),
-					Cases::choice_label( $fh_case['choice'] ),
+					Cases::choice_label( $fh_case['choice'] ) . ( null !== $fh_amount && 'retry' !== $fh_case['choice'] ? ' — ' . $fh_money( $fh_amount ) : '' ),
 					Lost_Fish::site_time( $fh_case['answered_at'] )
 				)
 			);
