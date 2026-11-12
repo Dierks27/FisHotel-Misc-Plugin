@@ -854,6 +854,12 @@ button.fh-fd-occ:active {
 
 .fh-fd-badge--ready { background: #1f8f4d; box-shadow: 0 0 0 2px rgba(61, 220, 132, 0.6); }
 
+/* For sale, but its sale date came before it left the Spa. */
+.fh-fd-warn {
+	color: var(--fd-warn);
+	font-weight: 700;
+}
+
 .fh-fd-facts {
 	display: flex;
 	flex-wrap: wrap;

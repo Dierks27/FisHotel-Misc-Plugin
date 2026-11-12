@@ -13,6 +13,7 @@
  * @var array   $pick          suppliers, origins.
  * @var bool    $can_checkin   Whether a line can be checked in.
  * @var bool    $is_new        Whether the order is unsaved.
+ * @var array   $batch         Admin_Workbook::batch_sale_panel() (empty for a new order).
  * @var string  $list_url      The Arrivals list URL.
  * @var string  $flash         One-time notice.
  * @var string  $today         Site date.
@@ -23,10 +24,12 @@
 defined( 'ABSPATH' ) || exit;
 
 use FisHotel\Misc\Sections\Clean_Room\Admin;
+use FisHotel\Misc\Sections\Clean_Room\Admin_Workbook;
 use FisHotel\Misc\Sections\Clean_Room\Clean_Room;
 use FisHotel\Misc\Sections\Clean_Room\Costing;
 use FisHotel\Misc\Sections\Clean_Room\Layout;
 use FisHotel\Misc\Sections\Clean_Room\Orders;
+use FisHotel\Misc\Sections\Clean_Room\Replay;
 
 $tab        = 'arrivals';
 $fh_mode    = (string) $order['cost_mode'];
@@ -123,6 +126,63 @@ $fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks 
 		<div class="fishotel-misc-notice fishotel-misc-notice--error">
 			<?php esc_html_e( 'The Clean Room tables do not exist. Deactivate and reactivate the plugin to create them.', 'fishotel-misc-plugin' ); ?>
 		</div>
+	<?php endif; ?>
+
+	<?php if ( ! $is_new && ! empty( $batch ) ) : ?>
+		<form class="fishotel-misc-card fh-cr-card fh-cr-sale" method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+			<?php wp_nonce_field( $batch['nonce_action'] ); ?>
+			<input type="hidden" name="action" value="<?php echo esc_attr( Admin_Workbook::SALE_DATE_ACTION ); ?>">
+			<input type="hidden" name="order_id" value="<?php echo esc_attr( (int) $order['id'] ); ?>">
+			<div class="fishotel-misc-card-header">
+				<div class="fishotel-misc-card-icon"><span class="dashicons dashicons-calendar-alt"></span></div>
+				<h2 class="fishotel-misc-card-title"><?php esc_html_e( 'Goes on sale', 'fishotel-misc-plugin' ); ?></h2>
+			</div>
+			<p class="fishotel-misc-card-desc"><?php esc_html_e( 'The day every group of this batch goes on sale. A group with its own date (set in the Clean room box on its product page) keeps that one. Nothing on the shop changes by itself: stock and visibility stay yours to set.', 'fishotel-misc-plugin' ); ?></p>
+			<div class="fh-cr-sale__row">
+				<label class="screen-reader-text" for="fh-cr-sale-date"><?php esc_html_e( 'Goes on sale', 'fishotel-misc-plugin' ); ?></label>
+				<input type="date" id="fh-cr-sale-date" class="fh-cr-input" name="sale_date" value="<?php echo esc_attr( $batch['date'] ); ?>" min="<?php echo esc_attr( Replay::SALE_DATE_MIN ); ?>" max="<?php echo esc_attr( Replay::sale_date_max( (string) $today ) ); ?>">
+				<button type="submit" class="button button-primary" name="op" value="save"><?php esc_html_e( 'Save', 'fishotel-misc-plugin' ); ?></button>
+				<button type="submit" class="button" name="op" value="clear" <?php disabled( '' === $batch['date'] ); ?>><?php esc_html_e( 'Clear', 'fishotel-misc-plugin' ); ?></button>
+				<?php if ( '' !== $batch['suggested'] ) : ?>
+					<button type="button" class="button-link fh-cr-suggest-date" data-target="fh-cr-sale-date" data-date="<?php echo esc_attr( $batch['suggested'] ); ?>" title="<?php esc_attr_e( 'Check-in + the suggested days (Settings). Fills the date; Save keeps it.', 'fishotel-misc-plugin' ); ?>"><?php echo esc_html( sprintf( /* translators: %s: date */ __( 'suggested %s', 'fishotel-misc-plugin' ), $batch['suggested'] ) ); ?></button>
+				<?php else : ?>
+					<span class="fh-cr-sub fh-cr-sub--inline"><?php esc_html_e( 'A suggestion appears once the fish are checked in.', 'fishotel-misc-plugin' ); ?></span>
+				<?php endif; ?>
+			</div>
+			<p class="fh-cr-sale__status"><?php echo esc_html( Admin_Workbook::batch_sale_status( $batch, (string) $today ) ); ?></p>
+			<?php if ( $batch['own'] ) : ?>
+				<p class="fh-cr-sub"><?php esc_html_e( 'These groups have their own date and keep it (change it on the product page):', 'fishotel-misc-plugin' ); ?></p>
+				<table class="widefat fh-cr-table fh-cr-sale__own">
+					<thead>
+						<tr>
+							<th scope="col"><?php esc_html_e( 'Product', 'fishotel-misc-plugin' ); ?></th>
+							<th scope="col"><?php esc_html_e( 'Tank', 'fishotel-misc-plugin' ); ?></th>
+							<th scope="col"><?php esc_html_e( 'Own date', 'fishotel-misc-plugin' ); ?></th>
+						</tr>
+					</thead>
+					<tbody>
+						<?php foreach ( $batch['own'] as $fh_own ) : ?>
+							<tr>
+								<td>
+									<?php if ( '' !== $fh_own['edit_url'] ) : ?>
+										<a href="<?php echo esc_url( $fh_own['edit_url'] ); ?>"><?php echo esc_html( '' !== $fh_own['product'] ? $fh_own['product'] : $fh_own['species'] ); ?></a>
+									<?php else : ?>
+										<?php echo esc_html( $fh_own['species'] ); ?> <span class="fh-cr-sub fh-cr-sub--inline"><?php esc_html_e( 'no product — Stays tab', 'fishotel-misc-plugin' ); ?></span>
+									<?php endif; ?>
+								</td>
+								<td><?php echo esc_html( null !== $fh_own['tank'] ? (string) $fh_own['tank'] : '—' ); ?></td>
+								<td>
+									<?php echo esc_html( $fh_own['date'] ); ?><?php echo $fh_own['ready'] ? ' <span class="fh-cr-sub fh-cr-sub--inline">' . esc_html__( 'for sale', 'fishotel-misc-plugin' ) . '</span>' : ''; ?>
+									<?php if ( ! empty( $fh_own['in_spa'] ) ) : ?>
+										<span class="fh-cr-warn"><?php esc_html_e( 'still in the Spa', 'fishotel-misc-plugin' ); ?></span>
+									<?php endif; ?>
+								</td>
+							</tr>
+						<?php endforeach; ?>
+					</tbody>
+				</table>
+			<?php endif; ?>
+		</form>
 	<?php endif; ?>
 
 	<form id="fh-cr-order" class="fh-cr-order" data-order="<?php echo esc_attr( (int) $order['id'] ); ?>" data-mode="<?php echo esc_attr( $fh_mode ); ?>" onsubmit="return false;">

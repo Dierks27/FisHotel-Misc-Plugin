@@ -14,7 +14,8 @@
  *   loss (the fastest path — Jeff counts bodies), sold / shipped, move
  *   (with a quantity = a split, an optional reason), arrival (always into
  *   a Spa tank), clear (the cleared date by hand), checkin (the check-in
- *   date by hand), ready (the sale-ready override), count (a full
+ *   date by hand), ready (the stay's own sale date; empty = back to the
+ *   batch's), count (a full
  *   recount), note (on a stay, or on the tank), copper (a reading on the
  *   tank), dose (a medication on the whole system or on the tank — the
  *   one write without an undo), tick (a to-do item done), undo, alias.
@@ -86,6 +87,7 @@ class Front_Desk {
 		add_filter( 'query_vars', array( $this, 'register_query_var' ) );
 		add_action( 'template_redirect', array( $this, 'maybe_render' ), 1 );
 		add_filter( 'auth_cookie_expiration', array( $this, 'extend_cookie_life' ), 10, 3 );
+		add_action( 'login_form', array( $this, 'remember_label_login' ) );
 
 		add_action( 'wp_ajax_fishotel_cleanroom_act', array( $this, 'ajax_act' ) );
 		add_action( 'wp_ajax_fishotel_cleanroom_parse', array( $this, 'ajax_parse' ) );
@@ -99,6 +101,8 @@ class Front_Desk {
 	 * auth cookie lasts about a year instead of WordPress's two days (the
 	 * default without "remember me"), so a scan does not mean another
 	 * login every other day. Everyone else keeps the normal cookie life.
+	 * remember_label_login() makes that login a remembered one, so the
+	 * browser keeps the cookie that long too.
 	 *
 	 * @param int  $length   Seconds.
 	 * @param int  $user_id  The user logging in.
@@ -108,8 +112,7 @@ class Front_Desk {
 	public function extend_cookie_life( $length, $user_id = 0, $remember = false ) {
 		unset( $remember );
 
-		$redirect = isset( $_REQUEST['redirect_to'] ) && is_scalar( $_REQUEST['redirect_to'] ) ? (string) wp_unslash( $_REQUEST['redirect_to'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- wp-login.php's own field, read only to decide the cookie life.
-		if ( '' === $redirect || false === strpos( $redirect, Clean_Room::QUERY_VAR ) ) {
+		if ( ! self::login_bound_for_front_desk() ) {
 			return $length;
 		}
 		if ( (int) $user_id <= 0 || ! user_can( (int) $user_id, Clean_Room::CAPABILITY ) ) {
@@ -117,6 +120,29 @@ class Front_Desk {
 		}
 
 		return max( (int) $length, self::COOKIE_LIFE );
+	}
+
+	/**
+	 * Is this request's redirect_to the Front Desk?
+	 *
+	 * @return bool
+	 */
+	private static function login_bound_for_front_desk() {
+		$redirect = isset( $_REQUEST['redirect_to'] ) && is_scalar( $_REQUEST['redirect_to'] ) ? (string) wp_unslash( $_REQUEST['redirect_to'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- wp-login.php's own field, read only.
+		return '' !== $redirect && false !== strpos( $redirect, Clean_Room::QUERY_VAR );
+	}
+
+	/**
+	 * wp-login.php's form, for a login bound for the Front Desk: send
+	 * "remember me" whether the box is ticked or not. Without it WordPress
+	 * hands out a cookie that ends with the browser session, however long
+	 * extend_cookie_life() says it lives — the phone would ask again the
+	 * next morning.
+	 */
+	public function remember_label_login() {
+		if ( self::login_bound_for_front_desk() ) {
+			echo '<input type="hidden" name="rememberme" value="forever" />';
+		}
 	}
 
 	/**
@@ -236,7 +262,12 @@ class Front_Desk {
 			'ownWater'    => __( 'its own water', 'fishotel-misc-plugin' ),
 			'day'         => __( 'day %d', 'fishotel-misc-plugin' ),
 			'inSince'     => __( 'in since %s', 'fishotel-misc-plugin' ),
-			'readyOn'     => __( 'ready %s', 'fishotel-misc-plugin' ),
+			'readyOn'     => __( 'on sale %s', 'fishotel-misc-plugin' ),
+			'noSaleDate'  => __( 'Sale date not set', 'fishotel-misc-plugin' ),
+			'suggestedOn' => __( 'suggested %s', 'fishotel-misc-plugin' ),
+			'stillInSpa'  => __( 'still in the Spa', 'fishotel-misc-plugin' ),
+			'saleOwn'     => __( 'own date', 'fishotel-misc-plugin' ),
+			'saleBatch'   => __( 'from the batch', 'fishotel-misc-plugin' ),
 			'clearedOn'   => __( 'cleared %s', 'fishotel-misc-plugin' ),
 			'live'        => __( 'live', 'fishotel-misc-plugin' ),
 			'pickTank'    => __( 'Pick a tank', 'fishotel-misc-plugin' ),
@@ -263,8 +294,9 @@ class Front_Desk {
 			'ago'         => __( '%s ago', 'fishotel-misc-plugin' ),
 			'clearedDate' => __( 'Cleared date', 'fishotel-misc-plugin' ),
 			'checkinDate' => __( 'Check-in date', 'fishotel-misc-plugin' ),
-			'readyDate'   => __( 'Sale-ready date', 'fishotel-misc-plugin' ),
-			'readyAuto'   => __( 'Leave empty for %d days after check-in', 'fishotel-misc-plugin' ),
+			'readyDate'   => __( 'Sale date (this group)', 'fishotel-misc-plugin' ),
+			'readyBatch'  => __( 'Empty = the batch date (%s).', 'fishotel-misc-plugin' ),
+			'readyNone'   => __( 'Empty = no sale date: the batch has none yet (set it on the supplier order).', 'fishotel-misc-plugin' ),
 			'unsetDate'   => __( 'Not cleared', 'fishotel-misc-plugin' ),
 			'dates'       => __( 'Dates', 'fishotel-misc-plugin' ),
 			'tankNote'    => __( 'Tank note', 'fishotel-misc-plugin' ),
@@ -309,17 +341,19 @@ class Front_Desk {
 		$today    = Clean_Room::today();
 
 		$data = array(
-			'today'    => $today,
-			'tablesOk' => Store::tables_exist(),
-			'tank'     => null,
-			'grid'     => array(),
-			'spaTanks' => array(),
-			'recent'   => array(),
-			'settings' => array(
+			'today'       => $today,
+			'saleDateMin' => Replay::SALE_DATE_MIN,
+			'saleDateMax' => Replay::sale_date_max( $today ),
+			'tablesOk'    => Store::tables_exist(),
+			'tank'        => null,
+			'grid'        => array(),
+			'spaTanks'    => array(),
+			'recent'      => array(),
+			'settings'    => array(
 				'autoConfirmSeconds' => (int) $settings['auto_confirm_seconds'],
 				'voiceEnabled'       => ! empty( $settings['voice_enabled'] ),
 				'undoSeconds'        => Settings::UNDO_SECONDS,
-				'saleReadyDays'      => (int) $settings['sale_ready_days'],
+				'saleReadyDays'      => (int) $settings['sale_ready_days'], // The suggestion only (occupants carry saleSuggested).
 				'copperFloor'        => (float) $settings['copper_floor'],
 				'copperTarget'       => (float) $settings['copper_target'],
 			),
@@ -445,9 +479,13 @@ class Front_Desk {
 			'stateLabel'      => (string) $stay['state_label'],
 			'checkinDate'     => (string) $stay['checkin_date'],
 			'clearedDate'     => $stay['cleared_date'],
-			'saleReadyDate'   => (string) $stay['sale_ready_date'],
-			'saleReadyManual' => $stay['sale_ready_override'],
+			'saleReadyDate'   => Replay::is_date( $stay['sale_ready_date'] ?? null ) ? (string) $stay['sale_ready_date'] : '',
+			'saleReadyManual' => $stay['sale_ready_override'] ?? null,
+			'saleSource'      => (string) ( $stay['sale_date_source'] ?? '' ),
+			'batchSaleDate'   => $stay['batch_sale_date'] ?? null,
+			'saleSuggested'   => (string) ( $stay['sale_ready_suggested'] ?? '' ),
 			'saleReady'       => ! empty( $stay['sale_ready'] ),
+			'readyInSpa'      => ! empty( $stay['ready_in_spa'] ),
 		);
 	}
 
@@ -1029,7 +1067,7 @@ class Front_Desk {
 
 	/**
 	 * The check-in date by hand: a "checkin:" note (Replay::NOTE_CHECKIN);
-	 * the day number and the sale-ready date follow from it.
+	 * the day number and the suggested sale date follow from it.
 	 */
 	private static function act_checkin( array $ctx, array $raw ) {
 		$stays = self::targets( $ctx, $raw, false );
@@ -1058,17 +1096,32 @@ class Front_Desk {
 	}
 
 	/**
-	 * The sale-ready override ('' = back to the setting).
+	 * The stay's own sale date ('' = none: back to the batch's date, or no
+	 * date at all when the batch has none). A date outside
+	 * Replay::SALE_DATE_MIN – two years after today is refused; the date
+	 * the group already has writes nothing.
 	 */
 	private static function act_ready( array $ctx, array $raw ) {
 		$stays = self::targets( $ctx, $raw, false );
 		if ( ! is_array( $stays ) ) {
 			return array( 'error' => $stays );
 		}
-		$stay = $stays[0];
-		$date = self::text( $raw, 'date', 10 );
-		if ( '' !== $date && ! Replay::is_date( $date ) ) {
+		$stay  = $stays[0];
+		$date  = self::text( $raw, 'date', 10 );
+		$check = Replay::own_sale_date_check( $date, $stay['sale_ready_override'] ?? null, (string) $ctx['today'] );
+		if ( 'invalid' === $check ) {
 			return array( 'error' => __( 'That is not a date.', 'fishotel-misc-plugin' ) );
+		}
+		if ( 'range' === $check ) {
+			/* translators: 1: earliest date, 2: latest date */
+			return array( 'error' => sprintf( __( 'Pick a sale date from %1$s to %2$s.', 'fishotel-misc-plugin' ), Replay::SALE_DATE_MIN, Replay::sale_date_max( (string) $ctx['today'] ) ) );
+		}
+		if ( 'same' === $check ) {
+			return array(
+				/* translators: %s: species */
+				'message'   => sprintf( __( '%s: nothing changed', 'fishotel-misc-plugin' ), (string) $stay['species'] ),
+				'event_ids' => array(),
+			);
 		}
 
 		$written = self::write( $ctx, $stay['id'], array( 'type' => 'note', 'note' => Replay::NOTE_SALE_READY . $date, 'event_at' => gmdate( 'Y-m-d H:i:s' ) ) );
@@ -1077,10 +1130,39 @@ class Front_Desk {
 		}
 
 		return array(
-			/* translators: 1: species, 2: date */
-			'message'   => '' !== $date ? sprintf( __( '%1$s sale-ready %2$s', 'fishotel-misc-plugin' ), $stay['species'], $date ) : sprintf( /* translators: 1: species, 2: days */ __( '%1$s sale-ready %2$d days after check-in again', 'fishotel-misc-plugin' ), $stay['species'], (int) $ctx['settings']['sale_ready_days'] ),
+			'message'   => self::ready_message( (string) $stay['species'], $date, (array) ( $written['state'] ?? array() ) ),
 			'event_ids' => array( $written['event_id'] ),
 		);
+	}
+
+	/**
+	 * The toast after a sale date was set or removed (pure): "Pajama
+	 * Cardinalfish on sale 2026-10-30", "… back to the batch date
+	 * (2026-11-02)", "… no sale date now — set one on its supplier order",
+	 * with ", still in the Spa" when the date has come before the group
+	 * was cleared.
+	 *
+	 * @param string $species The group.
+	 * @param string $date    The date typed ('' = removed).
+	 * @param array  $state   The stay's state after the write (Replay::state()).
+	 * @return string
+	 */
+	public static function ready_message( $species, $date, array $state ) {
+		$batch = isset( $state['batch_sale_date'] ) && Replay::is_date( $state['batch_sale_date'] ) ? (string) $state['batch_sale_date'] : '';
+		if ( '' !== $date ) {
+			/* translators: 1: species, 2: date */
+			$text = sprintf( __( '%1$s on sale %2$s', 'fishotel-misc-plugin' ), $species, $date );
+		} elseif ( '' !== $batch ) {
+			/* translators: 1: species, 2: the batch's sale date */
+			$text = sprintf( __( '%1$s back to the batch date (%2$s)', 'fishotel-misc-plugin' ), $species, $batch );
+		} else {
+			/* translators: %s: species */
+			$text = sprintf( __( '%s: no sale date now — set one on its supplier order', 'fishotel-misc-plugin' ), $species );
+		}
+		if ( ! empty( $state['ready_in_spa'] ) ) {
+			$text .= ' · ' . __( 'still in the Spa', 'fishotel-misc-plugin' );
+		}
+		return $text;
 	}
 
 	/**

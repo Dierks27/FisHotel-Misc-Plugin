@@ -701,7 +701,10 @@ class Admin_Editor {
 			'time'    => time(),
 		);
 
-		update_user_meta( (int) $user_id, self::DRAFTS_META, $all );
+		// update_user_meta() strips one level of slashes from what it is given,
+		// so the typed code would come back without its backslashes ("\n" as
+		// "n", \WC_Order as WC_Order) and the next save would store it so.
+		update_user_meta( (int) $user_id, self::DRAFTS_META, wp_slash( $all ) );
 	}
 
 	/**
@@ -765,7 +768,7 @@ class Admin_Editor {
 		if ( empty( $all ) ) {
 			delete_user_meta( (int) $user_id, self::DRAFTS_META );
 		} else {
-			update_user_meta( (int) $user_id, self::DRAFTS_META, $all );
+			update_user_meta( (int) $user_id, self::DRAFTS_META, wp_slash( $all ) );
 		}
 	}
 

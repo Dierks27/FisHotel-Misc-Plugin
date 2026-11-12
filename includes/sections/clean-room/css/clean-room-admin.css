@@ -140,6 +140,38 @@
 	border-left-color: var(--fh-success, #46b450);
 }
 
+.fh-cr-chip--warn {
+	color: var(--fh-warning, #ffb900);
+	border-left-color: var(--fh-warning, #ffb900);
+}
+
+a.fh-cr-chip--muted {
+	color: var(--fh-text-secondary, #a0a0a0);
+	text-decoration: none;
+	border-left-color: var(--fh-text-secondary, #a0a0a0);
+}
+
+/* A group for sale whose date came before it left the Spa. */
+.fh-cr-warn {
+	display: inline-block;
+	font-size: 11px;
+	font-weight: 600;
+	color: #996300;
+}
+
+.fh-cr-wrap .fh-cr-warn {
+	color: var(--fh-warning, #ffb900);
+}
+
+.fh-cr-muted {
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-tank__sale {
+	font-size: 11px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
 .fh-cr-summary__meta {
 	margin-left: auto;
 	font-size: 12px;
@@ -638,6 +670,34 @@
 	align-items: center;
 }
 
+/* The batch's "Goes on sale" card on the order page. */
+.fh-cr-sale {
+	margin: 0 0 16px;
+}
+
+.fh-cr-sale__row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px;
+}
+
+.fh-cr-sale__status {
+	margin: 10px 0 6px;
+	font-size: 13px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-wrap .fh-cr-suggest-date {
+	color: var(--fh-accent, #00a0d2);
+	font-size: 12px;
+}
+
+.fh-cr-sale__own {
+	max-width: 640px;
+	margin-top: 6px;
+}
+
 .fh-cr-order__title {
 	display: flex;
 	align-items: center;
@@ -860,4 +920,35 @@
 .fh-cr-metabox .fh-cr-badge {
 	font-size: 10px;
 	padding: 1px 7px;
+}
+
+.fh-cr-metabox__head {
+	margin: 10px 0 2px;
+	font-weight: 600;
+}
+
+.fh-cr-metabox__sale > div,
+.fh-cr-metabox__sale > label,
+.fh-cr-metabox__sale > span {
+	display: block;
+	margin: 2px 0;
+}
+
+.fh-cr-metabox__date {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.fh-cr-metabox__date input[type="date"] {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.fh-cr-metabox__batch {
+	font-size: 12px;
+}
+
+.fh-cr-metabox .fh-cr-suggest-date {
+	font-size: 12px;
 }

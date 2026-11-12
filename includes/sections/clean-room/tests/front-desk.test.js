@@ -1,7 +1,8 @@
 /**
  * Front Desk JS — the pure client helpers: number-word normalisation (the
- * "Heard:" line), the tank-number phrases, and the preview sentence
- * builder that mirrors the server's Parser::summary().
+ * "Heard:" line), the tank-number phrases, the preview sentence builder
+ * that mirrors the server's Parser::summary(), and a group's sale state
+ * in words (saleSummary).
  *
  * Runs js/front-desk.js without a DOM or config: the file exports its
  * helpers and skips the app when there is no document / window.fhFrontDesk.
@@ -29,7 +30,7 @@ function check( label, condition, detail ) {
 var tanks = [ 111, 112, 121, 122, 123, 211, 212, 221, 222, 311, 312, 321, 322, 511, 512, 513, 521, 522, 523, 524, 611, 621 ];
 
 console.log( '1. Exports' );
-check( 'helpers are exported for node', helpers && typeof helpers.normalizeNumberWords === 'function' && typeof helpers.previewSentence === 'function' && typeof helpers.tankValue === 'function' && typeof helpers.englishValue === 'function' );
+check( 'helpers are exported for node', helpers && typeof helpers.normalizeNumberWords === 'function' && typeof helpers.previewSentence === 'function' && typeof helpers.tankValue === 'function' && typeof helpers.englishValue === 'function' && typeof helpers.saleSummary === 'function' );
 check( 'helpers are also hung on the global for the browser', globalThis.fhFrontDeskHelpers && globalThis.fhFrontDeskHelpers.previewSentence === helpers.previewSentence );
 
 console.log( '2. englishValue() and tankValue()' );
@@ -88,6 +89,16 @@ check( 'sequential %s / %d', 'day 12 of 28' === helpers.fmt( 'day %d of %d', 12,
 check( 'positional', 'b then a' === helpers.fmt( '%2$s then %1$s', 'a', 'b' ) );
 check( 'escapes the five characters', '&lt;b&gt;&amp;&quot;&#039;' === helpers.escapeHtml( '<b>&"\'' ) );
 check( 'null → empty', '' === helpers.escapeHtml( null ) );
+
+console.log( '6. saleSummary()' );
+var sale = helpers.saleSummary( { saleReadyDate: '2026-10-25', saleSource: 'batch', saleSuggested: '2026-10-29', readyInSpa: false } );
+check( 'a batch date: "on sale <date> · from the batch", no warning', 'on sale 2026-10-25 · from the batch' === sale.text && 'on sale 2026-10-25' === sale.short && '' === sale.warning );
+check( 'an own date: "· own date"', 'on sale 2026-11-02 · own date' === helpers.saleSummary( { saleReadyDate: '2026-11-02', saleSource: 'own' } ).text );
+sale = helpers.saleSummary( { saleReadyDate: '', saleSuggested: '2026-10-29' } );
+check( 'no date: "Sale date not set · suggested <date>" (the suggestion is only a hint)', 'Sale date not set · suggested 2026-10-29' === sale.text && 'Sale date not set' === sale.short );
+check( 'no date and no check-in: no suggestion', 'Sale date not set' === helpers.saleSummary( {} ).text && 'Sale date not set' === helpers.saleSummary( null ).text );
+check( 'for sale while still in the Spa: the warning', 'still in the Spa' === helpers.saleSummary( { saleReadyDate: '2026-10-15', saleSource: 'batch', readyInSpa: true } ).warning );
+check( 'the page\'s translated strings are used when given', 'ON SALE 2026-10-25 · BATCH' === helpers.saleSummary( { saleReadyDate: '2026-10-25', saleSource: 'batch' }, { readyOn: 'ON SALE %s', saleBatch: 'BATCH' } ).text );
 
 console.log( '' );
 console.log( failures ? failures + ' of ' + checks + ' checks FAILED' : 'All ' + checks + ' checks passed' );

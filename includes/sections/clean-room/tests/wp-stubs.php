@@ -1,6 +1,8 @@
 <?php
 /**
- * Just enough WordPress to load the Clean Room section's classes headless.
+ * Just enough WordPress to load the Clean Room section's classes headless
+ * (and to drive the admin-post / save_post handlers: capabilities per
+ * user, nonces that match wp_create_nonce(), the current user).
  *
  * Layout, Replay, Parser, Qr, Costing, Stats, Species, Xlsx, Workbook and
  * Import_Map touch no WordPress function at all; Settings needs the
@@ -35,6 +37,10 @@ function esc_html( $text ) {
 }
 
 function esc_attr( $text ) {
+	return htmlspecialchars( (string) $text, ENT_QUOTES, 'UTF-8' );
+}
+
+function esc_attr__( $text, $domain = null ) {
 	return htmlspecialchars( (string) $text, ENT_QUOTES, 'UTF-8' );
 }
 
@@ -167,6 +173,40 @@ function user_can( $user, $capability ) {
 
 function get_current_user_id() {
 	return (int) ( $GLOBALS['fh_current_user'] ?? 0 );
+}
+
+/**
+ * The current user's capabilities, from the same registry (a meta cap
+ * like edit_post is granted per user, whatever the post).
+ */
+function current_user_can( $capability, ...$args ) {
+	return user_can( get_current_user_id(), $capability );
+}
+
+/**
+ * The current user: ID and user_login ($GLOBALS['fh_user_logins'][ id ], else "user<id>").
+ */
+function wp_get_current_user() {
+	$id = get_current_user_id();
+	return (object) array(
+		'ID'         => $id,
+		'user_login' => $id > 0 ? (string) ( $GLOBALS['fh_user_logins'][ $id ] ?? 'user' . $id ) : '',
+	);
+}
+
+/**
+ * A nonce is valid when it is exactly what wp_create_nonce() gives for the action.
+ */
+function wp_verify_nonce( $nonce, $action = -1 ) {
+	return is_string( $nonce ) && '' !== $nonce && hash_equals( wp_create_nonce( $action ), $nonce ) ? 1 : false;
+}
+
+function get_edit_post_link( $id = 0, $context = 'display' ) {
+	return admin_url( 'post.php?post=' . (int) $id . '&action=edit' );
+}
+
+function _n( $single, $plural, $number, $domain = null ) {
+	return 1 === (int) $number ? $single : $plural;
 }
 
 /**

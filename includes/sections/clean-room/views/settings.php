@@ -56,10 +56,10 @@ $tab = 'settings';
 				<div class="fishotel-misc-card-icon"><span class="dashicons dashicons-calendar"></span></div>
 				<h2 class="fishotel-misc-card-title"><?php esc_html_e( 'Numbers', 'fishotel-misc-plugin' ); ?></h2>
 			</div>
-			<p class="fishotel-misc-card-desc"><?php esc_html_e( 'A stay is cleared the day it moves from the Spa into the Clean Room (editable per stay) and sale-ready this many days after check-in — the full stay, not the day number (overridable per stay).', 'fishotel-misc-plugin' ); ?></p>
+			<p class="fishotel-misc-card-desc"><?php esc_html_e( 'A stay is cleared the day it moves from the Spa into the Clean Room (editable per stay). A group goes on sale on the date you choose: its batch\'s date ("Goes on sale" on the supplier order, Arrivals) or its own date (the Clean room box on the product page, or Dates on the phone). The number below never puts anything on sale: it is only the suggested date (check-in + this many days) shown next to the date pickers, which a tap on "suggested …" fills in.', 'fishotel-misc-plugin' ); ?></p>
 
 			<div class="fh-cr-field fh-cr-field--row">
-				<label class="fh-cr-label" for="fh-cr-days"><?php esc_html_e( 'Sale-ready: days after check-in (1–120)', 'fishotel-misc-plugin' ); ?></label>
+				<label class="fh-cr-label" for="fh-cr-days"><?php esc_html_e( 'Suggested sale date: days after check-in (1–120)', 'fishotel-misc-plugin' ); ?></label>
 				<input type="number" id="fh-cr-days" class="fh-cr-input fh-cr-input--num" name="sale_ready_days" min="<?php echo esc_attr( Settings::SALE_READY_MIN ); ?>" max="<?php echo esc_attr( Settings::SALE_READY_MAX ); ?>" step="1" required value="<?php echo esc_attr( $settings['sale_ready_days'] ); ?>">
 			</div>
 			<div class="fh-cr-field fh-cr-field--row">

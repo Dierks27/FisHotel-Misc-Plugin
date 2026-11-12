@@ -75,15 +75,17 @@ echo "4. Filters and totals\n";
 $filters = Admin::filters_from_request( array( 'area' => 'SPA', 's' => ' <b>cardinal</b> ' ) );
 check( 'area is validated (lower-cased), species sanitised', 'spa' === $filters['area'] && 'cardinal' === $filters['species'] );
 check( 'unknown area → both', '' === Admin::filters_from_request( array( 'area' => 'lab' ) )['area'] );
-check( 'nothing → empty filters', array( 'area' => '', 'species' => '' ) === Admin::filters_from_request( null ) );
+check( 'nothing → empty filters', array( 'area' => '', 'species' => '', 'ready' => false ) === Admin::filters_from_request( null ) );
+check( 'ready=1 → only the groups for sale today', true === Admin::filters_from_request( array( 'ready' => '1' ) )['ready'] && false === Admin::filters_from_request( array( 'ready' => 'yes' ) )['ready'] );
 $tanks = array(
-	array( 'status' => 'active', 'occupants' => array( array( 'qty_live' => 4, 'status' => 'in_qt', 'sale_ready' => false ), array( 'qty_live' => 2, 'status' => 'cleared', 'sale_ready' => false ) ) ),
-	array( 'status' => 'active', 'occupants' => array( array( 'qty_live' => 3, 'status' => 'cleared', 'sale_ready' => true ) ) ),
+	array( 'status' => 'active', 'occupants' => array( array( 'qty_live' => 4, 'status' => 'in_qt', 'sale_ready' => false, 'sale_ready_date' => null ), array( 'qty_live' => 2, 'status' => 'cleared', 'sale_ready' => false, 'sale_ready_date' => '2026-05-01' ) ) ),
+	array( 'status' => 'active', 'occupants' => array( array( 'qty_live' => 3, 'status' => 'cleared', 'sale_ready' => true, 'sale_ready_date' => '2026-04-20' ) ) ),
+	array( 'status' => 'active', 'occupants' => array( array( 'qty_live' => 1, 'status' => 'in_qt', 'sale_ready' => true, 'ready_in_spa' => true, 'sale_ready_date' => '2026-04-20' ) ) ),
 	array( 'status' => 'active', 'occupants' => array() ),
 	array( 'status' => 'offline', 'occupants' => array() ),
 );
 $totals = Admin::totals( $tanks );
-check( 'totals: 1 in QT, 1 cleared, 1 ready, 9 alive, 1 of 3 tanks empty (offline skipped)', array( 'in_qt' => 1, 'cleared' => 1, 'ready' => 1, 'live' => 9, 'tanks' => 3, 'empty' => 1 ) === $totals, json_encode( $totals ) );
+check( 'totals: 1 in QT, 1 cleared, 2 for sale (one still in the Spa), 10 alive, 1 of 4 tanks empty (offline skipped), 1 group without a sale date', array( 'in_qt' => 1, 'cleared' => 1, 'ready' => 2, 'live' => 10, 'tanks' => 4, 'empty' => 1, 'ready_in_spa' => 1, 'no_sale_date' => 1 ) === $totals, json_encode( $totals ) );
 check( 'matches_species is case-insensitive and empty matches all', Admin::matches_species( array( 'species' => 'Pajama Cardinalfish' ), 'CARDINAL' ) && Admin::matches_species( array( 'species' => 'x' ), '' ) && ! Admin::matches_species( array( 'species' => 'Yellow Tang' ), 'cardinal' ) );
 
 echo "5. Plain words for the Events tab\n";
@@ -100,7 +102,7 @@ check( 'move_reason', 'pairing' === Admin::move_reason( 'pairing' ) && 'bullying
 check( 'clear / unclear', 'cleared' === Admin::event_text( array( 'type' => 'clear' ) ) && 'cleared date removed (undo)' === Admin::event_text( array( 'type' => 'clear', 'qty' => -1, 'note' => 'undo of #9' ) ) );
 check( 'a clear with the date in its note', 'cleared date set to 2026-04-10' === Admin::event_text( array( 'type' => 'clear', 'note' => 'cleared:2026-04-10' ) ) );
 check( 'recount', 'recount: 4' === Admin::event_text( array( 'type' => 'count', 'qty' => 4 ) ) );
-check( 'a sale-ready note', 'sale-ready date set to 2026-05-20' === Admin::event_text( array( 'type' => 'note', 'note' => 'sale_ready:2026-05-20' ) ) && 'sale-ready date back to the default' === Admin::event_text( array( 'type' => 'note', 'note' => 'sale_ready:' ) ) );
+check( 'a sale-date note', 'own sale date set to 2026-05-20' === Admin::event_text( array( 'type' => 'note', 'note' => 'sale_ready:2026-05-20' ) ) && 'own sale date removed (the batch date applies)' === Admin::event_text( array( 'type' => 'note', 'note' => 'sale_ready:' ) ) );
 check( 'a check-in note', 'check-in date set to 2026-04-01' === Admin::event_text( array( 'type' => 'note', 'note' => 'checkin:2026-04-01' ) ) && 'check-in date back to the arrival' === Admin::event_text( array( 'type' => 'note', 'note' => 'checkin:' ) ) );
 check( 'a plain note', 'note: looking thin' === Admin::event_text( array( 'type' => 'note', 'note' => 'looking thin' ) ) );
 check( 'tank log: copper, tick, note', 'copper 2.4' === Admin::log_text( array( 'kind' => 'copper', 'value' => 2.4 ) ) && 'water change: copper off #7' === Admin::log_text( array( 'kind' => 'water_change', 'note' => 'copper off #7' ) ) && 'note: skimmer cleaned' === Admin::log_text( array( 'kind' => 'note', 'note' => 'skimmer cleaned' ) ) );

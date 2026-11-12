@@ -5,7 +5,11 @@
  * handed to Admin_Workbook), the stays CSV, the printable QR labels, the
  * stay edits from the Stays tab (counts, dates, a move, the seam fields),
  * the per-row Undo on the Events tab, the Coming Soon release button and
- * the product meta box.
+ * the product meta box — which also edits the sale date of each open
+ * stay of the product, saved with the product's Update button
+ * (save_meta_box(): its own nonce, edit_post AND manage_woocommerce;
+ * nothing on autosave, quick / bulk edit or REST; never in the way of
+ * the product save).
  *
  * Every write path checks manage_woocommerce (settings: manage_options)
  * and a nonce. The CSV guards every cell that starts with = + - @ or a
@@ -51,11 +55,21 @@ class Admin {
 	const RELEASE_DISPATCHED = '_fh_release_dispatched';
 
 	/**
-	 * Time of day (site zone) a release defaults to on the sale-ready date.
+	 * Time of day (site zone) a release defaults to on the sale date.
 	 *
 	 * @var string
 	 */
 	const RELEASE_TIME = '09:00:00';
+
+	/**
+	 * The product meta box's sale dates: the nonce action (+ the product
+	 * id), its field name, the posted array (fh_cr_sale[<stay id>][date |
+	 * shown | batch]) and the per-user notice carried across the redirect.
+	 */
+	const NONCE_PRODUCT       = 'fishotel_cleanroom_product_sale_dates_';
+	const NONCE_PRODUCT_FIELD = 'fh_cr_sale_nonce';
+	const SALE_FIELD          = 'fh_cr_sale';
+	const SALE_NOTICE         = 'fishotel_cleanroom_sale_notice_';
 
 	/**
 	 * Register hooks.
@@ -67,6 +81,8 @@ class Admin {
 		add_action( 'wp_ajax_fishotel_cleanroom_stay', array( $this, 'ajax_stay' ) );
 		add_action( 'wp_ajax_fishotel_cleanroom_release', array( $this, 'ajax_release' ) );
 		add_action( 'add_meta_boxes_product', array( $this, 'add_meta_box' ) );
+		add_action( 'save_post_product', array( $this, 'save_meta_box' ), 20, 3 );
+		add_action( 'admin_notices', array( $this, 'sale_date_notices' ) );
 	}
 
 	/**
@@ -199,10 +215,10 @@ class Admin {
 	}
 
 	/**
-	 * area / species from a request array.
+	 * area / species / ready (for sale today) from a request array.
 	 *
 	 * @param array $request $_GET-like.
-	 * @return array{area: string, species: string}
+	 * @return array{area: string, species: string, ready: bool}
 	 */
 	public static function filters_from_request( $request ) {
 		$request = is_array( $request ) ? $request : array();
@@ -216,23 +232,29 @@ class Admin {
 		return array(
 			'area'    => $area,
 			'species' => substr( $species, 0, 120 ),
+			'ready'   => isset( $request['ready'] ) && '1' === (string) wp_unslash( $request['ready'] ),
 		);
 	}
 
 	/**
-	 * Counts across the room (pure).
+	 * Counts across the room (pure): groups in QT / cleared / for sale
+	 * (a group for sale counts as ready, wherever it is), fish alive,
+	 * tanks; and the two warnings — groups for sale while still in the
+	 * Spa, and groups without a sale date.
 	 *
 	 * @param array[] $tanks Tanks with occupants.
-	 * @return array{in_qt: int, cleared: int, ready: int, live: int, tanks: int, empty: int}
+	 * @return array{in_qt: int, cleared: int, ready: int, live: int, tanks: int, empty: int, ready_in_spa: int, no_sale_date: int}
 	 */
 	public static function totals( array $tanks ) {
 		$out = array(
-			'in_qt'   => 0,
-			'cleared' => 0,
-			'ready'   => 0,
-			'live'    => 0,
-			'tanks'   => 0,
-			'empty'   => 0,
+			'in_qt'        => 0,
+			'cleared'      => 0,
+			'ready'        => 0,
+			'live'         => 0,
+			'tanks'        => 0,
+			'empty'        => 0,
+			'ready_in_spa' => 0,
+			'no_sale_date' => 0,
 		);
 		foreach ( $tanks as $tank ) {
 			if ( 'offline' === (string) ( $tank['status'] ?? '' ) ) {
@@ -251,6 +273,12 @@ class Admin {
 					$out['cleared']++;
 				} else {
 					$out['in_qt']++;
+				}
+				if ( ! empty( $stay['ready_in_spa'] ) ) {
+					$out['ready_in_spa']++;
+				}
+				if ( empty( $stay['sale_ready_date'] ) ) {
+					$out['no_sale_date']++;
 				}
 			}
 		}
@@ -288,8 +316,9 @@ class Admin {
 	}
 
 	/**
-	 * The meta box: this product's stays with day counts, the facts line
-	 * and a link to the board.
+	 * The meta box: this product's stays with day counts, the facts line,
+	 * a sale-date row per open stay (saved with the product's Update
+	 * button) and a link to the board.
 	 *
 	 * @param \WP_Post $post The product.
 	 */
@@ -312,11 +341,220 @@ class Admin {
 			return;
 		}
 
-		$board_url   = self::page_url( 'stays' );
-		$release_ts  = (int) get_post_meta( $product_id, self::RELEASE_META, true );
-		$release_url = '';
+		$board_url    = self::page_url( 'stays' );
+		$release_ts   = (int) get_post_meta( $product_id, self::RELEASE_META, true );
+		$release_url  = '';
+		$nonce_action = self::NONCE_PRODUCT . $product_id;
 
 		include Clean_Room::path() . 'views/meta-box.php';
+	}
+
+	/**
+	 * save_post_product: the sale dates typed in the meta box, saved with
+	 * the product. Only the classic edit form carries the box's nonce
+	 * field, so an autosave, a quick or bulk edit and a REST save do
+	 * nothing here; the nonce (per product), edit_post on the product AND
+	 * the section's capability are checked; it runs once per request (the
+	 * product save can fire this hook twice). Anything that goes wrong is
+	 * caught and logged — the product save itself is never stopped.
+	 *
+	 * @param int           $post_id Product id.
+	 * @param \WP_Post|null $post    The product (unused).
+	 * @param bool          $update  Whether an existing post was updated (unused).
+	 * @param object|null   $store   A store to use instead of the real one (the tests' stand-in).
+	 * @return array|false save_product_sale_dates() — false when nothing was looked at.
+	 */
+	public function save_meta_box( $post_id, $post = null, $update = false, $store = null ) {
+		static $done = array();
+		unset( $post, $update );
+
+		$post_id = (int) $post_id;
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- the nonce is verified below; its absence means "not our form".
+		if ( $post_id <= 0 || empty( $_POST[ self::NONCE_PRODUCT_FIELD ] ) || isset( $done[ $post_id ] ) ) {
+			return false;
+		}
+		if ( ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE ) || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) {
+			return false;
+		}
+		if ( ( function_exists( 'wp_is_post_revision' ) && wp_is_post_revision( $post_id ) ) || ( function_exists( 'wp_is_post_autosave' ) && wp_is_post_autosave( $post_id ) ) ) {
+			return false;
+		}
+		$nonce = is_scalar( $_POST[ self::NONCE_PRODUCT_FIELD ] ) ? sanitize_text_field( wp_unslash( (string) $_POST[ self::NONCE_PRODUCT_FIELD ] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
+		if ( '' === $nonce || ! wp_verify_nonce( $nonce, self::NONCE_PRODUCT . $post_id ) ) {
+			return false;
+		}
+		if ( ! current_user_can( 'edit_post', $post_id ) || ! current_user_can( Clean_Room::CAPABILITY ) ) {
+			return false;
+		}
+		$done[ $post_id ] = true;
+
+		$raw = isset( $_POST[ self::SALE_FIELD ] ) && is_array( $_POST[ self::SALE_FIELD ] ) ? wp_unslash( $_POST[ self::SALE_FIELD ] ) : array(); // phpcs:ignore WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified above; every value is checked in save_product_sale_dates().
+
+		$today = Clean_Room::today();
+		try {
+			$result = self::save_product_sale_dates( $store ? $store : new Store(), $post_id, (array) $raw, $today, Settings::get(), (int) get_current_user_id() );
+		} catch ( \Throwable $e ) {
+			do_action(
+				'fishotel_log',
+				'error',
+				'clean-room',
+				sprintf( 'The sale dates of product #%1$d could not be saved: %2$s', $post_id, $e->getMessage() ),
+				array( 'product_id' => $post_id )
+			);
+			self::queue_sale_notice( array( __( 'The Clean room sale dates could not be saved (see FisHotel Health). The product itself was saved.', 'fishotel-misc-plugin' ) ), 'error' );
+			return false;
+		}
+
+		$lines = array();
+		if ( $result['events'] > 0 ) {
+			/* translators: %d: groups */
+			$lines[] = sprintf( _n( 'Clean room: the sale date of %d group was saved.', 'Clean room: the sale dates of %d groups were saved.', $result['events'], 'fishotel-misc-plugin' ), $result['events'] );
+		}
+		foreach ( $result['invalid'] as $label ) {
+			/* translators: 1: the group (species, tank) and what was typed, 2: earliest date, 3: latest date */
+			$lines[] = sprintf( __( 'Clean room: %1$s is not a date from %2$s to %3$s — ignored, that group keeps its sale date.', 'fishotel-misc-plugin' ), $label, Replay::SALE_DATE_MIN, Replay::sale_date_max( $today ) );
+		}
+		foreach ( $result['follows_batch'] as $row ) {
+			/* translators: 1: the group, 2: the batch's sale date, 3: supplier order ref */
+			$lines[] = sprintf( __( 'Clean room: %1$s follows the batch date (%2$s) — change or clear it on supplier order %3$s.', 'fishotel-misc-plugin' ), $row['label'], $row['date'], $row['ref'] );
+		}
+		foreach ( $result['failed'] as $label ) {
+			/* translators: %s: the group */
+			$lines[] = sprintf( __( 'Clean room: the sale date of %s could not be saved.', 'fishotel-misc-plugin' ), $label );
+		}
+		if ( $lines ) {
+			self::queue_sale_notice( $lines, $result['invalid'] || $result['follows_batch'] || $result['failed'] ? 'warning' : 'success' );
+		}
+
+		return $result;
+	}
+
+	/**
+	 * The sale dates from the meta box into the stays (the testable core
+	 * of save_meta_box()). Per open stay of the product present in the
+	 * post: "Use the batch date" ticked → no own date; else a date equal
+	 * to what the box showed → untouched (so the batch's date shown in the
+	 * picker is never copied into an own date); else empty → no own date
+	 * (a group that has none and shows its batch's date is reported in
+	 * follows_batch: that date lives on the supplier order); else a real
+	 * Y-m-d from Replay::SALE_DATE_MIN to two years after today → that own
+	 * date; anything else is reported and ignored. Only a stay whose own
+	 * date really changes gets an event — the same "sale_ready:" note
+	 * event the Stays tab and the phone write, so the Replay and the
+	 * stay's history stay complete.
+	 *
+	 * @param object $store      Store (or stand-in) with stays_for_product() and record_event().
+	 * @param int    $product_id Product id.
+	 * @param array  $raw        Unslashed fh_cr_sale: stay id => { date, shown, batch }.
+	 * @param string $today      Site date.
+	 * @param array  $settings   Settings.
+	 * @param int    $actor_id   User.
+	 * @return array{events: int, changed: int[], invalid: string[], follows_batch: array[], failed: string[]}
+	 */
+	public static function save_product_sale_dates( $store, $product_id, array $raw, $today, array $settings, $actor_id = 0 ) {
+		$out = array(
+			'events'        => 0,
+			'changed'       => array(),
+			'invalid'       => array(),
+			'follows_batch' => array(),
+			'failed'        => array(),
+		);
+		if ( ! $raw ) {
+			return $out;
+		}
+
+		foreach ( $store->stays_for_product( (int) $product_id, $today, $settings ) as $stay ) {
+			$id = (int) $stay['id'];
+			if ( 'closed' === (string) $stay['status'] || ! isset( $raw[ $id ] ) || ! is_array( $raw[ $id ] ) ) {
+				continue;
+			}
+			$row   = $raw[ $id ];
+			$date  = isset( $row['date'] ) && is_scalar( $row['date'] ) ? trim( sanitize_text_field( (string) $row['date'] ) ) : '';
+			$shown = isset( $row['shown'] ) && is_scalar( $row['shown'] ) ? trim( sanitize_text_field( (string) $row['shown'] ) ) : '';
+			$label = sprintf( '%s (%s)', (string) $stay['species'], ! empty( $stay['tank_number'] ) ? 'Tank ' . (int) $stay['tank_number'] : '#' . $id );
+
+			if ( ! empty( $row['batch'] ) && '0' !== (string) $row['batch'] ) {
+				$wanted = null;
+			} elseif ( $date === $shown ) {
+				continue; // Untouched.
+			} elseif ( '' === $date ) {
+				$wanted = null;
+			} elseif ( Replay::is_sale_date_in_range( $date, $today ) ) {
+				$wanted = $date;
+			} else {
+				$out['invalid'][] = $label . ': "' . substr( $date, 0, 20 ) . '"';
+				continue;
+			}
+
+			$current = Replay::is_date( $stay['sale_ready_override'] ?? null ) ? (string) $stay['sale_ready_override'] : null;
+			if ( $wanted === $current ) {
+				if ( null === $wanted && empty( $row['batch'] ) && Replay::is_date( $stay['batch_sale_date'] ?? null ) ) {
+					$out['follows_batch'][] = array(
+						'label' => $label,
+						'date'  => (string) $stay['batch_sale_date'],
+						'ref'   => (string) ( $stay['batch_order_ref'] ?? '' ),
+					);
+				}
+				continue;
+			}
+
+			$written = $store->record_event(
+				$id,
+				array(
+					'type'     => 'note',
+					'note'     => Replay::NOTE_SALE_READY . ( null !== $wanted ? $wanted : '' ),
+					'event_at' => gmdate( 'Y-m-d H:i:s' ),
+					'actor_id' => (int) $actor_id,
+					'source'   => 'manual',
+				),
+				$today,
+				$settings
+			);
+			if ( $written ) {
+				$out['events']++;
+				$out['changed'][] = $id;
+			} else {
+				$out['failed'][] = $label;
+			}
+		}
+
+		return $out;
+	}
+
+	/**
+	 * Keep notice lines for this user's next admin page (the product edit
+	 * screen after the redirect).
+	 *
+	 * @param string[] $lines Lines.
+	 * @param string   $type  success|warning|error.
+	 */
+	private static function queue_sale_notice( array $lines, $type ) {
+		set_transient(
+			self::SALE_NOTICE . (int) get_current_user_id(),
+			array(
+				'type'  => in_array( $type, array( 'success', 'warning', 'error' ), true ) ? $type : 'warning',
+				'lines' => array_values( array_map( 'strval', $lines ) ),
+			),
+			5 * MINUTE_IN_SECONDS
+		);
+	}
+
+	/**
+	 * admin_notices: the meta box's notice, once.
+	 */
+	public function sale_date_notices() {
+		$key    = self::SALE_NOTICE . (int) get_current_user_id();
+		$notice = get_transient( $key );
+		if ( ! is_array( $notice ) || empty( $notice['lines'] ) ) {
+			return;
+		}
+		delete_transient( $key );
+
+		echo '<div class="notice notice-' . esc_attr( (string) $notice['type'] ) . ' is-dismissible">';
+		foreach ( (array) $notice['lines'] as $line ) {
+			echo '<p>' . esc_html( (string) $line ) . '</p>';
+		}
+		echo '</div>';
 	}
 
 	/* ============================================================== */
@@ -374,6 +612,9 @@ class Admin {
 					'reloading'      => __( 'Saved. Reloading…', 'fishotel-misc-plugin' ),
 					'howMany'        => __( 'How many?', 'fishotel-misc-plugin' ),
 					'which'          => __( 'Which date (YYYY-MM-DD)? Leave empty to clear.', 'fishotel-misc-plugin' ),
+					/* translators: %s: the batch's sale date */
+					'whichSaleBatch' => __( 'This group\'s own sale date (YYYY-MM-DD)? Leave empty to use the batch date (%s).', 'fishotel-misc-plugin' ),
+					'whichSale'      => __( 'This group\'s own sale date (YYYY-MM-DD)? Leave empty for none — the batch has no date yet.', 'fishotel-misc-plugin' ),
 					'whichTank'      => __( 'Move to which tank number?', 'fishotel-misc-plugin' ),
 					'whyMove'        => __( 'Why? (optional: clear building / bullying / pairing / other)', 'fishotel-misc-plugin' ),
 					'confirmCheckin' => __( 'Check the received fish in? One stay per line with fish (lines already checked in are skipped). The order becomes "received".', 'fishotel-misc-plugin' ),
@@ -396,7 +637,7 @@ class Admin {
 
 	/**
 	 * AJAX: an edit on one stay — loss, sold, count, clear / unclear,
-	 * ready (override), note, move (whole group, optional reason), undo
+	 * ready (the stay's own sale date; empty = the batch's), note, move (whole group, optional reason), undo
 	 * (one event, by id: a compensating event with the same idempotence
 	 * guard as the phone, without its actor / age guard — the admin may
 	 * fix anyone's mistake), or the seam fields (plus the check-in date).
@@ -495,11 +736,21 @@ class Admin {
 					$msg = __( 'Undone (a compensating event was written).', 'fishotel-misc-plugin' );
 					break;
 				case 'ready':
-					if ( '' !== $date && ! Replay::is_date( $date ) ) {
+					$check = Replay::own_sale_date_check( $date, $stay['sale_ready_override'] ?? null, $today );
+					if ( 'invalid' === $check ) {
 						wp_send_json_error( array( 'message' => __( 'That is not a date.', 'fishotel-misc-plugin' ) ), 400 );
 					}
+					if ( 'range' === $check ) {
+						/* translators: 1: earliest date, 2: latest date */
+						wp_send_json_error( array( 'message' => sprintf( __( 'Pick a sale date from %1$s to %2$s.', 'fishotel-misc-plugin' ), Replay::SALE_DATE_MIN, Replay::sale_date_max( $today ) ) ), 400 );
+					}
+					if ( 'same' === $check ) {
+						$ok  = true;
+						$msg = __( 'Nothing changed.', 'fishotel-misc-plugin' );
+						break;
+					}
 					$ok  = $store->record_event( $stay_id, array_merge( $base, array( 'type' => 'note', 'note' => Replay::NOTE_SALE_READY . $date ) ), $today, $settings );
-					$msg = __( 'Sale-ready date saved.', 'fishotel-misc-plugin' );
+					$msg = '' !== $date ? __( 'Own sale date saved.', 'fishotel-misc-plugin' ) : __( 'Own sale date removed: the batch date applies.', 'fishotel-misc-plugin' );
 					break;
 				case 'note':
 					$note = isset( $raw['note'] ) ? substr( sanitize_textarea_field( (string) $raw['note'] ), 0, 2000 ) : '';
@@ -552,8 +803,9 @@ class Admin {
 
 	/**
 	 * AJAX: set the product's Coming Soon release moment to a stay's
-	 * sale-ready date (RELEASE_TIME, site zone). The product must exist;
-	 * a stay never assumes one does.
+	 * effective sale date (RELEASE_TIME, site zone). The product must
+	 * exist; a stay never assumes one does. Nothing here runs on its own:
+	 * stock, visibility and purchasability stay manual.
 	 */
 	public function ajax_release() {
 		if ( ! current_user_can( Clean_Room::CAPABILITY ) ) {
@@ -571,8 +823,8 @@ class Admin {
 		if ( ! $stay || empty( $stay['product_id'] ) ) {
 			wp_send_json_error( array( 'message' => __( 'This stay is not linked to a product.', 'fishotel-misc-plugin' ) ), 400 );
 		}
-		if ( '' === (string) $stay['sale_ready_date'] ) {
-			wp_send_json_error( array( 'message' => __( 'This stay has no sale-ready date yet.', 'fishotel-misc-plugin' ) ), 400 );
+		if ( ! Replay::is_date( $stay['sale_ready_date'] ?? null ) ) {
+			wp_send_json_error( array( 'message' => __( 'This stay has no sale date yet — set one on its supplier order (Arrivals) or on the product page.', 'fishotel-misc-plugin' ) ), 400 );
 		}
 
 		$product_id = (int) $stay['product_id'];
@@ -602,7 +854,7 @@ class Admin {
 	}
 
 	/**
-	 * The release moment of a sale-ready date: RELEASE_TIME in the site
+	 * The release moment of a sale date: RELEASE_TIME in the site
 	 * zone, as a UNIX timestamp (pure apart from the zone).
 	 *
 	 * @param string $ymd Y-m-d.
@@ -686,7 +938,8 @@ class Admin {
 	}
 
 	/**
-	 * A stay as guarded CSV cells (pure).
+	 * A stay as guarded CSV cells (pure); sale_ready_date is the effective
+	 * sale date (the stay's own, else its batch's), empty when none is set.
 	 *
 	 * @param array $stay Hydrated stay.
 	 * @return string[]
@@ -703,7 +956,7 @@ class Admin {
 			self::csv_cell( (string) (int) ( $stay['qty_live'] ?? 0 ) ),
 			self::csv_cell( (string) ( $stay['checkin_date'] ?? '' ) ),
 			self::csv_cell( null !== ( $stay['day'] ?? null ) ? (string) $stay['day'] : '' ),
-			self::csv_cell( (string) ( $stay['state_label'] ?? $stay['status'] ?? '' ) ),
+			self::csv_cell( self::state_cell( $stay ) ),
 			self::csv_cell( (string) ( $stay['cleared_date'] ?? '' ) ),
 			self::csv_cell( (string) ( $stay['sale_ready_date'] ?? '' ) ),
 			self::csv_cell( (string) ( $stay['closed_date'] ?? '' ) ),
@@ -716,6 +969,22 @@ class Admin {
 			self::csv_cell( null !== ( $stay['landed_cost'] ?? null ) ? number_format( (float) $stay['landed_cost'], 2, '.', '' ) : '' ),
 			self::csv_cell( (string) ( $stay['notes'] ?? '' ) ),
 		);
+	}
+
+	/**
+	 * The state column of the stays exports (pure): the state label, with
+	 * " (still in the Spa)" when the group is for sale but not cleared.
+	 *
+	 * @param array $stay Hydrated stay.
+	 * @return string
+	 */
+	public static function state_cell( array $stay ) {
+		$label = (string) ( $stay['state_label'] ?? $stay['status'] ?? '' );
+		if ( ! empty( $stay['ready_in_spa'] ) ) {
+			/* translators: %s: state (ready) */
+			$label = sprintf( __( '%s (still in the Spa)', 'fishotel-misc-plugin' ), $label );
+		}
+		return $label;
 	}
 
 	/**
@@ -783,7 +1052,27 @@ class Admin {
 	/* ============================================================== */
 
 	/**
-	 * The state badge of a stay.
+	 * What the Stays tab's "Sale date…" prompt opens with (pure): the
+	 * group's own date; else nothing when its batch has a date (OK then
+	 * keeps the batch's date instead of copying one over it); else the
+	 * suggestion (check-in + the setting).
+	 *
+	 * @param array $stay Hydrated stay.
+	 * @return string Y-m-d or ''.
+	 */
+	public static function sale_prompt_default( array $stay ) {
+		if ( Replay::is_date( $stay['sale_ready_override'] ?? null ) ) {
+			return (string) $stay['sale_ready_override'];
+		}
+		if ( Replay::is_date( $stay['batch_sale_date'] ?? null ) ) {
+			return '';
+		}
+		return Replay::is_date( $stay['sale_ready_suggested'] ?? null ) ? (string) $stay['sale_ready_suggested'] : '';
+	}
+
+	/**
+	 * The state badge of a stay, with the "still in the Spa" warning when
+	 * it is for sale but not cleared yet.
 	 *
 	 * @param array $stay Hydrated stay.
 	 * @return string Escaped HTML.
@@ -792,8 +1081,52 @@ class Admin {
 		$status = (string) ( $stay['status'] ?? 'in_qt' );
 		$key    = ! empty( $stay['sale_ready'] ) ? 'ready' : $status;
 		$key    = in_array( $key, array( 'in_qt', 'cleared', 'ready', 'closed' ), true ) ? $key : 'in_qt';
+		$words  = self::sale_words( $stay );
 
-		return '<span class="fh-cr-badge fh-cr-badge--' . esc_attr( $key ) . '">' . esc_html( (string) ( $stay['state_label'] ?? $status ) ) . '</span>';
+		$html = '<span class="fh-cr-badge fh-cr-badge--' . esc_attr( $key ) . '">' . esc_html( (string) ( $stay['state_label'] ?? $status ) ) . '</span>';
+		if ( '' !== $words['warning'] ) {
+			$html .= ' <span class="fh-cr-warn" title="' . esc_attr__( 'Its sale date has come but it has not moved to the Clean Room yet.', 'fishotel-misc-plugin' ) . '">' . esc_html( $words['warning'] ) . '</span>';
+		}
+		return $html;
+	}
+
+	/**
+	 * A stay's sale state in words (pure): the effective sale date ("on
+	 * sale 2026-10-30") with where it comes from ("from the batch" / "own
+	 * date"), or "Sale date not set" with the suggestion ("suggested …",
+	 * check-in + the setting); the warning "still in the Spa" when it is
+	 * for sale but not cleared.
+	 *
+	 * @param array $stay Hydrated stay.
+	 * @return array{date: string, text: string, source: string, hint: string, warning: string}
+	 */
+	public static function sale_words( array $stay ) {
+		$date = isset( $stay['sale_ready_date'] ) && Replay::is_date( $stay['sale_ready_date'] ) ? (string) $stay['sale_ready_date'] : '';
+		$out  = array(
+			'date'    => $date,
+			'text'    => '',
+			'source'  => '',
+			'hint'    => '',
+			'warning' => '',
+		);
+
+		if ( '' === $date ) {
+			$out['text'] = __( 'Sale date not set', 'fishotel-misc-plugin' );
+			$suggested   = (string) ( $stay['sale_ready_suggested'] ?? '' );
+			if ( Replay::is_date( $suggested ) ) {
+				/* translators: %s: date */
+				$out['hint'] = sprintf( __( 'suggested %s', 'fishotel-misc-plugin' ), $suggested );
+			}
+		} else {
+			/* translators: %s: date */
+			$out['text']   = sprintf( __( 'on sale %s', 'fishotel-misc-plugin' ), $date );
+			$out['source'] = Replay::SALE_OWN === (string) ( $stay['sale_date_source'] ?? '' ) ? __( 'own date', 'fishotel-misc-plugin' ) : __( 'from the batch', 'fishotel-misc-plugin' );
+		}
+		if ( ! empty( $stay['ready_in_spa'] ) ) {
+			$out['warning'] = __( 'still in the Spa', 'fishotel-misc-plugin' );
+		}
+
+		return $out;
 	}
 
 	/**
@@ -855,7 +1188,7 @@ class Admin {
 			case 'note':
 				if ( 0 === strpos( $note, Replay::NOTE_SALE_READY ) ) {
 					$date = trim( substr( $note, strlen( Replay::NOTE_SALE_READY ) ) );
-					return '' !== $date ? 'sale-ready date set to ' . $date : 'sale-ready date back to the default';
+					return '' !== $date ? 'own sale date set to ' . $date : 'own sale date removed (the batch date applies)';
 				}
 				if ( 0 === strpos( $note, Replay::NOTE_CHECKIN ) ) {
 					$date = trim( substr( $note, strlen( Replay::NOTE_CHECKIN ) ) );

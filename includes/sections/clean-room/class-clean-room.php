@@ -26,9 +26,9 @@
  *   - class-replay.php      PURE: events → stay state (alive = received −
  *                           losses − shipped, recount overrides; cleared by
  *                           the first move from the Spa into the Clean Room;
- *                           sale-ready N days after check-in with a per-stay
- *                           override; splits), the day math, the
- *                           compensating (undo) event.
+ *                           for sale from a CHOSEN date — the stay's own,
+ *                           else its batch's on the supplier order; splits),
+ *                           the day math, the compensating (undo) event.
  *   - class-protocol.php    PURE: the editable treatment template → each
  *                           tank's daily to-do (feeding + due steps).
  *   - class-parser.php      PURE: a spoken / typed phrase → structured
@@ -400,13 +400,24 @@ namespace {
 		 * open stay here gets NULL (the theme falls back to the product's own
 		 * meta), never zeros.
 		 *
+		 * Each stay's sale_ready_date is its effective sale date — its own
+		 * date, else its batch's (the supplier order's "Goes on sale"),
+		 * else NULL: a stay without a chosen date is not for sale, so a
+		 * theme must handle null (it used to be a computed string).
+		 * sale_date_source says where the date comes from ('own' /
+		 * 'batch', null without a date); sale_ready is true from that date
+		 * on (the date itself counts, site time) for every open stay,
+		 * cleared or still in QT; ready_total counts their fish. next is
+		 * the stay for sale with fish left, else the earliest sale date (a
+		 * stay without one sorts last).
+		 *
 		 * @param int $product_id Product ID.
 		 * @return array{
 		 *   live_total: int,
 		 *   ready_total: int,
-		 *   in_qt: array<int, array{stay_id: int, qty_live: int, checkin_date: string, cleared_date: string|null, sale_ready_date: string, sale_ready: bool, day: int|null, tank: string}>,
-		 *   cleared: array<int, array{stay_id: int, qty_live: int, checkin_date: string, cleared_date: string|null, sale_ready_date: string, sale_ready: bool, day: int|null, tank: string}>,
-		 *   next: array{checkin_date: string, cleared_date: string|null, sale_ready_date: string, sale_ready: bool, day: int|null, tank: string, qty_live: int}|null
+		 *   in_qt: array<int, array{stay_id: int, qty_live: int, checkin_date: string, cleared_date: string|null, sale_ready_date: string|null, sale_date_source: string|null, sale_ready: bool, day: int|null, tank: string}>,
+		 *   cleared: array<int, array{stay_id: int, qty_live: int, checkin_date: string, cleared_date: string|null, sale_ready_date: string|null, sale_date_source: string|null, sale_ready: bool, day: int|null, tank: string}>,
+		 *   next: array{checkin_date: string, cleared_date: string|null, sale_ready_date: string|null, sale_date_source: string|null, sale_ready: bool, day: int|null, tank: string, qty_live: int}|null
 		 * }|null
 		 */
 		function fishotel_cleanroom_product_facts( $product_id ) {
