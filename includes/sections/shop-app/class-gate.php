@@ -32,7 +32,10 @@
  *     own hook at priority 0 for AJAX), so nothing that runs earlier in
  *     the request sees a capability at all;
  *   - WooCommerce neither reads the device's shop-front basket cookies
- *     nor sets any, so the two never meet.
+ *     nor sets any, so the two never meet;
+ *   - page-cache plugins are told to keep nothing of the request
+ *     (DONOTCACHEPAGE): to them a device without a WordPress login cookie
+ *     is an anonymous visitor whose page may be kept for the next one.
  *
  * A live shop session takes precedence over a WordPress login on these
  * requests (somebody unlocked with their PIN: they are who is working);
@@ -388,6 +391,9 @@ class Gate {
 	 * @param array $rule The rule the request falls under.
 	 */
 	private static function arm( array $rule ) {
+		// A page cache must never keep what is rendered for a shop session.
+		Http::never_cache();
+
 		add_filter( 'map_meta_cap', array( self::class, 'filter_map_meta_cap' ), PHP_INT_MAX, 3 );
 		add_filter( 'user_has_cap', array( self::class, 'filter_user_has_cap' ), PHP_INT_MAX, 4 );
 

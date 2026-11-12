@@ -106,6 +106,8 @@ register_shutdown_function(
 			'staff'     => $shop_app ? People::staff_user_id( false ) : 0,
 			'nonce'     => wp_create_nonce( Front_Desk::NONCE ),
 			'cookies'   => array_keys( fh_cookies_set() ),
+			'headers'   => $GLOBALS['fh_sent']['headers'],
+			'nocache_c' => defined( 'DONOTCACHEPAGE' ) && DONOTCACHEPAGE,
 			'queries'   => $queries,
 			'reads'     => $reads,
 		);

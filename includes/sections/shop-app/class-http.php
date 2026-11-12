@@ -150,6 +150,20 @@ class Http {
 	}
 
 	/**
+	 * Tell page-cache plugins never to keep this request's answer. They
+	 * decide "anonymous visitor" by the WordPress login cookie, which a
+	 * shop session does not have — so without this a cache that ignores
+	 * Cache-Control could keep a tank screen, or the state with a
+	 * person's name in it, and hand it to the next visitor. DONOTCACHEPAGE
+	 * is the constant they all honour.
+	 */
+	public static function never_cache() {
+		if ( ! defined( 'DONOTCACHEPAGE' ) ) {
+			define( 'DONOTCACHEPAGE', true );
+		}
+	}
+
+	/**
 	 * Send a header line.
 	 *
 	 * @param string $line "Name: value".

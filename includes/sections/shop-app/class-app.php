@@ -66,6 +66,13 @@ class App {
 	);
 
 	/**
+	 * The routes whose answer depends on the device asking.
+	 *
+	 * @var string[]
+	 */
+	const PRIVATE_ROUTES = array( 'state', 'unlock', 'lock', 'enrol' );
+
+	/**
 	 * What the output buffer adds before </body> ('' = nothing).
 	 *
 	 * @var string
@@ -103,6 +110,12 @@ class App {
 		}
 
 		$route = sanitize_key( wp_unslash( $_GET[ Shop_App::QUERY_VAR ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+
+		// Everything but the static shell, the manifest and the worker is
+		// about one device: no page cache may keep it.
+		if ( in_array( $route, self::PRIVATE_ROUTES, true ) ) {
+			Http::never_cache();
+		}
 
 		self::send( self::respond( $route, Http::method() ) );
 		exit;
@@ -890,13 +903,11 @@ class App {
 	public static function i18n() {
 		return array(
 			'title'         => 'FisHotel Shop',
-			'loading'       => __( 'One moment…', 'fishotel-misc-plugin' ),
 			'enterPin'      => __( 'Enter your PIN', 'fishotel-misc-plugin' ),
 			'wrongPin'      => __( 'Wrong PIN', 'fishotel-misc-plugin' ),
 			/* translators: %d: tries left */
 			'triesLeft'     => __( '%d tries left', 'fishotel-misc-plugin' ),
 			'oneTryLeft'    => __( '1 try left', 'fishotel-misc-plugin' ),
-			'locked'        => __( 'Too many wrong PINs', 'fishotel-misc-plugin' ),
 			/* translators: %s: time left, like 4:59 */
 			'lockedFor'     => __( 'This device is locked. Try again in %s.', 'fishotel-misc-plugin' ),
 			'checking'      => __( 'Checking…', 'fishotel-misc-plugin' ),

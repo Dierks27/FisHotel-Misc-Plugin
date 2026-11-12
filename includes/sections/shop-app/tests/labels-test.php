@@ -64,6 +64,7 @@ $after  = fh_page( array( 'shop_app' => true, 'native' => 'manager', 'uri' => $l
 check( 'before the Shop App: the Front Desk renders the tank page for a shop manager', '' === $before['result']['halt'] && 200 === $before['result']['status'] && false !== strpos( $before['page'], 'window.fhFrontDesk = ' ) && false !== strpos( $before['page'], '</html>' ), substr( $before['page'], 0, 300 ) );
 check( 'with the Shop App on: the same page, byte for byte', $before['page'] === $after['page'] && strlen( $after['page'] ) > 20000, strlen( $before['page'] ) . ' vs ' . strlen( $after['page'] ) );
 check( '… as the same user, never stored, with nothing of the app in it', $after['result']['user'] === $after['result']['users']['manager'] && $after['result']['nocache'] && false === strpos( $after['page'], 'fhShopApp' ) && false === strpos( $after['page'], 'fh-sa-' ) );
+check( '… and nothing is said to page caches that was not said before (a WordPress login has its own cookie for that)', false === $after['result']['nocache_c'] && false === $before['result']['nocache_c'] );
 check( '… and it cost the Shop App no query, no option read and no cookie', 0 === $after['result']['queries'] && array() === $after['result']['reads'] && array() === $after['result']['cookies'] );
 
 $owner_before = fh_page( array( 'shop_app' => false, 'native' => 'owner', 'uri' => '/?fh_front_desk=1' ) );
@@ -95,7 +96,7 @@ check( 'the label opens the tank page (200) — no redirect to a login', '' === 
 check( 'it is the Front Desk\'s own page: its markup, its script, its config', false !== strpos( $open['page'], '<body class="fh-fd">' ) && false !== strpos( $open['page'], 'id="fh-fd-app"' ) && isset( $fd['ajaxUrl'], $fd['nonce'], $fd['screen'], $fd['i18n'] ) );
 check( 'rendered as the account Sam\'s work is recorded under (the shared Shop staff account)', $open['result']['logged_in'] && $open['result']['staff'] > 0 && $open['result']['user'] === $open['result']['staff'] );
 check( 'its nonce is that account\'s', $fd['nonce'] === $open['result']['nonce'] );
-check( 'never stored', true === $open['result']['nocache'] );
+check( 'never stored: the Front Desk\'s own no-cache headers, and page-cache plugins are told DONOTCACHEPAGE (to them this device is an anonymous visitor)', true === $open['result']['nocache'] && true === $open['result']['nocache_c'] );
 check( 'the app\'s bar is added: who is unlocked, on which device, the session\'s end', is_array( $app ) && 'frontdesk' === $app['mode'] && 'Sam' === $app['session']['person'] && 'Shop tablet' === $app['device'] && 7200 === $app['session']['expires'] - $app['session']['now'] );
 check( '… with what it needs to stand between the page and the network', 'https://shop.example.test/wp-admin/admin-ajax.php' === $app['urls']['ajax'] && $fd['ajaxUrl'] === $app['urls']['ajax'] && 'fishotel_cleanroom_act' === $app['write'] && 'fh_save_id' === $app['saveField'] && in_array( 'fishotel_cleanroom_screen', $app['actions'], true ) );
 check( '… added before </body>, after the Front Desk\'s own script, once', 1 === substr_count( $open['page'], 'window.fhShopApp = ' ) && strpos( $open['page'], 'window.fhFrontDesk = ' ) < strpos( $open['page'], 'window.fhShopApp = ' ) && strpos( $open['page'], 'window.fhShopApp = ' ) < strripos( $open['page'], '</body>' ) );
