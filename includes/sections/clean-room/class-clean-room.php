@@ -15,9 +15,10 @@
  * event; the product page can then say "3 in QT · day 12 · next cleared …".
  *
  * Architecture:
- *   - class-store.php       the ONLY file that touches $wpdb: six tables
+ *   - class-store.php       the ONLY file that touches $wpdb: ten tables
  *                           (buildings, tanks, stays, stay_events, tank_logs,
- *                           aliases) via dbDelta gated by
+ *                           aliases, species, orders, order_lines,
+ *                           box_shares) via dbDelta gated by
  *                           fishotel_cleanroom_db_version, the seed,
  *                           record_event() = append + replay, species
  *                           suggestions, product facts.

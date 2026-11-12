@@ -11,9 +11,13 @@ daily to-do, a **dose log** on the whole system or one tank; the
 **supplier orders** with the workbook's landed-cost maths and a check-in
 that turns an order's lines into stays; a **species master**; the yearly
 **stats**; Excel exports; the **workbook import** that brings the
-spreadsheet's history onto the site; and the **sale dates** — the day each batch (or one
-group) goes on sale, chosen by hand —; and the facts the fish page will
-read.
+spreadsheet's history onto the site; the **sale dates** — the day each batch (or one
+group) goes on sale, chosen by hand —; the **standard sizes** (the ones
+the product variations use) on order lines and stays; the **percent of a
+box** a line took, guessed while unloading, with the **shares the site
+remembers** per supplier and origin; **unknown and mislabeled fish** —
+"??" until somebody knows, and one correction that puts the stay and its
+order line right together —; and the facts the fish page will read.
 
 Nothing here needs WooCommerce: a stay may or may not be linked to a
 product, a species may or may not be, and the species search reads the
@@ -137,9 +141,10 @@ log in again every two days; logged in without `manage_woocommerce` →
 
 **Tank screen** — title ("Tank 521 · Spa · Building 500 · 20G long ·
 shares water with 511, 512, 513, 522, 523, 524 · 205 gal system ·
-schedule 14 Day CM"), the occupants first (species, live, day N, state
-badge, "still in the Spa" when a group's sale date came before it was
-cleared, in since / "on sale <date>" or "Sale date not set", each with
+schedule 14 Day CM"), the occupants first (species with its size, live,
+day N, state badge, "still in the Spa" when a group's sale date came
+before it was cleared, "needs identifying" on a fish nobody knows yet,
+in since / "on sale <date>" or "Sale date not set", each with
 a **−1 lost** button — the
 fastest path is never below the fold), then the **Today** strip folded
 to one line ("Today · 3 to do ▸", plus "Cu low" when the last reading is
@@ -151,7 +156,12 @@ Move · Arrival · Note · Mic** (Copper takes the Mic's place when voice is
 off). Tapping an occupant opens its sheet: −1 lost, Lost…, Shipped, Move,
 Full recount, Note, Dates (check-in date, cleared date, the group's own
 sale date — empty goes back to the batch's, a "suggested …" chip fills
-the picker).
+the picker) and **Identify** (*Correct the fish* on a fish that has a
+name): the Arrival sheet's species search and the Size dropdown — or
+*Unknown fish (??)* with what it looks like —, one Save, the toast
+"Identified: ?? small wrasse → … · the order line follows", and no Undo:
+who a fish is is corrected again, not reversed (see *Unknown and
+mislabeled fish*).
 
 **Dose** — medication chips (Copper · Metro · Prazi · Formalin ·
 Chloroquine · Fenben · Salt), the amount with its unit (g / ml / tsp; the
@@ -168,8 +178,12 @@ on the sheet.
 
 **Arrival** — species search with instant suggestions (products, common
 names, scientific names, learned aliases), recent-species chips, "use as
-an unlisted fish", a quantity stepper, the Spa tank (the current one when
-it is a Spa tank, else the first empty one) and the date.
+an unlisted fish" and, beside it, **Unknown fish (??)** — the group is
+checked in as "??" and what was typed ("?? small wrasse"), flagged
+*needs identifying*, linked to no product, with its tank, count and size
+like any other —, a quantity stepper, the Size dropdown (the standard
+sizes, optional), the Spa tank (the current one when it is a Spa tank,
+else the first empty one) and the date.
 
 **Move** — one group or all (a tank with a single group skips "Which
 fish?"), an optional quantity (smaller = split), the reason chips, then
@@ -216,23 +230,25 @@ letters); an ambiguous or weak match asks "Which fish?" with the top three.
 Tabs: **Board · Stays · Arrivals · Species · Stats · Events · Settings**.
 
 **Board** — Area → Building → Level grid of tank cards (occupants with
-species · live · day N · badge; empty tanks dimmed; coming-soon buildings
+species · size · live · day N · badge; empty tanks dimmed; coming-soon buildings
 greyed), a header per building with its system gallons ("205 gal
 system"), its schedule, the count in QT and the last dose per medication
 (a system dose or a tank dose in that building, with its time), the last
 copper reading, the to-do count and what is still due today (printed on
 the card — a tooltip is invisible on a tablet) per tank, area and species
 filters, a *Front Desk* link per tank, and in the summary the groups for
-sale, those for sale but still in the Spa and those without a sale date
-(linked to Arrivals). **Stays** — every open
-stay (species, live / arrived, check-in, day, state, cleared, on sale —
+sale, those for sale but still in the Spa, those without a sale date
+(linked to Arrivals) and those that **need identifying** (linked to the
+Stays tab filtered to them). **Stays** — every open
+stay (species with its size and "needs identifying", live / arrived, check-in, day, state, cleared, on sale —
 the effective date with "from the batch" / "own date", or "Sale date not
 set" with the suggestion —, tank, supplier / order ref linked to its
 order) with Lost / Shipped / Count / Cleared… / Sale date… (the group's
 own date: pre-filled with it, else empty when the batch has a date — OK
 then keeps the batch's —, else the suggestion; empty = the batch's; the
-date it already has writes nothing) / Move… / Coming Soon / Edit (species, product, check-in date, supplier,
-order ref, landed cost, a note), a *For sale now* filter, closed stays
+date it already has writes nothing) / Move… / Coming Soon / **Identify…** (*Correct fish…* on a named fish: the real fish, its size, or still unknown) / Edit (species, size, product, check-in date, supplier,
+order ref, landed cost, a note — a changed species or size is the same
+correction as Identify…), a *For sale now* and a *Needs identifying* filter, closed stays
 with a toggle, a CSV and an XLSX export with the formula-cell guard.
 **Arrivals**, **Species** and **Stats** — the workbook replacement, below.
 **Events** — the latest 200 stay events and 100 tank-log entries in plain
@@ -244,7 +260,9 @@ logs and doses have none). **Settings** (`manage_options`) — the numbers,
 the schedule templates (a picker, add / rename / delete / make default,
 the steps editor per template, Reset to that template's seed), the layout
 editor (each building's schedule and system gallons beside its name and
-status), the box rates, **Import workbook**, the learned aliases, *Print
+status), the box rates, **Sizes** (the standard list and the sizes in use
+on products), **Box shares** (the remembered rows, each editable and
+forgettable), **Import workbook**, the learned aliases, *Print
 tank labels*.
 
 ## Supplier orders (Arrivals)
@@ -255,13 +273,18 @@ status draft → ordered → received → closed, the Spa building it lands in,
 the cost mode and the money: tariffs, domestic flight, import & re-ox
 fees, credit, the markup for the suggested price and the "worth it"
 margin threshold) with its **lines** (species — picked from the species
-list and the products, or typed —, ordered, received, per box or bags,
-the supplier's price, what it is worth at FisHotel's price, DOA,
+list and the products, or typed, or ticked **??** for a fish nobody
+knows yet —, its **size**, ordered, received, per box or bags, the
+**box** it came out of and the **percent of a box** it took, the
+supplier's price, what it is worth at FisHotel's price, DOA,
 survived, the Spa tank). The costing replicates the sheet exactly
 (`class-costing.php`, pure):
 
-- **box mode** — fraction = received ÷ per box (the line's, else the
-  species list's, else 24; 0 when nothing was received); fees per box =
+- **box mode** — fraction = the line's percent of a box ÷ 100 when one
+  is typed (see *Percent of a box*), else received ÷ per box (the
+  line's, else the species list's, else 24; 0 when nothing was received
+  either way) — every older and imported order keeps that rule and its
+  numbers; fees per box =
   (flight + import) ÷ Σ fraction; landed = received × price × (1 +
   tariffs ÷ Σ(received × price)) + fraction × fees per box — tariffs by
   goods value, the flight and import fees by box space;
@@ -293,7 +316,8 @@ count on the order's received date (today when empty; never in the
 future) into the line's tank, else the first empty active Spa tank of
 the order's building, else any empty Spa tank, else the first Spa tank
 of the building, else the first Spa tank; `source = order`, the line id,
-the supplier, the ref and the landed cost per fish filled; then a `loss`
+its size, its "needs identifying" flag, the supplier, the ref and the
+landed cost per fish filled; then a `loss`
 of the DOA count noted `doa`. A line with a stay is skipped, so a second
 click creates nothing; the order becomes *received*. From then on the
 line's figures are **live**: survived = arrived − every loss (any
@@ -374,6 +398,177 @@ storefront moves by itself: stock, visibility and purchasability stay
 manual; *Coming Soon* on the Stays tab still sets the product's
 countdown to the effective date on request.
 
+## Sizes
+
+One list of fish sizes — **the one the WooCommerce product variations
+use**, so an order line, a stay and a product all say the same thing.
+
+- **Where it comes from.** The global product attribute whose name or
+  slug contains "size" (the theme reads any attribute key matching
+  /size/ as the size — e.g. `pa_size` with term slugs like `2-3-5`): its
+  terms, in the order the attribute is set to (custom, name, numeric
+  name or term id), labelled as stored — the labels are in inches. When
+  several attributes match, Settings → Sizes picks the one in use
+  (`size_attribute`); when none exists, Settings offers a plain list to
+  type (`size_list`), so the feature works without the attribute. The
+  attribute and its terms are read straight from the tables — with or
+  without WooCommerce loaded — and **only** on this section's own admin
+  screens and the Front Desk, never on an ordinary front-end request.
+- **Settings → Sizes** (`manage_options`, its own nonce'd save): the
+  standard list — read-only when it comes from the attribute, with a
+  link to Products → Attributes —, which attribute is in use, and the
+  read-only **Sizes in use on products** report: every distinct size
+  value on the variations of the fish categories (attribute terms *and*
+  values typed on a product), how many products use each, flagged when
+  it is not in the standard list — what needs cleaning up. Nothing in
+  the section changes a product or a term.
+- **What is stored.** A size is its slug plus a snapshot of its label
+  (`size_slug`, `size_label`) on the order line and on the stay. A
+  stored size that is no longer in the list still displays, marked *not
+  a standard size*, and stays selectable on the row that has it; any
+  other unknown slug is refused (the Stays tab's Edit, the phone,
+  Identify…) or leaves that order line without a size and says so.
+- **Where it shows.** A Size dropdown on the order line, the Front Desk
+  Arrival sheet, the Stays tab's Edit and the Identify panel; the
+  check-in carries it from the line to the stay, a split to the sister
+  stay; beside the species on the Board, the Stays tab, the phone's
+  rows, the order page and the product box; a `size` column in the stays
+  and orders exports. The voice parser keeps ignoring size words: a
+  spoken arrival has no size.
+
+## Percent of a box
+
+"I only get one or two of a fish so for me to have to judge how many
+would have fit into the box would be super challenging. Instead, when I
+unload these fish out of the box it would be easier to simply guess
+about the % the fish took up in the box." Per order line (box mode
+only):
+
+- **Box #** — which physical box the line came out of (optional, 1–999);
+- **% of box** — the percent of ONE box the whole line took: 25 = a
+  quarter of a box; decimals allowed; above 0 and at most 400, so a line
+  may span boxes. A mistyped percent or box number refuses the save
+  before anything is written; blank and 0 mean none.
+
+In box mode a line's fraction of a box is its percent ÷ 100 when one is
+typed (and the line received fish), else received ÷ per box as before;
+everything downstream is unchanged — fees per box = (flight + import) ÷
+Σ fraction, tariffs by goods value. **The fees are split by each line's
+share of the total, so the percents only need to be right compared to
+each other**: guess everything a little high and the costs come out the
+same. Bag mode is untouched, and so is every order without a percent.
+
+The **Boxes** card under the lines adds the percents up per box number
+with a state — *under*, *about full* (90 to 110) or *over* —, the lines
+with a percent but no box number apart, and the boxes the percents come
+to (the sum ÷ 100) beside the order's Boxes field. It is a check on the
+guesses, never an input of the costing; the page recalculates it as the
+numbers are typed, exactly as the server renders it (one fixture tests
+both sides).
+
+## Remembered box shares
+
+Every box from every location is a different size, so what a fish takes
+is remembered **per location**: supplier + origin + fish (the species
+list id when the line has one, else the lower-cased name) + size → the
+percent of a box **one fish** takes, how many order lines it came from,
+and when (`fh_box_shares`).
+
+- **Written** when an order is saved (and when a fish is corrected, see
+  below), for every line of a box-mode order that has a percent,
+  received fish and an identified fish: value = percent ÷ received. The
+  latest *order* wins — by the order's received date, else its order
+  date —, so re-saving an old order never overwrites a newer guess. The
+  count goes up once per order line: a line that changes fish or size,
+  loses its percent or is removed gives its count back, and a share
+  nobody counts in any more is deleted.
+- **Read** when a line of an order from the same supplier and origin has
+  a fish (and size) but no percent: a **suggested N% (from K orders)**
+  chip — per fish × the received count (the ordered count while nothing
+  is received) — that fills the field on a tap and is never saved by
+  itself. A draft / ordered order shows **How full**: the boxes the
+  remembered shares predict for the ordered counts, and how many lines
+  have no remembered share yet.
+- **Settings → Box shares** lists the rows, each editable (dated today,
+  so only a later order replaces it) and forgettable.
+- A fish that still **needs identifying is never remembered**.
+
+## Unknown and mislabeled fish
+
+"… when some of these fish come in I have no idea what they are. A lot
+of times they are mislabeled and I have to go back and correct what I
+actually got."
+
+**Unknown.** A supplier order line and a stay can be flagged *needs
+identifying*. Its name is then "??" followed by an optional description
+— "?? small wrasse" — so every screen, toast and export that prints a
+species prints the "??". It is set with the **??** box on an order line
+(what is typed is then what the fish looks like), with **Unknown fish
+(??)** on the phone's Arrival sheet, or by typing a name with a leading
+"??" on the order page, in the Stays tab's Edit or on the phone. An
+unknown fish gets its tank, count, size, percent of a box and landed
+cost like any other; the check-in and a split keep it unknown; only a
+remembered box share is never written for it.
+
+**What the label said.** An order line keeps `label_name`: what the
+supplier's label or invoice called the fish. It is set from the line's
+name the first time the line is corrected to a different fish (case and
+spacing aside), and never overwritten after that — a second correction,
+or marking the fish unknown, leaves it; a "??" placeholder is never a
+label. The order page shows it under the line (*arrived labeled: X*)
+and the orders export carries it.
+
+**One correction.** *Identify…* / *Correct the fish…* — on the Stays
+tab, on a group's sheet on the phone, and on an order line that received
+fish — takes the real fish from the same search the Arrival sheet uses
+(a product, a species-list fish, or a typed name) and its size, and in
+one go:
+
+1. the **stay** gets the name, the product link and the size, and is no
+   longer flagged;
+2. its **order line** gets the species-list id, the name, the scientific
+   name and the size, is no longer flagged, and keeps its old name as
+   `label_name` (first time only);
+3. the stay gets a **note event** — "identified: ?? small wrasse → Lined
+   Wrasse · 2-3"" ("marked unknown: …" when the result is a fish that
+   still has to be identified) — so the Events tab shows who corrected
+   what and when. A change of size alone writes none;
+4. the **remembered box share** of the corrected fish is written, and
+   the one counted under the wrong fish given back.
+
+The same correction runs when the species or the size is changed in the
+Stays tab's **Edit**, and when the species, the ?? box or the size of a
+line **that already became a stay** is changed in the order editor's
+grid. A line without a stay is the order as typed: retyping its species
+there records no label (*Correct the fish…* does) — except that ticking
+?? on a named line that received fish keeps the name as what the label
+said, so a fish marked unknown while unloading still counts as
+mislabeled once it turns out to be something else.
+
+**A group that was split** has several stays on one order line, and
+**the line follows its stays only when they all agree**. While a sister
+stay is still a different fish, a correction changes that stay alone and
+the line gets a note — "[part of this line is Lined Wrasse — stay #12]",
+one per stay that is not what the line says — and no label and no
+remembered share: its percent is still the whole line's. Once the last
+sister is corrected to the same fish, the line follows and the notes go.
+A correction made on the order line itself corrects the line and every
+stay that still carried the line's old name; a sister already identified
+as something else keeps its own (and stays noted).
+
+**Where it shows.** A *N need identifying* chip on the Board (linked to
+the Stays tab filtered to them), a *Needs identifying* filter and marker
+on the Stays tab, "?? N to identify" on the Arrivals list and by the
+order's status, the marker on the order line, "needs identifying" on the
+phone's rows — and the "??" itself wherever the species is printed.
+
+**Mislabeled, in the Stats.** A line that received fish is *mislabeled*
+when its label names another fish than the one it turned out to be;
+*Stats → By supplier* and *By origin* show them with their rate over the
+lines that received fish, and count the unknown fish **not identified
+yet** apart (a fish is not mislabeled until it has a name). A line
+corrected back to what its label said is not mislabeled.
+
 ## Species
 
 The workbook's Fishlist as a table: name (unique), scientific name,
@@ -411,14 +606,24 @@ rows, then the same figures two ways, both shown and both exported:
   survived;
 
 and the weighted figures by supplier, by origin and by species group
-(the species row's group; "(no group)" otherwise).
+(the species row's group; "(no group)" otherwise). By supplier and by
+origin also say how the labels held up: **Mislabeled** — the lines that
+received fish whose `label_name` differs from the fish they turned out
+to be, with the rate over the lines that received fish — and, counted
+separately, **Not identified yet** (the unknown fish still waiting for a
+name).
 
 ## Exports
 
 XLSX everywhere, CSV where it is one table: orders + lines (two sheets;
 the CSV is the lines), species, stats (Orders, Totals — weighted beside
 sheet-style —, By supplier, By origin, By group; the CSV is the orders),
-stays (beside the existing CSV). All are admin-post downloads with a
+stays (beside the existing CSV). Columns added since are appended last,
+so a sheet built on the older positions keeps reading them: `size` and
+`needs_id` on the stays; `size`, `box_no`, `box_pct`, `needs_id` and
+`label_name` on the orders' Lines sheet; `received_lines`, `mislabeled`,
+`mislabeled_rate` and `not_identified` on the stats' Orders, By supplier
+and By origin sheets (and four rows at the end of Totals). All are admin-post downloads with a
 nonce and `manage_woocommerce`, named `fishotel-<thing>-<Ymd-His>.xlsx`.
 The writer (`class-xlsx.php`) needs nothing but the zip extension: text
 is written as inline strings — never a formula, whatever it starts with
@@ -486,7 +691,10 @@ whenever Jeff wants the latest Fishlist prices.
      date; their lines with the species id by name (an unknown fish keeps
      its name only), ordered / received / per box or bags / price / worth
      / DOA / survived as typed, the landed totals cached through the
-     costing; **an existing ref is never overwritten**;
+     costing; **an existing ref is never overwritten**. The workbook
+     carries no size, box number, percent of a box, "??" flag or label
+     name, so an imported line has none — whatever the sheet calls a
+     fish — and remembers no box share;
    - **stays** for the batches within the cutoff, through the same
      `Orders::check_in()` the Arrivals button uses — an arrival on the
      batch date into the line's tank, else the first empty Spa tank of the
@@ -585,25 +793,28 @@ its orders, species and stays through the same Store methods.
 
 ## Data
 
-Nine tables, created by dbDelta on first boot (gated by the autoloaded
-`fishotel_cleanroom_db_version` option, 1.3, so a booted site pays no
+Ten tables, created by dbDelta on first boot (gated by the autoloaded
+`fishotel_cleanroom_db_version` option, 1.5, so a booted site pays no
 query and no `SHOW TABLES`) and on activation, the layout seeded in the
-same step; the version is written only once every table — and the
-orders' `sale_date`, which every stay read selects — is there, so a
+same step; the version is written only once every table and every
+column added since a table's first version (`Store::REQUIRED_COLUMNS`:
+the orders' `sale_date`, the sizes, the box number / percent / share key,
+`needs_id`, `label_name`) is really there, so a
 failed CREATE or ALTER is retried on the next boot; everything kept on
 deactivation.
 
 - `{prefix}fh_buildings` — id, area, number (unique), name, status, sort, notes, schedule (the template the building runs, '' = the default), system_gallons (NULL = the sum of its tanks; the seed and the 1.2 backfill give Spa 500 205 and Spa 600 100)
 - `{prefix}fh_tanks` — id, building_id, number (unique), level, position, size_label, gallons, status, sort
-- `{prefix}fh_stays` — the cached state: product_id, species, qty_arrived, qty_live, checkin_date, cleared_date, sale_ready_date (the stay's OWN sale date, from its note events; the effective one is computed on read with the batch's), closed_date, status, tank_id, source, order_line_id (→ its batch), supplier, order_ref, landed_cost, notes
-- `{prefix}fh_stay_events` — the truth: stay_id, type (arrival · move · loss · clear · sold · count · note), qty, from/to tank, note, event_at (UTC), actor, source
+- `{prefix}fh_stays` — the cached state: product_id, species, size_slug + size_label (1.4), needs_id (1.5: the fish still has to be identified), qty_arrived, qty_live, checkin_date, cleared_date, sale_ready_date (the stay's OWN sale date, from its note events; the effective one is computed on read with the batch's), closed_date, status, tank_id, source, order_line_id (→ its batch; keyed since 1.5), supplier, order_ref, landed_cost, notes
+- `{prefix}fh_stay_events` — the truth: stay_id, type (arrival · move · loss · clear · sold · count · note), qty, from/to tank, note, event_at (UTC), actor, source. Who a fish IS is identity, not history: a correction writes the stay's columns and leaves a note event ("identified: <old> → <new>") as its trace
 - `{prefix}fh_tank_logs` — per tank, or per building: copper readings, doses (value = the amount, note "<Medication> <amount> <unit>"), test / water-change / feed tick-offs, tank notes; a building-level entry has tank_id 0 and building_id set and counts for every tank of the building (the day's to-do, the last copper reading when newer than the tank's own); an imported entry carries `import:<ref>#<row>` at the end of its note
 - `{prefix}fh_aliases` — spoken words → product / species
 - `{prefix}fh_species` — the species master: name (unique), sci_name, group_name, per_box, my_price, online_price, online_site, online_date, reef_safe, max_size, product_id, notes
 - `{prefix}fh_orders` — a supplier order: ref (unique), supplier, origin, order_date, received_date, sale_date (the batch's "Goes on sale", NULL = not set; added in 1.3), status, boxes, cost_mode, tariffs, domestic_flight, import_fees, credit, markup, worth_threshold, schedule, building_id, notes
-- `{prefix}fh_order_lines` — its lines: order_id, species_id, species, sci_name, qty_ordered, qty_received, per_box, bags, unit_price, worth, qty_doa, qty_survived, landed_total (a cache of the costing), stay_id, tank_id, sort, notes
+- `{prefix}fh_order_lines` — its lines: order_id, species_id, species, sci_name, needs_id (1.5), label_name (1.5: what the label called a corrected fish, NULL = never corrected), size_slug + size_label (1.4), qty_ordered, qty_received, per_box, box_no + box_pct (1.4), bags, unit_price, worth, qty_doa, qty_survived, landed_total (a cache of the costing), stay_id, tank_id, share_key (1.4: the remembered share the line counts in), sort, notes (the "part of this line" notes of a split group live here)
+- `{prefix}fh_box_shares` (1.4) — the remembered shares: share_key (unique: location + fish + size), location_key (supplier + origin), supplier, origin, fish_key (`s:<species id>` or `n:<name>`), species_id, species, size_slug, size_label, pct_per_fish, order_count, last_line_id + last_date (the line and the order date the value came from), updated_at
 
-Three options: `fishotel_cleanroom_settings`, `fishotel_cleanroom_protocol`
+Three options: `fishotel_cleanroom_settings` (with `size_attribute` and `size_list`, the source of the standard sizes), `fishotel_cleanroom_protocol`
 (`{ default: name, templates: { name: steps[] } }` — an older bare steps
 array is read as the "14 Day CM" template next to the other four seeds)
 and `fishotel_cleanroom_box_rates` (rows of supplier, origin, per box,
@@ -630,9 +841,10 @@ stored.
 clean-room/
 ├── class-clean-room.php    section info, load, boot, menu, activate / deactivate, the global
 │                           fishotel_cleanroom_product_facts() + the fishotel_product_qt_facts filter
-├── class-store.php         the ONLY $wpdb file: nine tables, seed, stays / events / logs, record_event
+├── class-store.php         the ONLY $wpdb file: ten tables, seed, stays / events / logs, record_event
 │                           (append + replay), splits, species search + candidates, aliases, facts,
-│                           the species master, the orders and their lines, stay figures
+│                           the species master, the orders and their lines, stay figures, the box
+│                           shares, the readers of the size attribute and the variations' sizes
 ├── class-layout.php        PURE: numbering rule, seed, shares-water, titles / labels, grouping
 ├── class-replay.php        PURE: events → state, day math, the chosen sale date (own > batch > none,
 │                           the suggestion, ready, "still in the Spa"), splits, compensating events
@@ -641,8 +853,17 @@ clean-room/
 │                           their aliases and dose rates, the dose suggestion and the dose tick
 ├── class-parser.php        PURE: a spoken / typed phrase → structured preview
 ├── class-qr.php            PURE: byte-mode QR encoder (EC M, v1–6) → inline SVG
-├── class-costing.php       PURE: the order sheet's landed-cost maths (box / bag), display helpers
-├── class-stats.php         PURE: per-order rows, weighted and sheet-style figures, groupings
+├── class-costing.php       PURE: the order sheet's landed-cost maths (box / bag), a line's percent
+│                           of a box, the per-box summary, display helpers
+├── class-sizes.php         PURE: the standard sizes (the product attribute that matches "size", else
+│                           a typed list), a stored size that left the list, the sizes-in-use report
+├── class-box-shares.php    the remembered shares: keys, what a saved line writes and gives back, the
+│                           suggestion and "How full" (takes the store as a parameter)
+├── class-identify.php      unknown ("??") and mislabeled fish: the fish a correction names, the one
+│                           correction of a stay and its order line, what the label said, the split
+│                           rule (takes the store as a parameter)
+├── class-stats.php         PURE: per-order rows, weighted and sheet-style figures, groupings, the
+│                           mislabeled / not-identified-yet counts
 ├── class-species.php       PURE: a species row normalised, the merge into the candidate list
 ├── class-orders.php        header / lines from a form, live figures of a line, the check-in
 │                           (takes the store as a parameter, like Front_Desk::perform())
@@ -655,17 +876,19 @@ clean-room/
 │                           the recent batches as stays, the treatment logs), idempotent;
 │                           preview() pure; takes the store as a parameter like Orders::check_in()
 ├── class-settings.php      options, sanitised AJAX saves (settings, the schedule templates and
-│                           their operations, box rates), layout editor, aliases
+│                           their operations, box rates, sizes, box shares), layout editor, aliases
 ├── class-front-desk.php    the phone page (query var fh_front_desk), the label-login cookie life,
 │                           its AJAX (act / parse / suggest) with perform() = the testable switch
-├── class-admin.php         the Room Board page, CSV, labels, stay edits + move + undo, Coming Soon release,
-│                           the product meta box and its sale dates (save_post_product)
-├── class-admin-workbook.php  the Arrivals / Species / Stats tabs, their AJAX, the XLSX / CSV exports,
-│                           the batch's "Goes on sale" (admin-post)
+├── class-admin.php         the Room Board page, CSV, labels, stay edits + move + undo + identify, Coming
+│                           Soon release, the product meta box and its sale dates (save_post_product)
+├── class-admin-workbook.php  the Arrivals / Species / Stats tabs, their AJAX (an order's save, check-in,
+│                           "Correct the fish…"), the Boxes card, the XLSX / CSV exports, the batch's
+│                           "Goes on sale" (admin-post)
 ├── class-admin-import.php  Settings → Import workbook: the private folder, upload → preview → import
 ├── css/front-desk.css, js/front-desk.js      the phone screen (inlined into the page)
 ├── css/clean-room-admin.css, js/clean-room-admin.js
 ├── views/front-desk.php, board.php, stays.php, arrivals.php, order.php, species.php, stats.php,
-│          events.php, settings.php, import.php, tabs.php, labels.php, meta-box.php
+│          events.php, settings.php, import.php, tabs.php, labels.php, meta-box.php,
+│          identify-panel.php (the Identify… panel of the Stays tab and the order page)
 └── tests/                  headless PHP + node tests (see tests/README.md)
 ```
