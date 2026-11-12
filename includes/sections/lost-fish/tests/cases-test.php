@@ -126,6 +126,7 @@ $case = $open[0];
 check_same( 'on the most recently PAID order — 502, not the oldest (501) nor the newest id (503)', array( 502, 53, 'i:53', 'product' ), array( $case['order_id'], $case['order_item_id'], $case['line_ref'], $case['line_match'] ) );
 check_same( 'it names the fish, the customer and what was paid for one', array( 'Lagoon Goby', 1, 'Blake Sample', 'blake@example.test', 42, 6000, 1 ), array( $case['fish_name'], $case['qty'], $case['customer_name'], $case['customer_email'], $case['customer_id'], $case['unit_paid'], $case['paid_known'] ) );
 check_same( 'it remembers the tank group and the loss event it came from', array( 1, 9002, 'auto', 'p:812', 7 ), array( $case['stay_id'], $case['loss_event_id'], $case['origin'], $case['kind_key'], $case['created_by'] ) );
+check_same( '… that loss with its number of fish, and when it was', array( ',9002:1', true ), array( $case['loss_events'], null !== $case['loss_at'] ) );
 check_same( 'open, nothing sent', array( 'open', null, '' ), array( $case['status'], $case['sent_at'], $case['token_salt'] ) );
 check_same( 'the shipping difference is already worked out: 810.00 less 60.00 stays over the threshold', array( Shipping::NONE, 0, 0, 1500 ), array( $case['ship_status'], $case['ship_diff'], $case['ship_manual'], $case['ship_charged'] ) );
 check_same( 'NO E-MAIL', array(), $GLOBALS['fh_mail'] );
@@ -141,13 +142,17 @@ check_same( 'each loss was worked out under the lock of its kind of fish, and ga
 
 echo "\nMore losses\n";
 fh_loss( $rooms, 1, 9003 );
-check_same( 'two alive for four owed: a second case, on the other goby of the same line', array( array( 502, 'i:53', 1 ), array( 502, 'i:53', 1 ) ), array_map( static function ( $c ) { return array( $c['order_id'], $c['line_ref'], $c['qty'] ); }, $store->cases() ) );
+check_same( 'two alive for four owed, and the case of that line was not sent yet: it GROWS to both gobies — one case, one e-mail to come', array( array( 1, 502, 'i:53', 2, 'open' ) ), array_map( static function ( $c ) { return array( $c['id'], $c['order_id'], $c['line_ref'], $c['qty'], $c['status'] ); }, $store->cases() ) );
+check_same( '… it remembers both losses, each with its fish', array( ',9002:1,9003:1', array( 9002 => 1, 9003 => 1 ), 9002 ), array( $store->get_case( 1 )['loss_events'], Cases::loss_events( $store->get_case( 1 )['loss_events'] ), $store->get_case( 1 )['loss_event_id'] ) );
+check_contains( '… the order is told', 'Lost fish case #1 — 1 more lost with no spare in the tanks: this case now speaks for 2 × Lagoon Goby. Nothing was sent', fh_notes( 502 )[1] );
+check_same( '… the log says so, and other sections are told how many more', array( 'grown', 1, 1 ), array( $store->events()[ count( $store->events() ) - 1 ], count( fh_fired( 'fishotel_lostfish_case_grown' ) ), fh_fired( 'fishotel_lostfish_case_grown' )[0][1] ) );
+check_same( '… not as a second "opened"', 1, count( fh_fired( 'fishotel_lostfish_case_opened' ) ) );
 fh_loss( $rooms, 2, 9004, 2 );
 $latest = $store->cases();
-check_same( 'two more lost at once (none alive): the next two holders, by paid date — 503, then 501', array( array( 501, 9004 ), array( 503, 9004 ) ), array( array( $latest[0]['order_id'], $latest[0]['loss_event_id'] ), array( $latest[1]['order_id'], $latest[1]['loss_event_id'] ) ) );
-check_same( 'four cases for four fish owed and none alive', 4, count( $latest ) );
+check_same( 'two more lost at once (none alive): the next two holders, by paid date — 503, then 501', array( array( 501, 9004, ',9004:1' ), array( 503, 9004, ',9004:1' ) ), array( array( $latest[0]['order_id'], $latest[0]['loss_event_id'], $latest[0]['loss_events'] ), array( $latest[1]['order_id'], $latest[1]['loss_event_id'], $latest[1]['loss_events'] ) ) );
+check_same( 'three cases — one per order line — for four fish owed and none alive', array( 3, 4 ), array( count( $latest ), array_sum( array_column( $latest, 'qty' ) ) ) );
 fh_loss( $rooms, 1, 9005, 0 );
-check_same( 'everybody owed already has a case: nothing new', 4, count( $store->cases() ) );
+check_same( 'everybody owed already has a case: nothing new', array( 3, 4 ), array( count( $store->cases() ), array_sum( array_column( $store->cases(), 'qty' ) ) ) );
 check_same( 'STILL NO E-MAIL after five losses', array(), $GLOBALS['fh_mail'] );
 
 echo "\nThe shipping difference of each\n";
@@ -157,7 +162,50 @@ foreach ( $store->cases() as $c ) {
 }
 check_same( '501 alone would drop under the threshold: 25.00', array( Shipping::DROP, 2500 ), array( $by_order[501][0]['ship_status'], $by_order[501][0]['ship_diff'] ) );
 check_same( '503 was under it already: none', array( Shipping::NONE, 0 ), array( $by_order[503][0]['ship_status'], $by_order[503][0]['ship_diff'] ) );
-check_same( '502 has two cases waiting: each one\'s difference depends on the other — not known, the figure alone as a hint', array( Shipping::UNKNOWN, null, 0 ), array( $by_order[502][0]['ship_status'], $by_order[502][0]['ship_diff'], $by_order[502][0]['ship_reduced'] ) );
+check_same( '502 has ONE case for both its gobies: 810.00 less 120.00 stays over the threshold — worked out, nothing for the owner to type', array( Shipping::NONE, 0, 0 ), array( $by_order[502][0]['ship_status'], $by_order[502][0]['ship_diff'], $by_order[502][0]['ship_manual'] ) );
+check_same( '… and the money of that case is for two fish', 12000, $cases->numbers( $by_order[502][0], $cases->orders()->facts( $GLOBALS['fh_orders'][502] ) )['refund'] );
+
+echo "\nWhat a further loss does NOT join\n";
+list( $cases, $store, $rooms ) = fh_world();
+fh_loss( $rooms, 1, 9001 );
+fh_loss( $rooms, 1, 9002 );
+$cases->set_numbers( 1, array( 'ship_diff' => '5.00' ), 5 );
+fh_loss( $rooms, 1, 9003 );
+$case = $store->get_case( 1 );
+check_same( 'a shipping difference typed in for one fish does not stand for two: worked out again, and the case asks for a look', array( 2, 0, Shipping::NONE, 0, 1 ), array( $case['qty'], $case['ship_manual'], $case['ship_status'], $case['ship_diff'], $case['needs_check'] ) );
+check_contains( '… saying why', 'The number of fish changed after a shipping difference was typed in', $case['check_note'] );
+
+list( $cases, $store, $rooms ) = fh_world();
+fh_loss( $rooms, 1, 9001 );
+fh_loss( $rooms, 1, 9002 );
+check( 'the first case is sent', $cases->send( 1, 5 )['ok'] );
+fh_loss( $rooms, 1, 9003 );
+check_same( 'a case that was SENT is never changed behind the customer\'s back: the next loss opens a new one', array( array( 2, 'open', 1, ',9003:1' ), array( 1, 'sent', 1, ',9002:1' ) ), array_map( static function ( $c ) { return array( $c['id'], $c['status'], $c['qty'], $c['loss_events'] ); }, $store->cases() ) );
+check_same( '… one e-mail so far, for one fish', 1, count( $GLOBALS['fh_mail'] ) );
+
+list( $cases, $store, $rooms ) = fh_world();
+fh_loss( $rooms, 1, 9001 );
+fh_loss( $rooms, 1, 9002 );
+$cases->send( 1, 5 );
+$cases->reopen( 1, 5 );
+fh_loss( $rooms, 1, 9003 );
+check_same( 'a case the owner REOPENED is the owner\'s: the next loss opens a new one', array( array( 2, 'open', 1 ), array( 1, 'open', 1 ) ), array_map( static function ( $c ) { return array( $c['id'], $c['status'], $c['qty'] ); }, $store->cases() ) );
+
+list( $cases, $store, $rooms ) = fh_world();
+$rooms->stays[1]['qty_live'] = 2; // Four alive for four owed.
+$cases->open_by_hand( 502, 'i:53', 1, 5 );
+fh_loss( $rooms, 1, 9002 );
+check_same( 'a case made by hand already speaks for the first fish short: nothing new', 1, count( $store->cases() ) );
+fh_loss( $rooms, 1, 9003 );
+check_same( 'a case made BY HAND is not grown by the next one either', array( array( 2, 'auto', 1 ), array( 1, 'manual', 1 ) ), array_map( static function ( $c ) { return array( $c['id'], $c['origin'], $c['qty'] ); }, $store->cases() ) );
+
+list( $cases, $store, $rooms ) = fh_world();
+fh_loss( $rooms, 1, 9001 );
+fh_loss( $rooms, 1, 9002 );
+$store->rows[1]['loss_events'] = ',' . implode( ':1,', range( 1000001, 1000025 ) ) . ':1'; // 250 of the column's 255 characters.
+fh_loss( $rooms, 1, 9003 );
+check_same( 'a case whose list of losses is full: a new case rather than a loss nobody could undo', array( 2, ',9003:1' ), array( count( $store->cases() ), $store->get_case( 2 )['loss_events'] ) );
+check_same( 'what is no list of losses reads as none', array( array(), array(), array( 7 => 2 ) ), array( Cases::loss_events( '' ), Cases::loss_events( ',x:1,3:0,-4:1,5' ), Cases::loss_events( ',7:2' ) ) );
 
 /* ================================================================== */
 echo "\nWhat never opens a case\n";
@@ -229,29 +277,45 @@ list( $cases, $store, $rooms ) = fh_world();
 fh_loss( $rooms, 1, 9001 );
 fh_loss( $rooms, 1, 9002 );
 fh_loss( $rooms, 1, 9003 );
-check_same( 'two open cases, from two losses', array( 9003, 9002 ), array_column( $store->cases(), 'loss_event_id' ) );
+check_same( 'one open case for two fish, from two losses', array( array( 1, 2, ',9002:1,9003:1' ) ), array_map( static function ( $c ) { return array( $c['id'], $c['qty'], $c['loss_events'] ); }, $store->cases() ) );
 fh_undo( $rooms, 1, 9003 );
-$after = array();
-foreach ( $store->cases() as $c ) {
-	$after[ $c['loss_event_id'] ] = array( $c['status'], $c['close_reason'] );
-}
-check_same( 'the undone loss\'s case closed by itself; the other loss\'s case is untouched', array( 9003 => array( 'closed', 'loss_undone' ), 9002 => array( 'open', '' ) ), $after );
-check_contains( 'the order is told', 'The loss was undone in the Clean Room before anything was sent', fh_notes( 502 )[2] );
+$case = $store->get_case( 1 );
+check_same( 'one of its two losses is undone: the case speaks for one fish again — and stays open for the other', array( 'open', 1, ',9002:1', '' ), array( $case['status'], $case['qty'], $case['loss_events'], $case['close_reason'] ) );
+check_contains( 'the order is told', 'A loss of 1 was undone in the Clean Room before anything was sent — this case now speaks for 1 × Lagoon Goby', fh_notes( 502 )[2] );
 check_same( 'the log says so', 'undone', $store->events()[ count( $store->events() ) - 1 ] );
-check_same( 'other sections are told', 'loss_undone', fh_fired( 'fishotel_lostfish_case_closed' )[0][1] );
+check_same( 'nothing closed', array(), fh_fired( 'fishotel_lostfish_case_closed' ) );
 check_same( 'no e-mail, of course', array(), $GLOBALS['fh_mail'] );
-fh_undo( $rooms, 1, 9003 );
-check_same( 'the same undo twice closes nothing twice', 3, count( fh_notes( 502 ) ) );
-check_same( 'an undo of a loss that opened no case does nothing', array( 'closed' => array(), 'flagged' => array() ), $cases->loss_undone( 9001 ) );
-
-$sent = $cases->send( 1, 5 );
-check( 'the other case is sent', $sent['ok'] );
+$cases->loss_undone( 9003, 7 );
+check_same( 'the same undo twice takes nothing away twice', array( 3, 1 ), array( count( fh_notes( 502 ) ), $store->get_case( 1 )['qty'] ) );
+check_same( 'an undo of a loss that opened no case does nothing', array( 'closed' => array(), 'shrunk' => array(), 'flagged' => array() ), $cases->loss_undone( 9001 ) );
+check_same( '… nor does one whose number only looks alike (#900 is not #9002)', array( 'closed' => array(), 'shrunk' => array(), 'flagged' => array() ), $cases->loss_undone( 900 ) );
 fh_undo( $rooms, 1, 9002 );
-$late = $store->get_case( 1 );
+$case = $store->get_case( 1 );
+check_same( 'its last loss is undone too: the case closed by itself', array( 'closed', 'loss_undone' ), array( $case['status'], $case['close_reason'] ) );
+check_contains( 'the order is told', 'The loss was undone in the Clean Room before anything was sent — the case closed by itself', fh_notes( 502 )[3] );
+check_same( 'other sections are told', 'loss_undone', fh_fired( 'fishotel_lostfish_case_closed' )[0][1] );
+$cases->loss_undone( 9002, 7 );
+check_same( 'the same undo twice closes nothing twice', 4, count( fh_notes( 502 ) ) );
+
+fh_loss( $rooms, 1, 9005 );
+$sent = $cases->send( 2, 5 );
+check( 'the next loss opens a new case, and that one is sent', $sent['ok'] && 'sent' === $store->get_case( 2 )['status'] );
+fh_undo( $rooms, 1, 9005 );
+$late = $store->get_case( 2 );
 check_same( 'its loss is undone AFTER the e-mail went out: the case is not closed behind the customer\'s back', 'sent', $late['status'] );
 check_same( '… it is flagged for the owner', 1, $late['needs_check'] );
-check_contains( '… with what to do', 'undone in the Clean Room AFTER the e-mail went out', $late['check_note'] );
+check_contains( '… with what to do', 'The loss behind this case was undone in the Clean Room AFTER the e-mail went out', $late['check_note'] );
 check_same( '… and logged as a warning', 'undone_late', $store->events()[ count( $store->events() ) - 1 ] );
+
+list( $cases, $store, $rooms ) = fh_world();
+fh_loss( $rooms, 1, 9001 );
+fh_loss( $rooms, 1, 9002 );
+fh_loss( $rooms, 1, 9003 );
+$cases->send( 1, 5 );
+fh_undo( $rooms, 1, 9003 );
+$late = $store->get_case( 1 );
+check_same( 'a case for two fish was sent, then ONE of its losses is undone: what the customer was sent stays as it is', array( 'sent', 2, 1 ), array( $late['status'], $late['qty'], $late['needs_check'] ) );
+check_contains( '… and the owner is told how many', 'A loss of 1 of the 2 fish of this case was undone in the Clean Room AFTER the e-mail went out', $late['check_note'] );
 
 /* ================================================================== */
 echo "\nNothing is sent without the click\n";
@@ -570,13 +634,31 @@ fh_loss( $rooms, 1, 9002 );
 check_same( 'switched on, a loss that opens a case schedules one tick just after the window', array( 'single', Lost_Fish::TICK_HOOK ), array( $GLOBALS['fh_cron'][0][0], $GLOBALS['fh_cron'][0][2] ) );
 check( '… 15 minutes and a margin from now', abs( $GLOBALS['fh_cron'][0][1] - ( time() + 900 + 60 ) ) <= 2 );
 check_same( 'the loss itself still sends nothing', array(), $GLOBALS['fh_mail'] );
-$created = strtotime( $store->get_case( 1 )['created_at'] . ' UTC' );
+$created = strtotime( $store->get_case( 1 )['loss_at'] . ' UTC' );
 $tick    = $cases->run_tick( $created + 899 );
 check_same( 'inside the window: nothing — the loss can still be undone', array( array(), array() ), array( $tick['sent'], $GLOBALS['fh_mail'] ) );
 $tick = $cases->run_tick( $created + 901 );
 check_same( 'after it: sent', array( array( 1 ), 1, 'sent' ), array( $tick['sent'], count( $GLOBALS['fh_mail'] ), $store->get_case( 1 )['status'] ) );
 check_contains( '… the order note says it went by itself', 'Sent by itself after the undo window.', fh_notes( 502 )[1] );
 check_same( '… not as anybody\'s note', false, $GLOBALS['fh_orders'][502]->notes[1]['by_user'] );
+
+list( $cases, $store, $rooms ) = fh_world();
+Settings::save( array( 'auto_send' => '1' ) );
+fh_loss( $rooms, 1, 9001 );
+fh_loss( $rooms, 1, 9002 );
+$store->rows[1]['created_at'] = gmdate( 'Y-m-d H:i:s', time() - 3600 ); // The first loss was an hour ago …
+$store->rows[1]['loss_at']    = gmdate( 'Y-m-d H:i:s', time() - 3600 );
+fh_loss( $rooms, 1, 9003 );                                               // … and one more just now.
+$lost = strtotime( $store->get_case( 1 )['loss_at'] . ' UTC' );
+$tick = $cases->run_tick( $lost + 899 );
+check_same( 'a case that grew waits out the undo window of its LAST loss', array( array(), array(), 2 ), array( $tick['sent'], $GLOBALS['fh_mail'], $store->get_case( 1 )['qty'] ) );
+check_same( '… and a tick was scheduled for it', 2, count( $GLOBALS['fh_cron'] ) );
+$tick = $cases->run_tick( $lost + 901 );
+check_same( '… then goes out once, for both fish', array( array( 1 ), 1 ), array( $tick['sent'], count( $GLOBALS['fh_mail'] ) ) );
+check_contains( '…', '2 × Lagoon Goby', $GLOBALS['fh_mail'][0]['message'] );
+$cases->reopen( 1, 5 );
+$tick = $cases->run_tick( $lost + 40 * DAY_IN_SECONDS );
+check_same( 'a case the owner REOPENED never goes out by itself again', array( array(), 1, 'open' ), array( $tick['sent'], count( $GLOBALS['fh_mail'] ), $store->get_case( 1 )['status'] ) );
 
 list( $cases, $store, $rooms ) = fh_world();
 Settings::save( array( 'auto_send' => '1' ) );

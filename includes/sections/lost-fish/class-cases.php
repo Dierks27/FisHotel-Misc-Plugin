@@ -72,6 +72,13 @@ class Cases {
 	const AUTO_SEND_MARGIN = 60;
 
 	/**
+	 * The room for the list of losses behind one case (the column's width).
+	 *
+	 * @var int
+	 */
+	const LOSS_LIST_MAX = 255;
+
+	/**
 	 * The store.
 	 *
 	 * @var object
@@ -294,12 +301,13 @@ class Cases {
 	 * @param int $event_id The loss event.
 	 * @param int $qty      How many were lost.
 	 * @param int $actor    Who recorded it.
-	 * @return array{outcome: string, opened: int[], assess: array|null}
+	 * @return array{outcome: string, opened: int[], grown: int[], assess: array|null}
 	 */
 	public function loss_recorded( $stay_id, $event_id, $qty = 1, $actor = 0 ) {
 		$report = array(
 			'outcome' => 'skipped',
 			'opened'  => array(),
+			'grown'   => array(),
 			'assess'  => null,
 		);
 
@@ -330,7 +338,7 @@ class Cases {
 	 * @param int   $qty      How many were lost.
 	 * @param int   $actor    Who recorded it.
 	 * @param array $report   The report so far.
-	 * @return array{outcome: string, opened: int[], assess: array|null}
+	 * @return array{outcome: string, opened: int[], grown: int[], assess: array|null}
 	 */
 	private function loss_assessed( array $stay, $event_id, $qty, $actor, array $report ) {
 		$assess           = $this->assess_stay( $stay );
@@ -378,16 +386,25 @@ class Cases {
 		}
 
 		foreach ( $assess['allocations'] as $allocation ) {
+			// One more of a fish whose case was not sent yet: that case grows — the customer gets ONE e-mail
+			// for the line, not one per tap.
+			$waiting = $this->unsent_case_of( $assess['kind'], $allocation['holder'] );
+			$grown   = $waiting ? $this->grow_case( $waiting, (int) $allocation['qty'], (int) $event_id, $actor ) : null;
+			if ( $grown ) {
+				$report['grown'][] = (int) $grown['id'];
+				continue;
+			}
+
 			$case = $this->open_case( $assess['kind'], $allocation['holder'], $allocation['qty'], 'auto', $actor, (int) $stay['id'], (int) $event_id );
 			if ( $case ) {
 				$report['opened'][] = (int) $case['id'];
 			}
 		}
-		$report['outcome'] = $report['opened'] ? 'opened' : 'failed';
+		$report['outcome'] = $report['opened'] ? 'opened' : ( $report['grown'] ? 'grown' : 'failed' );
 
 		$this->store->refresh_counts();
 
-		if ( $report['opened'] && Settings::get()['auto_send'] && function_exists( 'wp_schedule_single_event' ) ) {
+		if ( ( $report['opened'] || $report['grown'] ) && Settings::get()['auto_send'] && function_exists( 'wp_schedule_single_event' ) ) {
 			wp_schedule_single_event( time() + $this->rooms->undo_window() + self::AUTO_SEND_MARGIN, Lost_Fish::TICK_HOOK );
 		}
 
@@ -395,24 +412,179 @@ class Cases {
 	}
 
 	/**
-	 * The loss behind some cases was undone: the ones not sent yet close
-	 * by themselves; a sent or answered one is flagged for the owner.
+	 * The case a further loss of the same fish joins: opened by a loss,
+	 * for the same order line, not sent yet and never taken back by the
+	 * owner (a reopened case is the owner's from then on).
+	 *
+	 * @param array $kind   The kind.
+	 * @param array $holder The holder line.
+	 * @return array|null
+	 */
+	private function unsent_case_of( array $kind, array $holder ) {
+		$filters = array(
+			'status'   => 'open',
+			'order_id' => (int) $holder['order_id'],
+		);
+		foreach ( $this->store->cases( $filters ) as $case ) {
+			if ( 'auto' !== $case['origin'] || '' === $case['loss_events'] || null === $case['loss_at'] ) {
+				continue;
+			}
+			if ( (string) $case['line_ref'] === (string) $holder['ref'] && (string) $case['kind_key'] === (string) $kind['key'] ) {
+				return $case;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * The losses a case came from.
+	 *
+	 * @param string $list ",<event id>:<qty>,<event id>:<qty>…".
+	 * @return array<int, int> event id => fish.
+	 */
+	public static function loss_events( $list ) {
+		$out = array();
+		foreach ( explode( ',', (string) $list ) as $entry ) {
+			$parts = explode( ':', $entry );
+			if ( 2 === count( $parts ) && ctype_digit( $parts[0] ) && ctype_digit( $parts[1] ) && (int) $parts[0] > 0 && (int) $parts[1] > 0 ) {
+				$out[ (int) $parts[0] ] = (int) $parts[1];
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * The stored form of loss_events().
+	 *
+	 * @param array<int, int> $events event id => fish.
+	 * @return string
+	 */
+	private static function loss_list( array $events ) {
+		$out = '';
+		foreach ( $events as $event_id => $qty ) {
+			$out .= ',' . (int) $event_id . ':' . (int) $qty;
+		}
+		return $out;
+	}
+
+	/**
+	 * What changes with the number of fish of an open case: a shipping
+	 * difference typed in by hand was typed for the old number, so it is
+	 * worked out again and the case asks for a look.
+	 *
+	 * @param array $case The case as it was.
+	 * @return array Fields.
+	 */
+	private static function count_changed( array $case ) {
+		if ( empty( $case['ship_manual'] ) ) {
+			return array();
+		}
+		return array(
+			'ship_manual' => 0,
+			'needs_check' => 1,
+			'check_note'  => trim( $case['check_note'] . ' ' . __( 'The number of fish changed after a shipping difference was typed in — it was worked out again; check it.', 'fishotel-misc-plugin' ) ),
+		);
+	}
+
+	/**
+	 * One more loss for a case that was not sent yet.
+	 *
+	 * @param array $case     The open case.
+	 * @param int   $qty      Fish to add.
+	 * @param int   $event_id The loss event.
+	 * @param int   $actor    Who.
+	 * @return array|null The case, or null when it could not grow (a new case opens instead).
+	 */
+	private function grow_case( array $case, $qty, $event_id, $actor = 0 ) {
+		$qty    = max( 1, (int) $qty );
+		$events = self::loss_events( $case['loss_events'] );
+		if ( (int) $event_id <= 0 || isset( $events[ (int) $event_id ] ) ) {
+			return null;
+		}
+		$events[ (int) $event_id ] = $qty;
+		$list                      = self::loss_list( $events );
+		if ( strlen( $list ) > self::LOSS_LIST_MAX ) {
+			return null;
+		}
+
+		$fields = array_merge(
+			self::count_changed( $case ),
+			array(
+				'qty'         => (int) $case['qty'] + $qty,
+				'loss_events' => $list,
+				'loss_at'     => gmdate( 'Y-m-d H:i:s' ),
+			)
+		);
+		// Only while it is still open: a Send clicked in the same second wins, and a new case opens.
+		if ( ! $this->store->transition( (int) $case['id'], array( 'open' ), 'open', $fields ) ) {
+			return null;
+		}
+
+		$case = $this->refresh( $this->store->get_case( (int) $case['id'] ) );
+		$text = sprintf(
+			/* translators: 1: number of fish, 2: 2 × fish */
+			__( '%1$d more lost with no spare in the tanks: this case now speaks for %2$s. Nothing was sent to the customer yet.', 'fishotel-misc-plugin' ),
+			$qty,
+			Email::fish_line( $case )
+		);
+		$this->note( $case, $text, false );
+		$this->log( 'grown', $text, (int) $case['id'], (int) $case['order_id'], $actor );
+		$this->fire( 'fishotel_lostfish_case_grown', $case, $qty );
+
+		return $case;
+	}
+
+	/**
+	 * A loss behind some cases was undone. A case not sent yet closes by
+	 * itself — or, when other losses stand behind it too, speaks for
+	 * fewer fish; a sent or answered one is flagged for the owner.
 	 *
 	 * @param int $event_id The loss event that was undone.
 	 * @param int $actor    Who undid it.
-	 * @return array{closed: int[], flagged: int[]}
+	 * @return array{closed: int[], shrunk: int[], flagged: int[]}
 	 */
 	public function loss_undone( $event_id, $actor = 0 ) {
 		$out = array(
 			'closed'  => array(),
+			'shrunk'  => array(),
 			'flagged' => array(),
 		);
 		if ( (int) $event_id <= 0 ) {
 			return $out;
 		}
 
-		foreach ( $this->store->cases( array( 'loss_event_id' => (int) $event_id ) ) as $case ) {
-			$id = (int) $case['id'];
+		foreach ( $this->store->cases( array( 'loss_event' => (int) $event_id ) ) as $case ) {
+			$id     = (int) $case['id'];
+			$events = self::loss_events( $case['loss_events'] );
+			if ( ! isset( $events[ (int) $event_id ] ) ) {
+				continue;
+			}
+			$back = $events[ (int) $event_id ];
+			unset( $events[ (int) $event_id ] );
+			$rest = (int) $case['qty'] - $back;
+
+			if ( 'open' === $case['status'] && $events && $rest > 0 ) {
+				$fields = array_merge(
+					self::count_changed( $case ),
+					array(
+						'qty'         => $rest,
+						'loss_events' => self::loss_list( $events ),
+					)
+				);
+				if ( $this->store->transition( $id, array( 'open' ), 'open', $fields ) ) {
+					$out['shrunk'][] = $id;
+					$now             = $this->refresh( $this->store->get_case( $id ) );
+					$message         = sprintf(
+						/* translators: 1: number of fish, 2: 1 × fish */
+						__( 'A loss of %1$d was undone in the Clean Room before anything was sent — this case now speaks for %2$s.', 'fishotel-misc-plugin' ),
+						$back,
+						Email::fish_line( $now )
+					);
+					$this->note( $now, $message, false );
+					$this->log( 'undone', $message, $id, (int) $case['order_id'], $actor );
+				}
+				continue;
+			}
 
 			if ( 'open' === $case['status'] ) {
 				$closed = $this->store->transition(
@@ -435,12 +607,20 @@ class Cases {
 			}
 
 			if ( in_array( $case['status'], array( 'sent', 'answered' ), true ) ) {
-				$message = __( 'The loss behind this case was undone in the Clean Room AFTER the e-mail went out. Check the tank, then reopen or close the case and tell the customer.', 'fishotel-misc-plugin' );
+				$message = $events
+					? sprintf(
+						/* translators: 1: number of fish, 2: number of fish the e-mail spoke of */
+						__( 'A loss of %1$d of the %2$d fish of this case was undone in the Clean Room AFTER the e-mail went out. Check the tank, then reopen or close the case and tell the customer.', 'fishotel-misc-plugin' ),
+						$back,
+						(int) $case['qty']
+					)
+					: __( 'The loss behind this case was undone in the Clean Room AFTER the e-mail went out. Check the tank, then reopen or close the case and tell the customer.', 'fishotel-misc-plugin' );
 				$this->store->update_case(
 					$id,
 					array(
 						'needs_check' => 1,
 						'check_note'  => $message,
+						'loss_events' => self::loss_list( $events ),
 					)
 				);
 				$out['flagged'][] = $id;
@@ -448,7 +628,7 @@ class Cases {
 			}
 		}
 
-		if ( $out['closed'] || $out['flagged'] ) {
+		if ( $out['closed'] || $out['shrunk'] || $out['flagged'] ) {
 			$this->store->refresh_counts();
 		}
 
@@ -494,6 +674,8 @@ class Cases {
 				'qty'            => max( 1, (int) $qty ),
 				'stay_id'        => (int) $stay_id,
 				'loss_event_id'  => (int) $event_id,
+				'loss_events'    => (int) $event_id > 0 ? ',' . (int) $event_id . ':' . max( 1, (int) $qty ) : '',
+				'loss_at'        => 'manual' === $origin ? null : gmdate( 'Y-m-d H:i:s' ),
 				'order_id'       => (int) $holder['order_id'],
 				'order_item_id'  => (int) ( $holder['item_id'] ?? 0 ),
 				'line_ref'       => (string) $holder['ref'],
@@ -1365,6 +1547,7 @@ class Cases {
 				'close_reason'  => '',
 				'sent_at'       => null,
 				'reminded_at'   => null,
+				'loss_at'       => null, // The owner took it back: nothing about it goes by itself any more.
 				'token_salt'    => '',
 				'link_expires'  => null,
 				'amount_refund' => null,

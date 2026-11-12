@@ -290,6 +290,18 @@ check( 'a reminder is marked only on a sent case that has none yet', $store->mar
 $GLOBALS['wpdb']->affected = 0;
 check_same( '… a second run marks nothing', false, $store->mark_reminded( 12, '2026-11-28 15:00:00' ) );
 
+echo "\nThe losses behind a case\n";
+check( 'the list of losses and the time of the last one are columns; the time may be empty (a case by hand, a reopened one)', 1 === preg_match( "/loss_events varchar\(255\) NOT NULL DEFAULT '',/", $schema[0] ) && 1 === preg_match( '/loss_at datetime NULL,/', $schema[0] ) );
+$GLOBALS['wpdb'] = new Fh_Wpdb();
+$store           = new Store();
+$store->cases( array( 'loss_event' => 12 ) );
+check( 'the cases of a loss are found by its whole number — ",12:", so not #112 and not #120', false !== strpos( end( $GLOBALS['wpdb']->queries ), "loss_events LIKE '%,12:%'" ), end( $GLOBALS['wpdb']->queries ) );
+$store->cases_to_autosend( '2031-03-12 10:00:00' );
+check( 'what may go out by itself: open, opened by a loss, and its LAST loss that long ago — never a case without one', false !== strpos( end( $GLOBALS['wpdb']->queries ), "status = 'open' AND origin = 'auto' AND loss_at IS NOT NULL AND loss_at <= '2031-03-12 10:00:00'" ), end( $GLOBALS['wpdb']->queries ) );
+$GLOBALS['wpdb']->affected = 1;
+$store->transition( 12, array( 'open' ), 'open', array( 'qty' => 2, 'loss_events' => ',7:1,9:1' ) );
+check( 'a case grows only while it is still open — the same conditional UPDATE', 1 === preg_match( "/qty = 2.* WHERE id = 12 AND status IN \('open'\)$/", end( $GLOBALS['wpdb']->queries ) ), end( $GLOBALS['wpdb']->queries ) );
+
 echo "\nThe lock of a kind of fish\n";
 $GLOBALS['wpdb'] = new Fh_Wpdb();
 $store           = new Store();

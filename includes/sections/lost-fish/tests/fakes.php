@@ -542,6 +542,9 @@ class Fh_Fake_Store {
 			if ( ! empty( $filters['loss_event_id'] ) && (int) $row['loss_event_id'] !== (int) $filters['loss_event_id'] ) {
 				continue;
 			}
+			if ( ! empty( $filters['loss_event'] ) && false === strpos( (string) $row['loss_events'], ',' . (int) $filters['loss_event'] . ':' ) ) {
+				continue;
+			}
 			$out[] = Store::hydrate_case( $row );
 		}
 		return isset( $filters['limit'] ) ? array_slice( $out, 0, (int) $filters['limit'] ) : $out;
@@ -587,7 +590,7 @@ class Fh_Fake_Store {
 	public function cases_to_autosend( $created_before ) {
 		$out = array();
 		foreach ( $this->rows as $row ) {
-			if ( 'open' === $row['status'] && 'auto' === $row['origin'] && strcmp( $row['created_at'], (string) $created_before ) <= 0 ) {
+			if ( 'open' === $row['status'] && 'auto' === $row['origin'] && null !== $row['loss_at'] && strcmp( $row['loss_at'], (string) $created_before ) <= 0 ) {
 				$out[] = Store::hydrate_case( $row );
 			}
 		}

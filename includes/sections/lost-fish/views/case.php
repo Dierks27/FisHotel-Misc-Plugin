@@ -86,6 +86,11 @@ $fh_matches = array(
 				'manual' === $fh_case['origin'] ? __( 'by hand', 'fishotel-misc-plugin' ) : __( 'by a loss in the Clean Room', 'fishotel-misc-plugin' )
 			)
 		);
+		$fh_losses = count( Cases::loss_events( $fh_case['loss_events'] ) );
+		if ( $fh_losses > 1 ) {
+			/* translators: %d: number of losses */
+			echo ' · ' . esc_html( sprintf( __( 'from %d losses', 'fishotel-misc-plugin' ), $fh_losses ) );
+		}
 		if ( isset( $fh_matches[ $fh_case['line_match'] ] ) ) {
 			/* translators: %s: how the order line was found */
 			echo ' · ' . esc_html( sprintf( __( 'order line found by %s', 'fishotel-misc-plugin' ), $fh_matches[ $fh_case['line_match'] ] ) );

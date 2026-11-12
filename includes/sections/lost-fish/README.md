@@ -77,6 +77,16 @@ for — is handed to the holders, **the most recently paid order first**
 (first paid, first served). Each holder line that is short gets **one
 case**, for as many fish as that line is short.
 
+**One more of the same fish** for a line whose case was **not sent yet**
+does not open a second case: that case **grows** (1 × becomes 2 ×), its
+numbers are worked out again, and the order gets a note — so tapping
+"loss" three times is one case and one e-mail, not three. A shipping
+difference that was typed in for the smaller number is worked out again
+and the case is marked "check". A case that was already sent is never
+changed behind the customer's back, and a case made by hand or reopened
+by the owner is the owner's: in all three the further loss opens a new
+case.
+
 A case on an order that is **due to ship today or earlier** is marked
 "check": its box may already be packed — the fish marked as shipped in
 the Clean Room — before the shipment is recorded.
@@ -94,9 +104,12 @@ by itself: use **Open a case** for it.
 Undoing the loss in the Clean Room (the phone's undo within its 15
 minutes, or Undo on the Events tab) **closes the cases that loss opened
 and that were not sent yet** — by itself, with a note on the order. A
-case that was already sent or answered is never closed behind the
+case that grew from several losses remembers each of them with its
+number of fish: undoing one takes just those fish off it (2 × becomes
+1 ×), and the case closes when its last loss is undone. A case that was
+already sent or answered is never closed or changed behind the
 customer's back: it is flagged "the loss was undone after the e-mail went
-out" for the owner to sort out.
+out" (with how many of its fish) for the owner to sort out.
 
 ### Two phones at once
 
@@ -260,7 +273,9 @@ certain: a loss opened it, the order line was found by its product (or
 by the Invoices section), nothing marks it "check" (a name match, a
 price that is not on the line, an order due to ship today), the shipping
 difference was worked out and not typed, and the tanks are still short
-of that fish. Everything else waits for the click.
+of that fish. A case that grew waits out the window of its **last**
+loss. A case the owner reopened never goes out by itself again.
+Everything else waits for the click.
 
 ### No answer
 
@@ -344,12 +359,13 @@ screen can reach* says plainly what is not there.
 
 ## What it does not do (yet)
 
-- **Two losses, one order.** Each loss opens its own case, so a customer
-  who loses two fish of one order at different moments gets two cases —
-  and while both wait, neither shipping difference can be worked out (it
-  depends on the other answer): the owner types the figures, or sends
-  one and waits for its answer before the other. Several fish lost in
-  ONE loss on one order line are one case.
+- **Two different fish of one order.** Losses of the same fish join one
+  case per order line while it is unsent (see above). Two DIFFERENT
+  lines of one order — or a further loss after the first e-mail went
+  out — are still two cases, and while both wait, neither shipping
+  difference can be worked out (it depends on the other answer): the
+  owner types the figures, or sends one and waits for its answer before
+  the other.
 - **A recount** that comes up short opens nothing by itself (it is not a
   `loss` event) — open the case by hand.
 - **Sizes of a product.** Every group of a product is one kind, whatever
@@ -380,6 +396,7 @@ fishotel_lostfish_cases_for_order( $order_id )
 | Action | Arguments |
 | --- | --- |
 | `fishotel_lostfish_case_opened` | `$case` |
+| `fishotel_lostfish_case_grown` | `$case`, `$added` (fish) — a further loss joined an unsent case |
 | `fishotel_lostfish_case_sent` | `$case` |
 | `fishotel_lostfish_case_reminded` | `$case` |
 | `fishotel_lostfish_case_answered` | `$case`, `$choice` (`refund` / `credit` / `retry` / `cancel`), `$via` (`customer` / `owner`) |
@@ -430,7 +447,8 @@ install leaves a marker and is retried in wp-admin at most once an hour).
 Kept on deactivation.
 
 - `{prefix}fh_lostfish_cases` — one row per case: status, origin, the
-  kind and the fish, the tank group and loss event, the order line and
+  kind and the fish, the tank group, the losses behind it (each event
+  with its number of fish) and when the last one was, the order line and
   its customer, the money in cents (`unit_paid`, `ship_diff` — NULL means
   "not known", never a silent zero — and the amounts frozen at the send),
   the link salt and expiry, the choice, a UTC timestamp per stage.

@@ -11,7 +11,9 @@
  *
  *   {prefix}fh_lostfish_cases  one row per case: the fish (kind, product,
  *                              species, size, quantity, the tank group and
- *                              the loss event it came from), the order line
+ *                              the loss events it came from, each with its
+ *                              quantity, and when the last one was), the
+ *                              order line
  *                              and its customer, the money in CENTS (paid
  *                              per fish, the shipping difference, the
  *                              amounts frozen when the e-mail went out), the
@@ -52,7 +54,7 @@ class Store {
 	 *
 	 * @var string
 	 */
-	const DB_VERSION = '1.0';
+	const DB_VERSION = '1.1';
 
 	/**
 	 * Autoloaded option holding the installed schema version (or a failure
@@ -106,6 +108,8 @@ class Store {
 		'qty'            => 'd',
 		'stay_id'        => 'd',
 		'loss_event_id'  => 'd',
+		'loss_events'    => 's',
+		'loss_at'        => '?s',
 		'order_id'       => 'd',
 		'order_item_id'  => 'd',
 		'line_ref'       => 's',
@@ -228,6 +232,8 @@ class Store {
 				qty int(11) NOT NULL DEFAULT 1,
 				stay_id bigint(20) unsigned NOT NULL DEFAULT 0,
 				loss_event_id bigint(20) unsigned NOT NULL DEFAULT 0,
+				loss_events varchar(255) NOT NULL DEFAULT '',
+				loss_at datetime NULL,
 				order_id bigint(20) unsigned NOT NULL DEFAULT 0,
 				order_item_id bigint(20) unsigned NOT NULL DEFAULT 0,
 				line_ref varchar(64) NOT NULL DEFAULT '',
@@ -463,7 +469,8 @@ class Store {
 	/**
 	 * Cases, newest first.
 	 *
-	 * @param array $filters status (string|string[]), order_id, order_ids (int[]), kind_key, loss_event_id, limit.
+	 * @param array $filters status (string|string[]), order_id, order_ids (int[]), kind_key, loss_event_id (the first
+	 *                       loss of a case), loss_event (any loss of a case), limit.
 	 * @return array[]
 	 */
 	public function cases( array $filters = array() ) {
@@ -499,6 +506,11 @@ class Store {
 		if ( ! empty( $filters['loss_event_id'] ) ) {
 			$where[]  = 'loss_event_id = %d';
 			$params[] = (int) $filters['loss_event_id'];
+		}
+		if ( ! empty( $filters['loss_event'] ) ) {
+			// loss_events is ",<event id>:<qty>,<event id>:<qty>…": every entry starts with a comma.
+			$where[]  = 'loss_events LIKE %s';
+			$params[] = '%,' . (int) $filters['loss_event'] . ':%';
 		}
 
 		$limit = isset( $filters['limit'] ) ? max( 1, min( self::CASES_LIMIT, (int) $filters['limit'] ) ) : self::CASES_LIMIT;
@@ -644,6 +656,7 @@ class Store {
 			'status'         => 12,
 			'origin'         => 8,
 			'kind_key'       => 191,
+			'loss_events'    => 255,
 			'species'        => 120,
 			'size_slug'      => 100,
 			'size_label'     => 100,
@@ -726,14 +739,16 @@ class Store {
 	}
 
 	/**
-	 * The open cases a loss opened at or before a moment (the candidates
-	 * of "send by itself after the undo window").
+	 * The open cases whose LAST loss was at or before a moment (the
+	 * candidates of "send by itself after the undo window"). A case made
+	 * by hand has no loss, and a reopened one has it emptied: neither is
+	 * ever a candidate.
 	 *
-	 * @param string $created_before UTC datetime.
+	 * @param string $lost_before UTC datetime.
 	 * @return array[]
 	 */
-	public function cases_to_autosend( $created_before ) {
-		return $this->due( "status = 'open' AND origin = 'auto' AND created_at <= %s", (string) $created_before );
+	public function cases_to_autosend( $lost_before ) {
+		return $this->due( "status = 'open' AND origin = 'auto' AND loss_at IS NOT NULL AND loss_at <= %s", (string) $lost_before );
 	}
 
 	/**
