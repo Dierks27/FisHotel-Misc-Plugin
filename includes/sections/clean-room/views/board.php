@@ -10,6 +10,8 @@
  * @var array  $settings     Settings.
  * @var array  $protocols    Settings::protocols().
  * @var array  $doses        Store::latest_doses(): building id => medication => { label, logged_at }.
+ * @var array  $temp         Admin_Temp::board(): the Temporary area (building, slots, doses, sheet, closed).
+ * @var array  $todo         Todo::build(): the day's list by water system (left, total).
  * @var array[] $sizes       The standard sizes (slug, label).
  * @var string $today        Site date.
  * @var bool   $tables_ok    Whether the tables exist.
@@ -20,11 +22,14 @@
 defined( 'ABSPATH' ) || exit;
 
 use FisHotel\Misc\Sections\Clean_Room\Admin;
+use FisHotel\Misc\Sections\Clean_Room\Admin_Temp;
 use FisHotel\Misc\Sections\Clean_Room\Clean_Room;
 use FisHotel\Misc\Sections\Clean_Room\Layout;
 use FisHotel\Misc\Sections\Clean_Room\Protocol;
+use FisHotel\Misc\Sections\Clean_Room\Todo;
 
-$fh_species = (string) $filters['species'];
+$fh_species   = (string) $filters['species'];
+$fh_temp_done = false;
 ?>
 <div class="wrap fishotel-misc-wrap fh-cr-wrap">
 
@@ -47,7 +52,7 @@ $fh_species = (string) $filters['species'];
 			<label class="fh-cr-filter">
 				<span><?php esc_html_e( 'Area', 'fishotel-misc-plugin' ); ?></span>
 				<select name="area" class="fh-cr-input">
-					<option value=""><?php esc_html_e( 'Both', 'fishotel-misc-plugin' ); ?></option>
+					<option value=""><?php esc_html_e( 'All', 'fishotel-misc-plugin' ); ?></option>
 					<?php foreach ( Layout::AREAS as $fh_key => $fh_label ) : ?>
 						<option value="<?php echo esc_attr( $fh_key ); ?>" <?php selected( $filters['area'], $fh_key ); ?>><?php echo esc_html( $fh_label ); ?></option>
 					<?php endforeach; ?>
@@ -67,6 +72,7 @@ $fh_species = (string) $filters['species'];
 	</div>
 
 	<div class="fh-cr-summary">
+		<a class="fh-cr-chip fh-cr-chip--todo<?php echo (int) $todo['left'] > 0 ? ' fh-cr-chip--warn' : ' fh-cr-chip--ready'; ?>" href="<?php echo esc_url( Admin_Temp::todo_url() ); ?>" title="<?php esc_attr_e( 'Everything due today, by water system — the To do tab.', 'fishotel-misc-plugin' ); ?>"><?php echo esc_html( ucfirst( (string) preg_replace( '/^[^:]+:\s*/', '', Todo::headline( $todo ) ) ) ); ?> &rarr;</a>
 		<span class="fh-cr-chip"><strong><?php echo esc_html( $totals['in_qt'] ); ?></strong> <?php esc_html_e( 'groups in QT', 'fishotel-misc-plugin' ); ?></span>
 		<span class="fh-cr-chip"><strong><?php echo esc_html( $totals['cleared'] ); ?></strong> <?php esc_html_e( 'cleared', 'fishotel-misc-plugin' ); ?></span>
 		<span class="fh-cr-chip fh-cr-chip--ready"><strong><?php echo esc_html( $totals['ready'] ); ?></strong> <?php esc_html_e( 'for sale', 'fishotel-misc-plugin' ); ?></span>
@@ -87,6 +93,12 @@ $fh_species = (string) $filters['species'];
 	<?php foreach ( $groups as $fh_area => $fh_group ) : ?>
 		<?php
 		if ( '' !== $filters['area'] && $filters['area'] !== $fh_area ) {
+			continue;
+		}
+		if ( Layout::TEMP_AREA === $fh_area ) {
+			// The temporary tanks are slots, not a rack: their own block.
+			$fh_temp_done = true;
+			include Clean_Room::path() . 'views/board-temp.php';
 			continue;
 		}
 		?>
@@ -211,7 +223,11 @@ $fh_species = (string) $filters['species'];
 		</section>
 	<?php endforeach; ?>
 
+	<?php if ( ! $fh_temp_done && '' === $filters['area'] ) : ?>
+		<?php include Clean_Room::path() . 'views/board-temp.php'; // No own-water building in the layout: the block says so. ?>
+	<?php endif; ?>
+
 	<p class="fh-cr-footnote">
-		<?php esc_html_e( 'Numbering: hundreds = building, tens = level (1 bottom, 2 top), ones = position from the left. Every building is one water system. Arrivals land in the Spa; a stay is cleared the day it moves from the Spa into the Clean Room. A fish nobody knows yet reads "??" until it is identified (Stays tab, or the phone). A group goes on sale on the date you choose — its batch\'s "Goes on sale" date on the supplier order, or its own date on the product page — and not before; one whose date has come while it is still in the Spa is flagged. Each tank card lists what is still due today; each tank\'s QR opens its Front Desk screen.', 'fishotel-misc-plugin' ); ?>
+		<?php esc_html_e( 'Numbering: hundreds = building, tens = level (1 bottom, 2 top), ones = position from the left. Every building is one water system — a dose, a test or a water change is done once for the whole system (the To do tab lists them that way) — except the Temporary slots (TEMP 1 · 901 …), which are each their own water with their own schedule. Arrivals land in the Spa; a stay is cleared the day it moves from the Spa into the Clean Room. A fish nobody knows yet reads "??" until it is identified (Stays tab, or the phone). A group goes on sale on the date you choose — its batch\'s "Goes on sale" date on the supplier order, or its own date on the product page — and not before; one whose date has come while it is still in the Spa is flagged. Each tank card lists what is still due today; each tank\'s QR opens its Front Desk screen.', 'fishotel-misc-plugin' ); ?>
 	</p>
 </div>

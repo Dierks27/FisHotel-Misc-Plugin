@@ -227,12 +227,16 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 				require_once self::path() . 'class-admin.php';
 				require_once self::path() . 'class-admin-workbook.php';
 				require_once self::path() . 'class-admin-import.php';
+				require_once self::path() . 'class-admin-temp.php';
 
 				$settings = new Settings();
 				$settings->init();
 
 				$admin = new Admin();
 				$admin->init();
+
+				$temp = new Admin_Temp();
+				$temp->init();
 
 				$workbook = new Admin_Workbook();
 				$workbook->init();
@@ -259,6 +263,7 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 			require_once self::path() . 'class-admin.php';
 			require_once self::path() . 'class-admin-workbook.php';
 			require_once self::path() . 'class-admin-import.php';
+			require_once self::path() . 'class-admin-temp.php';
 
 			add_submenu_page(
 				'fishotel-misc',

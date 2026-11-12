@@ -513,17 +513,20 @@ class Todo {
 	 * 'low' — the last reading is under the floor, as the tank screen
 	 * flags it — and / or 'due' — the copper test is due today and no
 	 * reading has ticked it; 'overdue' when the last reading is two days
-	 * old or more, or there never was one.
+	 * old or more, or there never was one. Only a block whose list holds
+	 * a copper test today can be flagged: a hospital tank on antibiotics,
+	 * or a Clean Room building, is not "low" for having no copper.
 	 *
-	 * @param string $where  The block's name.
-	 * @param array  $copper system_copper().
-	 * @param bool   $due    Whether a copper test is still open today.
-	 * @param string $today  Site date.
-	 * @param mixed  $tz     Site zone.
+	 * @param string $where   The block's name.
+	 * @param array  $copper  system_copper().
+	 * @param bool   $due     Whether a copper test is still open today.
+	 * @param string $today   Site date.
+	 * @param mixed  $tz      Site zone.
+	 * @param bool   $matters Whether a copper test is on the block's list today, open or ticked.
 	 * @return array|null where, low, due, overdue, value, logged_at, days_ago.
 	 */
-	public static function copper_flag( $where, array $copper, $due, $today, $tz = null ) {
-		$low = 'low' === (string) $copper['state'];
+	public static function copper_flag( $where, array $copper, $due, $today, $tz = null, $matters = true ) {
+		$low = $matters && 'low' === (string) $copper['state'];
 		if ( ! $low && ! $due ) {
 			return null;
 		}
@@ -545,14 +548,16 @@ class Todo {
 	}
 
 	/**
-	 * Whether a list of items still holds an open copper test.
+	 * Whether a list of items holds a copper test — still open, or
+	 * (with $any) at all.
 	 *
 	 * @param array[] $items Items.
+	 * @param bool    $any   Whether a ticked one counts too.
 	 * @return bool
 	 */
-	private static function copper_due( array $items ) {
+	private static function copper_due( array $items, $any = false ) {
 		foreach ( $items as $item ) {
-			if ( empty( $item['done'] ) && Protocol::is_copper_test( $item ) ) {
+			if ( ( $any || empty( $item['done'] ) ) && Protocol::is_copper_test( $item ) ) {
 				return true;
 			}
 		}
@@ -640,7 +645,7 @@ class Todo {
 			'items'       => $items,
 			'left'        => self::left( $items ),
 			'copper'      => $copper,
-			'flag'        => self::copper_flag( $label, $copper, self::copper_due( $items ), $today, Clean_Room::timezone() ),
+			'flag'        => self::copper_flag( $label, $copper, self::copper_due( $items ), $today, Clean_Room::timezone(), self::copper_due( $items, true ) ),
 		);
 	}
 
@@ -713,7 +718,7 @@ class Todo {
 			'items'       => $items,
 			'left'        => self::left( $items ),
 			'copper'      => $copper,
-			'flag'        => self::copper_flag( $label . ( '' !== $name ? ' · ' . $name : '' ), $copper, self::copper_due( $items ), $today, Clean_Room::timezone() ),
+			'flag'        => self::copper_flag( $label . ( '' !== $name ? ' · ' . $name : '' ), $copper, self::copper_due( $items ), $today, Clean_Room::timezone(), self::copper_due( $items, true ) ),
 		);
 	}
 
@@ -872,7 +877,8 @@ class Todo {
 	 * and the nonce.
 	 *
 	 * @param object $store Store (or stand-in) with building(), tank_by_number(), log_building(), log_tank().
-	 * @param array  $raw   scope (system|tank), building (id) or tank (number), key, kind, label.
+	 * @param array  $raw   scope (system|tank), building (id) or tick_tank (the tank's number — not `tank`,
+	 *                      which is the page the phone is on), key, kind, label.
 	 * @param array  $base  actor_id, source.
 	 * @return array message, event_ids — or error.
 	 */
@@ -914,7 +920,7 @@ class Todo {
 			);
 		}
 
-		$tank = $store->tank_by_number( isset( $raw['tank'] ) && is_scalar( $raw['tank'] ) ? (int) $raw['tank'] : 0 );
+		$tank = $store->tank_by_number( isset( $raw['tick_tank'] ) && is_scalar( $raw['tick_tank'] ) ? (int) $raw['tick_tank'] : 0 );
 		if ( ! $tank || 'offline' === (string) $tank['status'] ) {
 			return array( 'error' => __( 'That tank is not in the layout.', 'fishotel-misc-plugin' ) );
 		}

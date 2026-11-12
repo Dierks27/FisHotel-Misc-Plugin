@@ -1213,18 +1213,23 @@ class Temp_Tanks {
 			}
 			$date = Replay::event_date( (string) ( $event['event_at'] ?? '' ), $tz );
 			$qty  = isset( $event['qty'] ) && null !== $event['qty'] ? (int) $event['qty'] : null;
-			if ( (int) ( $event['to_setup_id'] ?? 0 ) === $setup_id && in_array( (string) $event['type'], array( 'arrival', 'move' ), true ) ) {
+			$type = (string) ( $event['type'] ?? '' );
+			// A group came in by a check-in or by a whole move. A split leaves
+			// the group where it was (only its sister moves), and a sister's
+			// backdated "arrival" is bookkeeping, not a check-in.
+			$came = ( 'arrival' === $type && null !== $qty && $qty > 0 && 0 !== strpos( (string) ( $event['note'] ?? '' ), 'split from #' ) ) || ( 'move' === $type && Replay::is_whole_move( $event ) );
+			if ( (int) ( $event['to_setup_id'] ?? 0 ) === $setup_id && $came ) {
 				if ( ! isset( $out[ $stay ] ) ) {
 					$out[ $stay ] = array(
 						'stay_id' => $stay,
 						'species' => (string) ( $event['species'] ?? '' ),
 						'in'      => $date,
-						'qty'     => 'arrival' === (string) $event['type'] ? $qty : null,
+						'qty'     => 'arrival' === $type ? $qty : null,
 						'out'     => '',
 						'to'      => null,
 					);
 				}
-			} elseif ( (int) ( $event['from_setup_id'] ?? 0 ) === $setup_id && 'move' === (string) $event['type'] && isset( $out[ $stay ] ) && Replay::is_whole_move( $event ) ) {
+			} elseif ( (int) ( $event['from_setup_id'] ?? 0 ) === $setup_id && 'move' === $type && isset( $out[ $stay ] ) && Replay::is_whole_move( $event ) ) {
 				$out[ $stay ]['out'] = $date;
 				$out[ $stay ]['to']  = ! empty( $event['to_tank_number'] ) ? (int) $event['to_tank_number'] : null;
 			}

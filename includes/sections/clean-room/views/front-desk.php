@@ -15,6 +15,9 @@
 defined( 'ABSPATH' ) || exit;
 
 $fh_title = ! empty( $screen['tank'] ) ? 'Tank ' . (int) $screen['tank']['number'] : __( 'Front Desk', 'fishotel-misc-plugin' );
+if ( ! empty( $screen['tank']['temp']['label'] ) ) {
+	$fh_title = (string) $screen['tank']['temp']['label'] . ' · ' . (int) $screen['tank']['number']; // A temporary slot: "TEMP 1 · 901".
+}
 ?>
 <!DOCTYPE html>
 <html lang="<?php echo esc_attr( get_bloginfo( 'language' ) ); ?>">

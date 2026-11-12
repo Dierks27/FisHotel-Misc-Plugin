@@ -218,7 +218,7 @@ act( $store, 521, 'tick', array( 'key' => 'feed', 'kind' => 'feed', 'label' => '
 $room = room( $store );
 $feed = array_column( block( $room['todo'], 500 )['items'], null, 'label' )['Feed'];
 check( 'one tank fed: the line stays open and counts what is left', false === $feed['done'] && 3 === $feed['count'] && 2 === $feed['left'] && array( 521 => true, 522 => false, 513 => false ) === array_column( $feed['tanks'], 'done', 'number' ) );
-$r = act( $store, 0, 'todo_tick', array( 'scope' => 'tank', 'tank' => 522, 'key' => 'feed', 'kind' => 'feed', 'label' => 'Feed' ) );
+$r = act( $store, 0, 'todo_tick', array( 'scope' => 'tank', 'tick_tank' => 522, 'key' => 'feed', 'kind' => 'feed', 'label' => 'Feed' ) );
 check( 'one tank of the line ticked from the list', empty( $r['error'] ) && 'Done: Feed · Tank 522' === $r['message'] && 1 === array_column( block( room( $store )['todo'], 500 )['items'], null, 'label' )['Feed']['left'] );
 $r = act( $store, 0, 'todo_tick', array( 'scope' => 'system', 'building' => $store->tank_by_number( 521 )['building_id'], 'key' => 'feed', 'kind' => 'feed', 'label' => 'Feed' ) );
 $room = room( $store );
@@ -282,7 +282,7 @@ check( 'the dose is worked out for the tank\'s own gallons', 'Metronidazole' ===
 check( 'the count takes it in', 2 === $temp['left'] && 4 + 2 + 1 === $list['left'], $list['left'] );
 
 $item = $temp['items'][1];
-$r    = act( $store, 0, 'todo_tick', array( 'scope' => 'tank', 'tank' => 901, 'key' => $item['key'], 'kind' => $item['kind'], 'label' => $item['label'] ) );
+$r    = act( $store, 0, 'todo_tick', array( 'scope' => 'tank', 'tick_tank' => 901, 'key' => $item['key'], 'kind' => $item['kind'], 'label' => $item['label'] ) );
 check( 'its line is ticked on the tank', empty( $r['error'] ) && 'Done: Metronidazole + Kanamycin + Furan-2 · TEMP 1 · 901' === $r['message'], json_encode( $r ) );
 $log  = end( $store->logs );
 $room = room( $store );
@@ -293,7 +293,7 @@ act( $store, 0, 'todo_tick', array( 'scope' => 'system', 'building' => $store->t
 check( 'and a building\'s tick does not reach the temporary tank', false === lines( block( room( $store )['todo'], 901 ) )['Feed'] );
 $r = act( $store, 0, 'todo_tick', array( 'scope' => 'system', 'building' => $store->temp_building()['id'], 'key' => 'feed', 'kind' => 'feed' ) );
 check( 'the Temporary building is no system to tick', 'A temporary tank is its own water — tick it on that tank.' === ( $r['error'] ?? '' ) );
-$r = act( $store, 0, 'todo_tick', array( 'scope' => 'tank', 'tank' => 902, 'key' => 'feed', 'kind' => 'feed' ) );
+$r = act( $store, 0, 'todo_tick', array( 'scope' => 'tank', 'tick_tank' => 902, 'key' => 'feed', 'kind' => 'feed' ) );
 check( 'a slot with nothing set up has nothing to tick', isset( $r['error'] ) && false !== strpos( $r['error'], 'Nothing is set up in TEMP 2 · 902' ) );
 
 $clean = block( $list, 100 );
@@ -314,7 +314,7 @@ $base = array( 'actor_id' => 8, 'source' => 'manual' );
 check( 'nothing to tick without a key', 'Nothing to tick.' === ( Todo::tick( $store, array( 'scope' => 'system', 'building' => 5, 'key' => '   ' ), $base )['error'] ?? '' ) );
 check( 'a building that is not there', 'That building is not in the layout.' === ( Todo::tick( $store, array( 'scope' => 'system', 'building' => 99, 'key' => 'feed', 'kind' => 'feed' ), $base )['error'] ?? '' ) );
 check( 'a building that is coming soon', isset( Todo::tick( $store, array( 'scope' => 'system', 'building' => 4, 'key' => 'feed', 'kind' => 'feed' ), $base )['error'] ) );
-check( 'a tank that is not there', 'That tank is not in the layout.' === ( Todo::tick( $store, array( 'scope' => 'tank', 'tank' => 999, 'key' => 'feed', 'kind' => 'feed' ), $base )['error'] ?? '' ) );
+check( 'a tank that is not there', 'That tank is not in the layout.' === ( Todo::tick( $store, array( 'scope' => 'tank', 'tick_tank' => 999, 'key' => 'feed', 'kind' => 'feed' ), $base )['error'] ?? '' ) );
 $before = count( $store->logs );
 Todo::tick( $store, array( 'scope' => 'system', 'building' => $store->tank_by_number( 521 )['building_id'], 'key' => 'Odd  Step', 'kind' => 'copper' ), $base );
 $log = end( $store->logs );

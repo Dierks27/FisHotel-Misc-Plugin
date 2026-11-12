@@ -15,6 +15,7 @@ use FisHotel\Misc\Sections\Clean_Room\Admin;
 
 $fh_tabs = array(
 	'board'    => __( 'Board', 'fishotel-misc-plugin' ),
+	'todo'     => __( 'To do', 'fishotel-misc-plugin' ),
 	'stays'    => __( 'Stays', 'fishotel-misc-plugin' ),
 	'arrivals' => __( 'Arrivals', 'fishotel-misc-plugin' ),
 	'species'  => __( 'Species', 'fishotel-misc-plugin' ),

@@ -188,10 +188,11 @@ class Front_Desk {
 			'screen'   => $screen,
 			'baseUrl'  => Clean_Room::front_desk_url( 0 ),
 			'boardUrl' => admin_url( 'admin.php?page=' . Clean_Room::MENU_SLUG ),
-			'i18n'     => self::i18n(),
+			'i18n'     => array_merge( self::i18n(), self::temp_i18n() ),
 		);
 
-		$css = (string) file_get_contents( Clean_Room::path() . 'css/front-desk.css' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- our own file, inlined so the page makes no further requests.
+		$css  = (string) file_get_contents( Clean_Room::path() . 'css/front-desk.css' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- our own file, inlined so the page makes no further requests.
+		$css .= "\n" . (string) file_get_contents( Clean_Room::path() . 'css/front-desk-temp.css' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- the temporary tanks and the day's list, inlined the same way.
 		$js  = (string) file_get_contents( Clean_Room::path() . 'js/front-desk.js' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
 
 		include Clean_Room::path() . 'views/front-desk.php';
@@ -314,6 +315,102 @@ class Front_Desk {
 			'identify'    => __( 'Identify', 'fishotel-misc-plugin' ),
 			'correctFish' => __( 'Correct the fish', 'fishotel-misc-plugin' ),
 			'identifyHint' => __( 'Pick the real fish and its size: the tank row, its supplier order line and the remembered box share follow.', 'fishotel-misc-plugin' ),
+		);
+	}
+
+	/**
+	 * The strings of the temporary tanks' screens and of the day's list
+	 * (merged into i18n() for the page).
+	 *
+	 * @return array<string, string>
+	 */
+	public static function temp_i18n() {
+		return array(
+			'tempNothing'        => __( 'Nothing is set up here.', 'fishotel-misc-plugin' ),
+			'setUp'              => __( 'Set up', 'fishotel-misc-plugin' ),
+			'setUpTitle'         => __( 'Set up a temporary tank', 'fishotel-misc-plugin' ),
+			'setItUp'            => __( 'Set it up', 'fishotel-misc-plugin' ),
+			'slotsFull'          => __( 'Every temporary slot is in use. Take one down, or add a slot in Settings → Layout.', 'fishotel-misc-plugin' ),
+			'tempSlot'           => __( 'Slot', 'fishotel-misc-plugin' ),
+			'tempName'           => __( 'Name', 'fishotel-misc-plugin' ),
+			'tempNameHint'       => __( 'Hospital 1', 'fishotel-misc-plugin' ),
+			'whatFor'            => __( 'What is it for?', 'fishotel-misc-plugin' ),
+			'somethingElse'      => __( 'Something else', 'fishotel-misc-plugin' ),
+			'whatForHint'        => __( 'in a few words', 'fishotel-misc-plugin' ),
+			'tempKind'           => __( 'What kind of tank?', 'fishotel-misc-plugin' ),
+			'kindQuarantine'     => __( 'Quarantine', 'fishotel-misc-plugin' ),
+			'kindQuarantineHint' => __( 'for fish still in quarantine or under treatment', 'fishotel-misc-plugin' ),
+			'kindClean'          => __( 'Clean', 'fishotel-misc-plugin' ),
+			'kindCleanHint'      => __( 'for fish that are already cleared', 'fishotel-misc-plugin' ),
+			'gallons'            => __( 'Gallons', 'fishotel-misc-plugin' ),
+			'treatment'          => __( 'Treatment', 'fishotel-misc-plugin' ),
+			'noTreatment'        => __( 'No treatment, just watching', 'fishotel-misc-plugin' ),
+			/* translators: %s: what the tank is for */
+			'usedForThis'        => __( 'Used for %s:', 'fishotel-misc-plugin' ),
+			/* translators: %s: what the tank is for */
+			'noneForTag'         => __( 'No schedule is marked "%s" yet — pick any one, or no treatment.', 'fishotel-misc-plugin' ),
+			'whatItDoes'         => __( 'What it does — nothing is saved yet:', 'fishotel-misc-plugin' ),
+			'justFeeding'        => __( 'Only the daily feeding, while fish are in it.', 'fishotel-misc-plugin' ),
+			'feedingToo'         => __( 'plus the daily feeding', 'fishotel-misc-plugin' ),
+			'startDate'          => __( 'Treatment starts (day 1)', 'fishotel-misc-plugin' ),
+			'takeDown'           => __( 'Take down', 'fishotel-misc-plugin' ),
+			/* translators: %s: what is set up (its name, or the slot) */
+			'takeDownAsk'        => __( 'Take %s down? The slot is free again; its history is kept.', 'fishotel-misc-plugin' ),
+			'takeDownFish'       => __( 'Move the fish out first — then it can be taken down.', 'fishotel-misc-plugin' ),
+			'scheduleEdit'       => __( 'Schedule', 'fishotel-misc-plugin' ),
+			'thisTankOnly'       => __( 'This tank\'s own schedule: changes here are for this tank only — the template stays as it is. Day 1 is the treatment start.', 'fishotel-misc-plugin' ),
+			'addStep'            => __( 'Add a step', 'fishotel-misc-plugin' ),
+			'stepName'           => __( 'Step', 'fishotel-misc-plugin' ),
+			'stepDay'            => __( 'Day', 'fishotel-misc-plugin' ),
+			'removeStep'         => __( 'Remove', 'fishotel-misc-plugin' ),
+			'earlier'            => __( '−1 day', 'fishotel-misc-plugin' ),
+			'later'              => __( '+1 day', 'fishotel-misc-plugin' ),
+			'kindDose'           => __( 'dose', 'fishotel-misc-plugin' ),
+			'kindTest'           => __( 'test', 'fishotel-misc-plugin' ),
+			'kindWater'          => __( 'water change', 'fishotel-misc-plugin' ),
+			'kindOther'          => __( 'other', 'fishotel-misc-plugin' ),
+			'hospital'           => __( 'Hospital', 'fishotel-misc-plugin' ),
+			'moveClearsHint'     => __( 'Still in quarantine: a move into the Clean Room — or into a clean temporary tank — clears the group today.', 'fishotel-misc-plugin' ),
+			/* translators: 1: the temporary tank, 2: the group(s) */
+			'moveClearAsk'       => __( '%1$s is a CLEAN temporary tank. Moving %2$s into it clears it today — out of quarantine.', 'fishotel-misc-plugin' ),
+			'moveAndClear'       => __( 'Move and clear', 'fishotel-misc-plugin' ),
+			'todayList'          => __( 'Today\'s list', 'fishotel-misc-plugin' ),
+			/* translators: %d: things left */
+			'todoLeft'           => __( '%d things left to do', 'fishotel-misc-plugin' ),
+			/* translators: %d: things left (one) */
+			'todoLeftOne'        => __( '%d thing left to do', 'fishotel-misc-plugin' ),
+			'todoAllDone'        => __( 'All done', 'fishotel-misc-plugin' ),
+			'todoNothing'        => __( 'Nothing is due today', 'fishotel-misc-plugin' ),
+			/* translators: 1: the feeding step, 2: number of tanks (one) */
+			'feedOne'            => __( '%1$s — %2$d tank with fish', 'fishotel-misc-plugin' ),
+			/* translators: 1: the feeding step, 2: number of tanks */
+			'feedMany'           => __( '%1$s — %2$d tanks with fish', 'fishotel-misc-plugin' ),
+			/* translators: %d: tanks still to feed */
+			'leftN'              => __( '%d left', 'fishotel-misc-plugin' ),
+			'theTanks'           => __( 'the tanks', 'fishotel-misc-plugin' ),
+			/* translators: %s: "day 2 group" */
+			'forThe'             => __( 'for the %s', 'fishotel-misc-plugin' ),
+			/* translators: %s: reading */
+			'flagLow'            => __( 'Cu %s — below the floor', 'fishotel-misc-plugin' ),
+			'flagDue'            => __( 'copper reading due', 'fishotel-misc-plugin' ),
+			'flagOverdue'        => __( 'copper reading overdue', 'fishotel-misc-plugin' ),
+			'flagNone'           => __( 'no reading yet', 'fishotel-misc-plugin' ),
+			/* translators: 1: reading, 2: age */
+			'flagLast'           => __( 'last one %1$s, %2$s ago', 'fishotel-misc-plugin' ),
+			/* translators: %d: copper flags */
+			'flagsN'             => __( '%d copper flags', 'fishotel-misc-plugin' ),
+			'temporary'          => __( 'Temporary', 'fishotel-misc-plugin' ),
+			/* translators: %d: fish */
+			'fishN'              => __( '%d fish', 'fishotel-misc-plugin' ),
+			'noFish'             => __( 'no fish in it', 'fishotel-misc-plugin' ),
+			/* translators: %d: tanks (one) */
+			'tanksOne'           => __( '%d tank with fish', 'fishotel-misc-plugin' ),
+			/* translators: %d: tanks */
+			'tanksMany'          => __( '%d tanks with fish', 'fishotel-misc-plugin' ),
+			/* translators: %d: tank number */
+			'tankN'              => __( 'tank %d', 'fishotel-misc-plugin' ),
+			'nothingDueHere'     => __( 'Nothing is due on this tank today.', 'fishotel-misc-plugin' ),
+			'noFishSystem'       => __( 'No fish in this system — nothing is due.', 'fishotel-misc-plugin' ),
 		);
 	}
 

@@ -2,11 +2,13 @@
 /**
  * Printable tank labels — one per active tank: the number large, the
  * area / building / size small, a QR of the Front Desk URL (inline SVG,
- * nothing loaded from anywhere). Admin only (admin-post, nonce'd).
+ * nothing loaded from anywhere). Admin only (admin-post, nonce'd). A
+ * temporary slot prints "TEMP 1" large and "901 · Temporary · …" small:
+ * laminated once, it opens whatever is set up in that slot.
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  *
- * @var array[] $labels number, line, url, svg.
+ * @var array[] $labels number, line, url, svg (+ slot for a temporary slot).
  * @var string  $site   Site name.
  */
 
@@ -29,6 +31,7 @@ defined( 'ABSPATH' ) || exit;
 		.label svg { width: 1.55in; height: 1.55in; flex: 0 0 auto; }
 		.label .text { flex: 1 1 auto; min-width: 0; }
 		.label .number { font-size: 64px; font-weight: 800; line-height: 1; letter-spacing: -2px; }
+		.label .number.is-slot { font-size: 36px; letter-spacing: -1px; white-space: nowrap; }
 		.label .line { margin-top: 6px; font-size: 12px; line-height: 1.3; }
 		.label .url { margin-top: 4px; font-size: 8px; color: #555; word-break: break-all; }
 		.missing { font-size: 10px; color: #a00; }
@@ -53,7 +56,7 @@ defined( 'ABSPATH' ) || exit;
 					<span class="missing"><?php esc_html_e( 'URL too long for a QR', 'fishotel-misc-plugin' ); ?></span>
 				<?php endif; ?>
 				<div class="text">
-					<div class="number"><?php echo esc_html( $fh_label['number'] ); ?></div>
+					<div class="number<?php echo ! empty( $fh_label['slot'] ) ? ' is-slot' : ''; ?>"><?php echo esc_html( $fh_label['number'] ); ?></div>
 					<div class="line"><?php echo esc_html( $fh_label['line'] ); ?></div>
 					<div class="url"><?php echo esc_html( $fh_label['url'] ); ?></div>
 				</div>

@@ -2,7 +2,9 @@
 /**
  * Clean Room admin — the Room Board page under FisHotel Tools (Board /
  * Stays / Events / Settings; the Arrivals / Species / Stats tabs are
- * handed to Admin_Workbook), the stays CSV, the printable QR labels, the
+ * handed to Admin_Workbook, the To do tab, the Board's Temporary area and
+ * the temporary tanks' history to Admin_Temp), the stays CSV, the
+ * printable QR labels (a temporary slot prints "TEMP 1" and its number), the
  * stay edits from the Stays tab (counts, dates, a move, the seam fields),
  * the per-row Undo on the Events tab, the Coming Soon release button and
  * the product meta box — which also edits the sale date of each open
@@ -101,7 +103,7 @@ class Admin {
 	/**
 	 * URL of a tab.
 	 *
-	 * @param string $tab   board|stays|arrivals|species|stats|events|settings.
+	 * @param string $tab   board|todo|stays|arrivals|species|stats|events|settings.
 	 * @param array  $extra Extra query args.
 	 * @return string
 	 */
@@ -150,7 +152,7 @@ class Admin {
 		}
 
 		$tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'board'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only tab switch.
-		if ( ! in_array( $tab, array( 'board', 'stays', 'arrivals', 'species', 'stats', 'events', 'settings' ), true ) ) {
+		if ( ! in_array( $tab, array( 'board', Admin_Temp::TAB, 'stays', 'arrivals', 'species', 'stats', 'events', 'settings' ), true ) ) {
 			$tab = 'board';
 		}
 
@@ -176,6 +178,23 @@ class Admin {
 			return;
 		}
 
+		// The day's list by water system, and the temporary tanks' history.
+		$temp_ctx = array(
+			'store'        => $store,
+			'settings'     => $settings,
+			'today'        => $today,
+			'tables_ok'    => $tables_ok,
+			'can_settings' => $can_settings,
+		);
+		if ( Admin_Temp::TAB === $tab ) {
+			Admin_Temp::render_todo( $temp_ctx );
+			return;
+		}
+		if ( 'board' === $tab && ( isset( $_GET['setup'] ) || isset( $_GET['temp_history'] ) ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only view switch.
+			Admin_Temp::render_history( $temp_ctx, isset( $_GET['setup'] ) ? absint( wp_unslash( $_GET['setup'] ) ) : 0 ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return;
+		}
+
 		if ( 'settings' === $tab && $can_settings ) {
 			$protocols     = Settings::protocols();
 			$template_name = isset( $_GET['template'] ) ? Protocol::template_name( sanitize_text_field( wp_unslash( $_GET['template'] ) ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only picker.
@@ -183,6 +202,7 @@ class Admin {
 				$template_name = $protocols['default'];
 			}
 			$protocol  = $protocols['templates'][ $template_name ];
+			$used_for  = Temp_Tanks::tags( $protocols )[ $template_name ] ?? array();
 			$buildings = $store->buildings();
 			$tanks     = $store->tanks();
 			$groups    = Layout::group( $buildings, $tanks );
@@ -222,11 +242,14 @@ class Admin {
 
 		$filters   = self::filters_from_request( $_GET ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$protocols = Settings::protocols();
-		$tanks     = $store->tanks_with_occupants( $today, $settings, $protocols );
+		$room      = $store->room( $today, $settings, $protocols );
+		$tanks     = $room['tanks'];
+		$todo      = is_array( $room['todo'] ) ? $room['todo'] : array( 'left' => 0, 'total' => 0 );
 		$groups    = Layout::group( $store->buildings(), $tanks );
 		$totals    = self::totals( $tanks );
 		$doses     = $store->latest_doses();
 		$sizes     = Sizes::standard( $store, $settings )['sizes'];
+		$temp      = Admin_Temp::board( $store, $tanks, $protocols, $today );
 
 		include Clean_Room::path() . 'views/board.php';
 	}
@@ -1277,7 +1300,9 @@ class Admin {
 	/**
 	 * admin-post: the printable labels page — one label per active tank
 	 * (in a building that is not offline) with the number large, the
-	 * area / building / size small and a QR of the Front Desk URL.
+	 * area / building / size small and a QR of the Front Desk URL. A
+	 * temporary slot gets one too ("TEMP 1 · 901"): laminated once and
+	 * reused, it always opens whatever is set up in that slot.
 	 */
 	public function print_labels() {
 		if ( ! current_user_can( Clean_Room::CAPABILITY ) ) {
