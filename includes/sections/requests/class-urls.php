@@ -100,20 +100,27 @@ class Urls {
 	}
 
 	/**
-	 * Where the person of a request can see and cancel it: My Account for
-	 * a site customer, the personal link for everybody else.
+	 * Where the person an e-mail goes to can see and cancel their
+	 * request: My Account when the request belongs to a site customer
+	 * whose address is the request's own, the personal link for everybody
+	 * else (somebody without an account — or a request that was paid from
+	 * an account with another address: the link must work for whoever
+	 * reads the e-mail).
 	 *
 	 * @param array $request The request.
 	 * @return string
 	 */
 	public static function view( array $request ) {
-		if ( (int) ( $request['user_id'] ?? 0 ) > 0 ) {
+		$user_id = (int) ( $request['user_id'] ?? 0 );
+		$email   = Rules::email( $request['email'] ?? '' );
+		if ( $user_id > 0 && function_exists( 'get_userdata' ) ) {
+			$user    = get_userdata( $user_id );
 			$account = self::account();
-			if ( '' !== $account ) {
+			if ( '' !== $account && is_object( $user ) && ( '' === $email || Rules::email( $user->user_email ) === $email ) ) {
 				return $account;
 			}
 		}
-		return self::person( $request['email'] ?? '' );
+		return self::person( $email );
 	}
 
 	/**

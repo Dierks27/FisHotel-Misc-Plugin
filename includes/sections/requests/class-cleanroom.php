@@ -109,7 +109,8 @@ class Cleanroom {
 
 	/**
 	 * The standard sizes (slug, label), or null when the Clean Room's
-	 * Sizes class is not there — the size is then free text.
+	 * Sizes class is not there or has no size yet — the size is then free
+	 * text.
 	 *
 	 * @return array[]|null
 	 */
@@ -136,7 +137,10 @@ class Cleanroom {
 				);
 			}
 		}
-		return $out;
+
+		// No standard size is set up yet: a dropdown with nothing in it
+		// would not let anybody name a size, so the size is free text.
+		return $out ? $out : null;
 	}
 
 	/**

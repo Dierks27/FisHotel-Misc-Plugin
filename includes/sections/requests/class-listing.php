@@ -214,8 +214,10 @@ class Listing {
 			}
 			$parts[] = $waiting;
 			if ( $group['oldest'] > 0 ) {
-				/* translators: %s: how long, e.g. "4 months" */
-				$parts[] = sprintf( __( 'longest %s', 'fishotel-misc-plugin' ), Rules::age_words( (int) $group['oldest'], (int) $now ) );
+				$parts[] = (int) $now - (int) $group['oldest'] < 86400
+					? __( 'since today', 'fishotel-misc-plugin' )
+					/* translators: %s: how long, e.g. "4 months" */
+					: sprintf( __( 'longest %s', 'fishotel-misc-plugin' ), Rules::age_words( (int) $group['oldest'], (int) $now ) );
 			}
 		}
 		if ( $group['closed'] > 0 ) {

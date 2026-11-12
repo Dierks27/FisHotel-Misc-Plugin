@@ -406,6 +406,8 @@ check_contains( 'names are suggested from the fish products', 'Blue Test Wrasse'
 check_same( 'a visitor is not shown a product that is not public', array(), $adapter->suggest( 'wras', 8, static function ( $product_id ) { return false; } ) );
 check_same( 'a typed name that IS a product is matched to it', 501, $adapter->match_name( 'blue test wrasse' )['product_id'] );
 check_same( 'a name that only resembles one is not', null, $adapter->match_name( 'blue wrasse' )['product_id'] );
-check( 'the standard sizes come as a list (empty here: no size attribute in this store)', is_array( $adapter->sizes() ) );
+check( 'no standard size is set up in this store: the size is free text (null), not an empty dropdown', null === $adapter->sizes() );
+$sized = new Cleanroom( $room_store, $today, array_merge( $room_settings, array( 'size_list' => array( '1 - 2"', '2 - 3.5"' ) ) ) );
+check_same( 'the standard sizes come as slug and label', array( array( 'slug' => '1-2', 'label' => '1 - 2"' ), array( 'slug' => '2-3-5', 'label' => '2 - 3.5"' ) ), $sized->sizes() );
 
 fh_finish();
