@@ -577,7 +577,10 @@ class Stats {
 					if ( ! is_array( $bucket ) ) {
 						continue;
 					}
-					$slot                    = strtolower( trim( (string) ( $bucket['name'] ?? '' ) ) );
+					// Suppliers and origins are one name whatever the case, as build() groups them; a
+					// species group is its exact name, as build() keeps it.
+					$slot                    = trim( (string) ( $bucket['name'] ?? '' ) );
+					$slot                    = 'by_group' === $section ? $slot : strtolower( $slot );
 					$names[ $slot ]          = (string) ( $bucket['name'] ?? '' ); // The latest year's spelling.
 					$found[ $slot ][ $year ] = $bucket;
 				}

@@ -139,13 +139,6 @@ class Stats_Sales {
 	 */
 	const UNSPLIT = array( 'no_lines', 'quantity', 'unpriced', 'mismatch' );
 
-	/**
-	 * Whether the cache was already dropped in this request.
-	 *
-	 * @var bool
-	 */
-	private static $flushed = false;
-
 	/* ============================================================== */
 	/*  WordPress: the statuses that count, the cache                  */
 	/* ============================================================== */
@@ -248,23 +241,13 @@ class Stats_Sales {
 	/**
 	 * Drop the cached ledgers — hooked to an order's status change and to
 	 * WooCommerce's own updates of its order tables (which run a moment
-	 * after the order is saved), once per request however often it is
-	 * called.
+	 * after the order is saved, often in another request). Every call
+	 * deletes: a queue runner lives for minutes, and a cache rebuilt by a
+	 * view in the meantime must not survive the next order it handles.
+	 * With nothing cached that is one indexed look-up.
 	 */
 	public static function flush() {
-		if ( self::$flushed ) {
-			return;
-		}
-		self::$flushed = true;
 		delete_transient( self::TRANSIENT );
-	}
-
-	/**
-	 * Let flush() run again (a test, or a request that rebuilds the cache
-	 * and then changes an order).
-	 */
-	public static function reset_flush() {
-		self::$flushed = false;
 	}
 
 	/* ============================================================== */
@@ -1086,7 +1069,10 @@ class Stats_Sales {
 	 *   avg_paid         revenue ÷ units, beside list_price;
 	 *   est_revenue      the ESTIMATE of the supplier orders of that year
 	 *                    (survivors × the price typed on the line) —
-	 *                    null when no order of that year has the fish;
+	 *                    null when no order of that year has the fish, and
+	 *                    when it landed but none of its lines has a
+	 *                    survivor count yet (est_unknown: nothing to
+	 *                    estimate from is not an estimate of 0);
 	 *   landed_per_fish  that year's average landed cost of the fish;
 	 *   cost_sold        units × landed_per_fish;
 	 *   profit           revenue − cost_sold — only when the fish sold
@@ -1164,7 +1150,8 @@ class Stats_Sales {
 				'price_from'      => ! empty( $price['from'] ),
 				'received'        => $stat ? (int) $stat['received'] : null,
 				'survived'        => $stat && ! empty( $stat['survived_known'] ) ? (int) $stat['survived'] : null,
-				'est_revenue'     => $stat ? (float) $stat['revenue'] : null,
+				'est_revenue'     => $stat && ! empty( $stat['survived_known'] ) ? (float) $stat['revenue'] : null,
+				'est_unknown'     => $stat && empty( $stat['survived_known'] ) && (int) $stat['received'] > 0,
 				'unknown_lines'   => $stat ? (int) $stat['unknown_lines'] : 0,
 				'landed_per_fish' => $cost,
 				'cost_sold'       => $has && null !== $cost ? $units * $cost : null,

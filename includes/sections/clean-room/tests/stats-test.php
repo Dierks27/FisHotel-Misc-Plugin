@@ -189,6 +189,23 @@ foreach ( $c['by_group'] as $row ) {
 	$grp[ $row['name'] ] = $row;
 }
 check( 'groups: Gobies only in 2025 (a dash in 2026), Wrasses and Blennies only in 2026, "(no group)" last', array( 'Wrasses', 'Gobies', 'Blennies', '(no group)' ) === array_keys( $grp ) && true === $grp['Gobies']['present'][2025] && false === $grp['Gobies']['present'][2026] && null === $grp['Gobies']['values']['received'][2026] && null === $grp['Gobies']['changes']['received'][0]['abs'] && false === $grp['Wrasses']['present'][2025] );
+$cased = Stats::compare(
+	array(
+		2026 => array(
+			'totals'      => $by_year[2026]['totals'],
+			'by_supplier' => array( array_merge( $by_year[2026]['by_supplier'][0], array( 'name' => 'TEST supplier one' ) ) ),
+			'by_origin'   => array(),
+			'by_group'    => array( array_merge( $by_year[2026]['by_group'][0], array( 'name' => 'wrasses' ) ), $by_year[2026]['by_group'][0] ),
+		),
+		2025 => array(
+			'totals'      => $by_year[2025]['totals'],
+			'by_supplier' => array( array_merge( $by_year[2025]['by_supplier'][0], array( 'name' => 'Test Supplier One' ) ) ),
+			'by_origin'   => array(),
+			'by_group'    => array(),
+		),
+	)
+);
+check( 'a supplier is one name across the years whatever its case (the latest year\'s spelling shows); two species groups that differ only in case stay two rows, as on the By year view', 1 === count( $cased['by_supplier'] ) && 'TEST supplier one' === $cased['by_supplier'][0]['name'] && array( 2025 => true, 2026 => true ) === $cased['by_supplier'][0]['present'] && 2 === count( $cased['by_group'] ) );
 check( 'a year in which a group received nothing is still a real 0 — only a missing year is null', 0 === $grp['Blennies']['values']['received'][2026] && near( $grp['Blennies']['values']['fill_rate'][2026], 0 ) && null === $grp['Blennies']['values']['doa_rate'][2026] );
 
 echo "10. Year by year: three years, one of them skipped\n";

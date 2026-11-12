@@ -67,7 +67,7 @@ $fh_counts     = $data['counts'];
 
 	<p class="fh-cr-legend">
 		<span class="fh-cr-kind fh-cr-kind--read"><?php esc_html_e( 'Read-only', 'fishotel-misc-plugin' ); ?></span>
-		<?php esc_html_e( 'Nothing on this page changes a price: it only sets what a fish cost to land beside what FisHotel charges for it now. Change a price where it lives — on the product, or in the species list.', 'fishotel-misc-plugin' ); ?>
+		<?php esc_html_e( 'Nothing on this page changes a price: it only sets what a fish cost to land beside what FisHotel charges for it now. Change a price where it lives — on the product, or in the species list. The landed costs are counted from the supplier orders; the suggested price is the costing\'s suggestion, and the margin is what today\'s price would leave — neither is a sale. What customers actually paid is under Real sales.', 'fishotel-misc-plugin' ); ?>
 	</p>
 
 	<div class="fh-cr-summary">

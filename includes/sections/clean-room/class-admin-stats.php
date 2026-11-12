@@ -523,7 +523,7 @@ class Admin_Stats {
 			'dir'    => $dir,
 		);
 		if ( '' !== $sort ) {
-			$rows = Stats::sort_rows( $rows, $sort, $dir );
+			$rows = self::sort_species( $rows, $sort, $dir );
 		}
 		if ( $year > 0 && ! in_array( $year, $years, true ) ) {
 			$years[] = $year;
@@ -555,6 +555,34 @@ class Admin_Stats {
 				'csv'  => Admin_Workbook::export_url( 'species-years', 'csv', $args ),
 			),
 		);
+	}
+
+	/**
+	 * Species rows sorted by a column (pure). A fish without any survivor
+	 * count has no survivors figure and no estimate — the screen prints a
+	 * dash there — so by those columns it sorts last, not as a 0 or as a
+	 * loss of its whole landed cost.
+	 *
+	 * @param array[] $rows Stats::by_species() rows.
+	 * @param string  $sort Column.
+	 * @param string  $dir  asc|desc.
+	 * @return array[]
+	 */
+	public static function sort_species( array $rows, $sort, $dir ) {
+		if ( ! in_array( $sort, array( 'survived', 'revenue', 'profit', 'margin' ), true ) ) {
+			return Stats::sort_rows( $rows, $sort, $dir );
+		}
+		$keyed = array();
+		foreach ( $rows as $row ) {
+			$row['_sort'] = empty( $row['survived_known'] ) ? null : ( $row[ $sort ] ?? null );
+			$keyed[]      = $row;
+		}
+		$out = array();
+		foreach ( Stats::sort_rows( $keyed, '_sort', $dir ) as $row ) {
+			unset( $row['_sort'] );
+			$out[] = $row;
+		}
+		return $out;
 	}
 
 	/**
@@ -762,19 +790,19 @@ class Admin_Stats {
 		$ledger    = Stats_Sales::new_ledger( $year, $statuses );
 		$page_rows = max( 1, min( Stats_Sales::PAGE_ROWS, (int) $page_rows ) );
 		$max_pages = max( 1, min( Stats_Sales::MAX_PAGES, (int) $max_pages ) );
-		$after     = 0;
+		$after     = array( 0, 0 );
 		$pages     = 0;
 		$more      = false;
 
 		do {
-			$rows = (array) $store->sales_rows( $year, $ledger['statuses'], $after, $page_rows );
+			$rows = (array) $store->sales_rows( $year, $ledger['statuses'], $after[0], $after[1], $page_rows );
 			if ( ! $rows ) {
 				$more = false;
 				break;
 			}
 			Stats_Sales::add_rows( $ledger, $rows, (array) $store->sales_item_details( Stats_Sales::source_ids( $rows ) ) );
 			$last  = end( $rows );
-			$after = (int) $last['row_id'];
+			$after = array( (int) $last['row_id'], (int) $last['order_id'] ); // The lookup table's key: line id, then order id.
 			$more  = count( $rows ) >= $page_rows;
 			$pages++;
 		} while ( $more && $pages < $max_pages );

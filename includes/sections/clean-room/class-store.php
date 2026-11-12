@@ -3900,10 +3900,10 @@ class Store {
 	}
 
 	/**
-	 * Whether the four tables the sales readers join exist (they do on a
-	 * site with WooCommerce; without them Real sales says so and shows
-	 * nothing). One SHOW TABLES per table, once per request, asked only
-	 * by the Stats tab.
+	 * Whether WooCommerce's two lookup tables are there (they are on a
+	 * site with WooCommerce, which also has the order items; without them
+	 * Real sales says so and shows nothing). Two SHOW TABLES, once per
+	 * request, asked only by the Stats tab.
 	 *
 	 * @return bool
 	 */
@@ -3916,7 +3916,7 @@ class Store {
 
 		self::$sales_tables = true;
 		try {
-			foreach ( array_keys( self::SALES_TABLES ) as $name ) {
+			foreach ( array( 'stats', 'lookup' ) as $name ) {
 				$table = self::sales_table( $name );
 				if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) ) !== $table ) {
 					self::$sales_tables = false;
@@ -3988,17 +3988,23 @@ class Store {
 	 * later), whose order is in a status that counts. Each row carries its
 	 * own status and date and its parent's, and — for a refund line — the
 	 * line it refunds; Stats_Sales::add_rows() checks the status and the
-	 * year again and nets the refunds. Pages run by order line id: pass
-	 * the last row_id of a page as $after for the next.
+	 * year again and nets the refunds.
 	 *
-	 * @param int      $year     The year.
-	 * @param string[] $statuses Slugs without "wc-".
-	 * @param int      $after    Only lines with an id above this.
-	 * @param int      $limit    Rows per page.
+	 * Pages run by the lookup table's own key — the order line id, then
+	 * the order id: a refund of a whole order that names no line is stored
+	 * under the ORDER's line ids with the refund's order id, so one line
+	 * id can come twice. Pass the row_id and the order_id of a page's last
+	 * row as $after_item and $after_order for the next.
+	 *
+	 * @param int      $year        The year.
+	 * @param string[] $statuses    Slugs without "wc-".
+	 * @param int      $after_item  Only rows after this order line id …
+	 * @param int      $after_order … and, on that same line id, after this order id.
+	 * @param int      $limit       Rows per page.
 	 * @return array[] row_id, order_id, product_id, variation_id, qty, revenue, parent_id, status,
 	 *                 date_created, parent_status, parent_date, refunded_item_id.
 	 */
-	public function sales_rows( $year, array $statuses, $after = 0, $limit = Stats_Sales::PAGE_ROWS ) {
+	public function sales_rows( $year, array $statuses, $after_item = 0, $after_order = 0, $limit = Stats_Sales::PAGE_ROWS ) {
 		list( $in, $slugs ) = self::sales_statuses( $statuses );
 		if ( '' === $in || ! $this->sales_tables_exist() ) {
 			return array();
@@ -4017,13 +4023,13 @@ class Store {
 			. ' INNER JOIN ' . $stats . ' s ON s.order_id = l.order_id'
 			. ' LEFT JOIN ' . $stats . ' p ON s.parent_id > 0 AND p.order_id = s.parent_id'
 			. ' LEFT JOIN ' . self::sales_table( 'itemmeta' ) . ' rf ON rf.order_item_id = l.order_item_id AND rf.meta_key = %s'
-			. ' WHERE l.order_item_id > %d AND s.date_created >= %s'
+			. ' WHERE (l.order_item_id > %d OR (l.order_item_id = %d AND l.order_id > %d)) AND s.date_created >= %s'
 			. ' AND COALESCE(p.date_created, s.date_created) >= %s AND COALESCE(p.date_created, s.date_created) < %s'
 			. ' AND COALESCE(p.status, s.status) IN (' . $in . ')'
-			. ' ORDER BY l.order_item_id ASC LIMIT %d';
+			. ' ORDER BY l.order_item_id ASC, l.order_id ASC LIMIT %d';
 
 		$params = array_merge(
-			array( Stats_Sales::META_REFUNDED, max( 0, (int) $after ), $from, $from, $to ),
+			array( Stats_Sales::META_REFUNDED, max( 0, (int) $after_item ), max( 0, (int) $after_item ), max( 0, (int) $after_order ), $from, $from, $to ),
 			$slugs,
 			array( max( 1, min( Stats_Sales::PAGE_ROWS, (int) $limit ) ) )
 		);

@@ -230,7 +230,7 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 			add_action( self::IMPORT_CLEANUP_HOOK, array( self::class, 'import_cleanup' ), 10, 0 );
 			// The Stats tab's Real sales keeps what it read from WooCommerce in a transient: drop it when an
 			// order changes status and when WooCommerce updates its order tables (a moment after the order is
-			// saved). Registering costs nothing; the callback runs only then, and once per request.
+			// saved). Registering costs nothing; the callback runs only then.
 			foreach ( array( 'woocommerce_order_status_changed', 'woocommerce_analytics_update_order_stats', 'woocommerce_analytics_delete_order_stats' ) as $hook ) {
 				add_action( $hook, array( Stats_Sales::class, 'flush' ), 10, 0 );
 			}

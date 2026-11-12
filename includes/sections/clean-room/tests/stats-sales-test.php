@@ -256,6 +256,21 @@ check( 'add_rows() itself checks the year and the status of the ORDER — a refu
 check( 'a refund that names no line: 20.00 came off order S17 without a line and a quantity — counted apart, off no fish', 1 === $ledger['refunds']['count'] && near( $ledger['refunds']['amount'], -20 ) );
 $fin = Stats_Sales::finish( Stats_Sales::new_ledger( 2026, $statuses ), array(), array( array( 'order_id' => 1, 'net_total' => -40.0, 'on_lines' => -40.0 ), array( 'order_id' => 2, 'net_total' => -12.5, 'on_lines' => -10.0 ), 'junk' ) );
 check( 'a refund wholly on its lines is not counted; one partly on them counts the rest (−2.50)', 1 === $fin['refunds']['count'] && near( $fin['refunds']['amount'], -2.5 ) );
+$newer = new Fake_Store();
+list( $n1, $n1_items ) = $newer->sale( 'completed', '2026-02-01 10:00:00', array( array( 'product_id' => 12, 'name' => 'Test Wrasse, Blue', 'qty' => 2, 'revenue' => 80 ) ) );
+$newer->refund( $n1, '2026-02-05 09:00:00', array( $n1_items[0] => array( 0, 15 ) ), 5, true );
+$nl = Admin_Stats::build_ledger( $newer, 2026, $statuses );
+check( 'a newer WooCommerce keeps a lookup row for money taken off a line without a quantity: the 15.00 comes off THAT line (2 units, 65.00) and only the 5.00 that named no line is counted apart', 2 === $nl['rows'] && 2 === $nl['products']['12:0']['qty'] && near( $nl['products']['12:0']['revenue'], 65 ) && 1 === $nl['products']['12:0']['lines'] && 1 === $nl['refunds']['count'] && near( $nl['refunds']['amount'], -5 ) );
+list( $n2 ) = $newer->sale( 'completed', '2026-03-01 10:00:00', array(
+	array( 'product_id' => 12, 'name' => 'Test Wrasse, Blue', 'qty' => 1, 'revenue' => 40 ),
+	array( 'product_id' => 30, 'variation_id' => 31, 'name' => 'Green Test Blenny - Small', 'qty' => 2, 'revenue' => 110 ),
+) );
+$newer->full_refund( $n2, '2026-03-09 09:00:00' );
+$whole = Admin_Stats::build_ledger( $newer, 2026, $statuses );
+$split = Admin_Stats::build_ledger( $newer, 2026, $statuses, 1 );
+unset( $whole['built_at'], $split['built_at'] );
+check( 'a whole order refunded without naming a line is stored under the ORDER\'s line ids with the refund\'s order id: it nets to nothing (the blenny 0 units, 0.00; the wrasse back to 2 / 65.00)', 6 === $whole['rows'] && 0 === $whole['products']['30:31']['qty'] && near( $whole['products']['30:31']['revenue'], 0 ) && 2 === $whole['products']['12:0']['qty'] && near( $whole['products']['12:0']['revenue'], 65 ) && near( $whole['revenue'], 65 ) );
+check( '… and read ONE row at a time nothing is lost between two rows that share a line id (the pages run by line id, then order id)', $whole == $split && 6 === $split['rows'] );
 
 echo "5. Invoice lines: itemised fish, and invoices kept as one line\n";
 $named = array();
@@ -415,14 +430,14 @@ check( 'the wrasse — ACTUAL: 8 units, 333.00, 41.63 a fish on average; list pr
 check( '… ESTIMATE beside it: 360.00 (9 survivors × 40.00); landed 6.00 a fish that year; cost of the 8 sold 48.00; ACTUAL PROFIT 285.00', near( $r['est_revenue'], 360 ) && 10 === $r['received'] && 9 === $r['survived'] && near( $r['landed_per_fish'], 6 ) && near( $r['cost_sold'], 48 ) && near( $r['profit'], 285 ) && false === $r['no_cost'] && null === $r['earlier'] );
 check( '… matched by: its product, the product\'s title, its name', array( 'product', 'title', 'name' ) === $r['via'] || array( 'product', 'name', 'title' ) === $r['via'] );
 $r = $by['Green Test Blenny'];
-check( 'the blenny: 4 units, 205.00, 51.25 a fish; list price 50.00, the lowest variation; landed 10.00 → profit 165.00; its estimate is 0.00 with a line whose survivors are not known', 4 === $r['units'] && near( $r['avg_paid'], 51.25 ) && near( $r['list_price'], 50 ) && true === $r['price_from'] && near( $r['profit'], 165 ) && near( $r['est_revenue'], 0 ) && 1 === $r['unknown_lines'] && null === $r['survived'] );
+check( 'the blenny: 4 units, 205.00, 51.25 a fish; list price 50.00, the lowest variation; landed 10.00 → profit 165.00; its survivors are not known, so it has NO estimate (not an estimate of 0.00)', 4 === $r['units'] && near( $r['avg_paid'], 51.25 ) && near( $r['list_price'], 50 ) && true === $r['price_from'] && near( $r['profit'], 165 ) && null === $r['est_revenue'] && true === $r['est_unknown'] && 1 === $r['unknown_lines'] && null === $r['survived'] );
 $r = $by['Red Test Goby'];
 check( 'the goby sold 5 for 98.00 in 2026 but none LANDED in 2026: NO profit is shown — the row says so', 5 === $r['units'] && near( $r['revenue'], 98 ) && null === $r['profit'] && null === $r['cost_sold'] && null === $r['landed_per_fish'] && true === $r['no_cost'] && null === $r['est_revenue'] && null === $r['received'] );
 check( '… and carries the last earlier landed cost for reference only (4.00 in 2025); list price 20.00 from the species list', array( 'year' => 2025, 'landed_per_fish' => 4.0 ) === $r['earlier'] && near( $r['list_price'], 20 ) && 'list' === $r['price_source'] && 'no landed cost in 2026 (last landed: 4.00 a fish in 2025)' === Admin_Stats::profit_note( $r ) );
 $r = $by['Yellow Test Tang'];
 check( 'the tang sold but never landed anywhere: no profit, no earlier cost, no price on file', true === $r['no_cost'] && null === $r['earlier'] && null === $r['profit'] && null === $r['list_price'] && 'no landed cost in 2026' === Admin_Stats::profit_note( $r ) );
 $r = $by['Orange Test Clown'];
-check( 'the clown landed but did not sell: 0 units, no profit and no "no cost" note — its estimate (90.00) stands alone', false === $r['sold'] && 0 === $r['units'] && null === $r['profit'] && false === $r['no_cost'] && near( $r['est_revenue'], 90 ) && near( $r['landed_per_fish'], 5 ) && array() === $r['via'] && '' === Admin_Stats::profit_note( $r ) );
+check( 'the clown landed but did not sell: 0 units, no profit and no "no cost" note — its estimate (90.00) stands alone', false === $r['sold'] && 0 === $r['units'] && null === $r['profit'] && false === $r['no_cost'] && near( $r['est_revenue'], 90 ) && false === $r['est_unknown'] && near( $r['landed_per_fish'], 5 ) && array() === $r['via'] && '' === Admin_Stats::profit_note( $r ) );
 $sum = $data['totals'];
 check( 'the sums: 18 units, 696.00 actual beside 450.00 estimated; profit 450.00 on the 538.00 that has a landed cost (88.00); 2 species, 158.00, without one', 18 === $sum['units'] && near( $sum['revenue'], 696 ) && near( $sum['est_revenue'], 450 ) && near( $sum['profit'], 450 ) && near( $sum['costed_revenue'], 538 ) && near( $sum['cost_sold'], 88 ) && 2 === $sum['no_cost'] && near( $sum['no_cost_revenue'], 158 ) );
 $y25 = Admin_Stats::sales_data( $store, array( 'year' => 2025 ) );
@@ -450,7 +465,6 @@ $linked = Admin_Stats::sales_data( $store, array( 'year' => 2026 ) );
 check( 'WHICH FISH a sale is, is decided on every view: a species linked to the shrimp\'s product now has its 4 units / 48.00 — without reading WooCommerce again', $reads + 1 === $store->sales_reads && true === $linked['ledger']['cached'] && array( 4, 48.0 ) === fh_sold( $linked['match'], $shrimp ) && array( '#99' => array( 1, 9.0 ) ) === fh_missed( $linked['match'], 'products' ) && true === $linked['match']['totals']['balanced'] );
 $store->delete_species( $shrimp );
 add_action( 'woocommerce_order_status_changed', array( Stats_Sales::class, 'flush' ), 10, 0 );
-Stats_Sales::reset_flush();
 do_action( 'woocommerce_order_status_changed', 9001, 'pending', 'processing' );
 check( 'an order changing status drops the cache', false === get_transient( Stats_Sales::TRANSIENT ) );
 $source = (string) file_get_contents( Clean_Room::path() . 'class-clean-room.php' );
@@ -458,12 +472,11 @@ check( 'the section hooks that flush to an order\'s status change and to WooComm
 list( $late ) = $store->sale( 'completed', '2026-10-01 10:00:00', array( array( 'product_id' => 12, 'name' => 'Test Wrasse, Blue', 'qty' => 1, 'revenue' => 44 ) ) );
 $after        = Admin_Stats::sales_data( $store, array( 'year' => 2026 ) );
 check( '… so the next view reads again and has the new sale (9 wrasses, 377.00)', $reads + 2 === $store->sales_reads && false === $after['ledger']['cached'] && array( 9, 377.0 ) === fh_sold( $after['match'], $wrasse ) );
-set_transient( Stats_Sales::TRANSIENT, array( 'kept' => true ), 60 );
+Admin_Stats::sales_data( $store, array( 'year' => 2026 ) );
+do_action( 'woocommerce_order_status_changed', 9002, 'processing', 'completed' );
+check( 'EVERY change drops it, not only the first of a request: a queue runner lives for minutes, and a cache rebuilt by a view in between must not survive the next order', false === get_transient( Stats_Sales::TRANSIENT ) );
 Stats_Sales::flush();
-check( 'the flush runs once per request however often WooCommerce calls it (an import touches thousands of orders)', array( 'kept' => true ) === get_transient( Stats_Sales::TRANSIENT ) );
-Stats_Sales::reset_flush();
-Stats_Sales::flush();
-check( '… and again in the next', false === get_transient( Stats_Sales::TRANSIENT ) );
+check( '… and dropping an empty cache is harmless', false === get_transient( Stats_Sales::TRANSIENT ) );
 Admin_Stats::sales_data( $store, array( 'year' => 2026 ) );
 update_option( Stats_Sales::OPTION, array( 'completed' ) );
 $narrow = Admin_Stats::sales_data( $store, array( 'year' => 2026 ) );

@@ -219,9 +219,13 @@ $fh_th = static function ( $key, $label, $kind = '', $text = false, $title = '' 
 								<?php endif; ?>
 							</td>
 							<td class="fh-cr-num fh-cr-est">
-								<?php echo esc_html( null === $fh_r['est_revenue'] ? '—' : Costing::money( $fh_r['est_revenue'] ) ); ?>
-								<?php if ( (int) $fh_r['unknown_lines'] > 0 ) : ?>
-									<span class="fh-cr-sub"><?php echo esc_html( sprintf( /* translators: %d: order lines */ _n( '%d line without survivors', '%d lines without survivors', (int) $fh_r['unknown_lines'], 'fishotel-misc-plugin' ), (int) $fh_r['unknown_lines'] ) ); ?></span>
+								<?php if ( $fh_r['est_unknown'] ) : ?>
+									<span class="fh-cr-sub" title="<?php esc_attr_e( 'No survivor count on any line of this fish that year, so there is nothing to estimate from.', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'survivors not known yet', 'fishotel-misc-plugin' ); ?></span>
+								<?php else : ?>
+									<?php echo esc_html( null === $fh_r['est_revenue'] ? '—' : Costing::money( $fh_r['est_revenue'] ) ); ?>
+									<?php if ( (int) $fh_r['unknown_lines'] > 0 ) : ?>
+										<span class="fh-cr-sub"><?php echo esc_html( sprintf( /* translators: %d: order lines */ _n( '%d line without survivors: not in the estimate', '%d lines without survivors: not in the estimate', (int) $fh_r['unknown_lines'], 'fishotel-misc-plugin' ), (int) $fh_r['unknown_lines'] ) ); ?></span>
+									<?php endif; ?>
 								<?php endif; ?>
 							</td>
 							<td class="fh-cr-num"><?php echo esc_html( Costing::money( $fh_r['landed_per_fish'] ) ); ?></td>
