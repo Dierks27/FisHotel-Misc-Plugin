@@ -266,6 +266,16 @@ class Fake_Store {
 		return $this->plans ? end( $this->plans ) : null;
 	}
 
+	public function plans_for_day( $ship_ymd, $limit = 20 ) {
+		$out = array();
+		foreach ( array_reverse( array_values( $this->plans ) ) as $row ) {
+			if ( '' !== (string) $ship_ymd && $row['ship_date'] === (string) $ship_ymd && 'orders' === $row['origin'] ) {
+				$out[] = $row;
+			}
+		}
+		return array_slice( $out, 0, $limit );
+	}
+
 	public function add_plan( array $row ) {
 		$this->calls[] = 'add_plan';
 		if ( ! empty( $this->fail['add_plan'] ) ) {
@@ -326,6 +336,9 @@ class Fake_Store {
 	}
 
 	public function reserve_labels( $count ) {
+		if ( ! empty( $this->fail['reserve_labels'] ) ) {
+			return 0;
+		}
 		$from             = $this->next_label();
 		$this->next_label = $from + max( 0, (int) $count );
 		return $from;

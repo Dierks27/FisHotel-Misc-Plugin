@@ -211,13 +211,29 @@ namespace FisHotel\Misc\Sections\Foam_Cuts {
 		}
 
 		/**
-		 * A plan as other code gets it, or null.
+		 * Whether the section is switched on (one autoloaded option — no
+		 * query). The Section Manager loads this file even while the
+		 * section is off, so the helper below has to ask.
+		 *
+		 * @return bool
+		 */
+		public static function enabled() {
+			$on = get_option( 'fishotel_misc_enabled_sections', array() );
+			return is_array( $on ) && in_array( 'foam-cuts', $on, true );
+		}
+
+		/**
+		 * A plan as other code gets it, or null (also while the section is
+		 * switched off: nothing is loaded and nothing is read then).
 		 *
 		 * @param int $plan_id Plan id (0 = the newest plan).
 		 * @return array|null Planner::export().
 		 */
 		public static function plan( $plan_id = 0 ) {
 			try {
+				if ( ! self::enabled() ) {
+					return null;
+				}
 				self::load();
 				if ( ! Store::installed() ) {
 					return null;

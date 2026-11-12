@@ -108,7 +108,8 @@ class Svg {
 
 		foreach ( isset( $source['pieces'] ) ? (array) $source['pieces'] : array() as $piece ) {
 			$box   = self::box( $piece, $scale );
-			$size  = self::size( $piece['length'], $piece['width'] );
+			// Across × down, as the piece lies: a turned piece reads the other way round than on its cut list.
+			$size  = isset( $piece['w'], $piece['h'] ) ? self::size( $piece['w'], $piece['h'] ) : self::size( $piece['length'], $piece['width'] );
 			$out  .= '<g class="fc-piece" data-n="' . (int) $piece['n'] . '"><rect x="' . self::n( $box[0] ) . '" y="' . self::n( $box[1] ) . '" width="' . self::n( $box[2] ) . '" height="' . self::n( $box[3] ) . '" fill="#ffffff" stroke="#1d2327" stroke-width="1"/>';
 			$out  .= '<title>' . self::esc( (string) $piece['box'] . ' · ' . (string) $piece['name'] . ' · ' . $size . ' in' ) . '</title>';
 			$out  .= self::label( array( (string) $piece['box'], (string) $piece['name'], $size ), $box, 13, 5, '#1d2327', false );

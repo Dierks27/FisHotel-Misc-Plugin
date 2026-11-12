@@ -170,7 +170,7 @@ foreach ( $plan['sources'] as $source ) {
 						$title = (string) $el['value'];
 					}
 				}
-				$all_named = $all_named && $rect['box'] . ' · ' . $rect['name'] . ' · ' . Svg::size( $rect['length'], $rect['width'] ) . ' in' === $title
+				$all_named = $all_named && $rect['box'] . ' · ' . $rect['name'] . ' · ' . Svg::size( $rect['w'], $rect['h'] ) . ' in' === $title
 					&& (int) $drawn[ $i ][0]['attributes']['data-n'] === $rect['n'];
 			}
 		}
@@ -204,7 +204,7 @@ check( 'each drawing is well-formed XML', $well );
 check( 'the drawing area is the source at one scale, plus the margins for the rulers', $scaled, $detail );
 check( 'every piece, leftover and waste rectangle is drawn where the plan puts it, at that same scale across and down', $scaled );
 check( 'nothing is drawn outside the source', $inside );
-check( 'every piece carries its number and, in full, its box, its name and its size', $all_named );
+check( 'every piece carries its number and, in full, its box, its name and its size as it lies (across × down)', $all_named );
 check( 'every cut is a line where the plan says, top to bottom or left to right, numbered 1, 2, 3 … in the order they are made', $all_cuts );
 
 echo "3. What is written on the drawing\n";
@@ -232,12 +232,26 @@ foreach ( $sheet['pieces'] as $i => $piece ) {
 		$big = $i;
 	}
 }
-check_same( 'a piece with room shows three lines: box, piece, size', array( 'Flat', 'Top / bottom', '16 × 12' ), $texts( $groups['fc-piece'][ $big ] ) );
+check_same( 'a piece with room shows three lines: box, piece, size', array( 'Flat', 'Top / bottom', Svg::size( $sheet['pieces'][ $big ]['w'], $sheet['pieces'][ $big ]['h'] ) ), $texts( $groups['fc-piece'][ $big ] ) );
+$turned = null;
+$plain  = null;
+foreach ( $sheet['pieces'] as $i => $piece ) {
+	if ( $piece['rotated'] && $piece['length'] !== $piece['width'] && $texts( $groups['fc-piece'][ $i ] ) ) {
+		$turned = $i;
+	} elseif ( ! $piece['rotated'] && $piece['length'] !== $piece['width'] && $texts( $groups['fc-piece'][ $i ] ) ) {
+		$plain = $i;
+	}
+}
+check( 'the sheet has a piece that was turned and one that was not', null !== $turned && null !== $plain );
+$lines = $texts( $groups['fc-piece'][ $turned ] );
+check( 'a turned piece shows its size the way it is drawn — across × down — not the way its cut list has it', end( $lines ) === Svg::size( $sheet['pieces'][ $turned ]['w'], $sheet['pieces'][ $turned ]['h'] ) && end( $lines ) === Svg::size( $sheet['pieces'][ $turned ]['width'], $sheet['pieces'][ $turned ]['length'] ) && end( $lines ) !== Svg::size( $sheet['pieces'][ $turned ]['length'], $sheet['pieces'][ $turned ]['width'] ), fh_export( $lines ) );
+$lines = $texts( $groups['fc-piece'][ $plain ] );
+check_same( 'a piece that was not turned reads as on its cut list', Svg::size( $sheet['pieces'][ $plain ]['length'], $sheet['pieces'][ $plain ]['width'] ), end( $lines ) );
 $shown = 0;
 foreach ( $sheet['pieces'] as $i => $piece ) {
 	$lines = $texts( $groups['fc-piece'][ $i ] );
 	$shown += $lines ? 1 : 0;
-	if ( $lines && end( $lines ) !== Svg::size( $piece['length'], $piece['width'] ) ) {
+	if ( $lines && end( $lines ) !== Svg::size( $piece['w'], $piece['h'] ) ) {
 		$shown = -999;
 	}
 }

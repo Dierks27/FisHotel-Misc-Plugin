@@ -90,6 +90,26 @@ check( 'earlier ones cannot (a label is never handed out twice)', false === $sto
 check( 'nor nonsense', false === $store->release_labels( 0, 3 ) && false === $store->release_labels( 7, 0 ) && 7 === $store->next_label() );
 check_same( 'reserving none hands back the next number and moves nothing', array( 7, 7 ), array( $store->reserve_labels( 0 ), $store->next_label() ) );
 
+// Two requests at the same moment: each reads the counter, lays out its plan, then takes its numbers.
+$first  = new Store();
+$second = new Store();
+$saw    = array( $first->next_label(), $second->next_label() );
+$took   = array( $first->reserve_labels( 3 ), $second->reserve_labels( 3 ) );
+check( 'two requests that both saw the same next number are given different ones', array( 7, 7 ) === $saw && array( 7, 10 ) === $took && 13 === $store->next_label(), fh_export( $took ) );
+$GLOBALS['fh_option_reads'] = array();
+$wpdb->queries              = array();
+$store->reserve_labels( 2 );
+$taking = array_values( array_filter( $wpdb->queries, static function ( $sql ) { return false !== strpos( $sql, 'UPDATE' ); } ) );
+check( 'the numbers are taken in ONE statement that adds inside the database', 1 === count( $taking ) && false !== strpos( $taking[0], 'SET option_value = LAST_INSERT_ID( GREATEST( CAST( option_value AS UNSIGNED ), 1 ) + 2 )' ), fh_export( $wpdb->queries ) );
+check( 'never by reading the option in PHP and writing it back', ! in_array( Store::LABEL_OPTION, $GLOBALS['fh_option_reads'], true ) && 0 === preg_match( '/(get|update|add)_option\(\s*self::LABEL_OPTION/', (string) php_strip_whitespace( dirname( __DIR__ ) . '/class-store.php' ) ) );
+check( 'giving numbers back is one statement with its condition in the WHERE', true === $store->release_labels( 13, 2 ) && 1 === preg_match( "/UPDATE wp_options SET option_value = '13' WHERE option_name = '[a-z_]+' AND option_value = '15'$/", (string) end( $wpdb->queries ) ) );
+delete_option( Store::LABEL_OPTION );
+check( 'a counter that is not there yet is made on the first take (not autoloaded) — and a second request doing the same does not reset it', 1 === $first->reserve_labels( 4 ) && 5 === $second->reserve_labels( 1 ) && 6 === $store->next_label() && false === $GLOBALS['fh_autoload'][ Store::LABEL_OPTION ] );
+$wpdb->fail_queries = true;
+check( 'a database that refuses: 0, never a number someone else may hold', 0 === $store->reserve_labels( 2 ) && false === $store->release_labels( 5, 1 ) );
+$wpdb->fail_queries = false;
+check_same( '…and nothing moved', 6, $store->next_label() );
+
 echo "5. Rows\n";
 $row = Store::hydrate_leftover( array( 'id' => '7', 'label' => 'L7', 'length_u' => '300000', 'width_u' => '200000', 'status' => 'stock', 'origin' => 'plan', 'plan_id' => '3', 'used_plan_id' => '0', 'note' => 'from new sheet 1', 'created_at' => '2026-03-10 09:00:00', 'updated_at' => '2026-03-10 09:00:00' ) );
 check( 'a leftover: typed values, the size under length / width', 7 === $row['id'] && 300000 === $row['length'] && 200000 === $row['width'] && 3 === $row['plan_id'] && 0 === $row['used_plan_id'] && 'L7' === $row['label'] );

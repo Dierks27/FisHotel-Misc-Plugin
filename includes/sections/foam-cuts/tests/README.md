@@ -6,7 +6,8 @@ users with capabilities, nonces bound to action and user, transients,
 redirects / `wp_die()` that stop a handler by throwing (`FH_Halt`), the
 REST classes a route needs, a `WC_Order` double with `wc_get_orders()`
 (which, like the CPT store, ignores a meta query), a `$wpdb` that only
-knows which tables exist, and `dbDelta()`. `fake-store.php` is an
+knows which tables exist and the three statements of the label counter
+on the options table, and `dbDelta()`. `fake-store.php` is an
 in-memory `Store` with the same rules and real rollback (it can fail a
 method on demand, or behave like tables without transactions). Both
 helpers exit 0 when CI runs them directly. Every box, size, name and
@@ -19,6 +20,7 @@ php includes/sections/foam-cuts/tests/plan-test.php
 php includes/sections/foam-cuts/tests/store-test.php
 php includes/sections/foam-cuts/tests/stock-test.php
 php includes/sections/foam-cuts/tests/boxes-orders-test.php
+php includes/sections/foam-cuts/tests/packing-contract-test.php
 php includes/sections/foam-cuts/tests/planner-test.php
 php includes/sections/foam-cuts/tests/svg-test.php
 php includes/sections/foam-cuts/tests/rest-test.php
@@ -39,18 +41,28 @@ php includes/sections/foam-cuts/tests/section-test.php
 - **plan-test** — sources, cuts in words, labels, waste, pieces per box,
   warnings, the shape other code relies on.
 - **store-test** — the schema as dbDelta reads it, the version gate, a
-  failed install, the label counter, the only `$wpdb` file.
+  failed install, the label counter (taken in one statement inside the
+  database — two requests never get the same numbers), the only `$wpdb`
+  file.
 - **stock-test** — mark as cut once, undo, undo blocked, a stale plan,
   failures half-way with and without transactions, the stock by hand.
 - **boxes-orders-test** — settings, the three box sources with the other
   plugin absent / older / empty / switched off, the filters, the orders of
   a day and every shape the Packing section may answer in.
-- **planner-test** — making, deleting, exporting a plan; the print key.
+- **packing-contract-test** — doubles shaped like the Packing section's
+  real contracts: its functions take an order ID (and answer nothing for
+  an order object), a confirmed record's `count` is not a multiplier, its
+  box list is read from its classes.
+- **planner-test** — making, deleting, exporting a plan; the print key;
+  more than a plan lays out refused; the same day asked for again (one
+  plan), plans of the same day naming each other.
 - **svg-test** — well-formed, to scale, labelled, numbered, escaped,
   self-contained.
 - **rest-test** — permissions, the three routes, the stock never touched.
 - **admin-test** — page and print permissions, capability + nonce on every
-  write, each handler, escaping, a GET writes nothing, the printable page.
+  write, each handler, escaping, a GET writes nothing, a stale Boxes tab
+  refused, the printable page — a busy source's cuts on headed pages of
+  their own.
 - **section-test** — discovery, what a front-end / REST / admin request
   loads and costs, activation, PHP 7.4 syntax, no mail / HTTP / order
   write anywhere.

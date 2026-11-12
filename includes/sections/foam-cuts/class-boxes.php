@@ -6,7 +6,8 @@
  *      (FST_Settings::get_standard_boxes(), probed with method_exists) and
  *      the owner has entered some there;
  *   2. else the Packing section's list, when that section is switched on
- *      and answers fishotel_packing_boxes();
+ *      (its own list, read from its classes — or fishotel_packing_boxes()
+ *      should it ever offer that);
  *   3. else this section's own list (Settings → boxes).
  *
  * Whatever the source, the list can be replaced through the filter
@@ -261,17 +262,44 @@ class Boxes {
 	 * @return array[]|null
 	 */
 	public static function from_packing() {
-		if ( ! self::packing_on() || ! function_exists( 'fishotel_packing_boxes' ) ) {
+		if ( ! self::packing_on() ) {
 			return null;
 		}
 
 		try {
-			$rows = \fishotel_packing_boxes();
+			$rows = function_exists( 'fishotel_packing_boxes' ) ? \fishotel_packing_boxes() : self::packing_list();
 		} catch ( \Throwable $e ) {
 			return null;
 		}
 
 		return is_array( $rows ) ? self::read( $rows ) : null;
+	}
+
+	/**
+	 * The Packing section's box list read from its classes — it has no
+	 * function for it: Packing\Boxes::current( Packing\Settings::get() )
+	 * gives { boxes: [ { name, length, width, height (inches), … } ] }.
+	 * Every step is probed; null when any of it is not there.
+	 *
+	 * @return array[]|null
+	 */
+	private static function packing_list() {
+		$space   = '\\FisHotel\\Misc\\Sections\\Packing\\';
+		$section = $space . 'Packing';
+
+		if ( ! class_exists( $section, false ) ) {
+			return null;
+		}
+		if ( method_exists( $section, 'load' ) ) {
+			call_user_func( array( $section, 'load' ) );
+		}
+		if ( ! class_exists( $space . 'Boxes', false ) || ! method_exists( $space . 'Boxes', 'current' ) || ! class_exists( $space . 'Settings', false ) || ! method_exists( $space . 'Settings', 'get' ) ) {
+			return null;
+		}
+
+		$current = call_user_func( array( $space . 'Boxes', 'current' ), call_user_func( array( $space . 'Settings', 'get' ) ) );
+
+		return is_array( $current ) && isset( $current['boxes'] ) && is_array( $current['boxes'] ) ? $current['boxes'] : null;
 	}
 
 	/**

@@ -639,6 +639,14 @@ function wc_get_orders( $args = array() ) {
 	return $out;
 }
 
+/**
+ * The order ID of whatever a Packing double was handed (the real
+ * functions take an ID; a double may still be handed an order).
+ */
+function fh_oid( $order ) {
+	return is_object( $order ) ? (int) $order->get_id() : (int) $order;
+}
+
 function wc_get_order( $id ) {
 	if ( $id instanceof WC_Order ) {
 		return $id;
@@ -651,8 +659,9 @@ function wc_get_order( $id ) {
 /* ------------------------------------------------------------------ */
 
 /**
- * A wpdb that knows which tables "exist" and counts every call; the
- * section's reads and writes go through fake-store.php instead.
+ * A wpdb that knows which tables "exist", runs the label counter's
+ * statements on the options above, and counts every call; the section's
+ * other reads and writes go through fake-store.php instead.
  */
 class FH_Fake_WPDB {
 	public $prefix     = 'wp_';
@@ -661,6 +670,9 @@ class FH_Fake_WPDB {
 	public $tables     = array(); // Tables that exist (SHOW TABLES).
 	public $queries    = array(); // Every SQL string seen.
 	public $create_ok  = true;    // Whether dbDelta() creates what it is asked to.
+	public $options    = 'wp_options';
+	public $last_insert_id = 0;   // What LAST_INSERT_ID( expr ) left on this connection.
+	public $fail_queries   = false; // True = every query() is refused.
 
 	public function prepare( $sql, ...$args ) {
 		if ( 1 === count( $args ) && is_array( $args[0] ) ) {
@@ -688,6 +700,53 @@ class FH_Fake_WPDB {
 		if ( preg_match( "/^SHOW TABLES LIKE '(.+)'$/", $sql, $m ) ) {
 			return in_array( stripslashes( $m[1] ), $this->tables, true ) ? stripslashes( $m[1] ) : null;
 		}
+		if ( 'SELECT LAST_INSERT_ID()' === $sql ) {
+			return (string) $this->last_insert_id;
+		}
+		if ( preg_match( "/^SELECT option_value FROM wp_options WHERE option_name = '([^']+)' LIMIT 1$/", $sql, $m ) ) {
+			return array_key_exists( $m[1], $GLOBALS['fh_options'] ) ? (string) $GLOBALS['fh_options'][ $m[1] ] : null;
+		}
+		return null;
+	}
+
+	/**
+	 * The three statements Store runs on the options table for the label
+	 * counter, done the way the database does them (each one whole: there
+	 * is no moment between its read and its write); anything else is only
+	 * recorded.
+	 */
+	public function query( $sql ) {
+		$this->queries[] = 'query: ' . $sql;
+		if ( $this->fail_queries ) {
+			return false;
+		}
+
+		if ( preg_match( "/^INSERT IGNORE INTO wp_options \\(option_name, option_value, autoload\\) VALUES \\('([^']+)', '([^']*)', '(no|off)'\\)$/", $sql, $m ) ) {
+			if ( array_key_exists( $m[1], $GLOBALS['fh_options'] ) ) {
+				return 0;
+			}
+			$GLOBALS['fh_options'][ $m[1] ]  = $m[2];
+			$GLOBALS['fh_autoload'][ $m[1] ] = false;
+			return 1;
+		}
+
+		if ( preg_match( "/^UPDATE wp_options SET option_value = LAST_INSERT_ID\\( GREATEST\\( CAST\\( option_value AS UNSIGNED \\), 1 \\) \\+ (\\d+) \\) WHERE option_name = '([^']+)'$/", $sql, $m ) ) {
+			if ( ! array_key_exists( $m[2], $GLOBALS['fh_options'] ) ) {
+				return 0;
+			}
+			$this->last_insert_id           = max( (int) $GLOBALS['fh_options'][ $m[2] ], 1 ) + (int) $m[1];
+			$GLOBALS['fh_options'][ $m[2] ] = (string) $this->last_insert_id;
+			return 1;
+		}
+
+		if ( preg_match( "/^UPDATE wp_options SET option_value = '(\\d+)' WHERE option_name = '([^']+)' AND option_value = '(\\d+)'$/", $sql, $m ) ) {
+			if ( ! array_key_exists( $m[2], $GLOBALS['fh_options'] ) || (string) $GLOBALS['fh_options'][ $m[2] ] !== $m[3] ) {
+				return 0;
+			}
+			$GLOBALS['fh_options'][ $m[2] ] = $m[1];
+			return 1;
+		}
+
 		return null;
 	}
 

@@ -7,8 +7,9 @@
  *
  * @package FisHotel\Misc\Sections\Foam_Cuts
  *
- * @var array $plan  Plan row (with data).
- * @var array $state Stock::state(): stale, undo_blockers.
+ * @var array    $plan  Plan row (with data).
+ * @var array    $state Stock::state(): stale, undo_blockers.
+ * @var string[] $twins The other plans of the same ship day, in words.
  */
 
 defined( 'ABSPATH' ) || exit;
@@ -70,6 +71,14 @@ $fh_post    = admin_url( 'admin-post.php' );
 				<p><?php echo esc_html( $fh_line ); ?></p>
 			<?php endforeach; ?>
 			<p><?php esc_html_e( 'Delete it and make the plan again.', 'fishotel-misc-plugin' ); ?></p>
+		</div>
+	<?php endif; ?>
+
+	<?php if ( ! $fh_is_cut && ! empty( $twins ) ) : ?>
+		<div class="fh-fc-notice is-warn">
+			<?php foreach ( $twins as $fh_line ) : ?>
+				<p><?php echo esc_html( $fh_line ); ?></p>
+			<?php endforeach; ?>
 		</div>
 	<?php endif; ?>
 

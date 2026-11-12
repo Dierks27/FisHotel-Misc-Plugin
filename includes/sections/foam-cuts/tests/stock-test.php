@@ -111,7 +111,7 @@ check( 'two requests carrying the same draft: the first applies, the second find
 echo "5. Undo\n";
 check_same( 'a cut plan nothing has touched can be undone', array(), Stock::state( $store, $store->plan( 1 ) )['undo_blockers'] );
 $result = Stock::undo( $store, $store->plan( 1 ), 7 );
-check( 'undone', true === $result['ok'], $result['message'] );
+check( 'undone — saying what came back in numbers, with the count as it is now', true === $result['ok'] && false !== strpos( $result['message'], '1 whole sheet is back on the count (3 in stock now)' ) && false !== strpos( $result['message'], 'The plan is a draft again.' ) && false === strpos( $result['message'], 'as it was' ), $result['message'] );
 $now = $store->state();
 check( 'the leftovers are exactly as before the plan was cut', $before['leftovers'] === $now['leftovers'] );
 check_same( 'the sheets are back: 3', 3, $store->sheets() );
@@ -224,11 +224,20 @@ check( 'the plan takes more whole sheets than are in stock and says so', Plan::s
 check( 'it can still be marked as cut — the cutting happened', true === Stock::apply( $store, $plan, 7 )['ok'] );
 check( 'the count goes below zero rather than lying; an undo brings it back to 3', $store->sheets() < 0 && true === Stock::undo( $store, $store->plan( 1 ), 7 )['ok'] && 3 === $store->sheets() );
 
+$store = fh_shop();
+Stock::buy_sheets( $store, 3, '', 7 );
+Planner::create( $store, array( 'cube' => 24 ), array(), 7 );
+$took = Plan::sheets( $store->plan( 1 )['data'] );
+Stock::apply( $store, $store->plan( 1 ), 7 );
+Stock::count_sheets( $store, '4', 'counted the rack', 7 );
+$result = Stock::undo( $store, $store->plan( 1 ), 7 );
+check( 'the count corrected by hand between cut and undo: the undo says the count it leaves, not "as it was"', true === $result['ok'] && 4 + $took === $store->sheets() && false !== strpos( $result['message'], '(' . ( 4 + $took ) . ' in stock now)' ), $result['message'] );
+
 echo "10. The stock by hand\n";
 $store  = fh_shop();
 $result = Stock::buy_sheets( $store, '5', 'from the hardware shop', 7 );
 check( 'bought 5 sheets: an entry, 8 in stock', true === $result['ok'] && 8 === $store->sheets() && 'bought' === $store->sheet_log( 1 )[0]['kind'] && 'from the hardware shop' === $store->sheet_log( 1 )[0]['note'] && false !== strpos( $result['message'], '8 in stock now' ), $result['message'] );
-foreach ( array( '0', '-2', 'many', '', '99999' ) as $bad ) {
+foreach ( array( '0', '-2', 'many', '', '99999', '2.5', '1e2', '0x10', ' 3 sheets' ) as $bad ) {
 	check( "bought \"$bad\" is refused", false === Stock::buy_sheets( $store, $bad, '', 7 )['ok'] && 8 === $store->sheets() );
 }
 $result = Stock::count_sheets( $store, '6', 'counted the rack', 7 );
@@ -249,7 +258,17 @@ foreach ( array( array( '', '5' ), array( '0', '5' ), array( '5', 'wide' ), arra
 }
 $store->fail['add_leftover'] = true;
 check( 'a leftover that cannot be saved gives its label back', false === Stock::add_leftover( $store, '5', '5' )['ok'] && 4 === $store->next_label() );
+$store->fail = array( 'reserve_labels' => true );
+$count       = count( $store->leftovers );
+check( 'when no label can be reserved no leftover is added', false === Stock::add_leftover( $store, '5', '5' )['ok'] && $count === count( $store->leftovers ) );
 $store->fail = array();
+
+$sheet  = array( fh_in( 96 ), fh_in( 48 ) );
+$result = Stock::add_leftover( $store, '200', '100', '', $sheet );
+check( 'a leftover larger than a whole sheet is refused, in words, and takes no label', false === $result['ok'] && false !== strpos( $result['message'], 'larger than a whole sheet (96 × 48 in)' ) && 4 === $store->next_label(), $result['message'] );
+check( '…in either direction: 97 × 10 and 60 × 50 do not come out of a 96 × 48 sheet', false === Stock::add_leftover( $store, '97', '10', '', $sheet )['ok'] && false === Stock::add_leftover( $store, '60', '50', '', $sheet )['ok'] && 4 === $store->next_label() );
+check( 'a piece typed the other way round is fine (40 × 90), and so is a whole sheet', true === Stock::within( array( fh_in( 40 ), fh_in( 90 ) ), $sheet ) && true === Stock::within( array( fh_in( 96 ), fh_in( 48 ) ), $sheet ) );
+check( 'a leftover cannot be resized past a whole sheet either', false === Stock::resize_leftover( $store, 3, '120', '9', $sheet )['ok'] && fh_in( 22.5 ) === $store->leftover( 3 )['length'] );
 
 $result = Stock::resize_leftover( $store, 3, '20', '9.25' );
 check( 'resized: L3 is now 20 × 9 1/4 in', true === $result['ok'] && 'L3 is now 20 × 9 1/4 in.' === $result['message'] && fh_in( 20 ) === $store->leftover( 3 )['length'] );

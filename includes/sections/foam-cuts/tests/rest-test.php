@@ -97,7 +97,12 @@ $bad = $rest->create_plan( new WP_REST_Request( 'POST', array( 'source' => 'boxe
 check( 'source "boxes" without boxes: 400', $bad instanceof WP_Error && 'fishotel_foam_cuts_no_boxes' === $bad->get_error_code() );
 $bad = $rest->create_plan( new WP_REST_Request( 'POST', array( 'source' => 'stock' ) ) );
 check( 'a source that is neither: 400', $bad instanceof WP_Error && 'fishotel_foam_cuts_bad_source' === $bad->get_error_code() );
-check_same( 'none of those saved a plan', 3, count( $store->plans ) );
+$bad = $rest->create_plan( new WP_REST_Request( 'POST', array( 'boxes' => array( 'Cube' => 100000 ) ) ) );
+check( 'more of one box than a plan lays out: 400 naming the limit — not a plan for 500', $bad instanceof WP_Error && 'fishotel_foam_cuts_too_many' === $bad->get_error_code() && 400 === $bad->get_error_data()['status'] && 500 === $bad->get_error_data()['max'] && false !== strpos( $bad->get_error_message(), 'Cube' ) );
+$most = $rest->create_plan( new WP_REST_Request( 'POST', array( 'boxes' => array( 'Cube' => 500 ) ) ) );
+check( 'exactly the limit is a plan', $most instanceof WP_REST_Response && 201 === $most->get_status() && '500 × Cube' === $most->get_data()['title'] && false === $most->get_data()['reused'] );
+Planner::delete( $store, $store->plan( $most->get_data()['id'] ) );
+check_same( 'none of the refused ones saved a plan', 3, count( $store->plans ) );
 
 echo "6. Making a plan from the orders of a day\n";
 $bad = $rest->create_plan( new WP_REST_Request( 'POST', array() ) );
@@ -117,7 +122,7 @@ $GLOBALS['fh_orders'] = array(
 	303 => new WC_Order( 303, 'processing', array( '_fishotel_shipping_date' => '2026-03-15' ) ),
 );
 $GLOBALS['fh_suggest'] = static function ( $order ) {
-	return 302 === $order->get_id() ? null : 'Cube';
+	return 302 === fh_oid( $order ) ? null : 'Cube';
 };
 
 $made = $rest->create_plan( new WP_REST_Request( 'POST', array() ) );
@@ -126,6 +131,17 @@ $body = $made->get_data();
 check_same( 'one cube for the one order that has a box', '1 × Cube', $body['title'] );
 check_same( 'the order without a box is named in the answer, so the caller can say so', array( 302 ), $body['orders_without_box'] );
 check( 'the plan remembers the orders by id and number only', array( 301, 302 ) === array_column( $body['for']['orders'], 'id' ) && array( 'id', 'number', 'how', 'boxes' ) === array_keys( $body['for']['orders'][0] ) );
+$count  = count( $store->plans );
+$labels = $store->next_label();
+$again  = $rest->create_plan( new WP_REST_Request( 'POST', array( 'source' => 'orders', 'ship_date' => '2026-03-10' ) ) );
+check( 'the same day asked for again (a reprint): 200 with the SAME plan, flagged as reused — no second plan, no second set of labels', $again instanceof WP_REST_Response && 200 === $again->get_status() && $body['id'] === $again->get_data()['id'] && true === $again->get_data()['reused'] && false === $body['reused'] && $count === count( $store->plans ) && $labels === $store->next_label() );
+check( '…with the orders without a box named again, and no other plan for the day', array( 302 ) === $again->get_data()['orders_without_box'] && array() === $again->get_data()['same_day'] );
+$GLOBALS['fh_suggest'] = static function ( $order ) {
+	return 'Cube';
+};
+$more = $rest->create_plan( new WP_REST_Request( 'POST', array( 'source' => 'orders', 'ship_date' => '2026-03-10' ) ) );
+check( 'the day has changed (an order got its box): 201 with a new plan that names the earlier one', $more instanceof WP_REST_Response && 201 === $more->get_status() && '2 × Cube' === $more->get_data()['title'] && array( $body['id'] ) === array_column( $more->get_data()['same_day'], 'id' ) && 'draft' === $more->get_data()['same_day'][0]['status'] );
+check_same( 'GET shows the same list on the earlier plan', array( $more->get_data()['id'] ), array_column( $rest->get_plan( new WP_REST_Request( 'GET', array( 'id' => (string) $body['id'] ) ) )->get_data()['same_day'], 'id' ) );
 $made = $rest->create_plan( new WP_REST_Request( 'POST', array( 'source' => 'orders', 'ship_date' => '2026-03-14' ) ) );
 check( 'another day by ship_date', $made instanceof WP_REST_Response && '2026-03-14' === $made->get_data()['ship_date'] && array( 303 ) === array_column( $made->get_data()['for']['orders'], 'id' ) );
 $bad = $rest->create_plan( new WP_REST_Request( 'POST', array( 'source' => 'orders', 'ship_date' => '2026-03-20' ) ) );

@@ -63,6 +63,17 @@ $wpdb->queries = array();
 check( 'and without the tables it answers null without a single query', null === fishotel_foam_cuts_plan( 1 ) && array() === $wpdb->queries );
 update_option( 'fishotel_foam_cuts_db_version', '1.0', true );
 
+update_option( 'fishotel_misc_enabled_sections', array( 'weather' ) );
+$wpdb->queries              = array();
+$GLOBALS['fh_option_reads'] = array();
+check( 'with the section switched off it answers null — though the tables are there — without a query', null === fishotel_foam_cuts_plan( 0 ) && null === fishotel_foam_cuts_plan( 1 ) && array() === $wpdb->queries, fh_export( $wpdb->queries ) );
+check_same( '…having read one option: which sections are on', array( 'fishotel_misc_enabled_sections' ), array_values( array_unique( $GLOBALS['fh_option_reads'] ) ) );
+delete_option( 'fishotel_misc_enabled_sections' );
+check( 'the same when that option is not there at all', null === fishotel_foam_cuts_plan( 0 ) && array() === $wpdb->queries );
+update_option( 'fishotel_misc_enabled_sections', array( 'weather', 'foam-cuts' ) );
+fishotel_foam_cuts_plan( 0 );
+check( 'switched on, it asks the store', 1 === count( $wpdb->queries ) && false !== strpos( $wpdb->queries[0], 'fh_foam_plans' ), fh_export( $wpdb->queries ) );
+
 echo "5. A REST request\n";
 check_same( 'no route yet', array(), $GLOBALS['fh_rest_routes'] );
 do_action( 'rest_api_init' );

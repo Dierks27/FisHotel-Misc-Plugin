@@ -60,6 +60,15 @@ $store->fail['add_plan'] = true;
 $lost                    = Planner::create( $store, array( 'cube' => 1 ), array(), 7 );
 $store->fail             = array();
 check( 'a plan that cannot be saved gives its labels back', false === $lost['ok'] && 1 + $plan['label_count'] === $store->next_label() );
+$store->fail['reserve_labels'] = true;
+$lost                          = Planner::create( $store, array( 'cube' => 1 ), array(), 7 );
+$store->fail                   = array();
+check( 'labels that cannot be reserved: no plan, nothing saved', false === $lost['ok'] && 0 === $lost['id'] && 1 === count( $store->plans ) && false !== strpos( $lost['message'], 'could not be reserved' ), $lost['message'] );
+
+$count = count( $store->plans );
+$top   = $store->next_label();
+$many  = Planner::create( $store, array( 'cube' => 100000 ), array(), 7 );
+check( 'more of one box than a plan lays out: refused by name — never quietly cut down to the most it takes', false === $many['ok'] && 'too_many' === $many['code'] && false !== strpos( $many['message'], 'at most 500' ) && false !== strpos( $many['message'], 'Cube' ) && $count === count( $store->plans ) && $top === $store->next_label(), $many['message'] );
 
 echo "3. Another plan, and deleting drafts\n";
 Planner::create( $store, array( 'bare' => 3 ), array(), 7 );
@@ -137,7 +146,7 @@ check( 'a day nothing ships: refused, naming the day and its delivery date', fal
 
 $GLOBALS['fh_suggest'] = static function ( $order ) {
 	$map = array( 201 => 'Cube', 202 => array( 'box' => 'cube' ), 203 => array( 'boxes' => array( 'Flat', '14x9x7' ) ) );
-	return isset( $map[ $order->get_id() ] ) ? $map[ $order->get_id() ] : null;
+	return isset( $map[ fh_oid( $order ) ] ) ? $map[ fh_oid( $order ) ] : null;
 };
 $made = Planner::create_for_orders( $store, '2026-03-10', 7 );
 check( 'made', true === $made['ok'] && 1 === $made['id'], $made['message'] );
@@ -153,5 +162,49 @@ check_same( 'the unlisted box has the six suggested pieces', 6, array_sum( array
 check( 'the stock was not touched', array() === $store->leftovers( 'stock' ) && 0 === $store->sheets() );
 $out = Planner::export( $plan, $store );
 check( 'exported: origin and ship date', 'orders' === $out['origin'] && '2026-03-10' === $out['ship_date'] );
+check_same( 'no other plan for that day', array(), $out['same_day'] );
+
+echo "7. The same day asked for again\n";
+$store->add_sheet_entry( 'bought', 4, 0, '', 7 );
+$labels = $store->next_label();
+$again  = Planner::create_for_orders( $store, '2026-03-10', 7 );
+check( 'the same boxes, the draft still there: THAT plan is the answer — no second plan, no second set of labels', true === $again['ok'] && 1 === $again['id'] && true === $again['existing'] && 1 === count( $store->plans ) && $labels === $store->next_label() && false !== strpos( $again['message'], 'Plan 1 was already made' ), $again['message'] );
+check_same( 'a plan that was just made says it is new', false, $made['existing'] );
+check( 'the sheets bought in between do not make it another plan', Planner::signature( $plan['data'] ) === Planner::signature( json_decode( json_encode( $plan['data'] ), true ) ) );
+$typed = Planner::create( $store, array( 'cube' => 2, 'flat' => 1 ), array(), 7 );
+check( 'typed numbers are never folded into another plan', true === $typed['ok'] && 2 === $typed['id'] && false === $typed['existing'] );
+Planner::delete( $store, $store->plan( 2 ) );
+
+// An order's box changes: the day is no longer the same boxes.
+$GLOBALS['fh_suggest'] = static function ( $order ) {
+	$map = array( 201 => 'Cube', 202 => 'Flat', 203 => array( 'boxes' => array( 'Flat', '14x9x7' ) ) );
+	return isset( $map[ fh_oid( $order ) ] ) ? $map[ fh_oid( $order ) ] : null;
+};
+$other = Planner::create_for_orders( $store, '2026-03-10', 7 );
+check( 'other boxes for the same day: a new plan', true === $other['ok'] && false === $other['existing'] && $other['id'] !== 1 && '1 × Cube, 2 × Flat, 1 × 14 × 9 × 7' === $store->plan( $other['id'] )['title'], $other['message'] );
+$twin = $store->plan( $other['id'] );
+check_same( 'each names the other', array( array( array( 'id' => $twin['id'], 'status' => 'draft', 'title' => $twin['title'] ) ), array( array( 'id' => 1, 'status' => 'draft', 'title' => $plan['title'] ) ) ), array( Planner::same_day( $store, $store->plan( 1 ) ), Planner::same_day( $store, $twin ) ) );
+$lines = Planner::same_day_lines( Planner::same_day( $store, $twin ), $twin );
+check( 'in words: cut from ONE of them', 1 === count( $lines ) && false !== strpos( $lines[0], 'Plan 1 (' ) && false !== strpos( $lines[0], 'Cut from ONE of them' ) && false !== strpos( $lines[0], '2026-03-10' ), implode( ' ', $lines ) );
+check_same( 'a typed plan has no ship day and so no such plans', array(), Planner::same_day( $store, array( 'id' => 9, 'ship_date' => '' ) ) );
+check_same( 'the export lists them (the assistant sees it too)', array( 1 ), array_column( Planner::export( $twin, $store )['same_day'], 'id' ) );
+
+$cut = Planner::cut( $store, $store->plan( 1 ), 7 );
+check( 'the first of the two marked as cut: no warning yet', true === $cut['ok'] && false === strpos( $cut['message'], 'Mind:' ), $cut['message'] );
+$lines = Planner::same_day_lines( Planner::same_day( $store, $twin ), $twin );
+check( 'the other one now says the day was already cut for, and that it counts all of its orders again', false !== strpos( $lines[0], 'already marked as cut' ) && false !== strpos( $lines[0], 'ALL of that day' ), $lines[0] );
+$again = Planner::create_for_orders( $store, '2026-03-10', 7 );
+check( 'asked again now: the remaining draft with these boxes is handed back, not a third plan', true === $again['existing'] && $twin['id'] === $again['id'] && 2 === count( $store->plans ) );
+$cut = Planner::cut( $store, $store->plan( $twin['id'] ), 7 );
+check( 'marking the second as cut as well is allowed — the cutting may have happened — but the answer says the foam is now booked twice', true === $cut['ok'] && false !== strpos( $cut['message'], 'Mind: plan 1 for the same ship day (2026-03-10) is marked as cut as well' ) && false !== strpos( $cut['message'], 'undo one of them' ), $cut['message'] );
+$again = Planner::create_for_orders( $store, '2026-03-10', 7 );
+check( 'with no draft left for the day a new plan is made — and it names both cut ones', false === $again['existing'] && 2 === count( Planner::same_day( $store, $store->plan( $again['id'] ) ) ) );
+$stale = $store->plan( $again['id'] );
+foreach ( array_keys( \FisHotel\Misc\Sections\Foam_Cuts\Plan::used_leftovers( $stale['data'] ) ) as $id ) {
+	Stock::remove_leftover( $store, $id );
+}
+check( 'that draft cut into leftovers which are gone now', array() !== Stock::state( $store, $stale )['stale'] );
+$fresh = Planner::create_for_orders( $store, '2026-03-10', 7 );
+check( 'a draft that no longer matches the stock is not handed back: a new plan is made', false === $fresh['existing'] && $fresh['id'] !== $stale['id'] );
 
 fh_finish();

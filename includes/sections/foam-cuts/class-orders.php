@@ -11,8 +11,10 @@
  * folded into a combined box is skipped: its wrapper order carries the box.
  *
  * Which box an order goes in is the Packing section's knowledge:
- * fishotel_packing_confirmed_box( $order ) when a box was confirmed, else
- * fishotel_packing_suggest( $order ). Their answers are read loosely — a
+ * fishotel_packing_confirmed_box( $order_id ) when a box was confirmed,
+ * else fishotel_packing_suggest( $order_id ) — both are asked with the
+ * order's ID. Their answers ({ boxes: [ { name, length, width, height,
+ * … } ], … } as that section gives them) are read loosely — a
  * box name, a box row, { box: … }, { boxes: [ … ] } or a list of those,
  * with an optional count / qty — and can be supplied or corrected through
  * the filter fishotel_foam_cuts_order_boxes ( rows, order ). Without the
@@ -367,7 +369,9 @@ class Orders {
 
 	/**
 	 * Call one of the Packing section's functions for an order: with the
-	 * order object, and when that is refused, with its id.
+	 * order's ID — what both of them are declared to take; handed an order
+	 * object they answer "nothing", without an error — and, only when that
+	 * is refused with an error, with the order object.
 	 *
 	 * @param string $function Function name.
 	 * @param object $order    WC_Order.
@@ -379,10 +383,10 @@ class Orders {
 		}
 
 		try {
-			return $function( $order );
+			return $function( (int) $order->get_id() );
 		} catch ( \Throwable $e ) {
 			try {
-				return $function( (int) $order->get_id() );
+				return $function( $order );
 			} catch ( \Throwable $e2 ) {
 				return null;
 			}

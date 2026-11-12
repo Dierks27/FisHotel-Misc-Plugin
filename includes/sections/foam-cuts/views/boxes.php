@@ -136,7 +136,7 @@ $fh_t    = Units::format( $context['settings']['thickness'] );
 	<?php endif; ?>
 
 	<form method="post" action="<?php echo esc_url( $fh_post ); ?>">
-		<?php Admin::form_fields( 'boxes_save' ); ?>
+		<?php Admin::form_fields( 'boxes_save', array( 'loaded' => Admin::boxes_stamp( $context['settings']['boxes'] ) ) ); ?>
 		<table class="fh-fc-rows">
 			<thead>
 				<tr>

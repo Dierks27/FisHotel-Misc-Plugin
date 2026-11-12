@@ -339,7 +339,22 @@ class Stock {
 			return self::result( false, sprintf( __( 'The undo did not go through (%s). Check the stock.', 'fishotel-misc-plugin' ), $failed ) );
 		}
 
-		return self::result( true, __( 'Undone: the stock is as it was before this plan was cut. The plan is a draft again.', 'fishotel-misc-plugin' ) );
+		// What came back, in numbers — not "as it was": the sheet count may have been corrected by hand in between.
+		$parts = array();
+		if ( $sheets > 0 ) {
+			/* translators: 1: sheets put back, 2: sheets in stock now */
+			$parts[] = sprintf( _n( '%1$d whole sheet is back on the count (%2$d in stock now)', '%1$d whole sheets are back on the count (%2$d in stock now)', $sheets, 'fishotel-misc-plugin' ), $sheets, max( 0, (int) $store->sheets() ) );
+		}
+		if ( $used_ids ) {
+			/* translators: %d: leftovers */
+			$parts[] = sprintf( _n( '%d leftover it cut up is back in stock', '%d leftovers it cut up are back in stock', count( $used_ids ), 'fishotel-misc-plugin' ), count( $used_ids ) );
+		}
+		if ( $new ) {
+			/* translators: %d: leftovers */
+			$parts[] = sprintf( _n( 'the %d leftover it made is taken out again', 'the %d leftovers it made are taken out again', count( $new ), 'fishotel-misc-plugin' ), count( $new ) );
+		}
+
+		return self::result( true, __( 'Undone.', 'fishotel-misc-plugin' ) . ( $parts ? ' ' . ucfirst( implode( '; ', $parts ) ) . '.' : '' ) . ' ' . __( 'The plan is a draft again.', 'fishotel-misc-plugin' ) );
 	}
 
 	/* ============================================================== */
@@ -356,7 +371,8 @@ class Stock {
 	 * @return array{ok: bool, message: string}
 	 */
 	public static function buy_sheets( $store, $count, $note = '', $user_id = 0 ) {
-		$count = is_numeric( $count ) ? (int) $count : 0;
+		// A whole number as typed: "2.5" is not 2 sheets and "1e2" is not 100.
+		$count = is_scalar( $count ) && (string) (int) $count === trim( (string) $count ) ? (int) $count : 0;
 		if ( $count < 1 || $count > self::MAX_SHEETS ) {
 			return self::result( false, __( 'How many sheets? A whole number of 1 or more.', 'fishotel-misc-plugin' ) );
 		}
@@ -407,16 +423,23 @@ class Stock {
 	 * @param mixed  $length Length as typed (inches).
 	 * @param mixed  $width  Width as typed (inches).
 	 * @param string $note   Note.
+	 * @param array  $sheet  The whole sheet, [ length, width ] in units: a leftover cannot be larger (empty = not checked).
 	 * @return array{ok: bool, message: string, label?: string, id?: int}
 	 */
-	public static function add_leftover( $store, $length, $width, $note = '' ) {
+	public static function add_leftover( $store, $length, $width, $note = '', array $sheet = array() ) {
 		$sizes = self::sizes( $length, $width );
 		if ( null === $sizes ) {
 			return self::result( false, __( 'A leftover needs a length and a width above 0, in inches (11.75 or 11 3/4).', 'fishotel-misc-plugin' ) );
 		}
+		if ( ! self::within( $sizes, $sheet ) ) {
+			return self::result( false, self::too_large( $sizes, $sheet ) );
+		}
 
 		$number = (int) $store->reserve_labels( 1 );
-		$label  = self::LABEL_PREFIX . $number;
+		if ( $number < 1 ) {
+			return self::result( false, __( 'The leftover could not be saved (no label could be reserved).', 'fishotel-misc-plugin' ) );
+		}
+		$label = self::LABEL_PREFIX . $number;
 		$id     = $store->add_leftover(
 			array(
 				'label'  => $label,
@@ -451,9 +474,10 @@ class Stock {
 	 * @param int    $id     Leftover id.
 	 * @param mixed  $length Length as typed (inches).
 	 * @param mixed  $width  Width as typed (inches).
+	 * @param array  $sheet  The whole sheet, [ length, width ] in units: a leftover cannot be larger (empty = not checked).
 	 * @return array{ok: bool, message: string}
 	 */
-	public static function resize_leftover( $store, $id, $length, $width ) {
+	public static function resize_leftover( $store, $id, $length, $width, array $sheet = array() ) {
 		$row = $store->leftover( (int) $id );
 		if ( ! $row || 'stock' !== $row['status'] ) {
 			return self::result( false, __( 'That leftover is not in stock.', 'fishotel-misc-plugin' ) );
@@ -462,6 +486,10 @@ class Stock {
 		$sizes = self::sizes( $length, $width );
 		if ( null === $sizes ) {
 			return self::result( false, __( 'A leftover needs a length and a width above 0, in inches (11.75 or 11 3/4).', 'fishotel-misc-plugin' ) );
+		}
+
+		if ( ! self::within( $sizes, $sheet ) ) {
+			return self::result( false, self::too_large( $sizes, $sheet ) );
 		}
 
 		if ( ! $store->update_leftover( (int) $id, array( 'length' => $sizes[0], 'width' => $sizes[1] ) ) ) {
@@ -491,6 +519,37 @@ class Stock {
 
 		/* translators: %s: label */
 		return self::result( true, sprintf( __( '%s removed from the stock.', 'fishotel-misc-plugin' ), $row['label'] ) );
+	}
+
+	/**
+	 * Whether a leftover of this size can have come out of a whole sheet
+	 * (either way round).
+	 *
+	 * @param int[] $sizes [ length, width ] in units.
+	 * @param array $sheet [ length, width ] in units; empty = anything goes.
+	 * @return bool
+	 */
+	public static function within( array $sizes, array $sheet ) {
+		if ( 2 !== count( $sheet ) ) {
+			return true;
+		}
+		$sheet = array_map( 'intval', array_values( $sheet ) );
+
+		return max( $sizes ) <= max( $sheet ) && min( $sizes ) <= min( $sheet );
+	}
+
+	/**
+	 * "Larger than a whole sheet", in words.
+	 *
+	 * @param int[] $sizes [ length, width ] in units.
+	 * @param array $sheet [ length, width ] in units.
+	 * @return string
+	 */
+	private static function too_large( array $sizes, array $sheet ) {
+		$sheet = array_map( 'intval', array_values( $sheet ) );
+
+		/* translators: 1: the size typed, 2: the size of a whole sheet */
+		return sprintf( __( '%1$s in is larger than a whole sheet (%2$s in), so it cannot be a leftover. Check the numbers; nothing was saved.', 'fishotel-misc-plugin' ), Units::size( $sizes[0], $sizes[1] ), Units::size( $sheet[0], $sheet[1] ) );
 	}
 
 	/**

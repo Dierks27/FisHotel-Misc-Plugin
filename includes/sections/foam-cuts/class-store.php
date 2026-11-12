@@ -30,8 +30,11 @@
  *
  * The next free L-number lives in the option fishotel_foam_cuts_next_label
  * (not autoloaded: it is only read when a plan is made or a leftover is
- * added). A number is never given out twice, so a label still written on
- * an old offcut can never be mistaken for a leftover in stock.
+ * added). It is read and moved with statements of its own on the options
+ * table — the adding happens inside the database, so two requests at the
+ * same moment never get the same numbers. A number is never given out
+ * twice, so a label still written on an old offcut can never be mistaken
+ * for a leftover in stock.
  *
  * A status changes only where it still is what the caller read (UPDATE …
  * WHERE status = …), which is what makes "mark as cut" happen once.
@@ -651,6 +654,21 @@ class Store {
 	}
 
 	/**
+	 * The plans made for the orders of a ship day, newest first, with
+	 * their data decoded.
+	 *
+	 * @param string $ship_ymd Y-m-d.
+	 * @param int    $limit    Rows.
+	 * @return array[]
+	 */
+	public function plans_for_day( $ship_ymd, $limit = 20 ) {
+		if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', (string) $ship_ymd ) ) {
+			return array();
+		}
+		return array_map( array( self::class, 'hydrate_plan' ), $this->rows( 'foam_plans', 'ship_date = %s AND origin = %s ORDER BY id DESC LIMIT %d', array( (string) $ship_ymd, 'orders', max( 1, (int) $limit ) ) ) );
+	}
+
+	/**
 	 * Add a plan (a draft).
 	 *
 	 * @param array $row title, origin, ship_date, sheets, label_from, label_count, data (array), created_by.
@@ -754,44 +772,108 @@ class Store {
 	/* ============================================================== */
 
 	/**
-	 * The next free L-number.
+	 * The next free L-number, read from the database itself (not through
+	 * the options cache: another request may have moved it a moment ago).
 	 *
 	 * @return int
 	 */
 	public function next_label() {
-		return max( 1, (int) get_option( self::LABEL_OPTION, 1 ) );
+		global $wpdb;
+
+		try {
+			$value = $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s LIMIT 1", self::LABEL_OPTION ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		} catch ( \Throwable $e ) {
+			$value = null;
+		}
+
+		return max( 1, (int) $value );
 	}
 
 	/**
-	 * Take the next $count L-numbers.
+	 * Take the next $count L-numbers — in ONE statement that adds to the
+	 * counter inside the database (LAST_INSERT_ID( value + count ) hands
+	 * the new value back to this connection only), so two requests at the
+	 * same moment can never be given the same numbers. Reading the counter
+	 * and writing it back from PHP could: a double-click on "Make the
+	 * plan" did.
 	 *
 	 * @param int $count How many.
-	 * @return int The first of them.
+	 * @return int The first of them; 0 when the database refused (nothing was taken).
 	 */
 	public function reserve_labels( $count ) {
-		$from = $this->next_label();
-		update_option( self::LABEL_OPTION, $from + max( 0, (int) $count ), false );
-		return $from;
+		global $wpdb;
+
+		$count = max( 0, (int) $count );
+		if ( 0 === $count ) {
+			return $this->next_label();
+		}
+
+		$take = $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = LAST_INSERT_ID( GREATEST( CAST( option_value AS UNSIGNED ), 1 ) + %d ) WHERE option_name = %s", $count, self::LABEL_OPTION );
+
+		try {
+			$n = $wpdb->query( $take ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery
+			if ( 1 !== (int) $n ) {
+				// The counter is not there yet: make it (never autoloaded) — a second request doing the same changes nothing — and take again.
+				$wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, '1', 'no')", self::LABEL_OPTION ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				$n = $wpdb->query( $take ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery
+			}
+			$next = 1 === (int) $n ? (int) $wpdb->get_var( 'SELECT LAST_INSERT_ID()' ) : 0; // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		} catch ( \Throwable $e ) {
+			$next = 0;
+		}
+
+		self::forget_label_cache();
+
+		return $next > $count ? $next - $count : 0;
 	}
 
 	/**
 	 * Give numbers back — only when they are the last ones handed out (a
-	 * draft that is deleted straight away does not leave a gap).
+	 * draft that is deleted straight away does not leave a gap). One
+	 * statement with the condition in its WHERE, for the same reason.
 	 *
 	 * @param int $from  The first number.
 	 * @param int $count How many.
 	 * @return bool Whether they were given back.
 	 */
 	public function release_labels( $from, $count ) {
+		global $wpdb;
+
 		$from  = (int) $from;
 		$count = (int) $count;
 
-		if ( $from < 1 || $count < 1 || $this->next_label() !== $from + $count ) {
+		if ( $from < 1 || $count < 1 ) {
 			return false;
 		}
 
-		update_option( self::LABEL_OPTION, $from, false );
-		return true;
+		try {
+			$n = $wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = %s WHERE option_name = %s AND option_value = %s", (string) $from, self::LABEL_OPTION, (string) ( $from + $count ) ) ); // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+
+		self::forget_label_cache();
+
+		return 1 === (int) $n;
+	}
+
+	/**
+	 * The counter was written past the options API: drop what the object
+	 * cache remembers of it, so get_option() elsewhere never sees an old
+	 * number.
+	 */
+	private static function forget_label_cache() {
+		if ( ! function_exists( 'wp_cache_delete' ) || ! function_exists( 'wp_cache_get' ) || ! function_exists( 'wp_cache_set' ) ) {
+			return;
+		}
+
+		wp_cache_delete( self::LABEL_OPTION, 'options' );
+
+		$missing = wp_cache_get( 'notoptions', 'options' );
+		if ( is_array( $missing ) && isset( $missing[ self::LABEL_OPTION ] ) ) {
+			unset( $missing[ self::LABEL_OPTION ] );
+			wp_cache_set( 'notoptions', $missing, 'options' );
+		}
 	}
 
 	/* ============================================================== */

@@ -12,10 +12,12 @@ and what to write on what is left over. Under **FisHotel Tools → Foam Cuts**
    turned 90 degrees (yes), the smallest leftover worth keeping (4 × 4 in).
    Sizes are typed in inches; `11.75` and `11 3/4` both work.
 2. **Boxes** come from ShipTracker's standard boxes when it has some
-   (`FST_Settings::get_standard_boxes()`), else from the Packing section
-   (`fishotel_packing_boxes()`, only while that section is switched on),
-   else from this section's own list. The screen says which list is in use
-   and what was not available.
+   (`FST_Settings::get_standard_boxes()`), else from the Packing section's
+   own list (read from its classes, only while that section is switched
+   on), else from this section's own list. The screen says which list is in
+   use and what was not available. The own list is saved only from a page
+   that shows it as it is now: a save from a tab opened before someone
+   else changed the list is refused, so it cannot quietly drop a box.
 3. **Cut list per box** — six pieces suggested from the INSIDE dimensions
    L × W × H and the thickness t: top and bottom L × W, two long sides
    L × (H − 2t), two short sides (W − 2t) × (H − 2t) (L is taken as the
@@ -25,7 +27,10 @@ and what to write on what is left over. Under **FisHotel Tools → Foam Cuts**
 4. **Stock** — whole sheets (a count made of entries: bought, corrected,
    taken by a plan, given back by an undo) and leftovers (a size and a
    label L1, L2 … written on the piece; a number is never handed out
-   twice). Leftovers can be added, resized and removed by hand.
+   twice, also when two requests ask at the same moment: the counter is
+   moved inside the database). Leftovers can be added, resized and removed
+   by hand — never larger than a whole sheet; "bought" takes whole numbers
+   only.
 5. **A plan** — "cut for this many of each box", typed, or filled in from
    the orders that ship on a day (open orders whose delivery date
    `_fishotel_shipping_date` is the day after; their box from the Packing
@@ -35,21 +40,35 @@ and what to write on what is left over. Under **FisHotel Tools → Foam Cuts**
    fits; the larger remainder is kept as large as possible; no cut is
    longer than a sheet is wide unless a piece is. Deterministic. A piece
    that fits no sheet is reported, never dropped silently. Making a plan
-   changes nothing in the stock.
+   changes nothing in the stock. At most 500 of one box per plan — more is
+   refused, not cut down.
+   **The orders of a day asked for twice give one plan**: while the draft
+   for that ship day is still there, has the same boxes and still matches
+   the stock, it is handed back instead of a second plan (which would hand
+   out other labels for the same foam). When the day's boxes have changed,
+   a new plan is made, and each plan of that day names the others — on its
+   page, on the printed sheet, in the REST answer (`same_day`) and after
+   "Mark as cut" — because each counts ALL of that day's orders.
 6. **The printable page** — one source per page (a leftover's label, or
    "new sheet 1"): a drawing to scale with every piece labelled, the cuts
    numbered in the order they are made, the new leftovers hatched with the
    label to write on them; the cuts in plain words; then the pieces per box.
+   On a drawing a size reads across × down, as the piece lies (a turned
+   12 × 7 reads 7 × 12). A source with more cuts than fit under its
+   drawing gets them smaller in four columns, or on the page(s) after it —
+   each headed with the source's name and "cuts 1 to 45 of 45" — so no
+   page comes out of the printer without saying what it belongs to.
 7. **Mark as cut** books the plan against the stock once (used leftovers
    go, sheets are taken, new leftovers are added); it refuses a plan made
    for stock that has since changed. **Undo** puts it all back while
-   nothing else has touched what the plan touched.
+   nothing else has touched what the plan touched, and says what came back
+   in numbers (the sheet count as it is now).
 
 ## For other code
 
 | What | |
 |---|---|
-| `fishotel_foam_cuts_plan( $id = 0 )` | A plan (0 = the newest) as the REST route gives it, or `null`. Guard with `function_exists()`. |
+| `fishotel_foam_cuts_plan( $id = 0 )` | A plan (0 = the newest) as the REST route gives it, or `null` — also `null`, without a query, while the section is switched off. Guard with `function_exists()`. |
 | filter `fishotel_foam_cuts_boxes` ( rows, source ) | Replace the box list. Rows: `name`, `length`, `width`, `height` in inches. `source` is `shiptracker`, `packing` or `own`. |
 | filter `fishotel_foam_cuts_order_boxes` ( rows, order ) | Supply or correct the boxes of one order: rows of `name` (and / or `length`, `width`, `height` in inches) and `count`. |
 | filter `fishotel_foam_cuts_order_statuses` ( statuses ) | The statuses of an order still to be boxed. Default `processing`, `fulfillment`. |
@@ -58,11 +77,16 @@ and what to write on what is left over. Under **FisHotel Tools → Foam Cuts**
 | action `fishotel_foam_cuts_plan_undone` ( id, data ) | That was undone. |
 
 Read from elsewhere (all optional, all guarded): `FST_Settings::get_standard_boxes()`;
-`fishotel_packing_boxes()`, `fishotel_packing_confirmed_box( $order )`,
-`fishotel_packing_suggest( $order )` — called with the order object, and
-with its id when that is refused; the answer may be a box name, a size
-("16x12x10"), a box row, `{ box: … }`, `{ boxes: [ … ] }` or a list of
-those, with an optional `count` / `qty`; `fishotel_delivery_rules()->today()`.
+the Packing section's `fishotel_packing_confirmed_box( $order_id )` and
+`fishotel_packing_suggest( $order_id )` — called with the order's ID, which
+is what they take (handed an order object they answer "nothing" without an
+error), and with the order object only when the ID is refused with an
+error; its box list through `Packing\Boxes::current( Packing\Settings::get() )`
+(or `fishotel_packing_boxes()` should that ever exist). An answer may be
+that section's `{ boxes: [ { name, length, width, height, … } ], … }`, a
+box name, a size ("16x12x10"), a box row, `{ box: … }` or a list of those,
+with an optional `count` / `qty` beside a single box;
+`fishotel_delivery_rules()->today()`.
 Order meta read (never written): `_fishotel_shipping_date`,
 `_fishotel_fulfilled_by_order`. No order meta, post meta, e-mail, HTTP
 request or product stock is touched anywhere.
@@ -81,7 +105,7 @@ autoloaded); tables `{prefix}fh_foam_leftovers`, `fh_foam_plans`,
 |---|---|
 | `GET /wp-json/fishotel-misc/v1/foam-cuts/plan/<id>` | One plan (`<id>` may be `latest`). 404 `fishotel_foam_cuts_not_found`. |
 | `GET /wp-json/fishotel-misc/v1/foam-cuts/plans` | The latest 20: id, status, title, origin, ship_date, sheets, created_at, cut_at, print_url. |
-| `POST /wp-json/fishotel-misc/v1/foam-cuts/plan` | Make a draft. `{"source":"orders","ship_date":"YYYY-MM-DD"}` (date optional: today) or `{"boxes":{"<box name>":2}}`. 201 with the plan; 400 `…_unknown_box` / `…_bad_date` / `…_bad_source` / `…_no_boxes`; 409 `…_no_plan` with the reason (and the orders found). |
+| `POST /wp-json/fishotel-misc/v1/foam-cuts/plan` | Make a draft. `{"source":"orders","ship_date":"YYYY-MM-DD"}` (date optional: today) or `{"boxes":{"<box name>":2}}`. 201 with the plan and `"reused": false`; **200 with the existing draft and `"reused": true`** when the orders of that day were already planned with the same boxes (ask as often as you like — a reprint never makes a second plan); 400 `…_unknown_box` / `…_bad_date` / `…_bad_source` / `…_no_boxes` / `…_too_many` (more than 500 of one box); 409 `…_no_plan` with the reason (and the orders found). |
 
 No route marks a plan as cut: the person who cut the foam presses that.
 
@@ -105,13 +129,16 @@ export.
 ```
 id, status ("draft" | "cut"), title, origin ("typed" | "orders"), ship_date,
 created_at, cut_at, stale, stale_reasons[], can_undo, print_url
+same_day[] { id, status, title } — the OTHER plans made for the same ship day
+            (cut from one of them only); reused (POST only)
 schema, units ("in")
 sheet     { length, width, thickness }
 settings  { kerf, rotate, min_leftover { length, width } }
 boxes[]   { key, name, length, width, height, count, cut_list ("saved" | "suggested"),
             pieces[] { name, length, width, count } }
 sources[] { n, kind ("leftover" | "sheet"), label, leftover_id, length, width,
-            pieces[]    { n, box, box_key, name, length, width, x, y, w, h, rotated },
+            pieces[]    { n, box, box_key, name, length, width (as on the cut list),
+                          x, y, w, h (as it lies: w across, h down), rotated },
             cuts[]      { n, axis ("v" top to bottom | "h" left to right), at,
                           x1, y1, x2, y2, kerf, part { x, y, w, h }, of, side, text },
             leftovers[] { label, x, y, w, h },

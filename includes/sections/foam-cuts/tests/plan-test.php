@@ -139,6 +139,18 @@ foreach ( $plan['sources'][1]['cuts'] as $cut ) {
 check( 'an offcut too small to keep is called waste, with its size', 1 === preg_match( '/The rest \(1 × 13 in\) is waste\./', $waste ), $waste );
 check( 'waste rectangles are listed for the drawing', 2 === count( $plan['sources'][1]['waste'] ) && array() === $plan['sources'][1]['leftovers'] );
 
+$odd   = array(
+	'sheets'    => 0,
+	'leftovers' => array(
+		array( 'id' => 21, 'label' => 'L1', 'length' => 0, 'width' => fh_in( 10 ) ),
+		array( 'id' => 22, 'label' => 'L2', 'length' => fh_in( 30 ), 'width' => fh_in( 20 ) ),
+		array( 'id' => 23, 'label' => 'L3', 'length' => fh_in( 30 ), 'width' => -5 ),
+	),
+);
+$small = array( array( 'key' => 'tiny', 'name' => 'Tiny', 'length' => fh_in( 6 ), 'width' => fh_in( 6 ), 'height' => fh_in( 6 ), 'count' => 1, 'pieces' => array( array( 'name' => 'Square', 'length' => fh_in( 6 ), 'width' => fh_in( 6 ), 'count' => 2 ) ) ) );
+$built = Plan::build( $small, $odd, $settings, 4 );
+check( 'a leftover row without a size is left out — the source that is used keeps its own label, id and size', array() === $built['errors'] && 'L2' === $built['sources'][0]['label'] && 22 === $built['sources'][0]['leftover_id'] && 30 === $built['sources'][0]['length'] && array( 22 ) === Plan::used_leftover_ids( $built ), fh_export( array( $built['errors'], isset( $built['sources'][0] ) ? array( $built['sources'][0]['label'], $built['sources'][0]['leftover_id'] ) : null ) ) );
+
 echo "4. Warnings\n";
 check( 'more sheets than the stock says: a warning naming both numbers', $plan['totals']['sheets'] > 1 ? 1 === count( preg_grep( '/takes ' . $plan['totals']['sheets'] . ' whole sheet\(s\) and the stock says 1/', $plan['warnings'] ) ) : array() === $plan['warnings'], implode( ' | ', $plan['warnings'] ) );
 $many = Plan::build( array( fh_box( 'cube', 'Cube', 12, 12, 12, 12 ) ), array( 'sheets' => 0, 'leftovers' => array() ), $settings, 1 );

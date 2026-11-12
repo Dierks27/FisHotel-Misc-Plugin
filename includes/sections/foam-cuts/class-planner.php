@@ -7,8 +7,15 @@
  * (Stock::apply) does that.
  *
  * Also what a plan looks like to the outside (export(): the stored data
- * plus its id, status, whether the stock still matches, and the print
- * URL) and the key that opens the printable page.
+ * plus its id, status, whether the stock still matches, the other plans
+ * of the same ship day, and the print URL) and the key that opens the
+ * printable page.
+ *
+ * The orders of a day asked for twice give ONE plan: while a draft for
+ * that ship day with the same boxes is still there, it is handed back
+ * instead of a second one (which would hand out other labels for the same
+ * foam). Plans of the same day that do differ are named to each other on
+ * the page, on the printed sheet and in the REST answer.
  *
  * The print URL carries a nonce made the way WordPress makes one (a hash
  * of a 12-hour tick, the action, the plan and the user, under the nonce
@@ -70,9 +77,13 @@ class Planner {
 	public static function create( $store, array $counts, array $for = array(), $user_id = 0 ) {
 		$context = self::context();
 		$boxes   = array();
+		$over    = array();
 
 		foreach ( $context['boxes'] as $box ) {
 			$count = isset( $counts[ $box['key'] ] ) && is_numeric( $counts[ $box['key'] ] ) ? (int) $counts[ $box['key'] ] : 0;
+			if ( $count > Plan::MAX_BOX_COUNT ) {
+				$over[] = $box['name'];
+			}
 			if ( $count > 0 ) {
 				$box['count'] = min( Plan::MAX_BOX_COUNT, $count );
 				$boxes[]      = $box;
@@ -84,11 +95,25 @@ class Planner {
 		foreach ( Boxes::with_cut_lists( Boxes::clean( $extra ), $context['settings'] ) as $box ) {
 			foreach ( $extra as $row ) {
 				if ( is_array( $row ) && isset( $row['name'], $row['count'] ) && Boxes::key( (string) $row['name'] ) === $box['key'] && (int) $row['count'] > 0 ) {
+					if ( (int) $row['count'] > Plan::MAX_BOX_COUNT ) {
+						$over[] = $box['name'];
+					}
 					$box['count'] = min( Plan::MAX_BOX_COUNT, (int) $row['count'] );
 					$boxes[]      = $box;
 					break;
 				}
 			}
+		}
+
+		// More than a plan lays out: refused, never quietly cut down to the most it takes.
+		if ( $over ) {
+			return array(
+				'ok'      => false,
+				/* translators: 1: the most boxes of one kind in a plan, 2: box names */
+				'message' => sprintf( __( 'A plan lays out at most %1$d of one box, and more were asked for: %2$s. Make the plan in parts. Nothing was saved.', 'fishotel-misc-plugin' ), Plan::MAX_BOX_COUNT, implode( ', ', $over ) ),
+				'id'      => 0,
+				'code'    => 'too_many',
+			);
 		}
 
 		$plan_settings = Settings::for_plan( $context['settings'] );
@@ -104,14 +129,43 @@ class Planner {
 			);
 		}
 
+		$origin = isset( $for['origin'] ) && 'orders' === $for['origin'] ? 'orders' : 'typed';
+		$ship   = 'orders' === $origin && isset( $for['ship_date'] ) ? (string) $for['ship_date'] : '';
+
+		// The orders of a day asked for again (a reprint, the assistant and
+		// the owner both asking): the draft that is already there — same
+		// boxes, same cut lists, same settings, still matching the stock — is
+		// the answer. A second plan would hand out other labels for the same
+		// foam and, marked as cut as well, book it twice.
+		if ( '' !== $ship ) {
+			foreach ( self::day_plans( $store, $ship ) as $row ) {
+				if ( 'draft' !== $row['status'] || self::signature( $row['data'] ) !== self::signature( $data ) || Stock::stale( $row['data'], $store->leftovers_by_ids( Plan::used_leftover_ids( $row['data'] ) ) ) ) {
+					continue;
+				}
+				return array(
+					'ok'       => true,
+					/* translators: 1: plan number, 2: ship date */
+					'message'  => sprintf( __( 'Plan %1$d was already made for the orders shipping %2$s — the same boxes — and has not been cut yet, so no second plan was made. This is that plan.', 'fishotel-misc-plugin' ), (int) $row['id'], $ship ),
+					'id'       => (int) $row['id'],
+					'existing' => true,
+				);
+			}
+		}
+
 		$count    = (int) $data['labels']['count'];
 		$reserved = (int) $store->reserve_labels( $count );
+		if ( $reserved < 1 ) {
+			return array(
+				'ok'      => false,
+				'message' => __( 'The labels for the new leftovers could not be reserved, so no plan was made. Nothing was changed.', 'fishotel-misc-plugin' ),
+				'id'      => 0,
+			);
+		}
 		if ( $reserved !== $from ) {
 			// Someone took numbers in between: the same layout, the labels moved up.
 			$data = Plan::build( $boxes, $stock, $plan_settings, $reserved );
 		}
 
-		$origin = isset( $for['origin'] ) && 'orders' === $for['origin'] ? 'orders' : 'typed';
 		if ( 'orders' === $origin ) {
 			$data['for'] = array(
 				'origin'        => 'orders',
@@ -127,7 +181,7 @@ class Planner {
 			array(
 				'title'       => Plan::title( $data ),
 				'origin'      => $origin,
-				'ship_date'   => 'orders' === $origin && isset( $for['ship_date'] ) ? (string) $for['ship_date'] : '',
+				'ship_date'   => $ship,
 				'sheets'      => Plan::sheets( $data ),
 				'label_from'  => $reserved,
 				'label_count' => $count,
@@ -148,11 +202,88 @@ class Planner {
 		self::announce( 'fishotel_foam_cuts_plan_created', (int) $id, $data );
 
 		return array(
-			'ok'      => true,
+			'ok'       => true,
 			/* translators: %d: plan number */
-			'message' => sprintf( __( 'Plan %d is ready. Print it, cut, then press "Mark as cut".', 'fishotel-misc-plugin' ), (int) $id ),
-			'id'      => (int) $id,
+			'message'  => sprintf( __( 'Plan %d is ready. Print it, cut, then press "Mark as cut".', 'fishotel-misc-plugin' ), (int) $id ),
+			'id'       => (int) $id,
+			'existing' => false,
 		);
+	}
+
+	/**
+	 * What two plans must share to be "the same plan again": the boxes with
+	 * their counts and cut lists, the sheet and the settings.
+	 *
+	 * @param array $data Plan data.
+	 * @return string
+	 */
+	public static function signature( array $data ) {
+		$parts = array();
+		foreach ( array( 'boxes', 'sheet', 'settings' ) as $key ) {
+			$parts[ $key ] = isset( $data[ $key ] ) ? $data[ $key ] : null;
+		}
+		// Through JSON and back, as a stored plan went: 12.0 and 12 are the same size.
+		return md5( (string) wp_json_encode( json_decode( (string) wp_json_encode( $parts ), true ) ) );
+	}
+
+	/**
+	 * The plans made for the orders of a ship day, newest first, with data.
+	 *
+	 * @param object $store    Store.
+	 * @param string $ship_ymd Y-m-d.
+	 * @return array[]
+	 */
+	public static function day_plans( $store, $ship_ymd ) {
+		if ( ! Orders::is_date( $ship_ymd ) || ! method_exists( $store, 'plans_for_day' ) ) {
+			return array();
+		}
+		$rows = $store->plans_for_day( (string) $ship_ymd );
+		return is_array( $rows ) ? $rows : array();
+	}
+
+	/**
+	 * The OTHER plans made for the same ship day as this one — each cuts
+	 * for all of that day's orders, so only one of them should be cut.
+	 *
+	 * @param object $store Store.
+	 * @param array  $plan  Plan row.
+	 * @return array<int, array{id: int, status: string, title: string}>
+	 */
+	public static function same_day( $store, array $plan ) {
+		$out = array();
+		if ( empty( $plan['ship_date'] ) ) {
+			return $out;
+		}
+		foreach ( self::day_plans( $store, (string) $plan['ship_date'] ) as $row ) {
+			if ( (int) $row['id'] !== (int) $plan['id'] ) {
+				$out[] = array(
+					'id'     => (int) $row['id'],
+					'status' => (string) $row['status'],
+					'title'  => (string) $row['title'],
+				);
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * The other plans of the same ship day in words, for a person about to
+	 * cut. Empty when there is none.
+	 *
+	 * @param array $others same_day().
+	 * @param array $plan   The plan they are compared with.
+	 * @return string[]
+	 */
+	public static function same_day_lines( array $others, array $plan ) {
+		$lines = array();
+		foreach ( $others as $other ) {
+			$lines[] = 'cut' === $other['status']
+				/* translators: 1: plan number, 2: its boxes, 3: ship date */
+				? sprintf( __( 'Plan %1$d (%2$s) for the same ship day, %3$s, is already marked as cut. This plan counts ALL of that day\'s orders again — cutting it as well cuts their foam twice.', 'fishotel-misc-plugin' ), $other['id'], $other['title'], (string) $plan['ship_date'] )
+				/* translators: 1: plan number, 2: its boxes, 3: ship date */
+				: sprintf( __( 'Plan %1$d (%2$s) is another plan for the same ship day, %3$s. Cut from ONE of them and delete the other — marking both as cut books the foam twice, under different labels.', 'fishotel-misc-plugin' ), $other['id'], $other['title'], (string) $plan['ship_date'] );
+		}
+		return $lines;
 	}
 
 	/**
@@ -167,6 +298,12 @@ class Planner {
 	public static function cut( $store, array $plan, $user_id = 0 ) {
 		$result = Stock::apply( $store, $plan, $user_id );
 		if ( $result['ok'] ) {
+			foreach ( self::same_day( $store, $plan ) as $other ) {
+				if ( 'cut' === $other['status'] ) {
+					/* translators: 1: plan number, 2: ship date */
+					$result['message'] .= ' ' . sprintf( __( 'Mind: plan %1$d for the same ship day (%2$s) is marked as cut as well. If both were printed for the same boxes, the foam is now booked twice — undo one of them.', 'fishotel-misc-plugin' ), $other['id'], (string) $plan['ship_date'] );
+				}
+			}
 			self::announce( 'fishotel_foam_cuts_plan_cut', (int) $plan['id'], isset( $plan['data'] ) && is_array( $plan['data'] ) ? $plan['data'] : array() );
 		}
 		return $result;
@@ -344,6 +481,7 @@ class Planner {
 			),
 			$data,
 			array(
+				'same_day'  => self::same_day( $store, $plan ),
 				'print_url' => self::print_url( (int) $plan['id'] ),
 			)
 		);

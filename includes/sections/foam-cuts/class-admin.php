@@ -80,6 +80,18 @@ class Admin {
 	const SPARE_ROWS = 3;
 
 	/**
+	 * The printed page in CSS pixels (96 to the inch): the height inside
+	 * the margins of a US letter page on its side (8.5 in − 2 × 0.4 in), a
+	 * source's heading, and the most a drawing takes (4.2 in; 3.1 in on a
+	 * dense page; never less than about 2 in).
+	 */
+	const PRINT_PAGE          = 739;
+	const PRINT_HEAD          = 44;
+	const PRINT_DRAWING       = 404;
+	const PRINT_DRAWING_DENSE = 298;
+	const PRINT_DRAWING_LEAST = 190;
+
+	/**
 	 * The store (a test may set its own).
 	 *
 	 * @var object|null
@@ -225,6 +237,7 @@ class Admin {
 			$plans  = $installed ? $store->plans( 12 ) : array();
 			$plan   = $installed && $plan_id > 0 ? $store->plan( $plan_id ) : null;
 			$state  = $plan ? Stock::state( $store, $plan ) : array( 'stale' => array(), 'undo_blockers' => array() );
+			$twins  = $plan ? Planner::same_day_lines( Planner::same_day( $store, $plan ), $plan ) : array();
 			$orders = null;
 			$reason = Orders::unavailable_reason();
 			$today  = Orders::today();
@@ -485,7 +498,7 @@ class Admin {
 	 * @return array
 	 */
 	public function do_leftover_add( $store, array $post ) {
-		return self::answer( Stock::add_leftover( $store, self::text( $post, 'length' ), self::text( $post, 'width' ), self::text( $post, 'note' ) ), 'stock' );
+		return self::answer( Stock::add_leftover( $store, self::text( $post, 'length' ), self::text( $post, 'width' ), self::text( $post, 'note' ), self::sheet() ), 'stock' );
 	}
 
 	/**
@@ -496,7 +509,7 @@ class Admin {
 	 * @return array
 	 */
 	public function do_leftover_resize( $store, array $post ) {
-		return self::answer( Stock::resize_leftover( $store, isset( $post['leftover'] ) && is_scalar( $post['leftover'] ) ? absint( $post['leftover'] ) : 0, self::text( $post, 'length' ), self::text( $post, 'width' ) ), 'stock' );
+		return self::answer( Stock::resize_leftover( $store, isset( $post['leftover'] ) && is_scalar( $post['leftover'] ) ? absint( $post['leftover'] ) : 0, self::text( $post, 'length' ), self::text( $post, 'width' ), self::sheet() ), 'stock' );
 	}
 
 	/**
@@ -511,13 +524,47 @@ class Admin {
 	}
 
 	/**
+	 * The whole sheet as the settings have it: [ length, width ] in units.
+	 *
+	 * @return int[]
+	 */
+	private static function sheet() {
+		$settings = Settings::get();
+		return array( (int) $settings['sheet_length'], (int) $settings['sheet_width'] );
+	}
+
+	/**
+	 * A stamp of the own box list as a page showed it. The Boxes form posts
+	 * it back, so a save from a page that was opened before someone else
+	 * (or another tab) changed the list is refused instead of quietly
+	 * putting the old list back.
+	 *
+	 * @param array $boxes Settings → boxes.
+	 * @return string
+	 */
+	public static function boxes_stamp( array $boxes ) {
+		return md5( (string) wp_json_encode( array_values( $boxes ) ) );
+	}
+
+	/**
 	 * Save this section's own box list.
 	 *
 	 * @param object $store Store (not used: the list is a setting).
-	 * @param array  $post  own[i][name|length|width|height] in inches.
+	 * @param array  $post  own[i][name|length|width|height] in inches; loaded (boxes_stamp() of the list the form showed).
 	 * @return array
 	 */
 	public function do_boxes_save( $store, array $post ) {
+		$settings = Settings::get();
+		if ( ! hash_equals( self::boxes_stamp( $settings['boxes'] ), self::text( $post, 'loaded' ) ) ) {
+			return self::answer(
+				array(
+					'ok'      => false,
+					'message' => __( 'The box list was changed somewhere else (another tab, another person) after this page was opened, so nothing was saved — saving would have undone that change. The list below is the current one: make your change again.', 'fishotel-misc-plugin' ),
+				),
+				'boxes'
+			);
+		}
+
 		$rows  = isset( $post['own'] ) && is_array( $post['own'] ) ? $post['own'] : array();
 		$typed = 0;
 		foreach ( $rows as $row ) {
@@ -527,7 +574,6 @@ class Admin {
 		}
 
 		$boxes             = Boxes::read( $rows );
-		$settings          = Settings::get();
 		$settings['boxes'] = $boxes;
 		Settings::save( $settings );
 
@@ -704,6 +750,7 @@ class Admin {
 	public static function print_html( array $plan, $store, $confirm = false ) {
 		$data  = isset( $plan['data'] ) && is_array( $plan['data'] ) ? $plan['data'] : array();
 		$state = Stock::state( $store, $plan );
+		$twins = Planner::same_day_lines( Planner::same_day( $store, $plan ), $plan );
 		$link  = self::print_link( (int) $plan['id'] );
 		$site  = (string) get_bloginfo( 'name' );
 
@@ -715,6 +762,121 @@ class Admin {
 	/* ============================================================== */
 	/*  Rendering helpers                                              */
 	/* ============================================================== */
+
+	/**
+	 * A cut as it is printed in the ordered list: its words without the
+	 * "Cut 3:" in front (the list numbers it).
+	 *
+	 * @param array $cut A source's cut.
+	 * @return string
+	 */
+	public static function cut_words( array $cut ) {
+		return (string) preg_replace( '/^[^:]+:\s*/u', '', isset( $cut['text'] ) ? (string) $cut['text'] : '' );
+	}
+
+	/**
+	 * How one source goes on paper (pure), so that no printed page is
+	 * without the name of its source — a busy sheet has more cuts than fit
+	 * under its drawing:
+	 *
+	 *   normal  the drawing, the pieces, the labels and every cut on one page
+	 *   dense   the same on one page: a lower drawing, the cuts smaller in
+	 *           four columns
+	 *   split   the drawing, the pieces and the labels on one page; the cuts
+	 *           on the page(s) after it, each under the source's name with
+	 *           the numbers of the cuts it holds
+	 *
+	 * The page is US letter, landscape (see the @page rule of the view);
+	 * heights are estimated in CSS pixels from the length of each line,
+	 * with room to spare, because a browser cannot be asked.
+	 *
+	 * @param array $source A plan source.
+	 * @return array{layout: string, drawing: int, pages: array<int, array[]>}
+	 *         drawing: the most height the drawing gets, in pixels; pages:
+	 *         the cuts per page — one entry for normal / dense, the pages
+	 *         after the drawing for split.
+	 */
+	public static function print_layout( array $source ) {
+		$cuts = isset( $source['cuts'] ) ? array_values( (array) $source['cuts'] ) : array();
+
+		// What stands above the cuts on the drawing's page, apart from the drawing:
+		// the heading, the pieces (two columns; a long box name takes two
+		// lines) beside the labels of the new leftovers, and the headings between.
+		$lines   = 0;
+		$tallest = 1;
+		foreach ( self::group_pieces( isset( $source['pieces'] ) ? (array) $source['pieces'] : array() ) as $group ) {
+			$words   = $group['count'] . ' × ' . $group['box'] . ' · ' . $group['name'] . ' — ' . $group['size'] . ' in';
+			$takes   = max( 1, (int) ceil( ( function_exists( 'mb_strlen' ) ? mb_strlen( $words, 'UTF-8' ) : strlen( $words ) ) / 30 ) );
+			$lines  += $takes;
+			$tallest = max( $tallest, $takes );
+		}
+		$pieces = ( $lines / 2 + $tallest ) * 18;
+		$labels = (int) ceil( count( isset( $source['leftovers'] ) ? (array) $source['leftovers'] : array() ) / 2 ) * 24 + 44;
+		$above  = self::PRINT_HEAD + 30 + max( $pieces, $labels ) + 40;
+
+		if ( self::cuts_fit( $cuts, 3, 56, 13.0, self::PRINT_PAGE - $above - self::PRINT_DRAWING ) ) {
+			return array(
+				'layout'  => 'normal',
+				'drawing' => self::PRINT_DRAWING,
+				'pages'   => array( $cuts ),
+			);
+		}
+		if ( self::cuts_fit( $cuts, 4, 44, 11.7, self::PRINT_PAGE - $above - self::PRINT_DRAWING_DENSE ) ) {
+			return array(
+				'layout'  => 'dense',
+				'drawing' => self::PRINT_DRAWING_DENSE,
+				'pages'   => array( $cuts ),
+			);
+		}
+
+		$pages = array();
+		$page  = array();
+		foreach ( $cuts as $cut ) {
+			$try   = $page;
+			$try[] = $cut;
+			if ( $page && ! self::cuts_fit( $try, 3, 56, 13.0, self::PRINT_PAGE - self::PRINT_HEAD - 40 ) ) {
+				$pages[] = $page;
+				$try     = array( $cut );
+			}
+			$page = $try;
+		}
+		if ( $page ) {
+			$pages[] = $page;
+		}
+
+		return array(
+			'layout'  => 'split',
+			// The drawing as large as the page leaves it once the pieces and labels are under it.
+			'drawing' => (int) max( self::PRINT_DRAWING_LEAST, min( self::PRINT_DRAWING, self::PRINT_PAGE - $above - 30 ) ),
+			'pages'   => $pages,
+		);
+	}
+
+	/**
+	 * Whether a list of cuts fits a block of the printed page (pure).
+	 *
+	 * @param array[] $cuts    Cuts.
+	 * @param int     $columns Columns the list is set in.
+	 * @param int     $chars   Characters that fit one line of a column.
+	 * @param float   $line    Line height in pixels.
+	 * @param float   $height  The height there is, in pixels.
+	 * @return bool
+	 */
+	private static function cuts_fit( array $cuts, $columns, $chars, $line, $height ) {
+		$total   = 0.0;
+		$tallest = 0.0;
+
+		foreach ( $cuts as $cut ) {
+			$words   = self::cut_words( $cut );
+			$length  = function_exists( 'mb_strlen' ) ? mb_strlen( $words, 'UTF-8' ) : strlen( $words );
+			$item    = max( 1, (int) ceil( $length / $chars ) ) * $line + 2;
+			$total  += $item;
+			$tallest = max( $tallest, $item );
+		}
+
+		// Columns never balance exactly (a cut is not broken across two): the tallest cut to spare.
+		return $total / $columns + $tallest <= $height;
+	}
 
 	/**
 	 * The pieces of a source grouped for reading: the same box, piece and

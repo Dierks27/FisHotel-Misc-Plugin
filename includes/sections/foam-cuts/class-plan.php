@@ -200,7 +200,8 @@ class Plan {
 		// The leftovers in stock, in label order.
 		$leftovers = array();
 		foreach ( isset( $stock['leftovers'] ) ? (array) $stock['leftovers'] : array() as $left ) {
-			if ( ! is_array( $left ) ) {
+			// A row without a size is no foam: left out before the layout, so the sources keep their own labels.
+			if ( ! is_array( $left ) || ! isset( $left['id'], $left['length'], $left['width'] ) || (int) $left['length'] <= 0 || (int) $left['width'] <= 0 ) {
 				continue;
 			}
 			$leftovers[] = array(

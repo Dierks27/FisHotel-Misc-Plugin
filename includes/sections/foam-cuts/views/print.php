@@ -3,13 +3,17 @@
  * The printable cut sheet — a document of its own (no admin chrome,
  * nothing loaded from anywhere): one source per page with its drawing to
  * scale, the cuts in order, the pieces and the labels to write on the new
- * leftovers; then a last page with the pieces per box.
+ * leftovers; then a last page with the pieces per box. A source with more
+ * cuts than fit under its drawing (Admin::print_layout()) gets them
+ * smaller, or on pages of their own under the source's name — no page is
+ * printed without saying which sheet or leftover it belongs to.
  *
  * @package FisHotel\Misc\Sections\Foam_Cuts
  *
  * @var array  $plan    Plan row.
  * @var array  $data    Its data.
  * @var array  $state   Stock::state(): stale, undo_blockers.
+ * @var array  $twins   The other plans of the same ship day, in words.
  * @var string $link    A fresh URL of this page for the current user.
  * @var string $site    Site name.
  * @var bool   $confirm True = the link's nonce did not check out: show a button, not the sheet.
@@ -47,8 +51,11 @@ $fh_title = sprintf( __( 'Foam cut sheet — plan %d', 'fishotel-misc-plugin' ),
 		.head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; border-bottom: 2px solid #000; padding-bottom: 4px; margin-bottom: 8px; }
 		.head h1 { margin: 0; font-size: 20px; }
 		.head .meta { font-size: 12px; color: #333; }
-		.head .right { margin-left: auto; font-size: 11px; color: #555; }
-		.drawing svg { display: block; width: auto; height: auto; max-width: 100%; max-height: 4.2in; }
+		.head .right { margin-left: auto; font-size: 11px; color: #555; max-width: 38%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+		.summary .head .right { max-width: none; }
+		.drawing { max-height: 4.2in; }
+		.drawing svg { display: block; width: auto; height: auto; max-width: 100%; max-height: inherit; }
+		.sheet.dense ol.cuts { column-count: 4; column-gap: 18px; font-size: 9px; }
 		.lists { display: flex; gap: 22px; margin-top: 8px; }
 		.lists > div { flex: 1 1 0; min-width: 0; }
 		h2 { margin: 8px 0 3px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
@@ -89,7 +96,7 @@ $fh_title = sprintf( __( 'Foam cut sheet — plan %d', 'fishotel-misc-plugin' ),
 			echo esc_html(
 				sprintf(
 					/* translators: 1: number of pages with a drawing */
-					_n( '%d page with a drawing, then the pieces per box. Landscape; "fit to page" is fine — the drawing carries its own ruler.', '%d pages with a drawing, then the pieces per box. Landscape; "fit to page" is fine — every drawing carries its own ruler.', $fh_count, 'fishotel-misc-plugin' ),
+					_n( '%d page with a drawing (a busy one is followed by its cuts), then the pieces per box. Landscape; "fit to page" is fine — the drawing carries its own ruler.', '%d pages with a drawing (a busy one is followed by its cuts), then the pieces per box. Landscape; "fit to page" is fine — every drawing carries its own ruler.', $fh_count, 'fishotel-misc-plugin' ),
 					$fh_count
 				)
 			);
@@ -104,6 +111,11 @@ $fh_title = sprintf( __( 'Foam cut sheet — plan %d', 'fishotel-misc-plugin' ),
 			<?php esc_html_e( 'Make the plan again.', 'fishotel-misc-plugin' ); ?>
 		</p>
 	<?php endif; ?>
+	<?php if ( 'cut' !== $plan['status'] ) : ?>
+		<?php foreach ( isset( $twins ) ? (array) $twins : array() as $fh_line ) : ?>
+			<p class="note"><?php echo esc_html( $fh_line ); ?></p>
+		<?php endforeach; ?>
+	<?php endif; ?>
 	<?php if ( 'cut' === $plan['status'] ) : ?>
 		<p class="note soft">
 			<?php
@@ -114,7 +126,12 @@ $fh_title = sprintf( __( 'Foam cut sheet — plan %d', 'fishotel-misc-plugin' ),
 	<?php endif; ?>
 
 	<?php foreach ( $fh_sources as $fh_i => $fh_source ) : ?>
-		<section class="sheet">
+		<?php
+		// A busy source has more cuts than fit under its drawing: they go on pages of their own, each under the source's name.
+		$fh_layout = Admin::print_layout( $fh_source );
+		$fh_split  = 'split' === $fh_layout['layout'];
+		?>
+		<section class="sheet<?php echo 'dense' === $fh_layout['layout'] ? ' dense' : ''; ?>">
 			<div class="head">
 				<h1><?php echo esc_html( $fh_source['label'] ); ?></h1>
 				<span class="meta">
@@ -147,7 +164,7 @@ $fh_title = sprintf( __( 'Foam cut sheet — plan %d', 'fishotel-misc-plugin' ),
 				</span>
 			</div>
 
-			<div class="drawing">
+			<div class="drawing" style="max-height: <?php echo (int) $fh_layout['drawing']; ?>px;">
 				<?php echo Svg::source( $fh_source ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- built by Svg::source(): numbers, and texts escaped for XML. ?>
 			</div>
 
@@ -183,16 +200,61 @@ $fh_title = sprintf( __( 'Foam cut sheet — plan %d', 'fishotel-misc-plugin' ),
 			</div>
 
 			<h2><?php esc_html_e( 'Cuts, in this order', 'fishotel-misc-plugin' ); ?></h2>
-			<?php if ( $fh_source['cuts'] ) : ?>
+			<?php if ( $fh_split ) : ?>
+				<p>
+					<?php
+					echo esc_html(
+						sprintf(
+							/* translators: 1: number of cuts, 2: source label */
+							_n( 'The %1$d cuts of %2$s are on the next page.', 'The %1$d cuts of %2$s are on the next pages.', count( $fh_layout['pages'] ), 'fishotel-misc-plugin' ),
+							count( $fh_source['cuts'] ),
+							$fh_source['label']
+						)
+					);
+					?>
+				</p>
+			<?php elseif ( $fh_source['cuts'] ) : ?>
 				<ol class="cuts">
 					<?php foreach ( $fh_source['cuts'] as $fh_cut ) : ?>
-						<li><?php echo esc_html( preg_replace( '/^[^:]+:\s*/u', '', (string) $fh_cut['text'] ) ); ?></li>
+						<li><?php echo esc_html( Admin::cut_words( $fh_cut ) ); ?></li>
 					<?php endforeach; ?>
 				</ol>
 			<?php else : ?>
 				<p><?php esc_html_e( 'No cut: it is used whole.', 'fishotel-misc-plugin' ); ?></p>
 			<?php endif; ?>
 		</section>
+
+		<?php foreach ( $fh_split ? $fh_layout['pages'] : array() as $fh_page ) : ?>
+			<section class="sheet cuts-page">
+				<div class="head">
+					<h1><?php echo esc_html( $fh_source['label'] ); ?></h1>
+					<span class="meta">
+						<?php
+						echo esc_html(
+							sprintf(
+								/* translators: 1: first cut on this page, 2: last cut on this page, 3: cuts of the source */
+								__( 'cuts %1$d to %2$d of %3$d, in this order · the drawing is on the page before', 'fishotel-misc-plugin' ),
+								(int) $fh_page[0]['n'],
+								(int) $fh_page[ count( $fh_page ) - 1 ]['n'],
+								count( $fh_source['cuts'] )
+							)
+						);
+						?>
+					</span>
+					<span class="right">
+						<?php
+						/* translators: 1: plan number, 2: what it is for, 3: source number, 4: sources */
+						echo esc_html( sprintf( __( 'Plan %1$d · %2$s · source %3$d of %4$d', 'fishotel-misc-plugin' ), (int) $plan['id'], $plan['title'], $fh_i + 1, $fh_count ) );
+						?>
+					</span>
+				</div>
+				<ol class="cuts" start="<?php echo (int) $fh_page[0]['n']; ?>">
+					<?php foreach ( $fh_page as $fh_cut ) : ?>
+						<li><?php echo esc_html( Admin::cut_words( $fh_cut ) ); ?></li>
+					<?php endforeach; ?>
+				</ol>
+			</section>
+		<?php endforeach; ?>
 	<?php endforeach; ?>
 
 	<section class="sheet summary">
@@ -292,7 +354,7 @@ $fh_title = sprintf( __( 'Foam cut sheet — plan %d', 'fishotel-misc-plugin' ),
 			</tbody>
 		</table>
 
-		<p class="foot"><?php esc_html_e( 'Each drawing reads like the foam lies in front of you: left is left, the top is the far edge. Sizes read across × down. Every cut runs straight from one edge of its part to the other; "its left edge" and "its top edge" are those of the part being cut.', 'fishotel-misc-plugin' ); ?></p>
+		<p class="foot"><?php esc_html_e( 'Each drawing reads like the foam lies in front of you: left is left, the top is the far edge. On a drawing every size reads across × down, as the piece lies — a piece that was turned to fit reads the other way round than on the lists (12 × 7 on the list is 7 × 12 on the drawing). Every cut runs straight from one edge of its part to the other; "its left edge" and "its top edge" are those of the part being cut.', 'fishotel-misc-plugin' ); ?></p>
 		<p class="foot"><?php esc_html_e( 'When the foam is cut: FisHotel Tools → Foam Cuts → this plan → "Mark as cut". That takes the used leftovers and sheets out of the stock and adds the new leftovers under the labels above.', 'fishotel-misc-plugin' ); ?></p>
 	</section>
 <?php endif; ?>

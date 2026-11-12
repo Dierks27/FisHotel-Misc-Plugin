@@ -10,7 +10,10 @@
  *   POST /fishotel-misc/v1/foam-cuts/plan          make a draft plan:
  *        { "source": "orders", "ship_date": "YYYY-MM-DD" } (the date is
  *        optional: today) or { "boxes": { "<box name>": <how many>, … } }
- *        → 201 with the plan, as GET gives it
+ *        → 201 with the plan, as GET gives it. The orders of a day asked
+ *        for again while their draft (same boxes) is still there → 200
+ *        with THAT plan and "reused": true — never a second plan for the
+ *        same foam. More than 500 of one box → 400.
  *
  * Every route asks for manage_woocommerce. They work with the cookie +
  * X-WP-Nonce of wp-admin and with WordPress Application Passwords (HTTP
@@ -210,6 +213,17 @@ class Rest {
 					continue;
 				}
 				$counts[ $box['key'] ] = is_numeric( $count ) ? (int) $count : 0;
+				if ( $counts[ $box['key'] ] > Plan::MAX_BOX_COUNT ) {
+					return new \WP_Error(
+						'fishotel_foam_cuts_too_many',
+						/* translators: 1: the most boxes of one kind in a plan, 2: box name */
+						sprintf( __( 'A plan lays out at most %1$d of one box; more were asked for of: %2$s. Make the plan in parts.', 'fishotel-misc-plugin' ), Plan::MAX_BOX_COUNT, $box['name'] ),
+						array(
+							'status' => 400,
+							'max'    => Plan::MAX_BOX_COUNT,
+						)
+					);
+				}
 			}
 
 			if ( $unknown ) {
@@ -230,7 +244,7 @@ class Rest {
 		}
 
 		if ( ! $made['ok'] ) {
-			$data = array( 'status' => 409 );
+			$data = array( 'status' => isset( $made['code'] ) && 'too_many' === $made['code'] ? 400 : 409 );
 			if ( isset( $made['orders'] ) ) {
 				$data['ship_date']     = $made['orders']['ship_date'];
 				$data['delivery_date'] = $made['orders']['delivery_date'];
@@ -243,11 +257,14 @@ class Rest {
 		$plan = $store->plan( (int) $made['id'] );
 		$out  = Planner::export( $plan, $store );
 
+		// The same day asked for again: the draft that was already there, not a second plan.
+		$out['reused'] = ! empty( $made['existing'] );
+
 		if ( isset( $made['orders'] ) ) {
 			$out['orders_without_box'] = $made['orders']['without_box'];
 			$out['unknown_boxes']      = $made['orders']['unknown'];
 		}
 
-		return new \WP_REST_Response( $out, 201 );
+		return new \WP_REST_Response( $out, $out['reused'] ? 200 : 201 );
 	}
 }

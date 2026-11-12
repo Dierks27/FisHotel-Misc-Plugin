@@ -192,17 +192,26 @@ check_same( 'resized', fh_in( 20 ), $store->leftover( $added['id'] )['length'] )
 fh_post( $admin, 'leftover_remove', array( 'leftover' => (string) $added['id'] ) );
 check_same( 'removed', 'removed', $store->leftover( $added['id'] )['status'] );
 $state = $store->state();
+fh_post( $admin, 'leftover_add', array( 'length' => '200', 'width' => '100' ) );
+check( 'a leftover larger than a whole sheet is refused through the form too, saying why', $state === $store->state() && false !== strpos( fh_page( $admin, array( 'tab' => 'stock' ) ), 'larger than a whole sheet (96 × 48 in)' ) );
+fh_post( $admin, 'stock_buy', array( 'sheets' => '2.5' ) );
+fh_post( $admin, 'stock_buy', array( 'sheets' => '1e2' ) );
+check( '"Bought 2.5" and "Bought 1e2" book nothing', $state === $store->state() );
+Admin::take_flash();
 fh_post( $admin, 'leftover_add', array( 'length' => 'long', 'width' => '9' ) );
 fh_post( $admin, 'stock_buy', array( 'sheets' => array( '4' ) ) );
 fh_post( $admin, 'leftover_remove', array( 'leftover' => array( '1' ) ) );
 check( 'nonsense in a field changes nothing', $state === $store->state() );
 
 echo "6. Boxes, cut lists, settings\n";
+$stamp = Admin::boxes_stamp( Settings::get()['boxes'] );
+check( 'the Boxes form carries a stamp of the list it shows', false !== strpos( fh_page( $admin, array( 'tab' => 'boxes' ) ), 'name="loaded" value="' . $stamp . '"' ) );
 fh_post(
 	$admin,
 	'boxes_save',
 	array(
-		'own' => array(
+		'loaded' => $stamp,
+		'own'    => array(
 			array( 'name' => 'Cube', 'length' => '12', 'width' => '12', 'height' => '12' ),
 			array( 'name' => 'Long', 'length' => '24', 'width' => '10 1/2', 'height' => '8' ),
 			array( 'name' => 'Broken', 'length' => 'x', 'width' => '10', 'height' => '8' ),
@@ -215,6 +224,26 @@ check_same( 'the own list is replaced by what was posted', array( 'Cube', 'Long'
 check_same( 'sizes as typed', fh_in( 10.5 ), $saved['boxes'][1]['width'] );
 $html = fh_page( $admin, array( 'tab' => 'boxes' ) );
 check( 'the page counts what was saved and what was left out, and why', false !== strpos( $html, '2 boxes saved.' ) && false !== strpos( $html, '1 row was left out' ) );
+
+// A second tab, opened before that save, adds a box of its own and saves.
+fh_post(
+	$admin,
+	'boxes_save',
+	array(
+		'loaded' => $stamp,
+		'own'    => array(
+			array( 'name' => 'Cube', 'length' => '12', 'width' => '12', 'height' => '12' ),
+			array( 'name' => 'Flat', 'length' => '16', 'width' => '12', 'height' => '10' ),
+			array( 'name' => 'Late one', 'length' => '17', 'width' => '17', 'height' => '17' ),
+		),
+	)
+);
+check_same( 'a save from a page opened before the list changed is refused — the box added in between is not dropped', array( 'Cube', 'Long' ), array_column( Settings::get()['boxes'], 'name' ) );
+$html = fh_page( $admin, array( 'tab' => 'boxes' ) );
+check( '…and the page says why, and shows the current list with a fresh stamp', false !== strpos( $html, 'changed somewhere else' ) && false !== strpos( $html, 'is-error' ) && false !== strpos( $html, 'name="loaded" value="' . Admin::boxes_stamp( Settings::get()['boxes'] ) . '"' ) );
+fh_post( $admin, 'boxes_save', array( 'own' => array( array( 'name' => 'No stamp', 'length' => '9', 'width' => '9', 'height' => '9' ) ) ) );
+check_same( 'a save without the stamp is refused too', array( 'Cube', 'Long' ), array_column( Settings::get()['boxes'], 'name' ) );
+Admin::take_flash();
 
 fh_post(
 	$admin,
@@ -290,7 +319,12 @@ echo "8. The printable page: what is on it\n";
 $html    = Admin::print_html( $plan, $store );
 $sources = $plan['data']['sources'];
 check( 'a document of its own, not to be indexed, landscape', 0 === strpos( ltrim( $html ), '<!DOCTYPE html>' ) && false !== strpos( $html, 'noindex' ) && false !== strpos( $html, '@page { size: letter landscape' ) && '</html>' === substr( rtrim( $html ), -7 ) );
-check_same( 'one page per source, then the pieces per box', count( $sources ) + 1, substr_count( $html, '<section class="sheet' ) );
+$cut_pages = 0;
+foreach ( $sources as $source ) {
+	$cut_pages += 'split' === Admin::print_layout( $source )['layout'] ? count( Admin::print_layout( $source )['pages'] ) : 0;
+}
+check_same( 'one page per source (and one per page of cuts where a source has more than fit under its drawing), then the pieces per box', count( $sources ) + $cut_pages + 1, substr_count( $html, '<section class="sheet' ) );
+check_same( '…each source\'s own page starting with its drawing', count( $sources ), substr_count( $html, '<section class="sheet">' ) + substr_count( $html, '<section class="sheet dense">' ) );
 check( 'each page starts on a new sheet of paper when printed', false !== strpos( $html, '.sheet { page-break-after: always; break-after: page;' ) && false !== strpos( $html, '@media print' ) && false !== strpos( $html, '.toolbar { display: none; }' ) );
 check_same( 'a drawing per source', count( $sources ), substr_count( $html, '<svg ' ) );
 $labelled = true;
@@ -324,9 +358,72 @@ check( 'the next plan cuts into a leftover the first one made', count( $used ) >
 Stock::remove_leftover( $store, $used[0] );
 check( 'a plan made for stock that has since changed prints with DO NOT CUT across the top', false !== strpos( Admin::print_html( $next, $store ), 'DO NOT CUT FROM THIS SHEET' ) );
 
+// A busy sheet: more cuts than fit under its drawing.
+$busy = new Fake_Store();
+$busy->add_sheet_entry( 'bought', 6, 0, '', 7 );
+Planner::create( $busy, array( 'cube' => 5, 'long' => 2 ), array(), 7 );
+$big    = $busy->plan( 1 );
+$source = $big['data']['sources'][0];
+$layout = Admin::print_layout( $source );
+check( 'the busy sheet has dozens of cuts', count( $source['cuts'] ) > 30, (string) count( $source['cuts'] ) );
+check_same( 'so its cuts go on pages of their own', 'split', $layout['layout'] );
+$flat = array();
+foreach ( $layout['pages'] as $page ) {
+	$flat = array_merge( $flat, array_column( $page, 'n' ) );
+}
+check( 'every cut is on exactly one of them, in order', range( 1, count( $source['cuts'] ) ) === $flat );
+check( 'the drawing keeps a readable height', $layout['drawing'] >= Admin::PRINT_DRAWING_LEAST && $layout['drawing'] <= Admin::PRINT_DRAWING );
+$html   = Admin::print_html( $big, $busy );
+$extra  = 0;
+$headed = true;
+foreach ( $big['data']['sources'] as $each ) {
+	$each_layout = Admin::print_layout( $each );
+	if ( 'split' !== $each_layout['layout'] ) {
+		continue;
+	}
+	foreach ( $each_layout['pages'] as $page ) {
+		$extra++;
+		$headed = $headed && 1 === preg_match( '/<section class="sheet cuts-page">\s*<div class="head">\s*<h1>' . preg_quote( esc_html( $each['label'] ), '/' ) . '<\/h1>\s*<span class="meta">\s*cuts ' . (int) $page[0]['n'] . ' to ' . (int) $page[ count( $page ) - 1 ]['n'] . ' of ' . count( $each['cuts'] ) . ',/', $html ) && false !== strpos( $html, '<ol class="cuts" start="' . (int) $page[0]['n'] . '">' );
+	}
+}
+check_same( 'a printed page per source, one per page of cuts, then the pieces per box', count( $big['data']['sources'] ) + $extra + 1, substr_count( $html, '<section class="sheet' ) );
+check( 'every page of cuts starts with the name of its source and says which cuts it holds — no page without its heading', $extra > 0 && $headed );
+check( 'the drawing\'s page says where the cuts are', false !== strpos( $html, 'cuts of new sheet 1 are on the next page' ) );
+$words = 0;
+foreach ( $big['data']['sources'] as $each ) {
+	foreach ( $each['cuts'] as $cut ) {
+		$words += substr_count( $html, '<li>' . esc_html( Admin::cut_words( $cut ) ) . '</li>' ) >= 1 ? 1 : 0;
+	}
+}
+check_same( 'every cut of every source is printed', array_sum( array_map( static function ( $s ) { return count( $s['cuts'] ); }, $big['data']['sources'] ) ), $words );
+check_same( 'a cut is listed without its "Cut 3:" (the list numbers it)', 'straight across the whole sheet, top to bottom, 20 in from the left edge.', Admin::cut_words( array( 'text' => 'Cut 3: straight across the whole sheet, top to bottom, 20 in from the left edge.' ) ) );
+$few = array( 'pieces' => array(), 'leftovers' => array(), 'cuts' => array_slice( $source['cuts'], 0, 4 ) );
+check_same( 'a handful of cuts stays under the drawing, at its full height', array( 'normal', Admin::PRINT_DRAWING, 1 ), array( Admin::print_layout( $few )['layout'], Admin::print_layout( $few )['drawing'], count( Admin::print_layout( $few )['pages'] ) ) );
+$order = array( 'normal' => 0, 'dense' => 1, 'split' => 2 );
+$seen  = array();
+$some  = null;
+$rises = true;
+$last  = 0;
+for ( $n = 1; $n <= count( $source['cuts'] ); $n++ ) {
+	$try   = array( 'pieces' => array(), 'leftovers' => array(), 'cuts' => array_slice( $source['cuts'], 0, $n ) );
+	$kind  = Admin::print_layout( $try )['layout'];
+	$rises = $rises && $order[ $kind ] >= $last;
+	$last  = $order[ $kind ];
+	if ( ! isset( $seen[ $kind ] ) ) {
+		$seen[ $kind ] = $n;
+	}
+	if ( 'dense' === $kind ) {
+		$some = $try;
+	}
+}
+check( 'as the cuts grow: under the drawing, then dense, then on pages of their own — never back', $rises && array( 'normal', 'dense', 'split' ) === array_keys( $seen ), fh_export( $seen ) );
+check_same( 'dense is still one page — a lower drawing, the cuts smaller in four columns', array( 'dense', Admin::PRINT_DRAWING_DENSE, 1 ), array( Admin::print_layout( $some )['layout'], Admin::print_layout( $some )['drawing'], count( Admin::print_layout( $some )['pages'] ) ) );
+check( '…which the page is told', false !== strpos( Admin::print_html( array_merge( $big, array( 'data' => array_merge( $big['data'], array( 'sources' => array( array_merge( $source, array( 'cuts' => $some['cuts'], 'pieces' => array(), 'leftovers' => array() ) ) ) ) ) ) ), $busy ), '<section class="sheet dense">' ) );
+check_same( 'no cuts at all: nothing to lay out', array( 'normal', array( array() ) ), array( Admin::print_layout( array() )['layout'], Admin::print_layout( array() )['pages'] ) );
+
 echo "9. The numbers filled in from the orders of a day\n";
 $GLOBALS['fh_suggest'] = static function ( $order ) {
-	return 401 === $order->get_id() ? 'Cube' : ( 402 === $order->get_id() ? array( 'box' => 'Long' ) : null );
+	return 401 === fh_oid( $order ) ? 'Cube' : ( 402 === fh_oid( $order ) ? array( 'box' => 'Long' ) : null );
 };
 if ( ! function_exists( 'fishotel_packing_suggest' ) ) { // Inside an if: declared when this line is reached.
 	function fishotel_packing_suggest( $order ) {
@@ -347,6 +444,23 @@ $halt = fh_post( $admin, 'plan', array( 'origin' => 'orders', 'ship_date' => '20
 $plan = end( $store->plans );
 check( 'the plan is made from the numbers as posted (changed by hand: 2 cubes) and remembers the day and its orders', $halt && 'redirect' === $halt->kind && '2 × Cube, 1 × Long' === $plan['title'] && 'orders' === $plan['origin'] && '2026-03-10' === $plan['ship_date'] && array( 401, 402, 403 ) === array_column( $plan['data']['for']['orders'], 'id' ) );
 check( 'the printed sheet names the orders it is for — by number only', false !== strpos( Admin::print_html( $plan, $store ), 'For the orders shipping 2026-03-10 (delivery 2026-03-11):' ) && false !== strpos( Admin::print_html( $plan, $store ), '#401 1 × Cube' ) );
+
+$count = count( $store->plans );
+$halt  = fh_post( $admin, 'plan', array( 'origin' => 'orders', 'ship_date' => '2026-03-10', 'boxes' => array( array( 'key' => 'cube', 'count' => '2' ), array( 'key' => 'long', 'count' => '1' ) ) ) );
+check( 'the same day and the same numbers posted again (a double-click, a second tab): the page opens the plan that is there — no second one', $count === count( $store->plans ) && $halt && false !== strpos( $halt->data, 'plan=' . $plan['id'] ) && false !== strpos( fh_page( $admin, array( 'plan' => (string) $plan['id'] ) ), 'was already made for the orders shipping 2026-03-10' ) );
+check( 'a plan that is alone for its day carries no warning about another', false === strpos( fh_page( $admin, array( 'plan' => (string) $plan['id'] ) ), 'same ship day' ) && false === strpos( Admin::print_html( $plan, $store ), 'same ship day' ) );
+fh_post( $admin, 'plan', array( 'origin' => 'orders', 'ship_date' => '2026-03-10', 'boxes' => array( array( 'key' => 'cube', 'count' => '1' ), array( 'key' => 'long', 'count' => '1' ) ) ) );
+$twin = end( $store->plans );
+Admin::take_flash();
+$html = fh_page( $admin, array( 'plan' => (string) $twin['id'] ) );
+check( 'other numbers for the same day: a second plan — and its page names the first, before anything is cut', $twin['id'] !== $plan['id'] && false !== strpos( $html, 'Plan ' . $plan['id'] . ' (2 × Cube, 1 × Long) is another plan for the same ship day, 2026-03-10' ) && false !== strpos( $html, 'Cut from ONE of them' ) );
+check( 'the printed sheet says it too, across the top', false !== strpos( Admin::print_html( $twin, $store ), 'is another plan for the same ship day' ) && false !== strpos( Admin::print_html( $plan, $store ), 'Plan ' . $twin['id'] . ' (1 × Cube, 1 × Long) is another plan for the same ship day' ) );
+fh_post( $admin, 'cut', array( 'plan' => (string) $plan['id'] ) );
+Admin::take_flash();
+check( 'once the first is marked as cut, the other one warns that the day was already cut for — on the page and on paper', false !== strpos( fh_page( $admin, array( 'plan' => (string) $twin['id'] ) ), 'is already marked as cut. This plan counts ALL of that day' ) && false !== strpos( Admin::print_html( $store->plan( $twin['id'] ), $store ), 'is already marked as cut' ) );
+fh_post( $admin, 'cut', array( 'plan' => (string) $twin['id'] ) );
+$html = fh_page( $admin, array( 'plan' => (string) $twin['id'] ) );
+check( 'marked as cut all the same: either it is refused because the first plan used up its leftovers, or the notice says the foam is now booked twice', ( 'draft' === $store->plan( $twin['id'] )['status'] && false !== strpos( $html, 'The stock has changed since this plan was made' ) ) || ( 'cut' === $store->plan( $twin['id'] )['status'] && false !== strpos( $html, 'the foam is now booked twice' ) ), $store->plan( $twin['id'] )['status'] );
 
 echo "10. Small things\n";
 check_same( 'the sheet count is never shown below 0', array( 0, 5 ), array( Admin::sheets_shown( -3 ), Admin::sheets_shown( 5 ) ) );

@@ -202,11 +202,11 @@ $GLOBALS['fh_orders'] = array(
 
 $GLOBALS['fh_confirmed'] = static function ( $order ) {
 	$map = array( 101 => 'Small', 103 => array( 'name' => 'Medium', 'length' => 16, 'width' => 12, 'height' => 10 ) );
-	return isset( $map[ $order->get_id() ] ) ? $map[ $order->get_id() ] : null;
+	return isset( $map[ fh_oid( $order ) ] ) ? $map[ fh_oid( $order ) ] : null;
 };
 $GLOBALS['fh_suggest'] = static function ( $order ) {
 	$map = array( 101 => 'Long', 102 => array( 'box' => 'medium', 'bags' => 6 ) );
-	return isset( $map[ $order->get_id() ] ) ? $map[ $order->get_id() ] : null;
+	return isset( $map[ fh_oid( $order ) ] ) ? $map[ fh_oid( $order ) ] : null;
 };
 
 check_same( 'with WooCommerce and the Packing section there: usable', '', Orders::unavailable_reason() );
@@ -267,13 +267,23 @@ $GLOBALS['fh_confirmed'] = static function ( $order ) {
 };
 $found = Orders::for_ship_date( '2026-03-10', $boxes );
 check( 'a confirmed-box function that throws: the suggestion is used, nothing breaks', true === $found['ok'] && array( 'long' => 1, 'medium' => 1 ) === $found['counts'], fh_export( $found['counts'] ) );
+$GLOBALS['fh_asked']     = array();
 $GLOBALS['fh_confirmed'] = static function ( $order ) {
+	$GLOBALS['fh_asked'][] = gettype( $order );
 	if ( is_object( $order ) ) {
-		throw new TypeError( 'expects an order id' );
+		return null; // As the Packing section does: no error, just no answer.
 	}
 	return 101 === $order ? 'Small' : null;
 };
-check_same( 'a function that only takes an order id is asked again with the id', array( 'small' => 1, 'medium' => 1 ), Orders::for_ship_date( '2026-03-10', $boxes )['counts'] );
+check_same( 'the functions are asked with the order\'s ID (handed an order object the real ones answer nothing, without an error)', array( 'small' => 1, 'medium' => 1 ), Orders::for_ship_date( '2026-03-10', $boxes )['counts'] );
+check_same( '…and only with the ID', array( 'integer' ), array_values( array_unique( $GLOBALS['fh_asked'] ) ) );
+$GLOBALS['fh_confirmed'] = static function ( $order ) {
+	if ( ! is_object( $order ) ) {
+		throw new TypeError( 'expects an order' );
+	}
+	return 101 === $order->get_id() ? 'Small' : null;
+};
+check_same( 'a function that refuses an ID with an error is asked again with the order', array( 'small' => 1, 'medium' => 1 ), Orders::for_ship_date( '2026-03-10', $boxes )['counts'] );
 $GLOBALS['fh_confirmed'] = null;
 $GLOBALS['fh_suggest']   = static function ( $order ) {
 	$map = array(
@@ -281,7 +291,7 @@ $GLOBALS['fh_suggest']   = static function ( $order ) {
 		102 => 'Jumbo',
 		103 => array( 'length' => 14, 'width' => 9, 'height' => 7 ),
 	);
-	return isset( $map[ $order->get_id() ] ) ? $map[ $order->get_id() ] : null;
+	return isset( $map[ fh_oid( $order ) ] ) ? $map[ fh_oid( $order ) ] : null;
 };
 $found = Orders::for_ship_date( '2026-03-10', $boxes );
 check_same( 'two boxes for one order, one of them not on the list', array( 'small' => 2 ), $found['counts'] );
