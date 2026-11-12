@@ -104,7 +104,10 @@ stored, and stops the moment the box is unticked.
 - On a variable product with no stored choice and a Bag size on only some
   of its variations (set before the checkbox), those variations count and
   the others do not — as before. Click the box off and on again and save
-  to store "yes" and make every variation follow it.
+  to store "yes" and make every variation follow it. The box is drawn
+  ticked for such a product, so the editor says this under it, and the
+  fill tool's preview counts the others as "off, or never saved as a
+  choice" — never as "off" alone.
 
 ## Which bag
 
@@ -143,7 +146,9 @@ by the one rule: a variation whose product is unticked — or has no stored
 choice and is in none of the fish categories — is counted in the preview
 and left alone, so a net or a jar of food that happens to use the Size
 attribute gets no Bag size. Tick *Livestock — packed in a bag* on such a
-product when it really is packed in a bag, and the tool fills it.
+product when it really is packed in a bag, and the tool fills it (where
+the box already shows ticked for a Bag size set earlier, click it off and
+on again: the preview says so).
 
 A variation keeps the bag it was given even when the map changes later,
 and there is no bulk reset — so get the map right before *Set them* (a

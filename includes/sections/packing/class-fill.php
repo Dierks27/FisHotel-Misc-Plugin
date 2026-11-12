@@ -136,7 +136,8 @@ class Fill {
 	 * ticked or unticked; with no stored choice, whether the product is in
 	 * one of the fish categories (its own category slugs). The rows are the
 	 * variations WITHOUT a Bag size, so a Bag size from before the checkbox
-	 * is never in play here.
+	 * is never in play here — also not one on another variation of the same
+	 * product, whose box the editor draws ticked: describe() says so.
 	 *
 	 * @param int[]       $parent_ids The products about to be asked about (their categories and
 	 *                                their checkbox values are read in one go).
@@ -240,7 +241,8 @@ class Fill {
 		}
 		if ( ! empty( $plan['not_fish'] ) ) {
 			/* translators: %d: how many variations */
-			$lines[] = sprintf( _n( '%d is of a product that is not packed in a bag (“Livestock — packed in a bag” is off on it) — it stays empty; tick that box on the product if it is.', '%d are of products that are not packed in a bag (“Livestock — packed in a bag” is off on them) — they stay empty; tick that box on the product if they are.', (int) $plan['not_fish'], 'fishotel-misc-plugin' ), (int) $plan['not_fish'] );
+			// "Never saved as a choice": the editor draws the box ticked for a Bag size from before it, and stores nothing.
+			$lines[] = sprintf( _n( '%d is of a product that is not packed in a bag (“Livestock — packed in a bag” is off on it, or was never saved as a choice) — it stays empty; if it is, tick that box on the product and save — click it off and on again where it already shows ticked.', '%d are of products that are not packed in a bag (“Livestock — packed in a bag” is off on them, or was never saved as a choice) — they stay empty; if they are, tick that box on the product and save — click it off and on again where it already shows ticked.', (int) $plan['not_fish'], 'fishotel-misc-plugin' ), (int) $plan['not_fish'] );
 		}
 
 		return $lines;

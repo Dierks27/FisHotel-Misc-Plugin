@@ -207,6 +207,14 @@ unset( wc_get_product( 110 )->meta['_fh_packs_in_bag'], wc_get_product( 120 )->m
 $html = fh_shipping_fields( $editor, 130 );
 check( 'a Bag size from before the checkbox, no stored choice, no fish category: ticked — it counts as it did, and its Bag size shows', 'ticked/yes' === fh_box( $html ) && false !== strpos( $html, 'data-fh-legacy="1"' ) && false !== strpos( $html, '<option value="1" selected="selected">' ) );
 check( 'a variable product one of whose variations was given a Bag size back then: ticked as well', 'ticked/yes' === fh_box( fh_shipping_fields( $editor, 140 ) ) );
+$note = 'No choice is saved on this product yet: only the variations that were given a Bag size earlier count. To make every variation count, click this box off and on again and update the product.';
+check( 'ticked only for that Bag size, the box says what it means under it: no choice is saved, the variation without a Bag size does not count, and how to make it', false !== strpos( fh_shipping_fields( $editor, 140 ), $note ) && null === Bags::for_product( 142, $settings, fh_test_sizes() ) );
+check( 'no such note where every variation counts or none does: a fish category (a Bag size on a variation or not), a product nobody gave a bag, a simple product with its own', false === strpos( fh_shipping_fields( $editor, 100 ), 'No choice is saved' ) && false === strpos( fh_shipping_fields( $editor, 110 ), 'No choice is saved' ) && false === strpos( fh_shipping_fields( $editor, 150 ), 'No choice is saved' ) && false === strpos( $html, 'No choice is saved' ) );
+foreach ( array( 'yes', 'no' ) as $choice ) {
+	wc_get_product( 140 )->meta['_fh_packs_in_bag'] = $choice;
+	check( 'nor once the choice is stored: ' . $choice, false === strpos( fh_shipping_fields( $editor, 140 ), 'No choice is saved' ) );
+}
+unset( wc_get_product( 140 )->meta['_fh_packs_in_bag'] );
 wc_get_product( 130 )->meta['_fh_packs_in_bag'] = 'no';
 check( 'unticked since: unticked — the Bag size is still stored', 'unticked/no' === fh_box( fh_shipping_fields( $editor, 130 ) ) && '1' === wc_get_product( 130 )->meta['_fh_bag_size'] );
 unset( wc_get_product( 130 )->meta['_fh_packs_in_bag'] );

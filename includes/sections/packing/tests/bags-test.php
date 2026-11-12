@@ -283,7 +283,7 @@ $wider = Fill::fish_test();
 check( 'the filter on that list widens it here too', true === $wider( 150 ) && false === $wider( 160 ) );
 fh_reset_hooks();
 $preview = Fill::preview_request( array( '_wpnonce' => $nonce ), $store, $standard );
-check( 'the preview leaves them out and says how many', 2 === $preview['would_set'] && 7 === $preview['empty'] && false !== strpos( $preview['message'], 'The map would set 2 of them (Small: 1, Large: 1).' ) && false !== strpos( $preview['message'], '3 are of products that are not packed in a bag (“Livestock — packed in a bag” is off on them) — they stay empty; tick that box on the product if they are.' ), $preview['message'] );
+check( 'the preview leaves them out and says how many', 2 === $preview['would_set'] && 7 === $preview['empty'] && false !== strpos( $preview['message'], 'The map would set 2 of them (Small: 1, Large: 1).' ) && false !== strpos( $preview['message'], '3 are of products that are not packed in a bag (“Livestock — packed in a bag” is off on them, or was never saved as a choice) — they stay empty; if they are, tick that box on the product and save — click it off and on again where it already shows ticked.' ), $preview['message'] );
 $run = Fill::run( $store, $settings, $standard, 0, 50, static function () {
 	return 'set';
 } );
@@ -316,6 +316,22 @@ $run     = Fill::run(
 );
 check( 'and the run hands the writer exactly those', array( 151, 152 ) === $written && 2 === $run['set'] && 7 === $run['looked'] && true === $run['done'], fh_test_export( $written ) );
 unset( wc_get_product( 150 )->meta['_fh_packs_in_bag'], wc_get_product( 100 )->meta['_fh_packs_in_bag'] );
+
+echo "9d. A Bag size from before the checkbox on only some variations\n";
+// A frag rack outside the fish categories, never ticked or unticked: one variation was given a bag back then.
+fh_product( new Fh_Fake_Product( 170, 'variable', array( 'pa_size' => array( 'small', 'mid' ) ) ) );
+fh_product( new Fh_Fake_Product( 171, 'variation', array( 'pa_size' => 'small' ), array( '_fh_bag_size' => '2' ), 170 ) );
+fh_product( new Fh_Fake_Product( 172, 'variation', array( 'pa_size' => 'mid' ), array(), 170 ) );
+$GLOBALS['fh_terms'][170] = array( 'dry-goods' );
+check( 'the variation with the Bag size counts as it did, the one without does not — on an order and in the tool alike', 2 === Bags::for_product( 171, $settings, $standard )['id'] && null === Bags::for_product( 172, $settings, $standard ) && false === call_user_func( Fill::fish_test( array( 170 ), $store ), 170 ) );
+$preview = Fill::preview_request( array( '_wpnonce' => $nonce ), $store, $standard );
+check( 'the preview counts it, and does not call a box "off" that the editor draws ticked: never saved as a choice, click it off and on again', 2 === $preview['would_set'] && 8 === $preview['empty'] && false !== strpos( $preview['message'], '4 are of products that are not packed in a bag (“Livestock — packed in a bag” is off on them, or was never saved as a choice) — they stay empty; if they are, tick that box on the product and save — click it off and on again where it already shows ticked.' ) && false === strpos( $preview['message'], 'is off on them)' ), $preview['message'] );
+$one = Fill::describe( array( 'empty' => 1, 'set' => array(), 'by_bag' => array(), 'unmapped' => array(), 'no_size' => 0, 'not_fish' => 1 ), $settings, $standard );
+check( 'and of one', false !== strpos( implode( ' ', $one ), '1 is of a product that is not packed in a bag (“Livestock — packed in a bag” is off on it, or was never saved as a choice) — it stays empty; if it is, tick that box on the product and save — click it off and on again where it already shows ticked.' ), implode( ' ', $one ) );
+wc_get_product( 170 )->meta['_fh_packs_in_bag'] = 'yes'; // Clicked off and on again, and saved.
+$plan = Fill::plan( $store->variations_without_bag(), $settings, $standard, Fill::fish_test( array( 100, 150, 160, 170 ), $store ) );
+check( 'once "yes" is stored the tool plans the variation that had none', 2 === ( $plan['set'][172] ?? 0 ) && 3 === $plan['not_fish'], fh_test_export( $plan ) );
+unset( $GLOBALS['fh_products'][170], $GLOBALS['fh_products'][171], $GLOBALS['fh_products'][172], $GLOBALS['fh_terms'][170] );
 
 echo "10. The run sets only what has no value, through the product object\n";
 $run = Fill::run_request( array( '_wpnonce' => $nonce, 'after' => '0' ), $store, $standard );

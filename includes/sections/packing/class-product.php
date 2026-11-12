@@ -469,14 +469,21 @@ class Product {
 
 		$ticked = $this->ticked( $product );
 		$follow = null === $product || '' === Livestock::stored( $product );
+		$legacy = $follow && null !== $product && $this->has_stored_bag( $product );
 		$data   = array();
 		if ( $follow ) {
 			// No stored choice: the script lets the box follow the categories until it is touched.
 			$data['data-fh-follow'] = '1';
 			$data['data-fh-fish']   = implode( ',', $this->fish_term_ids() );
-			if ( null !== $product && $this->has_stored_bag( $product ) ) {
+			if ( $legacy ) {
 				$data['data-fh-legacy'] = '1';
 			}
+		}
+
+		$description = __( 'Tick for fish and other livestock that are packed in a bag: the Bag size fields show while it is ticked. Leave it off for medication, food and dry goods. For your records only: customers never see this.', 'fishotel-misc-plugin' );
+		if ( $legacy && method_exists( $product, 'is_type' ) && $product->is_type( 'variable' ) && ! Livestock::in_fish_category( $product ) ) {
+			// Ticked only for a Bag size from before the checkbox: a variation without one does not count, and saving the box as drawn stores nothing.
+			$description .= ' ' . __( 'No choice is saved on this product yet: only the variations that were given a Bag size earlier count. To make every variation count, click this box off and on again and update the product.', 'fishotel-misc-plugin' );
 		}
 
 		woocommerce_wp_checkbox(
@@ -486,7 +493,7 @@ class Product {
 				'label'             => __( 'Livestock — packed in a bag', 'fishotel-misc-plugin' ),
 				'value'             => $ticked ? Livestock::YES : Livestock::NO,
 				'cbvalue'           => Livestock::YES,
-				'description'       => __( 'Tick for fish and other livestock that are packed in a bag: the Bag size fields show while it is ticked. Leave it off for medication, food and dry goods. For your records only: customers never see this.', 'fishotel-misc-plugin' ),
+				'description'       => $description,
 				'wrapper_class'     => 'show_if_simple show_if_variable',
 				'custom_attributes' => $data,
 			)

@@ -76,8 +76,11 @@ helper files exit cleanly when they are run directly (the CI runs every
   counted, only fish filled (a variation of a product outside the fish
   categories counted, never planned and never written), the tool going by
   the checkbox (a ticked product filled whatever its category, an unticked
-  fish counted and left alone, the stored choices read in one go), and
-  every reason the tool refuses to run.
+  fish counted and left alone, the stored choices read in one go), a
+  product with a Bag size from before the checkbox on only some of its
+  variations (the others counted, in words that do not call a box "off"
+  that the editor draws ticked; planned once "yes" is stored), and every
+  reason the tool refuses to run.
 - **boxes-test.php** — a box (key, inches, size, volume); ShipTracker
   absent; an older build without `get_standard_boxes()` (guarded with
   `method_exists`); the active build providing them (they are the boxes in
@@ -124,7 +127,8 @@ helper files exit cleanly when they are run directly (the CI runs every
   product having none of its own. The checkbox: where it is drawn; its
   default (a fish category or not, simple and variable); a stored yes and
   no; a Bag size from before the checkbox (the product's own, a
-  variation's, a value that names no bag); the class on the product-data
+  variation's, a value that names no bag; the note under a box ticked
+  only for a variation's — and no note anywhere else); the class on the product-data
   box that hides the Bag size fields, the stylesheet rule and the script
   line behind it; the rule of its save and the save itself — ticked,
   unticked (the Bag size kept), ticked again, left as drawn (nothing
