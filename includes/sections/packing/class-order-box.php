@@ -78,7 +78,7 @@ class Order_Box {
 			array( $this, 'render_meta_box' ),
 			$screen_id,
 			'normal',
-			'default'
+			'high' // Under the order's items, above the shipment: fish, bag, box, then the label.
 		);
 
 		Admin::enqueue_assets();

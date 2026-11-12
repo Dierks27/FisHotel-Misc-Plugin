@@ -66,12 +66,30 @@ class Order_Packing {
 			return Packing::unavailable( $order_id, 'no_woocommerce' );
 		}
 
-		$order = $order_id > 0 ? wc_get_order( $order_id ) : null;
-		if ( ! is_object( $order ) || ! method_exists( $order, 'get_items' ) ) {
+		$order = self::load( $order_id );
+		if ( null === $order ) {
 			return Packing::unavailable( $order_id, 'order_not_found' );
 		}
 
 		return self::for_order( $order );
+	}
+
+	/**
+	 * An order by id — an order, not a refund or anything else WooCommerce
+	 * keeps beside orders.
+	 *
+	 * @param int $order_id Order ID.
+	 * @return object|null WC_Order.
+	 */
+	public static function load( $order_id ) {
+		$order = (int) $order_id > 0 && function_exists( 'wc_get_order' ) ? wc_get_order( (int) $order_id ) : null;
+		if ( ! is_object( $order ) || ! method_exists( $order, 'get_items' ) || ! method_exists( $order, 'get_meta' ) ) {
+			return null;
+		}
+		if ( method_exists( $order, 'get_type' ) && 'shop_order' !== $order->get_type() ) {
+			return null;
+		}
+		return $order;
 	}
 
 	/**
@@ -417,11 +435,8 @@ class Order_Packing {
 	 * @return array|null
 	 */
 	public static function confirmed_for( $order_id ) {
-		if ( ! function_exists( 'wc_get_order' ) ) {
-			return null;
-		}
-		$order = wc_get_order( (int) $order_id );
-		return is_object( $order ) ? self::confirmed( $order ) : null;
+		$order = self::load( $order_id );
+		return null !== $order ? self::confirmed( $order ) : null;
 	}
 
 	/* ============================================================== */
@@ -454,8 +469,8 @@ class Order_Packing {
 		}
 
 		$order_id = isset( $raw['order_id'] ) && is_scalar( $raw['order_id'] ) ? absint( $raw['order_id'] ) : 0;
-		$order    = $order_id > 0 ? wc_get_order( $order_id ) : null;
-		if ( ! is_object( $order ) || ! method_exists( $order, 'get_items' ) || ! method_exists( $order, 'update_meta_data' ) ) {
+		$order    = self::load( $order_id );
+		if ( null === $order || ! method_exists( $order, 'update_meta_data' ) ) {
 			return self::answer( 404, __( 'Order not found.', 'fishotel-misc-plugin' ) );
 		}
 

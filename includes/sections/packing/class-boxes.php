@@ -184,7 +184,8 @@ class Boxes {
 				if ( 0 !== $by_volume ) {
 					return $desc ? -$by_volume : $by_volume;
 				}
-				return strnatcasecmp( (string) $a['name'], (string) $b['name'] );
+				$by_name = strnatcasecmp( (string) $a['name'], (string) $b['name'] );
+				return 0 !== $by_name ? $by_name : strcmp( (string) $a['key'], (string) $b['key'] );
 			}
 		);
 		return $boxes;

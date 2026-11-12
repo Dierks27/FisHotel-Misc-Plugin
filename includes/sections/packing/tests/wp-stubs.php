@@ -365,7 +365,9 @@ require_once __DIR__ . '/fakes.php';
  */
 function fh_use_sizes( array $list ) {
 	$memo = new \ReflectionProperty( \FisHotel\Misc\Sections\Packing\Size_List::class, 'memo' );
-	$memo->setAccessible( true );
+	if ( PHP_VERSION_ID < 80100 ) {
+		$memo->setAccessible( true ); // Needed before PHP 8.1, a no-op since.
+	}
 	$memo->setValue( null, $list );
 }
 

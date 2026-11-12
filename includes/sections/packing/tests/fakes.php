@@ -278,6 +278,17 @@ class Fh_Fake_Order {
 		return $this->id;
 	}
 
+	/**
+	 * 'shop_order' unless a test makes it something else (a refund).
+	 *
+	 * @var string
+	 */
+	public $type = 'shop_order';
+
+	public function get_type() {
+		return $this->type;
+	}
+
 	public function get_status() {
 		return $this->status;
 	}
