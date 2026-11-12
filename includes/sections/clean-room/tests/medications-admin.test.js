@@ -36,7 +36,7 @@ check( 'the helpers are exported for node and hung on the global', typeof helper
 
 console.log( '2. hundredHint(): what 100 gallons take' );
 check( '25 mg per gallon: 2.5 g', '100 gal take 2.5 g' === helpers.hundredHint( 'per_gallon', '25', 'mg', '1' ) );
-check( '1 ml per 10 gallons: 10 ml; 1 g per 100 gallons: 1 g; 9.5 mg: 950 mg', '100 gal take 10 ml' === helpers.hundredHint( 'per_gallon', '1', 'ml', '10' ) && '100 gal take 1 g' === helpers.hundredHint( 'per_gallon', 1, 'g', 100 ) && '100 gal take 950 mg' === helpers.hundredHint( 'per_gallon', '9.5', 'mg', '' ) );
+check( '1 ml per 10 gallons: 10 ml; 1 g per 100 gallons: 1 g; 9.5 mg: 0.95 g', '100 gal take 10 ml' === helpers.hundredHint( 'per_gallon', '1', 'ml', '10' ) && '100 gal take 1 g' === helpers.hundredHint( 'per_gallon', 1, 'g', 100 ) && '100 gal take 0.95 g' === helpers.hundredHint( 'per_gallon', '9.5', 'mg', '' ) );
 check( 'to a level: for each 1.0', '100 gal take 69.2 ml for each 1.0' === helpers.hundredHint( 'to_level', '0.692', 'ml', '1' ) );
 check( 'pieces and drops', '100 gal take 10 ×' === helpers.hundredHint( 'per_gallon', '1', 'each', '10' ) && '100 gal take 40 drops' === helpers.hundredHint( 'per_gallon', '2', 'drops', '5' ) );
 check( 'no amount yet, a bad one, gallons of 0, a typed medication: nothing', '' === helpers.hundredHint( 'per_gallon', '', 'mg', '1' ) && '' === helpers.hundredHint( 'per_gallon', 'abc', 'mg', '1' ) && '' === helpers.hundredHint( 'per_gallon', '0', 'mg', '1' ) && '' === helpers.hundredHint( 'per_gallon', '25', 'mg', '0' ) && '' === helpers.hundredHint( 'typed', '25', 'mg', '1' ) && '' === helpers.hundredHint( 'per_gallon', null, 'mg', undefined ) );

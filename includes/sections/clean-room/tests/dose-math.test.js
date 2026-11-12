@@ -81,7 +81,7 @@ var metro  = fixture.medications.metro;
 var copper = fixture.medications.copper;
 var quine  = fixture.medications.quine;
 var a      = math.plan( quine, { gallons: 100, rate: 40, rateLabel: 'Loading', topup: true, changed: 20, changedUnit: 'gal' } );
-check( 'rateLabel / changedUnit (camelCase) read like rate_label / changed_unit', 'ok' === a.state && 800 === a.amount && 'Loading: 40 mg per gallon, 20 gal · top-up after a 20 gal water change' === a.note, JSON.stringify( a ) );
+check( 'rateLabel / changedUnit (camelCase) read like rate_label / changed_unit', 'ok' === a.state && 0.8 === a.amount && 'g' === a.unit && 'Loading: 40 mg per gallon, 20 gal · top-up after a 20 gal water change' === a.note, JSON.stringify( a ) );
 var b = math.plan( { key: 'copper', label: 'Copper Power', unit: 'ml', mode: 'to_level', rate: 0.692, per: 1, levelUnit: 'ppm' }, { gallons: 100, now: 2.16, target: 2.4 } );
 check( 'levelUnit (camelCase) reads like level_unit', 'Add 16.6 ml Copper Power' === b.line && '100 gal × 0.24 ppm × 0.692' === b.working, JSON.stringify( b ) );
 var c = math.plan( metro, { gallons: 100 }, { add: '%2$s: %1$s', gal: '%s G' } );

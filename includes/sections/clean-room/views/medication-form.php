@@ -34,6 +34,9 @@ $fh_number  = static function ( $value ) {
 ?>
 <form class="fh-cr-med-form" data-op="<?php echo esc_attr( $fh_op ); ?>" onsubmit="return false;">
 	<input type="hidden" name="key" value="<?php echo esc_attr( $fh_med['key'] ); ?>">
+	<?php if ( 'save' === $fh_op ) : ?>
+		<input type="hidden" name="seen" value="<?php echo esc_attr( Medications::fingerprint( $fh_med ) ); ?>">
+	<?php endif; ?>
 	<div class="fh-cr-med-grid">
 		<label class="fh-cr-med-field fh-cr-med-field--wide" for="fh-cr-med-label-<?php echo esc_attr( $fh_uid ); ?>">
 			<span><?php esc_html_e( 'Name', 'fishotel-misc-plugin' ); ?></span>

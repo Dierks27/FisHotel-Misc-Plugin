@@ -407,7 +407,7 @@ class Protocol {
 	/**
 	 * The amount of a medication dosed per gallon for a water volume, in
 	 * the sensible unit: gallons × the rate, one decimal from 1 up and two
-	 * below, a weight in grams from 1 g up and in milligrams below
+	 * below, a weight in grams from 0.1 g up and in milligrams below
 	 * (Dose::plan()). Null for a medication dosed to a level (copper) or
 	 * typed, a retired or unknown one, or no volume.
 	 *

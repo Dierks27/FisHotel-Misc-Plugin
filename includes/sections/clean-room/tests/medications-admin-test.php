@@ -62,6 +62,49 @@ $r = Medications_Admin::request( array( '_wpnonce' => $nonce, 'op' => 'restore',
 check( 'bring back', 200 === $r['status'] && false === Settings::medications()['formalin']['retired'] && '"Formalin" is offered again.' === $r['message'] );
 check( 'a key that is not in the list: 400', 400 === Medications_Admin::request( array( '_wpnonce' => $nonce, 'op' => 'retire', 'key' => 'gone' ) )['status'] );
 
+echo "2b. Two tabs: a form drawn before somebody else's change does not put the old values back\n";
+$as_drawn = Settings::medications()['metro']; // Both tabs were loaded now: rate 20.
+$tab      = array( '_wpnonce' => $nonce, 'op' => 'save', 'key' => 'metro', 'seen' => Medications::fingerprint( $as_drawn ), 'label' => 'Metronidazole', 'short' => 'Metro', 'aliases' => '', 'unit' => 'mg', 'mode' => 'per_gallon', 'rate' => '20', 'per' => '1', 'doses' => array( array( 'label' => 'Double', 'rate' => '40' ) ), 'measure' => array( 'label' => 'scoop', 'amount' => '0.5', 'unit' => 'g' ) );
+$r        = Medications_Admin::request( array_merge( $tab, array( 'rate' => '30' ) ) );
+check( 'tab A saves the rate 30: its form was drawn from the row as it is — saved', 200 === $r['status'] && 30.0 === Settings::medications()['metro']['rate'] );
+$r = Medications_Admin::request( array_merge( $tab, array( 'aliases' => 'flagyl' ) ) );
+check( 'tab B, loaded before that, adds an other name (its form still says 20): refused — it says the row was changed elsewhere and to reload', 400 === $r['status'] && '"Metronidazole" was changed elsewhere after this page was loaded — reload the page and make the change again. Nothing was changed.' === $r['message'], json_encode( $r ) );
+check( '…and the rate is still 30, the other name not added', 30.0 === Settings::medications()['metro']['rate'] && array() === Settings::medications()['metro']['aliases'] );
+$r = Medications_Admin::request( array_merge( $tab, array( 'seen' => Medications::fingerprint( Settings::medications()['metro'] ), 'rate' => '30', 'aliases' => 'flagyl' ) ) );
+check( '…reloaded (the form drawn from the row as it is now): saved', 200 === $r['status'] && array( 'flagyl' ) === Settings::medications()['metro']['aliases'] && 30.0 === Settings::medications()['metro']['rate'] );
+check( 'the fingerprint is the row\'s: the same for the same row, another after any change — a retire too', Medications::fingerprint( $as_drawn ) === Medications::fingerprint( $as_drawn ) && 16 === strlen( Medications::fingerprint( $as_drawn ) ) && Medications::fingerprint( $as_drawn ) !== Medications::fingerprint( Settings::medications()['metro'] ) && Medications::fingerprint( $as_drawn ) !== Medications::fingerprint( array_merge( $as_drawn, array( 'retired' => true ) ) ) );
+// The three template helpers the form's view echoes with (the shared stubs have the returning ones).
+if ( ! function_exists( 'esc_html_e' ) ) {
+	function esc_html_e( $text, $domain = null ) {
+		echo esc_html( $text );
+	}
+}
+if ( ! function_exists( 'esc_attr_e' ) ) {
+	function esc_attr_e( $text, $domain = null ) {
+		echo esc_attr( $text );
+	}
+}
+if ( ! function_exists( 'selected' ) ) {
+	function selected( $selected, $current = true, $echo = true ) {
+		$out = (string) $selected === (string) $current ? ' selected="selected"' : '';
+		if ( $echo ) {
+			echo $out; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- a fixed attribute.
+		}
+		return $out;
+	}
+}
+$fh_med = Settings::medications()['metro'];
+$fh_op  = 'save';
+$fh_uid = 'metro';
+ob_start();
+include FISHOTEL_MISC_PATH . 'includes/sections/clean-room/views/medication-form.php';
+$html = (string) ob_get_clean();
+check( 'the edit form carries it', false !== strpos( $html, '<input type="hidden" name="seen" value="' . Medications::fingerprint( $fh_med ) . '">' ) );
+$fh_op = 'add';
+ob_start();
+include FISHOTEL_MISC_PATH . 'includes/sections/clean-room/views/medication-form.php';
+check( '…the Add form has nothing to compare with', false === strpos( (string) ob_get_clean(), 'name="seen"' ) );
+
 echo "3. The real AJAX handler, up to its reply\n";
 $admin = new Medications_Admin();
 $reply = null;

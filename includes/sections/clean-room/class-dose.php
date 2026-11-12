@@ -19,7 +19,7 @@
  * result line ("Add 16.6 ml Copper Power"), the same working ("100 gal ×
  * 0.24 ppm × 0.692"). The rounding is spelled out with floor() so that PHP
  * and JavaScript agree to the last digit: one decimal from 1 up, two
- * below 1; a weight reads in grams from 1 g up and in milligrams below.
+ * below 1; a weight reads in grams from 0.1 g up and in milligrams below.
  *
  * The rest prepares the sum from what the room knows — the water (the
  * building's system or one tank), today's copper reading for it, the
@@ -54,6 +54,13 @@ class Dose {
 	);
 
 	/**
+	 * A weight reads in grams from this many milligrams up.
+	 *
+	 * @var int
+	 */
+	const GRAMS_FROM = 100;
+
+	/**
 	 * 10^n for the decimals the rounding uses.
 	 *
 	 * @var float[]
@@ -66,6 +73,23 @@ class Dose {
 	 * @var int
 	 */
 	const MAX_LEVEL = 999;
+
+	/**
+	 * The most a copper level may be — the limit a plain copper reading
+	 * has (Front_Desk::act_copper()), so the sheet's "Now" cannot log what
+	 * the Copper screen refuses.
+	 *
+	 * @var int
+	 */
+	const MAX_COPPER = 99;
+
+	/**
+	 * "Bring it to" for the copper product is challenged from this many
+	 * times the copper target of the settings (24 typed for 2.4).
+	 *
+	 * @var int
+	 */
+	const FAR_ABOVE = 2;
 
 	/* ============================================================== */
 	/*  Numbers and words (mirrored in js/dose-math.js)                */
@@ -141,8 +165,10 @@ class Dose {
 	}
 
 	/**
-	 * An amount in the sensible unit, rounded: a weight in grams from 1 g
-	 * up and in milligrams below (2,500 mg reads 2.5 g; 0.4 g reads 400 mg);
+	 * An amount in the sensible unit, rounded: a weight in grams from
+	 * 0.1 g up (2,500 mg reads 2.5 g, 950 mg reads 0.95 g — what the Dose
+	 * sheet's suggestion always read, so a system's dose is logged in the
+	 * unit it always was) and in milligrams below (a bucket's 62.5 mg);
 	 * every other unit as it is.
 	 *
 	 * @param float  $amount Amount.
@@ -155,7 +181,7 @@ class Dose {
 		if ( isset( self::MASS[ $unit ] ) ) {
 			$mg      = $amount * self::MASS[ $unit ];
 			$rounded = self::round_amount( $mg );
-			if ( $rounded >= 1000 ) {
+			if ( $rounded >= self::GRAMS_FROM ) {
 				return array(
 					'amount' => self::round_amount( $mg / 1000 ),
 					'unit'   => 'g',
@@ -807,7 +833,10 @@ class Dose {
 	/**
 	 * What the sheet starts with for one medication in one water (pure):
 	 *   now     the copper product only — today's latest reading for that
-	 *           water, with its time; nothing from another day;
+	 *           water, with its time; nothing from another day, and nothing
+	 *           once the product was dosed after that reading (the same
+	 *           sum would be offered a second time): a fresh reading is
+	 *           asked for;
 	 *   target  the level a due step names ("Copper Power to 2.4"; the
 	 *           lowest when two groups in one water are on different
 	 *           days), else for the copper product the copper target of
@@ -815,9 +844,9 @@ class Dose {
 	 *   rate    the rate a due step names ("Chloroquine 40 mg/gal"; the
 	 *           lowest of several), else the medication's own;
 	 *   dosed   the medication's latest dose logged in that water today
-	 *           (text, at), and whether it went in AFTER today's reading
-	 *           (after) — then "Now" is no longer what the water holds,
-	 *           and the sheet says to read again before adding more.
+	 *           (text, at, logged_at), and whether it went in AFTER today's
+	 *           reading (after) — then "Now" is no longer what the water
+	 *           holds, and the sheet says to read again before adding more.
 	 *
 	 * @param array $medication Medication.
 	 * @param array $water      One of waters(): reading, doses, items.
@@ -841,9 +870,10 @@ class Dose {
 		if ( isset( $water['doses'][ $key ] ) && is_array( $water['doses'][ $key ] ) ) {
 			$dosed        = $water['doses'][ $key ];
 			$out['dosed'] = array(
-				'text'  => (string) $dosed['text'],
-				'at'    => (string) $dosed['at'],
-				'after' => Medications::is_copper( $medication ) && ! empty( $water['reading'] ) && strcmp( (string) $dosed['logged_at'], (string) $water['reading']['logged_at'] ) >= 0,
+				'text'      => (string) $dosed['text'],
+				'at'        => (string) $dosed['at'],
+				'after'     => Medications::is_copper( $medication ) && ! empty( $water['reading'] ) && strcmp( (string) $dosed['logged_at'], (string) $water['reading']['logged_at'] ) >= 0,
+				'logged_at' => (string) $dosed['logged_at'],
 			);
 		}
 		if ( 'typed' === $mode ) {
@@ -853,7 +883,7 @@ class Dose {
 
 		if ( 'to_level' === $mode ) {
 			$copper = Medications::is_copper( $medication );
-			if ( $copper && ! empty( $water['reading'] ) && is_array( $water['reading'] ) ) {
+			if ( $copper && ! empty( $water['reading'] ) && is_array( $water['reading'] ) && empty( $out['dosed']['after'] ) ) {
 				$out['now']    = (float) $water['reading']['value'];
 				$out['now_at'] = (string) ( $water['reading']['at'] ?? '' );
 			}
@@ -993,13 +1023,17 @@ class Dose {
 	 * The copper reading a dose of the copper product brings along: the
 	 * "Now" value, logged on the water that was dosed (the building for the
 	 * whole system, else the tank) — unless it is today's latest reading
-	 * for that water already.
+	 * there already. "There" is what the page's tank shows: its own
+	 * readings and the building's. A reading on a sibling tank fills "Now"
+	 * for the whole system (it is one water) but does not count as logged:
+	 * the system's reading then goes on the building, so every tank of it
+	 * has it and its copper test is ticked.
 	 *
 	 * @param object     $store  Store (or stand-in): log_tank(), log_building().
 	 * @param array      $tank   The tank row.
 	 * @param bool       $whole  The whole system.
 	 * @param float      $now    The reading.
-	 * @param array|null $latest Today's latest reading for that water (waters()), or null.
+	 * @param array|null $latest Today's latest reading the page's tank shows (waters()['tank']['reading']), or null.
 	 * @param array      $base   actor_id, source.
 	 * @return string logged | already | failed.
 	 */
@@ -1019,6 +1053,40 @@ class Dose {
 			? $store->log_building( (int) ( $tank['building']['id'] ?? $tank['building_id'] ?? 0 ), $log )
 			: $store->log_tank( (int) $tank['id'], $log );
 		return $id ? 'logged' : 'failed';
+	}
+
+	/**
+	 * Whether a medication went into a water AFTER the sheet (or a phrase's
+	 * preview) that is being saved was drawn (pure) — a second phone, a
+	 * second tap, a Save sent again after a reply that never arrived. The
+	 * sheet posts the time of the latest dose it knew of ('' = none).
+	 *
+	 * @param array  $water      One of waters(): doses.
+	 * @param string $medication Medication key.
+	 * @param mixed  $seen       What the sheet posted.
+	 * @return array|null The newer dose (text, at, logged_at), or null.
+	 */
+	public static function newer_dose( array $water, $medication, $seen ) {
+		$dosed = isset( $water['doses'][ (string) $medication ] ) && is_array( $water['doses'][ (string) $medication ] ) ? $water['doses'][ (string) $medication ] : null;
+		if ( ! $dosed ) {
+			return null;
+		}
+		$seen = is_scalar( $seen ) && 1 === preg_match( '/^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/', (string) $seen ) ? (string) $seen : '';
+		return strcmp( (string) $dosed['logged_at'], $seen ) > 0 ? $dosed : null;
+	}
+
+	/**
+	 * Whether "Bring it to" is far above the copper target of the settings
+	 * (pure): FAR_ABOVE times it or more — 24 typed for 2.4. Never without
+	 * a target in the settings.
+	 *
+	 * @param float|null $target   The level typed.
+	 * @param array      $settings Settings (copper_target).
+	 * @return bool
+	 */
+	public static function far_above( $target, array $settings ) {
+		$usual = isset( $settings['copper_target'] ) && is_numeric( $settings['copper_target'] ) ? (float) $settings['copper_target'] : 0.0;
+		return null !== $target && $usual > 0 && (float) $target >= self::FAR_ABOVE * $usual - 1e-9;
 	}
 
 	/**

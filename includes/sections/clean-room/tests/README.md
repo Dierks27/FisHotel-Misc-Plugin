@@ -502,7 +502,7 @@ system temp directory (`FH_TEST_TMP` overrides).
   file the page's JS is run against too): `round_amount()` (16.608 →
   16.6, 5.125 → 5.1, 1.15 → 1.2 although binary floating point holds it
   a breath low, 0.004 stays 0.004), `display()` (2,500 mg → 2.5 g,
-  0.4 g → 400 mg, 999.96 mg → 1 g), the words (levels, rates, a
+  950 mg → 0.95 g, 99.9 mg stays mg, 999.96 mg → 1 g), the words (levels, rates, a
   measure's plural), and 51 sums — the copper example (100 gal, 2.16 →
   2.40 ppm = 16.6 ml), 100 gallons of Metronidazole (2.5 g), a rate for
   10 or 100 gallons, a rate typed in grams, a named dose, a schedule
@@ -511,8 +511,9 @@ system temp directory (`FH_TEST_TMP` overrides).
   missing or unreadable reading, unknown gallons, a measure, pieces /
   drops / teaspoons, three-decimal levels, typed — each with its state,
   amount, unit, result line, working and note; that the PHP words are
-  the JS file's English; that the seeded list gives the fixed list's
-  amounts on 205, 100, 40 and 20 gal; what a schedule step names
+  the JS file's English; that the seeded list gives exactly the fixed list's
+  amount AND unit on every water from 1 to 4000 gal (milligrams only
+  under 0.1 g); what a schedule step names
   (`step_rate()`, `step_level()`); what is due today per medication
   (day 1, day 2, a day with no copper step, two groups on different days
   — the lower first —, the CQ rates, the first medication a step names);
@@ -520,8 +521,8 @@ system temp directory (`FH_TEST_TMP` overrides).
   none, the site day rather than the UTC day); the doses logged today
   per water (`doses_today()`: the system's and each tank's, the latest
   of several, not yesterday's, not the other building's, and for copper
-  whether it went in after the reading); what "Now" and "Bring it
-  to" start with (`defaults()`); the two waters of a tank's page against
+  whether it went in after the reading — "Now" is then left empty);
+  what "Now" and "Bring it to" start with (`defaults()`); the two waters of a tank's page against
   the in-memory store (a reading on another tank of the building reads
   the system, not this tank; a building reading reads both; the due
   steps of the system and of the tank); what a Save's post turns into
@@ -540,16 +541,30 @@ system temp directory (`FH_TEST_TMP` overrides).
   reading 2.16 and the dose with its working, each once, the toast
   saying both, the day's "Copper Power to 2.4" and the copper test
   ticked in every tank of the water; saved again with the same Now, or
-  after "611 copper 2.16": no second reading; another Now, this tank
-  only, a reading two days old: logged; nothing to add but typed
-  anyway; a Now that is no number; unknown gallons; a medication added
+  when the page's tank has that reading itself: no second reading; a
+  reading on the sibling tank 611 fills "Now" for the system but the
+  whole-system Save still logs it on the building (621's copper test is
+  ticked), once; another Now, this tank only, a reading two days old:
+  logged; nothing to add but typed anyway; because a dose has no undo —
+  the same post again from a sheet that knew of no dose is refused with
+  nothing written and saving again from the refreshed sheet goes
+  through (another medication, a tank's water after a system dose, a
+  post with no `seen`), "Now" 216 or "Bring it to" 240 refused like a
+  plain reading of 216, "Bring it to" 24 asked about first and written
+  with `sure`, and at or above the target with no amount the reading
+  alone (once; on the tank; never below the target or for another
+  medication); a Now that is no number; unknown gallons; a medication added
   in Settings (to a level: no copper reading), a retired one refused and
   not offered; a store whose dose log fails; the Events line and the
   Board's last dose afterwards; and that every label front-desk.js asks
   for is sent.
 - **dose-phrases-test.php** — the dose phrases: "copper 2.16 to 2.4"
   and its relatives ("bring my copper up from 2.16 to 2.4", "cu 2.16 to
-  2.4", in words, with "ppm"), "raise / bump / top up copper to 2.4",
+  2.4", in words, with "ppm"), the target said first ("raise copper to
+  2.4 from 2.16" — never a reading of 2.4), the sentence as it was asked
+  for ("I need to bring my copper up from 2.16 to 2.4 in the 100 gallon
+  system"; "521 needs copper 2.16" stays a reading), "raise / bump / top
+  up copper to 2.4",
   "dose copper", "dose metro", "metro for the system", "prazi this
   tank", a name alone, a named dose ("cq loading"), a spoken tank, "the
   100 gallon system" (the building that holds that much; none or two of
@@ -559,7 +574,9 @@ system temp directory (`FH_TEST_TMP` overrides).
   2.4", "copper to 2.4" …) and a phrase with anything but dose words is
   read as before; the sentences against `fixtures/dose-phrases.json`;
   then the preview (`Front_Desk::dose_preview()`): the result line, the
-  working, the water, Now from today's reading or asked for, Bring it to
+  working, the water, Now from today's reading or asked for (also after
+  a copper dose — the same sum is not offered again, and a preview from
+  before that Save is refused on Confirm), Bring it to
   from the due step (day 1, day 2) or the copper target, the tank alone,
   nothing to add, a named dose, the CQ step's rate, a spoken amount, a
   typed medication, an unknown or offline tank, unknown gallons — and
@@ -569,7 +586,9 @@ system temp directory (`FH_TEST_TMP` overrides).
   nobody, a wrong or missing nonce (403), an unknown operation and the
   list's refusals (400) — nothing stored each time; add / edit / retire
   / bring back stored in the settings option with every other setting
-  untouched; the real `wp_ajax` handler up to its reply; what the panel
+  untouched; two tabs — a Save from a form drawn before another tab's
+  change is refused and stores nothing, a reloaded one saves, and the
+  edit form (not the Add form) carries the row's fingerprint; the real `wp_ajax` handler up to its reply; what the panel
   shows (how each is dosed in words, named doses, the measure, "the
   built-in list, unchanged"); the public calculator's figure beside
   ours in each state, absent said plainly; what the Board's Calculator
@@ -599,7 +618,14 @@ system temp directory (`FH_TEST_TMP` overrides).
   carries what was said, an unknown tank asks the server again; and
   "Already logged today: …" on the sheet and the preview — per
   medication and water, with "read the level again" only for copper
-  dosed after the reading.
+  dosed after the reading, "Now" then empty and asked for; and because a
+  dose has no undo: Save tapped three times before the reply posts ONE
+  request, a refusal that carries the screen redraws the open sheet (and
+  the preview) with the dose that went in and saving again posts its
+  time, "Bring it to" 24 is asked about and posted with `sure` only when
+  saved again as it stands, and at or above the target Save posts the
+  levels with no amount (the reading alone) — never for another
+  medication.
 - **medications-admin.test.js** — the pure parts of
   `js/medications-admin.js`: what 100 gallons take at a rate (the
   editor's hint), the rates the Board's Calculator offers, its sum.

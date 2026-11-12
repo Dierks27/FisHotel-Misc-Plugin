@@ -136,6 +136,14 @@ class Parser {
 
 	const SIZE_WORDS = array( 'small', 'medium', 'med', 'large', 'lg', 'sm', 'md', 'xl', 'xs', 'tiny', 'big', 'little', 'juvenile', 'juv', 'adult', 'baby', 'jumbo', 'mini' );
 
+	/**
+	 * Words that say nothing in a dose phrase only ("I need to bring my
+	 * copper up …") — every other phrase reads them as it always did.
+	 *
+	 * @var string[]
+	 */
+	const DOSE_FILLERS = array( 'need', 'needs', 'want', 'wants' );
+
 	const FILLER_WORDS = array( 'the', 'a', 'an', 'some', 'of', 'x', 'times', 'please', 'in', 'into', 'to', 'from', 'at', 'on', 'and', 'with', 'for', 'them', 'these', 'those', 'it', 'this', 'that', 'are', 'is', 'were', 'was', 'there', 'i', 'we', 'just', 'got', 'have', 'has', 'had', 'been', 'up', 'down', 'over', 'here', 'now', 'today', 'tank', 'tanks', 'building', 'more', 'also', 'my', 'our', 'so', 'then', 'okay', 'ok', 'um', 'uh', 'all', 'everything', 'everyone', 'everybody', 'each', 'every', 'fishes', 'row', 'shelf', 'tier' );
 
 	/**
@@ -887,13 +895,15 @@ class Parser {
 	 * treat …), a raise verb (raise, bring, bump, top up …), a water ("the
 	 * system", "whole", "this tank", "only", "the 100 gallon system"), one
 	 * of the medication's named doses ("loading"), a number, a unit, a
-	 * tank reference or a filler word. Then:
+	 * tank reference or a filler word ("I need to bring my copper up from
+	 * 2.16 to 2.4 in the 100 gallon system"). Then:
 	 *   - an amount with its unit ("metro 5 g", "copper power 55 ml") is a
 	 *     dose spoken with its amount — logged as said, no sum;
 	 *   - a medication dosed to a level: two levels joined by "to" ("copper
 	 *     2.16 to 2.4", "bring copper from 2.16 to 2.4") are now and target;
 	 *     one level after "to" with a raise or dose verb ("raise copper to
-	 *     2.4") is the target; none, with a verb or a water, leaves both to
+	 *     2.4") is the target, and "… to 2.4 from 2.16" names the target
+	 *     first; none, with a verb or a water, leaves both to
 	 *     the room ("dose copper"). A bare name, a single number without
 	 *     such a verb, or "copper to 2.4" stay what they were — a copper
 	 *     reading;
@@ -1112,7 +1122,7 @@ class Parser {
 				$system = true;
 			} elseif ( in_array( $token, array( 'only', 'alone' ), true ) || ( 'this' === $token && $j + 1 < $n && 'tank' === $tokens[ $j + 1 ] ) ) {
 				$alone = true;
-			} elseif ( ! in_array( $token, self::FILLER_WORDS, true ) ) {
+			} elseif ( ! in_array( $token, self::FILLER_WORDS, true ) && ! in_array( $token, self::DOSE_FILLERS, true ) ) {
 				return null;
 			}
 		}
@@ -1151,7 +1161,10 @@ class Parser {
 			$out['unit']   = $amounts[0]['unit'];
 		} elseif ( 'to_level' === $mode ) {
 			$count = count( $levels );
-			if ( 2 === $count && 'to' === $before( $levels[1] ) ) {
+			if ( 2 === $count && 'to' === $before( $levels[0] ) && 'from' === $before( $levels[1] ) ) {
+				$out['now']    = $levels[1]['value']; // "raise copper to 2.4 from 2.16": the target first.
+				$out['target'] = $levels[0]['value'];
+			} elseif ( 2 === $count && 'to' === $before( $levels[1] ) ) {
 				$out['now']    = $levels[0]['value'];
 				$out['target'] = $levels[1]['value'];
 			} elseif ( 1 === $count && ( $verb || $raise ) && 'to' === $before( $levels[0] ) ) {

@@ -556,7 +556,8 @@ class Medications {
 	 * @param string $op   add|save|retire|restore.
 	 * @param array  $raw  key (save / retire / restore) and the form fields: label, short,
 	 *                     aliases, unit, mode, rate, per, level_unit, doses[n][label|rate],
-	 *                     measure[label|amount|unit].
+	 *                     measure[label|amount|unit]; for save also seen — fingerprint() of
+	 *                     the row the form was drawn from.
 	 * @return array{list: array, key: string, message: string}|array{error: string}
 	 */
 	public static function apply_op( array $list, $op, array $raw ) {
@@ -589,6 +590,12 @@ class Medications {
 			case 'save':
 				if ( ! $current ) {
 					return array( 'error' => __( 'That medication no longer exists — reload the page.', 'fishotel-misc-plugin' ) );
+				}
+				// The form says which version of the row it was drawn from: one that was
+				// saved elsewhere since (another tab, another person) is not written over.
+				if ( isset( $raw['seen'] ) && is_scalar( $raw['seen'] ) && '' !== (string) $raw['seen'] && self::fingerprint( $current ) !== (string) $raw['seen'] ) {
+					/* translators: %s: medication name */
+					return array( 'error' => sprintf( __( '"%s" was changed elsewhere after this page was loaded — reload the page and make the change again.', 'fishotel-misc-plugin' ), $current['label'] ) );
 				}
 				$errors = array();
 				$row    = self::from_form( $raw, $errors );
@@ -642,6 +649,18 @@ class Medications {
 		}
 
 		return array( 'error' => __( 'Unknown medication action.', 'fishotel-misc-plugin' ) );
+	}
+
+	/**
+	 * A stored medication's fingerprint (pure): the edit form carries it,
+	 * and a Save from a form drawn before somebody else's change is refused
+	 * instead of quietly putting the old values back.
+	 *
+	 * @param array $medication A medication of the list.
+	 * @return string 16 hex characters.
+	 */
+	public static function fingerprint( array $medication ) {
+		return substr( md5( (string) json_encode( self::normalize_row( $medication ) ) ), 0, 16 );
 	}
 
 	/**

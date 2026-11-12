@@ -77,6 +77,18 @@ check( '…"bump / top up / bring … to", "dose copper to 2.4"', 2.4 === fh_dos
 $d = fh_dose( 'dose copper' );
 check( '"dose copper": both levels left to the room', 'copper' === ( $d['medication'] ?? '' ) && null === $d['now'] && null === $d['target'] && 'Dose: Copper Power · Tank 621' === fh_p( 'dose copper' )['summary'] );
 check( '"raise copper from 2.16": Now alone', array( 2.16, null ) === array( fh_dose( 'raise copper from 2.16' )['now'], fh_dose( 'raise copper from 2.16' )['target'] ) );
+$first = true;
+foreach ( array( 'raise copper to 2.4 from 2.16', 'bring copper to 2.4 from 2.16', 'bring the copper up to 2.40 from 2.16', 'copper to 2.4 from 2.16' ) as $phrase ) {
+	$d = fh_dose( $phrase );
+	if ( 'copper' !== ( $d['medication'] ?? '' ) || 2.16 !== ( $d['now'] ?? null ) || 2.4 !== ( $d['target'] ?? null ) ) {
+		$first = false;
+		echo "       not understood: $phrase → " . json_encode( $d ) . "\n";
+	}
+}
+check( 'the target said first — "raise copper to 2.4 from 2.16" — is the same dose, never a reading of 2.4', $first );
+$r = fh_p( 'I need to bring my copper up from 2.16 to 2.4 in the 100 gallon system', array( 'tank' => 521 ) );
+check( 'the sentence as it was asked for: "I need to bring my copper up from 2.16 to 2.4 in the 100 gallon system"', 'dose' === $r['intent'] && 611 === $r['tank'] && 'system' === $r['dose']['scope'] && 2.16 === $r['dose']['now'] && 2.4 === $r['dose']['target'] && array() === $r['needs'], json_encode( array( $r['intent'], $r['tank'], $r['needs'] ) ) );
+check( '…"I want to dose metro" too; "need" and "want" say nothing more: "521 needs copper 2.16" stays a reading, "need copper" one waiting for its value', 'metro' === ( fh_dose( 'I want to dose metro' )['medication'] ?? '' ) && 'copper' === fh_p( '521 needs copper 2.16' )['intent'] && 2.16 === fh_p( '521 needs copper 2.16' )['value'] && 521 === fh_p( '521 needs copper 2.16' )['tank'] && array( 'intent' => 'copper' ) === fh_dose( 'need copper' ) );
 $d = fh_dose( 'dose metro' );
 check( '"dose metro": Metronidazole, no water said, no amount', array( 'metro', 'per_gallon', '', null, '' ) === array( $d['medication'], $d['mode'], $d['scope'], $d['amount'], $d['dose_label'] ) && 'Dose: Metronidazole · Tank 621' === fh_p( 'dose metro' )['summary'] );
 check( '"metro for the system": the whole system', 'system' === fh_dose( 'metro for the system' )['scope'] && 'Dose: Metronidazole · whole system · Tank 621' === fh_p( 'metro for the system' )['summary'] && 'system' === fh_dose( 'dosed the whole system with metronidazole' )['scope'] && 'system' === fh_dose( 'metro for the building' )['scope'] );
@@ -161,6 +173,7 @@ function fh_confirm_fields( array $preview ) {
 			}
 		}
 	}
+	$fields['seen'] = is_array( $d['dosed'] ) ? $d['dosed']['logged_at'] : ''; // What the preview knew of.
 	return $fields;
 }
 function fh_preview( Fake_Store $store, $text, $page = 621, $forced = 0 ) {
@@ -180,10 +193,18 @@ check( 'Confirm: the same Save — the reading and the dose with its working, by
 check( 'nothing dosed there yet today: the preview has none to tell of', null === $d['dosed'] );
 $p = fh_preview( $room, 'raise copper to 2.4' );
 check( '…asked again after that Save: the preview tells of the dose already logged today, and that the reading is older than it', 'Copper Power 16.6 ml' === ( $p['dose']['dosed']['text'] ?? '' ) && true === $p['dose']['dosed']['after'] && 1 === preg_match( '/^\d\d:\d\d$/', $p['dose']['dosed']['at'] ), json_encode( $p['dose']['dosed'] ) );
-check( '"raise copper to 2.4": Now is today\'s latest reading (2.16, with its time) — 16.6 ml again', 2.16 === $p['dose']['now'] && 1 === preg_match( '/^\d\d:\d\d$/', $p['dose']['now_at'] ) && 16.6 === $p['dose']['plan']['amount'] && array() === $p['needs'] );
-$n = count( $room->logs );
-fh_act( $room, 621, fh_confirm_fields( $p ), 8, 'voice' );
-check( '…confirmed: only the dose — the reading is logged already', 1 === count( fh_new_logs( $room, $n ) ) && 'dose' === end( $room->logs )['kind'] );
+check( '…so "Now" is asked for again instead of offering the same 16.6 ml a second time: not ready', null === $p['dose']['now'] && '' === $p['dose']['now_at'] && array( 'now' ) === $p['needs'] && 'needs_now' === $p['dose']['plan']['state'] && null === $p['dose']['plan']['amount'], json_encode( $p['dose'] ) );
+$stale = fh_confirm_fields( fh_preview( new Fake_Store(), 'copper 2.16 to 2.4' ) ); // A preview drawn before that Save (a second phone).
+$n     = count( $room->logs );
+$r     = fh_act( $room, 621, $stale, 9, 'voice' );
+check( 'a preview from before that Save, confirmed afterwards: refused, nothing written, and it says what went in', '' === $stale['seen'] && 1 === preg_match( '/^Copper Power 16\.6 ml was logged in this water at \d\d:\d\d, after this sheet was opened\. Check it — saving again logs another dose\.$/', (string) ( $r['error'] ?? '' ) ) && 'Copper Power 16.6 ml' === $r['stale']['text'] && $n === count( $room->logs ), json_encode( $r ) );
+$read = new Fake_Store();
+Front_Desk::perform( 'copper', array( 'store' => $read, 'settings' => $settings, 'today' => $today, 'tank' => $read->tank_by_number( 621 ), 'base' => array( 'actor_id' => 8, 'source' => 'qr' ) ), array( 'value' => '2.16' ) );
+$p = fh_preview( $read, 'raise copper to 2.4' );
+check( '"raise copper to 2.4" after "621 copper 2.16": Now is today\'s latest reading (2.16, with its time) — 16.6 ml', 2.16 === $p['dose']['now'] && 1 === preg_match( '/^\d\d:\d\d$/', $p['dose']['now_at'] ) && 16.6 === $p['dose']['plan']['amount'] && array() === $p['needs'] );
+$n = count( $read->logs );
+fh_act( $read, 621, fh_confirm_fields( $p ), 8, 'voice' );
+check( '…confirmed: only the dose — the reading is logged already', 1 === count( fh_new_logs( $read, $n ) ) && 'dose' === end( $read->logs )['kind'] );
 $empty = new Fake_Store();
 $p     = fh_preview( $empty, 'raise copper to 2.4' );
 check( '…with no reading today it asks for Now, and is not ready', array( 'now' ) === $p['needs'] && 'needs_now' === $p['dose']['plan']['state'] && null === $p['dose']['now'] && 2.4 === $p['dose']['target'] && 'Type the reading now to get the amount.' === $p['dose']['plan']['line'] );
@@ -207,10 +228,10 @@ $n = count( $room->logs );
 $r = fh_act( $room, 621, fh_confirm_fields( $p ), 8, 'voice' );
 check( '…confirmed: "Metronidazole 2.5 g · 25 mg per gallon, 100 gal", once', array( 'dose|0|' . $rb . '|2.5|Metronidazole 2.5 g · 25 mg per gallon, 100 gal' ) === fh_new_logs( $room, $n ) );
 $p = fh_preview( $room, 'prazi this tank' );
-check( '"prazi this tank": the tank\'s 40 gal — 380 mg', false === $p['dose']['whole'] && 'Add 380 mg Praziquantel' === $p['dose']['plan']['line'] && '40 gal × 9.5 mg' === $p['dose']['plan']['working'] && 'Tank 621' === $p['dose']['place'] );
+check( '"prazi this tank": the tank\'s 40 gal — 0.38 g', false === $p['dose']['whole'] && 'Add 0.38 g Praziquantel' === $p['dose']['plan']['line'] && '40 gal × 9.5 mg' === $p['dose']['plan']['working'] && 'Tank 621' === $p['dose']['place'] );
 $n = count( $room->logs );
 fh_act( $room, 621, fh_confirm_fields( $p ), 8, 'voice' );
-check( '…confirmed: on the tank', array( 'dose|' . $r621['id'] . '|-|380|Praziquantel 380 mg · 9.5 mg per gallon, 40 gal' ) === fh_new_logs( $room, $n ) );
+check( '…confirmed: on the tank', array( 'dose|' . $r621['id'] . '|-|0.38|Praziquantel 0.38 g · 9.5 mg per gallon, 40 gal' ) === fh_new_logs( $room, $n ) );
 $p = fh_preview( $room, 'metro for the system', 521 );
 check( '"metro for the system" on 521: the 205 gal system — 5.1 g', 'Add 5.1 g Metronidazole' === $p['dose']['plan']['line'] && 'Building 500, whole system' === $p['dose']['place'] && 205.0 === $p['dose']['gallons'] );
 $p = fh_preview( $room, 'cq loading' );

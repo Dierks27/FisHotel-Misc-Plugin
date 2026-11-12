@@ -315,6 +315,7 @@ class Front_Desk {
 			'targetLabel' => __( 'Bring it to', 'fishotel-misc-plugin' ),
 			'nowFrom'     => __( 'today\'s reading, %s', 'fishotel-misc-plugin' ),
 			'nowNone'     => __( 'no reading today — type it', 'fishotel-misc-plugin' ),
+			'nowAgain'    => __( 'dosed since the last reading — type a new one', 'fishotel-misc-plugin' ),
 			'nowType'     => __( 'type the reading', 'fishotel-misc-plugin' ),
 			'copperTargetChip' => __( 'target %s', 'fishotel-misc-plugin' ),
 			'topupLabel'  => __( 'Top-up after a water change', 'fishotel-misc-plugin' ),
@@ -322,6 +323,8 @@ class Front_Desk {
 			'ofTheWater'  => __( 'of the water', 'fishotel-misc-plugin' ),
 			'useResult'   => __( 'Use the result: %s', 'fishotel-misc-plugin' ),
 			'alsoReading' => __( 'Saving also logs the copper reading %s (once).', 'fishotel-misc-plugin' ),
+			/* translators: %s: the reading */
+			'onlyReading' => __( 'Save logs the copper reading %s (once) — there is nothing to add.', 'fishotel-misc-plugin' ),
 			'dosedToday'  => __( 'Already logged today: %1$s, at %2$s.', 'fishotel-misc-plugin' ),
 			'dosedAfter'  => __( 'That went in after the reading — read the level again before adding more.', 'fishotel-misc-plugin' ),
 			'noMeds'      => __( 'No medication is offered — add or bring one back in Settings → Medications (Room board).', 'fishotel-misc-plugin' ),
@@ -735,7 +738,16 @@ class Front_Desk {
 		$result = self::perform( $act, $ctx, $raw );
 
 		if ( ! empty( $result['error'] ) ) {
-			wp_send_json_error( array( 'message' => (string) $result['error'] ), 400 );
+			$error = array( 'message' => (string) $result['error'] );
+			if ( ! empty( $result['stale'] ) ) {
+				// The page is behind the room: hand it the screen as it is now.
+				$error['screen'] = self::screen_data( $tankn );
+				$error['dosed']  = $result['stale'];
+			}
+			if ( isset( $result['confirm'] ) ) {
+				$error['confirm'] = (float) $result['confirm'];
+			}
+			wp_send_json_error( $error, 400 );
 		}
 
 		wp_send_json_success(
@@ -1378,6 +1390,18 @@ class Front_Desk {
 	 * A dose log of the day ticks the dose step that names the medication,
 	 * the reading the copper test. No undo: a dose cannot be taken back out
 	 * of the water, so the log stands (a correction is a note).
+	 *
+	 * Because there is no undo, three things are refused before anything is
+	 * written: a Save from a sheet that is behind the room (`seen`, the
+	 * time of the medication's latest dose in that water as the sheet knew
+	 * it — a newer one means a second phone, a second tap or a Save sent
+	 * again; the reply carries the screen as it is now, and saving again
+	 * from it goes through); for the copper product a level above 99 (the
+	 * limit a plain copper reading has); and a "Bring it to" far above the
+	 * copper target (24 for 2.4) until it is saved again (`sure`).
+	 *
+	 * With no amount, the copper product at or above its target ("Nothing
+	 * to add") logs the reading alone — once, by the same rule.
 	 */
 	private static function act_dose( array $ctx, array $raw ) {
 		$tank       = $ctx['tank'];
@@ -1386,16 +1410,20 @@ class Front_Desk {
 		if ( ! $medication || ! empty( $medication['retired'] ) ) {
 			return array( 'error' => __( 'Which medication? Pick one.', 'fishotel-misc-plugin' ) );
 		}
-		$amount = isset( $raw['amount'] ) && is_scalar( $raw['amount'] ) && is_numeric( $raw['amount'] ) ? round( (float) $raw['amount'], 2 ) : null;
-		if ( null === $amount || $amount <= 0 || $amount > self::MAX_DOSE ) {
+		$whole       = ! empty( $raw['whole'] ) && '0' !== (string) $raw['whole'];
+		$building_id = (int) ( $tank['building']['id'] ?? $tank['building_id'] ?? 0 );
+		$copper      = Medications::is_copper( $medication );
+		$blank       = ! isset( $raw['amount'] ) || ( is_scalar( $raw['amount'] ) && '' === trim( (string) $raw['amount'] ) );
+		$amount      = isset( $raw['amount'] ) && is_scalar( $raw['amount'] ) && is_numeric( $raw['amount'] ) ? round( (float) $raw['amount'], 2 ) : null;
+		$args        = Dose::args_from_request( $medication, $raw, 0 );
+		$only        = $blank && $copper && $args['calc'] && ( ! $whole || $building_id > 0 ); // Perhaps the reading alone.
+		if ( ! $only && ( null === $amount || $amount <= 0 || $amount > self::MAX_DOSE ) ) {
 			return array( 'error' => __( 'How much? An amount above 0 and at most 9999.', 'fishotel-misc-plugin' ) );
 		}
 		$unit = isset( $raw['unit'] ) && is_scalar( $raw['unit'] ) ? sanitize_key( $raw['unit'] ) : '';
-		if ( ! in_array( $unit, Medications::UNITS, true ) ) {
+		if ( ! $only && ! in_array( $unit, Medications::UNITS, true ) ) {
 			return array( 'error' => __( 'Which unit? mg, g, ml, tsp, drops or each.', 'fishotel-misc-plugin' ) );
 		}
-		$whole       = ! empty( $raw['whole'] ) && '0' !== (string) $raw['whole'];
-		$building_id = (int) ( $tank['building']['id'] ?? $tank['building_id'] ?? 0 );
 		if ( $whole && $building_id <= 0 ) {
 			return array( 'error' => __( 'This tank has no building to dose as a system.', 'fishotel-misc-plugin' ) );
 		}
@@ -1405,15 +1433,62 @@ class Front_Desk {
 		$note    = '';
 		$reading = '';
 		$now     = null;
-		$args    = Dose::args_from_request( $medication, $raw, 0 );
-		if ( $args['calc'] || $args['topup'] ) {
+		$sheet   = array_key_exists( 'seen', $raw ); // A sheet or a preview says what it knew.
+		if ( $args['calc'] || $args['topup'] || $sheet ) {
 			$waters = Dose::waters( $store, $tank, $ctx['today'], (array) $ctx['settings'] );
 			$water  = $waters[ $whole ? 'system' : 'tank' ];
 			$args   = Dose::args_from_request( $medication, $raw, $water['gallons'] );
-			$note   = Dose::working_note( $medication, $args );
-			if ( $args['calc'] && Medications::is_copper( $medication ) && isset( $args['now'] ) && null !== $args['now'] ) {
-				$now     = (float) $args['now'];
-				$reading = Dose::save_reading( $store, $tank, $whole, $now, $water['reading'], $ctx['base'] );
+			$levels = $args['calc'] && $copper;
+
+			foreach ( $levels ? array( 'now', 'target' ) : array() as $which ) {
+				if ( isset( $args[ $which ] ) && $args[ $which ] > Dose::MAX_COPPER ) {
+					return array( 'error' => __( 'A copper level is a number like 2.4 — at most 99. Check "Now" and "Bring it to".', 'fishotel-misc-plugin' ) );
+				}
+			}
+			$now = $levels && isset( $args['now'] ) && null !== $args['now'] ? (float) $args['now'] : null;
+
+			if ( $only ) {
+				if ( null === $now || 'nothing' !== Dose::plan( $medication, $args )['state'] ) {
+					return array( 'error' => __( 'How much? An amount above 0 and at most 9999.', 'fishotel-misc-plugin' ) );
+				}
+				$reading = Dose::save_reading( $store, $tank, $whole, $now, $waters['tank']['reading'], $ctx['base'] );
+				if ( 'failed' === $reading ) {
+					return array( 'error' => __( 'The reading could not be saved.', 'fishotel-misc-plugin' ) );
+				}
+				return array(
+					'message'   => sprintf(
+						'already' === $reading
+							/* translators: 1: the reading, 2: the water */
+							? __( 'Copper %1$s was logged already · %2$s · nothing to add', 'fishotel-misc-plugin' )
+							/* translators: 1: the reading, 2: the water */
+							: __( 'Copper %1$s logged · %2$s · nothing to add', 'fishotel-misc-plugin' ),
+						Dose::level_text( $now ),
+						Dose::place( $tank, $whole )
+					),
+					'event_ids' => array(),
+					'reading'   => $reading,
+				);
+			}
+
+			$newer = $sheet ? Dose::newer_dose( $water, $medication['key'], $raw['seen'] ) : null;
+			if ( $newer ) {
+				return array(
+					/* translators: 1: the dose as it was logged, 2: clock time */
+					'error' => sprintf( __( '%1$s was logged in this water at %2$s, after this sheet was opened. Check it — saving again logs another dose.', 'fishotel-misc-plugin' ), $newer['text'], $newer['at'] ),
+					'stale' => Dose::defaults( $medication, $water, (array) $ctx['settings'], Medications::from_settings( (array) $ctx['settings'] ) )['dosed'],
+				);
+			}
+			if ( $levels && Dose::far_above( $args['target'] ?? null, (array) $ctx['settings'] ) && empty( $raw['sure'] ) ) {
+				return array(
+					/* translators: 1: the level typed, 2: the copper target */
+					'error'   => sprintf( __( '"Bring it to" %1$s is far above the copper target (%2$s). If that is right, save again.', 'fishotel-misc-plugin' ), Dose::level_text( $args['target'] ), Dose::level_text( (float) $ctx['settings']['copper_target'] ) ),
+					'confirm' => (float) $args['target'],
+				);
+			}
+
+			$note = Dose::working_note( $medication, $args );
+			if ( null !== $now ) {
+				$reading = Dose::save_reading( $store, $tank, $whole, $now, $waters['tank']['reading'], $ctx['base'] );
 			}
 		}
 

@@ -203,7 +203,12 @@ function start( config ) {
 		var fields = {};
 		new URLSearchParams( options.body ).forEach( function ( value, key ) { fields[ key ] = value; } );
 		posts.push( fields );
-		return Promise.resolve( { status: 200, json: function () { return Promise.resolve( { success: true, data: reply( fields ) } ); } } );
+		var data = reply( fields, posts.length );
+		if ( data && data.refused ) {
+			// A refusal: wp_send_json_error() — success false, the data beside the message.
+			return Promise.resolve( { status: 400, json: function () { return Promise.resolve( { success: false, data: data.refused } ); } } );
+		}
+		return Promise.resolve( { status: 200, json: function () { return Promise.resolve( { success: true, data: data } ); } } );
 	};
 	delete global.SpeechRecognition;
 	delete global.webkitSpeechRecognition;
@@ -346,15 +351,15 @@ async function run() {
 	page.tap( 'Top-up after a water change' );
 	check( 'the Top-up switch asks how much water was changed', 'How much of the water was changed?' === result( page ) && !! page.input( 'fh-fd-changed' ) && '' === page.input( 'fh-fd-amount' ).value );
 	page.type( 'fh-fd-changed', '25' );
-	check( '25 % of 100 gal: the amount for the water that was replaced — 625 mg', 'Add 625 mg Metronidazole 25 gal × 25 mg (25 % of 100 gal) 1.3 scoops (one scoop = 0.5 g)' === result( page ) && '625' === page.input( 'fh-fd-amount' ).value && 'mg' === page.select().value, result( page ) );
+	check( '25 % of 100 gal: the amount for the water that was replaced — 625 mg reads 0.63 g', 'Add 0.63 g Metronidazole 25 gal × 25 mg (25 % of 100 gal) 1.3 scoops (one scoop = 0.5 g)' === result( page ) && '0.63' === page.input( 'fh-fd-amount' ).value && 'g' === page.select().value, result( page ) );
 	page.tapExact( 'gal' );
-	check( '…or in gallons: 25 gal', 0 === result( page ).indexOf( 'Add 625 mg Metronidazole 25 gal × 25 mg' ) && -1 === result( page ).indexOf( '%' ), result( page ) );
+	check( '…or in gallons: 25 gal', 0 === result( page ).indexOf( 'Add 0.63 g Metronidazole 25 gal × 25 mg' ) && -1 === result( page ).indexOf( '%' ), result( page ) );
 	page.type( 'fh-fd-changed', '150' );
 	check( 'more than the water holds is refused', 'That is more than this water holds (100 gal).' === result( page ) );
 	page.type( 'fh-fd-changed', '30' );
 	page.tap( 'Save' );
 	await later( function () {} );
-	check( 'Save posts the rate and the top-up', 1 === page.posts.length && 'metro' === page.posts[0].medication && '750' === page.posts[0].amount && 'mg' === page.posts[0].unit && '1' === page.posts[0].calc && '25' === page.posts[0].rate && '1' === page.posts[0].topup && '30' === page.posts[0].changed && 'gal' === page.posts[0].changed_unit && ! ( 'now' in page.posts[0] ), JSON.stringify( page.posts ) );
+	check( 'Save posts the rate and the top-up', 1 === page.posts.length && 'metro' === page.posts[0].medication && '0.75' === page.posts[0].amount && 'g' === page.posts[0].unit && '1' === page.posts[0].calc && '25' === page.posts[0].rate && '1' === page.posts[0].topup && '30' === page.posts[0].changed && 'gal' === page.posts[0].changed_unit && ! ( 'now' in page.posts[0] ), JSON.stringify( page.posts ) );
 
 	page = start( { screen: screen( true ) } );
 	page.tap( 'Dose +' );
@@ -364,15 +369,15 @@ async function run() {
 	page.tap( 'Top-up · 12 mg per gallon' );
 	check( 'a named dose chip picks that rate: 1.2 g', 0 === result( page ).indexOf( 'Add 1.2 g Test Quine 100 gal × 12 mg' ) && -1 !== page.button( 'Top-up · 12 mg per gallon' ).className.indexOf( 'is-on' ) );
 	page.tap( 'This tank only' );
-	check( 'the chosen rate stays when the water changes (40 gal — 480 mg)', 0 === result( page ).indexOf( 'Add 480 mg Test Quine 40 gal × 12 mg' ), result( page ) );
+	check( 'the chosen rate stays when the water changes (40 gal — 0.48 g)', 0 === result( page ).indexOf( 'Add 0.48 g Test Quine 40 gal × 12 mg' ), result( page ) );
 	page.tap( 'Save' );
 	await later( function () {} );
-	check( 'Save posts the rate with the named dose\'s name', '12' === page.posts[0].rate && 'Top-up' === page.posts[0].dose_label && '480' === page.posts[0].amount && '0' === page.posts[0].whole );
+	check( 'Save posts the rate with the named dose\'s name', '12' === page.posts[0].rate && 'Top-up' === page.posts[0].dose_label && '0.48' === page.posts[0].amount && 'g' === page.posts[0].unit && '0' === page.posts[0].whole );
 	page = start( { screen: screen( true ) } );
 	page.tap( 'Dose +' );
 	page.tap( 'Quine' );
 	page.tap( 'This tank only' );
-	check( 'nothing due in this tank alone: its own rate (10 mg per gallon — 400 mg), nothing marked due', -1 !== page.button( '10 mg per gallon · usual' ).className.indexOf( 'is-on' ) && 0 === result( page ).indexOf( 'Add 400 mg Test Quine' ) && ! page.button( 'due today' ), result( page ) );
+	check( 'nothing due in this tank alone: its own rate (10 mg per gallon — 0.4 g), nothing marked due', -1 !== page.button( '10 mg per gallon · usual' ).className.indexOf( 'is-on' ) && 0 === result( page ).indexOf( 'Add 0.4 g Test Quine' ) && ! page.button( 'due today' ), result( page ) );
 
 	console.log( '5. Typed, another medication dosed to a level, unknown gallons' );
 	page = start( { screen: screen( true ) } );
@@ -521,24 +526,139 @@ async function run() {
 	page.tap( 'Copper' );
 	check( 'nothing dosed today: no "Already logged today" on the sheet', -1 === page.text().indexOf( 'Already logged today' ) && 0 === page.byClass( 'fh-fd-dosed' ).length );
 	var dosedScreen = screen( true );
-	dosedScreen.tank.dose.system.meds.copper.dosed = { text: 'Copper Power 16.6 ml', at: '09:20', after: true };
-	dosedScreen.tank.dose.system.meds.metro.dosed  = { text: 'Metronidazole 2.5 g', at: '08:05', after: false };
+	dosedScreen.tank.dose.system.meds.copper.dosed = { text: 'Copper Power 16.6 ml', at: '09:20', after: true, logged_at: '2026-11-12 15:20:00' };
+	dosedScreen.tank.dose.system.meds.copper.now   = null; // Dosed since the reading: the server leaves "Now" empty.
+	dosedScreen.tank.dose.system.meds.copper.nowAt = '';
+	dosedScreen.tank.dose.system.meds.metro.dosed  = { text: 'Metronidazole 2.5 g', at: '08:05', after: false, logged_at: '2026-11-12 14:05:00' };
 	page = start( { screen: dosedScreen } );
 	page.tap( 'Dose +' );
 	check( 'no medication picked: nothing told yet', 0 === page.byClass( 'fh-fd-dosed' ).length );
 	page.tap( 'Copper' );
-	check( 'copper dosed after today\'s reading: the sheet says what went in, when, and to read the level again — above the sum', -1 !== page.text().indexOf( 'Already logged today: Copper Power 16.6 ml, at 09:20. That went in after the reading — read the level again before adding more.' ) && 1 === page.byClass( 'is-after' ).length && page.text().indexOf( 'Already logged today' ) < page.text().indexOf( 'Add 16.6 ml' ), page.text() );
-	check( '…the sum and Save stay the page\'s to use', 'Add 16.6 ml Copper Power 100 gal × 0.24 ppm × 0.692' === result( page ) && ! page.button( 'Save' ).disabled );
+	check( 'copper dosed after today\'s reading: the sheet says what went in, when, and to read the level again — above the sum', -1 !== page.text().indexOf( 'Already logged today: Copper Power 16.6 ml, at 09:20. That went in after the reading — read the level again before adding more.' ) && 1 === page.byClass( 'is-after' ).length && page.text().indexOf( 'Already logged today' ) < page.text().indexOf( 'Type the reading now' ), page.text() );
+	check( '…and does NOT offer the same 16.6 ml again: "Now" is empty and asked for ("dosed since the last reading — type a new one"), the amount empty', '' === page.input( 'fh-fd-now' ).value && '2.4' === page.input( 'fh-fd-target' ).value && 'Type the reading now to get the amount.' === result( page ) && '' === page.input( 'fh-fd-amount' ).value && -1 !== page.text().indexOf( 'dosed since the last reading — type a new one' ) && -1 === page.text().indexOf( 'no reading today' ), page.text() );
+	page.type( 'fh-fd-now', '2.38' );
+	check( '…a fresh reading typed: the sum and Save are the page\'s to use', 'Add 1.4 ml Copper Power 100 gal × 0.02 ppm × 0.692' === result( page ) && ! page.button( 'Save' ).disabled, result( page ) );
+	page.tap( 'Save' );
+	await later( function () {} );
+	check( '…and Save says which dose this sheet knew of', 1 === page.posts.length && '2026-11-12 15:20:00' === page.posts[0].seen && '2.38' === page.posts[0].now, JSON.stringify( page.posts ) );
+	page = start( { screen: dosedScreen } );
+	page.tap( 'Dose +' );
+	page.tap( 'Copper' );
 	page.tap( 'Metro' );
 	check( 'another medication: its own dose, and no "read again"', -1 !== page.text().indexOf( 'Already logged today: Metronidazole 2.5 g, at 08:05.' ) && -1 === page.text().indexOf( 'read the level again' ) && -1 === page.text().indexOf( 'Copper Power 16.6 ml, at' ) && 0 === page.byClass( 'is-after' ).length, page.text() );
 	page.tap( 'This tank only' );
 	check( 'the other water (this tank alone, nothing dosed in it): not told', -1 === page.text().indexOf( 'Already logged today' ) );
 
 	var again = JSON.parse( JSON.stringify( preview ) );
-	again.dose.dosed = { text: 'Copper Power 16.6 ml', at: '09:20', after: true };
+	again.dose.dosed = { text: 'Copper Power 16.6 ml', at: '09:20', after: true, logged_at: '2026-11-12 15:20:00' };
 	page = phrase( function () { return again; } );
 	await later( function () {} );
 	check( 'a dose phrase: the preview tells of it too, before Confirm', -1 !== page.text().indexOf( 'Already logged today: Copper Power 16.6 ml, at 09:20. That went in after the reading' ) && ! page.button( 'Confirm now' ).disabled, page.text() );
+	page.tap( 'Confirm now' );
+	await later( function () {} );
+	check( '…and Confirm says which dose the preview knew of', 2 === page.posts.length && '2026-11-12 15:20:00' === page.posts[1].seen );
+
+	console.log( '9. Because a dose has no undo: one Save, a sheet that is behind, a slipped decimal, the reading alone' );
+	page = start( { screen: screen( true ) } );
+	page.tap( 'Dose +' );
+	page.tap( 'Copper' );
+	page.tap( 'Save' );
+	page.tap( 'Save' );
+	page.tap( 'Save' );
+	await later( function () {} );
+	check( 'Save tapped three times before the reply (the bar is outside the dimmed app): ONE post', 1 === page.posts.length && 'dose' === page.posts[0].act, JSON.stringify( page.posts.map( function ( f ) { return f.act; } ) ) );
+	check( '…a sheet that knows of no dose says so', '' === page.posts[0].seen && ! ( 'sure' in page.posts[0] ) );
+	page.tap( 'Dose +' );
+	page.tap( 'Copper' );
+	page.tap( 'Save' );
+	await later( function () {} );
+	check( '…and once the reply is in, the next Save is a new one', 2 === page.posts.length );
+
+	// A second phone: its sheet was drawn before the first phone's Save.
+	var behind = function ( fields, count ) {
+		if ( 'dose' === fields.act && '' === fields.seen ) {
+			return { refused: { message: 'Copper Power 16.6 ml was logged in this water at 09:20, after this sheet was opened. Check it — saving again logs another dose.', screen: dosedScreen, dosed: dosedScreen.tank.dose.system.meds.copper.dosed } };
+		}
+		return { message: 'Saved', undo: { eventIds: [] }, screen: dosedScreen };
+	};
+	page = start( { screen: screen( true ), reply: behind } );
+	page.tap( 'Dose +' );
+	page.tap( 'Copper' );
+	check( 'a sheet drawn before another phone\'s Save still offers 16.6 ml', '16.6' === page.input( 'fh-fd-amount' ).value );
+	page.tap( 'Save' );
+	await later( function () {} );
+	check( '…its Save is refused: the toast says what went in, and the sheet — still open — is redrawn as the room is now', 1 === page.posts.length && -1 !== shown( page.toast ).indexOf( 'Copper Power 16.6 ml was logged in this water at 09:20' ) && -1 !== page.text().indexOf( 'Already logged today: Copper Power 16.6 ml, at 09:20.' ) && !! page.input( 'fh-fd-now' ) && '' === page.input( 'fh-fd-now' ).value && '' === page.input( 'fh-fd-amount' ).value, page.text() );
+	page.type( 'fh-fd-now', '2.38' );
+	page.tap( 'Save' );
+	await later( function () {} );
+	check( '…saving again from it (it knows of that dose now) goes through', 2 === page.posts.length && '2026-11-12 15:20:00' === page.posts[1].seen && '1.4' === page.posts[1].amount && -1 !== shown( page.toast ).indexOf( 'Saved' ), JSON.stringify( page.posts[1] ) );
+
+	page = phrase( function () { return JSON.parse( JSON.stringify( preview ) ); } );
+	await later( function () {} );
+	global.fetch = ( function ( inner ) {
+		return function ( url, options ) {
+			var fields = {};
+			new URLSearchParams( options.body ).forEach( function ( value, key ) { fields[ key ] = value; } );
+			if ( 'dose' === fields.act && '' === fields.seen ) {
+				page.posts.push( fields );
+				return Promise.resolve( { status: 400, json: function () { return Promise.resolve( { success: false, data: behind( fields ).refused } ); } } );
+			}
+			return inner( url, options );
+		};
+	}( global.fetch ) );
+	page.tap( 'Confirm now' );
+	await later( function () {} );
+	check( 'a preview that is behind: refused the same way, and it now tells of the dose', 2 === page.posts.length && -1 !== page.text().indexOf( 'Already logged today: Copper Power 16.6 ml, at 09:20.' ) && -1 !== shown( page.toast ).indexOf( 'was logged in this water' ), page.text() );
+	page.tap( 'Confirm now' );
+	await later( function () {} );
+	check( '…confirmed again, knowing of it: posted with that dose\'s time', 3 === page.posts.length && '2026-11-12 15:20:00' === page.posts[2].seen );
+
+	// A slipped decimal in "Bring it to".
+	var asksFirst = function ( fields ) {
+		if ( 'dose' === fields.act && '24' === fields.target && ! fields.sure ) {
+			return { refused: { message: '"Bring it to" 24.00 is far above the copper target (2.50). If that is right, save again.', confirm: 24 } };
+		}
+		return { message: 'Saved', undo: { eventIds: [] }, screen: screen( true ) };
+	};
+	page = start( { screen: screen( true ), reply: asksFirst } );
+	page.tap( 'Dose +' );
+	page.tap( 'Copper' );
+	page.type( 'fh-fd-target', '24' );
+	check( '"Bring it to" 24 for 2.4: the sum does as it is told', 0 === result( page ).indexOf( 'Add 1511.3 ml Copper Power' ), result( page ) );
+	page.tap( 'Save' );
+	await later( function () {} );
+	check( '…the server asks first: the toast says so, the sheet stays open with what was typed', 1 === page.posts.length && ! ( 'sure' in page.posts[0] ) && -1 !== shown( page.toast ).indexOf( 'far above the copper target' ) && '24' === page.input( 'fh-fd-target' ).value );
+	page.type( 'fh-fd-target', '2.4' );
+	page.tap( 'Save' );
+	await later( function () {} );
+	check( '…corrected to 2.4: saved, and nothing is waved through', 2 === page.posts.length && '2.4' === page.posts[1].target && ! ( 'sure' in page.posts[1] ) );
+	page = start( { screen: screen( true ), reply: asksFirst } );
+	page.tap( 'Dose +' );
+	page.tap( 'Copper' );
+	page.type( 'fh-fd-target', '24' );
+	page.tap( 'Save' );
+	await later( function () {} );
+	page.tap( 'Save' );
+	await later( function () {} );
+	check( '…saved again as it stands: it was meant, and the post says so', 2 === page.posts.length && '24' === page.posts[1].target && '1' === page.posts[1].sure && -1 !== shown( page.toast ).indexOf( 'Saved' ), JSON.stringify( page.posts[1] ) );
+
+	// At or above the target.
+	page = start( { screen: screen( true ), reply: function () { return { message: 'Copper 2.45 logged · Building 600, whole system · nothing to add', undo: { eventIds: [] }, screen: screen( true ) }; } } );
+	page.tap( 'Dose +' );
+	page.tap( 'Copper' );
+	page.type( 'fh-fd-now', '2.45' );
+	check( 'at or above the target: "Nothing to add" — and the sheet says the reading is all Save logs', 0 === result( page ).indexOf( 'Nothing to add' ) && -1 !== page.text().indexOf( 'Save logs the copper reading 2.45 (once) — there is nothing to add.' ) && -1 === page.text().indexOf( 'Saving also logs' ), page.text() );
+	page.tap( 'Save' );
+	await later( function () {} );
+	check( '…Save keeps that word: ONE post, the dose action with no amount and the levels — the server logs the reading alone', 1 === page.posts.length && 'dose' === page.posts[0].act && 'copper' === page.posts[0].medication && '' === page.posts[0].amount && '1' === page.posts[0].calc && '2.45' === page.posts[0].now && '2.4' === page.posts[0].target && '1' === page.posts[0].whole && -1 !== shown( page.toast ).indexOf( 'Copper 2.45 logged' ), JSON.stringify( page.posts ) );
+	page = start( { screen: screen( true ) } );
+	page.tap( 'Dose +' );
+	page.tap( 'Ramp' );
+	page.type( 'fh-fd-now', '0.6' );
+	page.type( 'fh-fd-target', '0.5' );
+	page.tap( 'Save' );
+	await later( function () {} );
+	check( '…another medication dosed to a level has no reading to log: nothing is promised and nothing posted', 0 === result( page ).indexOf( 'Nothing to add' ) && -1 === page.text().indexOf( 'copper reading' ) && 0 === page.posts.length && -1 !== shown( page.toast ).indexOf( 'Nothing to add' ) );
 
 	console.log( '\n' + ( failures ? failures + ' of ' + checks + ' checks FAILED' : 'All ' + checks + ' checks passed' ) );
 	process.exit( failures ? 1 : 0 );

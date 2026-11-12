@@ -185,8 +185,10 @@ water, so the log stands and a correction is a note; the sheet says so
 before Save — and, when that medication went into that water today
 already, it says that too ("Already logged today: Copper Power 16.6 ml,
 at 09:20."), with, for the copper product, "read the level again before
-adding more" while the reading is older than that dose. All of it is in
-*Medications and the dose sum*, below.
+adding more" while the reading is older than that dose ("Now" is then
+empty and asked for). Save goes out once however often it is tapped, and
+a sheet that is behind the room is refused once and redrawn. All of it
+is in *Medications and the dose sum*, below.
 
 **Calculator** (in the links under the fish rows, on the tank picker, and
 at `/?fh_front_desk=1&calc=1`) — a medication and any number of gallons
@@ -231,7 +233,7 @@ fish) for next time.
 | `move 3 cardinals 121 to 221` · `move the clowns to building one top left` · `move all to 222` | a move (a quantity smaller than the group splits it) |
 | `four pajama cardinalfish in tank 521` · `put a dozen banggai cardinals into 522` | an arrival (a Clean Room tank is refused — pick a Spa tank) |
 | `521 copper 2.4` · `copper two point four` | a copper reading on the tank |
-| `copper 2.16 to 2.4` · `bring copper from 2.16 to 2.4` · `raise copper to 2.4` · `dose copper` | a dose of the copper product to a level: the result line and its working, then Confirm (today's latest reading is Now when none is said — asked for when there is none) |
+| `copper 2.16 to 2.4` · `bring copper from 2.16 to 2.4` · `raise copper to 2.4` · `raise copper to 2.4 from 2.16` · `I need to bring my copper up from 2.16 to 2.4 in the 100 gallon system` · `dose copper` | a dose of the copper product to a level: the result line and its working, then Confirm (today's latest reading is Now when none is said — asked for when there is none, or when copper was dosed since) |
 | `dose metro` · `metro for the system` · `prazi this tank` · `cq loading` · `metro for the 100 gallon system` | a dose per gallon for that water, with its sum; a named dose is heard |
 | `metro 5 g` · `dosed 5 grams of metro` · `copper power 55 ml` | a dose spoken with its amount: that amount is logged, no sum |
 | `count five clowns` · `there are 3 pajamas` | a full recount |
@@ -321,7 +323,11 @@ logs that name it still read, and an edit that changes the name or the
 chip keeps the old one as an other name for the same reason (a dose log
 carries no key; its note starts with the medication's name). Two
 medications cannot share a name. The editor says what 100 gallons take
-at the rate being typed.
+at the rate being typed. An edit form carries a fingerprint of the row it
+was drawn from: a Save from a tab loaded before somebody else's change
+is refused ("… was changed elsewhere after this page was loaded — reload
+the page and make the change again") instead of quietly putting the old
+values back.
 
 **The copper product** is the row with the key `copper` (seeded "Copper
 Power") while it is dosed to a level: its "Now" is today's copper
@@ -360,8 +366,11 @@ against `tests/fixtures/dose-maths.json`):
   water that was replaced; a medication dosed to a level stays Now →
   Bring it to.
 - **rounding**: one decimal from 1 up, two below 1 (16.608 → 16.6 ml);
-  a weight reads in grams from 1 g up and in milligrams below (2,500 mg
-  → 2.5 g; 0.4 g → 400 mg).
+  a weight reads in grams from 0.1 g up (2,500 mg → 2.5 g; 950 mg →
+  0.95 g) and in milligrams below (a bucket's 62.5 mg). With the seeded
+  list that is, amount and unit, what the Dose sheet's suggestion read
+  before the list could be edited — a system's dose is logged in the
+  unit it always was (the log's value carries no unit of its own).
 
 **Save** logs the dose once through the existing dose log — the
 medication, the amount as it stands in the field, its unit, the system
@@ -371,20 +380,45 @@ gallon, 100 gal", "Loading: 40 mg per gallon, 100 gal", "… · top-up
 after a 25 % water change". For the copper product it also logs the
 copper READING — the "Now" value, on the same water (the building for
 the system, else the tank) — unless that value is today's latest reading
-for that water already. The day's to-do then ticks as it always did: the
-dose step that names the medication, and the copper test by the
-reading. A plain typed dose (no sum behind it) logs exactly what it
-always logged.
+there already. "There" is what the page's tank shows: its own readings
+and the building's. A reading taken on a sibling tank fills "Now" for
+the whole system (it is one water) but is not the system's reading yet:
+the whole-system Save logs it on the building, so every tank of the
+system has it and its copper test is ticked. The day's to-do then ticks
+as it always did: the dose step that names the medication, and the
+copper test by the reading. A plain typed dose (no sum behind it) logs
+exactly what it always logged.
 
-**Twice is said, not blocked.** The sheet and a dose phrase's preview
+At or above the target ("Nothing to add") with no amount typed, Save
+logs **the reading alone** — the same action, the same water, the same
+once — and the toast says "Copper 2.45 logged · Building 600, whole
+system · nothing to add"; the sheet says so before Save.
+
+A copper level is a number up to 99, as on the Copper screen: a "Now" or
+"Bring it to" above that is refused and nothing is written. A "Bring it
+to" of twice the copper target or more (24 typed for 2.4) is asked about
+first — "… is far above the copper target (2.50). If that is right, save
+again." — and written when it is saved again as it stands.
+
+**Twice is said — and never written by accident.** The sheet and a dose phrase's preview
 show the medication's latest dose logged in that water today
 (`Dose::doses_today()`: a dose for the whole system counts in the system
 and in each tank of it, a dose in one tank in the system and in that
 tank), so a second person at the same tank — or a page reopened after a
 Save — sees it before adding more. For the copper product "Now" is
 today's reading; when the dose went in after that reading the water
-holds more than "Now" says, and the note asks for a new reading first.
-Nothing is refused: a second dose on purpose is still one Save.
+holds more than "Now" says: "Now" is left empty, the note asks for a new
+reading first, and the same sum is not offered a second time. A second
+dose on purpose is still one Save — but because a dose has no undo, one
+Save is one log: the page sends one request at a time (a second tap on
+Save while the first is under way does nothing), and the sheet and the
+preview post the time of the latest dose of that medication they knew of
+(`seen`). When a newer one is in that water — a second phone, a Save
+sent again after a reply that never arrived — the server writes nothing,
+says "Copper Power 16.6 ml was logged in this water at 09:20, after this
+sheet was opened. Check it — saving again logs another dose." and hands
+the page the screen as it is now; the sheet stays open, shows that dose,
+and saving again from it goes through.
 
 **Afterwards** the working is in the log's own note, so everything that
 shows or lists a dose shows it: the Events tab line, the Board's "last

@@ -559,6 +559,8 @@
 		pending: null,
 		voice: null,
 		form: {},
+		sending: false,
+		sure: null,
 		timers: {},
 		toastShownAt: 0,
 		toastSticky: false
@@ -683,16 +685,34 @@
 		}).then(function (json) {
 			if (!json || !json.success) {
 				var msg = json && json.data && json.data.message ? json.data.message : t('error', 'Something went wrong.');
-				throw new Error(msg);
+				var refusal = new Error(msg);
+				refusal.data = json && json.data && typeof json.data === 'object' ? json.data : null;
+				throw refusal;
 			}
 			return json.data;
 		});
 	}
 
+	/*
+	 * One write at a time: while a request is under way a second tap does
+	 * nothing (the Save button sits in the bar outside the app, which
+	 * busy() does not cover — and a dose has no undo).
+	 *
+	 * A refusal may carry more than its message: the screen as it is now
+	 * (a dose sheet or preview that was behind the room — it is redrawn
+	 * with what went in, and saving again goes through), or a level to
+	 * confirm ("Bring it to" far above the copper target — saving the same
+	 * level again says it was meant).
+	 */
 	function act(fields) {
+		if (state.sending) {
+			return Promise.resolve(null);
+		}
+		state.sending = true;
 		busy(true);
 		var before = tank() ? tank().number : 0;
 		return post('fishotel_cleanroom_act', fields).then(function (data) {
+			state.sure = null;
 			if (data.screen) {
 				state.screen = data.screen;
 			}
@@ -714,10 +734,27 @@
 			}
 			return data;
 		}).catch(function (err) {
+			var more = err && err.data ? err.data : null;
+			if (more && typeof more.confirm === 'number') {
+				state.sure = more.confirm;
+			}
+			if (more && more.screen) {
+				state.screen = more.screen;
+				if (state.voice && state.voice.preview && state.voice.preview.dose) {
+					state.voice.preview.dose.dosed = more.dosed || null;
+				}
+				render();
+			}
 			failToast(err);
 		}).then(function () {
+			state.sending = false;
 			busy(false);
 		});
+	}
+
+	/* Whether this "Bring it to" is the one the server asked about and Save was tapped again for. */
+	function sureOf(target) {
+		return typeof state.sure === 'number' && present(target) && Math.abs(Number(target) - state.sure) < 1e-9;
 	}
 
 	function failToast(err) {
@@ -1909,6 +1946,11 @@
 		var useChip = el('button', { type: 'button', class: 'fh-fd-chip fh-fd-chip--ghost', hidden: true, on: { click: function () { f.amountEdited = false; update(); } } });
 		var readingNote = el('p', { class: 'fh-fd-muted', hidden: true });
 
+		/* The copper product at or above its target, no amount typed: Save logs the reading alone. */
+		function readingOnly() {
+			return !!med && !!med.copper && !!plan && plan.state === 'nothing' && !present(f.amount);
+		}
+
 		/* Run the sum again and show it; the amount follows it until somebody types one. */
 		function update() {
 			plan = med ? doseMath.plan(med, { gallons: water.gallons, rate: f.rate, rateLabel: f.rateLabel, now: f.now, target: f.target, topup: !!f.topup, changed: f.changed, changedUnit: f.changedUnit }, doseWords()) : null;
@@ -1928,7 +1970,8 @@
 			var reads = !!med && !!med.copper && !!plan && ['ok', 'nothing', 'no_gallons'].indexOf(plan.state) !== -1;
 			readingNote.hidden = !reads;
 			if (reads) {
-				readingNote.textContent = fmt(t('alsoReading', 'Saving also logs the copper reading %s (once).'), doseMath.levelText(doseMath.level(f.now)));
+				// At or above the target with no amount typed, the reading is all Save logs.
+				readingNote.textContent = fmt(readingOnly() ? t('onlyReading', 'Save logs the copper reading %s (once) — there is nothing to add.') : t('alsoReading', 'Saving also logs the copper reading %s (once).'), doseMath.levelText(doseMath.level(f.now)));
 			}
 		}
 
@@ -1938,7 +1981,7 @@
 			} else if (med.mode === 'to_level') {
 				screen.appendChild(levelFields(med, f, {
 					options: start.options,
-					nowHint: !med.copper ? t('nowType', 'type the reading') : (start.nowAt && !f.nowEdited ? fmt(t('nowFrom', 'today\'s reading, %s'), start.nowAt) : (f.nowEdited ? '' : t('nowNone', 'no reading today — type it'))),
+					nowHint: !med.copper ? t('nowType', 'type the reading') : (start.nowAt && !f.nowEdited ? fmt(t('nowFrom', 'today\'s reading, %s'), start.nowAt) : (f.nowEdited ? '' : (start.dosed && start.dosed.after ? t('nowAgain', 'dosed since the last reading — type a new one') : t('nowNone', 'no reading today — type it')))),
 					typedHint: ''
 				}, update, render));
 			}
@@ -1963,7 +2006,7 @@
 					toast(t('medication', 'Medication') + '?', null, true);
 					return;
 				}
-				if (!f.amount || !(parseFloat(f.amount) > 0)) {
+				if (!readingOnly() && (!f.amount || !(parseFloat(f.amount) > 0))) {
 					toast(plan && plan.state !== 'ok' && plan.line ? plan.line : t('amount', 'Amount') + '?', null, true);
 					return;
 				}
@@ -1971,6 +2014,11 @@
 				fields.act = 'dose';
 				fields.tank = tk.number;
 				fields.via = 'qr';
+				// What this sheet knew of: the server refuses when that medication went into this water since.
+				fields.seen = start.dosed && start.dosed.logged_at ? start.dosed.logged_at : '';
+				if (fields.calc && sureOf(fields.target)) {
+					fields.sure = 1;
+				}
 				act(fields);
 			})
 		]);
@@ -2532,12 +2580,16 @@
 				fields.amount = plan.amount;
 				fields.unit = plan.unit;
 				fields.whole = d.whole ? 1 : 0;
+				fields.seen = d.dosed && d.dosed.logged_at ? d.dosed.logged_at : '';
 				if (plan.state === 'ok') {
 					// The sum stood behind it: the server writes the working (and the copper reading).
 					fields.calc = 1;
 					if (d.mode === 'to_level') {
 						fields.now = d.now;
 						fields.target = d.target;
+						if (sureOf(d.target)) {
+							fields.sure = 1;
+						}
 					} else {
 						fields.rate = d.rate;
 						if (d.rate_label) {

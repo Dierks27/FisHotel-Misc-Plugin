@@ -84,24 +84,33 @@ foreach ( $fixture['cases'] as $case ) {
 check( 'the plan has exactly the seven fields the page reads', array( 'state', 'amount', 'unit', 'line', 'working', 'note', 'measure' ) === array_keys( Dose::plan( $fixture['medications']['metro'], array( 'gallons' => 100 ) ) ) );
 check( 'a medication that is not one: typed, never a throw', 'typed' === Dose::plan( array() )['state'] && 'needs_now' === Dose::plan( $fixture['medications']['copper'] )['state'] && 'no_gallons' === Dose::plan( $fixture['medications']['metro'] )['state'] );
 
-echo "4. The seeded list gives the same sums (the fixed list's suggestions, in the sensible unit)\n";
+echo "4. The seeded list gives the same sums (the fixed list's suggestions, amount and unit)\n";
 $seed = Medications::seed();
 check( 'the copper example on the seeded copper product: 16.6 ml', 16.6 === Dose::plan( $seed['copper'], array( 'gallons' => 100, 'now' => 2.16, 'target' => 2.4 ) )['amount'] && 'Add 16.6 ml Copper Power' === Dose::plan( $seed['copper'], array( 'gallons' => 100, 'now' => 2.16, 'target' => 2.4 ) )['line'] );
 check( '100 gallons of the seeded Metronidazole: 2.5 g', array( 2.5, 'g', '100 gal × 25 mg' ) === array( Dose::plan( $seed['metro'], array( 'gallons' => 100 ) )['amount'], Dose::plan( $seed['metro'], array( 'gallons' => 100 ) )['unit'], Dose::plan( $seed['metro'], array( 'gallons' => 100 ) )['working'] ) );
-$old = array();
+$old   = array();
+$small = array();
 foreach ( Protocol::DOSE_RATES as $key => $rate ) {
-	foreach ( array( 205, 100, 40, 20 ) as $gallons ) {
+	for ( $gallons = 1; $gallons <= 4000; $gallons++ ) {
 		// What the fixed list suggested, as its code had it: gallons × the rate in the fixed unit, one decimal from 1 up, two below.
 		$amount = $gallons * $rate;
 		$amount = round( $amount, $amount >= 1 ? 1 : 2 );
+		$unit   = Protocol::MEDICATIONS[ $key ]['unit'];
 		$now    = Protocol::dose_suggestion( $key, $gallons );
-		$mine   = $now ? Dose::convert( $now['amount'], $now['unit'], Protocol::MEDICATIONS[ $key ]['unit'] ) : null;
-		if ( null === $mine || abs( $mine - $amount ) > 1e-9 ) {
-			$old[] = $key . '@' . $gallons . ': ' . $amount . ' vs ' . json_encode( $now );
+		if ( 'g' === $unit && $gallons * $rate < 0.0995 ) {
+			// Under 0.1 g two decimals of a gram said too little ("0.05 g"): milligrams now, the same weight.
+			if ( ! $now || 'mg' !== $now['unit'] || abs( $now['amount'] - $gallons * $rate * 1000 ) > 0.05 + 1e-9 ) {
+				$small[] = $key . '@' . $gallons . ': ' . json_encode( $now );
+			}
+			continue;
+		}
+		if ( array( 'amount' => $amount, 'unit' => $unit ) !== $now ) {
+			$old[] = $key . '@' . $gallons . ': ' . $amount . ' ' . $unit . ' vs ' . json_encode( $now );
 		}
 	}
 }
-check( 'every medication of the fixed list, on 205, 100, 40 and 20 gal: the amount the fixed list suggested (a weight under 1 g now reads in mg)', array() === $old, implode( ', ', $old ) );
+check( 'every medication of the fixed list, on every water from 1 to 4000 gal: exactly the amount AND the unit the fixed list suggested (prazi on 100 gal is 0.95 g, on 55 gal 0.52 g) — nothing changes until the list is edited', array() === $old, implode( ', ', array_slice( $old, 0, 8 ) ) );
+check( '…except under 0.1 g (a bucket), where the same weight now reads in milligrams', array() === $small && array( 'amount' => 47.5, 'unit' => 'mg' ) === Protocol::dose_suggestion( 'prazi', 5 ), implode( ', ', array_slice( $small, 0, 8 ) ) );
 check( 'Protocol::dose_suggestion() still answers: metro 5.1 g on 205, formalin 20.5 ml, nothing for copper / salt / an unknown key / no volume', array( 'amount' => 5.1, 'unit' => 'g' ) === Protocol::dose_suggestion( 'metro', 205 ) && array( 'amount' => 20.5, 'unit' => 'ml' ) === Protocol::dose_suggestion( 'formalin', 205 ) && null === Protocol::dose_suggestion( 'copper', 205 ) && null === Protocol::dose_suggestion( 'salt', 205 ) && null === Protocol::dose_suggestion( 'x', 205 ) && null === Protocol::dose_suggestion( 'metro', 0 ) );
 
 echo "5. What a schedule step names\n";
@@ -228,7 +237,7 @@ check( '…and none of it in the other building; a dose two days old is not toda
 $d = Dose::defaults( $seed['metro'], $w['system'], $settings, $seed );
 check( 'the sheet starts with it: "Metronidazole 500 mg" and its time; no "read again" for a medication with no level', is_array( $d['dosed'] ) && 'Metronidazole 500 mg' === $d['dosed']['text'] && false === $d['dosed']['after'] && null === Dose::defaults( $seed['metro'], $w['tank'], $settings, $seed )['dosed'], json_encode( $d['dosed'] ) );
 $d = Dose::defaults( $seed['copper'], $w['system'], $settings, $seed );
-check( 'copper dosed in the same second as the reading (a Save logs both): the reading is older than the dose', true === $d['dosed']['after'] && 2.2 === $d['now'], json_encode( $d ) );
+check( 'copper dosed in the same second as the reading (a Save logs both): the reading is older than the dose — so "Now" is left empty, a fresh reading is asked for, and the same sum is not offered again', true === $d['dosed']['after'] && null === $d['now'] && '' === $d['now_at'] && 2.2 === $w['system']['reading']['value'] && 'needs_now' === Dose::plan( $seed['copper'], array( 'gallons' => 205, 'now' => $d['now'], 'target' => $d['target'] ) )['state'] && $w['system']['doses']['copper']['logged_at'] === $d['dosed']['logged_at'], json_encode( $d ) );
 check( 'a typed medication is told of too', null === Dose::defaults( $seed['salt'], $w['system'], $settings, $seed )['dosed'] && 'Salt 2 each' === Dose::defaults( $seed['salt'], array( 'reading' => null, 'items' => array(), 'doses' => Dose::doses_today( array( array( 'kind' => 'dose', 'note' => 'Salt 2 each', 'logged_at' => gmdate( 'Y-m-d H:i:s' ) ) ), $now_day, $seed ) ), $settings, $seed )['dosed']['text'] );
 $store->log_building( $b500, array( 'kind' => 'copper', 'value' => 2.38, 'logged_at' => gmdate( 'Y-m-d H:i:s', time() + 5 ) ) );
 $w = Dose::waters( $store, $t521, $now_day, $settings );
@@ -245,7 +254,7 @@ $t = Dose::doses_today( $rows, $now_day, $seed );
 check( 'several doses of one medication: the latest; a reading or a dose of nothing on the list is no dose of it', array( 'copper' ) === array_keys( $t ) && 'Copper Power 1.4 ml' === $t['copper']['text'], json_encode( $t ) );
 check( 'no date, no rows: nothing', array() === Dose::doses_today( $rows, '', $seed ) && array() === Dose::doses_today( array(), $now_day, $seed ) );
 $sheet = Dose::sheet_data( Medications::active( $seed ), Dose::waters( $store, $t521, $now_day, $settings ), $settings, $seed );
-check( 'the sheet\'s data carries it per water and medication', 'Copper Power 1.4 ml' === $sheet['system']['meds']['copper']['dosed']['text'] && true === $sheet['system']['meds']['copper']['dosed']['after'] && 'Metronidazole 500 mg' === $sheet['system']['meds']['metro']['dosed']['text'] && null === $sheet['tank']['meds']['metro']['dosed'] && null === $sheet['system']['meds']['salt']['dosed'], json_encode( $sheet['system']['meds'] ) );
+check( 'the sheet\'s data carries it per water and medication — with its time, which a Save posts back as what the sheet knew', 'Copper Power 1.4 ml' === $sheet['system']['meds']['copper']['dosed']['text'] && true === $sheet['system']['meds']['copper']['dosed']['after'] && null === $sheet['system']['meds']['copper']['now'] && 1 === preg_match( '/^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/', $sheet['system']['meds']['copper']['dosed']['logged_at'] ) && 'Metronidazole 500 mg' === $sheet['system']['meds']['metro']['dosed']['text'] && null === $sheet['tank']['meds']['metro']['dosed'] && null === $sheet['system']['meds']['salt']['dosed'], json_encode( $sheet['system']['meds'] ) );
 
 echo "10. What a Save's post turns into\n";
 $a = Dose::args_from_request( $seed['copper'], array( 'calc' => '1', 'now' => '2.16', 'target' => '2.4', 'rate' => '99' ), 100 );

@@ -12,7 +12,7 @@
  * tests/fixtures/dose-maths.json is read by this file's test and by the
  * PHP one, so the two cannot drift apart. The rounding is spelled out with
  * Math.floor() so both sides agree to the last digit: one decimal from 1
- * up, two below 1; a weight reads in grams from 1 g up and in milligrams
+ * up, two below 1; a weight reads in grams from 0.1 g up and in milligrams
  * below.
  *
  * No DOM, no jQuery, no config: the Front Desk page inlines this file
@@ -28,6 +28,7 @@
 
 	var MASS = { mg: 1, g: 1000 };
 	var FACTORS = [1, 10, 100, 1000, 10000];
+	var GRAMS_FROM = 100; // A weight reads in grams from this many milligrams up.
 	var MAX_LEVEL = 999;
 
 	/* The words of the sum (English; the page passes the translated ones). */
@@ -147,8 +148,9 @@
 	}
 
 	/**
-	 * An amount in the sensible unit, rounded: a weight in grams from 1 g
-	 * up and in milligrams below; every other unit as it is.
+	 * An amount in the sensible unit, rounded: a weight in grams from
+	 * 0.1 g up (950 mg reads 0.95 g) and in milligrams below; every other
+	 * unit as it is.
 	 *
 	 * @param {number} amount Amount.
 	 * @param {string} unit   Its unit.
@@ -160,7 +162,7 @@
 		if (Object.prototype.hasOwnProperty.call(MASS, unit)) {
 			var mg = amount * MASS[unit];
 			var rounded = roundAmount(mg);
-			if (rounded >= 1000) {
+			if (rounded >= GRAMS_FROM) {
 				return { amount: roundAmount(mg / 1000), unit: 'g' };
 			}
 			return { amount: rounded, unit: 'mg' };
