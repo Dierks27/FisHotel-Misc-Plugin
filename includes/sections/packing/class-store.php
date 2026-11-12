@@ -11,7 +11,11 @@
  *     tool previews and then sets;
  *   - variation_counts() and bag_usage(): how many variations there are,
  *     how many carry a bag, and how many products / variations name each
- *     bag — for the Packing page.
+ *     bag — for the Packing page;
+ *   - packs_flags(): the "Livestock — packed in a bag" value stored on a
+ *     list of products, in one go — for the fill tool; variation_bags():
+ *     the Bag sizes stored on one product's variations — for the product
+ *     editor's checkbox.
  *
  * The section has no table of its own. Every write goes through the
  * WooCommerce product object (Fill, Product) or the order object
@@ -237,6 +241,71 @@ class Store {
 			'total'    => $total,
 			'with_bag' => min( $total, $with ),
 		);
+	}
+
+	/**
+	 * The "Livestock — packed in a bag" value stored on each of a list of
+	 * products — only those that have one.
+	 *
+	 * @param int[] $product_ids Product IDs (parents, not variations).
+	 * @return array<int, string> Product id → 'yes' | 'no'.
+	 */
+	public function packs_flags( array $product_ids ) {
+		global $wpdb;
+
+		$product_ids = array_values( array_unique( array_filter( array_map( 'intval', $product_ids ) ) ) );
+		if ( ! is_object( $wpdb ) || ! $product_ids ) {
+			return array();
+		}
+
+		$out = array();
+		foreach ( array_chunk( $product_ids, 1000 ) as $ids ) {
+			$in = implode( ',', array_map( 'intval', $ids ) );
+			try {
+				$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT post_id, meta_value FROM ' . $wpdb->postmeta . " WHERE post_id IN ({$in}) AND meta_key = %s ORDER BY meta_id ASC", Packing::META_PACKS ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery
+			} catch ( \Throwable $e ) {
+				$rows = array();
+			}
+			foreach ( is_array( $rows ) ? $rows : array() as $row ) {
+				$flag = Livestock::flag( $row['meta_value'] ?? '' );
+				if ( '' !== $flag ) {
+					$out[ (int) $row['post_id'] ] = $flag;
+				}
+			}
+		}
+
+		return $out;
+	}
+
+	/**
+	 * The Bag sizes stored on the variations of one product (each value
+	 * once; variations in the trash left out).
+	 *
+	 * @param int $product_id The variable product.
+	 * @return string[] The stored values (bag ids as text).
+	 */
+	public function variation_bags( $product_id ) {
+		global $wpdb;
+
+		$product_id = (int) $product_id;
+		if ( ! is_object( $wpdb ) || $product_id < 1 ) {
+			return array();
+		}
+
+		try {
+			$values = $wpdb->get_col(
+				$wpdb->prepare( 'SELECT DISTINCT pm.meta_value FROM ' . $wpdb->postmeta . ' pm INNER JOIN ' . $wpdb->posts . " v ON v.ID = pm.post_id WHERE v.post_parent = %d AND v.post_type = 'product_variation' AND v.post_status <> 'trash' AND pm.meta_key = %s AND pm.meta_value <> '' LIMIT 50", $product_id, Packing::META_BAG ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery
+			);
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+
+		$out = array();
+		foreach ( is_array( $values ) ? $values : array() as $value ) {
+			$out[] = trim( (string) $value );
+		}
+
+		return $out;
 	}
 
 	/**

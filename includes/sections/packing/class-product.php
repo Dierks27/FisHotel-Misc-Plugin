@@ -1,23 +1,43 @@
 <?php
 /**
- * The "Bag size" dropdown in the WooCommerce product editor — on every
- * variation, and on a simple product (Shipping tab).
+ * The product editor: the "Livestock — packed in a bag" checkbox (Shipping
+ * tab, simple and variable products) and the "Bag size" dropdown — on
+ * every variation, and on a simple product (Shipping tab).
  *
- * It is a RECORD, strictly: the value is the hidden product meta
- * `_fh_bag_size` (a bag id). It is not a product attribute, it creates no
- * variation and no term, and nothing on the storefront, in the cart, at
- * checkout, in an e-mail, on an invoice, in My Account or in the
- * customer-facing REST / Store API reads it — this section registers no
- * hook outside wp-admin and never adds anything to an order line.
+ * Both are RECORDS, strictly: the hidden product meta `_fh_packs_in_bag`
+ * ('yes' / 'no', on the parent product) and `_fh_bag_size` (a bag id).
+ * Neither is a product attribute, creates a variation or a term, and
+ * nothing on the storefront, in the cart, at checkout, in an e-mail, on an
+ * invoice, in My Account or in the customer-facing REST / Store API reads
+ * them — this section registers no hook outside wp-admin and never adds
+ * anything to an order line.
  *
- * The field is shown to, and saved for, users who can manage_woocommerce
+ * The checkbox says whether the product is something that goes in a bag
+ * at all (fish and other livestock do; medication, food and dry goods do
+ * not). With no stored choice it shows the default — ticked for a product
+ * in one of the fish categories — and a save that leaves it as it was
+ * drawn stores nothing, so the product keeps following the default; the
+ * owner ticking or unticking it stores 'yes' or 'no' (decide_packs()).
+ * The script marks a box the owner clicked, so clicking it off and on
+ * again stores the choice as well.
+ *
+ * The Bag size dropdowns are drawn for every product and shown only while
+ * the checkbox is ticked: the product-data box carries the class
+ * `fh-no-bag` while it is not (set here when the screen is drawn, toggled
+ * by the script when the checkbox changes), and the stylesheet hides the
+ * dropdowns under it — the variation panels WooCommerce loads later
+ * included. A Bag size stored earlier is kept when the box is unticked; it
+ * stops counting (Livestock::decide()).
+ *
+ * The fields are shown to, and saved for, users who can manage_woocommerce
  * only, behind this section's own nonce (WooCommerce checks its own nonce
  * and the edit capability before either save hook fires). "Not set" is a
  * choice too: the variation then follows the size → bag map, and the
  * first option says which bag that is right now.
  *
- * decide() is the pure rule of a save; the two save handlers read the
- * posted value, ask it, and write through the product object.
+ * decide() and decide_packs() are the pure rules of a save; the save
+ * handlers read the posted values, ask them, and write through the product
+ * object.
  *
  * @package FisHotel\Misc\Sections\Packing
  */
@@ -45,12 +65,45 @@ class Product {
 	const FIELD_VARIATION = 'fh_bag_size_var';
 
 	/**
+	 * Form fields of the "Livestock — packed in a bag" checkbox: the
+	 * checkbox itself (posted only while ticked) and, beside it, the state
+	 * it was drawn in ('yes' / 'no') — which also says the checkbox was on
+	 * the form at all. Once the owner has clicked the box the script makes
+	 * that field the opposite of the box, so the click is stored.
+	 */
+	const FIELD_PACKS       = 'fh_packs_in_bag';
+	const FIELD_PACKS_SHOWN = 'fh_packs_in_bag_shown';
+
+	/**
+	 * The class the product-data box carries while the checkbox is off:
+	 * the stylesheet hides every Bag size dropdown under it.
+	 *
+	 * @var string
+	 */
+	const CLASS_OFF = 'fh-no-bag';
+
+	/**
 	 * Settings and sizes of this request (the editor draws many
 	 * variations).
 	 *
 	 * @var array|null
 	 */
 	private $settings = null;
+
+	/**
+	 * The store the checkbox's default is read through (the tests hand in
+	 * a stand-in).
+	 *
+	 * @var object|null
+	 */
+	private $store = null;
+
+	/**
+	 * @param object|null $store Store, or a stand-in with variation_bags() (null = a new Store when needed).
+	 */
+	public function __construct( $store = null ) {
+		$this->store = is_object( $store ) ? $store : null;
+	}
 
 	/**
 	 * Register the product-editor hooks. All of them fire in wp-admin only
@@ -60,7 +113,9 @@ class Product {
 		add_action( 'woocommerce_product_after_variable_attributes', array( $this, 'render_variation_field' ), 10, 3 );
 		add_action( 'woocommerce_save_product_variation', array( $this, 'save_variation' ), 10, 2 );
 		add_action( 'woocommerce_product_options_shipping', array( $this, 'render_simple_field' ) );
-		add_action( 'woocommerce_admin_process_product_object', array( $this, 'save_simple' ), 10, 1 );
+		add_action( 'woocommerce_admin_process_product_object', array( $this, 'save_product' ), 10, 1 );
+		// The classes of the product-data box on the product edit screen (wp-admin only).
+		add_filter( 'postbox_classes_product_woocommerce-product-data', array( $this, 'product_data_classes' ) );
 	}
 
 	/**
@@ -151,8 +206,39 @@ class Product {
 	}
 
 	/**
-	 * Whether the current request may save a Bag size: the capability and
-	 * this section's nonce.
+	 * What a posted "Livestock — packed in a bag" checkbox does to the
+	 * stored choice (pure). The owner ticking or unticking it stores 'yes'
+	 * or 'no'; a save that leaves it as it was drawn stores nothing — a
+	 * product with no stored choice keeps following the default.
+	 *
+	 * @param mixed  $shown   The state the checkbox was drawn in, as posted beside it: 'yes' | 'no'
+	 *                        (anything else = the checkbox was not on the form).
+	 * @param bool   $ticked  Whether the checkbox was posted ticked.
+	 * @param string $current The stored choice ('yes' | 'no' | '' = none).
+	 * @return array{action: string, value: string} action = keep | set.
+	 */
+	public static function decide_packs( $shown, $ticked, $current ) {
+		$current = Livestock::flag( $current );
+		$shown   = Livestock::flag( $shown );
+		$posted  = $ticked ? Livestock::YES : Livestock::NO;
+		$keep    = array(
+			'action' => 'keep',
+			'value'  => $current,
+		);
+
+		if ( '' === $shown || $posted === $shown || $posted === $current ) {
+			return $keep; // Not on the form, left as it was drawn, or stored already.
+		}
+
+		return array(
+			'action' => 'set',
+			'value'  => $posted,
+		);
+	}
+
+	/**
+	 * Whether the current request may save a Bag size or the checkbox: the
+	 * capability and this section's nonce.
 	 *
 	 * @param array $raw Unslashed POST.
 	 * @return bool
@@ -262,12 +348,185 @@ class Product {
 	}
 
 	/* ============================================================== */
+	/*  Livestock — packed in a bag                                    */
+	/* ============================================================== */
+
+	/**
+	 * The store, made when first needed.
+	 *
+	 * @return object
+	 */
+	private function store() {
+		if ( null === $this->store ) {
+			$this->store = new Store();
+		}
+		return $this->store;
+	}
+
+	/**
+	 * Whether a product carries a Bag size from before the checkbox: its
+	 * own (a simple product), or one of its variations'. Such a product
+	 * counts as packed in a bag while it has no stored choice — the rule of
+	 * Livestock::decide() — so its checkbox is drawn ticked.
+	 *
+	 * @param object $product WC_Product (the parent).
+	 * @return bool
+	 */
+	private function has_stored_bag( $product ) {
+		$settings = $this->settings();
+		if ( null !== Bags::find( $settings['bags'], Bags::own_value( $product ) ) ) {
+			return true;
+		}
+		if ( ! method_exists( $product, 'is_type' ) || ! $product->is_type( 'variable' ) || ! method_exists( $product, 'get_id' ) ) {
+			return false;
+		}
+
+		$store = $this->store();
+		foreach ( method_exists( $store, 'variation_bags' ) ? (array) $store->variation_bags( (int) $product->get_id() ) : array() as $value ) {
+			if ( null !== Bags::find( $settings['bags'], $value ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Whether the checkbox of a product is ticked: the stored choice, else
+	 * the default — the one rule of Livestock::decide(), asked of the
+	 * product as a whole.
+	 *
+	 * @param object|null $product WC_Product (the parent).
+	 * @return bool
+	 */
+	public function ticked( $product ) {
+		if ( ! is_object( $product ) ) {
+			return false;
+		}
+		$flag = Livestock::stored( $product );
+
+		return Livestock::decide( $flag, '' === $flag && Livestock::in_fish_category( $product ), '' === $flag && $this->has_stored_bag( $product ) );
+	}
+
+	/**
+	 * The term ids of the fish categories — so the script can tick the box
+	 * as soon as a new product is put in one, before it is saved.
+	 *
+	 * @return int[]
+	 */
+	private function fish_term_ids() {
+		$ids = array();
+		if ( ! function_exists( 'get_term_by' ) ) {
+			return $ids;
+		}
+		foreach ( Lines::fish_categories() as $slug ) {
+			$term = get_term_by( 'slug', $slug, 'product_cat' );
+			if ( is_object( $term ) && isset( $term->term_id ) ) {
+				$ids[] = (int) $term->term_id;
+			}
+		}
+		return $ids;
+	}
+
+	/**
+	 * The classes of the product-data box: `fh-no-bag` while the product
+	 * is not packed in a bag, so the Bag size dropdowns are hidden from the
+	 * first paint — also on the variation panels that load later.
+	 *
+	 * @param mixed $classes The box's classes.
+	 * @return array
+	 */
+	public function product_data_classes( $classes ) {
+		global $post;
+
+		$classes = is_array( $classes ) ? $classes : array();
+		if ( ! current_user_can( Packing::CAPABILITY ) || ! function_exists( 'wc_get_product' ) ) {
+			return $classes; // The fields are not drawn at all.
+		}
+
+		try {
+			$product = is_object( $post ) && isset( $post->ID ) ? wc_get_product( (int) $post->ID ) : null;
+			$ticked  = $this->ticked( is_object( $product ) ? $product : null );
+		} catch ( \Throwable $e ) {
+			$ticked = true; // Never hide a field because something else failed.
+		}
+		if ( ! $ticked ) {
+			$classes[] = self::CLASS_OFF;
+		}
+
+		return $classes;
+	}
+
+	/**
+	 * The checkbox (Shipping tab, simple and variable products), with the
+	 * state it is drawn in beside it.
+	 *
+	 * @param object|null $product WC_Product.
+	 */
+	private function render_packs_field( $product ) {
+		if ( ! function_exists( 'woocommerce_wp_checkbox' ) ) {
+			return;
+		}
+
+		$ticked = $this->ticked( $product );
+		$follow = null === $product || '' === Livestock::stored( $product );
+		$data   = array();
+		if ( $follow ) {
+			// No stored choice: the script lets the box follow the categories until it is touched.
+			$data['data-fh-follow'] = '1';
+			$data['data-fh-fish']   = implode( ',', $this->fish_term_ids() );
+			if ( null !== $product && $this->has_stored_bag( $product ) ) {
+				$data['data-fh-legacy'] = '1';
+			}
+		}
+
+		woocommerce_wp_checkbox(
+			array(
+				'id'                => self::FIELD_PACKS,
+				'name'              => self::FIELD_PACKS,
+				'label'             => __( 'Livestock — packed in a bag', 'fishotel-misc-plugin' ),
+				'value'             => $ticked ? Livestock::YES : Livestock::NO,
+				'cbvalue'           => Livestock::YES,
+				'description'       => __( 'Tick for fish and other livestock that are packed in a bag: the Bag size fields show while it is ticked. Leave it off for medication, food and dry goods. For your records only: customers never see this.', 'fishotel-misc-plugin' ),
+				'wrapper_class'     => 'show_if_simple show_if_variable',
+				'custom_attributes' => $data,
+			)
+		);
+		echo '<input type="hidden" id="' . esc_attr( self::FIELD_PACKS_SHOWN ) . '" name="' . esc_attr( self::FIELD_PACKS_SHOWN ) . '" value="' . esc_attr( $ticked ? Livestock::YES : Livestock::NO ) . '">';
+	}
+
+	/**
+	 * Save the checkbox onto the product object WooCommerce is about to
+	 * save (the parent product — a variation has none of its own).
+	 *
+	 * @param object $product WC_Product.
+	 * @param array  $raw     Unslashed POST.
+	 * @return bool Whether the object changed.
+	 */
+	private function save_packs( $product, array $raw ) {
+		if ( ! method_exists( $product, 'update_meta_data' ) || ! method_exists( $product, 'get_meta' ) ) {
+			return false;
+		}
+		if ( method_exists( $product, 'is_type' ) && $product->is_type( 'variation' ) ) {
+			return false;
+		}
+
+		$ticked   = isset( $raw[ self::FIELD_PACKS ] ) && Livestock::YES === Livestock::flag( $raw[ self::FIELD_PACKS ] );
+		$decision = self::decide_packs( $raw[ self::FIELD_PACKS_SHOWN ] ?? null, $ticked, $product->get_meta( Packing::META_PACKS, true ) );
+		if ( 'set' !== $decision['action'] ) {
+			return false;
+		}
+
+		$product->update_meta_data( Packing::META_PACKS, (string) $decision['value'] );
+		return true;
+	}
+
+	/* ============================================================== */
 	/*  Simple products                                                */
 	/* ============================================================== */
 
 	/**
-	 * The dropdown on a simple product (Shipping tab, with the weight and
-	 * the dimensions).
+	 * The Shipping tab (with the weight and the dimensions): the checkbox,
+	 * then the dropdown of a simple product.
 	 */
 	public function render_simple_field() {
 		global $product_object;
@@ -284,6 +543,8 @@ class Product {
 		$size     = null !== $product && ! $variable ? Bags::product_size( $product, $standard ) : '';
 		$mapped   = Bags::resolve( '', $size, $settings, $standard['sizes'] );
 
+		$this->render_packs_field( $product );
+
 		woocommerce_wp_select(
 			array(
 				'id'            => self::FIELD,
@@ -293,24 +554,39 @@ class Product {
 				'options'       => self::options( $settings['bags'], $current, $mapped['bag'], '' !== $size ),
 				'desc_tip'      => true,
 				'description'   => $this->help(),
-				'wrapper_class' => 'show_if_simple',
+				'wrapper_class' => 'show_if_simple fh-bag-size-field',
 			)
 		);
 		wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD, false );
 	}
 
 	/**
-	 * Save a simple product's Bag size onto the product object WooCommerce
-	 * is about to save. A variable product has no Bag size of its own — its
-	 * variations do.
+	 * Save the Shipping tab's two fields onto the product object
+	 * WooCommerce is about to save: the checkbox (simple and variable
+	 * products), and a simple product's Bag size.
 	 *
 	 * @param object $product WC_Product.
 	 */
-	public function save_simple( $product ) {
+	public function save_product( $product ) {
 		$raw = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified in may_save().
 		if ( ! is_array( $raw ) || ! self::may_save( $raw ) || ! is_object( $product ) ) {
 			return;
 		}
+
+		$this->save_packs( $product, $raw );
+		$this->save_simple( $product, $raw );
+	}
+
+	/**
+	 * A simple product's Bag size, onto the product object. A variable
+	 * product has no Bag size of its own — its variations do. The value is
+	 * kept as posted also while the checkbox is off: an earlier Bag size is
+	 * never deleted by unticking, it stops counting.
+	 *
+	 * @param object $product WC_Product.
+	 * @param array  $raw     Unslashed POST (the nonce and the capability were checked).
+	 */
+	private function save_simple( $product, array $raw ) {
 		if ( method_exists( $product, 'is_type' ) && ( $product->is_type( 'variable' ) || $product->is_type( 'variation' ) ) ) {
 			return;
 		}

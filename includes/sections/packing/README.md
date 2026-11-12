@@ -9,9 +9,15 @@ size** on every fish variation, **how many bags of each size fit each
 standard box**, and from those two a **suggested box on every order**,
 flagged *on the line* when it is nearly full so the owner confirms it.
 
-The Bag size is a record, strictly. It is never shown on the storefront, in
-the cart, at checkout, in an e-mail, on an invoice, in My Account or in the
-customer-facing REST / Store API. See *Storefront silence* below.
+Bags are for livestock only. A product-level checkbox, **Livestock — packed
+in a bag**, says whether a product is bagged at all: the Bag size fields
+show only while it is ticked, so medication, food and dry goods carry
+none. See *Livestock — packed in a bag* below.
+
+The Bag size and that checkbox are records, strictly. They are never shown
+on the storefront, in the cart, at checkout, in an e-mail, on an invoice,
+in My Account or in the customer-facing REST / Store API. See *Storefront
+silence* below.
 
 Nothing is seeded: no bag, no box and no number is filled in by the code.
 
@@ -34,9 +40,11 @@ Nothing is seeded: no bag, no box and no number is filled in by the code.
 A save that draws the page again (bags, the map, boxes) keeps its button
 disabled until the page is back, so the same rows are never posted twice.
 
-**The product editor** (the classic one) — a **Bag size** dropdown on every
-variation, and on a simple product under *Shipping*. Its first option is
-"Not set", and says which bag the size map gives that variation right now.
+**The product editor** (the classic one) — under *Shipping*, on simple and
+variable products, the checkbox **Livestock — packed in a bag**; and, while
+it is ticked, a **Bag size** dropdown on every variation and on a simple
+product under *Shipping*. The dropdown's first option is "Not set", and
+says which bag the size map gives that variation right now.
 
 **The order screen** (the legacy one and the High-Performance Order Storage
 one) — a **Packing** box: each fish line with its bag and where the bag
@@ -47,18 +55,71 @@ screen and no other: when the order, a bag size or the numbers changed
 since the box was drawn, nothing is stored, the box is drawn again with
 the suggestion as it stands now, and it is confirmed from there.
 
+## Livestock — packed in a bag
+
+Fish and other livestock go in a bag; medication, food and dry goods do
+not, and need no Bag size. The checkbox in the product editor's *Shipping*
+tab says which a product is. It is stored on the **parent** product as the
+hidden meta `_fh_packs_in_bag` — `yes` or `no` — and a variation is read
+from its parent.
+
+**The one rule** (`Livestock::decide()`), asked wherever something decides
+whether a product is bagged — an order's lines and its Packing box, the
+fill tool, the contracts, the product editor:
+
+| Stored on the product | Packed in a bag? |
+|-----------------------|------------------|
+| `yes` | yes, whatever its category |
+| `no` | no — even in a fish category, and even with a Bag size stored earlier |
+| nothing | yes when the product is in a fish category (see *What is a fish*); and, so that nothing set before the checkbox existed changes, yes for a product — or a variation — that carries a Bag size of its own |
+
+So existing fish need no click, and medication and dry goods show no bag
+fields. This replaces the earlier rule "a product with its own Bag size is
+a fish whatever its category": that still holds only while no choice is
+stored, and stops the moment the box is unticked.
+
+- **The default** is what the box shows while nothing is stored: ticked
+  for a product in a fish category (or with a Bag size from before the
+  checkbox — its own, or one of its variations'), unticked otherwise. A
+  new product follows its categories on the screen until the box is
+  touched: put it in a fish category and the box ticks itself.
+- **A save stores a choice only when the owner changed the box.** The form
+  posts the state the box was drawn in beside it; a save that leaves the
+  box as drawn stores nothing, and the product keeps following the
+  default. A box the owner clicked is a choice whatever it ends up as —
+  clicked off and on again included (the script says so on the form). A
+  save that does not carry the box at all (quick edit, another screen)
+  changes nothing — it is never read as "unticked".
+- **The Bag size fields show only while the box is ticked.** They are
+  drawn for every product; the product-data box carries the class
+  `fh-no-bag` while the box is off (set by the server when the screen is
+  drawn, flipped by the script when the box changes, without a reload),
+  and one stylesheet rule hides every Bag size field under it — the
+  variation panels WooCommerce loads later included.
+- **Unticking deletes nothing.** A Bag size stored earlier stays on the
+  product and on its variations; it stops counting, and counts again when
+  the box is ticked.
+- On an order, a line whose product is unticked is **ignored and named as
+  that**, apart from what is simply not a fish.
+- On a variable product with no stored choice and a Bag size on only some
+  of its variations (set before the checkbox), those variations count and
+  the others do not — as before. Click the box off and on again and save
+  to store "yes" and make every variation follow it.
+
 ## Which bag
 
-For a product or a variation:
+Only what is packed in a bag has one (the rule above). Then, for a product
+or a variation:
 
 1. its own **Bag size** — it overrides everything;
 2. else the **size → bag map**: the bag of the variation's size (or of a
    simple product's size when it has exactly one);
 3. else none.
 
-For an order line: its product as above; and when the product gives
-nothing — an invoice line, an unlisted fish, a product that was deleted —
-the size the *line* carries (WooCommerce copies a variation's attributes
+For an order line: its product as above (a line whose product is not
+packed in a bag has none); and when the product gives nothing — an invoice
+line, an unlisted fish, a product that was deleted — the size the *line*
+carries (WooCommerce copies a variation's attributes
 onto the order line; the filter `fishotel_packing_item_size` can name
 one), through the same map.
 
@@ -77,12 +138,12 @@ variation that has no Bag size, so the product record shows it. *Preview*
 counts and changes nothing; *Set them* runs a batch at a time. It never
 touches a variation that already has a value — the list is read from the
 variations without one, and each is checked once more on the product
-object just before it is written. A variation whose product is in none of
-the fish categories (see *What is a fish*) is counted in the preview and
-left alone: a Bag size of its own is what makes any other product count as
-a fish on an order, so the tool must not hand one to a net or a jar of
-food that happens to use the Size attribute. Set such a product's Bag size
-by hand when it really is packed in a bag.
+object just before it is written. It fills only what is packed in a bag,
+by the one rule: a variation whose product is unticked — or has no stored
+choice and is in none of the fish categories — is counted in the preview
+and left alone, so a net or a jar of food that happens to use the Size
+attribute gets no Bag size. Tick *Livestock — packed in a bag* on such a
+product when it really is packed in a bag, and the tool fills it.
 
 A variation keeps the bag it was given even when the map changes later,
 and there is no bulk reset — so get the map right before *Set them* (a
@@ -107,7 +168,8 @@ variation set back to "Not set" follows the map again).
   (a setting, 90 % until changed) is flagged for the owner to confirm.
 - **A line with no bag size** is listed by name and the suggestion is
   marked *incomplete* — it is worked out for the lines that do have one.
-- **What is not a fish** is ignored, and named as ignored.
+- **What is not a fish** is ignored, and named as ignored — a line whose
+  product is unticked (*Livestock — packed in a bag*) with that reason.
 - A bag size that goes in **no** box is set aside and named; the rest is
   boxed as usual (status `partial`). A suggestion names at most 40 boxes;
   what is left after that is named as not boxed.
@@ -124,10 +186,15 @@ fish; an invoice credit is money; an Invoice product kept as one line is
 opened up (its `_fh_invoice_lines` snapshot, else its description through
 the theme's or the Batch plugin's parser when one is there — and when
 nothing can read it, it is reported as a fish line without a bag, never
-dropped); otherwise a line is a fish when its product is in a fish
-category (the Ship Day list when the Batch plugin has it, else
-`quarantined-fish` and `inverts` under the same filter,
-`fishotel_ship_day_fish_categories`) **or** carries a Bag size of its own.
+dropped); otherwise the line's product decides, by the rule of *Livestock
+— packed in a bag*: ticked is a fish, unticked is not, and with no stored
+choice a line is a fish when its product is in a fish category (the Ship
+Day list when the Batch plugin has it, else `quarantined-fish` and
+`inverts` under the same filter, `fishotel_ship_day_fish_categories`) or
+carries a Bag size of its own from before the checkbox. A line with a
+product that is unticked is not a fish even when an invoice flags it as
+one; a line with no product has no checkbox to go by and is read as
+before.
 
 **A combined box** (the theme's fulfillment order) is read through its
 live source orders, as the pick list does. An order that went *into* a
@@ -154,6 +221,7 @@ exactly the same size, so the move from the own list to ShipTracker's
 |-------|-----|------|
 | option (not autoloaded) | `fishotel_packing_settings` | `bags` (id, name, width, length, sort), `last_bag_id`, `boxes` (the own list: name, length, width, height), `fits` (per box: name, dims, bag id → how many), `size_map` (size slug → bag id), `threshold` |
 | product / variation meta | `_fh_bag_size` | the bag's id |
+| product meta (the parent product, never a variation) | `_fh_packs_in_bag` | *Livestock — packed in a bag*: `yes` or `no`; absent = follow the default |
 | order meta | `_fh_packing_box` | the confirmed box: `v`, `boxes` (name, length, width, height), `fill` (as it stood), `suggested`, `complete`, `by` (user id), `at` (UTC) |
 | order meta | `_fh_packing_box_name` | the same as plain text: `Medium box`, `2 × Large box + Small box` |
 
@@ -190,7 +258,7 @@ fishotel_packing_bag_for_size( string $size_slug_or_label ): ?array
 | `unplaced` | bags no box takes: `id`, `name`, `count` |
 | `lines` | every fish line: `item_id`, `order_id`, `name`, `qty`, `fish_per_bag`, `bags`, `bag` (null without one), `size`, `size_label`, `flag`, `from` |
 | `incomplete`, `complete` | the fish lines with no bag size (`item_id`, `order_id`, `name`, `qty`, `reason`) · true when there is none |
-| `ignored`, `skipped` | lines that are not fish · lines left out (shipped, never shipping, refunded) — each with a `reason` |
+| `ignored`, `skipped` | lines that are not fish, or whose product is not packed in a bag (*Livestock — packed in a bag* unticked — the `reason` says so) · lines left out (shipped, never shipping, refunded) — each with a `reason` |
 | `box_source` | `shiptracker` or `own` |
 | `is_fulfillment`, `sources`, `packed_with` | a combined box and its live source order ids · the combined box an order went into (0 = none) |
 | `confirmed` | `fishotel_packing_confirmed_box()` of the order |
@@ -200,7 +268,11 @@ fishotel_packing_bag_for_size( string $size_slug_or_label ): ?array
 `name`, `width`, `length` (inches as text, `''` when not given), `label`
 (`Medium (6 × 14 in)`), `sort`, `source` (`own` = set on the variation or
 the product, `map` = from the size → bag map), `size`, `size_label`. Null
-when the line has no bag size.
+when the line has no bag size, and null for a line or a product that is
+not packed in a bag — `fishotel_packing_bag_for_item()` and
+`fishotel_packing_bag_for_product()` ask the same rule as the order's
+Packing box (`fishotel_packing_bag_for_size()` is the bag of a size, not of
+a product, and answers as before).
 
 **`fishotel_packing_confirmed_box()`**: `order_id`, `boxes` (each `name`,
 `length`, `width`, `height`, `dims`, `volume`), `count`, `name`, the first
@@ -240,8 +312,10 @@ into a combined box has none of its own — ask the combined box
 `choice=suggested` the screen posts `shown`, the suggestion it displayed,
 and gets 409 plus the box drawn again when that is not the suggestion any
 more). The product
-dropdown is saved by WooCommerce's own product saves, behind this
-section's nonce `fishotel_packing_bag_size` as well.
+editor's two fields — the checkbox and the dropdown — are saved by
+WooCommerce's own product saves, behind this section's nonce
+`fishotel_packing_bag_size` and `manage_woocommerce` as well, through the
+product object.
 
 ## What it reads from other code — and what happens without it
 
@@ -266,15 +340,20 @@ Each is reached through `class_exists()` / `method_exists()` /
   (`woocommerce_product_after_variable_attributes`,
   `woocommerce_save_product_variation`,
   `woocommerce_product_options_shipping`,
-  `woocommerce_admin_process_product_object`), `add_meta_boxes`,
-  `admin_enqueue_scripts` and the admin AJAX actions — none of the hooks
+  `woocommerce_admin_process_product_object`, and
+  `postbox_classes_product_woocommerce-product-data` for the class that
+  hides the Bag size fields), `add_meta_boxes`, `admin_enqueue_scripts`
+  (the Packing page and the product edit screen) and the admin AJAX
+  actions — none of the hooks
   WooCommerce uses to print variation data, cart / checkout / e-mail /
   invoice / My Account order-item data, or to build a REST or Store API
   answer.
 - The bag is never written to an order line: it is worked out from the
-  product each time. The meta key is hidden (a leading underscore), is not
-  registered for REST, is not a product attribute, and makes no variation
-  and no term.
+  product each time. Both meta keys — `_fh_bag_size` and
+  `_fh_packs_in_bag` — are hidden (a leading underscore), are not
+  registered for REST, are not product attributes, and make no variation
+  and no term. The checkbox is drawn in the product editor only; no view
+  and no script names its key.
 - The lists are one option that is **not autoloaded**: the Packing page,
   the product editor and the order screen read it once; no other screen
   does.
@@ -291,16 +370,17 @@ packing/
 ├── class-boxes.php          the boxes in use; "how many fit" per box
 ├── class-suggest.php        PURE: bags needed → box(es), fill, on the line
 ├── class-bags.php           a product's / an order line's bag
+├── class-livestock.php      "Livestock — packed in a bag": the one rule
 ├── class-lines.php          an order's fish lines
 ├── class-order-packing.php  the suggestion of an order; the confirmed box
 ├── class-store.php          the only $wpdb file — reads only
 ├── class-fill.php           "Fill empty ones from the map"
-├── class-product.php        the Bag size dropdown in the product editor
+├── class-product.php        the checkbox and the Bag size dropdown in the product editor
 ├── class-order-box.php      the Packing box on the order screen
 ├── class-admin.php          the page; the assets
 ├── views/                   page, tab-bags, tab-sizes, tab-boxes, order-box
 ├── css/packing-admin.css    the dark page; the box on the (light) order screen
-├── js/packing-admin.js      the saves, the fill run, the box's buttons
+├── js/packing-admin.js      the saves, the fill run, the box's buttons, the checkbox
 └── tests/                   headless — see tests/README.md
 ```
 
@@ -310,6 +390,7 @@ packing/
   field is not.
 - **The pick list** itself lives in the Batch plugin; it can show the bag
   of a line by calling `fishotel_packing_bag_for_item()`.
-- The Bag size dropdown is in the **classic** product editor (variations
-  and the Shipping tab); quick edit, bulk edit and the product import do
-  not set it.
+- The checkbox and the Bag size dropdown are in the **classic** product
+  editor (the Shipping tab and the variations); quick edit, bulk edit and
+  the product import set neither — a product made that way follows the
+  default.

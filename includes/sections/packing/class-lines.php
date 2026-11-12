@@ -12,19 +12,26 @@
  *   - an invoice credit (`_fh_invoice_credit`) is money, not a fish;
  *   - a line flagged `_fh_invoice_fish` (one fish of an itemised invoice)
  *     and a product-less line with `_fishotel_fish_id` (a batch-invoice
- *     fish) are fish;
+ *     fish) are fish — unless the line has a product and that product says
+ *     "not packed in a bag";
  *   - an Invoice product kept as one line is opened up: its fish come from
  *     the `_fh_invoice_lines` snapshot on the line, else from the invoice's
  *     description through the Batch plugin or the theme when one of them
  *     is there — and when nothing can read it, the line is reported as a
  *     fish line without a bag size, never silently dropped;
- *   - otherwise a line is a fish when its product (the parent of a
- *     variation) is in a fish category — the Ship Day list when the Batch
- *     plugin has it, else `quarantined-fish` and `inverts` under the same
- *     filter (fishotel_ship_day_fish_categories) — OR when its product
- *     carries a Bag size of its own: something the owner gave a bag to is
- *     bagged, whatever its category;
- *   - everything else is not a fish: ignored, and named as ignored.
+ *   - otherwise the line's PRODUCT decides, by the one rule of
+ *     Livestock::decide(): the "Livestock — packed in a bag" checkbox of
+ *     the product (the parent of a variation) when the owner ticked or
+ *     unticked it — ticked is a fish whatever the category, unticked is
+ *     not, even in a fish category and even with a Bag size stored
+ *     earlier; with no stored choice, a product in a fish category — the
+ *     Ship Day list when the Batch plugin has it, else `quarantined-fish`
+ *     and `inverts` under the same filter
+ *     (fishotel_ship_day_fish_categories) — and, so that nothing set before
+ *     the checkbox existed changes, a product that carries a Bag size of
+ *     its own;
+ *   - everything else is not a fish: ignored, and named as ignored — a
+ *     line whose product is unticked with that reason.
  *
  * A combined box (the theme's fulfillment order) is read through its live
  * source orders, as the pick list does; when no source loads, its own
@@ -122,14 +129,19 @@ class Lines {
 	 * @param bool     $has_product     Whether the line still has a product.
 	 * @param string[] $fish_categories fish_categories().
 	 * @param bool     $has_own_bag     Whether its product carries a Bag size of its own.
+	 * @param mixed    $packs           The "Livestock — packed in a bag" value stored on its product
+	 *                                  (Livestock::stored(): 'yes', 'no', '' = no stored choice).
 	 * @return string KIND_*.
 	 */
-	public static function kind( array $meta, array $category_slugs, $name, $has_product, array $fish_categories, $has_own_bag = false ) {
+	public static function kind( array $meta, array $category_slugs, $name, $has_product, array $fish_categories, $has_own_bag = false, $packs = '' ) {
+		$packs = $has_product ? Livestock::flag( $packs ) : '';
+
 		if ( self::truthy( $meta[ self::META_INV_CREDIT ] ?? '' ) ) {
 			return self::KIND_CREDIT;
 		}
 		if ( self::truthy( $meta[ self::META_INV_FISH ] ?? '' ) ) {
-			return self::KIND_FISH;
+			// The invoice says it is a fish; a product that says "not bagged" has the last word.
+			return Livestock::NO === $packs ? self::KIND_OTHER : self::KIND_FISH;
 		}
 
 		$slugs = array();
@@ -139,17 +151,78 @@ class Lines {
 		if ( in_array( 'invoices', $slugs, true ) || 1 === preg_match( '/\bInvoice\b/i', (string) $name ) ) {
 			return self::KIND_INVOICE;
 		}
-		if ( array_intersect( $slugs, $fish_categories ) ) {
+
+		$in_category = (bool) array_intersect( $slugs, $fish_categories );
+		if ( $has_product ) {
+			// The product decides: its checkbox, else its category (or a Bag size from before the checkbox).
+			return Livestock::decide( $packs, $in_category, $has_own_bag ) ? self::KIND_FISH : self::KIND_OTHER;
+		}
+		if ( $in_category ) {
 			return self::KIND_FISH;
 		}
-		if ( ! $has_product && is_scalar( $meta[ self::META_FISH_ID ] ?? null ) && '' !== trim( (string) $meta[ self::META_FISH_ID ] ) ) {
-			return self::KIND_FISH;
-		}
-		if ( $has_own_bag ) {
+		if ( is_scalar( $meta[ self::META_FISH_ID ] ?? null ) && '' !== trim( (string) $meta[ self::META_FISH_ID ] ) ) {
 			return self::KIND_FISH;
 		}
 
 		return self::KIND_OTHER;
+	}
+
+	/**
+	 * The meta of an order line that says what the line is, by key ('' when
+	 * absent).
+	 *
+	 * @param object $item WC_Order_Item.
+	 * @return array
+	 */
+	public static function line_meta( $item ) {
+		$meta = array();
+		foreach ( array( self::META_LINE_STATUS, self::META_FISH_ID, self::META_INV_FISH, self::META_INV_LINES, self::META_INV_CREDIT ) as $key ) {
+			$value        = is_object( $item ) && method_exists( $item, 'get_meta' ) ? $item->get_meta( $key ) : '';
+			$meta[ $key ] = ( is_scalar( $value ) || is_array( $value ) ) ? $value : '';
+		}
+		return $meta;
+	}
+
+	/**
+	 * What a line with a product is, and what its product's checkbox says.
+	 *
+	 * @param array       $meta     line_meta().
+	 * @param object|null $product  The line's product (null without one).
+	 * @param string      $name     The line's name.
+	 * @param array       $settings Settings (bags).
+	 * @param string[]    $fish     fish_categories().
+	 * @return array{kind: string, packs: string}
+	 */
+	private static function classify( array $meta, $product, $name, array $settings, array $fish ) {
+		$packs = null !== $product ? Livestock::stored( $product ) : '';
+		$own   = null !== $product && null !== Bags::find( $settings['bags'], Bags::own_value( $product ) );
+
+		return array(
+			'kind'  => self::kind( $meta, self::category_slugs( $product ), $name, null !== $product, $fish, $own, $packs ),
+			'packs' => $packs,
+		);
+	}
+
+	/**
+	 * Whether an order line is something that is bagged, as far as its
+	 * product can tell — what fishotel_packing_bag_for_item() asks before
+	 * it answers. A line without a product is not decided here (true): the
+	 * size it carries answers, as it always did.
+	 *
+	 * @param object $item     WC_Order_Item_Product.
+	 * @param array  $settings Settings (bags).
+	 * @return bool
+	 */
+	public static function bagged( $item, array $settings ) {
+		$product = is_object( $item ) && method_exists( $item, 'get_product' ) ? $item->get_product() : null;
+		if ( ! is_object( $product ) ) {
+			return true;
+		}
+
+		$name = method_exists( $item, 'get_name' ) ? (string) $item->get_name() : '';
+		$what = self::classify( self::line_meta( $item ), $product, $name, $settings, self::fish_categories() );
+
+		return self::KIND_FISH === $what['kind'] || self::KIND_INVOICE === $what['kind'];
 	}
 
 	/**
@@ -384,11 +457,7 @@ class Lines {
 			$item_id = method_exists( $item, 'get_id' ) ? (int) $item->get_id() : (int) $item_key;
 			$name    = method_exists( $item, 'get_name' ) ? trim( (string) $item->get_name() ) : '';
 			$name    = '' !== $name ? $name : __( '(unnamed item)', 'fishotel-misc-plugin' );
-			$meta    = array();
-			foreach ( array( self::META_LINE_STATUS, self::META_FISH_ID, self::META_INV_FISH, self::META_INV_LINES, self::META_INV_CREDIT ) as $key ) {
-				$value        = method_exists( $item, 'get_meta' ) ? $item->get_meta( $key ) : '';
-				$meta[ $key ] = ( is_scalar( $value ) || is_array( $value ) ) ? $value : '';
-			}
+			$meta    = self::line_meta( $item );
 
 			$qty  = (int) $item->get_quantity();
 			$base = array(
@@ -414,19 +483,22 @@ class Lines {
 
 			$product = method_exists( $item, 'get_product' ) ? $item->get_product() : null;
 			$product = is_object( $product ) ? $product : null;
-			$own     = null !== $product && null !== Bags::find( $settings['bags'], Bags::own_value( $product ) );
-			$kind    = self::kind( $meta, self::category_slugs( $product ), $name, null !== $product, $fish, $own );
+			$what    = self::classify( $meta, $product, $name, $settings, $fish );
+			$kind    = $what['kind'];
 
 			if ( self::KIND_CREDIT === $kind ) {
 				continue; // Money, not a thing in the box.
 			}
 
 			if ( self::KIND_OTHER === $kind ) {
-				$out['ignored'][] = $base + array(
-					'reason' => null === $product
-						? __( 'no product — nothing says it is a fish', 'fishotel-misc-plugin' )
-						: __( 'not a fish', 'fishotel-misc-plugin' ),
-				);
+				if ( null === $product ) {
+					$reason = __( 'no product — nothing says it is a fish', 'fishotel-misc-plugin' );
+				} elseif ( Livestock::NO === $what['packs'] ) {
+					$reason = Livestock::unticked_reason();
+				} else {
+					$reason = __( 'not a fish', 'fishotel-misc-plugin' );
+				}
+				$out['ignored'][] = $base + array( 'reason' => $reason );
 				continue;
 			}
 
@@ -440,7 +512,7 @@ class Lines {
 				continue;
 			}
 
-			$bag     = Bags::for_item( $item, $settings, $standard );
+			$bag     = Bags::item_bag( $item, $settings, $standard ); // The line is a fish: that was asked above.
 			$per_bag = Bags::fish_per_bag( $product, $item );
 			$size    = $bag ? $bag['size'] : ( null !== $product ? Bags::product_size( $product, $standard ) : '' );
 			if ( '' === $size ) {
@@ -507,8 +579,20 @@ class Lines {
 				$line = wc_get_product( $row['product_id'] );
 				$line = is_object( $line ) ? $line : null;
 			}
+			if ( null !== $line && Livestock::NO === Livestock::stored( $line ) ) {
+				// The invoice names a product the owner unticked: not bagged, and named.
+				$out['ignored'][] = array(
+					'item_id'  => $base['item_id'],
+					'order_id' => $base['order_id'],
+					'name'     => $row['name'],
+					'qty'      => $qty,
+					'reason'   => Livestock::unticked_reason(),
+				);
+				continue;
+			}
 			if ( null !== $line ) {
-				$bag     = Bags::for_product( $line, $settings, $standard );
+				// The invoice says it is a fish: its product gives the bag, whatever its category.
+				$bag     = Bags::product_bag( $line, $settings, $standard );
 				$size    = Bags::product_size( $line, $standard );
 				$per_bag = Bags::fish_per_bag( $line, null );
 			}

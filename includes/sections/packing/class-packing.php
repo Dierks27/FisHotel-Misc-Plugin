@@ -6,7 +6,8 @@
  * WHY this exists: the owner packs every fish in one of a handful of
  * standard bags and knows from experience which box an order needs. That
  * knowledge has to be written down before anybody else can pack: a bag
- * size on every fish variation (a record only — never on the storefront),
+ * size on every fish variation (a record only — never on the storefront;
+ * asked for livestock only, not for medication or dry goods),
  * how many bags of each size fit each standard box, and from those two a
  * suggested box on every order, flagged "on the line" when it is nearly
  * full so the owner confirms it.
@@ -30,6 +31,10 @@
  *                              fill, "on the line".
  *   - class-bags.php           a product's / an order line's bag: its own
  *                              value, else the size → bag map.
+ *   - class-livestock.php      "Livestock — packed in a bag": the ONE rule
+ *                              that says whether a product is bagged at all
+ *                              (the checkbox on the product, else the fish
+ *                              categories).
  *   - class-lines.php          an order's fish lines (the pick list's
  *                              rules), what is ignored, what is skipped.
  *   - class-order-packing.php  the suggestion of an order, the confirmed
@@ -39,7 +44,8 @@
  *                              variations without a bag size, bag usage.
  *   - class-fill.php           "Fill empty ones from the map": preview,
  *                              then set only what has no value.
- *   - class-product.php        the Bag size dropdown in the product editor.
+ *   - class-product.php        the "Livestock — packed in a bag" checkbox and
+ *                              the Bag size dropdown in the product editor.
  *   - class-order-box.php      the Packing box on the order screen (legacy
  *                              and HPOS) and its Confirm / change AJAX.
  *   - class-admin.php          the page under FisHotel Tools.
@@ -95,6 +101,15 @@ namespace FisHotel\Misc\Sections\Packing {
 		 * @var string
 		 */
 		const META_BAG = '_fh_bag_size';
+
+		/**
+		 * Product meta (on the parent product, never on a variation):
+		 * "Livestock — packed in a bag" — 'yes' or 'no'; absent = follow
+		 * the default (the fish categories). Hidden, like the bag size.
+		 *
+		 * @var string
+		 */
+		const META_PACKS = '_fh_packs_in_bag';
 
 		/**
 		 * Order meta: the confirmed box (a JSON record) and its name as
@@ -153,6 +168,7 @@ namespace FisHotel\Misc\Sections\Packing {
 			require_once __DIR__ . '/class-boxes.php';
 			require_once __DIR__ . '/class-suggest.php';
 			require_once __DIR__ . '/class-bags.php';
+			require_once __DIR__ . '/class-livestock.php';
 			require_once __DIR__ . '/class-lines.php';
 			require_once __DIR__ . '/class-order-packing.php';
 			require_once __DIR__ . '/class-store.php';
@@ -450,8 +466,9 @@ namespace {
 		 *   incomplete     the fish lines with no bag size: item_id,
 		 *                  order_id, name, qty, reason
 		 *   complete       bool — every fish line has a bag size
-		 *   ignored        lines that are not fish: item_id, order_id, name,
-		 *                  qty, reason
+		 *   ignored        lines that are not fish, or whose product is not
+		 *                  packed in a bag: item_id, order_id, name, qty,
+		 *                  reason
 		 *   skipped        lines left out: already shipped, never shipping,
 		 *                  refunded
 		 *   box_source     shiptracker | own
@@ -474,7 +491,9 @@ namespace {
 	if ( ! function_exists( 'fishotel_packing_bag_for_item' ) ) {
 		/**
 		 * The bag one order line is packed in — for the pick list. Null
-		 * when the line has no bag size (or the section is off): id, name,
+		 * when the line has no bag size, when its product is not packed in
+		 * a bag ("Livestock — packed in a bag" unticked; with no stored
+		 * choice, not in a fish category), or the section is off: id, name,
 		 * width, length (inches, '' when not given), label ("Medium
 		 * (6 × 12 in)"), sort, source (own = set on the variation or the
 		 * product, map = from the size → bag map), size, size_label.
@@ -491,6 +510,9 @@ namespace {
 		/**
 		 * The bag of a product or a variation (its own value, else the size
 		 * → bag map) — the same shape as fishotel_packing_bag_for_item().
+		 * Null for a product that is not packed in a bag: "Livestock —
+		 * packed in a bag" unticked on it (on the parent, for a variation),
+		 * or, with no stored choice, not in a fish category.
 		 *
 		 * @param mixed $product A product id or a WC_Product.
 		 * @return array|null

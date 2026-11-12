@@ -2,7 +2,7 @@
 /**
  * Packing admin — the page under FisHotel Tools (Bags · Sizes → bags ·
  * Boxes) and the assets it shares with the Packing box on the order
- * screen.
+ * screen and the fields in the product editor.
  *
  * The page only reads; every save is an AJAX call to a handler that
  * checks manage_woocommerce and a nonce (Settings, Fill). The views say
@@ -31,8 +31,10 @@ class Admin {
 	}
 
 	/**
-	 * Enqueue the assets on the section page (the order screen asks for
-	 * them itself when it adds the Packing box).
+	 * Enqueue the assets on the section page and on the product edit
+	 * screen — where the "Livestock — packed in a bag" checkbox shows and
+	 * hides the Bag size dropdowns (the order screen asks for them itself
+	 * when it adds the Packing box).
 	 *
 	 * @param string $hook_suffix Admin page hook.
 	 */
@@ -40,7 +42,8 @@ class Admin {
 		unset( $hook_suffix );
 
 		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
-		if ( $screen && false !== strpos( (string) $screen->id, Packing::MENU_SLUG ) ) {
+		$id     = $screen && isset( $screen->id ) ? (string) $screen->id : '';
+		if ( false !== strpos( $id, Packing::MENU_SLUG ) || ( 'product' === $id && current_user_can( Packing::CAPABILITY ) ) ) {
 			self::enqueue_assets();
 		}
 	}

@@ -15,6 +15,13 @@
  * a variation's attributes onto the order line; the filter
  * fishotel_packing_item_size can name one), through the same map.
  *
+ * Only what is packed in a bag has one: for_product() and for_item() —
+ * the contracts — answer none for a product the Livestock rule says is not
+ * bagged (the "Livestock — packed in a bag" checkbox of the product, else
+ * the fish categories). A Bag size stored on such a product is kept and
+ * does not count. product_bag() and item_bag() are the same answers
+ * without that question, for a caller that has asked it already.
+ *
  * The bag size is read through the WooCommerce product object, never
  * written here, and nothing in this file prints anything: it is a record.
  *
@@ -209,7 +216,8 @@ class Bags {
 	}
 
 	/**
-	 * The bag of a product or a variation.
+	 * The bag of a product or a variation — none when the product is not
+	 * packed in a bag (Livestock::for_product()).
 	 *
 	 * @param mixed      $product  A product id or a WC_Product.
 	 * @param array|null $settings Settings (null = the stored ones).
@@ -226,11 +234,30 @@ class Bags {
 		if ( ! is_array( $settings ) ) {
 			$settings = Settings::get();
 		}
-		if ( ! $settings['bags'] ) {
+		if ( ! $settings['bags'] || ! Livestock::for_product( $product, $settings ) ) {
 			return null;
 		}
 		if ( ! is_array( $standard ) ) {
 			$standard = Size_List::standard();
+		}
+
+		return self::product_bag( $product, $settings, $standard );
+	}
+
+	/**
+	 * The bag a product or a variation gives — its own value, else the map
+	 * — without asking whether it is packed in a bag at all: for a caller
+	 * that has asked already (an order's lines), or whose fish is one by
+	 * another word than the product's (a fish of an invoice).
+	 *
+	 * @param object $product  WC_Product.
+	 * @param array  $settings Settings.
+	 * @param array  $standard Size_List::standard().
+	 * @return array|null describe().
+	 */
+	public static function product_bag( $product, array $settings, array $standard ) {
+		if ( ! is_object( $product ) || empty( $settings['bags'] ) ) {
+			return null;
 		}
 
 		$resolved = self::resolve( self::own_value( $product ), self::product_size( $product, $standard ), $settings, $standard['sizes'] );
@@ -267,7 +294,11 @@ class Bags {
 	}
 
 	/**
-	 * The bag of one order line.
+	 * The bag of one order line — none when the line has a product and
+	 * that product makes it something that is not bagged (Lines::bagged():
+	 * the same questions, in the same order, as the order's Packing box
+	 * asks). A line with no product is answered from the size it carries,
+	 * as before.
 	 *
 	 * @param object     $item     WC_Order_Item_Product.
 	 * @param array|null $settings Settings (null = the stored ones).
@@ -281,16 +312,34 @@ class Bags {
 		if ( ! is_array( $settings ) ) {
 			$settings = Settings::get();
 		}
-		if ( ! $settings['bags'] ) {
+		if ( ! $settings['bags'] || ! Lines::bagged( $item, $settings ) ) {
 			return null;
 		}
 		if ( ! is_array( $standard ) ) {
 			$standard = Size_List::standard();
 		}
 
+		return self::item_bag( $item, $settings, $standard );
+	}
+
+	/**
+	 * The bag an order line gives — its product's, else the bag of the size
+	 * the line carries — without asking whether the line is bagged at all
+	 * (see product_bag()).
+	 *
+	 * @param object $item     WC_Order_Item_Product.
+	 * @param array  $settings Settings.
+	 * @param array  $standard Size_List::standard().
+	 * @return array|null describe().
+	 */
+	public static function item_bag( $item, array $settings, array $standard ) {
+		if ( ! is_object( $item ) || empty( $settings['bags'] ) ) {
+			return null;
+		}
+
 		$product = method_exists( $item, 'get_product' ) ? $item->get_product() : null;
 		if ( is_object( $product ) ) {
-			$bag = self::for_product( $product, $settings, $standard );
+			$bag = self::product_bag( $product, $settings, $standard );
 			if ( $bag ) {
 				return $bag;
 			}

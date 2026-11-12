@@ -439,6 +439,36 @@ class Fh_Fake_Store {
 		return $out;
 	}
 
+	/**
+	 * How often the checkbox values were read, and for which products.
+	 *
+	 * @var array
+	 */
+	public $flag_reads = array();
+
+	public function packs_flags( array $product_ids ) {
+		$this->flag_reads[] = array_values( $product_ids );
+		$out                = array();
+		foreach ( $product_ids as $id ) {
+			$value = isset( $GLOBALS['fh_products'][ (int) $id ] ) ? (string) ( $GLOBALS['fh_products'][ (int) $id ]->meta['_fh_packs_in_bag'] ?? '' ) : '';
+			if ( 'yes' === $value || 'no' === $value ) {
+				$out[ (int) $id ] = $value;
+			}
+		}
+		return $out;
+	}
+
+	public function variation_bags( $product_id ) {
+		$out = array();
+		foreach ( $GLOBALS['fh_products'] as $product ) {
+			$value = trim( (string) ( $product->meta['_fh_bag_size'] ?? '' ) );
+			if ( 'variation' === $product->type && (int) $product_id === $product->parent_id && 'trash' !== $product->status && '' !== $value && ! in_array( $value, $out, true ) ) {
+				$out[] = $value;
+			}
+		}
+		return $out;
+	}
+
 	public function variation_counts() {
 		$total = 0;
 		$with  = 0;

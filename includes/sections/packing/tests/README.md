@@ -1,7 +1,8 @@
 # Packing — headless tests
 
 All run without WordPress, WooCommerce, a database or the network.
-`wp-stubs.php` supplies the WordPress functions the section touches —
+`wp-stubs.php` supplies the WordPress functions the section touches (and
+the two product-editor fields of WooCommerce it draws) —
 options (every read and write is counted), capabilities, nonces, the AJAX
 replies (they throw `Fh_Test_Json`, so a test can call a real handler and
 read what it would have answered) and a hook registry that remembers every
@@ -60,15 +61,23 @@ helper files exit cleanly when they are run directly (the CI runs every
   attribute at all) and when it is (its attribute, its typed list, the
   Clean Room failing); the rule (own value, else the map, else none; a
   removed bag); the bag of a product (a variation, a size typed on the
-  product, a simple product with one size or several); the bag of an order
-  line (its product, the size on the line, the filter; nothing is written
-  to the line); the bag of a size; fish per bag; the fill tool — a preview
+  product, a simple product with one size or several); only what is
+  packed in a bag having one (the rule of *Livestock — packed in a bag*:
+  a stored yes, a stored no — in a fish category and with a Bag size
+  stored earlier, which is kept —, no stored choice in a fish category
+  and outside one, a Bag size from before the checkbox, a variation read
+  from its parent); the bag of an order line (its product, the size on the
+  line, the filter; nothing is written to the line; none for a line whose
+  product is not packed in a bag); the bag of a size; fish per bag; the
+  fill tool — a preview
   that changes nothing, a run that sets only what has no value through
   `update_meta_data()` + `save_meta_data()`, a batch at a time behind a
   cursor, a value set since the list was read left alone, a failed write
   counted, only fish filled (a variation of a product outside the fish
-  categories counted, never planned and never written), and every reason
-  the tool refuses to run.
+  categories counted, never planned and never written), the tool going by
+  the checkbox (a ticked product filled whatever its category, an unticked
+  fish counted and left alone, the stored choices read in one go), and
+  every reason the tool refuses to run.
 - **boxes-test.php** — a box (key, inches, size, volume); ShipTracker
   absent; an older build without `get_standard_boxes()` (guarded with
   `method_exists`); the active build providing them (they are the boxes in
@@ -82,7 +91,11 @@ helper files exit cleanly when they are run directly (the CI runs every
   fish that are not shop products; an Invoice kept as one line (its
   snapshot as JSON or an array, no snapshot, a snapshot with no fish);
   what is a fish (the pick list's order of questions, a product with a Bag
-  size of its own, the shared filter); fish per bag; a combined box read
+  size of its own from before the checkbox, the shared filter); the
+  product's checkbox deciding (ticked whatever the category; unticked
+  ignored by the suggestion and named as that, its Bag size kept; a ticked
+  product without a bag listed as incomplete; an invoice that names an
+  unticked product; a line with no product read as before); fish per bag; a combined box read
   through its live sources (not its copies, not a cancelled source; no
   source loading; every source cancelled); an order that went into one;
   what a person is told (split, on the line said once for two boxes of a
@@ -99,19 +112,31 @@ helper files exit cleanly when they are run directly (the CI runs every
   suggestion; nothing to suggest; an order that went into a combined box
   (confirmed there, not here); what is read back; the contracts with their
   filters and actions, a filter that answers nonsense, the "unavailable"
-  answer; the Packing box on both order screens and what it draws
-  (escaped); the AJAX handler, also when it refuses with the box as it
+  answer, and the contracts going by the product's checkbox (no bag and no
+  line for an unticked product, a bag for a ticked one outside the fish
+  categories, a Bag size from before the checkbox); the Packing box on
+  both order screens and what it draws (escaped; what was unticked named
+  apart from what is not a fish); the AJAX handler, also when it refuses with the box as it
   stands now.
 - **product-test.php** — the dropdown's options; the rule of a save; who
   may save; the field on a variation and on a simple product; the two save
   handlers writing one hidden meta through the product object; a variable
-  product having none of its own.
+  product having none of its own. The checkbox: where it is drawn; its
+  default (a fish category or not, simple and variable); a stored yes and
+  no; a Bag size from before the checkbox (the product's own, a
+  variation's, a value that names no bag); the class on the product-data
+  box that hides the Bag size fields, the stylesheet rule and the script
+  line behind it; the rule of its save and the save itself — ticked,
+  unticked (the Bag size kept), ticked again, left as drawn (nothing
+  stored), clicked off and on again (stored), not on the form, a bad nonce, no nonce, no capability, the
+  parent product only and never a variation.
 - **page-test.php** — the Packing page drawn headless: who may open it;
   the three tabs with nothing typed, then with bags, sizes and boxes; each
   form with its nonce and the fields its save reads (which forms redraw
   the page once saved; each stored box saying which box it is); what the page says
   when something is not available; names escaped; ShipTracker providing
-  the boxes; the assets.
+  the boxes; the assets (the Packing page, and the product edit screen of
+  a user who is shown the fields — no other screen).
 - **storefront-test.php** — a front-end request loads nothing but the
   section's own file, hooks nothing and reads no option; in wp-admin the
   hooks are exactly the product editor's, the order screen's, the page's
@@ -122,15 +147,21 @@ helper files exit cleanly when they are run directly (the CI runs every
   registered meta, order-item meta, post-meta functions, an e-mail, a
   stock or status change, money, an attribute / term / variation, a
   request to another server, a cron event, a table — and for `$wpdb`
-  outside the Store (which only reads); the only meta ever written; the
-  hidden meta keys; working out a suggestion or a line's bag writing
-  nothing anywhere.
+  outside the Store (which only reads); the only meta ever written (the
+  checkbox's by the product editor alone, its key spelled in one place,
+  no view drawing or reading it); the hidden meta keys, `_fh_packs_in_bag`
+  among them; working out a suggestion or a line's bag writing nothing
+  anywhere — also with the checkbox stored as yes and as no, the choice
+  never reaching the variation or the order line.
 - **packing-admin.test.js** — the script's pure helpers: the tiny
   sprintf, a new table row from its template, the fill tool's run loop
   (it must end: a cursor that does not move, an answer that is not a
   success and a run that never says done all stop it), what a button of
   the Packing box posts (Confirm carries what it showed), a saved form
-  that redraws the page keeping its button disabled, and a save that would
-  redraw the page being stopped while another form holds unsaved changes.
+  that redraws the page keeping its button disabled, a save that would
+  redraw the page being stopped while another form holds unsaved changes,
+  the product editor's checkbox following the product's categories only
+  while no choice is stored and the box was not touched, and a box the
+  owner clicked being marked on the form as a choice.
 
-494 checks in the nine PHP files and 35 in the node test.
+607 checks in the nine PHP files and 44 in the node test.

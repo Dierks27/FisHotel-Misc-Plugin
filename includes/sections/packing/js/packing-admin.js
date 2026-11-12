@@ -1,13 +1,16 @@
 /**
  * Packing admin — the saves of the Packing page (bags, the size → bag map,
  * boxes, how many fit), "Add a row", the "Fill empty ones from the map"
- * tool (preview, then a run that asks for one batch after another), and the
- * Packing box on the order screen (confirm / change / clear / refresh).
+ * tool (preview, then a run that asks for one batch after another), the
+ * Packing box on the order screen (confirm / change / clear / refresh), and
+ * the "Livestock — packed in a bag" checkbox of the product editor, which
+ * shows and hides the Bag size dropdowns.
  *
  * The server draws every piece of HTML and writes every sentence; this
  * file posts forms and swaps the answers in. The pure helpers (fmt,
- * rowFromTemplate, fillStep, confirmPayload, afterSave, unsavedElsewhere)
- * are exported for tests/packing-admin.test.js.
+ * rowFromTemplate, fillStep, confirmPayload, afterSave, unsavedElsewhere,
+ * livestockFromCategories, drawnAsAfterClick) are exported for
+ * tests/packing-admin.test.js.
  *
  * @package FisHotel\Misc\Sections\Packing
  */
@@ -157,13 +160,66 @@
 		return false;
 	}
 
+	/**
+	 * What the "Livestock — packed in a bag" checkbox of the product editor
+	 * should say after the product's categories changed. It follows them
+	 * only while the product has no stored choice and the owner has not
+	 * touched the box on this page: then it is ticked when the product is in
+	 * one of the fish categories (or carries a Bag size from before the
+	 * checkbox existed), as the server will read it once the product is
+	 * saved.
+	 *
+	 * @param {Object} box        { follow: no stored choice, touched: changed by hand, legacy: has a Bag size already }.
+	 * @param {Array}  fishIds    The term ids of the fish categories.
+	 * @param {Array}  checkedIds The term ids ticked in the category list.
+	 * @return {boolean|null} Ticked or not; null = leave the box alone.
+	 */
+	function livestockFromCategories(box, fishIds, checkedIds) {
+		if (!box || !box.follow || box.touched) {
+			return null;
+		}
+		if (box.legacy) {
+			return true;
+		}
+
+		var fish = {};
+		var i;
+		for (i = 0; fishIds && i < fishIds.length; i++) {
+			if (String(fishIds[i]).replace(/\s+/g, '') !== '') {
+				fish[String(fishIds[i]).replace(/\s+/g, '')] = true;
+			}
+		}
+		for (i = 0; checkedIds && i < checkedIds.length; i++) {
+			if (fish[String(checkedIds[i]).replace(/\s+/g, '')] === true) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * What the form says the "Livestock — packed in a bag" checkbox was
+	 * drawn as, once the owner has clicked it. The server stores a choice
+	 * when the box is posted differently from how it was drawn; a box that
+	 * was clicked is a choice whatever it ends up as — clicked off and on
+	 * again included — so the form then says the opposite of what is posted.
+	 *
+	 * @param {boolean} checked Whether the box is ticked now.
+	 * @return {string} 'yes' or 'no'.
+	 */
+	function drawnAsAfterClick(checked) {
+		return checked ? 'no' : 'yes';
+	}
+
 	var api = {
 		fmt: fmt,
 		rowFromTemplate: rowFromTemplate,
 		fillStep: fillStep,
 		confirmPayload: confirmPayload,
 		afterSave: afterSave,
-		unsavedElsewhere: unsavedElsewhere
+		unsavedElsewhere: unsavedElsewhere,
+		livestockFromCategories: livestockFromCategories,
+		drawnAsAfterClick: drawnAsAfterClick
 	};
 
 	root.fhPacking = root.fhPacking || {};
@@ -338,6 +394,49 @@
 
 			step();
 		});
+
+		/* ---- The product editor: Livestock — packed in a bag ------- */
+
+		// The product-data box carries .fh-no-bag while the checkbox is off; the
+		// stylesheet hides every Bag size dropdown under it, so the variation
+		// panels WooCommerce loads later are covered without being touched here.
+		var $packs = $('#fh_packs_in_bag');
+		if ($packs.length) {
+			var packsTouched = false;
+			var showBagFields = function () {
+				$('#woocommerce-product-data').toggleClass('fh-no-bag', !$packs.prop('checked'));
+			};
+
+			$packs.on('change', function () {
+				packsTouched = true;
+				// The owner's click is a choice: the save stores it, whatever it ends up as.
+				$('#fh_packs_in_bag_shown').val(drawnAsAfterClick($packs.prop('checked')));
+				showBagFields();
+			});
+
+			// A product with no stored choice follows its categories, as the server
+			// will once it is saved — so a new fish shows its Bag size right away.
+			$(document).on('change', '#product_catdiv input[type="checkbox"]', function () {
+				root.setTimeout(function () {
+					var next = livestockFromCategories(
+						{ follow: $packs.attr('data-fh-follow') === '1', touched: packsTouched, legacy: $packs.attr('data-fh-legacy') === '1' },
+						String($packs.attr('data-fh-fish') || '').split(','),
+						$('#product_catchecklist input[type="checkbox"]:checked').map(function () {
+							return this.value;
+						}).get()
+					);
+					if (next === null) {
+						return;
+					}
+					$packs.prop('checked', next);
+					// Still the default, not a choice: the save keeps following it.
+					$('#fh_packs_in_bag_shown').val(next ? 'yes' : 'no');
+					showBagFields();
+				}, 0);
+			});
+
+			showBagFields();
+		}
 
 		/* ---- The Packing box on the order screen ------------------- */
 

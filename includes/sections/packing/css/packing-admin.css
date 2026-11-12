@@ -4,7 +4,8 @@
  * Two surfaces: the section page under FisHotel Tools (dark, built on
  * admin/css/admin-style.css and its --fh-* tokens) and the Packing box on
  * the WooCommerce order screen (stock light admin). The badges use solid
- * colours so they read the same on both.
+ * colours so they read the same on both. And one rule for the product
+ * editor, at the end.
  *
  * @package FisHotel\Misc\Sections\Packing
  */
@@ -450,4 +451,18 @@
 	margin: 12px 0 0;
 	font-size: 11px;
 	color: #646970;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Product editor: Bag size only for what is packed in a bag          */
+/* ------------------------------------------------------------------ */
+
+/*
+ * The product-data box carries .fh-no-bag while "Livestock — packed in a
+ * bag" is off. Every Bag size dropdown under it is hidden — the simple
+ * product's and each variation's, also on the variation panels WooCommerce
+ * loads later. !important: WooCommerce's show_if_* sets an inline display.
+ */
+#woocommerce-product-data.fh-no-bag .fh-bag-size-field {
+	display: none !important;
 }

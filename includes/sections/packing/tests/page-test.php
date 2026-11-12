@@ -131,6 +131,16 @@ $GLOBALS['fh_screen'] = (object) array( 'id' => 'fishotel-tools_page_fishotel-mi
 $admin->maybe_enqueue( 'x' );
 $admin->maybe_enqueue( 'x' );
 check( 'on the Packing page: the stylesheet, the script and its strings — once', array( 'style:fishotel-packing-admin', 'script:fishotel-packing-admin', 'data:fhPacking' ) === $GLOBALS['fh_enqueued'] );
+$GLOBALS['fh_enqueued'] = array();
+$GLOBALS['fh_screen']   = (object) array( 'id' => 'edit-product' );
+$admin->maybe_enqueue( 'edit.php' );
+fh_login( 7 );
+$GLOBALS['fh_screen'] = (object) array( 'id' => 'product' );
+$admin->maybe_enqueue( 'post.php' );
+check( 'not on the list of products, and not on the product edit screen of a user who is not shown the fields', array() === $GLOBALS['fh_enqueued'] );
+fh_login( 5 );
+$admin->maybe_enqueue( 'post.php' );
+check( 'on the product edit screen: the same three — the script shows and hides the Bag size fields with the "Livestock — packed in a bag" checkbox', array( 'style:fishotel-packing-admin', 'script:fishotel-packing-admin', 'data:fhPacking' ) === $GLOBALS['fh_enqueued'] );
 check( 'tab links', 'https://example.test/wp-admin/admin.php?page=fishotel-misc-packing' === Admin::tab_url() && 'https://example.test/wp-admin/admin.php?page=fishotel-misc-packing&tab=boxes' === Admin::tab_url( 'boxes' ) && Admin::tab_url() === Admin::tab_url( 'nope' ) );
 
 fh_finish();

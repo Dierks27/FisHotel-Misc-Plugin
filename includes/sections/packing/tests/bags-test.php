@@ -4,9 +4,12 @@
  * the list of sizes comes from (this section's own lookup while the Clean
  * Room is not there, the Clean Room's list when it is), the size → bag
  * map, a variation's own Bag size overriding it, a bag that was removed,
- * the bag of an order line (its product, else the size on the line), and
- * the "Fill empty ones from the map" tool: a preview that changes nothing
- * and a run that sets only what has no value, through the product object.
+ * the bag of an order line (its product, else the size on the line), only
+ * what is packed in a bag having one ("Livestock — packed in a bag" on the
+ * product, else the fish categories), and the "Fill empty ones from the
+ * map" tool: a preview that changes nothing and a run that sets only what
+ * has no value, through the product object — and only on what is packed
+ * in a bag.
  *
  * Run from the plugin root:  php includes/sections/packing/tests/bags-test.php
  */
@@ -15,6 +18,7 @@ require_once __DIR__ . '/wp-stubs.php';
 
 use FisHotel\Misc\Sections\Packing\Bags;
 use FisHotel\Misc\Sections\Packing\Fill;
+use FisHotel\Misc\Sections\Packing\Livestock;
 use FisHotel\Misc\Sections\Packing\Packing;
 use FisHotel\Misc\Sections\Packing\Settings;
 use FisHotel\Misc\Sections\Packing\Size_List;
@@ -117,6 +121,12 @@ fh_product( new Fh_Fake_Product( 106, 'variation', array( 'pa_size' => 'mid' ), 
 fh_product( new Fh_Fake_Product( 110, 'simple', array( 'pa_size' => array( 'big' ) ) ) );
 fh_product( new Fh_Fake_Product( 111, 'simple', array( 'pa_size' => array( 'small', 'big' ) ) ) );
 fh_product( new Fh_Fake_Product( 112, 'simple', array(), array( '_fh_bag_size' => '1' ) ) );
+// Fish and inverts; 112 has no category at all — it was given a Bag size before the checkbox existed.
+$GLOBALS['fh_terms'] = array(
+	100 => array( 'quarantined-fish' ),
+	110 => array( 'inverts' ),
+	111 => array( 'inverts' ),
+);
 
 check( 'a variation with no Bag size of its own: the bag of its size', 1 === Bags::for_product( 101, $settings, $standard )['id'] && Bags::SOURCE_MAP === Bags::for_product( 101, $settings, $standard )['source'] );
 check( 'a variation with its own: that one, whatever its size says', 3 === Bags::for_product( 102, $settings, $standard )['id'] && Bags::SOURCE_OWN === Bags::for_product( 102, $settings, $standard )['source'] && 'mid' === Bags::for_product( 102, $settings, $standard )['size'] );
@@ -129,6 +139,31 @@ check( 'a simple product with a Bag size of its own', 1 === Bags::for_product( 1
 check( 'a product object works as well as an id; an id that is no product gives none', 1 === Bags::for_product( wc_get_product( 101 ), $settings, $standard )['id'] && null === Bags::for_product( 99999, $settings, $standard ) && null === Bags::for_product( 'x', $settings, $standard ) );
 $no_bags = array_merge( $settings, array( 'bags' => array() ) );
 check( 'with no bags defined nothing has a bag', null === Bags::for_product( 102, $no_bags, $standard ) );
+
+echo "5b. Only what is packed in a bag has one\n";
+check( 'the stored choice reads as yes, no or nothing — nothing else', 'yes' === Livestock::flag( ' Yes ' ) && 'no' === Livestock::flag( 'no' ) && '' === Livestock::flag( '' ) && '' === Livestock::flag( '1' ) && '' === Livestock::flag( true ) && '' === Livestock::flag( null ) && '' === Livestock::flag( array( 'yes' ) ) );
+check( 'the rule: ticked is packed in a bag whatever the category', true === Livestock::decide( 'yes', false, false ) && true === Livestock::decide( 'yes', true, true ) );
+check( 'unticked is not — even in a fish category, even with a Bag size stored earlier', false === Livestock::decide( 'no', true, false ) && false === Livestock::decide( 'no', true, true ) && false === Livestock::decide( 'no', false, true ) );
+check( 'no stored choice: a product in a fish category is, any other is not', true === Livestock::decide( '', true, false ) && false === Livestock::decide( '', false, false ) && false === Livestock::decide( 'maybe', false ) );
+check( 'no stored choice and a Bag size from before the checkbox: it counts as it did', true === Livestock::decide( '', false, true ) );
+
+fh_product( new Fh_Fake_Product( 120, 'simple', array( 'pa_size' => array( 'small' ) ) ) ); // A medication sold by size.
+$GLOBALS['fh_terms'][120] = array( 'medication' );
+check( 'a product outside the fish categories has no bag — though it carries a size the map knows', null === Bags::for_product( 120, $settings, $standard ) && false === Livestock::for_product( wc_get_product( 120 ), $settings ) );
+wc_get_product( 120 )->meta['_fh_packs_in_bag'] = 'yes';
+check( 'ticked, it has one whatever its category', 1 === Bags::for_product( 120, $settings, $standard )['id'] && true === Livestock::for_product( wc_get_product( 120 ), $settings ) );
+wc_get_product( 100 )->meta['_fh_packs_in_bag'] = 'no';
+check( 'unticked on a fish: none of its variations has a bag — not from the map, not from a Bag size stored earlier', null === Bags::for_product( 101, $settings, $standard ) && null === Bags::for_product( 102, $settings, $standard ) && false === Livestock::for_product( wc_get_product( 102 ), $settings ) );
+check( 'the Bag size stored earlier is kept: it stops counting, it is not deleted', '3' === wc_get_product( 102 )->meta['_fh_bag_size'] && 0 === wc_get_product( 102 )->meta_saves && null === wc_get_product( 102 )->pending );
+unset( wc_get_product( 100 )->meta['_fh_packs_in_bag'] );
+wc_get_product( 101 )->meta['_fh_packs_in_bag'] = 'no';
+check( 'a variation has no checkbox of its own: the parent product is asked', 1 === Bags::for_product( 101, $settings, $standard )['id'] && '' === Livestock::stored( wc_get_product( 101 ) ) );
+unset( wc_get_product( 101 )->meta['_fh_packs_in_bag'] );
+check( 'a product with a Bag size from before the checkbox and no stored choice still has its bag, in no category at all', 1 === Bags::for_product( 112, $settings, $standard )['id'] && array() === ( $GLOBALS['fh_terms'][112] ?? array() ) );
+wc_get_product( 112 )->meta['_fh_packs_in_bag'] = 'no';
+check( 'until it is unticked', null === Bags::for_product( 112, $settings, $standard ) && '1' === wc_get_product( 112 )->meta['_fh_bag_size'] );
+unset( wc_get_product( 112 )->meta['_fh_packs_in_bag'], wc_get_product( 120 )->meta['_fh_packs_in_bag'] );
+check( 'asked without the question, a product still gives the bag of its size (a fish of an invoice is one by the invoice\'s word)', 1 === Bags::product_bag( wc_get_product( 120 ), $settings, $standard )['id'] );
 
 echo "6. The bag of an order line\n";
 $line = new Fh_Fake_Item( 1, 'Invented Goby', 2, 100, array( 'pa_size' => 'small' ), 101 );
@@ -153,6 +188,16 @@ check( 'the filter fishotel_packing_item_size can name the line\'s size', 1 === 
 fh_reset_hooks();
 check( 'nothing is ever written to the line', array() === $line->writes );
 check( 'something that is not a line gives none', null === Bags::for_item( 'x', $settings, $standard ) && null === Bags::for_item( null, $settings, $standard ) );
+$line = new Fh_Fake_Item( 6, 'Invented Remedy - Small', 1, 120, array( 'pa_size' => 'small' ) );
+check( 'a line whose product is not packed in a bag has none — the size on the line does not make it a fish', null === Bags::for_item( $line, $settings, $standard ) );
+wc_get_product( 120 )->meta['_fh_packs_in_bag'] = 'yes';
+check( 'ticked on the product, the line has its bag', 1 === Bags::for_item( $line, $settings, $standard )['id'] );
+unset( wc_get_product( 120 )->meta['_fh_packs_in_bag'] );
+wc_get_product( 100 )->meta['_fh_packs_in_bag'] = 'no';
+$line = new Fh_Fake_Item( 7, 'Invented Goby', 1, 100, array( 'pa_size' => 'mid' ), 102 );
+check( 'unticked on the product, a line of its variation has none — its own Bag size included', null === Bags::for_item( $line, $settings, $standard ) );
+unset( wc_get_product( 100 )->meta['_fh_packs_in_bag'] );
+check( 'and has it again once the choice is gone', 3 === Bags::for_item( $line, $settings, $standard )['id'] );
 
 echo "7. The bag of a size (a fish that is not a shop product)\n";
 check( 'by the size\'s slug', 2 === Bags::for_size( 'mid', $settings, $standard )['id'] && Bags::SOURCE_MAP === Bags::for_size( 'mid', $settings, $standard )['source'] );
@@ -238,11 +283,39 @@ $wider = Fill::fish_test();
 check( 'the filter on that list widens it here too', true === $wider( 150 ) && false === $wider( 160 ) );
 fh_reset_hooks();
 $preview = Fill::preview_request( array( '_wpnonce' => $nonce ), $store, $standard );
-check( 'the preview leaves them out and says how many', 2 === $preview['would_set'] && 7 === $preview['empty'] && false !== strpos( $preview['message'], 'The map would set 2 of them (Small: 1, Large: 1).' ) && false !== strpos( $preview['message'], '3 are of products that are not in a fish category — they stay empty' ), $preview['message'] );
+check( 'the preview leaves them out and says how many', 2 === $preview['would_set'] && 7 === $preview['empty'] && false !== strpos( $preview['message'], 'The map would set 2 of them (Small: 1, Large: 1).' ) && false !== strpos( $preview['message'], '3 are of products that are not packed in a bag (“Livestock — packed in a bag” is off on them) — they stay empty; tick that box on the product if they are.' ), $preview['message'] );
 $run = Fill::run( $store, $settings, $standard, 0, 50, static function () {
 	return 'set';
 } );
 check( 'the run does not hand them to the writer, and still passes them (the cursor moves on)', 2 === $run['set'] && 7 === $run['looked'] && 161 === $run['last_id'] && true === $run['done'], fh_test_export( $run ) );
+
+echo "9c. The fill tool goes by the checkbox\n";
+wc_get_product( 150 )->meta['_fh_packs_in_bag'] = 'yes'; // The net, ticked: it is packed in a bag after all.
+wc_get_product( 100 )->meta['_fh_packs_in_bag'] = 'no';  // The fish, unticked.
+$store->flag_reads = array();
+$is_fish           = Fill::fish_test( array( 100, 150, 160, 150 ), $store );
+check( 'ticked: filled whatever the category; unticked: never, even in a fish category; no stored choice: the category', true === $is_fish( 150 ) && false === $is_fish( 100 ) && false === $is_fish( 160 ) );
+check( 'the stored choices of the products asked about are read in one go', array( array( 100, 150, 160 ) ) === $store->flag_reads, fh_test_export( $store->flag_reads ) );
+$lazy = Fill::fish_test();
+check( 'without a list to read ahead, each product is asked through its product object — the same answers', true === $lazy( 150 ) && false === $lazy( 100 ) && false === $lazy( 160 ) && false === $lazy( 0 ) );
+$plan = Fill::plan( $store->variations_without_bag(), $settings, $standard, Fill::fish_test( array_column( $store->variations_without_bag(), 'parent' ), $store ) );
+check( 'the plan: the ticked product\'s variations are set, the unticked fish\'s are counted and left alone', array( 151 => 1, 152 => 3 ) === $plan['set'] && 5 === $plan['not_fish'] && 7 === $plan['empty'], fh_test_export( $plan ) );
+$preview = Fill::preview_request( array( '_wpnonce' => $nonce ), $store, $standard );
+check( 'the preview says the same', 2 === $preview['would_set'] && false !== strpos( $preview['message'], 'The map would set 2 of them (Small: 1, Large: 1).' ) && false !== strpos( $preview['message'], '5 are of products that are not packed in a bag' ), $preview['message'] );
+$written = array();
+$run     = Fill::run(
+	$store,
+	$settings,
+	$standard,
+	0,
+	50,
+	static function ( $id ) use ( &$written ) {
+		$written[] = $id;
+		return 'set';
+	}
+);
+check( 'and the run hands the writer exactly those', array( 151, 152 ) === $written && 2 === $run['set'] && 7 === $run['looked'] && true === $run['done'], fh_test_export( $written ) );
+unset( wc_get_product( 150 )->meta['_fh_packs_in_bag'], wc_get_product( 100 )->meta['_fh_packs_in_bag'] );
 
 echo "10. The run sets only what has no value, through the product object\n";
 $run = Fill::run_request( array( '_wpnonce' => $nonce, 'after' => '0' ), $store, $standard );

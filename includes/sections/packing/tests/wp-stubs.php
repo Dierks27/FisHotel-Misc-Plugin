@@ -3,9 +3,11 @@
  * Just enough WordPress to load the Packing section headless: the
  * translation and escaping helpers, options (with a count of the reads, so
  * a test can prove a front-end request reads none), capabilities and
- * nonces, the AJAX replies (wp_send_json_*() throw Fh_Test_Json), and a
- * hook registry that remembers every add_action() / add_filter() so the
- * storefront test can look at exactly what the section hooks.
+ * nonces, the AJAX replies (wp_send_json_*() throw Fh_Test_Json), a hook
+ * registry that remembers every add_action() / add_filter() so the
+ * storefront test can look at exactly what the section hooks, and the two
+ * fields of WooCommerce's product editor the section draws (a select, a
+ * checkbox).
  *
  * WooCommerce is replaced by fakes.php: an order, an order line, a product
  * and the registries wc_get_order() / wc_get_product() answer from. No
@@ -328,6 +330,36 @@ function woocommerce_wp_select( $field ) {
 		echo '<option value="' . esc_attr( $value ) . '"' . ( (string) $value === (string) $field['value'] ? ' selected="selected"' : '' ) . '>' . esc_html( $label ) . '</option>';
 	}
 	echo '</select></p>';
+}
+
+/**
+ * WooCommerce's checkbox field of the product editor, reduced to its markup.
+ */
+function woocommerce_wp_checkbox( $field ) {
+	$cbvalue = $field['cbvalue'] ?? 'yes';
+	$attrs   = '';
+	foreach ( $field['custom_attributes'] ?? array() as $name => $value ) {
+		$attrs .= ' ' . esc_attr( $name ) . '="' . esc_attr( $value ) . '"';
+	}
+	echo '<p class="form-field ' . esc_attr( $field['id'] ) . '_field ' . esc_attr( $field['wrapper_class'] ?? '' ) . '">';
+	echo '<label for="' . esc_attr( $field['id'] ) . '">' . esc_html( $field['label'] ) . '</label>';
+	echo '<input type="checkbox" class="checkbox" name="' . esc_attr( $field['name'] ?? $field['id'] ) . '" id="' . esc_attr( $field['id'] ) . '" value="' . esc_attr( $cbvalue ) . '"' . ( (string) $field['value'] === (string) $cbvalue ? ' checked="checked"' : '' ) . $attrs . '>';
+	echo '<span class="description">' . esc_html( $field['description'] ?? '' ) . '</span></p>';
+}
+
+/**
+ * Product category terms by slug: $GLOBALS['fh_term_ids'][ slug ] = term id.
+ */
+$GLOBALS['fh_term_ids'] = array();
+
+function get_term_by( $field, $value, $taxonomy = '' ) {
+	if ( 'slug' !== $field || 'product_cat' !== $taxonomy || ! isset( $GLOBALS['fh_term_ids'][ (string) $value ] ) ) {
+		return false;
+	}
+	return (object) array(
+		'term_id' => (int) $GLOBALS['fh_term_ids'][ (string) $value ],
+		'slug'    => (string) $value,
+	);
 }
 
 /**

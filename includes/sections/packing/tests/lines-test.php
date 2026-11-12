@@ -4,7 +4,10 @@
  * products, customers' orders and numbers: which lines are fish (the pick
  * list's rules), what is ignored and named, what is left out (shipped,
  * refunded), a line with no bag size (listed, the suggestion marked
- * incomplete), invoice fish in each shape an order can carry them, a
+ * incomplete), invoice fish in each shape an order can carry them, the
+ * "Livestock — packed in a bag" checkbox of the product deciding (ticked,
+ * unticked — ignored and named as that —, no stored choice, a Bag size
+ * from before the checkbox), a
  * combined box read through its live source orders, an order that went
  * into one, and what a person is told about it all.
  *
@@ -15,6 +18,7 @@ require_once __DIR__ . '/wp-stubs.php';
 
 use FisHotel\Misc\Sections\Packing\Boxes;
 use FisHotel\Misc\Sections\Packing\Lines;
+use FisHotel\Misc\Sections\Packing\Livestock;
 use FisHotel\Misc\Sections\Packing\Order_Packing;
 use FisHotel\Misc\Sections\Packing\Settings;
 use FisHotel\Misc\Sections\Packing\Suggest;
@@ -163,7 +167,7 @@ check( 'the flags on the line are read before the categories', Lines::KIND_CREDI
 check( 'anything else is not a fish', Lines::KIND_OTHER === Lines::kind( array(), array( 'dry-goods' ), 'Reef Salt', true, $fish ) && Lines::KIND_OTHER === Lines::kind( array( '_fishotel_fish_id' => '7' ), array(), 'x', true, $fish ) );
 $order  = fh_order( new Fh_Fake_Order( 504, array( new Fh_Fake_Item( 1, 'Frag plug with a bag', 2, 130 ), new Fh_Fake_Item( 2, 'Reef Salt 5 lb', 1, 120 ) ) ) );
 $result = fh_suggest( $order );
-check( 'a product the owner gave a Bag size of its own is bagged, whatever its category', array( '2 × Frag plug with a bag → Small' ) === fh_lines( $result ) && array( 'Reef Salt 5 lb' ) === array_column( $result['ignored'], 'name' ) );
+check( 'a product the owner gave a Bag size of its own before the checkbox existed — and has no stored choice — is still bagged, whatever its category', array( '2 × Frag plug with a bag → Small' ) === fh_lines( $result ) && array( 'Reef Salt 5 lb' ) === array_column( $result['ignored'], 'name' ) );
 check( 'the fish categories are the Ship Day list\'s default', array( 'quarantined-fish', 'inverts' ) === Lines::fish_categories() );
 add_filter(
 	'fishotel_ship_day_fish_categories',
@@ -174,6 +178,67 @@ add_filter(
 );
 check( 'under the same filter the pick list uses', array( 'quarantined-fish', 'inverts', 'dry-goods' ) === Lines::fish_categories() && array( '2 × Frag plug with a bag → Small', '1 × Reef Salt 5 lb → none' ) === fh_lines( fh_suggest( $order ) ) );
 fh_reset_hooks();
+
+echo "6b. Livestock — packed in a bag: the product decides\n";
+$unticked = 'not packed in a bag — “Livestock — packed in a bag” is unticked on the product';
+check( 'ticked on the product: a fish, whatever its category', Lines::KIND_FISH === Lines::kind( array(), array( 'dry-goods' ), 'A net', true, $fish, false, 'yes' ) && Lines::KIND_FISH === Lines::kind( array(), array(), 'x', true, $fish, false, ' YES ' ) );
+check( 'unticked: not a fish — in a fish category, and with a Bag size stored earlier', Lines::KIND_OTHER === Lines::kind( array(), array( 'quarantined-fish' ), 'Invented Goby', true, $fish, false, 'no' ) && Lines::KIND_OTHER === Lines::kind( array(), array( 'quarantined-fish' ), 'Invented Goby', true, $fish, true, 'no' ) && Lines::KIND_OTHER === Lines::kind( array(), array(), 'x', true, $fish, true, 'no' ) );
+check( 'no stored choice: the category decides, as it did — and a Bag size from before the checkbox still counts', Lines::KIND_FISH === Lines::kind( array(), array( 'inverts' ), 'x', true, $fish, false, '' ) && Lines::KIND_OTHER === Lines::kind( array(), array( 'dry-goods' ), 'x', true, $fish, false, '' ) && Lines::KIND_FISH === Lines::kind( array(), array( 'dry-goods' ), 'x', true, $fish, true, '' ) && Lines::KIND_FISH === Lines::kind( array(), array( 'dry-goods' ), 'x', true, $fish, true, 'junk' ) );
+check( 'a fish of an invoice whose product was unticked is not bagged either; a credit is still money', Lines::KIND_OTHER === Lines::kind( array( '_fh_invoice_fish' => 1 ), array(), 'x', true, $fish, false, 'no' ) && Lines::KIND_FISH === Lines::kind( array( '_fh_invoice_fish' => 1 ), array(), 'x', true, $fish, false, '' ) && Lines::KIND_CREDIT === Lines::kind( array( '_fh_invoice_credit' => 1 ), array(), 'x', true, $fish, false, 'yes' ) );
+check( 'a line with no product has no checkbox to go by: what the line says counts, as before', Lines::KIND_FISH === Lines::kind( array( '_fishotel_fish_id' => '7' ), array(), 'x', false, $fish, false, 'no' ) && Lines::KIND_OTHER === Lines::kind( array(), array(), 'x', false, $fish, false, 'yes' ) );
+
+$order = fh_order(
+	new Fh_Fake_Order(
+		540,
+		array(
+			new Fh_Fake_Item( 1, 'Invented Goby - Small', 2, 100, array( 'pa_size' => 'small' ), 101 ),
+			new Fh_Fake_Item( 2, 'Invented Goby - Mid', 1, 100, array( 'pa_size' => 'mid' ), 102 ),
+			new Fh_Fake_Item( 3, 'Invented Snail', 1, 110 ),
+			new Fh_Fake_Item( 4, 'Reef Salt 5 lb', 1, 120 ),
+			new Fh_Fake_Item( 5, 'Frag plug with a bag', 2, 130 ),
+		)
+	)
+);
+$result = fh_suggest( $order );
+check( 'with no choice stored anywhere the order reads as it always did', array( '2 × Invented Goby - Small → Small', '1 × Invented Goby - Mid → Large', '1 × Invented Snail → Large', '2 × Frag plug with a bag → Small' ) === fh_lines( $result ) && array( 'not a fish' ) === array_column( $result['ignored'], 'reason' ) && 'Cube 12' === $result['boxes'][0]['name'], fh_test_export( fh_lines( $result ) ) );
+
+wc_get_product( 100 )->meta['_fh_packs_in_bag'] = 'no';  // The fish, unticked — on the parent.
+wc_get_product( 130 )->meta['_fh_packs_in_bag'] = 'no';  // The frag plug with its Bag size from before.
+$result = fh_suggest( $order );
+check( 'a product that was unticked is ignored by the suggestion — every variation of it, its own Bag size or the map\'s', array( '1 × Invented Snail → Large' ) === fh_lines( $result ), fh_test_export( fh_lines( $result ) ) );
+check( 'and named as ignored, with that reason — apart from what is simply not a fish', array( array( 'item_id' => 1, 'order_id' => 540, 'name' => 'Invented Goby - Small', 'qty' => 2, 'reason' => $unticked ), array( 'item_id' => 2, 'order_id' => 540, 'name' => 'Invented Goby - Mid', 'qty' => 1, 'reason' => $unticked ), array( 'item_id' => 4, 'order_id' => 540, 'name' => 'Reef Salt 5 lb', 'qty' => 1, 'reason' => 'not a fish' ), array( 'item_id' => 5, 'order_id' => 540, 'name' => 'Frag plug with a bag', 'qty' => 2, 'reason' => $unticked ) ) === $result['ignored'] && $unticked === Livestock::unticked_reason(), fh_test_export( $result['ignored'] ) );
+check( 'the box is worked out for what is left: one Large bag, 25 % of the smallest box that takes it — and the suggestion is complete', 1 === $result['bag_total'] && array( array( 3, 1 ) ) === array_map( static function ( $bag ) { return array( $bag['id'], $bag['count'] ); }, $result['bags'] ) && 'Cube 12' === $result['boxes'][0]['name'] && 25.0 === $result['boxes'][0]['fill_pct'] && true === $result['complete'] && array() === $result['incomplete'] );
+check( 'the Bag sizes stored earlier are still there: unticking deleted nothing, and working it out wrote nothing', '3' === wc_get_product( 102 )->meta['_fh_bag_size'] && '1' === wc_get_product( 130 )->meta['_fh_bag_size'] && 0 === wc_get_product( 130 )->meta_saves && array() === $order->writes() );
+
+wc_get_product( 120 )->meta['_fh_packs_in_bag'] = 'yes'; // The salt, ticked: packed in a bag after all.
+$result = fh_suggest( $order );
+check( 'a product that was ticked is a fish line whatever its category — without a size or a Bag size it is listed as having no bag', array( '1 × Invented Snail → Large', '1 × Reef Salt 5 lb → none' ) === fh_lines( $result ) && false === $result['complete'] && array( 'Reef Salt 5 lb' ) === array_column( $result['incomplete'], 'name' ) && ! in_array( 'Reef Salt 5 lb', array_column( $result['ignored'], 'name' ), true ), fh_test_export( fh_lines( $result ) ) );
+wc_get_product( 120 )->meta['_fh_bag_size'] = '2';
+check( 'given a Bag size, it is bagged', array( '1 × Invented Snail → Large', '1 × Reef Salt 5 lb → Medium' ) === fh_lines( fh_suggest( $order ) ) );
+unset( wc_get_product( 120 )->meta['_fh_bag_size'], wc_get_product( 120 )->meta['_fh_packs_in_bag'] );
+
+wc_get_product( 100 )->meta['_fh_packs_in_bag'] = 'yes';
+unset( wc_get_product( 130 )->meta['_fh_packs_in_bag'] );
+check( 'ticked on a fish, and the choice taken off the frag plug: both are back', array( '2 × Invented Goby - Small → Small', '1 × Invented Goby - Mid → Large', '1 × Invented Snail → Large', '2 × Frag plug with a bag → Small' ) === fh_lines( fh_suggest( $order ) ) );
+add_filter(
+	'fishotel_ship_day_fish_categories',
+	static function () {
+		return array( 'inverts' );
+	}
+);
+check( 'a ticked product stays a fish when its category is no longer a fish category; one with no stored choice follows the list', array( '2 × Invented Goby - Small → Small', '1 × Invented Goby - Mid → Large', '1 × Invented Snail → Large', '2 × Frag plug with a bag → Small' ) === fh_lines( fh_suggest( $order ) ) );
+unset( wc_get_product( 100 )->meta['_fh_packs_in_bag'] );
+check( '— without the choice the same fish is not one any more, except the variation that has a Bag size of its own', array( '1 × Invented Goby - Mid → Large', '1 × Invented Snail → Large', '2 × Frag plug with a bag → Small' ) === fh_lines( fh_suggest( $order ) ) );
+fh_reset_hooks();
+
+wc_get_product( 100 )->meta['_fh_packs_in_bag'] = 'no';
+$invoice = fh_order( new Fh_Fake_Order( 541, array( new Fh_Fake_Item( 1, 'Sample Invoice (1/2/26)', 2, 140, array( '_fh_invoice_lines' => array( array( 'name' => 'Invented Tang', 'qty' => 2, 'kind' => 'fish', 'product_id' => 101 ), array( 'name' => 'Invented Wrasse', 'qty' => 1, 'kind' => 'fish', 'size' => 'mid' ) ) ) ) ) ) );
+$result  = fh_suggest( $invoice );
+check( 'an invoice that names an unticked product: that fish is ignored and named, the others are bagged', array( '2 × Invented Wrasse → Medium' ) === fh_lines( $result ) && array( array( 'item_id' => 1, 'order_id' => 541, 'name' => 'Invented Tang', 'qty' => 4, 'reason' => $unticked ) ) === $result['ignored'], fh_test_export( $result['ignored'] ) );
+$flagged = fh_order( new Fh_Fake_Order( 542, array( new Fh_Fake_Item( 1, 'Invented Goby - Small', 1, 100, array( '_fh_invoice_fish' => '1' ), 101 ) ) ) );
+check( 'a line the invoice flags as a fish, of an unticked product: ignored as well', array() === fh_lines( fh_suggest( $flagged ) ) && array( $unticked ) === array_column( fh_suggest( $flagged )['ignored'], 'reason' ) );
+unset( wc_get_product( 100 )->meta['_fh_packs_in_bag'] );
+check( 'and with the choice gone both are fish again', array( '4 × Invented Tang → Small', '2 × Invented Wrasse → Medium' ) === fh_lines( fh_suggest( $invoice ) ) && array( '1 × Invented Goby - Small → Small' ) === fh_lines( fh_suggest( $flagged ) ) );
 
 echo "7. Fish per bag\n";
 add_filter(

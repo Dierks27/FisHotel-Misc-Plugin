@@ -232,6 +232,21 @@ check( 'fishotel_packing_bag_for_item(): the bag of the line, filtered with the 
 check( 'a line that is not a fish with a bag, or not a line: null', null === fishotel_packing_bag_for_item( $order->items[3] ) && null === fishotel_packing_bag_for_item( 'x' ) && null === fishotel_packing_bag_for_item( null ) );
 check( 'fishotel_packing_bag_for_product() and fishotel_packing_bag_for_size() answer from the same rule', 3 === fishotel_packing_bag_for_product( 102 )['id'] && 2 === fishotel_packing_bag_for_size( 'mid' )['id'] && null === fishotel_packing_bag_for_product( 120 ) && null === fishotel_packing_bag_for_size( 'show' ) && null === fishotel_packing_bag_for_size( array( 'mid' ) ) );
 fh_reset_hooks();
+
+// "Livestock — packed in a bag" on the product: the contracts go by it, as the box on the order does.
+wc_get_product( 100 )->meta['_fh_packs_in_bag'] = 'no';
+$unticked = fishotel_packing_suggest( 700 );
+check( 'a product that was unticked: no bag for its lines or its variations, and the suggestion ignores it and names it as that', null === fishotel_packing_bag_for_item( $order->items[1] ) && null === fishotel_packing_bag_for_item( $order->items[2] ) && null === fishotel_packing_bag_for_product( 101 ) && null === fishotel_packing_bag_for_product( wc_get_product( 102 ) ) && 'empty' === $unticked['status'] && array() === $unticked['lines'] && array() === $unticked['boxes'] && array( 'Invented Goby - Small', 'Invented Goby - Big', 'Reef <b>Salt</b> 5 lb' ) === array_column( $unticked['ignored'], 'name' ) && array( 'not packed in a bag — “Livestock — packed in a bag” is unticked on the product', 'not packed in a bag — “Livestock — packed in a bag” is unticked on the product', 'not a fish' ) === array_column( $unticked['ignored'], 'reason' ), fh_test_export( $unticked['ignored'] ) );
+check( 'the bag of a size is not a product\'s: it answers as before', 2 === fishotel_packing_bag_for_size( 'mid' )['id'] );
+unset( wc_get_product( 100 )->meta['_fh_packs_in_bag'] );
+wc_get_product( 120 )->meta = array( '_fh_packs_in_bag' => 'yes', '_fh_bag_size' => '2' );
+$ticked                     = fishotel_packing_suggest( 700 );
+check( 'a product outside the fish categories that was ticked: its bag, and a line of the suggestion', 2 === fishotel_packing_bag_for_product( 120 )['id'] && 'own' === fishotel_packing_bag_for_item( $order->items[3] )['source'] && array() === $ticked['ignored'] && 3 === count( $ticked['lines'] ) && 9 === $ticked['bag_total'] );
+wc_get_product( 120 )->meta = array( '_fh_packs_in_bag' => 'no', '_fh_bag_size' => '2' );
+check( 'unticked again, its stored Bag size does not make it a fish', null === fishotel_packing_bag_for_product( 120 ) && null === fishotel_packing_bag_for_item( $order->items[3] ) && array( 'Reef <b>Salt</b> 5 lb' ) === array_column( fishotel_packing_suggest( 700 )['ignored'], 'name' ) && 8 === fishotel_packing_suggest( 700 )['bag_total'] );
+wc_get_product( 120 )->meta = array( '_fh_bag_size' => '2' );
+check( 'with no stored choice that Bag size counts, as it did before the checkbox', 2 === fishotel_packing_bag_for_product( 120 )['id'] && 9 === fishotel_packing_suggest( 700 )['bag_total'] );
+wc_get_product( 120 )->meta = array();
 add_filter(
 	'fishotel_packing_suggest',
 	static function () {
@@ -293,6 +308,12 @@ $order->items[4] = new Fh_Fake_Item( 4, 'Invented Goby - Show', 1, 100, array(),
 $html            = Order_Box::render_body( $order );
 check( 'a line with no bag size is marked, and the suggestion is badged incomplete', false !== strpos( $html, 'class="is-missing"' ) && false !== strpos( $html, 'No bag size' ) && false !== strpos( $html, 'fh-pack-badge--incomplete' ) && false === strpos( $html, 'It was confirmed while' ) );
 unset( $order->items[4] );
+wc_get_product( 120 )->meta['_fh_packs_in_bag'] = 'no';
+$order->items[5]                                = new Fh_Fake_Item( 5, 'A net', 2, 0 );
+$html                                           = Order_Box::render_body( $order );
+check( 'a line whose product was unticked is named apart from what is not a fish, with the reason — and escaped', false !== strpos( $html, '<strong>Ignored (“Livestock — packed in a bag” is unticked on the product):</strong>' ) && 1 === preg_match( '/unticked on the product\):<\/strong>\s*1 × Reef &lt;b&gt;Salt&lt;\/b&gt; 5 lb\s*<\/p>/', $html ) && 1 === preg_match( '/Ignored \(not fish\):<\/strong>\s*2 × A net\s*<\/p>/', $html ) && false === strpos( $html, '<b>Salt</b>' ) );
+unset( $order->items[5], wc_get_product( 120 )->meta['_fh_packs_in_bag'] );
+check( 'with nothing unticked that second list is not drawn', false === strpos( Order_Box::render_body( $order ), 'is unticked on the product' ) );
 
 echo "9. The AJAX handler answers with the box drawn again\n";
 $_POST = array( 'choice' => 'suggested' ) + $post;

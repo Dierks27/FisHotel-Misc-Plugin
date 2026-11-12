@@ -10,18 +10,20 @@
  *   preview  counts, and changes nothing: how many variations have no Bag
  *            size, how many of those the map would set (and to which bag),
  *            how many carry a size the map has no bag for, how many carry
- *            no size at all, how many are not fish;
+ *            no size at all, how many are of a product that is not packed
+ *            in a bag;
  *   run      sets them, a batch at a time (the page asks again until it is
  *            done). It never touches a variation that already has a value:
  *            the list comes from the variations WITHOUT one, and each is
  *            checked once more on the product object just before it is
  *            written.
  *
- * Only FISH are filled: a variation whose product is in none of the fish
- * categories (Lines::fish_categories()) is counted and left alone. A Bag
- * size of its own is what makes any other product count as a fish on an
- * order, so writing one onto a net or a jar of food that happens to use
- * the Size attribute would put it in the box suggestion.
+ * Only what is PACKED IN A BAG is filled — the one rule of
+ * Livestock::decide(), read from the variation's product: "Livestock —
+ * packed in a bag" ticked on it; unticked, never; with no stored choice, a
+ * product in one of the fish categories (Lines::fish_categories()). A
+ * variation of any other product is counted and left alone: a net or a jar
+ * of food that happens to use the Size attribute needs no Bag size.
  *
  * A value is written through the WooCommerce product object
  * (update_meta_data() + save_meta_data()): the hidden meta `_fh_bag_size`,
@@ -71,13 +73,13 @@ class Fill {
 	 * @param array[]       $rows     Store::variations_without_bag(): id, parent, attributes.
 	 * @param array         $settings Settings (bags, size_map).
 	 * @param array         $standard Size_List::standard().
-	 * @param callable|null $is_fish  function ( $parent_id ): bool — whether a product is a fish
-	 *                                (fish_test()); asked once per product. Null = every row is.
+	 * @param callable|null $is_fish  function ( $parent_id ): bool — whether a product is packed in
+	 *                                a bag (fish_test()); asked once per product. Null = every row is.
 	 * @return array{empty: int, set: array<int, int>, by_bag: array<int, int>, unmapped: array<string, int>, no_size: int, not_fish: int}
 	 *         empty = variations without a value; set = variation id → bag id;
 	 *         by_bag = bag id → how many; unmapped = size slug → how many;
 	 *         no_size = how many carry no size; not_fish = how many are of a
-	 *         product that is not a fish.
+	 *         product that is not packed in a bag.
 	 */
 	public static function plan( array $rows, array $settings, array $standard, $is_fish = null ) {
 		$out = array(
@@ -128,28 +130,59 @@ class Fill {
 	}
 
 	/**
-	 * The question plan() asks about a variation's product: is it in one of
-	 * the fish categories — the same list, read the same way (the product's
-	 * own category slugs), as the order lines are told apart by.
+	 * The question plan() asks about a variation's product: is it packed in
+	 * a bag — the one rule the order lines go by (Livestock::decide()). The
+	 * "Livestock — packed in a bag" checkbox of the product when it was
+	 * ticked or unticked; with no stored choice, whether the product is in
+	 * one of the fish categories (its own category slugs). The rows are the
+	 * variations WITHOUT a Bag size, so a Bag size from before the checkbox
+	 * is never in play here.
 	 *
-	 * @param int[] $parent_ids The products about to be asked about (their categories are read in one go).
+	 * @param int[]       $parent_ids The products about to be asked about (their categories and
+	 *                                their checkbox values are read in one go).
+	 * @param object|null $store      Store (or the tests' stand-in) with packs_flags(); without
+	 *                                one each product is asked through its product object.
 	 * @return callable function ( $parent_id ): bool.
 	 */
-	public static function fish_test( array $parent_ids = array() ) {
+	public static function fish_test( array $parent_ids = array(), $store = null ) {
 		$categories = Lines::fish_categories();
 		$parent_ids = array_values( array_unique( array_filter( array_map( 'intval', $parent_ids ) ) ) );
 		if ( $parent_ids && function_exists( 'update_object_term_cache' ) ) {
 			update_object_term_cache( $parent_ids, 'product' );
 		}
 
-		return static function ( $parent_id ) use ( $categories ) {
-			$terms = (int) $parent_id > 0 && $categories && function_exists( 'get_the_terms' ) ? get_the_terms( (int) $parent_id, 'product_cat' ) : false;
+		// The checkbox values of the products named, read together; null = not read that way.
+		$flags = null;
+		if ( $parent_ids && is_object( $store ) && method_exists( $store, 'packs_flags' ) ) {
+			$flags = array();
+			$read  = (array) $store->packs_flags( $parent_ids );
+			foreach ( $parent_ids as $id ) {
+				$flags[ $id ] = Livestock::flag( $read[ $id ] ?? '' );
+			}
+		}
+
+		return static function ( $parent_id ) use ( $categories, $flags ) {
+			$parent_id = (int) $parent_id;
+			if ( $parent_id < 1 ) {
+				return false;
+			}
+
+			if ( null !== $flags && isset( $flags[ $parent_id ] ) ) {
+				$flag = $flags[ $parent_id ];
+			} else {
+				$flag = function_exists( 'wc_get_product' ) ? Livestock::stored( wc_get_product( $parent_id ) ) : '';
+			}
+
+			$in_category = false;
+			$terms       = '' === $flag && $categories && function_exists( 'get_the_terms' ) ? get_the_terms( $parent_id, 'product_cat' ) : false;
 			foreach ( is_array( $terms ) ? $terms : array() as $term ) {
 				if ( is_object( $term ) && isset( $term->slug ) && in_array( strtolower( (string) $term->slug ), $categories, true ) ) {
-					return true;
+					$in_category = true;
+					break;
 				}
 			}
-			return false;
+
+			return Livestock::decide( $flag, $in_category );
 		};
 	}
 
@@ -207,7 +240,7 @@ class Fill {
 		}
 		if ( ! empty( $plan['not_fish'] ) ) {
 			/* translators: %d: how many variations */
-			$lines[] = sprintf( _n( '%d is of a product that is not in a fish category — it stays empty (set its Bag size by hand if it is packed in a bag).', '%d are of products that are not in a fish category — they stay empty (set their Bag size by hand if they are packed in a bag).', (int) $plan['not_fish'], 'fishotel-misc-plugin' ), (int) $plan['not_fish'] );
+			$lines[] = sprintf( _n( '%d is of a product that is not packed in a bag (“Livestock — packed in a bag” is off on it) — it stays empty; tick that box on the product if it is.', '%d are of products that are not packed in a bag (“Livestock — packed in a bag” is off on them) — they stay empty; tick that box on the product if they are.', (int) $plan['not_fish'], 'fishotel-misc-plugin' ), (int) $plan['not_fish'] );
 		}
 
 		return $lines;
@@ -258,7 +291,7 @@ class Fill {
 	public static function run( $store, array $settings, array $standard, $after_id = 0, $limit = self::BATCH, $writer = null ) {
 		$limit = max( 1, (int) $limit );
 		$rows  = is_object( $store ) && method_exists( $store, 'variations_without_bag' ) ? (array) $store->variations_without_bag( (int) $after_id, $limit ) : array();
-		$plan  = self::plan( $rows, $settings, $standard, self::fish_test( array_column( $rows, 'parent' ) ) );
+		$plan  = self::plan( $rows, $settings, $standard, self::fish_test( array_column( $rows, 'parent' ), $store ) );
 
 		$out = array(
 			'set'     => 0,
@@ -338,7 +371,7 @@ class Fill {
 
 		$store  = is_object( $store ) ? $store : new Store();
 		$rows   = (array) $store->variations_without_bag();
-		$plan   = self::plan( $rows, $settings, $standard, self::fish_test( array_column( $rows, 'parent' ) ) );
+		$plan   = self::plan( $rows, $settings, $standard, self::fish_test( array_column( $rows, 'parent' ), $store ) );
 		$counts = method_exists( $store, 'variation_counts' ) ? (array) $store->variation_counts() : array();
 		$lines  = self::describe( $plan, $settings, $standard, $counts );
 

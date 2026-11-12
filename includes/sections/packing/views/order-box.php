@@ -20,6 +20,7 @@ defined( 'ABSPATH' ) || exit;
 
 use FisHotel\Misc\Sections\Packing\Bags;
 use FisHotel\Misc\Sections\Packing\Boxes;
+use FisHotel\Misc\Sections\Packing\Livestock;
 use FisHotel\Misc\Sections\Packing\Order_Packing;
 use FisHotel\Misc\Sections\Packing\Suggest;
 
@@ -139,16 +140,29 @@ if ( $fh_confirmed && $fh_can_use ) {
 		<p class="fh-pack-box__note"><?php echo esc_html( $fh_message ); ?></p>
 	<?php endforeach; ?>
 
-	<?php if ( $result['ignored'] ) : ?>
+	<?php
+	// What is ignored, in two lists: what is not a fish, and what the owner unticked on the product.
+	$fh_ignored  = array();
+	$fh_unticked = array();
+	foreach ( $result['ignored'] as $fh_line ) {
+		$fh_part = (int) $fh_line['qty'] . ' × ' . $fh_line['name'];
+		if ( isset( $fh_line['reason'] ) && Livestock::unticked_reason() === $fh_line['reason'] ) {
+			$fh_unticked[] = $fh_part;
+		} else {
+			$fh_ignored[] = $fh_part;
+		}
+	}
+	?>
+	<?php if ( $fh_ignored ) : ?>
 		<p class="fh-pack-box__hint">
 			<strong><?php esc_html_e( 'Ignored (not fish):', 'fishotel-misc-plugin' ); ?></strong>
-			<?php
-			$fh_parts = array();
-			foreach ( $result['ignored'] as $fh_line ) {
-				$fh_parts[] = (int) $fh_line['qty'] . ' × ' . $fh_line['name'];
-			}
-			echo esc_html( implode( ', ', $fh_parts ) );
-			?>
+			<?php echo esc_html( implode( ', ', $fh_ignored ) ); ?>
+		</p>
+	<?php endif; ?>
+	<?php if ( $fh_unticked ) : ?>
+		<p class="fh-pack-box__hint">
+			<strong><?php esc_html_e( 'Ignored (“Livestock — packed in a bag” is unticked on the product):', 'fishotel-misc-plugin' ); ?></strong>
+			<?php echo esc_html( implode( ', ', $fh_unticked ) ); ?>
 		</p>
 	<?php endif; ?>
 

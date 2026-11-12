@@ -1,8 +1,10 @@
 /**
  * Packing admin JS — the pure helpers: the tiny sprintf, a new table row
  * from its template, the fill tool's run loop (it must end), what a
- * button of the Packing box posts, and what a form's save may and may not
- * do to the page (a second post, another form's unsaved numbers).
+ * button of the Packing box posts, what a form's save may and may not do
+ * to the page (a second post, another form's unsaved numbers), and when
+ * the product editor's "Livestock — packed in a bag" checkbox follows the
+ * product's categories — and that a box the owner clicked is stored.
  *
  * Runs js/packing-admin.js without jQuery or a DOM: the file exports its
  * helpers and skips the DOM wiring when jQuery is absent.
@@ -32,7 +34,7 @@ function same( a, b ) {
 }
 
 console.log( '1. Exports' );
-check( 'the helpers are exported for node', helpers && [ 'fmt', 'rowFromTemplate', 'fillStep', 'confirmPayload' ].every( function ( name ) {
+check( 'the helpers are exported for node', helpers && [ 'fmt', 'rowFromTemplate', 'fillStep', 'confirmPayload', 'afterSave', 'unsavedElsewhere', 'livestockFromCategories', 'drawnAsAfterClick' ].every( function ( name ) {
 	return typeof helpers[ name ] === 'function';
 } ) );
 check( 'and hung on the global for the browser', globalThis.fhPacking && globalThis.fhPacking.helpers === helpers );
@@ -97,6 +99,21 @@ check( 'nothing typed elsewhere: goes ahead', helpers.unsavedElsewhere( clean, 0
 check( 'the form\'s own changes are what is being saved', helpers.unsavedElsewhere( typed, 1, true ) === false && helpers.unsavedElsewhere( [ { dirty: true } ], 0, true ) === false );
 check( 'a save that does not reload drops nothing', helpers.unsavedElsewhere( [ { dirty: true }, { dirty: false } ], 1, false ) === false );
 check( 'no forms, or junk: goes ahead', helpers.unsavedElsewhere( [], 0, true ) === false && helpers.unsavedElsewhere( null, 0, true ) === false && helpers.unsavedElsewhere( [ null, undefined ], 0, true ) === false );
+
+console.log( '8. livestockFromCategories(): the checkbox of a product with no stored choice follows its categories' );
+var following = { follow: true, touched: false, legacy: false };
+var fishIds   = [ '31', '32' ];
+check( 'a new product put in a fish category: ticked, so its Bag size shows before the first save', helpers.livestockFromCategories( following, fishIds, [ '7', '32' ] ) === true );
+check( 'taken out of it again, or put in other categories only: unticked', helpers.livestockFromCategories( following, fishIds, [ '7' ] ) === false && helpers.livestockFromCategories( following, fishIds, [] ) === false );
+check( 'term ids arrive as text or as numbers, with or without spaces', helpers.livestockFromCategories( following, [ 31, ' 32 ' ], [ 32 ] ) === true && helpers.livestockFromCategories( following, [ '31' ], [ ' 31' ] ) === true );
+check( 'a stored choice is never changed by the categories', helpers.livestockFromCategories( { follow: false, touched: false, legacy: false }, fishIds, [ '31' ] ) === null && helpers.livestockFromCategories( { follow: false, touched: false, legacy: false }, fishIds, [] ) === null );
+check( 'nor is a box the owner has ticked or unticked on this page', helpers.livestockFromCategories( { follow: true, touched: true, legacy: false }, fishIds, [ '31' ] ) === null && helpers.livestockFromCategories( { follow: true, touched: true, legacy: false }, fishIds, [] ) === null );
+check( 'a product with a Bag size from before the checkbox stays ticked whatever its categories', helpers.livestockFromCategories( { follow: true, touched: false, legacy: true }, fishIds, [] ) === true && helpers.livestockFromCategories( { follow: true, touched: false, legacy: true }, fishIds, [ '7' ] ) === true );
+check( 'no fish categories known (an empty list, a blank attribute): nothing is a fish by category', helpers.livestockFromCategories( following, [], [ '31' ] ) === false && helpers.livestockFromCategories( following, [ '' ], [ '' ] ) === false && helpers.livestockFromCategories( following, null, null ) === false );
+check( 'no box at all: left alone', helpers.livestockFromCategories( null, fishIds, [ '31' ] ) === null && helpers.livestockFromCategories( undefined, fishIds, [ '31' ] ) === null );
+
+console.log( '9. drawnAsAfterClick(): a box the owner clicked is a choice' );
+check( 'the form then says the box was drawn the other way round, so the save stores what it is now — also when it was clicked off and on again', helpers.drawnAsAfterClick( true ) === 'no' && helpers.drawnAsAfterClick( false ) === 'yes' );
 
 console.log( '\n' + ( failures ? failures + ' of ' + checks + ' checks FAILED' : 'All ' + checks + ' checks passed' ) );
 process.exit( failures ? 1 : 0 );

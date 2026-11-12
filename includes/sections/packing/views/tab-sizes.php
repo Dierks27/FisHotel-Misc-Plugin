@@ -124,7 +124,7 @@ if ( Size_List::SOURCE_CLEAN_ROOM === $standard['source'] && Size_List::KIND_ATT
 		<h2 class="fishotel-misc-card-title"><?php esc_html_e( 'Fill empty ones from the map', 'fishotel-misc-plugin' ); ?></h2>
 	</div>
 	<p class="fishotel-misc-card-desc">
-		<?php esc_html_e( 'Writes the map\'s bag onto every fish variation that has no Bag size, so each product shows it. It never changes a variation that already has one, it leaves products that are not in a fish category alone, and it writes nothing but that one hidden field. Get the map right and save it first, then preview, then set: a variation keeps the bag it was given even when the map changes later (set it back to "Not set" on the variation to make it follow the map again).', 'fishotel-misc-plugin' ); ?>
+		<?php esc_html_e( 'Writes the map\'s bag onto every fish variation that has no Bag size, so each product shows it. It never changes a variation that already has one, it leaves products that are not packed in a bag alone (“Livestock — packed in a bag” on the product; a product nobody ticked or unticked counts when it is in a fish category), and it writes nothing but that one hidden field. Get the map right and save it first, then preview, then set: a variation keeps the bag it was given even when the map changes later (set it back to "Not set" on the variation to make it follow the map again).', 'fishotel-misc-plugin' ); ?>
 	</p>
 	<p class="fishotel-misc-card-desc">
 		<?php

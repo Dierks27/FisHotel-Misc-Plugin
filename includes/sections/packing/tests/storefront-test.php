@@ -1,7 +1,8 @@
 <?php
 /**
- * Storefront silence — the Bag size is a record, so nothing a customer
- * can reach may ever hear of it:
+ * Storefront silence — the Bag size and the "Livestock — packed in a bag"
+ * checkbox are records, so nothing a customer can reach may ever hear of
+ * them:
  *
  *   - on a front-end request the section loads nothing but its own file,
  *     hooks nothing and reads no option (no query);
@@ -13,8 +14,9 @@
  *     route and no public AJAX action, writes no order-item meta, sends no
  *     mail, changes no stock and no status, makes no attribute, term or
  *     variation — and only its Store touches $wpdb, read-only;
- *   - the meta key is hidden (a leading underscore), and working out a
- *     suggestion or a line's bag writes nothing anywhere.
+ *   - both meta keys are hidden (a leading underscore), and working out a
+ *     suggestion or a line's bag writes nothing anywhere — whatever the
+ *     checkbox of the product says.
  *
  * Run from the plugin root:  php includes/sections/packing/tests/storefront-test.php
  */
@@ -61,6 +63,7 @@ sort( $hooks );
 $expected = array(
 	'add_meta_boxes',
 	'admin_enqueue_scripts',
+	'postbox_classes_product_woocommerce-product-data', // The classes of the product-data box, on the product edit screen.
 	'woocommerce_admin_process_product_object',
 	'woocommerce_product_after_variable_attributes',
 	'woocommerce_product_options_shipping',
@@ -218,8 +221,13 @@ foreach ( $code as $name => $text ) {
 	}
 }
 ksort( $meta_writes );
-check_same( 'the only meta ever written: the bag size on a product, the confirmed box (and its name) on an order', array( 'Packing::META_BAG', 'Packing::META_BOX', 'Packing::META_BOX_NAME' ), array_keys( $meta_writes ) );
+check_same( 'the only meta ever written: the bag size and the "packed in a bag" choice on a product, the confirmed box (and its name) on an order', array( 'Packing::META_BAG', 'Packing::META_BOX', 'Packing::META_BOX_NAME', 'Packing::META_PACKS' ), array_keys( $meta_writes ) );
 check( 'the bag size is written by the product editor and the fill tool only; the box by the order packing only', array( 'class-fill.php', 'class-product.php' ) === array_values( array_unique( $meta_writes['Packing::META_BAG'] ) ) && array( 'class-order-packing.php' ) === array_values( array_unique( $meta_writes['Packing::META_BOX'] ) ), fh_test_export( $meta_writes ) );
+check( 'the "packed in a bag" choice is written by the product editor only — the fill tool, the order screen and the contracts only read it', array( 'class-product.php' ) === array_values( array_unique( $meta_writes['Packing::META_PACKS'] ) ), fh_test_export( $meta_writes ) );
+$names_key = array_values( array_filter( array_keys( $code ), static function ( $name ) use ( $code ) { return false !== strpos( $code[ $name ], '_fh_packs_in_bag' ); } ) );
+check( 'the key itself is spelled in one place, the section\'s constant: no view, no script and no other class names it', array( 'class-packing.php' ) === $names_key, implode( ', ', $names_key ) );
+$views = array_values( array_filter( array_keys( $code ), static function ( $name ) use ( $code ) { return 0 === strpos( $name, 'views/' ) && ( false !== strpos( $code[ $name ], 'META_PACKS' ) || false !== strpos( $code[ $name ], 'fh_packs_in_bag' ) ); } ) );
+check( 'no view reads the choice or draws the checkbox: it is drawn in the product editor\'s Shipping tab and nowhere else', array() === $views && 1 === preg_match( '/woocommerce_wp_checkbox/', $code['class-product.php'] ) && array( 'class-product.php' ) === fh_grep( $code, '/woocommerce_wp_checkbox/' ), implode( ', ', $views ) );
 
 $handlers = fh_grep( $code, '/wp_ajax_/' );
 sort( $handlers );
@@ -227,8 +235,9 @@ check( 'the admin AJAX actions are registered in three files, each behind Settin
 check( 'every view and class file refuses to be opened directly', array() === array_values( array_filter( array_keys( $files ), static function ( $name ) use ( $files ) { return '.php' === substr( $name, -4 ) && false === strpos( $files[ $name ], "defined( 'ABSPATH' ) || exit;" ); } ) ) );
 check( 'the script talks to admin-ajax.php only', 0 === preg_match( '/wp-json|\/wc\/store|fetch\s*\(/', $files['js/packing-admin.js'] ) );
 
-echo "4. The meta key is hidden, and reading writes nothing\n";
+echo "4. The meta keys are hidden, and reading writes nothing\n";
 check( 'the bag size is hidden meta: the underscore keeps it out of every list of item or product data WooCommerce formats for a customer, and out of the Custom Fields box', '_fh_bag_size' === Packing::META_BAG && '_' === Packing::META_BAG[0] );
+check( 'so is the "Livestock — packed in a bag" choice: hidden product meta, on the parent product — never on a variation, never on an order line', '_fh_packs_in_bag' === Packing::META_PACKS && '_' === Packing::META_PACKS[0] );
 check( 'the confirmed box is hidden order meta', '_fh_packing_box' === Packing::META_BOX && '_fh_packing_box_name' === Packing::META_BOX_NAME );
 
 Packing::load();
@@ -246,6 +255,23 @@ check( 'the contracts answer: the line\'s bag and the order\'s box', 'Medium' ==
 check( 'nothing was added to the order line: its meta is what WooCommerce put there', array() === $item->writes && array( 'pa_size' => 'small' ) === $item->meta );
 check( 'nothing was written to the order, the product or the options', array() === $order->writes() && 0 === wc_get_product( 101 )->meta_saves && null === wc_get_product( 101 )->pending && count( $GLOBALS['fh_option_writes'] ) === $writes );
 check( 'the line\'s own data — what WooCommerce prints from — does not contain the bag in any form', false === strpos( wp_json_encode( $item->get_meta_data() ), 'bag' ) && false === strpos( wp_json_encode( $item->get_meta_data() ), 'Medium' ) );
+
+// The same with the checkbox stored on the product — ticked, then unticked.
+foreach ( array( 'yes', 'no' ) as $fh_choice ) {
+	wc_get_product( 100 )->meta[ Packing::META_PACKS ] = $fh_choice;
+	$bag        = fishotel_packing_bag_for_item( $item );
+	$by_product = fishotel_packing_bag_for_product( 101 );
+	$suggestion = fishotel_packing_suggest( 700 );
+	$answered   = 'yes' === $fh_choice
+		? ( 'Medium' === $bag['name'] && 'Medium' === $by_product['name'] && 'fits' === $suggestion['status'] && array() === $suggestion['ignored'] )
+		: ( null === $bag && null === $by_product && 'empty' === $suggestion['status'] && array( 'Invented Goby - Small' ) === array_column( $suggestion['ignored'], 'name' ) );
+	check( 'with "Livestock — packed in a bag" stored as ' . $fh_choice . ' on the product the contracts answer by it', $answered, fh_test_export( array( $bag, $suggestion['status'], $suggestion['ignored'] ) ) );
+	$line_data = (string) wp_json_encode( $item->get_meta_data() );
+	check( '— and nothing was written anywhere: not to the line, the order, the product, the variation or the options', array() === $item->writes && array( 'pa_size' => 'small' ) === $item->meta && array() === $order->writes() && 0 === wc_get_product( 100 )->meta_saves && null === wc_get_product( 100 )->pending && 0 === wc_get_product( 101 )->meta_saves && null === wc_get_product( 101 )->pending && count( $GLOBALS['fh_option_writes'] ) === $writes );
+	check( '— the line\'s own data says nothing of it: no key, no "packed in a bag", no "livestock"', false === stripos( $line_data, 'packs' ) && false === stripos( $line_data, 'bag' ) && false === stripos( $line_data, 'livestock' ) );
+	check( '— the choice sits on the parent product alone: the variation a customer buys carries no such meta', ! array_key_exists( Packing::META_PACKS, wc_get_product( 101 )->meta ) && array( '_fh_bag_size' => '2' ) === wc_get_product( 101 )->meta );
+}
+unset( wc_get_product( 100 )->meta[ Packing::META_PACKS ] );
 
 echo "5. The section itself\n";
 $info = Packing::get_section_info();
