@@ -24,8 +24,9 @@
  * A greedy rule is only as good as the order it is fed, so the same rule
  * is run over a few orders and a few variations (a deterministic list —
  * no randomness anywhere) and the best result is kept: fewest pieces that
- * could not be placed, fewest new sheets, least foam wasted, the largest
- * remainders, fewest cuts.
+ * could not be placed, fewest new sheets, fewest cuts longer than a sheet
+ * is wide, the largest remainders (what is left concentrated in few big
+ * rectangles rather than many small ones), least foam wasted, fewest cuts.
  *
  * The saw cut's own width (kerf) is taken out of the remainder at every
  * cut, never out of a piece. A piece is turned 90 degrees only when
@@ -349,8 +350,8 @@ class Packer {
 			count( $run['unplaced'] ),
 			$run['sheets'],
 			$long,
-			$source_area - $pieces_area - $leftover_area,
 			-$largeness,
+			$source_area - $pieces_area - $leftover_area,
 			count( $run['cuts'] ),
 			$length,
 			$index,

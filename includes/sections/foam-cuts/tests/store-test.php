@@ -106,7 +106,7 @@ $dir   = dirname( __DIR__ );
 $files = array_merge( glob( $dir . '/*.php' ), glob( $dir . '/views/*.php' ) );
 $with  = array();
 foreach ( $files as $file ) {
-	if ( false !== strpos( (string) file_get_contents( $file ), '$wpdb' ) ) {
+	if ( false !== strpos( (string) php_strip_whitespace( $file ), '$wpdb' ) ) { // The code, not what a comment says about it.
 		$with[] = basename( $file );
 	}
 }

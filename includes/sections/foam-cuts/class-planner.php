@@ -145,12 +145,66 @@ class Planner {
 			);
 		}
 
+		self::announce( 'fishotel_foam_cuts_plan_created', (int) $id, $data );
+
 		return array(
 			'ok'      => true,
 			/* translators: %d: plan number */
 			'message' => sprintf( __( 'Plan %d is ready. Print it, cut, then press "Mark as cut".', 'fishotel-misc-plugin' ), (int) $id ),
 			'id'      => (int) $id,
 		);
+	}
+
+	/**
+	 * MARK AS CUT (Stock::apply), and tell whoever listens:
+	 * do_action( 'fishotel_foam_cuts_plan_cut', $plan_id, $plan_data ).
+	 *
+	 * @param object $store   Store.
+	 * @param array  $plan    Plan row (with data).
+	 * @param int    $user_id Who.
+	 * @return array{ok: bool, message: string}
+	 */
+	public static function cut( $store, array $plan, $user_id = 0 ) {
+		$result = Stock::apply( $store, $plan, $user_id );
+		if ( $result['ok'] ) {
+			self::announce( 'fishotel_foam_cuts_plan_cut', (int) $plan['id'], isset( $plan['data'] ) && is_array( $plan['data'] ) ? $plan['data'] : array() );
+		}
+		return $result;
+	}
+
+	/**
+	 * UNDO (Stock::undo), and tell whoever listens:
+	 * do_action( 'fishotel_foam_cuts_plan_undone', $plan_id, $plan_data ).
+	 *
+	 * @param object $store   Store.
+	 * @param array  $plan    Plan row (with data).
+	 * @param int    $user_id Who.
+	 * @return array{ok: bool, message: string}
+	 */
+	public static function undo( $store, array $plan, $user_id = 0 ) {
+		$result = Stock::undo( $store, $plan, $user_id );
+		if ( $result['ok'] ) {
+			self::announce( 'fishotel_foam_cuts_plan_undone', (int) $plan['id'], isset( $plan['data'] ) && is_array( $plan['data'] ) ? $plan['data'] : array() );
+		}
+		return $result;
+	}
+
+	/**
+	 * Fire an action; a listener that throws never undoes what happened.
+	 *
+	 * @param string $hook    Action name.
+	 * @param int    $plan_id Plan id.
+	 * @param array  $data    Plan data.
+	 */
+	private static function announce( $hook, $plan_id, array $data ) {
+		if ( ! function_exists( 'do_action' ) ) {
+			return;
+		}
+		try {
+			do_action( $hook, (int) $plan_id, $data );
+		} catch ( \Throwable $e ) {
+			unset( $e );
+		}
 	}
 
 	/**

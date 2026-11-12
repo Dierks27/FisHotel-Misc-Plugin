@@ -82,6 +82,10 @@ function esc_attr_e( $text, $domain = null ) {
 	echo esc_attr( $text );
 }
 
+function esc_js( $text ) {
+	return str_replace( array( '\\', "'", '"', "\n", '<', '>' ), array( '\\\\', "\\'", '&quot;', '\\n', '&lt;', '&gt;' ), (string) $text );
+}
+
 function esc_url( $url ) {
 	return str_replace( array( '"', "'", '<', '>' ), array( '%22', '%27', '%3C', '%3E' ), (string) $url );
 }
@@ -427,6 +431,10 @@ function check_admin_referer( $action = -1, $query_arg = '_wpnonce' ) {
 function nocache_headers() {
 }
 
+function auth_redirect() {
+	throw new FH_Halt( 'redirect', 'https://example.test/wp-login.php', 302 );
+}
+
 function current_time( $type, $gmt = 0 ) {
 	$ts = strtotime( $GLOBALS['fh_now'] . ' UTC' );
 	if ( 'mysql' === $type ) {
@@ -708,13 +716,13 @@ function dbDelta( $sql ) {
 /*  The section                                                        */
 /* ------------------------------------------------------------------ */
 
-foreach ( array( 'foam-cuts', 'units', 'cut-list', 'packer', 'plan', 'svg', 'store', 'settings', 'boxes', 'stock', 'orders', 'planner', 'rest', 'admin' ) as $fh_class ) {
-	$fh_file = FISHOTEL_MISC_PATH . 'includes/sections/foam-cuts/class-' . $fh_class . '.php';
-	if ( is_file( $fh_file ) ) {
-		require_once $fh_file;
-	}
+// Every class of the section — or, for the test of what a request loads
+// (FH_FOAM_SECTION_ONLY defined before this file), only the section class,
+// as the Section Manager loads it.
+foreach ( defined( 'FH_FOAM_SECTION_ONLY' ) ? array( 'foam-cuts' ) : array( 'foam-cuts', 'units', 'cut-list', 'packer', 'plan', 'svg', 'store', 'settings', 'boxes', 'stock', 'orders', 'planner', 'rest', 'admin' ) as $fh_class ) {
+	require_once FISHOTEL_MISC_PATH . 'includes/sections/foam-cuts/class-' . $fh_class . '.php';
 }
-unset( $fh_class, $fh_file );
+unset( $fh_class );
 
 if ( is_file( __DIR__ . '/fake-store.php' ) ) {
 	require_once __DIR__ . '/fake-store.php';
