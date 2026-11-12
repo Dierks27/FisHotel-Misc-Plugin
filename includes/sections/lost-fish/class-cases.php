@@ -13,22 +13,34 @@
  *
  *   The UNDO of that loss (the Clean Room's compensating event) closes
  *   the cases it opened that were not sent yet; a case already sent is
- *   only flagged, for the owner to sort out.
+ *   only flagged, for the owner to sort out. Whatever loss was undone, the
+ *   kind is then worked out again: unsent cases a loss opened that the
+ *   tanks now cover close (or speak for fewer fish) too.
  *
  *   A case is OPEN until the owner clicks "Send to customer" — or, with
  *   the setting switched on, until the undo window has passed and
  *   everything about it is certain. Sending freezes the numbers and makes
  *   the links; from then on the case shows exactly what the e-mail said.
  *
+ *   What blocks a send: a price or a shipping difference that is not
+ *   known, no address, an order that is closed, gone or was never paid, a
+ *   line that was refunded in the meantime, and — so the difference is
+ *   never withheld twice — another case of the same order that is with
+ *   the customer while this one's difference was (or would have to be)
+ *   typed by hand.
+ *
  *   SENT → ANSWERED happens once: by the customer's Confirm on the page
- *   behind a link, or by the owner recording the answer by hand. After
+ *   behind a link — the order is read again first: a closed one records
+ *   nothing, and "cancel" is gone once part of it shipped — or by the
+ *   owner recording the answer by hand. After
  *   the answer the case lists what the owner has to do — this class moves
  *   no money, changes no stock and cancels nothing. The one thing it does
  *   itself is hand a "try again" to the Requests section
  *   (fishotel_requests_create()) when that section is there.
  *
  *   ANSWERED → DONE is the owner's tick. Any case can be reopened: the
- *   answer is forgotten, the old links die, the numbers are fresh again.
+ *   answer is forgotten, the old links die, the numbers are fresh again —
+ *   and a case reopened after an answer says what had been chosen.
  *
  * Every stage writes a private note on the WooCommerce order and a line
  * in the section's log. Every status change goes through
@@ -184,10 +196,8 @@ class Cases {
 			if ( $qty > 0 ) {
 				$cases->loss_recorded( (int) $stay_id, (int) $event_id, $qty, (int) ( $event['actor_id'] ?? 0 ) );
 			} elseif ( $qty < 0 ) {
-				$target = self::undo_target( (string) ( $event['note'] ?? '' ) );
-				if ( $target > 0 ) {
-					$cases->loss_undone( $target, (int) ( $event['actor_id'] ?? 0 ) );
-				}
+				// Fish are back in the tank — whichever loss this takes back, the kind is worked out again.
+				$cases->loss_undone( self::undo_target( (string) ( $event['note'] ?? '' ) ), (int) ( $event['actor_id'] ?? 0 ), (int) $stay_id );
 			}
 		} catch ( \Throwable $e ) {
 			self::trouble( 'on_cleanroom_event', $e );
@@ -343,6 +353,19 @@ class Cases {
 	private function loss_assessed( array $stay, $event_id, $qty, $actor, array $report ) {
 		$assess           = $this->assess_stay( $stay );
 		$report['assess'] = $assess;
+		if ( method_exists( $this->orders, 'capped' ) && $this->orders->capped() ) {
+			$this->log(
+				'capped',
+				sprintf(
+					/* translators: %s: what was lost */
+					__( 'Loss of %s: there are more open orders than one loss can read, so the oldest were NOT checked — somebody among them may be owed this fish. Cancel or trash old unpaid orders, and use "Open a case" if a customer is short.', 'fishotel-misc-plugin' ),
+					max( 1, (int) $qty ) . ' × ' . self::kind_label( $assess['kind'] ) . self::tank_label( $stay )
+				),
+				0,
+				0,
+				$actor
+			);
+		}
 		if ( '' === $assess['kind']['key'] || $assess['committed'] <= 0 ) {
 			$report['outcome'] = 'nobody';
 			return $report;
@@ -472,17 +495,18 @@ class Cases {
 	 * difference typed in by hand was typed for the old number, so it is
 	 * worked out again and the case asks for a look.
 	 *
-	 * @param array $case The case as it was.
+	 * @param array  $case The case as it was.
+	 * @param string $why  What to say instead ('' = the number of fish changed).
 	 * @return array Fields.
 	 */
-	private static function count_changed( array $case ) {
+	private static function count_changed( array $case, $why = '' ) {
 		if ( empty( $case['ship_manual'] ) ) {
 			return array();
 		}
 		return array(
 			'ship_manual' => 0,
 			'needs_check' => 1,
-			'check_note'  => trim( $case['check_note'] . ' ' . __( 'The number of fish changed after a shipping difference was typed in — it was worked out again; check it.', 'fishotel-misc-plugin' ) ),
+			'check_note'  => trim( $case['check_note'] . ' ' . ( '' !== $why ? $why : __( 'The number of fish changed after a shipping difference was typed in — it was worked out again; check it.', 'fishotel-misc-plugin' ) ) ),
 		);
 	}
 
@@ -539,21 +563,24 @@ class Cases {
 	 * itself — or, when other losses stand behind it too, speaks for
 	 * fewer fish; a sent or answered one is flagged for the owner.
 	 *
-	 * @param int $event_id The loss event that was undone.
+	 * Then — whichever loss was undone, also one the extra had covered —
+	 * the kind of that tank group is worked out again: unsent cases a
+	 * loss opened that the tanks now cover close as well
+	 * (trim_to_shortage()).
+	 *
+	 * @param int $event_id The loss event that was undone (0 = not known).
 	 * @param int $actor    Who undid it.
+	 * @param int $stay_id  The tank group the fish came back to (0 = not known: nothing is worked out again).
 	 * @return array{closed: int[], shrunk: int[], flagged: int[]}
 	 */
-	public function loss_undone( $event_id, $actor = 0 ) {
+	public function loss_undone( $event_id, $actor = 0, $stay_id = 0 ) {
 		$out = array(
 			'closed'  => array(),
 			'shrunk'  => array(),
 			'flagged' => array(),
 		);
-		if ( (int) $event_id <= 0 ) {
-			return $out;
-		}
 
-		foreach ( $this->store->cases( array( 'loss_event' => (int) $event_id ) ) as $case ) {
+		foreach ( (int) $event_id > 0 ? $this->store->cases( array( 'loss_event' => (int) $event_id ) ) : array() as $case ) {
 			$id     = (int) $case['id'];
 			$events = self::loss_events( $case['loss_events'] );
 			if ( ! isset( $events[ (int) $event_id ] ) ) {
@@ -628,11 +655,139 @@ class Cases {
 			}
 		}
 
+		if ( (int) $stay_id > 0 ) {
+			$trimmed       = $this->trim_to_shortage( (int) $stay_id, (int) $actor );
+			$out['closed'] = array_merge( $out['closed'], $trimmed['closed'] );
+			$out['shrunk'] = array_merge( $out['shrunk'], $trimmed['shrunk'] );
+		}
+
 		if ( $out['closed'] || $out['shrunk'] || $out['flagged'] ) {
 			$this->store->refresh_counts();
 		}
 
 		return $out;
+	}
+
+	/**
+	 * Fish came back to a tank group: when the open cases of its kind now
+	 * speak for more fish than the tanks are short, the unsent cases a
+	 * loss opened give the surplus back — the newest first; a case closes,
+	 * or speaks for fewer fish. A case that was sent, one made by hand and
+	 * one the owner reopened are never touched.
+	 *
+	 * @param int $stay_id The tank group.
+	 * @param int $actor   Who.
+	 * @return array{closed: int[], shrunk: int[]}
+	 */
+	public function trim_to_shortage( $stay_id, $actor = 0 ) {
+		$out  = array(
+			'closed' => array(),
+			'shrunk' => array(),
+		);
+		$stay = $this->rooms->stay( (int) $stay_id );
+		if ( ! $stay || ! empty( $stay['needs_id'] ) || ! $this->orders->available() ) {
+			return $out;
+		}
+
+		$lock = Cover::kind_key( (int) ( $stay['product_id'] ?? 0 ), (string) ( $stay['species'] ?? '' ), (string) ( $stay['size_slug'] ?? '' ) );
+		$held = '' !== $lock && method_exists( $this->store, 'lock' ) && $this->store->lock( $lock );
+
+		try {
+			$assess = $this->assess_stay( $stay );
+			$excess = $assess['pending'] - $assess['shortage'];
+			if ( '' === $assess['kind']['key'] || $excess <= 0 ) {
+				return $out;
+			}
+
+			$order_ids = array();
+			foreach ( $assess['holders'] as $holder ) {
+				$order_ids[] = (int) $holder['order_id'];
+			}
+			$filters = array(
+				'status'    => 'open',
+				'order_ids' => array_values( array_unique( $order_ids ) ),
+			);
+			foreach ( $order_ids ? $this->store->cases( $filters ) : array() as $case ) {
+				if ( $excess <= 0 ) {
+					break;
+				}
+				if ( 'auto' !== $case['origin'] || null === $case['loss_at'] || (string) $case['kind_key'] !== (string) $assess['kind']['key'] ) {
+					continue;
+				}
+				$id   = (int) $case['id'];
+				$back = min( $excess, (int) $case['qty'] );
+
+				if ( $back >= (int) $case['qty'] ) {
+					$closed = $this->store->transition(
+						$id,
+						array( 'open' ),
+						'closed',
+						array(
+							'closed_at'    => gmdate( 'Y-m-d H:i:s' ),
+							'close_reason' => 'loss_undone',
+						)
+					);
+					if ( $closed ) {
+						$excess         -= $back;
+						$out['closed'][] = $id;
+						$message         = __( 'A loss of this fish was undone in the Clean Room and the tanks cover it again — the case closed by itself. Nothing was sent.', 'fishotel-misc-plugin' );
+						$this->note( $case, $message, false );
+						$this->log( 'undone', $message, $id, (int) $case['order_id'], $actor );
+						$this->fire( 'fishotel_lostfish_case_closed', $this->store->get_case( $id ), 'loss_undone' );
+					}
+					continue;
+				}
+
+				$fields = array_merge(
+					self::count_changed( $case ),
+					array(
+						'qty'         => (int) $case['qty'] - $back,
+						'loss_events' => self::loss_list( self::losses_less( self::loss_events( $case['loss_events'] ), $back ) ),
+					)
+				);
+				if ( $this->store->transition( $id, array( 'open' ), 'open', $fields ) ) {
+					$excess         -= $back;
+					$out['shrunk'][] = $id;
+					$now             = $this->refresh( $this->store->get_case( $id ) );
+					$message         = sprintf(
+						/* translators: %s: 1 × fish */
+						__( 'A loss of this fish was undone in the Clean Room and the tanks cover part of it again — this case now speaks for %s. Nothing was sent.', 'fishotel-misc-plugin' ),
+						Email::fish_line( $now )
+					);
+					$this->note( $now, $message, false );
+					$this->log( 'undone', $message, $id, (int) $case['order_id'], $actor );
+				}
+			}
+		} finally {
+			if ( $held ) {
+				$this->store->unlock( $lock );
+			}
+		}
+
+		return $out;
+	}
+
+	/**
+	 * The losses behind a case with some fish taken off, the latest loss
+	 * first.
+	 *
+	 * @param array<int, int> $events event id => fish.
+	 * @param int             $fish   Fish to take off.
+	 * @return array<int, int>
+	 */
+	private static function losses_less( array $events, $fish ) {
+		foreach ( array_reverse( array_keys( $events ) ) as $event_id ) {
+			if ( $fish <= 0 ) {
+				break;
+			}
+			$off                  = min( (int) $fish, (int) $events[ $event_id ] );
+			$events[ $event_id ] -= $off;
+			$fish                -= $off;
+			if ( $events[ $event_id ] <= 0 ) {
+				unset( $events[ $event_id ] );
+			}
+		}
+		return $events;
 	}
 
 	/**
@@ -803,32 +958,52 @@ class Cases {
 	/* ============================================================== */
 
 	/**
-	 * What the other cases of the same order mean for this one's shipping
-	 * difference: the fish answered refunds / credits already took out
-	 * and what they withheld, and how many still wait.
+	 * What the other cases of the same order mean for this one: for its
+	 * shipping difference, the fish answered refunds / credits already
+	 * took out and what they withheld, and the cases that still wait (how
+	 * many, their fish, and which of them are with the customer); for its
+	 * "cancel the whole order" amount, what was already given back as
+	 * store credit and the refunds the owner still has to make.
 	 *
 	 * @param array $case The case.
-	 * @return array{removed: array[], withheld: int, pending: int}
+	 * @return array{removed: array[], withheld: int, pending: int, waiting: array[], sent: int[], credited: int,
+	 *               credits: int[], refunds_due: array<int, int>}
 	 */
 	public function ledger( array $case ) {
 		$out = array(
-			'removed'  => array(),
-			'withheld' => 0,
-			'pending'  => 0,
+			'removed'     => array(),
+			'withheld'    => 0,
+			'pending'     => 0,
+			'waiting'     => array(),
+			'sent'        => array(),
+			'credited'    => 0,
+			'credits'     => array(),
+			'refunds_due' => array(),
 		);
 		foreach ( $this->store->cases( array( 'order_id' => (int) $case['order_id'] ) ) as $other ) {
 			if ( (int) $other['id'] === (int) $case['id'] ) {
 				continue;
 			}
+			$line = array(
+				'ref'       => $other['line_ref'],
+				'qty'       => (int) $other['qty'],
+				'unit_paid' => (int) $other['unit_paid'],
+			);
 			if ( in_array( $other['status'], Cover::PENDING, true ) ) {
 				$out['pending']++;
+				$out['waiting'][] = $line;
+				if ( 'sent' === $other['status'] ) {
+					$out['sent'][] = (int) $other['id'];
+				}
 			} elseif ( in_array( $other['status'], Cover::RELEASED, true ) && in_array( $other['choice'], array( 'refund', 'credit' ), true ) ) {
-				$out['removed'][] = array(
-					'ref'       => $other['line_ref'],
-					'qty'       => (int) $other['qty'],
-					'unit_paid' => (int) $other['unit_paid'],
-				);
+				$out['removed'][] = $line;
 				$out['withheld'] += max( 0, (int) $other['ship_diff'] );
+				if ( 'credit' === $other['choice'] ) {
+					$out['credited'] += max( 0, (int) $other['amount_refund'] );
+					$out['credits'][] = (int) $other['id'];
+				} elseif ( 'answered' === $other['status'] && (int) $other['amount_refund'] > 0 ) {
+					$out['refunds_due'][ (int) $other['id'] ] = (int) $other['amount_refund'];
+				}
 			}
 		}
 		return $out;
@@ -863,18 +1038,25 @@ class Cases {
 		);
 
 		if ( empty( $case['ship_manual'] ) ) {
-			$diff = Shipping::difference(
-				$order,
-				array(
-					array(
-						'ref'       => $case['line_ref'],
-						'qty'       => (int) $case['qty'],
-						'unit_paid' => (int) $case['unit_paid'],
-					),
-				),
-				$this->ledger( $case ),
-				array( 'free_classes' => Settings::get()['free_classes'] )
+			$mine   = array(
+				'ref'       => $case['line_ref'],
+				'qty'       => (int) $case['qty'],
+				'unit_paid' => (int) $case['unit_paid'],
 			);
+			$ledger = $this->ledger( $case );
+			$opts   = array( 'free_classes' => Settings::get()['free_classes'] );
+			$diff   = Shipping::difference( $order, array( $mine ), $ledger, $opts );
+
+			// ONE other case of the order still waits. When the shipping stays the same with this fish out
+			// alone AND with both out, no answer there can change this one: there is no difference — nothing
+			// to type, nothing to wait for.
+			if ( Shipping::UNKNOWN === $diff['status'] && 1 === $ledger['pending'] && 0 === $diff['alone'] ) {
+				$both = Shipping::difference( $order, array_merge( array( $mine ), $ledger['waiting'] ), array_merge( $ledger, array( 'pending' => 0 ) ), $opts );
+				if ( Shipping::NONE === $both['status'] ) {
+					$diff         = $both;
+					$diff['note'] = __( 'The order\'s shipping stays the same without this fish — also when the fish of its other open case goes too.', 'fishotel-misc-plugin' );
+				}
+			}
 
 			$fields['ship_status']  = $diff['status'];
 			$fields['ship_diff']    = $diff['diff'];
@@ -907,18 +1089,35 @@ class Cases {
 	 */
 	public function numbers( array $case, $facts = null ) {
 		$frozen = 'open' !== $case['status'];
+		$ledger = $this->ledger( $case );
 
 		if ( $frozen && null !== $case['amount_refund'] ) {
 			$fish    = max( 0, (int) $case['unit_paid'] ) * max( 1, (int) $case['qty'] );
+			$cancel  = null !== $case['amount_cancel'] ? (int) $case['amount_cancel'] : null;
+			$offer   = ! empty( $case['offer_cancel'] ) && null !== $cancel;
+			$settled = 0;
+			// While the answer, or what follows from it, is still to come, "cancel" is what is left to give
+			// back NOW — never more than the e-mail said: a refund or a store credit made since comes off
+			// it, and once part of the order has shipped it is no longer offered.
+			if ( is_array( $facts ) && in_array( $case['status'], array( 'sent', 'answered' ), true ) ) {
+				if ( null !== $cancel ) {
+					$settled = max( 0, (int) $facts['refunded'] ) + $ledger['credited'];
+					$cancel  = min( $cancel, max( 0, (int) $facts['total'] - $settled ) );
+				}
+				if ( 'sent' === $case['status'] && ! empty( $facts['any_shipped'] ) ) {
+					$offer = false;
+				}
+			}
 			$numbers = array(
 				'fish_paid'    => $fish,
 				'ship_diff'    => null !== $case['ship_diff'] ? (int) $case['ship_diff'] : 0,
 				'refund'       => (int) $case['amount_refund'],
 				'credit'       => (int) $case['amount_refund'],
 				'retry'        => 0,
-				'cancel'       => null !== $case['amount_cancel'] ? (int) $case['amount_cancel'] : null,
+				'cancel'       => $cancel,
+				'settled'      => $settled,
 				'shortfall'    => max( 0, (int) $case['ship_diff'] - $fish ),
-				'offer_cancel' => ! empty( $case['offer_cancel'] ) && null !== $case['amount_cancel'],
+				'offer_cancel' => $offer,
 			);
 		} else {
 			$numbers = Money::choices(
@@ -929,6 +1128,7 @@ class Cases {
 					'ship_diff'      => $case['ship_diff'],
 					'order_total'    => is_array( $facts ) ? (int) $facts['total'] : null,
 					'order_refunded' => is_array( $facts ) ? (int) $facts['refunded'] : 0,
+					'order_credited' => $ledger['credited'],
 					'offer_cancel'   => ! empty( $case['offer_cancel'] ) && is_array( $facts ),
 				)
 			);
@@ -942,15 +1142,35 @@ class Cases {
 				if ( $facts['closed'] ) {
 					/* translators: %s: order status */
 					$blockers['order'] = sprintf( __( 'The order is %s — there is nothing left to ask the customer.', 'fishotel-misc-plugin' ), $facts['status'] );
+				} elseif ( empty( $facts['paid'] ) ) {
+					$blockers['unpaid'] = __( 'This order is not paid — nothing was paid for this fish, so there is nothing to refund or credit. Close the case, or wait for the payment.', 'fishotel-misc-plugin' );
 				}
 				if ( '' === $facts['email'] ) {
 					$blockers['email'] = __( 'The order has no e-mail address for the customer.', 'fishotel-misc-plugin' );
+				}
+
+				$left = $this->line_left( $case );
+				if ( null !== $left && $left < (int) $case['qty'] ) {
+					$blockers['refunded'] = sprintf(
+						/* translators: 1: fish left on the line, 2: fish of the case */
+						__( 'Only %1$d of this order line is left that was not refunded, and this case speaks for %2$d — it looks as if this fish was already refunded. Close the case instead of asking again.', 'fishotel-misc-plugin' ),
+						max( 0, $left ),
+						(int) $case['qty']
+					);
 				}
 			}
 			if ( empty( $case['paid_known'] ) ) {
 				$blockers['paid'] = __( 'What was paid for the fish is not known — type it in.', 'fishotel-misc-plugin' );
 			}
-			if ( null === $case['ship_diff'] ) {
+			if ( $ledger['sent'] && ( null === $case['ship_diff'] || ! empty( $case['ship_manual'] ) ) ) {
+				// Another case of the order is with the customer. A figure typed here — or to be typed — was
+				// worked out as if this fish were the only one: with one typed there too, both would be withheld.
+				$blockers['sibling'] = sprintf(
+					/* translators: %s: case numbers */
+					__( 'Case %s on this order is with the customer and has no answer yet, and the shipping difference of this one depends on that answer — typed now, it could be taken twice. Wait for the answer (or record it by hand): this case is then worked out on what is left of the order.', 'fishotel-misc-plugin' ),
+					'#' . implode( ', #', $ledger['sent'] )
+				);
+			} elseif ( null === $case['ship_diff'] ) {
 				$blockers['shipping'] = __( 'The shipping difference could not be worked out — fill it in, or confirm zero.', 'fishotel-misc-plugin' );
 			}
 		}
@@ -960,6 +1180,36 @@ class Cases {
 		$numbers['ready']    = ! $frozen && ! $blockers;
 
 		return $numbers;
+	}
+
+	/**
+	 * The fish of the case's order line that were not refunded.
+	 *
+	 * @param array $case The case.
+	 * @return int|null Null when the order or the line cannot be read (nothing is concluded from that).
+	 */
+	private function line_left( array $case ) {
+		$order = $this->orders->get( (int) $case['order_id'] );
+		$line  = $order ? $this->orders->line( $order, (string) $case['line_ref'] ) : null;
+
+		return $line ? (int) $line['qty'] - (int) $line['qty_refunded'] : null;
+	}
+
+	/**
+	 * What a form of the Cases screen saw of a case. A write that depends
+	 * on what was on the page (send, the numbers, the answer, giving the
+	 * case away) is refused when the case no longer reads like that — it
+	 * was changed in another tab, or a further loss joined it.
+	 *
+	 * @param array $case The case.
+	 * @return string
+	 */
+	public static function stamp( array $case ) {
+		$parts = array();
+		foreach ( array( 'id', 'status', 'order_id', 'line_ref', 'qty', 'unit_paid', 'paid_known', 'ship_diff', 'ship_manual', 'customer_email' ) as $key ) {
+			$parts[] = isset( $case[ $key ] ) ? (string) $case[ $key ] : '';
+		}
+		return substr( hash( 'sha256', implode( '|', $parts ) ), 0, 16 );
 	}
 
 	/**
@@ -1284,7 +1534,7 @@ class Cases {
 			$order = $this->orders->get( (int) $case['order_id'] );
 			$facts = $order ? $this->orders->facts( $order ) : null;
 			$nums  = $this->numbers( $case, $facts );
-			if ( isset( $nums['blockers']['paid'] ) || isset( $nums['blockers']['shipping'] ) || isset( $nums['blockers']['order'] ) ) {
+			if ( array_diff_key( $nums['blockers'], array( 'email' => 1 ) ) ) {
 				return self::result( false, implode( ' ', array_diff_key( $nums['blockers'], array( 'email' => 1 ) ) ), $case, 'numbers' );
 			}
 			$from                    = array( 'open' );
@@ -1293,6 +1543,28 @@ class Cases {
 			$fields['offer_cancel']  = $nums['offer_cancel'] ? 1 : 0;
 		} elseif ( 'sent' !== $case['status'] ) {
 			return self::result( false, __( 'This case is not waiting for an answer.', 'fishotel-misc-plugin' ), $case, 'state' );
+		} else {
+			// The e-mail may be days old: the order is read again before anything is recorded.
+			$order = $this->orders->get( (int) $case['order_id'] );
+			$facts = $order ? $this->orders->facts( $order ) : null;
+			if ( 'customer' === $via && ( ! $facts || $facts['closed'] ) ) {
+				$text = $facts
+					/* translators: %s: order status */
+					? sprintf( __( 'The customer tried to answer, but the order is %s by now — nothing was recorded. Sort it out with the customer directly, then close the case.', 'fishotel-misc-plugin' ), $facts['status'] )
+					: __( 'The customer tried to answer, but the order no longer exists — nothing was recorded. Sort it out with the customer directly, then close the case.', 'fishotel-misc-plugin' );
+				$this->store->update_case(
+					(int) $case['id'],
+					array(
+						'needs_check' => 1,
+						'check_note'  => $text,
+					)
+				);
+				$this->log( 'answer_refused', $text, (int) $case['id'], (int) $case['order_id'] );
+				return self::result( false, __( 'The order of this case is closed.', 'fishotel-misc-plugin' ), $this->store->get_case( (int) $case['id'] ), 'closed' );
+			}
+			if ( 'cancel' === $choice && $facts && $facts['any_shipped'] ) {
+				return self::result( false, __( 'Cancelling the whole order is not offered on this case — part of it has shipped.', 'fishotel-misc-plugin' ), $case, 'choice' );
+			}
 		}
 
 		if ( 'cancel' === $choice && ( empty( $case['offer_cancel'] ) || ( array_key_exists( 'offer_cancel', $fields ) && ! $fields['offer_cancel'] ) ) ) {
@@ -1304,9 +1576,10 @@ class Cases {
 		}
 
 		$case   = $this->store->get_case( (int) $case['id'] );
-		$amount = Money::amount_for( $choice, $this->numbers( $case ) );
 		$order  = $this->orders->get( (int) $case['order_id'] );
-		$symbol = $order ? $this->orders->facts( $order )['symbol'] : '$';
+		$facts  = $order ? $this->orders->facts( $order ) : null;
+		$amount = Money::amount_for( $choice, $this->numbers( $case, $facts ) );
+		$symbol = $facts ? $facts['symbol'] : '$';
 		$text   = sprintf(
 			/* translators: 1: who, 2: the choice, 3: the amount (may be empty) */
 			__( '%1$s: %2$s%3$s. Nothing was done by the site — see FisHotel Tools → Lost Fish for what to do.', 'fishotel-misc-plugin' ),
@@ -1323,6 +1596,8 @@ class Cases {
 		}
 		if ( 'cancel' === $choice ) {
 			$this->close_siblings( $case, $actor );
+		} else {
+			$this->recheck_siblings( $case );
 		}
 
 		$this->store->refresh_counts();
@@ -1357,6 +1632,34 @@ class Cases {
 				$message = sprintf( __( 'Closed: the customer chose to cancel the whole order (case #%d).', 'fishotel-misc-plugin' ), (int) $case['id'] );
 				$this->note( $other, $message, false );
 				$this->log( 'closed', $message, (int) $other['id'], (int) $other['order_id'], $actor );
+			}
+		}
+	}
+
+	/**
+	 * An answer came in: a shipping difference typed on another open case
+	 * of the same order was typed while this one still waited, so it is
+	 * worked out again on what is left of the order (the ledger) and that
+	 * case asks for a look.
+	 *
+	 * @param array $case The case that was answered.
+	 */
+	private function recheck_siblings( array $case ) {
+		$filters = array(
+			'status'   => 'open',
+			'order_id' => (int) $case['order_id'],
+		);
+		foreach ( $this->store->cases( $filters ) as $other ) {
+			if ( (int) $other['id'] === (int) $case['id'] ) {
+				continue;
+			}
+			$fields = self::count_changed(
+				$other,
+				/* translators: %d: case id */
+				sprintf( __( 'Case #%d on this order was answered after a shipping difference was typed in here — it was worked out again on what is left of the order; check it.', 'fishotel-misc-plugin' ), (int) $case['id'] )
+			);
+			if ( $fields && $this->store->transition( (int) $other['id'], array( 'open' ), 'open', $fields ) ) {
+				$this->refresh( $this->store->get_case( (int) $other['id'] ) );
 			}
 		}
 	}
@@ -1533,6 +1836,23 @@ class Cases {
 			return self::result( false, __( 'That case no longer exists.', 'fishotel-misc-plugin' ) );
 		}
 
+		// An answer the owner may already have acted on: the case says what it was, and asks for a look.
+		$check = array();
+		if ( 'name' === $case['line_match'] ) {
+			$check[] = __( 'Matched to this order line by NAME only — check that it is the same fish before sending.', 'fishotel-misc-plugin' );
+		}
+		if ( in_array( $case['status'], Cover::RELEASED, true ) && '' !== $case['choice'] ) {
+			$order   = $this->orders->get( (int) $case['order_id'] );
+			$amount  = self::summary( $case )['amount'];
+			$check[] = sprintf(
+				/* translators: 1: the choice, 2: its amount (may be empty), 3: whether it was ticked Done (may be empty) */
+				__( 'Reopened after an answer: the customer had chosen to %1$s%2$s%3$s. Make sure that was not already paid out before asking again.', 'fishotel-misc-plugin' ),
+				self::choice_label( $case['choice'] ),
+				null !== $amount && 'retry' !== $case['choice'] ? ' — ' . Money::format( $amount, $order ? $this->orders->facts( $order )['symbol'] : '$' ) : '',
+				'done' === $case['status'] ? __( ', and it was ticked Done', 'fishotel-misc-plugin' ) : ''
+			);
+		}
+
 		$moved = $this->store->transition(
 			(int) $case['id'],
 			array( 'sent', 'answered', 'done', 'closed' ),
@@ -1553,8 +1873,8 @@ class Cases {
 				'amount_refund' => null,
 				'amount_cancel' => null,
 				'ship_manual'   => 0,
-				'needs_check'   => 'name' === $case['line_match'] ? 1 : 0,
-				'check_note'    => 'name' === $case['line_match'] ? __( 'Matched to this order line by NAME only — check that it is the same fish before sending.', 'fishotel-misc-plugin' ) : '',
+				'needs_check'   => $check ? 1 : 0,
+				'check_note'    => implode( ' ', $check ),
 			)
 		);
 		if ( ! $moved ) {
@@ -1809,6 +2129,24 @@ class Cases {
 			case 'cancel':
 				/* translators: 1: order number, 2: amount */
 				$out['text'] = sprintf( __( 'Cancel order #%1$s and refund %2$s.', 'fishotel-misc-plugin' ), $number, $money );
+				$ledger      = $this->ledger( $case );
+				$said        = array();
+				if ( is_array( $facts ) && (int) $facts['refunded'] > 0 ) {
+					/* translators: %s: amount */
+					$said[] = sprintf( __( '%s was already refunded on the order', 'fishotel-misc-plugin' ), Money::format( (int) $facts['refunded'], $symbol ) );
+				}
+				if ( $ledger['credited'] > 0 ) {
+					/* translators: 1: amount, 2: case numbers */
+					$said[] = sprintf( __( '%1$s was already given as store credit (case %2$s)', 'fishotel-misc-plugin' ), Money::format( $ledger['credited'], $symbol ), '#' . implode( ', #', $ledger['credits'] ) );
+				}
+				if ( $said && is_array( $facts ) ) {
+					/* translators: 1: order total, 2: what already went back */
+					$out['detail'] = sprintf( __( 'The order came to %1$s; %2$s.', 'fishotel-misc-plugin' ), Money::format( (int) $facts['total'], $symbol ), implode( __( ', and ', 'fishotel-misc-plugin' ), $said ) );
+				}
+				foreach ( $ledger['refunds_due'] as $other_id => $due ) {
+					/* translators: 1: case id, 2: amount */
+					$out['note'] = trim( $out['note'] . ' ' . sprintf( __( 'Case #%1$d on this order still asks for a refund of %2$s: that money is PART of this amount — do not pay it twice.', 'fishotel-misc-plugin' ), (int) $other_id, Money::format( $due, $symbol ) ) );
+				}
 				break;
 
 			case 'retry':

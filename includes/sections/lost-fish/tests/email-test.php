@@ -17,6 +17,7 @@
 require_once __DIR__ . '/wp-stubs.php';
 
 use FisHotel\Misc\Sections\Lost_Fish\Email;
+use FisHotel\Misc\Sections\Lost_Fish\Lost_Fish;
 use FisHotel\Misc\Sections\Lost_Fish\Money;
 use FisHotel\Misc\Sections\Lost_Fish\Settings;
 
@@ -31,6 +32,8 @@ $case = array(
 	'customer_name'  => 'Avery Example',
 	'customer_email' => 'avery@example.test',
 );
+Lost_Fish::$today = '2026-11-10'; // The day these tests are read on: a week before the order ships.
+
 $facts = array(
 	'number'        => '501',
 	'symbol'        => '$',

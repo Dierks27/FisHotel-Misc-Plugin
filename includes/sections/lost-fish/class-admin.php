@@ -49,6 +49,14 @@ class Admin {
 	 */
 	const FLASH = 'fishotel_lostfish_flash_';
 
+	/**
+	 * The operations that act on what the page showed of a case, and so
+	 * carry its stamp (Cases::stamp()) in the "seen" field.
+	 *
+	 * @var string[]
+	 */
+	const SEEN_OPS = array( 'send', 'numbers', 'answer', 'reassign' );
+
 	const TABS = array( 'cases', 'new', 'log', 'settings' );
 
 	const FINISHED_LIMIT = 50;
@@ -476,6 +484,20 @@ class Admin {
 		$text  = static function ( $key ) use ( $raw ) {
 			return isset( $raw[ $key ] ) && is_scalar( $raw[ $key ] ) ? trim( (string) $raw[ $key ] ) : '';
 		};
+
+		// What these four do depends on what the page showed (who is written to, which numbers): a page
+		// that is behind the case — another tab changed it, a further loss joined it — does nothing.
+		if ( in_array( $op, self::SEEN_OPS, true ) ) {
+			$now = $cases->store()->get_case( $case_id );
+			if ( $now && ! hash_equals( Cases::stamp( $now ), $text( 'seen' ) ) ) {
+				return array(
+					'status'  => 400,
+					'ok'      => false,
+					'message' => __( 'This case changed since the page was loaded (another tab, or another loss). Nothing was done — check it as it is now, then try again.', 'fishotel-misc-plugin' ),
+					'case_id' => $case_id,
+				);
+			}
+		}
 
 		switch ( $op ) {
 			case 'send':

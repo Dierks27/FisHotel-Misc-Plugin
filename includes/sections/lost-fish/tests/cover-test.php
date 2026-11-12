@@ -178,4 +178,21 @@ $others = Cover::alternatives( fh_case( 502, 'i:2', 2, 'open' ), $ranked );
 check_same( 'the other holders with enough free fish — not the case\'s own line, not a line whose fish all have a case', array( 501 ), array_column( $others, 'order_id' ) );
 check_same( 'a case for more fish than any other line has free: nobody', array(), Cover::alternatives( fh_case( 502, 'i:2', 3, 'open' ), $ranked ) );
 
+echo "\nAn order whose customer chose to cancel\n";
+$cancel_holders = array(
+	array( 'order_id' => 901, 'ref' => 'i:1', 'qty' => 2, 'qty_refunded' => 0, 'paid_at' => 3000 ),
+	array( 'order_id' => 901, 'ref' => 'i:2', 'qty' => 1, 'qty_refunded' => 0, 'paid_at' => 3000 ),
+	array( 'order_id' => 902, 'ref' => 'i:3', 'qty' => 1, 'qty_refunded' => 0, 'paid_at' => 2000 ),
+);
+$cancel_cases   = array(
+	array( 'status' => 'answered', 'choice' => 'cancel', 'order_id' => 901, 'line_ref' => 'i:1', 'qty' => 1 ),
+);
+check_same( 'the orders being cancelled', array( 901 => true ), Cover::cancelled_orders( $cancel_cases ) );
+check_same( '… not while the case only waits, not for another choice, not when it was closed', array(), Cover::cancelled_orders( array( array( 'status' => 'sent', 'choice' => 'cancel', 'order_id' => 901 ), array( 'status' => 'done', 'choice' => 'refund', 'order_id' => 902 ), array( 'status' => 'closed', 'choice' => 'cancel', 'order_id' => 903 ) ) ) );
+$ranked = Cover::rank_holders( $cancel_holders, $cancel_cases );
+check_same( 'EVERY line of that order owes nothing — not only the line of the case', array( 0, 0, 1 ), array( $ranked[0]['owed'] + 0, $ranked[1]['owed'] + 0, $ranked[2]['owed'] ) );
+$kind_any = Cover::kind_of_stay( array( 'product_id' => 812, 'species' => 'Lagoon Goby' ) );
+$assess   = Cover::assess( $kind_any, array( array( 'product_id' => 812, 'qty_live' => 1, 'status' => 'in_qt' ) ), $cancel_holders, $cancel_cases );
+check_same( 'one alive, one owed (the other order): covered', array( 1, 1, 0 ), array( $assess['covered'], $assess['committed'], $assess['shortage'] ) );
+
 fh_finish();

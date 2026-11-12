@@ -29,12 +29,16 @@ $fh_money   = static function ( $cents ) use ( $fh_symbol ) {
 };
 
 /**
- * The hidden fields every form of this card starts with.
+ * The hidden fields every form of this card starts with. "seen" is what
+ * this page shows of the case: a write that depends on it is refused when
+ * the case has changed since.
  */
-$fh_form = static function ( $op ) use ( $fh_id ) {
+$fh_seen = Cases::stamp( $fh_case );
+$fh_form = static function ( $op ) use ( $fh_id, $fh_seen ) {
 	echo '<input type="hidden" name="action" value="' . esc_attr( Admin::ACTION_CASE ) . '">';
 	echo '<input type="hidden" name="case_id" value="' . esc_attr( $fh_id ) . '">';
 	echo '<input type="hidden" name="op" value="' . esc_attr( $op ) . '">';
+	echo '<input type="hidden" name="seen" value="' . esc_attr( $fh_seen ) . '">'; // The case as this page shows it.
 	wp_nonce_field( Admin::NONCE_CASE . $fh_id, '_wpnonce', false );
 };
 

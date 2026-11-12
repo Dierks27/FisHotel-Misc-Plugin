@@ -72,11 +72,20 @@ class Orders {
 	const CLOSED_STATUSES = array( 'completed', 'shipped', 'cancelled', 'refunded', 'failed', 'checkout-draft', 'draft', 'auto-draft', 'trash' );
 
 	/**
-	 * The most open orders one loss looks at.
+	 * How many open order ids are asked for at a time — and the most
+	 * orders one loss LOADS when the order-item tables cannot say which of
+	 * them hold the fish.
 	 *
 	 * @var int
 	 */
 	const OPEN_LIMIT = 400;
+
+	/**
+	 * The most pages of open order ids one loss reads (50 × 400 orders).
+	 *
+	 * @var int
+	 */
+	const OPEN_PAGES = 50;
 
 	/**
 	 * The section's store (for the open-order prefilter), or null.
@@ -91,6 +100,13 @@ class Orders {
 	 * @var int[]|null
 	 */
 	private $open_ids = null;
+
+	/**
+	 * Whether some open orders were left unread (see capped()).
+	 *
+	 * @var bool
+	 */
+	private $capped = false;
 
 	/**
 	 * The lines of an invoice product, as the Invoices section gives them,
@@ -123,6 +139,19 @@ class Orders {
 	 */
 	public function available() {
 		return function_exists( 'wc_get_order' ) && function_exists( 'wc_get_orders' );
+	}
+
+	/**
+	 * Whether the last look for holders had to leave open orders unread:
+	 * there were more than OPEN_PAGES pages of them, or the order-item
+	 * tables could not say which hold the fish and there were more than
+	 * OPEN_LIMIT to load. The caller says so in the log — a holder among
+	 * the unread ones gets no case.
+	 *
+	 * @return bool
+	 */
+	public function capped() {
+		return $this->capped;
 	}
 
 	/**
@@ -691,13 +720,17 @@ class Orders {
 		if ( ! $open ) {
 			return array();
 		}
-		if ( ! is_object( $this->store ) || ! method_exists( $this->store, 'orders_with_lines' ) ) {
-			return $open;
+		$found = null;
+		if ( is_object( $this->store ) && method_exists( $this->store, 'orders_with_lines' ) ) {
+			$product_id = (int) ( $kind['product_id'] ?? 0 );
+			$found      = $this->store->orders_with_lines( $open, $product_id > 0 ? array( $product_id ) : array() );
 		}
-
-		$product_id = (int) ( $kind['product_id'] ?? 0 );
-		$found      = $this->store->orders_with_lines( $open, $product_id > 0 ? array( $product_id ) : array() );
 		if ( ! is_array( $found ) ) {
+			// The tables cannot say: every open order is loaded and judged — the newest OPEN_LIMIT at most.
+			if ( count( $open ) > self::OPEN_LIMIT ) {
+				$this->capped = true;
+				$open         = array_slice( $open, 0, self::OPEN_LIMIT );
+			}
 			return $open;
 		}
 
@@ -706,7 +739,8 @@ class Orders {
 
 	/**
 	 * The ids of the orders that may still owe something, newest first:
-	 * every order status except the closed ones.
+	 * every order status except the closed ones — all of them, read a page
+	 * at a time.
 	 *
 	 * @return int[]
 	 */
@@ -743,22 +777,36 @@ class Orders {
 			return $this->open_ids;
 		}
 
-		try {
-			$ids = wc_get_orders(
-				array(
-					'type'    => 'shop_order',
-					'status'  => $open,
-					'limit'   => self::OPEN_LIMIT,
-					'orderby' => 'date',
-					'order'   => 'DESC',
-					'return'  => 'ids',
-				)
-			);
-		} catch ( \Throwable $e ) {
-			$ids = array();
+		// Every open order, a page of ids at a time: the product prefilter (candidate_ids()) comes AFTER this,
+		// so a pile of newer unpaid orders must not push a paid holder out of the list.
+		$ids = array();
+		for ( $page = 1; $page <= self::OPEN_PAGES; $page++ ) {
+			try {
+				$found = wc_get_orders(
+					array(
+						'type'    => 'shop_order',
+						'status'  => $open,
+						'limit'   => self::OPEN_LIMIT,
+						'page'    => $page,
+						'orderby' => 'date',
+						'order'   => 'DESC',
+						'return'  => 'ids',
+					)
+				);
+			} catch ( \Throwable $e ) {
+				$found = array();
+			}
+			$found = is_array( $found ) ? $found : array();
+			$ids   = array_merge( $ids, $found );
+			if ( count( $found ) < self::OPEN_LIMIT ) {
+				break;
+			}
+			if ( self::OPEN_PAGES === $page ) {
+				$this->capped = true;
+			}
 		}
 
-		$this->open_ids = array_values( array_unique( array_filter( array_map( 'intval', is_array( $ids ) ? $ids : array() ) ) ) );
+		$this->open_ids = array_values( array_unique( array_filter( array_map( 'intval', $ids ) ) ) );
 
 		return $this->open_ids;
 	}

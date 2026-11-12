@@ -94,6 +94,7 @@ function fh_post( $case_id, $op, array $fields = array() ) {
 			'case_id'  => (string) $case_id,
 			'op'       => $op,
 			'_wpnonce' => wp_create_nonce( Admin::NONCE_CASE . $case_id ),
+			'seen'     => fh_seen( Cases::instance(), $case_id ), // The case as the page shows it right now.
 		),
 		$fields
 	);
@@ -219,7 +220,10 @@ $a = $cases->open_by_hand( 501, 'i:51', 1, 5 )['case']['id'];                   
 $rooms->lose( 1, 1 );
 $cases->loss_recorded( 1, 9001, 1, 5 );                                          // Open, from a loss: 502's two gobies.
 $b = $store->cases()[0]['id'];
-$c = $cases->open_by_hand( 502, 'i:54', 1, 5 )['case']['id'];                    // Open, blocked: another case waits on 502.
+$c = $cases->open_by_hand( 502, 'i:54', 1, 5 )['case']['id'];                    // Open, ready: another case waits on 502, but 502 stays over the threshold either way.
+fh_order( 510, array( 'paid' => 900, 'shipping' => 15.00, 'first_name' => 'Emery', 'last_name' => 'Pilot', 'email' => 'emery@example.test', 'customer_id' => 45, 'lines' => array( 5101 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'qty' => 1, 'total' => 60.00 ), 5102 => array( 'name' => 'Harbor Tang', 'product_id' => 813, 'qty' => 2, 'total' => 460.00 ) ) ) );
+$cases->open_by_hand( 510, 'i:5101', 1, 5 );                                     // Open, blocked: two cases wait on 510,
+$cases->open_by_hand( 510, 'i:5102', 1, 5 );                                     // and its shipping depends on what is picked.
 $d = $cases->open_by_hand( 503, 'i:55', 1, 5 )['case']['id'];
 $cases->send( $d, 5 );                                                           // Sent, waiting.
 foreach ( array( 505, 506, 507, 508, 509 ) as $id ) {
@@ -251,9 +255,11 @@ check_contains( 'the three groups', 'Needs you', $html );
 check_contains( '…', 'Waiting for the customer', $html );
 check_contains( '…', 'Finished (latest', $html );
 check_contains( 'it says send by itself is off', 'Send by itself: off — nothing is sent without your click', $html );
-check_same( 'ONE "Send to customer" button per case that was not sent yet', 3, substr_count( $html, 'class="button button-primary button-hero"' ) );
-check_same( '… and no other button on the page sends anything', 3, substr_count( $html, 'name="op" value="send"' ) );
-check_same( '… two of them cannot be pressed: two cases wait on one order, so neither shipping difference is known', 2, substr_count( $html, 'button-hero"  disabled="disabled"' ) );
+check_same( 'ONE "Send to customer" button per case that was not sent yet', 5, substr_count( $html, 'class="button button-primary button-hero"' ) );
+check_same( '… and no other button on the page sends anything', 5, substr_count( $html, 'name="op" value="send"' ) );
+check_same( '… two of them cannot be pressed: two cases wait on one order whose shipping depends on the answers, so neither difference is known', 2, substr_count( $html, 'button-hero"  disabled="disabled"' ) );
+check_contains( '… two cases on an order that stays over the threshold either way need nothing typed', 'also when the fish of its other open case goes too', $html );
+check_same( 'every form of a case carries what the page shows of it', substr_count( $html, 'name="op" value=' ), substr_count( $html, 'name="seen" value="' ) );
 check_contains( '… and the case says why', 'other lost-fish case on this order still waits for an answer', $html );
 check_contains( '… and what blocks it', 'fill it in, or confirm zero', $html );
 check_contains( 'the numbers of every choice: the fish', 'Paid for the fish', $html );

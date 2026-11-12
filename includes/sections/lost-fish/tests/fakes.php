@@ -360,7 +360,7 @@ function wc_get_orders( $args = array() ) {
 		}
 	);
 	if ( isset( $args['limit'] ) && (int) $args['limit'] > 0 ) {
-		$found = array_slice( $found, 0, (int) $args['limit'] );
+		$found = array_slice( $found, ( max( 1, (int) ( $args['page'] ?? 1 ) ) - 1 ) * (int) $args['limit'], (int) $args['limit'] );
 	}
 
 	if ( 'ids' === ( $args['return'] ?? '' ) ) {
@@ -773,6 +773,62 @@ class Fh_Fake_Rooms {
 }
 
 /**
+ * The Clean Room records a loss: the group has that many fewer, and the
+ * action fires as Store::record_event() fires it.
+ */
+function fh_loss( Fh_Fake_Rooms $rooms, $stay_id, $event_id, $qty = 1, $source = 'qr' ) {
+	$rooms->lose( $stay_id, $qty );
+	do_action(
+		'fishotel_cleanroom_event_recorded',
+		$stay_id,
+		$event_id,
+		array(
+			'type'     => 'loss',
+			'qty'      => $qty,
+			'note'     => 'disease',
+			'source'   => $source,
+			'actor_id' => 7,
+		),
+		array()
+	);
+}
+
+/**
+ * The Clean Room undoes that loss: the fish are back, and the
+ * compensating event fires.
+ */
+function fh_undo( Fh_Fake_Rooms $rooms, $stay_id, $event_id, $qty = 1 ) {
+	$rooms->stays[ $stay_id ]['qty_live'] += $qty;
+	$rooms->stays[ $stay_id ]['status']    = 'in_qt';
+	do_action(
+		'fishotel_cleanroom_event_recorded',
+		$stay_id,
+		$event_id + 1000,
+		array(
+			'type'     => 'loss',
+			'qty'      => -$qty,
+			'note'     => 'undo of #' . $event_id,
+			'source'   => 'qr',
+			'actor_id' => 7,
+		),
+		array()
+	);
+}
+
+/**
+ * What the Cases screen posts with a form of a case: the case as the
+ * page shows it (Admin::card() brings an open case up to date first).
+ *
+ * @param Cases $cases   The cases.
+ * @param int   $case_id Case id.
+ * @return string The "seen" field.
+ */
+function fh_seen( Cases $cases, $case_id ) {
+	$card = \FisHotel\Misc\Sections\Lost_Fish\Admin::card( $cases, $cases->store()->get_case( (int) $case_id ), \FisHotel\Misc\Sections\Lost_Fish\Settings::get() );
+	return Cases::stamp( $card['case'] );
+}
+
+/**
  * The real Cases on the in-memory store, the real Orders over the
  * WooCommerce stand-ins and the tank groups given.
  *
@@ -802,6 +858,7 @@ function fh_reset() {
 	$GLOBALS['fh_options']      = array( 'blogname' => 'Example Reef Shop' );
 	$GLOBALS['fh_current_user'] = 0;
 	\FisHotel\Misc\Sections\Lost_Fish\Shipping::$rater = null;
+	\FisHotel\Misc\Sections\Lost_Fish\Lost_Fish::$today = null;
 }
 
 /**

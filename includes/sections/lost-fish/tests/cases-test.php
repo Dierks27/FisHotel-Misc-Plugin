@@ -61,49 +61,6 @@ function fh_world() {
 	return array( $cases, $store, $rooms );
 }
 
-/**
- * The Clean Room records a loss: the group has that many fewer, and the
- * action fires as Store::record_event() fires it.
- */
-function fh_loss( Fh_Fake_Rooms $rooms, $stay_id, $event_id, $qty = 1, $source = 'qr' ) {
-	$rooms->lose( $stay_id, $qty );
-	do_action(
-		'fishotel_cleanroom_event_recorded',
-		$stay_id,
-		$event_id,
-		array(
-			'type'     => 'loss',
-			'qty'      => $qty,
-			'note'     => 'disease',
-			'source'   => $source,
-			'actor_id' => 7,
-		),
-		array()
-	);
-}
-
-/**
- * The Clean Room undoes that loss: the fish are back, and the
- * compensating event fires.
- */
-function fh_undo( Fh_Fake_Rooms $rooms, $stay_id, $event_id, $qty = 1 ) {
-	$rooms->stays[ $stay_id ]['qty_live'] += $qty;
-	$rooms->stays[ $stay_id ]['status']    = 'in_qt';
-	do_action(
-		'fishotel_cleanroom_event_recorded',
-		$stay_id,
-		$event_id + 1000,
-		array(
-			'type'     => 'loss',
-			'qty'      => -$qty,
-			'note'     => 'undo of #' . $event_id,
-			'source'   => 'qr',
-			'actor_id' => 7,
-		),
-		array()
-	);
-}
-
 add_action( 'fishotel_cleanroom_event_recorded', array( Cases::class, 'on_cleanroom_event' ), 10, 4 );
 
 /* ================================================================== */

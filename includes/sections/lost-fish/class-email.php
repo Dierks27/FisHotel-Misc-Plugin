@@ -105,6 +105,33 @@ class Email {
 	}
 
 	/**
+	 * The order's ship and delivery dates as far as they are still to
+	 * come. A date that has gone by is not "when it will ship" — the
+	 * reminder goes out days after the first e-mail, and a date on an
+	 * order can be an old one — so once the ship date (or, without one,
+	 * the delivery date) is before today, both are dropped and the e-mail
+	 * says "we will confirm your ship date" instead.
+	 *
+	 * @param array $facts Orders::facts() (ship_date, delivery_date).
+	 * @return array{ship_date: string, delivery_date: string} Y-m-d or ''.
+	 */
+	public static function coming_dates( array $facts ) {
+		$ship     = Orders::ymd( (string) ( $facts['ship_date'] ?? '' ) );
+		$delivery = Orders::ymd( (string) ( $facts['delivery_date'] ?? '' ) );
+		$first    = '' !== $ship ? $ship : $delivery;
+
+		if ( '' !== $first && strcmp( $first, Lost_Fish::today() ) < 0 ) {
+			$ship     = '';
+			$delivery = '';
+		}
+
+		return array(
+			'ship_date'     => $ship,
+			'delivery_date' => $delivery,
+		);
+	}
+
+	/**
 	 * The sentence about when the rest of the order ships.
 	 *
 	 * @param array $facts     Orders::facts() (ship_date, delivery_date).
@@ -116,8 +143,9 @@ class Email {
 			return __( 'There is nothing else left to ship on this order.', 'fishotel-misc-plugin' );
 		}
 
-		$ship     = self::date_label( (string) ( $facts['ship_date'] ?? '' ) );
-		$delivery = self::date_label( (string) ( $facts['delivery_date'] ?? '' ) );
+		$dates    = self::coming_dates( $facts );
+		$ship     = self::date_label( $dates['ship_date'] );
+		$delivery = self::date_label( $dates['delivery_date'] );
 
 		if ( '' !== $ship && '' !== $delivery ) {
 			/* translators: 1: ship date, 2: delivery date */
@@ -234,8 +262,11 @@ class Email {
 				'choice'  => 'cancel',
 				'title'   => __( 'Cancel the whole order', 'fishotel-misc-plugin' ),
 				'amount'  => (int) $numbers['cancel'],
-				/* translators: 1: order number, 2: amount */
-				'text'    => sprintf( __( 'We cancel order #%1$s and refund everything you paid for it: %2$s.', 'fishotel-misc-plugin' ), (string) ( $facts['number'] ?? '' ), $money( (int) $numbers['cancel'] ) ),
+				'text'    => (int) ( $numbers['settled'] ?? 0 ) > 0
+					/* translators: 1: order number, 2: amount, 3: what already went back */
+					? sprintf( __( 'We cancel order #%1$s and refund the rest of what you paid for it: %2$s (%3$s already went back to you as a refund or a store credit).', 'fishotel-misc-plugin' ), (string) ( $facts['number'] ?? '' ), $money( (int) $numbers['cancel'] ), $money( (int) $numbers['settled'] ) )
+					/* translators: 1: order number, 2: amount */
+					: sprintf( __( 'We cancel order #%1$s and refund everything you paid for it: %2$s.', 'fishotel-misc-plugin' ), (string) ( $facts['number'] ?? '' ), $money( (int) $numbers['cancel'] ) ),
 				'confirm' => __( 'Yes, cancel the whole order', 'fishotel-misc-plugin' ),
 			);
 		}
@@ -281,7 +312,8 @@ class Email {
 			$name = __( 'there', 'fishotel-misc-plugin' );
 		}
 
-		$fish = trim( (string) ( $case['fish_name'] ?? '' ) );
+		$fish  = trim( (string) ( $case['fish_name'] ?? '' ) );
+		$dates = self::coming_dates( $facts );
 
 		return array(
 			'customer_name' => $name,
@@ -290,8 +322,8 @@ class Email {
 			'fish_line'     => self::fish_line( $case ),
 			'order_number'  => (string) ( $facts['number'] ?? ( $case['order_id'] ?? '' ) ),
 			'ship_line'     => self::ship_line( $facts, $rest ),
-			'ship_date'     => self::date_label( (string) ( $facts['ship_date'] ?? '' ) ),
-			'delivery_date' => self::date_label( (string) ( $facts['delivery_date'] ?? '' ) ),
+			'ship_date'     => self::date_label( $dates['ship_date'] ),
+			'delivery_date' => self::date_label( $dates['delivery_date'] ),
 			'site_name'     => self::site_name(),
 		);
 	}

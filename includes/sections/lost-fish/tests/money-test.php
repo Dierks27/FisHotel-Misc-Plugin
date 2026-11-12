@@ -143,6 +143,9 @@ $shipped = Money::choices(
 	)
 );
 check_same( 'part of the order shipped: cancel is not offered', array( false, null ), array( $shipped['offer_cancel'], $shipped['cancel'] ) );
+$credited = Money::choices( array( 'unit_paid' => 23000, 'qty' => 1, 'ship_diff' => 0, 'order_total' => 76500, 'order_refunded' => 3500, 'order_credited' => 6000 ) );
+check_same( 'cancel after 35.00 was refunded and 60.00 given as store credit on the order: what is left, and how much went back', array( 67000, 9500 ), array( $credited['cancel'], $credited['settled'] ) );
+check_same( 'nothing went back: nothing to say', 0, $drop['settled'] );
 
 echo "\nThe amount of a choice\n";
 check_same( 'refund', 3500, Money::amount_for( 'refund', $drop ) );

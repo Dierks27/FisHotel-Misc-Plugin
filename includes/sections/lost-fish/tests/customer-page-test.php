@@ -196,10 +196,11 @@ check_same( 'the choice could not be saved: the page says it was NOT recorded', 
 check_contains( '…', 'your choice was NOT recorded', Customer_Page::render( $view ) );
 $store->fail = array();
 
-unset( $GLOBALS['fh_orders'][501] );
-$view = Customer_Page::handle( $t1['refund'], 'GET', false, $cases, $now );
-check_same( 'the order is gone: the page still shows what the e-mail promised', array( 'confirm', 3500 ), array( $view['state'], $view['row']['amount'] ) );
-check( '… and renders', false !== strpos( Customer_Page::render( $view ), 'Refund the lost fish — $35.00' ) );
+Customer_Page::handle( $t2['credit'], 'POST', true, $cases, $now );
+unset( $GLOBALS['fh_orders'][503] );
+$view = Customer_Page::handle( $t2['refund'], 'GET', false, $cases, $now );
+check_same( 'the order of an ANSWERED case is gone: its links still say what was chosen, with the amount the e-mail promised', array( 'chosen', 'credit', 6000 ), array( $view['state'], $view['row']['choice'], $view['row']['amount'] ) );
+check( '… and the page renders', false !== strpos( Customer_Page::render( $view ), 'Take a store credit — $60.00' ) );
 
 echo "\nAn ordinary request\n";
 $_GET  = array();

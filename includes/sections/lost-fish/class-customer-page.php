@@ -13,6 +13,15 @@
  *         once per case. A second Confirm, on any of the four links,
  *         only shows what was chosen.
  *
+ * The e-mail may be days old, so THE ORDER IS READ AGAIN on every
+ * request: once it is completed, shipped, cancelled, refunded or gone,
+ * every link of a case that still waits says the request is closed and a
+ * Confirm records nothing (the case is flagged for the owner); once part
+ * of the order has shipped, "cancel the whole order" is no longer offered
+ * — its link says so and lists the other choices; and the cancel amount
+ * is what is left to give back now (a refund or a store credit made since
+ * the e-mail comes off it).
+ *
  * After the choice every link of the case says what was chosen. A link
  * whose case was closed or reopened, a link past its expiry and a token
  * that does not verify each get their own plain sentence; a token that
@@ -120,29 +129,45 @@ class Customer_Page {
 			return self::view( 'invalid' );
 		}
 
-		$state = $answered ? 'chosen' : 'confirm';
+		$state   = $answered ? 'chosen' : 'confirm';
+		$posting = ! $answered && 'POST' === strtoupper( (string) $method ) && $confirm;
 
-		if ( ! $answered && 'POST' === strtoupper( (string) $method ) && $confirm ) {
+		// The order as it is NOW, not as it was when the e-mail went out.
+		$order = $cases->orders()->get( (int) $case['order_id'] );
+		$live  = $order ? $cases->orders()->facts( $order ) : null;
+		if ( ! $answered && ( ! $live || $live['closed'] ) ) {
+			if ( $posting ) {
+				$cases->answer( (int) $case['id'], $parsed['choice'], 'customer', 0 ); // Refused there — and the owner is told.
+			}
+			return self::view( 'closed' );
+		}
+		if ( ! $answered && 'cancel' === $parsed['choice'] && empty( $cases->numbers( $case, $live )['offer_cancel'] ) ) {
+			$state = 'shipped'; // Part of the order left since the e-mail: no Confirm, the other choices.
+		}
+
+		if ( $posting && 'confirm' === $state ) {
 			$result = $cases->answer( (int) $case['id'], $parsed['choice'], 'customer', 0 );
 			$case   = is_array( $result['case'] ) ? $result['case'] : $case;
 			if ( $result['ok'] ) {
 				$state = 'recorded';
 			} elseif ( in_array( $case['status'], Cover::RELEASED, true ) ) {
 				$state = 'chosen'; // Somebody confirmed a moment earlier: show what was chosen.
+			} elseif ( 'closed' === $result['code'] ) {
+				return self::view( 'closed' );
 			} else {
 				return self::view( 'error' );
 			}
 		}
 
-		$order   = $cases->orders()->get( (int) $case['order_id'] );
-		$facts   = $order ? $cases->orders()->facts( $order ) : self::bare_facts( $case );
-		$numbers = $cases->numbers( $case, $order ? $facts : null );
-		$links   = 'confirm' === $state ? Cases::links( $case, (int) $parsed['expires'], ! empty( $case['offer_cancel'] ) ) : array();
+		$facts   = $live ? $live : self::bare_facts( $case );
+		$numbers = $cases->numbers( $case, $live );
+		$open    = in_array( $state, array( 'confirm', 'shipped' ), true );
+		$links   = $open ? Cases::links( $case, (int) $parsed['expires'], ! empty( $numbers['offer_cancel'] ) ) : array();
 		$rows    = Email::choice_rows( $case, $numbers, $facts, $links );
-		$choice  = 'confirm' === $state ? $parsed['choice'] : $case['choice'];
+		$choice  = $open ? $parsed['choice'] : $case['choice'];
 		$others  = array();
 		foreach ( $rows as $row ) {
-			if ( $row['choice'] !== $choice && 'confirm' === $state ) {
+			if ( $row['choice'] !== $choice && $open ) {
 				$others[] = $row;
 			}
 		}
@@ -161,7 +186,7 @@ class Customer_Page {
 	/**
 	 * An empty view of a state.
 	 *
-	 * @param string $state invalid | expired | closed | confirm | recorded | chosen | error.
+	 * @param string $state invalid | expired | closed | confirm | shipped | recorded | chosen | error.
 	 * @return array
 	 */
 	private static function view( $state ) {
@@ -227,15 +252,11 @@ class Customer_Page {
 				. '<button type="submit" class="confirm">' . esc_html( $row['confirm'] ) . '</button>'
 				. '</form>';
 			$body .= '<p class="muted">' . esc_html__( 'Nothing changes until you press the button. You can pick only once.', 'fishotel-misc-plugin' ) . '</p>';
-
-			if ( $view['others'] ) {
-				$body .= '<h2>' . esc_html__( 'Or pick something else', 'fishotel-misc-plugin' ) . '</h2><ul class="others">';
-				foreach ( $view['others'] as $other ) {
-					$label = $other['title'] . ( '' !== $other['money'] ? ' — ' . $other['money'] : '' );
-					$body .= '<li>' . ( '' !== $other['url'] ? '<a href="' . esc_url( $other['url'] ) . '">' . esc_html( $label ) . '</a>' : esc_html( $label ) ) . '</li>';
-				}
-				$body .= '</ul>';
-			}
+			$body .= self::others_list( $view['others'], __( 'Or pick something else', 'fishotel-misc-plugin' ) );
+		} elseif ( 'shipped' === $state ) {
+			$body .= '<p>' . esc_html__( 'Part of this order has shipped since we wrote to you, so the whole order can no longer be cancelled. Nothing was changed.', 'fishotel-misc-plugin' ) . '</p>';
+			$body .= self::others_list( $view['others'], __( 'What you can still pick', 'fishotel-misc-plugin' ) );
+			$body .= '<p class="muted">' . esc_html__( 'If you have a question, just reply to our e-mail.', 'fishotel-misc-plugin' ) . '</p>';
 		} elseif ( ( 'recorded' === $state || 'chosen' === $state ) && $row ) {
 			$body .= '<p class="ok">' . esc_html( 'recorded' === $state ? __( 'Thank you — your choice is recorded.', 'fishotel-misc-plugin' ) : __( 'A choice was already made for this fish:', 'fishotel-misc-plugin' ) ) . '</p>';
 			$body .= self::choice_box( $row );
@@ -277,6 +298,25 @@ class Customer_Page {
 			. '<h1>' . esc_html( $heading ) . '</h1>'
 			. $body
 			. '</main></body></html>';
+	}
+
+	/**
+	 * The other choices as a list of links.
+	 *
+	 * @param array[] $others  Email::choice_rows() rows.
+	 * @param string  $heading The heading above them.
+	 * @return string HTML ('' when there are none).
+	 */
+	private static function others_list( array $others, $heading ) {
+		if ( ! $others ) {
+			return '';
+		}
+		$html = '<h2>' . esc_html( $heading ) . '</h2><ul class="others">';
+		foreach ( $others as $other ) {
+			$label = $other['title'] . ( '' !== $other['money'] ? ' — ' . $other['money'] : '' );
+			$html .= '<li>' . ( '' !== $other['url'] ? '<a href="' . esc_url( $other['url'] ) . '">' . esc_html( $label ) . '</a>' : esc_html( $label ) ) . '</li>';
+		}
+		return $html . '</ul>';
 	}
 
 	/**

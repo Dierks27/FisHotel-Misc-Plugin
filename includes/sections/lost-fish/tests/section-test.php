@@ -132,6 +132,14 @@ $info = Lost_Fish::get_section_info();
 check_same( 'the card on the dashboard: a name, a description, an icon', array( 'Lost Fish', true, true ), array( $info['name'], strlen( $info['description'] ) > 40, 0 === strpos( $info['icon'], 'dashicons-' ) ) );
 check_same( 'the screen and every write need manage_woocommerce', 'manage_woocommerce', Lost_Fish::CAPABILITY );
 
+echo "\nWhile the section is switched off\n";
+$GLOBALS['wpdb'] = new Fh_Counting_Wpdb();
+unset( $GLOBALS['fh_options'][ Store::DB_VERSION_OPTION ] ); // Never switched on: the tables do not exist.
+check( 'the contract function exists all the same — the Section Manager loads this file to list the section', function_exists( 'fishotel_lostfish_cases_for_order' ) );
+check_same( 'it answers an empty list, and asks the database NOTHING (there is no table to ask)', array( array(), 0 ), array( fishotel_lostfish_cases_for_order( 12345 ), $GLOBALS['wpdb']->queries ) );
+$GLOBALS['fh_options'][ Store::DB_VERSION_OPTION ] = Store::DB_VERSION; // Switched off again later: the tables are still there.
+check_same( '… also when the tables are there but the section did not boot', array( array(), 0 ), array( fishotel_lostfish_cases_for_order( 12345 ), $GLOBALS['wpdb']->queries ) );
+
 echo "\nAn ordinary front-end request\n";
 $GLOBALS['wpdb']                                   = new Fh_Counting_Wpdb();
 $GLOBALS['fh_options'][ Store::DB_VERSION_OPTION ] = Store::DB_VERSION;
@@ -213,6 +221,13 @@ $rows = fishotel_lostfish_cases_for_order( 501 );
 check_same( 'the cases of an order: status, fish, choice, the amount owed back', array( 7, 'answered', 'Lagoon Goby', 1, 501, 51, 'refund', 2901 ), array( $rows[0]['id'], $rows[0]['status'], $rows[0]['fish'], $rows[0]['qty'], $rows[0]['order_id'], $rows[0]['order_item_id'], $rows[0]['choice'], $rows[0]['amount'] ) );
 $GLOBALS['wpdb']->rows = array();
 check_same( 'an order without one: an empty list', array(), fishotel_lostfish_cases_for_order( 502 ) );
+$version                 = $GLOBALS['fh_options'][ Store::DB_VERSION_OPTION ];
+$GLOBALS['wpdb']->rows   = array( array( 'id' => '7', 'status' => 'open', 'order_id' => '501' ) );
+$GLOBALS['wpdb']->queries = 0;
+unset( $GLOBALS['fh_options'][ Store::DB_VERSION_OPTION ] );
+check_same( 'switched on, but the tables are not installed (yet): an empty list and no query', array( array(), 0 ), array( fishotel_lostfish_cases_for_order( 501 ), $GLOBALS['wpdb']->queries ) );
+$GLOBALS['fh_options'][ Store::DB_VERSION_OPTION ] = $version;
+$GLOBALS['wpdb']->rows                             = array();
 
 echo "\nThe folder's rules\n";
 $files = array_merge( glob( $folder . '/*.php' ), glob( $folder . '/views/*.php' ) );

@@ -13,7 +13,9 @@
  *               finds them), each for its quantity MINUS what a refund
  *               already took off the line or an answered case released
  *               (whichever is larger — the owner may or may not have
- *               refunded with a quantity).
+ *               refunded with a quantity). An order whose customer chose
+ *               to cancel the whole order owes nothing from that answer
+ *               on.
  *   SHORTAGE  = COMMITTED − COVERED, never below zero.
  *
  * COVERED >= COMMITTED: the customer's fish is replaced from the extra and
@@ -231,6 +233,24 @@ class Cover {
 	}
 
 	/**
+	 * The orders whose customer chose to cancel the whole order: from that
+	 * answer on none of their lines is owed a fish, even while the owner
+	 * has not cancelled the order in WooCommerce yet.
+	 *
+	 * @param array[] $cases Cases (status, order_id, choice).
+	 * @return array<int, true> By order id.
+	 */
+	public static function cancelled_orders( array $cases ) {
+		$out = array();
+		foreach ( $cases as $case ) {
+			if ( is_array( $case ) && 'cancel' === (string) ( $case['choice'] ?? '' ) && in_array( (string) ( $case['status'] ?? '' ), self::RELEASED, true ) ) {
+				$out[ (int) ( $case['order_id'] ?? 0 ) ] = true;
+			}
+		}
+		return $out;
+	}
+
+	/**
 	 * The holders, most recently paid first (the same moment: the newer
 	 * order, then the later line), each with what it is still owed and
 	 * what is free for a new case.
@@ -240,8 +260,9 @@ class Cover {
 	 * @return array[] The holders with owed, pending and free added.
 	 */
 	public static function rank_holders( array $holders, array $cases ) {
-		$tally = self::tally( $cases );
-		$out   = array();
+		$tally     = self::tally( $cases );
+		$cancelled = self::cancelled_orders( $cases );
+		$out       = array();
 
 		foreach ( $holders as $holder ) {
 			if ( ! is_array( $holder ) ) {
@@ -249,7 +270,7 @@ class Cover {
 			}
 			$key      = self::line_key( $holder['order_id'] ?? 0, $holder['ref'] ?? '' );
 			$gone     = max( max( 0, (int) ( $holder['qty_refunded'] ?? 0 ) ), (int) ( $tally['released'][ $key ] ?? 0 ) );
-			$owed     = max( 0, (int) ( $holder['qty'] ?? 0 ) - $gone );
+			$owed     = isset( $cancelled[ (int) ( $holder['order_id'] ?? 0 ) ] ) ? 0 : max( 0, (int) ( $holder['qty'] ?? 0 ) - $gone );
 			$pending  = min( $owed, (int) ( $tally['pending'][ $key ] ?? 0 ) );
 			$out[]    = array_merge(
 				$holder,

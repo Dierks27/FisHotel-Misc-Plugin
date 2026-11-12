@@ -13,7 +13,8 @@
  *   - try again             = nothing moves, the order's shipping stays as
  *                             it is;
  *   - cancel the whole order = everything paid on the order that was not
- *                             refunded already.
+ *                             refunded already, less what earlier cases
+ *                             of the order already gave back as credit.
  *
  * A refund is never negative: when the shipping difference is more than
  * the fish, the refund is zero and the rest is reported (shortfall) so the
@@ -155,9 +156,10 @@ class Money {
 	 *
 	 * @param array $in unit_paid (cents, one fish, tax included), qty, paid_known (bool, default true),
 	 *                  ship_diff (cents, or null = not known), order_total (cents),
-	 *                  order_refunded (cents), offer_cancel (bool, default true).
+	 *                  order_refunded (cents), order_credited (cents given back as store credit by earlier
+	 *                  cases of the order), offer_cancel (bool, default true).
 	 * @return array{fish_paid: int, ship_diff: int|null, refund: int|null, credit: int|null, retry: int,
-	 *               cancel: int|null, shortfall: int, offer_cancel: bool}
+	 *               cancel: int|null, settled: int, shortfall: int, offer_cancel: bool}
 	 */
 	public static function choices( array $in ) {
 		$qty        = max( 1, (int) ( $in['qty'] ?? 1 ) );
@@ -173,9 +175,10 @@ class Money {
 			$shortfall = max( 0, $ship_diff - $fish_paid );
 		}
 
-		$cancel = null;
+		$cancel  = null;
+		$settled = max( 0, (int) ( $in['order_refunded'] ?? 0 ) ) + max( 0, (int) ( $in['order_credited'] ?? 0 ) );
 		if ( $offer && isset( $in['order_total'] ) ) {
-			$cancel = max( 0, (int) $in['order_total'] - max( 0, (int) ( $in['order_refunded'] ?? 0 ) ) );
+			$cancel = max( 0, (int) $in['order_total'] - $settled );
 		}
 
 		return array(
@@ -185,6 +188,7 @@ class Money {
 			'credit'       => $refund,
 			'retry'        => 0,
 			'cancel'       => $cancel,
+			'settled'      => null !== $cancel ? $settled : 0,
 			'shortfall'    => $shortfall,
 			'offer_cancel' => $offer && null !== $cancel,
 		);

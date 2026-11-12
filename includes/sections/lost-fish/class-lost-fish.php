@@ -101,6 +101,22 @@ namespace FisHotel\Misc\Sections\Lost_Fish {
 		const CLEANROOM_EVENT = 'fishotel_cleanroom_event_recorded';
 
 		/**
+		 * Whether boot() ran in this request — that is, whether the
+		 * section is switched on.
+		 *
+		 * @var bool
+		 */
+		private static $booted = false;
+
+		/**
+		 * A day to take for today (Y-m-d). The tests pin it; nothing else
+		 * sets it.
+		 *
+		 * @var string|null
+		 */
+		public static $today = null;
+
+		/**
 		 * Section base path.
 		 *
 		 * @return string
@@ -158,6 +174,7 @@ namespace FisHotel\Misc\Sections\Lost_Fish {
 		 */
 		public static function boot() {
 			self::load();
+			self::$booted = true;
 
 			try {
 				Store::maybe_install( is_admin() );
@@ -260,6 +277,9 @@ namespace FisHotel\Misc\Sections\Lost_Fish {
 		 * @return string Y-m-d
 		 */
 		public static function today() {
+			if ( is_string( self::$today ) && '' !== self::$today ) {
+				return self::$today;
+			}
 			try {
 				$now = new \DateTimeImmutable( 'now', self::timezone() );
 				return $now->format( 'Y-m-d' );
@@ -290,14 +310,21 @@ namespace FisHotel\Misc\Sections\Lost_Fish {
 
 		/**
 		 * The cases of an order, for other sections (see
-		 * fishotel_lostfish_cases_for_order()).
+		 * fishotel_lostfish_cases_for_order()). While the section is
+		 * switched off (boot() did not run) or its tables are not installed
+		 * this is an empty list and no query.
 		 *
 		 * @param int $order_id Order id.
 		 * @return array[]
 		 */
 		public static function cases_for_order( $order_id ) {
+			if ( ! self::$booted || (int) $order_id <= 0 ) {
+				return array();
+			}
 			try {
-				self::load();
+				if ( ! Store::installed() ) {
+					return array();
+				}
 				$store = new Store();
 				$out   = array();
 				foreach ( $store->cases( array( 'order_id' => (int) $order_id ) ) as $case ) {
@@ -319,8 +346,11 @@ namespace {
 		 * an invoice screen or the order page can read to know that a line
 		 * is short and what the customer chose.
 		 *
-		 * This function exists ONLY while the Misc plugin is active and the
-		 * Lost Fish section is enabled, so guard it with function_exists().
+		 * This function exists whenever the Misc plugin is active (the
+		 * Section Manager loads this file to list the section), so guard it
+		 * with function_exists(). While the Lost Fish section is switched
+		 * off, or before its tables exist, it returns an empty list and
+		 * runs no query.
 		 *
 		 * Each row: id, status (open | sent | answered | done | closed),
 		 * fish, qty, order_id, order_item_id, choice ('' | refund | credit |
