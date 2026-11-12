@@ -36,7 +36,7 @@ defined( 'ABSPATH' ) || exit;
 				<button type="button" class="button button-primary fh-cr-identify-save"><?php esc_html_e( 'Save', 'fishotel-misc-plugin' ); ?></button>
 				<button type="button" class="button fh-cr-identify-cancel"><?php esc_html_e( 'Cancel', 'fishotel-misc-plugin' ); ?></button>
 			</div>
-			<p class="fh-cr-sub fh-cr-identify__hint"><?php esc_html_e( 'One correction: the stay, its supplier order line (which keeps what the label said) and the remembered box share follow. While a group that was split still has another fish in a sister stay, only this stay changes and the order line gets a note.', 'fishotel-misc-plugin' ); ?></p>
+			<p class="fh-cr-sub fh-cr-identify__hint"><?php esc_html_e( 'One correction: the stay, its supplier order line (which keeps what the label said) and the remembered box share follow. While a group that was split still has another fish in a sister stay, only this stay changes and the order line gets a note; to correct a whole split group at once, correct its line on the order.', 'fishotel-misc-plugin' ); ?></p>
 		</td>
 	</tr>
 </template>

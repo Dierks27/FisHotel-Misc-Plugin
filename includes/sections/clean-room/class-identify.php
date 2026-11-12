@@ -52,8 +52,9 @@
  *             last sister is corrected to the same fish the line follows
  *             and the notes go. A correction made on the order line
  *             corrects the line and every stay that still carried the
- *             line's old name; a sister already identified as something
- *             else keeps its own.
+ *             line's old name (closed ones too) — the one step for a
+ *             split group that is all the same fish; a sister already
+ *             identified as something else keeps its own.
  *
  * Nothing here touches $wpdb: stay() and line() take the store they write
  * to (the real Store or the tests' stand-in), like Orders::check_in().
@@ -672,7 +673,7 @@ class Identify {
 		} elseif ( 'followed' === $out['line'] ) {
 			$parts[] = __( 'the order line follows', 'fishotel-misc-plugin' );
 		} elseif ( 'part' === $out['line'] ) {
-			$parts[] = __( 'its order line keeps its name — other fish of that line are something else', 'fishotel-misc-plugin' );
+			$parts[] = __( 'its order line keeps its name: the group was split and another stay of that line is a different fish — correct that one too, or the whole line on its order', 'fishotel-misc-plugin' );
 		}
 		if ( null !== $out['label'] ) {
 			/* translators: %s: what the supplier's label called the fish */

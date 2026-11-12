@@ -342,6 +342,18 @@ check( 'a checked-in line corrected on the order page: the line, and the stay th
 check( 'its reply counts the stays that followed', 'Identified: Blue Test Tang → Powder Test Tang · 2-3" · 1 stay follows · arrived labeled: Blue Test Tang.' === $r['message'], $r['message'] );
 check( 'that stay gets the event; the sister already identified as something else keeps its own and stays noted on the line', $events + 1 === $store->event_count() && 'identified: Blue Test Tang → Powder Test Tang · 2-3"' === $store->last_event()['note'] && $tang === $store->last_event()['stay_id'] && 'Green Test Blenny' === $store->stay( $part, $today, $settings )['species'] && '[part of this line is Green Test Blenny — stay #' . $part . ']' === $line['notes'] );
 
+$closed_store = fh_identify_store();
+$closed_order = fh_identify_order( $closed_store, array( array( 'species' => 'striped eel', 'needs_id' => '1', 'qty_ordered' => 3, 'qty_received' => 3, 'box_no' => 1, 'box_pct' => '30' ) ), $today );
+$out          = Orders::check_in( $closed_store, $closed_store->order( $closed_order ), $today, $settings, array( 'actor_id' => 7 ) );
+$alive        = $out['created'][0]['stay_id'];
+$split        = $closed_store->split_stay( $closed_store->stay( $alive, $today, $settings ), 1, $closed_store->tank_by_number( 522 ), array( 'actor_id' => 7, 'source' => 'manual' ), $today, $settings, '' );
+$dead         = $split['stay_id'];
+$closed_store->record_event( $dead, array( 'type' => 'loss', 'qty' => 1, 'actor_id' => 7, 'source' => 'manual', 'event_at' => gmdate( 'Y-m-d H:i:s' ) ), $today, $settings );
+$r            = Admin::identify_stay( $closed_store, $closed_store->stay( $alive, $today, $settings ), array( 'species' => 'Lined Test Wrasse', 'product_id' => 21 ), $base, $today, $settings );
+check( 'a sister stay that died unidentified still counts: the line waits (and still reads "??")', 'closed' === $closed_store->stay( $dead, $today, $settings )['status'] && 'part' === $r['result']['line'] && true === fh_line( $closed_store, $closed_order, 0 )['needs_id'] && 1 === Admin_Workbook::unknown_lines( $closed_store->order( $closed_order ) ) && false !== strpos( $r['message'], 'the whole line on its order' ) );
+$r = Admin_Workbook::identify_line( $closed_store, $closed_store->order( $closed_order ), array( 'line_id' => fh_line( $closed_store, $closed_order, 0 )['id'], 'species' => 'Lined Test Wrasse', 'product_id' => 21 ), $today, $settings, 7 );
+check( 'correcting the line on its order reaches the closed stay too: the line and every stay are the fish, nothing left to identify, the note gone, the share written', empty( $r['error'] ) && array( $dead ) === $r['stays'] && 'Lined Test Wrasse' === $closed_store->stay( $dead, $today, $settings )['species'] && false === $closed_store->stay( $dead, $today, $settings )['needs_id'] && false === fh_line( $closed_store, $closed_order, 0 )['needs_id'] && '' === fh_line( $closed_store, $closed_order, 0 )['notes'] && null === fh_line( $closed_store, $closed_order, 0 )['label_name'] && 0 === Admin_Workbook::unknown_lines( $closed_store->order( $closed_order ) ) && 1 === count( $closed_store->box_shares ) && near( array_values( $closed_store->box_shares )[0]['pct_per_fish'], 10.0 ), json_encode( $r ) );
+
 echo "10. The order editor's grid\n";
 $post = static function ( $store, $order_id, array $changes = array(), array $header = array() ) use ( $today ) {
 	$lines = array();

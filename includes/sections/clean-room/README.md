@@ -553,8 +553,10 @@ one per stay that is not what the line says — and no label and no
 remembered share: its percent is still the whole line's. Once the last
 sister is corrected to the same fish, the line follows and the notes go.
 A correction made on the order line itself corrects the line and every
-stay that still carried the line's old name; a sister already identified
-as something else keeps its own (and stays noted).
+stay that still carried the line's old name — the one step for a split
+group that is all the same fish, and the way to reach a sister stay that
+is already closed —; a sister already identified as something else keeps
+its own (and stays noted).
 
 **Where it shows.** A *N need identifying* chip on the Board (linked to
 the Stays tab filtered to them), a *Needs identifying* filter and marker
