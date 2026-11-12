@@ -13,7 +13,10 @@
  * Writes go through ONE action, fishotel_cleanroom_act:
  *   loss (the fastest path — Jeff counts bodies), sold / shipped, move
  *   (with a quantity = a split, an optional reason), arrival (always into
- *   a Spa tank, with an optional size from the standard list), clear (the cleared date by hand), checkin (the check-in
+ *   a Spa tank, with an optional size from the standard list — or as an
+ *   unknown fish, "??" and what it looks like), identify (the real fish and
+ *   its size on a group: the stay and its supplier order line together —
+ *   Identify), clear (the cleared date by hand), checkin (the check-in
  *   date by hand), ready (the stay's own sale date; empty = back to the
  *   batch's), count (a full
  *   recount), note (on a stay, or on the tank), copper (a reading on the
@@ -297,6 +300,11 @@ class Front_Desk {
 			'size'        => __( 'Size', 'fishotel-misc-plugin' ),
 			'sizeHint'    => __( 'optional', 'fishotel-misc-plugin' ),
 			'notStandard' => __( 'not a standard size', 'fishotel-misc-plugin' ),
+			'unknownFish' => __( 'Unknown fish (??)', 'fishotel-misc-plugin' ),
+			'needsId'     => __( 'needs identifying', 'fishotel-misc-plugin' ),
+			'identify'    => __( 'Identify', 'fishotel-misc-plugin' ),
+			'correctFish' => __( 'Correct the fish', 'fishotel-misc-plugin' ),
+			'identifyHint' => __( 'Pick the real fish and its size: the tank row, its supplier order line and the remembered box share follow.', 'fishotel-misc-plugin' ),
 		);
 	}
 
@@ -472,6 +480,7 @@ class Front_Desk {
 			'saleSuggested'   => (string) ( $stay['sale_ready_suggested'] ?? '' ),
 			'saleReady'       => ! empty( $stay['sale_ready'] ),
 			'readyInSpa'      => ! empty( $stay['ready_in_spa'] ),
+			'needsId'         => ! empty( $stay['needs_id'] ),
 		);
 	}
 
@@ -713,6 +722,9 @@ class Front_Desk {
 				case 'arrival':
 					$result = self::act_arrival( $ctx, $raw );
 					break;
+				case 'identify':
+					$result = self::act_identify( $ctx, $raw );
+					break;
 				case 'loss':
 				case 'sold':
 					$result = self::act_loss_or_sold( $ctx, $raw, (string) $act );
@@ -792,8 +804,11 @@ class Front_Desk {
 
 	/**
 	 * Arrival — always into a Spa tank. The payload may name a Spa tank
-	 * (`to_tank`) when the page's tank is not one, and a `size` (the slug
-	 * of a standard size; one that is not in the list is refused).
+	 * (`to_tank`) when the page's tank is not one, a `size` (the slug of a
+	 * standard size; one that is not in the list is refused), and
+	 * `unknown` — the "Unknown fish (??)" choice: the group is checked in
+	 * as "??" + what was typed, flagged "needs identifying" and linked to
+	 * no product (a name typed with a leading "??" is one too).
 	 */
 	private static function act_arrival( array $ctx, array $raw ) {
 		$store      = $ctx['store'];
@@ -810,6 +825,11 @@ class Front_Desk {
 		$product_id = max( 0, self::int( $raw, 'product_id' ) );
 		$qty        = self::int( $raw, 'qty', 1 );
 		$date       = self::text( $raw, 'date', 10 );
+		$unknown    = ( ! empty( $raw['unknown'] ) && '0' !== (string) $raw['unknown'] ) || Identify::is_unknown_name( $species );
+		if ( $unknown ) {
+			$species    = Identify::unknown_name( $species );
+			$product_id = 0; // Nobody knows what it is: it is no product yet.
+		}
 
 		if ( $product_id > 0 ) {
 			$title = $store->product_title( $product_id );
@@ -842,6 +862,7 @@ class Front_Desk {
 				'species'      => $species,
 				'size_slug'    => $size['slug'],
 				'size_label'   => $size['label'],
+				'needs_id'     => $unknown,
 				'checkin_date' => $date,
 				'tank_id'      => (int) $tank['id'],
 				'source'       => $ctx['base']['source'],
@@ -872,6 +893,56 @@ class Front_Desk {
 			'message'   => sprintf( __( '%1$d × %2$s in Tank %3$d', 'fishotel-misc-plugin' ), $qty, $species . ( null !== $size['label'] ? ' · ' . $size['label'] : '' ), (int) $tank['number'] ),
 			'event_ids' => array( $written['event_id'] ),
 			'tank'      => (int) $tank['number'],
+		);
+	}
+
+	/**
+	 * Identify / Correct the fish: one group of this tank gets its real
+	 * fish (a product, a species-list fish, a typed name — or "Unknown
+	 * fish (??)" with what it looks like) and its size. The stay and its
+	 * supplier order line are corrected together and the remembered box
+	 * share follows (Identify::stay()). No undo: who a fish is is not an
+	 * event to reverse — correct it again.
+	 */
+	private static function act_identify( array $ctx, array $raw ) {
+		$stays = self::targets( $ctx, $raw, false );
+		if ( ! is_array( $stays ) ) {
+			return array( 'error' => $stays );
+		}
+		$stay = $stays[0];
+		$fish = Identify::fish_from( $ctx['store'], $raw, (array) $ctx['settings'], $stay );
+		if ( ! empty( $fish['error'] ) ) {
+			return array( 'error' => (string) $fish['error'] );
+		}
+
+		$done = Identify::stay(
+			$ctx['store'],
+			$stay,
+			$fish,
+			array(
+				'today'    => $ctx['today'],
+				'settings' => (array) $ctx['settings'],
+				'actor_id' => (int) $ctx['base']['actor_id'],
+				'source'   => (string) $ctx['base']['source'],
+			)
+		);
+		if ( ! $done['ok'] ) {
+			return array( 'error' => (string) $done['error'] );
+		}
+
+		if ( '' !== $done['message'] ) {
+			$message = $done['message'];
+		} elseif ( $done['changed'] ) {
+			/* translators: %s: species */
+			$message = sprintf( __( '%s saved', 'fishotel-misc-plugin' ), (string) $fish['name'] );
+		} else {
+			/* translators: %s: species */
+			$message = sprintf( __( '%s: nothing changed', 'fishotel-misc-plugin' ), (string) $stay['species'] );
+		}
+
+		return array(
+			'message'   => $message,
+			'event_ids' => array(),
 		);
 	}
 

@@ -11,7 +11,8 @@
  *   {prefix}fh_stays        the cached state of one group of one species
  *                           (+ supplier, order_ref, landed_cost, order_line_id —
  *                           the seam a supplier order's check-in fills; its size
- *                           as a slug + a label snapshot)
+ *                           as a slug + a label snapshot; needs_id, set while
+ *                           nobody knows what the fish is)
  *   {prefix}fh_stay_events  the history: every change to a stay is an event
  *   {prefix}fh_tank_logs    per-tank entries: copper readings, dose / test
  *                           tick-offs, water changes, feeding, tank notes
@@ -25,7 +26,9 @@
  *   {prefix}fh_order_lines  its lines: species, size, ordered / received / DOA /
  *                           survived, per box or bags, the box it came out of and
  *                           the percent of a box it took, price, worth, tank, the
- *                           stay it became, the remembered share it counts in
+ *                           stay it became, the remembered share it counts in,
+ *                           needs_id (an unknown fish) and label_name (what the
+ *                           supplier's label called a fish that was corrected)
  *   {prefix}fh_box_shares   the remembered shares: per supplier + origin + fish +
  *                           size, the percent of a box ONE fish takes, how many
  *                           order lines it came from, the line and date of the
@@ -76,11 +79,13 @@ class Store {
 	 * the orders' sale_date (the batch's chosen sale date). 1.4 adds the
 	 * size of a line and of a stay (slug + label snapshot), a line's box
 	 * number, percent of a box and remembered-share key, and the box_shares
-	 * table.
+	 * table. 1.5 adds needs_id on a line and on a stay (a fish that still
+	 * has to be identified), a line's label_name (what the supplier's label
+	 * called a fish that was corrected) and the stays' order_line_id key.
 	 *
 	 * @var string
 	 */
-	const DB_VERSION = '1.4';
+	const DB_VERSION = '1.5';
 
 	/**
 	 * The columns added after a table's first version. The version option
@@ -92,8 +97,8 @@ class Store {
 	 */
 	const REQUIRED_COLUMNS = array(
 		'orders'      => array( 'sale_date' ),
-		'order_lines' => array( 'size_slug', 'size_label', 'box_no', 'box_pct', 'share_key' ),
-		'stays'       => array( 'size_slug', 'size_label' ),
+		'order_lines' => array( 'size_slug', 'size_label', 'box_no', 'box_pct', 'share_key', 'needs_id', 'label_name' ),
+		'stays'       => array( 'size_slug', 'size_label', 'needs_id' ),
 	);
 
 	/**
@@ -316,6 +321,7 @@ class Store {
 				species VARCHAR(120) NOT NULL DEFAULT '',
 				size_slug VARCHAR(100) NULL,
 				size_label VARCHAR(100) NULL,
+				needs_id TINYINT(1) NOT NULL DEFAULT 0,
 				qty_arrived INT NOT NULL DEFAULT 0,
 				qty_live INT NOT NULL DEFAULT 0,
 				checkin_date DATE NOT NULL,
@@ -336,7 +342,8 @@ class Store {
 				KEY product_id (product_id),
 				KEY tank_id (tank_id),
 				KEY status (status),
-				KEY checkin_date (checkin_date)
+				KEY checkin_date (checkin_date),
+				KEY order_line_id (order_line_id)
 			) {$charset_collate};",
 			"CREATE TABLE {$events} (
 				id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -431,6 +438,8 @@ class Store {
 				species_id BIGINT(20) UNSIGNED NULL,
 				species VARCHAR(120) NOT NULL DEFAULT '',
 				sci_name VARCHAR(120) NOT NULL DEFAULT '',
+				needs_id TINYINT(1) NOT NULL DEFAULT 0,
+				label_name VARCHAR(120) NULL,
 				size_slug VARCHAR(100) NULL,
 				size_label VARCHAR(100) NULL,
 				qty_ordered INT NOT NULL DEFAULT 0,
@@ -920,6 +929,7 @@ class Store {
 	 *
 	 * @param array  $filters  area (clean|spa), species (search), product_id, tank_id, building_id,
 	 *                         order_id (the batch: the supplier order the stays were checked in from),
+	 *                         needs_id (bool: only the fish that still have to be identified),
 	 *                         status (in_qt|cleared — effective), ready (bool: for sale today — the
 	 *                         effective sale date has come), include_closed (bool), limit (int).
 	 * @param string $today    Site date.
@@ -962,6 +972,9 @@ class Store {
 		if ( ! empty( $filters['order_id'] ) ) {
 			$where[]  = 'ol.order_id = %d';
 			$params[] = (int) $filters['order_id'];
+		}
+		if ( ! empty( $filters['needs_id'] ) ) {
+			$where[] = 's.needs_id = 1';
 		}
 
 		$limit = isset( $filters['limit'] ) ? max( 1, min( 2000, (int) $filters['limit'] ) ) : 1000;
@@ -1055,6 +1068,41 @@ class Store {
 	}
 
 	/**
+	 * Every stay of a supplier order line — the stay its check-in made and
+	 * the sister stays split off it —, open and closed, oldest first: what
+	 * a correction of the fish looks at to decide whether the line follows
+	 * (Identify).
+	 *
+	 * @param int    $line_id  Order line id.
+	 * @param string $today    Site date.
+	 * @param array  $settings Settings.
+	 * @return array[]
+	 */
+	public function stays_for_line( $line_id, $today, array $settings ) {
+		if ( ! self::tables_exist() || (int) $line_id <= 0 ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		try {
+			$rows = $wpdb->get_results(
+				$wpdb->prepare( self::stay_select() . ' WHERE s.order_line_id = %d ORDER BY s.id ASC LIMIT 200', (int) $line_id ), // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				ARRAY_A
+			);
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+
+		$out = array();
+		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
+			$out[] = self::hydrate_stay( $row, $today, $settings );
+		}
+
+		return $out;
+	}
+
+	/**
 	 * One stay with its events.
 	 *
 	 * @param int    $id       Stay id.
@@ -1090,8 +1138,9 @@ class Store {
 	 * supplier / order_ref / landed_cost / order_line_id are the seam the
 	 * supplier-order import will fill; all may be null.
 	 *
-	 * @param array $fields product_id, species, size_slug, size_label, checkin_date, tank_id, source,
-	 *                      order_line_id, supplier, order_ref, landed_cost, notes.
+	 * @param array $fields product_id, species, size_slug, size_label, needs_id (the fish still has to
+	 *                      be identified), checkin_date, tank_id, source, order_line_id, supplier,
+	 *                      order_ref, landed_cost, notes.
 	 * @return int|false Stay id.
 	 */
 	public function create_stay( array $fields ) {
@@ -1107,6 +1156,7 @@ class Store {
 			'species'       => substr( (string) ( $fields['species'] ?? '' ), 0, 120 ),
 			'size_slug'     => self::size_or_null( $fields['size_slug'] ?? null ),
 			'size_label'    => null !== self::size_or_null( $fields['size_slug'] ?? null ) ? self::size_or_null( $fields['size_label'] ?? null ) : null,
+			'needs_id'      => ! empty( $fields['needs_id'] ) ? 1 : 0,
 			'qty_arrived'   => 0,
 			'qty_live'      => 0,
 			'checkin_date'  => Replay::is_date( $fields['checkin_date'] ?? null ) ? (string) $fields['checkin_date'] : gmdate( 'Y-m-d' ),
@@ -1134,8 +1184,8 @@ class Store {
 	/**
 	 * Update the seam fields of a stay (supplier, order_ref, landed_cost,
 	 * order_line_id, product_id, species, the size — size_slug with its
-	 * size_label, an empty slug clears both —, notes) — identity, not
-	 * history.
+	 * size_label, an empty slug clears both —, needs_id, notes) — identity,
+	 * not history.
 	 *
 	 * @param int   $stay_id Stay id.
 	 * @param array $fields  Any of the keys above.
@@ -1156,6 +1206,9 @@ class Store {
 		if ( array_key_exists( 'size_slug', $fields ) ) {
 			$data['size_slug']  = self::size_or_null( $fields['size_slug'] );
 			$data['size_label'] = null !== $data['size_slug'] ? self::size_or_null( $fields['size_label'] ?? null ) : null;
+		}
+		if ( array_key_exists( 'needs_id', $fields ) ) {
+			$data['needs_id'] = ! empty( $fields['needs_id'] ) ? 1 : 0;
 		}
 		foreach ( array( 'supplier', 'order_ref' ) as $key ) {
 			if ( array_key_exists( $key, $fields ) ) {
@@ -1431,7 +1484,8 @@ class Store {
 	 * Split a group: $qty fish of $stay continue in a sister stay in the
 	 * destination tank. The original gets a move event with the quantity
 	 * (Replay subtracts them); the sister is the same fish of the same
-	 * size and gets a backdated arrival (same
+	 * size — as unknown as the original, when that one still has to be
+	 * identified — and gets a backdated arrival (same
 	 * check-in), a clear carrying the original's cleared date when it had
 	 * one, the same own sale date (the batch's comes with the order line),
 	 * and the move itself — so its
@@ -1460,6 +1514,7 @@ class Store {
 				'species'       => $stay['species'],
 				'size_slug'     => $stay['size_slug'] ?? null,
 				'size_label'    => $stay['size_label'] ?? null,
+				'needs_id'      => ! empty( $stay['needs_id'] ),
 				'checkin_date'  => $stay['checkin_date'],
 				'tank_id'       => $stay['tank_id'],
 				'source'        => (string) ( $base['source'] ?? 'manual' ),
@@ -2327,7 +2382,8 @@ class Store {
 
 	/**
 	 * The species of the last N arrivals (distinct, newest first) — the
-	 * "recent species" chips.
+	 * "recent species" chips. A fish that still has to be identified is
+	 * left out: "?? small wrasse" is not a species to check in again.
 	 *
 	 * @param int $limit Count.
 	 * @return array[] species, product_id.
@@ -2341,7 +2397,7 @@ class Store {
 
 		try {
 			$rows = $wpdb->get_results(
-				$wpdb->prepare( 'SELECT s.species, s.product_id, MAX(e.id) AS last_id FROM ' . self::table( 'stay_events' ) . ' e INNER JOIN ' . self::table( 'stays' ) . " s ON s.id = e.stay_id WHERE e.type = 'arrival' AND e.qty > 0 GROUP BY s.species, s.product_id ORDER BY last_id DESC LIMIT %d", max( 1, (int) $limit ) ), // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				$wpdb->prepare( 'SELECT s.species, s.product_id, MAX(e.id) AS last_id FROM ' . self::table( 'stay_events' ) . ' e INNER JOIN ' . self::table( 'stays' ) . " s ON s.id = e.stay_id WHERE e.type = 'arrival' AND e.qty > 0 AND s.needs_id = 0 GROUP BY s.species, s.product_id ORDER BY last_id DESC LIMIT %d", max( 1, (int) $limit ) ), // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 				ARRAY_A
 			);
 		} catch ( \Throwable $e ) {
@@ -3146,10 +3202,12 @@ class Store {
 	 * are updated, rows without one inserted, the order's other lines
 	 * deleted — except lines that already became a stay, which are kept
 	 * and keep their received / DOA / survived figures (those live on the
-	 * stay now). The size, the box number and the percent of a box are
-	 * saved as given on every line; share_key (the remembered share a line
-	 * counts in) is never touched here — Box_Shares owns it through
-	 * set_line_share_key(). Orders::normalize_lines() first.
+	 * stay now). The size, the "needs identifying" flag, the box number and
+	 * the percent of a box are saved as given on every line; share_key (the
+	 * remembered share a line counts in) and label_name (what the label
+	 * called a corrected fish) are never touched here — Box_Shares owns the
+	 * first through set_line_share_key(), Identify the second through
+	 * update_line_fields(). Orders::normalize_lines() first.
 	 *
 	 * @param int     $order_id Order id.
 	 * @param array[] $lines    Clean lines (id 0 = new), each may carry landed_total.
@@ -3178,6 +3236,7 @@ class Store {
 					'species_id'   => ! empty( $line['species_id'] ) ? (int) $line['species_id'] : null,
 					'species'      => (string) ( $line['species'] ?? '' ),
 					'sci_name'     => (string) ( $line['sci_name'] ?? '' ),
+					'needs_id'     => ! empty( $line['needs_id'] ) ? 1 : 0,
 					'size_slug'    => self::size_or_null( $line['size_slug'] ?? null ),
 					'size_label'   => null !== self::size_or_null( $line['size_slug'] ?? null ) ? self::size_or_null( $line['size_label'] ?? null ) : null,
 					'qty_ordered'  => max( 0, (int) ( $line['qty_ordered'] ?? 0 ) ),
@@ -3272,6 +3331,61 @@ class Store {
 		if ( null !== $tank_id ) {
 			$data['tank_id'] = (int) $tank_id > 0 ? (int) $tank_id : null;
 		}
+
+		try {
+			return false !== $wpdb->update( self::table( 'order_lines' ), $data, array( 'id' => (int) $line_id ), null, array( '%d' ) );
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+	}
+
+	/**
+	 * Change who a line's fish is — what a correction writes (Identify):
+	 * the species list id, the name, the scientific name, the size
+	 * (size_slug with its size_label; an empty slug clears both), the
+	 * "needs identifying" flag, label_name (what the supplier's label
+	 * called the fish) and the notes. Counts, prices and the stay link are
+	 * not touched.
+	 *
+	 * @param int   $line_id Line id.
+	 * @param array $fields  Any of species_id, species, sci_name, size_slug, size_label, needs_id,
+	 *                       label_name, notes.
+	 * @return bool
+	 */
+	public function update_line_fields( $line_id, array $fields ) {
+		if ( ! self::tables_exist() || (int) $line_id <= 0 ) {
+			return false;
+		}
+
+		$data = array();
+		if ( array_key_exists( 'species_id', $fields ) ) {
+			$data['species_id'] = (int) $fields['species_id'] > 0 ? (int) $fields['species_id'] : null;
+		}
+		if ( array_key_exists( 'species', $fields ) && '' !== trim( (string) $fields['species'] ) ) {
+			$data['species'] = substr( trim( (string) $fields['species'] ), 0, 120 );
+		}
+		if ( array_key_exists( 'sci_name', $fields ) ) {
+			$data['sci_name'] = substr( trim( (string) $fields['sci_name'] ), 0, 120 );
+		}
+		if ( array_key_exists( 'size_slug', $fields ) ) {
+			$data['size_slug']  = self::size_or_null( $fields['size_slug'] );
+			$data['size_label'] = null !== $data['size_slug'] ? self::size_or_null( $fields['size_label'] ?? null ) : null;
+		}
+		if ( array_key_exists( 'needs_id', $fields ) ) {
+			$data['needs_id'] = ! empty( $fields['needs_id'] ) ? 1 : 0;
+		}
+		if ( array_key_exists( 'label_name', $fields ) ) {
+			$label              = substr( trim( (string) $fields['label_name'] ), 0, 120 );
+			$data['label_name'] = '' !== $label ? $label : null;
+		}
+		if ( array_key_exists( 'notes', $fields ) ) {
+			$data['notes'] = (string) $fields['notes'];
+		}
+		if ( ! $data ) {
+			return false;
+		}
+
+		global $wpdb;
 
 		try {
 			return false !== $wpdb->update( self::table( 'order_lines' ), $data, array( 'id' => (int) $line_id ), null, array( '%d' ) );
@@ -3897,7 +4011,8 @@ class Store {
 
 	/**
 	 * A stay row with ints, its size (slug + label snapshot, null without
-	 * one), its tank path, its batch (order id, ref and
+	 * one), whether the fish still has to be identified (needs_id), its
+	 * tank path, its batch (order id, ref and
 	 * sale date) and the effective state today — the effective sale date
 	 * (sale_ready_date: own, else the batch's, else null), where it comes
 	 * from, the suggestion, whether it is for sale and the "still in the
@@ -3930,6 +4045,7 @@ class Store {
 			'species'             => (string) ( $row['species'] ?? '' ),
 			'size_slug'           => self::size_or_null( $row['size_slug'] ?? null ),
 			'size_label'          => null !== self::size_or_null( $row['size_slug'] ?? null ) ? self::size_or_null( $row['size_label'] ?? null ) : null,
+			'needs_id'            => ! empty( $row['needs_id'] ),
 			'qty_arrived'         => (int) ( $row['qty_arrived'] ?? 0 ),
 			'qty_live'            => (int) ( $row['qty_live'] ?? 0 ),
 			'checkin_date'        => (string) ( $row['checkin_date'] ?? '' ),
@@ -4136,6 +4252,8 @@ class Store {
 			'species_id'         => ! empty( $row['species_id'] ) ? (int) $row['species_id'] : null,
 			'species'            => (string) ( $row['species'] ?? '' ),
 			'sci_name'           => (string) ( $row['sci_name'] ?? '' ),
+			'needs_id'           => ! empty( $row['needs_id'] ),
+			'label_name'         => isset( $row['label_name'] ) && null !== $row['label_name'] && '' !== trim( (string) $row['label_name'] ) ? (string) $row['label_name'] : null,
 			'size_slug'          => self::size_or_null( $row['size_slug'] ?? null ),
 			'size_label'         => null !== self::size_or_null( $row['size_slug'] ?? null ) ? self::size_or_null( $row['size_label'] ?? null ) : null,
 			'qty_ordered'        => (int) ( $row['qty_ordered'] ?? 0 ),

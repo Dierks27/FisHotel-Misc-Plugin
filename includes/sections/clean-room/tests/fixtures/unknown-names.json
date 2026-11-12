@@ -1,0 +1,26 @@
+{
+	"_about": "Invented descriptions. Identify::unknown_name() in PHP and unknownName() in both JS files (clean-room-admin.js, front-desk.js) are run against this file, so the name of an unknown fish reads the same wherever it is made. 'known' is what the order page's ?? box leaves when it is unticked (knownName()).",
+	"unknown": [
+		["", "??"],
+		["   ", "??"],
+		[null, "??"],
+		["small wrasse", "?? small wrasse"],
+		[" small   wrasse ", "?? small wrasse"],
+		["?? small wrasse", "?? small wrasse"],
+		["???small wrasse", "?? small wrasse"],
+		[" ?? ", "??"],
+		["? ? striped eel", "?? striped eel"],
+		["? a?b", "?? a?b"],
+		["Blue Test Tang", "?? Blue Test Tang"],
+		["tab\tand\nnewline", "?? tab and newline"],
+		["what is it??", "?? what is it??"]
+	],
+	"known": [
+		["?? small wrasse", "small wrasse"],
+		["??", ""],
+		[" ? odd eel ", "odd eel"],
+		["Blue Test Tang", "Blue Test Tang"],
+		["what is it??", "what is it??"],
+		[null, ""]
+	]
+}

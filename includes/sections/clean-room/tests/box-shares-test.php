@@ -104,7 +104,7 @@ foreach ( Store::schema( 'DEFAULT CHARSET=utf8mb4' ) as $statement ) {
 		$tables[ $m[1] ] = $statement;
 	}
 }
-check( 'schema version 1.4; ten tables, box_shares among them, one CREATE per table', '1.4' === Store::DB_VERSION && 10 === count( Store::TABLES ) && in_array( 'box_shares', Store::TABLES, true ) && array_keys( $tables ) === Store::TABLES );
+check( 'schema version 1.4 or later; ten tables, box_shares among them, one CREATE per table', version_compare( Store::DB_VERSION, '1.4', '>=' ) && 10 === count( Store::TABLES ) && in_array( 'box_shares', Store::TABLES, true ) && array_keys( $tables ) === Store::TABLES );
 check( 'fh_order_lines: box_no and box_pct beside per_box, the size, the share key — each nullable, on its own line', 1 === preg_match( "/\n\t+per_box SMALLINT NULL,\n\t+box_no SMALLINT NULL,\n\t+box_pct DECIMAL\(6,2\) NULL,\n/", $tables['order_lines'] ) && 1 === preg_match( "/\n\t+size_slug VARCHAR\(100\) NULL,\n\t+size_label VARCHAR\(100\) NULL,\n/", $tables['order_lines'] ) && 1 === preg_match( "/\n\t+share_key CHAR\(32\) NULL,\n/", $tables['order_lines'] ) );
 check( 'fh_stays: the size', 1 === preg_match( "/\n\t+size_slug VARCHAR\(100\) NULL,\n\t+size_label VARCHAR\(100\) NULL,\n/", $tables['stays'] ) );
 check( 'fh_box_shares: the key, the location, the fish, the size, the percent per fish, the count, the line and date of the value', 1 === preg_match( "/\n\t+share_key CHAR\(32\) NOT NULL,\n\t+location_key CHAR\(32\) NOT NULL,\n/", $tables['box_shares'] ) && 1 === preg_match( "/\n\t+pct_per_fish DECIMAL\(9,4\) NOT NULL DEFAULT 0,\n\t+order_count INT NOT NULL DEFAULT 0,\n\t+last_line_id BIGINT\(20\) UNSIGNED NULL,\n\t+last_date DATE NULL,\n/", $tables['box_shares'] ) && false !== strpos( $tables['box_shares'], "PRIMARY KEY  (id),\n" ) && false !== strpos( $tables['box_shares'], 'UNIQUE KEY share_key (share_key)' ) && false !== strpos( $tables['box_shares'], 'KEY location_key (location_key)' ) );
@@ -378,7 +378,7 @@ $sheets = Admin_Workbook::orders_sheets( array( Admin_Workbook::resolve_order( $
 $head   = $sheets['Lines'][0];
 $first  = array_combine( $head, $sheets['Lines'][1] );
 $last   = array_combine( $head, $sheets['Lines'][4] );
-check( 'the Lines sheet ends with size, box_no, box_pct — after the columns it always had', array( 'size', 'box_no', 'box_pct' ) === array_slice( $head, -3 ) && 'notes' === $head[ count( $head ) - 4 ] && 'order_ref' === $head[0] );
+check( 'the Lines sheet has size, box_no, box_pct right after the columns it always had', array( 'size', 'box_no', 'box_pct' ) === array_slice( $head, (int) array_search( 'notes', $head, true ) + 1, 3 ) && 28 === array_search( 'size', $head, true ) && 'order_ref' === $head[0] );
 check( 'a line\'s size label, box number and percent are exported typed; empty cells without them', '2-3"' === $first['size'] && 1 === $first['box_no'] && 60.0 === $first['box_pct'] && null === $last['size'] && null === $last['box_no'] && null === $last['box_pct'] );
 $plain    = new Fake_Store();
 $order_id = $plain->save_order( Orders::normalize_order( array( 'ref' => '2025-1', 'supplier' => 'Test Supplier One', 'origin' => 'Testland', 'received_date' => '2025-06-01', 'status' => 'closed' ) ) );

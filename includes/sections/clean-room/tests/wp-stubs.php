@@ -2,7 +2,9 @@
 /**
  * Just enough WordPress to load the Clean Room section's classes headless
  * (and to drive the admin-post / save_post handlers: capabilities per
- * user, nonces that match wp_create_nonce(), the current user).
+ * user, nonces that match wp_create_nonce(), the current user; and the
+ * wp_ajax handlers up to their reply: wp_send_json_*() and a failed
+ * check_ajax_referer() throw Fh_Test_Json).
  *
  * Layout, Replay, Parser, Qr, Costing, Stats, Species, Xlsx, Workbook and
  * Import_Map touch no WordPress function at all; Settings needs the
@@ -201,6 +203,46 @@ function wp_verify_nonce( $nonce, $action = -1 ) {
 	return is_string( $nonce ) && '' !== $nonce && hash_equals( wp_create_nonce( $action ), $nonce ) ? 1 : false;
 }
 
+/**
+ * The AJAX replies and the AJAX nonce check: wp_send_json_*() ends the
+ * request in WordPress; here it throws, so a test can call a real
+ * wp_ajax handler and read what it would have answered —
+ * catch ( Fh_Test_Json $reply ): ->success, ->status, ->data.
+ */
+class Fh_Test_Json extends \RuntimeException {
+
+	public $success = false;
+	public $status  = 200;
+	public $data    = null;
+
+	public function __construct( $success, $data, $status ) {
+		parent::__construct( is_array( $data ) && isset( $data['message'] ) ? (string) $data['message'] : '' );
+		$this->success = (bool) $success;
+		$this->data    = $data;
+		$this->status  = (int) $status;
+	}
+}
+
+function wp_send_json_error( $data = null, $status_code = null ) {
+	throw new Fh_Test_Json( false, $data, null === $status_code ? 200 : (int) $status_code );
+}
+
+function wp_send_json_success( $data = null, $status_code = null ) {
+	throw new Fh_Test_Json( true, $data, null === $status_code ? 200 : (int) $status_code );
+}
+
+/**
+ * As WordPress: the nonce is read from $_REQUEST[ $query_arg ], and a wrong one ends the request with 403.
+ */
+function check_ajax_referer( $action = -1, $query_arg = false, $stop = true ) {
+	$nonce = $query_arg && isset( $_REQUEST[ $query_arg ] ) && is_scalar( $_REQUEST[ $query_arg ] ) ? (string) $_REQUEST[ $query_arg ] : '';
+	$valid = wp_verify_nonce( $nonce, $action );
+	if ( ! $valid && $stop ) {
+		throw new Fh_Test_Json( false, array( 'message' => 'bad nonce' ), 403 );
+	}
+	return $valid;
+}
+
 function get_edit_post_link( $id = 0, $context = 'display' ) {
 	return admin_url( 'post.php?post=' . (int) $id . '&action=edit' );
 }
@@ -249,6 +291,7 @@ require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-sizes.php'
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-box-shares.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-stats.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-species.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-identify.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-orders.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-xlsx.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-workbook.php';

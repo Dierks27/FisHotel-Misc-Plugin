@@ -208,6 +208,7 @@ class Fake_Store {
 			'species'         => substr( (string) ( $fields['species'] ?? '' ), 0, 120 ),
 			'size_slug'       => Store::size_or_null( $fields['size_slug'] ?? null ),
 			'size_label'      => null !== Store::size_or_null( $fields['size_slug'] ?? null ) ? Store::size_or_null( $fields['size_label'] ?? null ) : null,
+			'needs_id'        => ! empty( $fields['needs_id'] ) ? 1 : 0,
 			'qty_arrived'     => 0,
 			'qty_live'        => 0,
 			'checkin_date'    => Replay::is_date( $fields['checkin_date'] ?? null ) ? (string) $fields['checkin_date'] : gmdate( 'Y-m-d' ),
@@ -286,6 +287,12 @@ class Fake_Store {
 			if ( ! empty( $filters['order_id'] ) && $this->batch_of( $row ) !== (int) $filters['order_id'] ) {
 				continue;
 			}
+			if ( ! empty( $filters['needs_id'] ) && empty( $row['needs_id'] ) ) {
+				continue;
+			}
+			if ( ! empty( $filters['species'] ) && false === stripos( (string) $row['species'], (string) $filters['species'] ) ) {
+				continue;
+			}
 			$stay = Store::hydrate_stay( $this->joined_row( $row ), $today, $settings );
 			if ( ! empty( $filters['ready'] ) && empty( $stay['sale_ready'] ) ) {
 				continue;
@@ -316,6 +323,25 @@ class Fake_Store {
 			static function ( $a, $b ) {
 				$closed = (int) ( 'closed' === $a['status'] ) <=> (int) ( 'closed' === $b['status'] );
 				return $closed ?: ( strcmp( $a['checkin_date'], $b['checkin_date'] ) ?: ( $a['id'] <=> $b['id'] ) );
+			}
+		);
+		return $out;
+	}
+
+	/**
+	 * Every stay of an order line, open and closed, oldest first (Store::stays_for_line()).
+	 */
+	public function stays_for_line( $line_id, $today, array $settings ) {
+		$out = array();
+		foreach ( $this->stays as $row ) {
+			if ( (int) $line_id > 0 && (int) $row['order_line_id'] === (int) $line_id ) {
+				$out[] = Store::hydrate_stay( $this->joined_row( $row ), $today, $settings );
+			}
+		}
+		usort(
+			$out,
+			static function ( $a, $b ) {
+				return $a['id'] <=> $b['id'];
 			}
 		);
 		return $out;
@@ -354,9 +380,19 @@ class Fake_Store {
 			return false;
 		}
 		foreach ( array( 'product_id', 'species', 'supplier', 'order_ref', 'landed_cost', 'order_line_id', 'notes' ) as $key ) {
-			if ( array_key_exists( $key, $fields ) ) {
-				$this->stays[ (int) $stay_id ][ $key ] = $fields[ $key ];
+			if ( ! array_key_exists( $key, $fields ) ) {
+				continue;
 			}
+			if ( 'species' === $key && '' === trim( (string) $fields[ $key ] ) ) {
+				continue; // As the real Store: an empty name never replaces one.
+			}
+			if ( 'product_id' === $key ) {
+				$fields[ $key ] = (int) $fields[ $key ] > 0 ? (int) $fields[ $key ] : null;
+			}
+			$this->stays[ (int) $stay_id ][ $key ] = $fields[ $key ];
+		}
+		if ( array_key_exists( 'needs_id', $fields ) ) {
+			$this->stays[ (int) $stay_id ]['needs_id'] = ! empty( $fields['needs_id'] ) ? 1 : 0;
 		}
 		if ( array_key_exists( 'size_slug', $fields ) ) {
 			$slug                                       = Store::size_or_null( $fields['size_slug'] );
@@ -504,6 +540,7 @@ class Fake_Store {
 				'species'       => $stay['species'],
 				'size_slug'     => $stay['size_slug'] ?? null,
 				'size_label'    => $stay['size_label'] ?? null,
+				'needs_id'      => ! empty( $stay['needs_id'] ),
 				'checkin_date'  => $stay['checkin_date'],
 				'tank_id'       => $stay['tank_id'],
 				'source'        => (string) ( $base['source'] ?? 'manual' ),
@@ -1139,6 +1176,8 @@ class Fake_Store {
 				'species_id'   => ! empty( $line['species_id'] ) ? (int) $line['species_id'] : null,
 				'species'      => (string) ( $line['species'] ?? '' ),
 				'sci_name'     => (string) ( $line['sci_name'] ?? '' ),
+				'needs_id'     => ! empty( $line['needs_id'] ) ? 1 : 0,
+				'label_name'   => $current ? ( $current['label_name'] ?? null ) : null, // Identify owns it (update_line_fields()).
 				'size_slug'    => Store::size_or_null( $line['size_slug'] ?? null ),
 				'size_label'   => null !== Store::size_or_null( $line['size_slug'] ?? null ) ? Store::size_or_null( $line['size_label'] ?? null ) : null,
 				'qty_ordered'  => max( 0, (int) ( $line['qty_ordered'] ?? 0 ) ),
@@ -1199,6 +1238,49 @@ class Fake_Store {
 			$this->lines[ (int) $line_id ]['tank_id'] = (int) $tank_id > 0 ? (int) $tank_id : null;
 		}
 		return true;
+	}
+
+	/**
+	 * Who a line's fish is, as a correction writes it (Store::update_line_fields()).
+	 */
+	public function update_line_fields( $line_id, array $fields ) {
+		if ( ! isset( $this->lines[ (int) $line_id ] ) ) {
+			return false;
+		}
+		$row     = &$this->lines[ (int) $line_id ];
+		$changed = false;
+		if ( array_key_exists( 'species_id', $fields ) ) {
+			$row['species_id'] = (int) $fields['species_id'] > 0 ? (int) $fields['species_id'] : null;
+			$changed           = true;
+		}
+		if ( array_key_exists( 'species', $fields ) && '' !== trim( (string) $fields['species'] ) ) {
+			$row['species'] = substr( trim( (string) $fields['species'] ), 0, 120 );
+			$changed        = true;
+		}
+		if ( array_key_exists( 'sci_name', $fields ) ) {
+			$row['sci_name'] = substr( trim( (string) $fields['sci_name'] ), 0, 120 );
+			$changed         = true;
+		}
+		if ( array_key_exists( 'size_slug', $fields ) ) {
+			$row['size_slug']  = Store::size_or_null( $fields['size_slug'] );
+			$row['size_label'] = null !== $row['size_slug'] ? Store::size_or_null( $fields['size_label'] ?? null ) : null;
+			$changed           = true;
+		}
+		if ( array_key_exists( 'needs_id', $fields ) ) {
+			$row['needs_id'] = ! empty( $fields['needs_id'] ) ? 1 : 0;
+			$changed         = true;
+		}
+		if ( array_key_exists( 'label_name', $fields ) ) {
+			$label             = substr( trim( (string) $fields['label_name'] ), 0, 120 );
+			$row['label_name'] = '' !== $label ? $label : null;
+			$changed           = true;
+		}
+		if ( array_key_exists( 'notes', $fields ) ) {
+			$row['notes'] = (string) $fields['notes'];
+			$changed      = true;
+		}
+		unset( $row );
+		return $changed;
 	}
 
 	/* ---- remembered box shares ------------------------------------ */

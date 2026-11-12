@@ -54,6 +54,9 @@
  *                           spreadsheet averaged them.
  *   - class-species.php     PURE: the species master row and its merge into
  *                           the candidate list.
+ *   - class-identify.php    unknown ("??") and mislabeled fish: the one
+ *                           correction of a stay and its order line together,
+ *                           what the label said, the split rule.
  *   - class-orders.php      the order from a form, the live figures of a
  *                           checked-in line, the check-in that creates stays.
  *   - class-xlsx.php        a dependency-free .xlsx writer.
@@ -180,6 +183,7 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 			require_once self::path() . 'class-box-shares.php';
 			require_once self::path() . 'class-stats.php';
 			require_once self::path() . 'class-species.php';
+			require_once self::path() . 'class-identify.php';
 			require_once self::path() . 'class-orders.php';
 			require_once self::path() . 'class-xlsx.php';
 			require_once self::path() . 'class-workbook.php';

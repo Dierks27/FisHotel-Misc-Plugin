@@ -26,6 +26,12 @@
  * place of received ÷ per box). The check-in carries the size from the
  * line to its stay; a split carries it on to the sister stay.
  *
+ * A line may also be an unknown fish (needs_id): its name is then "??"
+ * and what it looks like (Identify::unknown_name()), it names no
+ * species-list fish, and its stay is checked in as unknown as the line —
+ * with its tank, count, size, percent of a box and landed cost like any
+ * other.
+ *
  * Once a line is linked, its figures are live: survived = arrived − every
  * loss (any reason), sold = the shipped events, DOA = the losses noted
  * "doa" (undos honoured). Imported history (lines without stays) keeps
@@ -114,13 +120,15 @@ class Orders {
 	 * Clean one order line from a form. A line without a species name is
 	 * for the caller to drop (normalize_lines() does).
 	 *
-	 * @param array $raw id, species_id, species, sci_name, size_slug, size_label, qty_ordered,
-	 *                   qty_received, per_box, box_no, box_pct, bags, unit_price, worth, qty_doa,
-	 *                   qty_survived, tank_id, sort, notes.
+	 * @param array $raw id, species_id, species, sci_name, needs_id, size_slug, size_label,
+	 *                   qty_ordered, qty_received, per_box, box_no, box_pct, bags, unit_price,
+	 *                   worth, qty_doa, qty_survived, tank_id, sort, notes.
 	 * @return array A box number or a percent that is blank or out of range is null here
 	 *               (line_errors() names the ones that were typed wrong); the size is the
 	 *               posted slug and label as text — Sizes::apply_to_lines() checks it
-	 *               against the standard list before an order from a form is saved.
+	 *               against the standard list before an order from a form is saved. A
+	 *               line ticked "needs identifying" is named "??" + what was typed and
+	 *               names no species-list fish.
 	 */
 	public static function normalize_line( array $raw ) {
 		$text = static function ( $key, $max ) use ( $raw ) {
@@ -147,12 +155,14 @@ class Orders {
 		$per_box = $int( 'per_box', true );
 		$bags    = $int( 'bags', true );
 		$size    = $text( 'size_slug', Sizes::MAX_LABEL );
+		$unknown = isset( $raw['needs_id'] ) && is_scalar( $raw['needs_id'] ) && ! in_array( strtolower( trim( (string) $raw['needs_id'] ) ), array( '', '0', 'false', 'no' ), true );
 
 		return array(
 			'id'           => isset( $raw['id'] ) && is_scalar( $raw['id'] ) ? max( 0, (int) $raw['id'] ) : 0,
-			'species_id'   => isset( $raw['species_id'] ) && is_scalar( $raw['species_id'] ) && (int) $raw['species_id'] > 0 ? (int) $raw['species_id'] : null,
-			'species'      => $text( 'species', 120 ),
+			'species_id'   => ! $unknown && isset( $raw['species_id'] ) && is_scalar( $raw['species_id'] ) && (int) $raw['species_id'] > 0 ? (int) $raw['species_id'] : null,
+			'species'      => $unknown ? Identify::unknown_name( $text( 'species', 120 ) ) : $text( 'species', 120 ),
 			'sci_name'     => $text( 'sci_name', 120 ),
+			'needs_id'     => $unknown,
 			'size_slug'    => '' !== $size ? $size : null,
 			'size_label'   => '' !== $size && '' !== $text( 'size_label', Sizes::MAX_LABEL ) ? $text( 'size_label', Sizes::MAX_LABEL ) : null,
 			'qty_ordered'  => $int( 'qty_ordered', false ),
@@ -503,6 +513,7 @@ class Orders {
 					'species'       => (string) $line['species'],
 					'size_slug'     => $line['size_slug'] ?? null,
 					'size_label'    => $line['size_label'] ?? null,
+					'needs_id'      => ! empty( $line['needs_id'] ),
 					'checkin_date'  => $date,
 					'tank_id'       => (int) $tank['id'],
 					'source'        => $source,
