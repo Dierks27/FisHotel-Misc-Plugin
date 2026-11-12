@@ -81,7 +81,7 @@ class Admin {
 					/* translators: %d: number of variations set so far */
 					'progress' => __( '%d set so far…', 'fishotel-misc-plugin' ),
 					/* translators: 1: variations set, 2: variations that could not be saved */
-					'done'     => __( 'Done: %1$d variations now have a Bag size (%2$d could not be saved).', 'fishotel-misc-plugin' ),
+					'done'     => __( 'Done — Bag size set on: %1$d · could not be saved: %2$d.', 'fishotel-misc-plugin' ),
 					'stopped'  => __( 'Stopped — the last step did not get an answer. What was set so far stays set; run it again to carry on.', 'fishotel-misc-plugin' ),
 				),
 			)

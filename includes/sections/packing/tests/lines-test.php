@@ -121,7 +121,7 @@ $order  = fh_order(
 			new Fh_Fake_Item( 3, 'A batch-invoice fish', 1, 0, array( '_fishotel_fish_id' => '77' ) ),
 			new Fh_Fake_Item( 4, 'Credit: a lost fish', 1, 0, array( '_fh_invoice_credit' => '1' ) ),
 			new Fh_Fake_Item( 5, 'Something with no product', 1, 0 ),
-			new Fh_Fake_Item( 6, 'jp Invoice (1/2/26)', 1, 140 ),
+			new Fh_Fake_Item( 6, 'Sample Invoice (1/2/26)', 1, 140 ),
 		)
 	)
 );
@@ -140,17 +140,17 @@ $snapshot = array(
 	array( 'name' => 'Free shipping this time', 'kind' => 'note' ),
 	array( 'name' => 'An unlisted fish', 'qty' => 1 ),
 );
-$order    = fh_order( new Fh_Fake_Order( 503, array( new Fh_Fake_Item( 1, 'jp Invoice (1/2/26)', 1, 140, array( '_fh_invoice_lines' => wp_json_encode( $snapshot ) ) ) ) ) );
+$order    = fh_order( new Fh_Fake_Order( 503, array( new Fh_Fake_Item( 1, 'Sample Invoice (1/2/26)', 1, 140, array( '_fh_invoice_lines' => wp_json_encode( $snapshot ) ) ) ) ) );
 $result   = fh_suggest( $order );
 check( 'its fish come from the snapshot on the line: a product\'s bag, the bag of a size, or none', array( '2 × Invented Tang → Small', '1 × Invented Wrasse → Medium', '1 × An unlisted fish → none' ) === fh_lines( $result ), fh_test_export( fh_lines( $result ) ) );
-check( 'each says which invoice it is from; credits and notes are not fish', array( 'jp Invoice (1/2/26)', 'jp Invoice (1/2/26)', 'jp Invoice (1/2/26)' ) === array_column( $result['lines'], 'from' ) && false === $result['complete'] && array( 'An unlisted fish' ) === array_column( $result['incomplete'], 'name' ) );
+check( 'each says which invoice it is from; credits and notes are not fish', array( 'Sample Invoice (1/2/26)', 'Sample Invoice (1/2/26)', 'Sample Invoice (1/2/26)' ) === array_column( $result['lines'], 'from' ) && false === $result['complete'] && array( 'An unlisted fish' ) === array_column( $result['incomplete'], 'name' ) );
 $order->items[1]->qty  = 2;
 $order->items[1]->meta = array( '_fh_invoice_lines' => $snapshot );
 check( 'two of the invoice: twice the fish; a snapshot stored as an array reads the same', array( '4 × Invented Tang → Small', '2 × Invented Wrasse → Medium', '2 × An unlisted fish → none' ) === fh_lines( fh_suggest( $order ) ) );
 $order->items[1]->qty  = 1;
 $order->items[1]->meta = array();
 $result                = fh_suggest( $order );
-check( 'no snapshot and nothing here that can read the invoice: reported as a fish line without a bag, never dropped', array( '1 × jp Invoice (1/2/26) → none' ) === fh_lines( $result ) && false === $result['complete'] && 'an invoice whose fish cannot be read here' === $result['incomplete'][0]['reason'] );
+check( 'no snapshot and nothing here that can read the invoice: reported as a fish line without a bag, never dropped', array( '1 × Sample Invoice (1/2/26) → none' ) === fh_lines( $result ) && false === $result['complete'] && 'an invoice whose fish cannot be read here' === $result['incomplete'][0]['reason'] );
 $order->items[1]->meta = array( '_fh_invoice_lines' => wp_json_encode( array( array( 'name' => 'Credit: a lost fish', 'price' => -5 ) ) ) );
 check( 'a snapshot with no fish in it is flagged too', 'an invoice with no fish lines' === fh_suggest( $order )['incomplete'][0]['reason'] );
 check( 'the snapshot reader: a JSON string, an array, one object, junk', 3 === count( Lines::invoice_fish( $snapshot ) ) && 1 === count( Lines::invoice_fish( array( 'name' => 'One fish' ) ) ) && null === Lines::invoice_fish( '' ) && null === Lines::invoice_fish( 'not json' ) && null === Lines::invoice_fish( 12 ) && array() === Lines::invoice_fish( '[]' ) );
@@ -158,7 +158,7 @@ check( 'the snapshot reader: a JSON string, an array, one object, junk', 3 === c
 echo "6. What is a fish\n";
 $fish = array( 'quarantined-fish', 'inverts' );
 check( 'a product in a fish category', Lines::KIND_FISH === Lines::kind( array(), array( 'Quarantined-Fish' ), 'Invented Goby', true, $fish ) );
-check( 'a product in the invoices category, or named an Invoice', Lines::KIND_INVOICE === Lines::kind( array(), array( 'invoices' ), 'x', true, $fish ) && Lines::KIND_INVOICE === Lines::kind( array(), array(), 'jp Invoice (1/2/26)', true, $fish ) );
+check( 'a product in the invoices category, or named an Invoice', Lines::KIND_INVOICE === Lines::kind( array(), array( 'invoices' ), 'x', true, $fish ) && Lines::KIND_INVOICE === Lines::kind( array(), array(), 'Sample Invoice (1/2/26)', true, $fish ) );
 check( 'the flags on the line are read before the categories', Lines::KIND_CREDIT === Lines::kind( array( '_fh_invoice_credit' => 1, '_fh_invoice_fish' => 1 ), array( 'quarantined-fish' ), 'x', true, $fish ) && Lines::KIND_FISH === Lines::kind( array( '_fh_invoice_fish' => true ), array( 'dry-goods' ), 'x', false, $fish ) );
 check( 'anything else is not a fish', Lines::KIND_OTHER === Lines::kind( array(), array( 'dry-goods' ), 'Reef Salt', true, $fish ) && Lines::KIND_OTHER === Lines::kind( array( '_fishotel_fish_id' => '7' ), array(), 'x', true, $fish ) );
 $order  = fh_order( new Fh_Fake_Order( 504, array( new Fh_Fake_Item( 1, 'Frag plug with a bag', 2, 130 ), new Fh_Fake_Item( 2, 'Reef Salt 5 lb', 1, 120 ) ) ) );
@@ -226,6 +226,9 @@ echo "9. What a person is told\n";
 $order  = fh_order( new Fh_Fake_Order( 520, array( new Fh_Fake_Item( 1, 'Invented Goby - Small', 40, 100, array(), 101 ) ) ) );
 $result = fh_suggest( $order );
 check( 'a split says so, and names the box that is on the line', Suggest::STATUS_SPLIT === $result['status'] && 2 === count( $result['boxes'] ) && 'No single box holds it all: split into 2 boxes.' === $result['messages'][0] && false !== strpos( $result['messages'][1], 'On the line: Long 20 is 100% full (90% or more)' ), fh_test_export( $result['messages'] ) );
+$order  = fh_order( new Fh_Fake_Order( 524, array( new Fh_Fake_Item( 1, 'Invented Goby - Small', 60, 100, array(), 101 ) ) ) );
+$result = fh_suggest( $order );
+check( 'two boxes of one kind, equally full, are said once', array( 'Long 20', 'Long 20' ) === array_column( $result['boxes'], 'name' ) && array( 'No single box holds it all: split into 2 boxes.', 'On the line: Long 20 is 100% full (90% or more) — confirm it.' ) === $result['messages'], fh_test_export( $result['messages'] ) );
 $order  = fh_order( new Fh_Fake_Order( 521, array( new Fh_Fake_Item( 1, 'Invented Goby - Small', 6, 100, array(), 101 ) ) ) );
 $result = fh_suggest( $order );
 check( 'a single box at or over the threshold is flagged for the owner', true === $result['on_the_line'] && false !== strpos( $result['messages'][0], 'On the line: Cube 8 is 100% full' ) );
@@ -266,7 +269,7 @@ check( 'the Ship Day list is used when the Batch plugin has it', array( 'inverts
 $order  = fh_order( new Fh_Fake_Order( 530, array( new Fh_Fake_Item( 1, 'Invented Goby - Small', 1, 100, array(), 101 ), new Fh_Fake_Item( 2, 'Invented Snail', 1, 110 ) ) ) );
 $result = fh_suggest( $order );
 check( 'so the Packing box and the pick list agree on what is a fish', array( '1 × Invented Snail → Large' ) === fh_lines( $result ) && array( 'Invented Goby - Small' ) === array_column( $result['ignored'], 'name' ) );
-$order  = fh_order( new Fh_Fake_Order( 531, array( new Fh_Fake_Item( 1, 'jp Invoice (1/2/26)', 1, 140 ) ) ) );
+$order  = fh_order( new Fh_Fake_Order( 531, array( new Fh_Fake_Item( 1, 'Sample Invoice (1/2/26)', 1, 140 ) ) ) );
 $result = fh_suggest( $order );
 check( 'an Invoice with no snapshot is read from its description by the Batch plugin\'s parser — a line it could not read fully still counts', array( '2 × Invented Blenny → none', '1 × A line it could not read fully → none' ) === fh_lines( $result ) && false === $result['complete'], fh_test_export( fh_lines( $result ) ) );
 

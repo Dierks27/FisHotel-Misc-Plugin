@@ -258,6 +258,7 @@ check( 'an order that cannot be loaded says so', false !== strpos( (string) ob_g
 
 $html = Order_Box::render_body( $folded );
 check( 'an order that went into a combined box shows its lines and where it is packed — and no Confirm control', false !== strpos( $html, 'packed with combined box #800' ) && false === strpos( $html, 'data-op="confirm"' ) && false !== strpos( $html, 'Invented Goby - Small' ) );
+check( 'nor a suggested box of its own: the box is the combined one', false === strpos( $html, 'Suggested box' ) && false === strpos( $html, 'fh-pack-box__suggest' ) && false !== strpos( $html, '1 × Small' ) );
 $order->items[4] = new Fh_Fake_Item( 4, 'Invented Goby - Show', 1, 100, array(), 103 );
 $html            = Order_Box::render_body( $order );
 check( 'a line with no bag size is marked, and the suggestion is badged incomplete', false !== strpos( $html, 'class="is-missing"' ) && false !== strpos( $html, 'No bag size' ) && false !== strpos( $html, 'fh-pack-badge--incomplete' ) && false === strpos( $html, 'It was confirmed while' ) );

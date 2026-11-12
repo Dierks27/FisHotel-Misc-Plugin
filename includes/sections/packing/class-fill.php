@@ -118,8 +118,12 @@ class Fill {
 		$lines = array();
 
 		if ( isset( $counts['total'] ) ) {
-			/* translators: 1: variations in all, 2: variations that have a bag size */
-			$lines[] = sprintf( __( '%1$d variations in all; %2$d already have a Bag size and are not touched.', 'fishotel-misc-plugin' ), (int) $counts['total'], (int) ( $counts['with_bag'] ?? 0 ) );
+			$total = (int) $counts['total'];
+			$with  = (int) ( $counts['with_bag'] ?? 0 );
+			/* translators: %d: variations in all */
+			$line = sprintf( _n( '%d variation in all.', '%d variations in all.', $total, 'fishotel-misc-plugin' ), $total );
+			/* translators: %d: variations that have a bag size */
+			$lines[] = $line . ' ' . sprintf( _n( '%d already has a Bag size and is not touched.', '%d already have a Bag size and are not touched.', $with, 'fishotel-misc-plugin' ), $with );
 		}
 
 		$would = count( $plan['set'] );
@@ -134,8 +138,10 @@ class Fill {
 				$parts[] = $bag['name'] . ': ' . (int) $plan['by_bag'][ (int) $bag['id'] ];
 			}
 		}
-		/* translators: 1: variations without a bag size, 2: how many would be set */
-		$line = sprintf( __( '%1$d variations have no Bag size. The map would set %2$d of them', 'fishotel-misc-plugin' ), (int) $plan['empty'], $would );
+		/* translators: %d: variations without a bag size */
+		$line = sprintf( _n( '%d variation has no Bag size.', '%d variations have no Bag size.', (int) $plan['empty'], 'fishotel-misc-plugin' ), (int) $plan['empty'] );
+		/* translators: %d: how many of them would be set */
+		$line   .= ' ' . sprintf( __( 'The map would set %d of them', 'fishotel-misc-plugin' ), $would );
 		$lines[] = $line . ( $parts ? ' (' . implode( ', ', $parts ) . ').' : '.' );
 
 		if ( $plan['unmapped'] ) {
@@ -143,12 +149,13 @@ class Fill {
 			foreach ( $plan['unmapped'] as $slug => $count ) {
 				$parts[] = Size_List::label( $standard['sizes'], (string) $slug ) . ': ' . (int) $count;
 			}
+			$count = array_sum( $plan['unmapped'] );
 			/* translators: 1: how many variations, 2: the sizes with their counts */
-			$lines[] = sprintf( __( '%1$d carry a size the map has no bag for (%2$s) — they stay empty.', 'fishotel-misc-plugin' ), array_sum( $plan['unmapped'] ), implode( ', ', $parts ) );
+			$lines[] = sprintf( _n( '%1$d carries a size the map has no bag for (%2$s) — it stays empty.', '%1$d carry a size the map has no bag for (%2$s) — they stay empty.', $count, 'fishotel-misc-plugin' ), $count, implode( ', ', $parts ) );
 		}
 		if ( $plan['no_size'] > 0 ) {
 			/* translators: %d: how many variations */
-			$lines[] = sprintf( __( '%d carry no size (any size, or none) — they stay empty.', 'fishotel-misc-plugin' ), (int) $plan['no_size'] );
+			$lines[] = sprintf( _n( '%d carries no size (any size, or none) — it stays empty.', '%d carry no size (any size, or none) — they stay empty.', (int) $plan['no_size'], 'fishotel-misc-plugin' ), (int) $plan['no_size'] );
 		}
 
 		return $lines;

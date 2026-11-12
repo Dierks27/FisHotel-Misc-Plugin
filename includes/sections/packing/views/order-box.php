@@ -11,6 +11,7 @@
  * @var array  $settings   Settings::get().
  * @var string $nonce      Nonce for the confirm AJAX.
  * @var string $page_url   The Packing page.
+ * @var string $wrapper_url The order screen of the combined box this order went into ('' = none).
  * @var string $message    The outcome of a save ('' = none).
  * @var bool   $error      Whether $message is an error.
  */
@@ -70,7 +71,7 @@ if ( $fh_confirmed && $fh_can_use ) {
 						<td class="fh-pack-box__qty"><?php echo esc_html( (int) $fh_line['qty'] ); ?></td>
 						<td>
 							<?php echo esc_html( $fh_line['name'] ); ?>
-							<?php if ( '' !== (string) $fh_line['size_label'] ) : ?>
+							<?php if ( '' !== (string) $fh_line['size_label'] && false === stripos( (string) $fh_line['name'], (string) $fh_line['size_label'] ) ) : ?>
 								<span class="fh-pack-box__sub"><?php echo esc_html( $fh_line['size_label'] ); ?></span>
 							<?php endif; ?>
 							<?php if ( '' !== (string) ( $fh_line['from'] ?? '' ) ) : ?>
@@ -164,7 +165,18 @@ if ( $fh_confirmed && $fh_can_use ) {
 		</p>
 	<?php endif; ?>
 
-	<?php if ( $result['boxes'] ) : ?>
+	<?php if ( $fh_folded && '' !== $wrapper_url ) : ?>
+		<p class="fh-pack-box__hint">
+			<a href="<?php echo esc_url( $wrapper_url ); ?>">
+				<?php
+				/* translators: %d: order ID of the combined box */
+				echo esc_html( sprintf( __( 'Open combined box #%d', 'fishotel-misc-plugin' ), (int) $result['packed_with'] ) );
+				?>
+			</a>
+		</p>
+	<?php endif; ?>
+
+	<?php if ( $result['boxes'] && ! $fh_folded ) : ?>
 		<div class="fh-pack-box__suggest<?php echo $result['on_the_line'] ? ' is-line' : ''; ?><?php echo $result['complete'] ? '' : ' is-incomplete'; ?>">
 			<span class="fh-pack-box__label">
 				<?php echo esc_html( $result['split'] ? __( 'Suggested boxes', 'fishotel-misc-plugin' ) : __( 'Suggested box', 'fishotel-misc-plugin' ) ); ?>

@@ -191,8 +191,8 @@ check( 'nothing was scanned for a refused request', 0 === $store->scans );
 
 $preview = Fill::preview_request( array( '_wpnonce' => $nonce ), $store, $standard );
 check( 'the preview counts: 4 variations have no value; the map would set 2 of them', 200 === $preview['status'] && 4 === $preview['empty'] && 2 === $preview['would_set'], fh_test_export( $preview ) );
-check( 'it says which bags, which sizes have no bag, and how many carry no size', false !== strpos( $preview['message'], 'Small: 1' ) && false !== strpos( $preview['message'], 'Large: 1' ) && false !== strpos( $preview['message'], 'Show (5"+): 1' ) && false !== strpos( $preview['message'], '1 carry no size' ), $preview['message'] );
-check( 'and how many already have one and are not touched', false !== strpos( $preview['message'], '6 variations in all; 2 already have a Bag size' ), $preview['message'] );
+check( 'it says which bags, which sizes have no bag, and how many carry no size', false !== strpos( $preview['message'], 'Small: 1' ) && false !== strpos( $preview['message'], 'Large: 1' ) && false !== strpos( $preview['message'], '1 carries a size the map has no bag for (Show (5"+): 1)' ) && false !== strpos( $preview['message'], '1 carries no size' ), $preview['message'] );
+check( 'and how many already have one and are not touched', false !== strpos( $preview['message'], '6 variations in all. 2 already have a Bag size and are not touched. 4 variations have no Bag size. The map would set 2 of them' ), $preview['message'] );
 $touched = 0;
 foreach ( $GLOBALS['fh_products'] as $product ) {
 	$touched += $product->meta_saves + $product->full_saves + ( null === $product->pending ? 0 : 1 );

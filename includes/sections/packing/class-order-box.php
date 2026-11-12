@@ -132,6 +132,15 @@ class Order_Box {
 		$nonce      = wp_create_nonce( Order_Packing::NONCE_ACTION );
 		$page_url   = admin_url( 'admin.php?page=' . Packing::MENU_SLUG );
 
+		// An order that went into a combined box links to it: the box is suggested there.
+		$wrapper_url = '';
+		if ( (int) $result['packed_with'] > 0 && function_exists( 'wc_get_order' ) ) {
+			$wrapper = wc_get_order( (int) $result['packed_with'] );
+			if ( is_object( $wrapper ) && method_exists( $wrapper, 'get_edit_order_url' ) ) {
+				$wrapper_url = (string) $wrapper->get_edit_order_url();
+			}
+		}
+
 		ob_start();
 		include Packing::path() . 'views/order-box.php';
 		return (string) ob_get_clean();
