@@ -233,9 +233,12 @@ class Order_Packing {
 				break;
 
 			case Suggest::STATUS_SPLIT:
+			case Suggest::STATUS_PARTIAL:
 				$count = count( $result['boxes'] );
-				/* translators: %d: number of boxes */
-				$out[] = sprintf( _n( 'No single box holds it all: %d box takes what goes in.', 'No single box holds it all: split into %d boxes.', $count, 'fishotel-misc-plugin' ), $count );
+				if ( $count > 1 ) {
+					/* translators: %d: number of boxes */
+					$out[] = sprintf( __( 'No single box holds it all: split into %d boxes.', 'fishotel-misc-plugin' ), $count );
+				}
 				break;
 		}
 

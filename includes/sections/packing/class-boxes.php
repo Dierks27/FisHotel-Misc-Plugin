@@ -195,15 +195,16 @@ class Boxes {
 	 * provide them (the plugin is not active, the method does not exist
 	 * yet, or it failed).
 	 *
+	 * @param string $class ShipTracker's settings class (a parameter so a test can stand in for it).
 	 * @return array[]|null
 	 */
-	public static function from_shiptracker() {
-		if ( ! class_exists( 'FST_Settings' ) || ! method_exists( 'FST_Settings', 'get_standard_boxes' ) ) {
+	public static function from_shiptracker( $class = 'FST_Settings' ) {
+		if ( ! is_string( $class ) || ! class_exists( $class ) || ! method_exists( $class, 'get_standard_boxes' ) ) {
 			return null;
 		}
 
 		try {
-			$rows = \FST_Settings::get_standard_boxes();
+			$rows = call_user_func( array( $class, 'get_standard_boxes' ) );
 		} catch ( \Throwable $e ) {
 			return null;
 		}

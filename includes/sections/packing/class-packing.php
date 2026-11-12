@@ -429,12 +429,16 @@ namespace {
 		 *
 		 *   available      bool
 		 *   order_id       int
-		 *   status         fits | split | no_fit | no_boxes | empty | unavailable
+		 *   status         fits (one box holds every bag) | split (several
+		 *                  do) | partial (boxes for what can be boxed — some
+		 *                  bags go in no box, see unplaced) | no_fit (no bag
+		 *                  goes in any box) | no_boxes | empty (no bags
+		 *                  needed) | unavailable
 		 *   boxes          the suggested box(es): key, name, length, width,
 		 *                  height (inches), dims ("LxWxH"), volume, source,
 		 *                  bags (bag id → how many go in it), fill (1.0 =
 		 *                  full), fill_pct, on_the_line
-		 *   split          bool — no single box holds it all
+		 *   split          bool — more than one box is suggested
 		 *   on_the_line    bool — a suggested box is at or over the threshold
 		 *   threshold      the "on the line" percent
 		 *   bags           bags needed by size: id, name, width, length, count

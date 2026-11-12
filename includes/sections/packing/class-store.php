@@ -60,6 +60,10 @@ class Store {
 	public function size_attributes() {
 		global $wpdb;
 
+		if ( ! is_object( $wpdb ) ) {
+			return array();
+		}
+
 		$table = $wpdb->prefix . 'woocommerce_attribute_taxonomies';
 
 		try {
@@ -105,6 +109,10 @@ class Store {
 
 		global $wpdb;
 
+		if ( ! is_object( $wpdb ) ) {
+			return array();
+		}
+
 		try {
 			$rows = $wpdb->get_results(
 				$wpdb->prepare( 'SELECT t.term_id, t.name, t.slug, tm.meta_value AS menu_order FROM ' . $wpdb->terms . ' t INNER JOIN ' . $wpdb->term_taxonomy . ' tt ON tt.term_id = t.term_id LEFT JOIN ' . $wpdb->termmeta . ' tm ON tm.term_id = t.term_id AND tm.meta_key = %s WHERE tt.taxonomy = %s ORDER BY t.term_id ASC LIMIT %d', 'order_' . $taxonomy, $taxonomy, self::SIZES_LIMIT ), // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery
@@ -143,6 +151,10 @@ class Store {
 	 */
 	public function variations_without_bag( $after_id = 0, $limit = 0 ) {
 		global $wpdb;
+
+		if ( ! is_object( $wpdb ) ) {
+			return array();
+		}
 
 		$limit    = (int) $limit > 0 ? min( (int) $limit, self::SCAN_LIMIT ) : self::SCAN_LIMIT;
 		$statuses = "'" . implode( "','", self::PRODUCT_STATUSES ) . "'";
@@ -201,6 +213,13 @@ class Store {
 	public function variation_counts() {
 		global $wpdb;
 
+		if ( ! is_object( $wpdb ) ) {
+			return array(
+				'total'    => 0,
+				'with_bag' => 0,
+			);
+		}
+
 		$statuses = "'" . implode( "','", self::PRODUCT_STATUSES ) . "'";
 		$from     = ' FROM ' . $wpdb->posts . ' v INNER JOIN ' . $wpdb->posts . " p ON p.ID = v.post_parent AND p.post_type = 'product' AND p.post_status IN ({$statuses}) WHERE v.post_type = 'product_variation' AND v.post_status <> 'trash'";
 
@@ -228,6 +247,10 @@ class Store {
 	 */
 	public function bag_usage() {
 		global $wpdb;
+
+		if ( ! is_object( $wpdb ) ) {
+			return array();
+		}
 
 		try {
 			$rows = $wpdb->get_results(

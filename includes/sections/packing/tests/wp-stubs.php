@@ -15,6 +15,14 @@
  * @package FisHotel\Misc\Sections\Packing
  */
 
+// A warning, a notice or a deprecation is a failure: it stops the test.
+error_reporting( E_ALL );
+set_error_handler(
+	static function ( $severity, $message, $file, $line ) {
+		throw new \ErrorException( $message, 0, $severity, $file, $line );
+	}
+);
+
 define( 'ABSPATH', '/var/www/html/' );
 define( 'FISHOTEL_MISC_PATH', dirname( __DIR__, 4 ) . '/' );
 define( 'FISHOTEL_MISC_URL', 'https://example.test/wp-content/plugins/fishotel-misc-plugin/' );
@@ -340,9 +348,26 @@ function get_the_terms( $post_id, $taxonomy ) {
 	);
 }
 
+// The section's own file is all WordPress loads before boot(). A test that
+// wants to see what a request loads by itself defines FH_PACKING_NO_LOAD
+// first; every other test gets every class.
 require_once FISHOTEL_MISC_PATH . 'includes/sections/packing/class-packing.php';
-\FisHotel\Misc\Sections\Packing\Packing::load_admin();
+if ( ! defined( 'FH_PACKING_NO_LOAD' ) ) {
+	\FisHotel\Misc\Sections\Packing\Packing::load_admin();
+}
 require_once __DIR__ . '/fakes.php';
+
+/**
+ * Make the list of sizes of this request a given one (as if it had been
+ * resolved already), so nothing goes looking for a database.
+ *
+ * @param array $list Size_List::standard() shape.
+ */
+function fh_use_sizes( array $list ) {
+	$memo = new \ReflectionProperty( \FisHotel\Misc\Sections\Packing\Size_List::class, 'memo' );
+	$memo->setAccessible( true );
+	$memo->setValue( null, $list );
+}
 
 /**
  * Shared check() helper for every test file.

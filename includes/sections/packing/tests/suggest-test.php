@@ -154,11 +154,13 @@ foreach ( $plan['boxes'] as $box ) {
 check( 'every bag is in exactly one box', 100 === $total );
 
 $plan = Suggest::suggest( array( 1 => 5000 ), fh_boxes( array( 'cube 8' ) ), 90, $order );
-check( 'a split never runs past ' . Suggest::MAX_BOXES . ' boxes; what is left is reported, not dropped', Suggest::MAX_BOXES === count( $plan['boxes'] ) && array( 1 => 5000 - 6 * Suggest::MAX_BOXES ) === $plan['unplaced'] );
+check( 'a split never runs past ' . Suggest::MAX_BOXES . ' boxes; what is left is reported, not dropped', Suggest::MAX_BOXES === count( $plan['boxes'] ) && array( 1 => 5000 - 6 * Suggest::MAX_BOXES ) === $plan['unplaced'] && Suggest::STATUS_PARTIAL === $plan['status'] );
 
 echo "7. Bags no box takes\n";
 $plan = Suggest::suggest( array( 1 => 2, 4 => 1 ), fh_boxes( array( 'cube 8', 'cube 12' ) ), 90, $order );
-check( 'a Jumbo bag with no number in any box: the rest is boxed, the Jumbo is named as unplaced', Suggest::STATUS_SPLIT === $plan['status'] && array( 'Cube 12 16.7' ) === fh_names( $plan ) && array( 4 => 1 ) === $plan['unplaced'], fh_test_export( array( fh_names( $plan ), $plan['unplaced'] ) ) );
+check( 'a Jumbo bag with no number in any box is set aside and named; the rest gets the smallest box that holds it', Suggest::STATUS_PARTIAL === $plan['status'] && array( 'Cube 8 33.3' ) === fh_names( $plan ) && array( 4 => 1 ) === $plan['unplaced'] && false === $plan['split'], fh_test_export( array( fh_names( $plan ), $plan['unplaced'] ) ) );
+$plan = Suggest::suggest( array( 1 => 20, 4 => 1 ), fh_boxes( array( 'cube 8', 'cube 12' ) ), 90, $order );
+check( 'the rest may itself need a split: both are said', Suggest::STATUS_PARTIAL === $plan['status'] && true === $plan['split'] && array( 'Cube 12 100', 'Cube 12 66.7' ) === fh_names( $plan ) && array( 4 => 1 ) === $plan['unplaced'], fh_test_export( array( fh_names( $plan ), $plan['unplaced'] ) ) );
 $plan = Suggest::suggest( array( 4 => 2 ), fh_boxes( array( 'cube 8', 'cube 12' ) ), 90, $order );
 check( 'nothing at all can be boxed: no box, the status says so', Suggest::STATUS_NO_FIT === $plan['status'] && array() === $plan['boxes'] && array( 4 => 2 ) === $plan['unplaced'] && false === $plan['split'] );
 

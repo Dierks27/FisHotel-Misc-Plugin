@@ -11,7 +11,8 @@
  *     box that takes twelve and two large ones in a box that takes six is
  *     6/12 + 2/6 = 83 %;
  *   - a bag size with no "how many fit" for a box does not go in that box
- *     at all;
+ *     at all; a bag size that goes in NO box is set aside and named, and
+ *     the rest is boxed as usual (the status is then "partial");
  *   - the suggestion is the SMALLEST box (by volume) whose fill is at most
  *     100 %;
  *   - when no box holds it all, it is split: the largest box that takes
@@ -37,11 +38,12 @@ defined( 'ABSPATH' ) || exit;
  */
 class Suggest {
 
-	const STATUS_FITS     = 'fits';
-	const STATUS_SPLIT    = 'split';
-	const STATUS_NO_FIT   = 'no_fit';
-	const STATUS_NO_BOXES = 'no_boxes';
-	const STATUS_EMPTY    = 'empty';
+	const STATUS_FITS     = 'fits';     // One box holds every bag.
+	const STATUS_SPLIT    = 'split';    // Several boxes hold every bag.
+	const STATUS_PARTIAL  = 'partial';  // Boxes for what can be boxed; some bags go in no box.
+	const STATUS_NO_FIT   = 'no_fit';   // No bag goes in any box.
+	const STATUS_NO_BOXES = 'no_boxes'; // There are no boxes.
+	const STATUS_EMPTY    = 'empty';    // No bags are needed.
 
 	/**
 	 * A split never runs to more boxes than this.
@@ -178,18 +180,40 @@ class Suggest {
 			return $out;
 		}
 
+		// Bag sizes that go in no box at all are set aside: the rest is boxed.
+		$never = array();
+		foreach ( $needs as $bag_id => $count ) {
+			$goes = false;
+			foreach ( $boxes as $box ) {
+				if ( isset( $box['fits'][ $bag_id ] ) && (int) $box['fits'][ $bag_id ] >= 1 ) {
+					$goes = true;
+					break;
+				}
+			}
+			if ( ! $goes ) {
+				$never[ $bag_id ] = $count;
+			}
+		}
+		$placeable = array_diff_key( $needs, $never );
+		if ( ! $placeable ) {
+			$out['status']   = self::STATUS_NO_FIT;
+			$out['unplaced'] = $never;
+			return $out;
+		}
+
 		// One box that holds it all: the smallest.
-		$single = self::smallest_holding( $needs, $boxes );
+		$single = self::smallest_holding( $placeable, $boxes );
 		if ( null !== $single ) {
-			$out['status']      = self::STATUS_FITS;
-			$out['boxes'][]     = self::placed( $single[0], $needs, $single[1], $threshold );
+			$out['status']      = $never ? self::STATUS_PARTIAL : self::STATUS_FITS;
+			$out['boxes'][]     = self::placed( $single[0], $placeable, $single[1], $threshold );
 			$out['on_the_line'] = $out['boxes'][0]['on_the_line'];
+			$out['unplaced']    = $never;
 			return $out;
 		}
 
 		// None does: split, the largest first.
 		$largest_first = Boxes::by_volume( $boxes, true );
-		$remaining     = $needs;
+		$remaining     = $placeable;
 
 		while ( $remaining && count( $out['boxes'] ) < self::MAX_BOXES ) {
 			if ( $out['boxes'] ) {
@@ -218,18 +242,14 @@ class Suggest {
 				break;
 			}
 			if ( ! $took ) {
-				break; // What is left goes in no box.
+				break;
 			}
 		}
 
-		$out['unplaced'] = $remaining;
-		if ( ! $out['boxes'] ) {
-			$out['status'] = self::STATUS_NO_FIT;
-			return $out;
-		}
-
-		$out['status'] = self::STATUS_SPLIT;
-		$out['split']  = true;
+		// What is left only when the split ran into MAX_BOXES.
+		$out['unplaced'] = $never + $remaining;
+		$out['status']   = $out['unplaced'] ? self::STATUS_PARTIAL : self::STATUS_SPLIT;
+		$out['split']    = count( $out['boxes'] ) > 1;
 		foreach ( $out['boxes'] as $box ) {
 			if ( $box['on_the_line'] ) {
 				$out['on_the_line'] = true;
