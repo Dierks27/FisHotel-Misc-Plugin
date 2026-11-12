@@ -707,22 +707,73 @@ class Admin {
 					'fee'        => $text( 'fee' ),
 					'source'     => ! empty( $post['owed'] ) ? 'lost_fish' : 'hand',
 				);
+				// One more fish for the person just saved, on the invoice that is already out.
+				$offered = isset( $post['invoice_of'] ) && is_scalar( $post['invoice_of'] ) ? absint( $post['invoice_of'] ) : 0;
+				if ( $offered > 0 && ! empty( $post['same_invoice'] ) && empty( $post['owed'] ) ) {
+					$args['invoice_of'] = $offered;
+				}
 				if ( is_array( $ctx['sizes'] ) ) {
 					$args['sizes'] = $ctx['sizes'];
 				}
+				// The invoice the form may offer for the next fish: one that can still be paid.
+				$offer = static function ( $carrier_id ) use ( $service ) {
+					$invoice = (int) $carrier_id > 0 ? $service->payable( (int) $carrier_id ) : array( 'ok' => false );
+					if ( empty( $invoice['ok'] ) ) {
+						return array();
+					}
+					return array(
+						'invoice_of'  => (int) $invoice['carrier']['id'],
+						'invoice_fee' => Rules::money( (float) $invoice['carrier']['fee_amount'], Urls::currency_symbol() ),
+					);
+				};
+
 				$new = $service->create( $args, $actor );
 				if ( is_object( $new ) ) {
-					return $fail( method_exists( $new, 'get_error_message' ) ? (string) $new->get_error_message() : __( 'The request could not be saved.', 'fishotel-misc-plugin' ), array_diff_key( $args, array( 'sizes' => 1 ) ) + array( 'owed' => ! empty( $post['owed'] ) ? 1 : 0 ) );
+					return $fail(
+						method_exists( $new, 'get_error_message' ) ? (string) $new->get_error_message() : __( 'The request could not be saved.', 'fishotel-misc-plugin' ),
+						array_merge(
+							array_diff_key( $args, array( 'sizes' => 1, 'invoice_of' => 1 ) ),
+							array(
+								'owed'         => ! empty( $post['owed'] ) ? 1 : 0,
+								'again'        => ! empty( $post['again'] ) ? 1 : 0,
+								'same_invoice' => ! empty( $post['same_invoice'] ) ? 1 : 0,
+							),
+							$offer( $offered )
+						)
+					);
 				}
 				$added = $store->get( (int) $new );
 				/* translators: 1: request id, 2: state */
 				$message = sprintf( __( 'Request #%1$d is saved (%2$s).', 'fishotel-misc-plugin' ), (int) $new, Rules::state_label( $added ? $added['state'] : '' ) );
-				if ( $added && 'awaiting_payment' === $added['state'] ) {
+				$joined  = $added && 'awaiting_payment' === $added['state'] && (int) $added['fee_ref'] !== (int) $added['id'];
+				if ( $joined ) {
+					/* translators: %d: request id */
+					$message .= ' ' . sprintf( __( 'It is on the invoice of request #%d — no second invoice, no second e-mail.', 'fishotel-misc-plugin' ), (int) $added['fee_ref'] );
+				} elseif ( $added && 'awaiting_payment' === $added['state'] ) {
 					$message .= ' ' . Service::mail_words( $service->last_mail, __( 'The invoice', 'fishotel-misc-plugin' ), true );
+				}
+
+				// "Save, and add another fish for this person": the person stays in the
+				// form, and an invoice that is not paid yet can take the next fish too.
+				$keep = array();
+				if ( ! empty( $post['again'] ) && $added ) {
+					$keep = array(
+						'again'     => 1,
+						'user_id'   => (int) $added['user_id'],
+						'name'      => (string) $added['name'],
+						'email'     => (string) $added['email'],
+						'handle'    => (string) $added['handle'],
+						'came_from' => (string) $added['came_from'],
+						'owed'      => ! empty( $added['owed'] ) ? 1 : 0,
+					);
+					if ( Rules::fee_open( $added ) ) {
+						$keep = array_merge( $keep, $offer( (int) $added['fee_ref'] ) );
+					}
 				}
 				return array(
 					'ok'      => true,
 					'message' => $message,
+					'keep'    => $keep,
 				);
 
 			case 'link_create':

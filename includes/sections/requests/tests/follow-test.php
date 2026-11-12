@@ -153,7 +153,12 @@ check_same( 'a request that is ready and stays ready needs no step', array(), fh
 $steps = fh_steps( array( fh_req( 1, 'ready', array( 'line_id' => 11, 'stay_id' => 71 ) ) ), array( fh_order( 1, 'received', array( $line ) ) ) );
 check_same( 'the sale date was moved later: back in quarantine', 'in_quarantine', $steps[1]['to'] );
 $steps = fh_steps( array( fh_req( 1, 'on_order', array( 'line_id' => 11 ) ) ), array( fh_order( 1, 'received', array( $ready ) ) ) );
-check_same( 'checked in and already on sale: straight to ready', 'ready', $steps[1]['to'] );
+check_same( 'checked in and already on sale: one step at a time — in quarantine first', 'in_quarantine', $steps[1]['to'] );
+$steps = fh_steps( array( fh_req( 1, 'in_quarantine', array( 'line_id' => 11, 'stay_id' => 71 ) ) ), array( fh_order( 1, 'received', array( $ready ) ) ) );
+check_same( 'and ready with the next plan', 'ready', $steps[1]['to'] );
+$one   = fh_line( 11, array( 'stay_id' => 71, 'stays' => array( array_merge( $tank, array( 'sale_ready' => true, 'qty_live' => 1 ) ) ) ) );
+$steps = fh_steps( array( fh_req( 1, 'on_order', array( 'line_id' => 11 ) ), fh_req( 2, 'in_quarantine', array( 'line_id' => 11, 'stay_id' => 71 ) ) ), array( fh_order( 1, 'received', array( $one ) ) ) );
+check( 'while the oldest request takes its first step, its fish on sale is not promised to a younger one', 'in_quarantine' === $steps[1]['to'] && ( ! isset( $steps[2] ) || 'ready' !== $steps[2]['to'] ) );
 
 $split = fh_line( 11, array( 'stay_id' => 71, 'stays' => array( array_merge( $tank, array( 'qty_live' => 1 ) ), array( 'id' => 72, 'qty_live' => 1, 'sale_ready' => true, 'open' => true, 'product_id' => 501, 'tank' => 121 ) ) ) );
 $steps = fh_steps( array( fh_req( 1, 'in_quarantine', array( 'line_id' => 11, 'stay_id' => 71 ) ), fh_req( 2, 'in_quarantine', array( 'line_id' => 11, 'stay_id' => 71 ) ) ), array( fh_order( 1, 'received', array( $split ) ) ) );
@@ -188,6 +193,26 @@ $steps = fh_steps( array( fh_req( 1, 'on_order', array( 'line_id' => 11 ) ), fh_
 check_same( 'the line now orders one fish: the request matched by hand stays, both others wait again', array( 1, 2 ), array_keys( $steps ) );
 check_same( 'state', array( 'waiting', 'waiting' ), array( $steps[1]['to'], $steps[2]['to'] ) );
 
+echo "\nThe line was corrected to another fish\n";
+$goby_line = fh_line( 11, array( 'species' => 'Red Test Goby', 'species_product_id' => 502, 'stay_id' => 71, 'stays' => array( array_merge( $tank, array( 'sale_ready' => true ) ) ) ) );
+$steps     = fh_steps(
+	array(
+		fh_req( 1, 'in_quarantine', array( 'line_id' => 11, 'stay_id' => 71, 'product_id' => 501 ) ),
+		fh_req( 2, 'ready', array( 'line_id' => 11, 'stay_id' => 71 ) ),
+		fh_req( 3, 'in_quarantine', array( 'line_id' => 11, 'stay_id' => 71, 'link_manual' => 1 ) ),
+		fh_req( 4, 'offered', array( 'line_id' => 11, 'stay_id' => 71 ) ),
+	),
+	array( fh_order( 1, 'received', array( $goby_line ) ) )
+);
+check_same( 'a request the job matched does not follow a line that now holds another fish: back to waiting', array( 'waiting', 'waiting' ), array( $steps[1]['to'] ?? '', $steps[2]['to'] ?? '' ) );
+check_contains( 'and its history says what the line reads now', 'Red Test Goby', $steps[1]['why'] );
+check_same( 'a match made by hand is the owner\'s: it goes on with the line', 'ready', $steps[3]['to'] ?? '' );
+check( 'a request that was told is left alone', ! isset( $steps[4] ) );
+$steps = fh_steps( array( fh_req( 1, 'on_order', array( 'line_id' => 11 ) ) ), array( fh_order( 1, 'draft', array( fh_line( 11, array( 'needs_id' => true ) ) ) ) ) );
+check_same( 'a line whose fish now has to be identified is not the fish that was asked for either', 'waiting', $steps[1]['to'] ?? '' );
+$steps = fh_steps( array( fh_req( 1, 'on_order', array( 'line_id' => 11, 'size_slug' => 'm' ) ) ), array( fh_order( 1, 'draft', array( fh_line( 11, array( 'size_slug' => 'l' ) ) ) ) ) );
+check_same( 'nor is a line whose size was changed to another one', 'waiting', $steps[1]['to'] ?? '' );
+
 echo "\nRequests that were already told\n";
 $steps = fh_steps( array( fh_req( 1, 'offered', array( 'line_id' => 11, 'stay_id' => 71 ) ), fh_req( 2, 'in_quarantine', array( 'line_id' => 11, 'stay_id' => 71 ) ) ), array( fh_order( 1, 'received', array( fh_line( 11, array( 'stay_id' => 71, 'stays' => array( array_merge( $tank, array( 'qty_live' => 1, 'sale_ready' => true ) ) ) ) ) ) ) ) );
 check( 'a request that was told is never taken back', ! isset( $steps[1] ) );
@@ -211,6 +236,35 @@ $run     = Follow::run( $service, null );
 check_same( 'nothing follows, and it says the Clean Room is not there', array( false, 'waiting' ), array( $run['available'], $service->store->get( $id )['state'] ) );
 check_contains( 'the last-check line says so too', 'Clean Room is off', Cron::summary_words( Cron::daily( $service, null ) ) );
 check( 'the adapter is not made while the Clean Room is not loaded', null === Cleanroom::make() );
+
+/* ================================================================== */
+echo "\nOne run takes both steps\n";
+/* ================================================================== */
+
+/**
+ * A stand-in for the Clean Room adapter: the supplier orders it is given.
+ */
+class Fh_Fake_Room {
+	public $orders = array();
+	public function snapshot( $requests ) {
+		unset( $requests );
+		return $this->orders;
+	}
+}
+
+$service      = fh_service();
+$fake         = new Fh_Fake_Room();
+$id           = $service->create( array( 'name' => 'Lee Local', 'fish' => 'Blue Test Wrasse' ), fh_staff() );
+$fake->orders = array( fh_order( 1, 'ordered', array( fh_line( 11 ) ) ) );
+Follow::run( $service, $fake );
+check_same( 'matched to the order', 'on_order', $service->store->get( $id )['state'] );
+$fake->orders = array( fh_order( 1, 'received', array( fh_line( 11, array( 'stay_id' => 71, 'stays' => array( array_merge( $tank, array( 'sale_ready' => true ) ) ) ) ) ) ) );
+$run          = Follow::run( $service, $fake );
+check_same( 'checked in and already on sale: ONE run brings it to ready', 'ready', $service->store->get( $id )['state'] );
+check_same( 'and it counts both steps', array( 1, 1 ), array( $run['in_quarantine'], $run['ready'] ) );
+$notes = implode( ' | ', $service->store->notes( $id ) );
+check( 'the history has the check-in AND the sale date', false !== strpos( $notes, 'in quarantine' ) && false !== strpos( $notes, 'the fish is ready' ) );
+check_same( 'another run changes nothing', 0, array_sum( array_slice( Follow::run( $service, $fake ), 1 ) ) );
 
 /* ================================================================== */
 echo "\nThe run against the Clean Room's own classes\n";
@@ -238,6 +292,7 @@ foreach ( array( 'clean-room', 'layout', 'replay', 'protocol', 'parser', 'qr', '
 }
 require_once $room . 'tests/fake-store.php';
 
+use FisHotel\Misc\Sections\Clean_Room\Identify as Room_Identify;
 use FisHotel\Misc\Sections\Clean_Room\Orders as Room_Orders;
 use FisHotel\Misc\Sections\Clean_Room\Settings as Room_Settings;
 use FisHotel\Misc\Sections\Clean_Room\Tests\Fake_Store as Room_Store;
@@ -387,6 +442,26 @@ $owed = $service->create( array( 'name' => 'Pat Example', 'email' => 'pat@exampl
 check( 'an owed request for the same customer and product', is_int( $owed ) );
 $store->update( $owed, array( 'user_id' => 7, 'state' => 'offered', 'offered_at' => Rules::utc( $GLOBALS['fh_clock'] ) ) );
 check_same( 'an owed fish is never filled by a purchase (it was paid for long ago)', array(), Follow::bought( $service, array( 'id' => 806, 'user_id' => 7, 'email' => 'pat@example.test', 'created' => $GLOBALS['fh_clock'] + 60, 'product_ids' => array( 501 ) ) ) );
+
+echo "\nThe owner corrects the fish of a line after check-in\n";
+$kim   = $service->create( array( 'name' => 'Kim Keeper', 'email' => 'kim@example.test', 'fish' => 'Green Test Tang' ), fh_staff() );
+$wrong = $room_store->save_order( Room_Orders::normalize_order( array( 'ref' => '2026-77', 'supplier' => 'Test Supplier One', 'status' => 'ordered', 'order_date' => '2026-03-01' ) ) );
+$room_store->save_order_lines( $wrong, Room_Orders::normalize_lines( array( array( 'species' => 'Green Test Tang', 'qty_ordered' => 1 ) ) ) );
+Follow::run( $service, $later );
+check_same( 'matched by itself', 'on_order', $store->get( $kim )['state'] );
+$wrong_lines                    = $room_store->order_lines( $wrong );
+$wrong_lines[0]['qty_received'] = 1;
+$room_store->save_order_lines( $wrong, $wrong_lines );
+Room_Orders::check_in( $room_store, $room_store->order( $wrong ), $today, $room_settings, array( 'actor_id' => 1 ) );
+$wrong_line = $room_store->order_lines( $wrong )[0];
+Room_Identify::line( $room_store, $room_store->order( $wrong ), $wrong_line, Room_Identify::fish_from( $room_store, array( 'species' => 'Red Test Goby', 'product_id' => 502 ), $room_settings, $wrong_line ), array( 'today' => $today, 'settings' => $room_settings, 'actor_id' => 1, 'source' => 'test' ) );
+check_same( 'the Clean Room\'s own "Correct the fish…" made the line a goby', 'Red Test Goby', $room_store->order_lines( $wrong )[0]['species'] );
+$room_store->update_order_fields( $wrong, array( 'sale_date' => '2026-03-20' ) );
+fh_take_mails();
+Cron::daily( $service, $later );
+check_same( 'the tang request does not follow the goby: it waits again', array( 'waiting', null ), array( $store->get( $kim )['state'], $store->get( $kim )['line_id'] ) );
+check_same( 'and nobody is told a goby is their tang', 0, count( fh_take_mails() ) );
+check_contains( 'the history says why', 'Red Test Goby', implode( ' | ', $store->notes( $kim ) ) );
 
 echo "\nPast demand from the Clean Room's order lines\n";
 $old = $room_store->save_order( Room_Orders::normalize_order( array( 'ref' => '2025-4', 'supplier' => 'Test Supplier Two', 'status' => 'closed', 'received_date' => '2025-06-10' ) ) );

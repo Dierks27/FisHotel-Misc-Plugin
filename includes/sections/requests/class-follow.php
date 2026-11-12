@@ -8,11 +8,13 @@
  *                                  more fish than the line orders
  *   on_order      → in_quarantine  that line was checked in to a tank
  *   in_quarantine → ready          that tank group's sale date has come (the
- *                                  Clean Room's own sale-ready state)
+ *                                  Clean Room's own sale-ready state) — never
+ *                                  straight from on_order: one step at a time
  *   ready         → offered        the person is told (Service::offer())
  *
  * and back again when the fish is not there after all: the order arrived
- * without it, the line was removed, fewer fish are alive than were asked
+ * without it, the line was removed or corrected to another fish (a match
+ * the job made itself; one made by hand stays), fewer fish are alive than were asked
  * for (the oldest requests keep their place; a request the owner matched by
  * hand goes first; a request that was already told is never taken back).
  *
@@ -252,6 +254,24 @@ class Follow {
 				$why[ $id ] = sprintf( __( 'Supplier order %s arrived without this fish — back to waiting.', 'fishotel-misc-plugin' ), (string) ( $order_of[ $line_id ]['ref'] ?? '' ) );
 				continue;
 			}
+			if ( 'offered' !== $request['state'] && empty( $request['link_manual'] ) && ! self::same_fish( $request, $lines[ $line_id ] ) ) {
+				// The line was corrected (or its fish now has to be identified): it is no
+				// longer what was asked for. A match made by hand is the owner's to undo.
+				$reads = (string) ( $lines[ $line_id ]['species'] ?? '' );
+				if ( '' !== (string) ( $lines[ $line_id ]['size_label'] ?? '' ) ) {
+					$reads .= ', ' . (string) $lines[ $line_id ]['size_label'];
+				}
+				if ( ! empty( $lines[ $line_id ]['needs_id'] ) ) {
+					$reads .= ' ' . __( '(still to be identified)', 'fishotel-misc-plugin' );
+				}
+				$why[ $id ] = sprintf(
+					/* translators: 1: order ref, 2: the fish (and size) now on the line */
+					__( 'Its line on supplier order %1$s now reads "%2$s" — not the fish or size that was asked for; back to waiting. (Match it by hand if it will do.)', 'fishotel-misc-plugin' ),
+					(string) ( $order_of[ $line_id ]['ref'] ?? '' ),
+					$reads
+				);
+				continue;
+			}
 			$assigned[ $id ] = $line_id;
 		}
 
@@ -389,12 +409,17 @@ class Follow {
 					/* translators: %s: order ref */
 					: sprintf( __( 'Its line on supplier order %s is not in a tank (any more) — on order.', 'fishotel-misc-plugin' ), $ref );
 			} else {
-				$taken = isset( $ready_used[ $line_id ] ) ? $ready_used[ $line_id ] : 0;
-				if ( $taken + $qty <= self::live( $line, true ) ) {
+				$taken   = isset( $ready_used[ $line_id ] ) ? $ready_used[ $line_id ] : 0;
+				$on_sale = $taken + $qty <= self::live( $line, true );
+				if ( $on_sale ) {
 					$ready_used[ $line_id ] = $taken + $qty;
-					$to                     = 'ready';
-					$stay                   = self::stay_of( $line, true );
-					$said                   = __( 'The sale date of its tank group has come — the fish is ready.', 'fishotel-misc-plugin' );
+				}
+				// One step at a time: a request that comes from the order is checked in
+				// first (its place among the fish on sale is kept); run() plans again.
+				if ( $on_sale && in_array( $request['state'], array( 'in_quarantine', 'ready' ), true ) ) {
+					$to   = 'ready';
+					$stay = self::stay_of( $line, true );
+					$said = __( 'The sale date of its tank group has come — the fish is ready.', 'fishotel-misc-plugin' );
 				} else {
 					$to   = 'in_quarantine';
 					$stay = self::stay_of( $line, false );
@@ -451,22 +476,31 @@ class Follow {
 			return $out;
 		}
 
-		$requests = $service->store->find( array( 'state' => Rules::FOLLOW_STATES ) );
-		$orders   = $cleanroom->snapshot( $requests );
-		if ( ! is_array( $orders ) ) {
-			// The supplier orders could not be read: change nothing rather than send everyone back.
-			return $out;
-		}
-		$out['available'] = true;
+		// Twice at most: a line that was checked in AND is already on sale takes
+		// two steps (in quarantine, then ready), and both belong to this run.
+		for ( $pass = 0; $pass < 2; $pass++ ) {
+			$requests = $service->store->find( array( 'state' => Rules::FOLLOW_STATES ) );
+			$orders   = $cleanroom->snapshot( $requests );
+			if ( ! is_array( $orders ) ) {
+				// The supplier orders could not be read: change nothing rather than send everyone back.
+				return $out;
+			}
+			$out['available'] = true;
 
-		$by_id = array();
-		foreach ( $requests as $request ) {
-			$by_id[ (int) $request['id'] ] = $request;
-		}
+			$by_id = array();
+			foreach ( $requests as $request ) {
+				$by_id[ (int) $request['id'] ] = $request;
+			}
 
-		foreach ( self::plan( $requests, $orders ) as $step ) {
-			if ( isset( $by_id[ $step['id'] ] ) && $service->follow( $by_id[ $step['id'] ], $step ) && empty( $step['quiet'] ) ) {
-				$out[ $step['to'] ]++;
+			$again = false;
+			foreach ( self::plan( $requests, $orders ) as $step ) {
+				if ( isset( $by_id[ $step['id'] ] ) && $service->follow( $by_id[ $step['id'] ], $step ) && empty( $step['quiet'] ) ) {
+					$out[ $step['to'] ]++;
+					$again = $again || 'in_quarantine' === $step['to'];
+				}
+			}
+			if ( ! $again ) {
+				break;
 			}
 		}
 

@@ -250,8 +250,10 @@ class Service {
 	 *
 	 * @param array      $args  user_id, name, email, handle, fish, species_id, product_id, size_slug,
 	 *                          size_label, qty, note, source, came_from, owed, fee, order_id, link_id,
-	 *                          sheet, and 'sizes' (the standard size list to check the size against;
-	 *                          absent = the size is taken as given).
+	 *                          sheet, 'sizes' (the standard size list to check the size against;
+	 *                          absent = the size is taken as given) and — by hand only — invoice_of
+	 *                          (the request that carries an unpaid invoice of the same e-mail
+	 *                          address: this fish joins it; no second invoice, no e-mail).
 	 * @param array|null $actor Who (default: the system).
 	 * @return int|\WP_Error The new request id.
 	 */
@@ -301,6 +303,20 @@ class Service {
 				$fee      = 0.0;
 			}
 		}
+		// By hand, one more fish for somebody whose invoice is not paid yet: it
+		// goes on that invoice instead of making a second one.
+		$join = null;
+		if ( $hand && ! $owed && ! empty( $args['invoice_of'] ) ) {
+			$invoice = $this->payable( (int) $args['invoice_of'] );
+			if ( ! $invoice['ok'] ) {
+				$errors[] = __( 'That invoice can no longer take another fish (it was paid, removed, or ran out of time). Untick it — and set a fee if this fish needs one.', 'fishotel-misc-plugin' );
+			} elseif ( '' === $person['email'] || Rules::email( $invoice['carrier']['email'] ) !== $person['email'] ) {
+				$errors[] = __( 'One invoice goes to one person: this fish is for another e-mail address than that invoice.', 'fishotel-misc-plugin' );
+			} else {
+				$join = $invoice;
+				$fee  = 0.0;
+			}
+		}
 		if ( $hand && $fee > 0 ) {
 			$fees = $this->fees();
 			if ( ! $fees['available'] ) {
@@ -323,8 +339,9 @@ class Service {
 		$state    = 'new';
 		$approved = null;
 		if ( $hand || $lost ) {
-			$state    = ( $hand && $fee > 0 ) ? 'awaiting_payment' : 'waiting';
-			$approved = $now;
+			$state    = ( $hand && ( $fee > 0 || $join ) ) ? 'awaiting_payment' : 'waiting';
+			// On an invoice that is already running, it runs out of time with the others.
+			$approved = $join ? $join['members'][0]['approved_at'] : $now;
 		}
 
 		$list = isset( $this->settings['came_from'] ) && is_array( $this->settings['came_from'] ) ? $this->settings['came_from'] : array();
@@ -367,7 +384,10 @@ class Service {
 			/* translators: %d: order number */
 			$words[] = sprintf( __( 'from order #%d', 'fishotel-misc-plugin' ), (int) $args['order_id'] );
 		}
-		if ( $hand ) {
+		if ( $hand && $join ) {
+			/* translators: 1: request id, 2: amount */
+			$words[] = sprintf( __( 'approved as saved, on the invoice of request #%1$d (%2$s, not paid yet) — no second invoice', 'fishotel-misc-plugin' ), (int) $join['carrier']['id'], Rules::money( (float) $join['carrier']['fee_amount'] ) );
+		} elseif ( $hand ) {
 			$words[] = $fee > 0
 				/* translators: %s: amount */
 				? sprintf( __( 'approved as saved, with a fee of %s', 'fishotel-misc-plugin' ), Rules::money( $fee ) )
@@ -376,7 +396,10 @@ class Service {
 		$this->log( $id, 'created', implode( ' — ', $words ), $actor );
 
 		$this->last_mail = '';
-		if ( 'awaiting_payment' === $state ) {
+		if ( $join ) {
+			// The invoice went out with the first fish: nothing is e-mailed again.
+			$this->store->update( $id, array( 'fee_ref' => (int) $join['carrier']['id'] ) );
+		} elseif ( 'awaiting_payment' === $state ) {
 			$this->store->update( $id, array( 'fee_ref' => $id ) );
 			$this->last_mail = $this->send_invoice( $id );
 		}
@@ -803,7 +826,13 @@ class Service {
 			return self::fail( sprintf( __( 'A fee cannot be charged right now: %s.', 'fishotel-misc-plugin' ), $fees['reason'] ) );
 		}
 
-		$this->store->update( $carrier_id, array( 'fee_amount' => $fee ) );
+		$this->store->update(
+			$carrier_id,
+			array(
+				'fee_amount'  => $fee,
+				'reminded_at' => null,
+			)
+		);
 		foreach ( $state['members'] as $member ) {
 			$this->store->update(
 				(int) $member['id'],
@@ -960,7 +989,10 @@ class Service {
 
 	/**
 	 * Put a closed request back on the list (a mistake, a change of mind).
-	 * A fee that was never paid is dropped.
+	 * A fee that was never paid is dropped — unless its invoice is still
+	 * open for other requests of the sheet: then the request goes back on
+	 * that invoice and waits for the payment with them (dropping it there
+	 * would leave the others on an invoice nobody can pay, resend or change).
 	 *
 	 * @param int   $id    Request id.
 	 * @param array $actor Who.
@@ -983,19 +1015,29 @@ class Service {
 			'stay_id'     => null,
 			'link_manual' => 0,
 		);
+		$to   = 'waiting';
+		$said = __( 'Reopened — back on the list.', 'fishotel-misc-plugin' );
+		$done = __( 'The request is back on the list.', 'fishotel-misc-plugin' );
 		if ( (int) $request['fee_ref'] > 0 ) {
-			$carrier = (int) $request['fee_ref'] === (int) $request['id'] ? $request : $this->store->get( (int) $request['fee_ref'] );
-			if ( ! $carrier || empty( $carrier['fee_paid_at'] ) ) {
+			$invoice = $this->payable( (int) $request['fee_ref'] );
+			if ( $invoice['ok'] ) {
+				$to                    = 'awaiting_payment';
+				$fields['kept_at']     = null;
+				$fields['approved_at'] = $invoice['members'][0]['approved_at'];
+				/* translators: %d: request id */
+				$said = sprintf( __( 'Reopened — back on the invoice of request #%d, which is not paid yet: it waits for the payment with the others.', 'fishotel-misc-plugin' ), (int) $request['fee_ref'] );
+				$done = __( 'The request is back, on its invoice: it waits for the payment with the others on it.', 'fishotel-misc-plugin' );
+			} elseif ( ! $invoice['carrier'] || empty( $invoice['carrier']['fee_paid_at'] ) ) {
 				$fields['fee_ref']    = null;
 				$fields['fee_amount'] = 0.0;
 			}
 		}
 
-		if ( ! $this->move( $request, 'waiting', $fields, Rules::CLOSED_STATES, 'reopened', __( 'Reopened — back on the list.', 'fishotel-misc-plugin' ), $actor ) ) {
+		if ( ! $this->move( $request, $to, $fields, Rules::CLOSED_STATES, 'reopened', $said, $actor ) ) {
 			return self::fail( __( 'That request could not be reopened.', 'fishotel-misc-plugin' ) );
 		}
 
-		return self::ok( __( 'The request is back on the list.', 'fishotel-misc-plugin' ) );
+		return self::ok( $done );
 	}
 
 	/**
@@ -1340,6 +1382,7 @@ class Service {
 			'ask_expired' => 0,
 		);
 
+		$invoices = array(); // carrier id → the requests that still wait for its payment.
 		foreach ( $this->store->find( array( 'state' => 'awaiting_payment' ) ) as $request ) {
 			if ( Rules::fee_expired( $request, $now, $expire ) ) {
 				/* translators: %d: days */
@@ -1348,8 +1391,21 @@ class Service {
 				}
 				continue;
 			}
-			if ( Rules::reminder_due( $request, $now, $remind ) && 'sent' === $this->send_invoice( (int) $request['id'], 'reminder' ) ) {
-				$this->store->update( (int) $request['id'], array( 'reminded_at' => $this->stamp() ), array( 'awaiting_payment' ) );
+			$invoices[ (int) $request['fee_ref'] ][ (int) $request['id'] ] = $request;
+		}
+
+		// ONE reminder per invoice — also when the request that carries it was
+		// cancelled meanwhile and only the others on its sheet still wait.
+		foreach ( $invoices as $carrier_id => $members ) {
+			$carrier = isset( $members[ $carrier_id ] ) ? $members[ $carrier_id ] : $this->store->get( $carrier_id );
+			if ( ! $carrier ) {
+				continue;
+			}
+			// The clock is the one of a request that still waits.
+			$first                  = reset( $members );
+			$carrier['approved_at'] = $first['approved_at'];
+			if ( Rules::reminder_due( $carrier, $now, $remind ) && 'sent' === $this->send_invoice( $carrier_id, 'reminder' ) ) {
+				$this->store->update( $carrier_id, array( 'reminded_at' => $this->stamp() ) );
 				$out['reminded']++;
 			}
 		}
@@ -1393,6 +1449,12 @@ class Service {
 			return self::fail( __( 'That request does not exist.', 'fishotel-misc-plugin' ) );
 		}
 
+		// A page that was opened before somebody else's correction (another tab,
+		// another person) must not put the old values back.
+		if ( isset( $raw['seen'] ) && is_string( $raw['seen'] ) && '' !== $raw['seen'] && ! hash_equals( Rules::seen( $request ), $raw['seen'] ) ) {
+			return self::fail( __( 'This request was corrected somewhere else after this page was opened. Nothing was saved — the page now shows it as it is; make your change again.', 'fishotel-misc-plugin' ) );
+		}
+
 		$person = Rules::person( $raw );
 		$errors = Rules::person_errors( $person, false );
 		$fish   = Rules::fish_row( $raw, is_array( $sizes ) ? $sizes : null, $request );
@@ -1408,6 +1470,14 @@ class Service {
 		$user_id = array_key_exists( 'user_id', $raw ) ? max( 0, (int) $raw['user_id'] ) : (int) $request['user_id'];
 		if ( $user_id > 0 && ! $this->user( $user_id ) ) {
 			return self::fail( __( 'That site customer does not exist.', 'fishotel-misc-plugin' ) );
+		}
+		if ( $user_id > 0 && ! array_key_exists( 'user_id', $raw ) && '' !== $person['email'] && $person['email'] !== Rules::email( $request['email'] ) ) {
+			// The address was changed: the request follows it. Left on the old
+			// account, the invoice would go to one person and only the other could pay it.
+			$owner = $this->user( $user_id );
+			if ( ! $owner || Rules::email( $owner['email'] ) !== $person['email'] ) {
+				$user_id = 0;
+			}
 		}
 		if ( 0 === $user_id && '' !== $person['email'] ) {
 			$user_id = $this->user_by_email( $person['email'] );
@@ -1452,9 +1522,19 @@ class Service {
 			return self::fail( __( 'The request could not be saved.', 'fishotel-misc-plugin' ) );
 		}
 		/* translators: %s: column names */
-		$this->log( $id, 'edited', sprintf( __( 'Edited: %s.', 'fishotel-misc-plugin' ), implode( ', ', $changed ) ), $actor );
+		$said = sprintf( __( 'Edited: %s.', 'fishotel-misc-plugin' ), implode( ', ', $changed ) );
+		$done = __( 'The request is saved.', 'fishotel-misc-plugin' );
+		if ( in_array( 'user_id', $changed, true ) ) {
+			$moved = $user_id > 0
+				/* translators: %d: user id */
+				? sprintf( __( 'It now belongs to site customer #%d (the account of its e-mail address).', 'fishotel-misc-plugin' ), $user_id )
+				: __( 'It no longer belongs to a site account (its e-mail address is not a site customer\'s).', 'fishotel-misc-plugin' );
+			$said .= ' ' . $moved;
+			$done .= ' ' . $moved;
+		}
+		$this->log( $id, 'edited', $said, $actor );
 
-		return self::ok( __( 'The request is saved.', 'fishotel-misc-plugin' ) );
+		return self::ok( $done );
 	}
 
 	/**

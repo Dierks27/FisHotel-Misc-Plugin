@@ -381,6 +381,82 @@ $service->reopen( $unpaid, fh_staff() );
 check_same( 'reopening a request whose fee was never paid drops the fee', array( 'waiting', null, 0.0 ), array( $store->get( $unpaid )['state'], $store->get( $unpaid )['fee_ref'], $store->get( $unpaid )['fee_amount'] ) );
 
 /* ================================================================== */
+echo "\nA sheet whose invoice-carrying fish is cancelled\n";
+/* ================================================================== */
+
+$service = fh_service();
+$store   = $service->store;
+$ids     = $service->submit( $person, array( array( 'fish' => 'Blue Test Wrasse' ), array( 'fish' => 'Red Test Goby' ) ), array( 'source' => 'link', 'link' => fh_link( $service ) ) )['ids'];
+$service->approve( $ids, '10', fh_staff() );
+fh_take_mails();
+check( 'the person cancels the fish that carries the invoice', $service->cancel( $ids[0], Service::customer( 7 ), '', true )['ok'] );
+check( 'the invoice can still be paid for the other fish', $service->payable( $ids[0], 10.0 )['ok'] );
+fh_days_pass( 4 );
+$timers = $service->timers();
+$mails  = fh_take_mails();
+check_same( 'the ONE reminder still goes out', array( 1, 1 ), array( $timers['reminded'], count( $mails ) ) );
+check_contains( 'for the fish that still waits', 'Red Test Goby', $mails[0]['alt'] );
+check_lacks( 'not for the cancelled one', 'Blue Test Wrasse', $mails[0]['alt'] );
+check_same( 'and only once', array( 0, 0 ), array( $service->timers()['reminded'], count( fh_take_mails() ) ) );
+
+$back = $service->reopen( $ids[0], fh_staff() );
+check_same( 'reopened while its invoice is still open: it goes back ON the invoice and waits for the payment', array( true, 'awaiting_payment', $ids[0], 10.0 ), array( $back['ok'], $store->get( $ids[0] )['state'], $store->get( $ids[0] )['fee_ref'], $store->get( $ids[0] )['fee_amount'] ) );
+check_contains( 'the owner is told so', 'waits for the payment', $back['message'] );
+check_same( 'it runs out of time with the other', $store->get( $ids[1] )['approved_at'], $store->get( $ids[0] )['approved_at'] );
+check( 'the other fish is not left on an invoice nobody can pay', $service->payable( $ids[0], 10.0 )['ok'] && 2 === count( $service->payable( $ids[0] )['members'] ) );
+check( 'the invoice can be sent again', $service->resend_invoice( $ids[1], fh_staff() )['ok'] );
+fh_take_mails();
+$service->cancel( $ids[1], Service::customer( 7 ), '', true );
+check_same( 'a fish that does NOT carry the invoice comes back onto it the same way', 'awaiting_payment', $service->reopen( $ids[1], fh_staff() )['ok'] ? $store->get( $ids[1] )['state'] : 'refused' );
+$service->paid( $ids[0], array( 'order_id' => 90, 'amount' => 10.0, 'user_id' => 7, 'wallet' => true ) );
+check_same( 'paid: both are on the list', array( 'waiting', 'waiting' ), array( $store->get( $ids[0] )['state'], $store->get( $ids[1] )['state'] ) );
+
+$service = fh_service();
+$store   = $service->store;
+$ids     = $service->submit( $person, array( array( 'fish' => 'Blue Test Wrasse' ), array( 'fish' => 'Red Test Goby' ) ), array( 'source' => 'link', 'link' => fh_link( $service ) ) )['ids'];
+$service->approve( $ids, '10', fh_staff() );
+$service->cancel( $ids[0], fh_staff() );
+fh_days_pass( 4 );
+$service->timers();
+check( 'a changed fee starts the reminder clock again, cancelled carrier or not', $service->set_fee( $ids[1], '15', fh_staff() )['ok'] && null === $store->get( $ids[0] )['reminded_at'] );
+fh_take_mails();
+fh_days_pass( 3 );
+check_same( 'so the new invoice gets its one reminder too', 1, $service->timers()['reminded'] );
+fh_days_pass( 5 );
+$service->timers();
+check_same( 'the invoice ran out of time: everything on it is closed', array( 'cancelled', 'expired' ), array( $store->get( $ids[0] )['state'], $store->get( $ids[1] )['state'] ) );
+$service->reopen( $ids[0], fh_staff() );
+check_same( 'reopened after that, the fee is dropped as before', array( 'waiting', null, 0.0 ), array( $store->get( $ids[0] )['state'], $store->get( $ids[0] )['fee_ref'], $store->get( $ids[0] )['fee_amount'] ) );
+fh_take_mails();
+
+/* ================================================================== */
+echo "\nBy hand: several fish for one person, ONE invoice\n";
+/* ================================================================== */
+
+$service = fh_service();
+$store   = $service->store;
+$first   = $service->create( array( 'user_id' => 7, 'fish' => 'Blue Test Wrasse', 'fee' => '25' ), fh_staff() );
+check_same( 'the first fish carries the invoice, and it is e-mailed', 1, count( fh_take_mails() ) );
+fh_days_pass( 1 );
+$second = $service->create( array( 'user_id' => 7, 'fish' => 'Red Test Goby', 'fee' => '25', 'invoice_of' => $first ), fh_staff() );
+$r      = $store->get( $second );
+check_same( 'the second fish goes on that invoice: no fee of its own', array( 'awaiting_payment', $first, 0.0 ), array( $r['state'], $r['fee_ref'], $r['fee_amount'] ) );
+check_same( 'nothing is e-mailed again', 0, count( fh_take_mails() ) );
+check_same( 'it runs out of time with the first', $store->get( $first )['approved_at'], $r['approved_at'] );
+check_contains( 'its history says whose invoice', 'on the invoice of request #' . $first . ' ($25.00, not paid yet)', implode( ' | ', $store->notes( $second ) ) );
+check_same( 'the invoice names both fish', 2, count( $service->payable( $first, 25.0 )['members'] ) );
+$other = $service->create( array( 'user_id' => 8, 'fish' => 'Green Test Tang', 'invoice_of' => $first ), fh_staff() );
+check( 'a fish for ANOTHER person is refused on that invoice', is_wp_error( $other ) );
+check_contains( 'and it says why', 'One invoice goes to one person', is_wp_error( $other ) ? $other->get_error_message() : '' );
+$service->paid( $first, array( 'order_id' => 91, 'amount' => 25.0, 'user_id' => 7, 'wallet' => true ) );
+check_same( 'one payment puts both on the list', array( 'waiting', 'waiting' ), array( $store->get( $first )['state'], $store->get( $second )['state'] ) );
+$late = $service->create( array( 'user_id' => 7, 'fish' => 'Green Test Tang', 'invoice_of' => $first ), fh_staff() );
+check( 'a paid invoice takes no more fish, and nothing is saved', is_wp_error( $late ) && 2 === count( $store->rows ) );
+$owed = $service->create( array( 'user_id' => 7, 'fish' => 'Green Test Tang', 'source' => 'lost_fish', 'invoice_of' => $first ) );
+check_same( 'an owed fish never goes on an invoice', array( 'waiting', null ), array( $store->get( $owed )['state'], $store->get( $owed )['fee_ref'] ) );
+fh_take_mails();
+
+/* ================================================================== */
 echo "\nStill want it?\n";
 /* ================================================================== */
 
@@ -508,6 +584,46 @@ check_same( 'the address joins its account', 8, $r['user_id'] );
 check_contains( 'the log names what changed', 'qty', implode( ' | ', $store->notes( $id ) ) );
 check( 'a bad edit changes nothing', ! $service->edit( $id, array( 'name' => '', 'fish' => '' ), $sizes, fh_staff() )['ok'] && 'Green Test Tang' === $store->get( $id )['fish'] );
 check( 'a note is added to the history', $service->note( $id, 'Prefers a small one.', fh_staff() )['ok'] && 'note' === $store->actions( $id )[ count( $store->actions( $id ) ) - 1 ] );
+
+echo "\nA page that was opened before another correction\n";
+$form  = array( 'name' => 'Lee Local', 'email' => 'sam@example.test', 'fish' => 'Green Test Tang', 'qty' => 3, 'size_slug' => '2-3-5', 'came_from' => 'phone', 'note' => 'Called again.' );
+$tab_a = Rules::seen( $store->get( $id ) );
+$tab_b = $tab_a;
+check( 'tab A saves a note', $service->edit( $id, array_merge( $form, array( 'note' => 'IMPORTANT: wants a male, call first', 'seen' => $tab_a ) ), $sizes, fh_staff() )['ok'] );
+$stale = $service->edit( $id, array_merge( $form, array( 'qty' => 5, 'seen' => $tab_b ) ), $sizes, fh_staff() );
+check( 'tab B, opened before that, is refused', ! $stale['ok'] );
+check_contains( 'and told why', 'corrected somewhere else', $stale['message'] );
+check_same( 'the newer note is still there, the quantity untouched', array( 'IMPORTANT: wants a male, call first', 3 ), array( $store->get( $id )['note'], $store->get( $id )['qty'] ) );
+check( 'with the page as it is now, the same change is saved', $service->edit( $id, array_merge( $form, array( 'note' => 'IMPORTANT: wants a male, call first', 'qty' => 5, 'seen' => Rules::seen( $store->get( $id ) ) ) ), $sizes, fh_staff() )['ok'] && 5 === $store->get( $id )['qty'] );
+$before_state = Rules::seen( $store->get( $id ) );
+$store->update( $id, array( 'state' => 'on_order', 'line_id' => 4 ) );
+check_same( 'the daily job moving the request along does not make an open page stale', $before_state, Rules::seen( $store->get( $id ) ) );
+
+echo "\nThe account follows the e-mail address\n";
+$picked = $service->create( array( 'user_id' => 7, 'fish' => 'Blue Test Wrasse' ), fh_staff() );
+$base   = array( 'name' => 'Pat Example', 'handle' => 'reef_pat', 'fish' => 'Blue Test Wrasse', 'qty' => 1 );
+$service->edit( $picked, array_merge( $base, array( 'email' => 'pat@example.test', 'qty' => 2 ) ), $sizes, fh_staff() );
+check_same( 'the address unchanged: the account stays', 7, $store->get( $picked )['user_id'] );
+$moved = $service->edit( $picked, array_merge( $base, array( 'email' => 'sam@example.test', 'qty' => 2 ) ), $sizes, fh_staff() );
+check_same( 'the address corrected to another customer\'s: the request moves to that account', 8, $store->get( $picked )['user_id'] );
+check_contains( 'the owner is told', 'now belongs to site customer #8', $moved['message'] );
+check_contains( 'and so is the history', 'now belongs to site customer #8', implode( ' | ', $store->notes( $picked ) ) );
+$moved = $service->edit( $picked, array_merge( $base, array( 'email' => 'nobody@example.test', 'qty' => 2 ) ), $sizes, fh_staff() );
+check_same( 'an address that is nobody\'s account: the request belongs to no account', 0, $store->get( $picked )['user_id'] );
+check_contains( 'said plainly', 'no longer belongs to a site account', $moved['message'] );
+$kept = $service->create( array( 'user_id' => 7, 'fish' => 'Red Test Goby' ), fh_staff() );
+$service->edit( $kept, array( 'name' => 'Pat Example', 'email' => '', 'fish' => 'Red Test Goby', 'qty' => 1 ), $sizes, fh_staff() );
+check_same( 'an address that is only cleared leaves the account alone', 7, $store->get( $kept )['user_id'] );
+
+echo "\nLinks in an e-mail\n";
+$html = \FisHotel\Misc\Sections\Requests\Mailer::html( "Hello Pat pay at https://evil.example/pay now,\n\nPay here: https://example.test/?fh_request_pay=abc.def\n\nSee http://EXAMPLE.test/product/501/." );
+check_contains( 'a link to the shop\'s own site is clickable', '<a href="https://example.test/?fh_request_pay=abc.def"', $html );
+check_contains( 'whatever the case of the host', '<a href="http://EXAMPLE.test/product/501/"', $html );
+check_lacks( 'an address somebody typed into a name or a note is not', 'href="https://evil.example', $html );
+check_contains( 'it stays as plain text', 'pay at https://evil.example/pay now', $html );
+$bad = $service->create( array( 'name' => 'Pat pay at https://evil.example/pay', 'email' => 'lee@example.test', 'fish' => 'Blue Test Wrasse', 'fee' => '5' ), fh_staff() );
+$mail = fh_take_mails();
+check( 'the invoice of such a request links the pay link and nothing else', is_int( $bad ) && 1 === count( $mail ) && false === strpos( $mail[0]['message'], 'href="https://evil.example' ) && false !== strpos( $mail[0]['message'], 'href="https://example.test/?' ) );
 check( 'an empty note is not', ! $service->note( $id, '   ', fh_staff() )['ok'] );
 
 /* ================================================================== */

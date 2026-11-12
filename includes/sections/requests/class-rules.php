@@ -87,10 +87,13 @@ class Rules {
 	const ASK_ANSWER_DAYS = 14;
 
 	/**
-	 * Submissions allowed per address and per e-mail in RATE_WINDOW seconds.
+	 * Submissions allowed per e-mail address in RATE_WINDOW seconds — and
+	 * RATE_ADDRESS_FACTOR times as many per visitor address, which a
+	 * household, an office or (behind a proxy / CDN) every visitor shares.
 	 */
-	const RATE_LIMIT  = 5;
-	const RATE_WINDOW = 3600;
+	const RATE_LIMIT          = 5;
+	const RATE_WINDOW         = 3600;
+	const RATE_ADDRESS_FACTOR = 4;
 
 	/* ============================================================== */
 	/*  Words                                                          */
@@ -296,6 +299,22 @@ class Rules {
 	}
 
 	/**
+	 * A fingerprint of everything the "Correct it" form can change, as the
+	 * request stands: the form posts it back, and a save from a page that
+	 * shows older values is refused.
+	 *
+	 * @param array $request The request.
+	 * @return string
+	 */
+	public static function seen( array $request ) {
+		$parts = array();
+		foreach ( array( 'name', 'email', 'handle', 'fish', 'size_slug', 'size_label', 'qty', 'note', 'came_from' ) as $key ) {
+			$parts[] = isset( $request[ $key ] ) && is_scalar( $request[ $key ] ) ? (string) $request[ $key ] : '';
+		}
+		return substr( md5( implode( "\x1f", $parts ) ), 0, 16 );
+	}
+
+	/**
 	 * A fee typed in a form: null when it is not an amount from 0 to
 	 * MAX_FEE; an empty field is 0.
 	 *
@@ -308,13 +327,21 @@ class Rules {
 		}
 		if ( is_int( $value ) || is_float( $value ) ) {
 			$amount = (float) $value;
+			if ( is_nan( $amount ) || is_infinite( $amount ) ) {
+				return null;
+			}
 		} else {
 			if ( ! is_string( $value ) ) {
 				return null;
 			}
-			$clean = str_replace( array( '$', ',', ' ' ), '', trim( $value ) );
+			$clean = str_replace( array( '$', ' ' ), '', trim( $value ) );
 			if ( '' === $clean ) {
 				return 0.0;
+			}
+			// A comma only ever groups thousands ("1,250.00"): "25,00" is refused
+			// rather than read as 2500.
+			if ( 1 === preg_match( '/^\d{1,3}(,\d{3})+(\.\d{1,2})?$/', $clean ) ) {
+				$clean = str_replace( ',', '', $clean );
 			}
 			if ( 1 !== preg_match( '/^\d{1,6}(\.\d{1,2})?$/', $clean ) ) {
 				return null;

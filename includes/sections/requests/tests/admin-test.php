@@ -70,6 +70,20 @@ function fh_ctx( $service, array $more = array() ) {
 	);
 }
 
+/**
+ * The Add tab as it is printed with what a save handed back.
+ */
+function fh_add_view( $service, array $keep ) {
+	$tab        = 'add';
+	$ctx        = fh_ctx( $service, array( 'fees' => array( 'available' => true, 'reason' => '', 'product_id' => 9001, 'product_title' => 'Test Wallet Refill' ) ) );
+	$flash      = array( 'message' => '', 'ok' => true, 'keep' => $keep );
+	$needs      = Listing::needs_you( array(), $GLOBALS['fh_clock'], $service->settings );
+	$came_froms = $service->settings['came_from'];
+	ob_start();
+	include FISHOTEL_MISC_PATH . 'includes/sections/requests/views/admin-add.php';
+	return (string) ob_get_clean();
+}
+
 /* ================================================================== */
 echo "The one write action\n";
 /* ================================================================== */
@@ -101,6 +115,37 @@ check( 'a form with mistakes saves nothing', ! $result['ok'] && 3 === count( $st
 check_same( 'and hands its values back, to show again', 'keep me', $result['keep']['note'] );
 check( 'never the size list', ! isset( $result['keep']['sizes'] ) );
 
+echo "\nSeveral fish for one person: the person is kept, and ONE invoice\n";
+check_same( 'a plain save hands nothing back: the next form is empty', array(), Admin::perform( 'add', array( 'name' => 'Lee Local', 'fish' => 'Plain Test Fish' ), fh_ctx( $service ) )['keep'] );
+$result = Admin::perform( 'add', array( 'user_id' => '7', 'fish' => 'Striped Test Damsel', 'fee' => '25', 'came_from' => 'phone', 'again' => '1' ), fh_ctx( $service ) );
+$first  = $store->find( array( 'search' => 'Striped Test Damsel' ) )[0];
+check_same( '"Save, and add another fish for this person" keeps who it is for', array( 1, 7, 'pat@example.test', 'phone' ), array( $result['keep']['again'], $result['keep']['user_id'], $result['keep']['email'], $result['keep']['came_from'] ) );
+check( 'never the fish, the note or the fee', ! isset( $result['keep']['fish'] ) && ! isset( $result['keep']['note'] ) && ! isset( $result['keep']['fee'] ) );
+check_same( 'the invoice that just went out is offered for the next fish', array( $first['id'], '$25.00', 1 ), array( $result['keep']['invoice_of'], $result['keep']['invoice_fee'], count( fh_take_mails() ) ) );
+$html = fh_add_view( $service, $result['keep'] );
+check_contains( 'the form says it is the same person', 'The same person as the request you just saved', $html );
+check_contains( 'and offers the same invoice, ticked', 'name="same_invoice" value="1"  checked="checked"', $html );
+check_contains( 'naming it', 'request #' . $first['id'] . ' ($25.00, not paid yet)', $html );
+check_contains( 'the person is filled in', 'value="pat@example.test"', $html );
+
+$result = Admin::perform( 'add', array_merge( $result['keep'], array( 'fish' => 'Spotted Test Hawkfish', 'fee' => '25', 'same_invoice' => '1', 'again' => '1' ) ), fh_ctx( $service ) );
+$second = $store->find( array( 'search' => 'Spotted Test Hawkfish' ) )[0];
+check_same( 'the second fish is on the first one\'s invoice: no second invoice, no second e-mail', array( true, 'awaiting_payment', $first['id'], 0.0, 0 ), array( $result['ok'], $second['state'], $second['fee_ref'], $second['fee_amount'], count( fh_take_mails() ) ) );
+check_contains( 'the notice says so', 'no second invoice', $result['message'] );
+check_same( 'and the invoice is offered again for a third', $first['id'], $result['keep']['invoice_of'] );
+$result = Admin::perform( 'add', array_merge( $result['keep'], array( 'fish' => 'Banded Test Pipefish', 'fee' => '8' ) ), fh_ctx( $service ) );
+$third  = $store->find( array( 'search' => 'Banded Test Pipefish' ) )[0];
+check_same( 'unticked, a fish gets an invoice of its own', array( true, $third['id'], 8.0, 1 ), array( $result['ok'], $third['fee_ref'], $third['fee_amount'], count( fh_take_mails() ) ) );
+$result = Admin::perform( 'add', array( 'name' => 'Lee Local', 'email' => 'lee@example.test', 'fish' => 'Dotted Test Dragonet', 'invoice_of' => (string) $first['id'], 'same_invoice' => '1' ), fh_ctx( $service ) );
+check( 'the person was changed to somebody else: refused, with the form handed back', ! $result['ok'] && 'Dotted Test Dragonet' === $result['keep']['fish'] && array() === $store->find( array( 'search' => 'Dotted Test Dragonet' ) ) );
+check_same( 'the invoice is still offered, ticked as it was', array( $first['id'], '$25.00', 1 ), array( $result['keep']['invoice_of'], $result['keep']['invoice_fee'], $result['keep']['same_invoice'] ) );
+$result = Admin::perform( 'add', array( 'name' => 'Lee Local', 'email' => 'lee@example.test', 'fish' => '', 'invoice_of' => (string) $first['id'] ), fh_ctx( $service ) );
+check_lacks( 'unticked and refused for another reason: the box comes back unticked', 'name="same_invoice" value="1"  checked="checked"', fh_add_view( $service, $result['keep'] ) );
+foreach ( array( $first['id'], $second['id'], $third['id'] ) as $fh_done ) {
+	$service->cancel( $fh_done, fh_staff() );
+}
+$service->cancel( $store->find( array( 'search' => 'Plain Test Fish' ) )[0]['id'], fh_staff() );
+
 echo "\nApprove and decline\n";
 $link  = $store->link( $store->insert_link( array( 'token' => Tokens::link(), 'label' => 'Test batch', 'fee_amount' => 12.0 ) ) );
 $sheet = $service->submit( array( 'name' => 'Noah Newcomer', 'email' => 'noah@example.test' ), array( array( 'fish' => 'Purple Test Dottyback' ), array( 'fish' => 'Orange Test Anthias' ), array( 'fish' => 'Yellow Test Blenny' ) ), array( 'source' => 'link', 'link' => $link, 'fee' => 12.0 ) )['ids'];
@@ -125,6 +170,8 @@ check_contains( 'and the history says nothing went to a wallet from here', 'noth
 
 echo "\nEdit, note, close\n";
 check_same( 'an edit', array( true, 3 ), array( Admin::perform( 'edit', array( 'id' => $lee['id'], 'name' => 'Lee Local', 'fish' => 'Blue Test Wrasse', 'qty' => '3', 'size_label' => 'about 3 inches', 'came_from' => 'in person' ), fh_ctx( $service ) )['ok'], $store->get( $lee['id'] )['qty'] ) );
+$stale = Admin::perform( 'edit', array( 'id' => $lee['id'], 'name' => 'Lee Local', 'fish' => 'Blue Test Wrasse', 'qty' => '9', 'size_label' => 'about 3 inches', 'came_from' => 'in person', 'seen' => Rules::seen( $lee ) ), fh_ctx( $service ) );
+check_same( 'an edit from a page that was opened before that one is refused', array( false, 3 ), array( $stale['ok'], $store->get( $lee['id'] )['qty'] ) );
 check( 'a note', Admin::perform( 'note', array( 'id' => $lee['id'], 'text' => 'Called again.' ), fh_ctx( $service ) )['ok'] );
 check_same( 'cancel, then reopen', array( 'cancelled', 'waiting' ), array( Admin::perform( 'cancel', array( 'id' => $lee['id'] ), fh_ctx( $service ) )['ok'] ? $store->get( $lee['id'] )['state'] : '', Admin::perform( 'reopen', array( 'id' => $lee['id'] ), fh_ctx( $service ) )['ok'] ? $store->get( $lee['id'] )['state'] : '' ) );
 check_same( 'filled', 'filled', Admin::perform( 'fill', array( 'id' => $lee['id'] ), fh_ctx( $service ) )['ok'] ? $store->get( $lee['id'] )['state'] : '' );
@@ -328,6 +375,7 @@ $html = fh_admin_view( 'admin-request.php', array_merge( $base, array( 'tab' => 
 check_contains( 'a request that does not exist says so', 'does not exist', $html );
 $html = fh_admin_view( 'admin-request.php', array_merge( $base, array( 'tab' => 'list', 'ctx' => $unavailable, 'missing' => false, 'request' => $store->get( $fresh ), 'detail' => Admin::request_detail( $store->get( $fresh ), $unavailable ), 'came_froms' => array() ) ) );
 check_contains( 'while fees are unavailable the screen says why', 'Fees are unavailable: Batch Manager is not active', $html );
+check_contains( 'the "Correct it" form carries what it showed, so a stale page cannot undo a newer correction', 'name="seen" value="' . Rules::seen( $store->get( $fresh ) ) . '"', $html );
 check_contains( 'and the fee field is switched off', 'name="fee" value="" placeholder="0.00" inputmode="decimal"  disabled="disabled"', $html );
 check_contains( 'and it says the Clean Room is off', 'Clean Room section is switched off', $html );
 

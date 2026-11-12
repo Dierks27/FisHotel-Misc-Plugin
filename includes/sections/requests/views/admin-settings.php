@@ -85,7 +85,7 @@ $fh_holder = array(
 			</p>
 			<div class="fh-rq-grid">
 				<label>
-					<span><?php esc_html_e( 'Wallet-deposit product ID (leave empty to use Batch Manager\'s own)', 'fishotel-misc-plugin' ); ?></span>
+					<span><?php esc_html_e( 'Wallet-deposit product ID (leave empty to use Batch Manager\'s own — any other must have "Wallet Refill" in its name, or Batch Manager credits no wallet and fees are switched off)', 'fishotel-misc-plugin' ); ?></span>
 					<input type="number" class="fh-rq-input" name="settings[deposit_product]" value="<?php echo esc_attr( (int) $fh_s['deposit_product'] > 0 ? (string) $fh_s['deposit_product'] : '' ); ?>" min="0">
 				</label>
 			</div>

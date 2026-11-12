@@ -71,14 +71,25 @@ for ( $fh_i = 0; $fh_i < Rules::RATE_LIMIT - 1; $fh_i++ ) {
 check( 'four sheets in the hour: still fine', ! Front::rate_limited( $keys ) );
 Front::rate_hit( $keys );
 check( 'the fifth uses the hour up', Front::rate_limited( $keys ) );
-check( 'the same address with ANOTHER e-mail is limited too', Front::rate_limited( Front::rate_keys( '203.0.113.9', 'other@example.test' ) ) );
 check( 'the same e-mail from ANOTHER address is limited too', Front::rate_limited( Front::rate_keys( '198.51.100.7', 'pat@example.test' ) ) );
 check( 'somebody else entirely is not', ! Front::rate_limited( Front::rate_keys( '198.51.100.7', 'other@example.test' ) ) );
+check( 'an address is shared (a household, an office, a proxy): ANOTHER e-mail from it still gets through', ! Front::rate_limited( Front::rate_keys( '203.0.113.9', 'other@example.test' ) ) );
+for ( $fh_i = Rules::RATE_LIMIT; $fh_i < Rules::RATE_LIMIT * Rules::RATE_ADDRESS_FACTOR; $fh_i++ ) {
+	Front::rate_hit( Front::rate_keys( '203.0.113.9', 'person' . $fh_i . '@example.test' ) );
+}
+check( 'until the address itself has sent four times as many: then everybody from it waits', Front::rate_limited( Front::rate_keys( '203.0.113.9', 'other@example.test' ) ) );
+check_same( 'an address is counted as digits, hex letters, dots and colons — whatever a filter hands back', array( '203.0.113.9', '2001:db8::7', '', '' ), array( Front::clean_address( " 203.0.113.9\n\"; --" ), Front::clean_address( '2001:db8::7' ), Front::clean_address( array( 'x' ) ), Front::clean_address( null ) ) );
 check_same( 'the window is an hour', Rules::RATE_WINDOW, $GLOBALS['fh_transients'][ $keys[0] ][1] );
 add_filter( 'fishotel_requests_rate_limit', static function () { return 50; } );
 check( 'the limit can be filtered', ! Front::rate_limited( $keys ) );
 $GLOBALS['fh_filters']    = array();
 $GLOBALS['fh_transients'] = array();
+
+echo "\nWhose sheet it is\n";
+check_same( 'a logged-in visitor who types the address of the account: the sheet is that account\'s', 7, Front::sender_id( 7, 'pat@example.test', ' PAT@example.test ' ) );
+check_same( 'a logged-in visitor who types ANOTHER address is not made the owner of that request', 0, Front::sender_id( 7, 'pat@example.test', 'sam@example.test' ) );
+check_same( 'logged out: nobody', 0, Front::sender_id( 0, '', 'sam@example.test' ) );
+check_same( 'no address typed: nobody', 0, Front::sender_id( 7, '', '' ) );
 
 /* ================================================================== */
 echo "\nThe form as it is printed\n";

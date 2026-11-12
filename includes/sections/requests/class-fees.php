@@ -38,7 +38,13 @@
  *     applied to a fee line, and its quantity is always 1, so what is
  *     credited is the fee (on a store whose prices include tax and whose
  *     deposit product is taxable, the credit is the fee before tax — the
- *     request's history then says how much was credited);
+ *     request's history then says how much was credited). One exception
+ *     WooCommerce leaves no filter for: the remainder cent of a fixed-cart
+ *     coupon can land on the fee line, so a line up to SHORT_BY below the
+ *     fee still counts as paid (the wallet gets what was paid);
+ *   - Batch Manager credits only its own deposit product, or a line whose
+ *     name contains "Wallet Refill" → any other product typed in Requests →
+ *     Settings makes fees unavailable, and the screens say why;
  *   - the amount is whatever the cart line says → it comes from a signed
  *     token and is checked again every time the cart is priced.
  *
@@ -85,6 +91,23 @@ class Fees {
 	const BATCH_CLASS    = 'FisHotel_Batch_Manager';
 	const BATCH_OPTION   = 'fishotel_deposit_product_id';
 	const BATCH_CREDITED = '_fishotel_wallet_credited';
+
+	/**
+	 * What Batch Manager looks for in the NAME of an order line that is not
+	 * its own deposit product before it credits a wallet for it.
+	 *
+	 * @var string
+	 */
+	const BATCH_NAME = 'Wallet Refill';
+
+	/**
+	 * How far below the fee a paid line may fall and still count: a
+	 * fixed-cart coupon's remainder cent lands on the dearest line past
+	 * every filter (one cent per coupon).
+	 *
+	 * @var float
+	 */
+	const SHORT_BY = 0.05;
 
 	/**
 	 * The memoised status (null = not asked in this request).
@@ -142,15 +165,37 @@ class Fees {
 	public static function product_id( array $settings ) {
 		$id = (int) ( $settings['deposit_product'] ?? 0 );
 		if ( $id <= 0 ) {
-			$id = (int) get_option( self::BATCH_OPTION, 0 );
-		}
-		if ( $id <= 0 ) {
-			$id = self::batch_default();
+			$id = self::batch_product_id();
 		}
 		if ( function_exists( 'apply_filters' ) ) {
 			$id = (int) apply_filters( 'fishotel_requests_deposit_product_id', $id );
 		}
 		return max( 0, $id );
+	}
+
+	/**
+	 * Batch Manager's OWN deposit product — the one it credits a wallet
+	 * for whatever the product is called: its stored setting, else the
+	 * product it falls back to.
+	 *
+	 * @return int 0 when there is none.
+	 */
+	public static function batch_product_id() {
+		$id = (int) get_option( self::BATCH_OPTION, 0 );
+		return $id > 0 ? $id : self::batch_default();
+	}
+
+	/**
+	 * Whether Batch Manager credits a wallet when this product is bought
+	 * (its two tests in credit_wallet_on_payment(): the line is its own
+	 * deposit product, or the line's name contains "Wallet Refill").
+	 *
+	 * @param int    $id   Product id.
+	 * @param string $name Product name.
+	 * @return bool
+	 */
+	public static function credited_by_batch( $id, $name ) {
+		return ( (int) $id > 0 && (int) $id === self::batch_product_id() ) || false !== stripos( (string) $name, self::BATCH_NAME );
 	}
 
 	/**
@@ -217,8 +262,20 @@ class Fees {
 				/* translators: %d: product id */
 				$out['reason'] = sprintf( __( 'the wallet-deposit product #%d is in the trash', 'fishotel-misc-plugin' ), $id );
 			} else {
-				$out['available']     = true;
 				$out['product_title'] = method_exists( $product, 'get_name' ) ? (string) $product->get_name() : '';
+				if ( self::credited_by_batch( $id, $out['product_title'] ) ) {
+					$out['available'] = true;
+				} else {
+					// Paid with any other product the money would be taken and no wallet credited.
+					$out['reason'] = sprintf(
+						/* translators: 1: product id, 2: product name, 3: Batch Manager's product id, 4: "Wallet Refill" */
+						__( 'product #%1$d ("%2$s") is not one Batch Manager credits a wallet for — it credits its own deposit product (#%3$d) or a product with "%4$s" in its name; leave the product empty in Requests → Settings to use Batch Manager\'s', 'fishotel-misc-plugin' ),
+						$id,
+						$out['product_title'],
+						self::batch_product_id(),
+						self::BATCH_NAME
+					);
+				}
 			}
 		}
 
@@ -627,7 +684,8 @@ class Fees {
 			// prices include it); what Batch Manager credits is the total before tax.
 			$before_tax = method_exists( $item, 'get_total' ) ? (float) $item->get_total() : 0.0;
 			$paid       = $before_tax + ( method_exists( $item, 'get_total_tax' ) ? (float) $item->get_total_tax() : 0.0 );
-			if ( $paid + 0.005 < (float) $carrier['fee_amount'] ) {
+			// A few cents short still counts (see SHORT_BY): the history names what was paid.
+			if ( $paid + self::SHORT_BY < (float) $carrier['fee_amount'] ) {
 				$out['short'][] = $carrier_id;
 				$service->store->log(
 					$carrier_id,

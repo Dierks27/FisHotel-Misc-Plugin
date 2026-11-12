@@ -23,8 +23,10 @@ use FisHotel\Misc\Sections\Requests\Rules;
 $fh_value = static function ( $key, $default = '' ) use ( $keep ) {
 	return isset( $keep[ $key ] ) && is_scalar( $keep[ $key ] ) ? (string) $keep[ $key ] : (string) $default;
 };
-$fh_sizes = $ctx['sizes'];
-$fh_user  = (int) $fh_value( 'user_id', 0 );
+$fh_sizes   = $ctx['sizes'];
+$fh_user    = (int) $fh_value( 'user_id', 0 );
+$fh_again   = '1' === $fh_value( 'again' );
+$fh_invoice = (int) $fh_value( 'invoice_of', 0 );
 ?>
 <div class="wrap fishotel-misc-wrap fh-rq-wrap">
 	<?php include Requests::path() . 'views/admin-tabs.php'; ?>
@@ -42,6 +44,9 @@ $fh_user  = (int) $fh_value( 'user_id', 0 );
 		<p class="fishotel-misc-card-desc"><?php esc_html_e( 'For the requests that reach you by e-mail, by phone, in person or on the forum. It is approved as you save it and goes straight on the list. Nobody is e-mailed — unless you set a fee (the invoice), and later when the fish is ready.', 'fishotel-misc-plugin' ); ?></p>
 
 		<h3 class="fh-rq-card__sub"><?php esc_html_e( 'Who', 'fishotel-misc-plugin' ); ?></h3>
+		<?php if ( $fh_again ) : ?>
+			<p class="fh-rq-sub fh-rq-again"><?php esc_html_e( 'The same person as the request you just saved — add their next fish below, or change who it is for.', 'fishotel-misc-plugin' ); ?> <a href="<?php echo esc_url( Admin::page_url( 'add' ) ); ?>"><?php esc_html_e( 'Start with an empty form', 'fishotel-misc-plugin' ); ?></a></p>
+		<?php endif; ?>
 		<div class="fh-rq-grid">
 			<label class="fh-rq-grid__wide fh-rq-customer">
 				<span><?php esc_html_e( 'Find a site customer (type a name or an e-mail) — or skip this and fill in the fields below', 'fishotel-misc-plugin' ); ?></span>
@@ -101,13 +106,33 @@ $fh_user  = (int) $fh_value( 'user_id', 0 );
 					?>
 				</span>
 			</label>
+			<?php if ( $fh_invoice > 0 ) : ?>
+				<label class="fh-rq-check fh-rq-grid__wide">
+					<input type="hidden" name="invoice_of" value="<?php echo esc_attr( (string) $fh_invoice ); ?>">
+					<input type="checkbox" name="same_invoice" value="1" <?php checked( '0' !== $fh_value( 'same_invoice', '1' ) ); ?>>
+					<?php
+					echo esc_html(
+						sprintf(
+							/* translators: 1: request id, 2: amount */
+							__( 'Put this fish on the same invoice as request #%1$d (%2$s, not paid yet): one fee for all of this person\'s fish — no second invoice, no second e-mail, and the fee field above is ignored. Untick it to give this fish an invoice of its own, or none.', 'fishotel-misc-plugin' ),
+							$fh_invoice,
+							$fh_value( 'invoice_fee' )
+						)
+					);
+					?>
+				</label>
+			<?php endif; ?>
 			<label class="fh-rq-check fh-rq-grid__wide">
 				<input type="checkbox" name="owed" value="1" <?php checked( '1' === $fh_value( 'owed' ) ); ?>>
 				<?php esc_html_e( 'A replacement for a lost fish: it is OWED (already paid for) — never a fee, and the "ready" e-mail says there is nothing to pay.', 'fishotel-misc-plugin' ); ?>
 			</label>
 		</div>
 
-		<p><button type="submit" class="button button-primary"><?php esc_html_e( 'Save the request', 'fishotel-misc-plugin' ); ?></button></p>
+		<p>
+			<button type="submit" class="button button-primary"><?php esc_html_e( 'Save the request', 'fishotel-misc-plugin' ); ?></button>
+			<button type="submit" class="button" name="again" value="1"><?php esc_html_e( 'Save, and add another fish for this person', 'fishotel-misc-plugin' ); ?></button>
+			<span class="fh-rq-sub fh-rq-sub--inline"><?php esc_html_e( 'Several fish for one person: the second button keeps the person in the form, and with a fee all of them go on ONE invoice.', 'fishotel-misc-plugin' ); ?></span>
+		</p>
 		<datalist id="fh-rq-names"></datalist>
 	</form>
 </div>

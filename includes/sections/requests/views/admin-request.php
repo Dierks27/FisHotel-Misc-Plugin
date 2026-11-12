@@ -141,6 +141,7 @@ $fh_open_states = Rules::is_open( $fh_state );
 			<section class="fishotel-misc-card fh-rq-card">
 				<h3 class="fh-rq-card__title"><?php esc_html_e( 'Correct it', 'fishotel-misc-plugin' ); ?></h3>
 				<?php $fh_open( 'edit', 'fh-rq-grid' ); ?>
+					<input type="hidden" name="seen" value="<?php echo esc_attr( Rules::seen( $request ) ); ?>">
 					<label><span><?php esc_html_e( 'Name', 'fishotel-misc-plugin' ); ?></span><input type="text" class="fh-rq-input" name="name" value="<?php echo esc_attr( $request['name'] ); ?>" maxlength="<?php echo esc_attr( Rules::MAX_NAME ); ?>"></label>
 					<label><span><?php esc_html_e( 'E-mail', 'fishotel-misc-plugin' ); ?></span><input type="email" class="fh-rq-input" name="email" value="<?php echo esc_attr( $request['email'] ); ?>" maxlength="<?php echo esc_attr( Rules::MAX_EMAIL ); ?>"></label>
 					<label><span><?php esc_html_e( 'Forum handle', 'fishotel-misc-plugin' ); ?></span><input type="text" class="fh-rq-input" name="handle" value="<?php echo esc_attr( $request['handle'] ); ?>" maxlength="<?php echo esc_attr( Rules::MAX_HANDLE ); ?>"></label>
@@ -172,7 +173,7 @@ $fh_open_states = Rules::is_open( $fh_state );
 						</select>
 					</label>
 					<label class="fh-rq-grid__wide"><span><?php esc_html_e( 'Note', 'fishotel-misc-plugin' ); ?></span><textarea class="fh-rq-input" name="note" rows="2" maxlength="<?php echo esc_attr( Rules::MAX_NOTE ); ?>"><?php echo esc_textarea( $request['note'] ); ?></textarea></label>
-					<p class="fh-rq-grid__wide"><button type="submit" class="button"><?php esc_html_e( 'Save the correction', 'fishotel-misc-plugin' ); ?></button> <span class="fh-rq-sub fh-rq-sub--inline"><?php esc_html_e( 'Saving never sends an e-mail. An e-mail address that belongs to a site customer joins the request to that account.', 'fishotel-misc-plugin' ); ?></span></p>
+					<p class="fh-rq-grid__wide"><button type="submit" class="button"><?php esc_html_e( 'Save the correction', 'fishotel-misc-plugin' ); ?></button> <span class="fh-rq-sub fh-rq-sub--inline"><?php esc_html_e( 'Saving never sends an e-mail. An e-mail address that belongs to a site customer joins the request to that account; a changed address moves the request to the account of the new one (or to none).', 'fishotel-misc-plugin' ); ?></span></p>
 				</form>
 				<datalist id="fh-rq-names"></datalist>
 			</section>

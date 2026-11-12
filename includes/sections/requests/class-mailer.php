@@ -242,8 +242,29 @@ class Mailer {
 	}
 
 	/**
-	 * A plain-text body as simple HTML: paragraphs, line breaks, links —
-	 * everything else escaped.
+	 * Whether a URL in an e-mail may become a clickable link: only one on
+	 * the shop's own site (the pay, view, keep / cancel and product links).
+	 * A name, a fish or a note is typed by whoever asked — an address in
+	 * it stays plain text in the shop's own e-mail.
+	 *
+	 * @param string $url A URL found in the body.
+	 * @return bool
+	 */
+	public static function own_url( $url ) {
+		$host = strtolower( (string) parse_url( (string) $url, PHP_URL_HOST ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url -- pure, and wp_parse_url() is not in the tests.
+		if ( '' === $host ) {
+			return false;
+		}
+		$own = array( strtolower( (string) parse_url( home_url( '/' ), PHP_URL_HOST ) ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url
+		if ( function_exists( 'apply_filters' ) ) {
+			$own = (array) apply_filters( 'fishotel_requests_mail_link_hosts', $own );
+		}
+		return in_array( $host, array_map( 'strtolower', array_filter( $own, 'is_string' ) ), true );
+	}
+
+	/**
+	 * A plain-text body as simple HTML: paragraphs, line breaks, links to
+	 * the shop's own site — everything else escaped.
 	 *
 	 * @param string $text Plain text.
 	 * @return string
@@ -257,7 +278,7 @@ class Mailer {
 			$parts = preg_split( '~(https?://[^\s<>"\']+[^\s<>"\'.,;:!?)])~', (string) $paragraph, -1, PREG_SPLIT_DELIM_CAPTURE );
 			$html  = '';
 			foreach ( (array) $parts as $index => $part ) {
-				if ( 1 === $index % 2 ) {
+				if ( 1 === $index % 2 && self::own_url( $part ) ) {
 					$html .= '<a href="' . esc_url( $part ) . '" style="color:#0b6fa4">' . esc_html( $part ) . '</a>';
 				} else {
 					$html .= nl2br( esc_html( $part ) );

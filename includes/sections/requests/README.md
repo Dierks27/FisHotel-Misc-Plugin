@@ -22,12 +22,18 @@ Switch the section on in **FisHotel Tools → Dashboard**; it then lives at
    and the published fish products), a size from the standard size list
    (free text when the Clean Room has none), a quantity, a note. What
    comes in is a *sheet* of requests in state **new**. The form carries a
-   nonce and a honeypot field, and takes 5 sheets an hour per address and
-   per e-mail.
+   nonce and a honeypot field, and takes 5 sheets an hour per e-mail
+   address and 20 per visitor address (a household, an office or a proxy
+   shares one). Somebody logged in who types another e-mail address than
+   their account's is not made the owner of that request: it joins the
+   account of its address when it is approved.
 2. **By hand** (Requests → Add): pick a site customer or type a name /
    e-mail / handle, the fish, size, quantity, where it came from, a note,
    an optional fee — or tick "a replacement for a lost fish" (owed, never
-   a fee). It is approved as it is saved.
+   a fee). It is approved as it is saved. **Save, and add another fish
+   for this person** keeps the person in the form; with a fee, the next
+   fish can go on the invoice that just went out (ticked for you) — one
+   fee and one e-mail for all of that person's fish.
 3. **Another section**: `fishotel_requests_create( array $args )` — see
    *Contracts* below.
 
@@ -40,7 +46,8 @@ Switch the section on in **FisHotel Tools → Dashboard**; it then lives at
   ticked** (with or without a fee) or open a request to **Decline** it
   (an optional note; an e-mail only when ticked).
 - **awaiting_payment** — approved with a fee: one invoice e-mail with a
-  pay link. One reminder after 3 days, expiry after 7 (both in Settings).
+  pay link. One reminder per invoice after 3 days, expiry after 7 (both
+  in Settings).
 - **waiting** — on the list.
 - **on_order / in_quarantine / ready** — see *The state follows the
   fish*.
@@ -56,7 +63,12 @@ when, what).
 A fee belongs to an *invoice*, and an invoice may cover several requests
 approved together (one sheet, one fee): the oldest carries the amount,
 the others point at it, all wait for the payment, one e-mail goes out,
-and paying it puts every one of them on the list.
+and paying it puts every one of them on the list. When the fish that
+carries the amount is cancelled, the invoice stays payable for the
+others (and is still reminded once); a cancelled fish that is reopened
+while its invoice is unpaid goes back **on** the invoice and waits for
+the payment with the others. Reopened after the invoice has closed, its
+fee is dropped.
 
 The money goes through the store's existing custom-order **deposit**, so
 it lands in the customer's **wallet** — FisHotel Batch Manager credits
@@ -70,7 +82,10 @@ it; this section never touches a wallet:
   keys Batch Manager prices by (`is_deposit`, `deposit_amount`) plus this
   section's own (`fh_request_fee`); the price is applied to that cart
   line only and checked again every time the cart is priced; the line's
-  quantity is always 1 and no coupon takes anything off it;
+  quantity is always 1 and no coupon takes anything off it (the one
+  thing WooCommerce leaves no filter for is the remainder cent of a
+  fixed-cart coupon: a line up to 5 cents under the fee still counts as
+  paid, and the History names what was paid);
 - the order line is tagged `_fh_request_fee` (and the order
   `_fishotel_request_fee`); when the order is paid — at priority 20 on
   the same three hooks Batch Manager credits the wallet on at priority
@@ -95,7 +110,11 @@ Manager and cancel the request.
 **Without Batch Manager, WooCommerce or the deposit product, fees are
 unavailable**: every screen says why, the fee fields are switched off,
 and requests can still be taken and approved without a fee. The deposit
-product is Batch Manager's own setting; Settings → Fees can name another.
+product is Batch Manager's own setting. Settings → Fees can name another
+— but only one Batch Manager credits a wallet for (its own, or a product
+with "Wallet Refill" in its name); with any other, fees are unavailable
+and the screens say which product is wrong, because a payment would be
+taken and no wallet credited.
 
 ## The state follows the fish
 
@@ -109,17 +128,21 @@ now*) moves requests by itself:
   orders.
 - **on_order → in_quarantine** when that line is checked in to a tank.
 - **in_quarantine → ready** when that tank group's sale date has come
-  (the Clean Room's own "for sale").
+  (the Clean Room's own "for sale"). Always one step at a time: a line
+  that is checked in and already on sale takes both steps in the same
+  check, each with its line in the History.
 - **ready → offered**: the "ready" e-mail, with the product link when the
   product is published. By itself when Settings → *Tell people by
   themselves when their fish is ready* is on (the default), otherwise the
   request waits under *Needs you* for one click. Somebody without an
   e-mail address always waits there (*Told them* records that you did).
 - and **back to waiting** when the fish is not there after all: the order
-  arrived without it, the line was removed, or fewer fish are alive than
-  were asked for — the oldest requests keep their place, a request
-  matched by hand goes first, and a request that was already told is
-  never taken back.
+  arrived without it, the line was removed, the line was corrected to
+  another fish or size (or its fish now has to be identified), or fewer
+  fish are alive than were asked for — the oldest requests keep their
+  place, a request matched by hand goes first (and stays on a corrected
+  line: that match is the owner's to undo), and a request that was
+  already told is never taken back.
 
 On a request's page the owner can **match it by hand** to a supplier
 order line (also on an order that is already received) and **take it
@@ -157,7 +180,9 @@ Five e-mails, all through `wp_mail()` as simple HTML with a plain-text
 part, each with a switch, a subject and a body in Settings, each logged
 on its request: the invoice for the fee, the fee reminder, the fish is
 ready, still want it?, declined. Nothing is e-mailed for a request added
-by hand unless it has a fee or its fish becomes ready.
+by hand unless it has a fee or its fish becomes ready. Only addresses on
+the shop's own site become clickable links: a URL somebody typed into a
+name, a fish or a note stays plain text.
 
 ## Later: open to the public
 
@@ -185,8 +210,11 @@ $request = fishotel_requests_get( $id ); // array|null
   `fishotel_requests_state_changed` ( id, from, to ),
   `fishotel_requests_fee_paid` ( carrier id, order id, amount ).
 - **Filters**: `fishotel_requests_deposit_product_id`,
-  `fishotel_requests_rate_limit`, `fishotel_requests_mail` ( args, kind,
-  request ).
+  `fishotel_requests_rate_limit`, `fishotel_requests_client_address`
+  (the visitor address the rate limit counts — `REMOTE_ADDR` unless a
+  site behind a proxy or CDN returns the header it trusts),
+  `fishotel_requests_mail_link_hosts` (the hosts an e-mail may link to —
+  the site's own), `fishotel_requests_mail` ( args, kind, request ).
 - **Clean Room**: `do_action( 'fishotel_cleanroom_order_line', $line )`
   under each line's fish on the supplier order page (the one line this
   section added outside its folder).

@@ -80,7 +80,8 @@ echo "\nThe fee\n";
 check_same( 'an empty fee is none', 0.0, Rules::fee( '' ) );
 check_same( 'a typed fee with a dollar sign', 12.5, Rules::fee( '$12.50' ) );
 check_same( 'a float', 18.0, Rules::fee( 18.0 ) );
-foreach ( array( '-5', '12.345', 'ten', '10000', array( 5 ), '1e3' ) as $fh_bad ) {
+check_same( 'a comma that groups thousands is read', 1250.0, Rules::fee( '$1,250.00' ) );
+foreach ( array( '-5', '12.345', 'ten', '10000', array( 5 ), '1e3', '25,00', '2,5', '1,2345', ',25', NAN, INF ) as $fh_bad ) {
 	check( 'fee ' . fh_test_export( $fh_bad ) . ' is refused', null === Rules::fee( $fh_bad ) );
 }
 check_same( 'money reads with two decimals', '$1,234.50', Rules::money( 1234.5 ) );

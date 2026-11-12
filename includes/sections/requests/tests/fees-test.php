@@ -213,7 +213,13 @@ check( 'the product exists: fees are available', $status['available'] && '' === 
 check_same( 'the screen can name the product', 'Test Wallet Refill', $status['product_title'] );
 
 $GLOBALS['fh_products'][9002] = new Fh_Fake_Product( 9002, 'Other Test Product' );
-check_same( 'a product typed in Requests → Settings wins over Batch Manager\'s', 9002, Fees::status( array_merge( $service->settings, array( 'deposit_product' => 9002 ) ), true )['product_id'] );
+$other = Fees::status( array_merge( $service->settings, array( 'deposit_product' => 9002 ) ), true );
+check_same( 'a product typed in Requests → Settings wins over Batch Manager\'s', 9002, $other['product_id'] );
+check( 'but a product Batch Manager would not credit a wallet for makes fees unavailable', ! $other['available'] );
+check_contains( 'and the screen says which product, and what Batch Manager credits', '#9002 ("Other Test Product") is not one Batch Manager credits a wallet for', $other['reason'] );
+check_contains( 'naming Batch Manager\'s own', '#9001', $other['reason'] );
+$GLOBALS['fh_products'][9003] = new Fh_Fake_Product( 9003, 'Request fee — wallet refill' );
+check( 'another product with "Wallet Refill" in its name is one Batch Manager credits: available', Fees::status( array_merge( $service->settings, array( 'deposit_product' => 9003 ) ), true )['available'] );
 add_filter( 'fishotel_requests_deposit_product_id', static function ( $id ) { return 9001; } );
 check_same( 'and a filter has the last word', 9001, Fees::product_id( array( 'deposit_product' => 9002 ) ) );
 $GLOBALS['fh_filters'] = array();
@@ -403,6 +409,16 @@ $short  = new Fh_Fake_Order( 702, 8, 'sam@example.test', array( new Fh_Fake_Item
 $result = Fees::record( $short, $service );
 check_same( 'an order line that paid less than the fee is NOT recorded as paid', array( array(), array( $ids4[0] ), 'awaiting_payment' ), array( $result['paid'], $result['short'], $store->get( $ids4[0] )['state'] ) );
 check_contains( 'and the history says so', 'NOT recorded as paid', implode( ' | ', $store->notes( $ids4[0] ) ) );
+$cent                               = new Fh_Fake_Order( 706, 8, 'sam@example.test', array( new Fh_Fake_Item( 9001, 11.99, array( Fees::ITEM_META => $ids4[0] ) ) ) );
+$cent->meta[ Fees::BATCH_CREDITED ] = 1;
+$result                             = Fees::record( $cent, $service );
+check_same( 'one cent short (the remainder cent of a fixed-cart coupon lands on the fee line): it IS paid', array( array( $ids4[0] ), array(), 'waiting' ), array( $result['paid'], $result['short'], $store->get( $ids4[0] )['state'] ) );
+check_contains( 'and the history names what was paid', 'Fee of $11.99 paid with order #706', implode( ' | ', $store->notes( $ids4[0] ) ) );
+$ids6 = $service->submit( array( 'name' => 'Noah Newcomer', 'email' => 'noah@example.test' ), array( array( 'fish' => 'Green Test Tang' ) ), array( 'source' => 'link', 'link' => $link ) )['ids'];
+$service->approve( $ids6, '12', fh_staff() );
+fh_take_mails();
+$result = Fees::record( new Fh_Fake_Order( 707, 8, 'sam@example.test', array( new Fh_Fake_Item( 9001, 11.9, array( Fees::ITEM_META => $ids6[0] ) ) ) ), $service );
+check_same( 'ten cents short is short', array( array(), array( $ids6[0] ) ), array( $result['paid'], $result['short'] ) );
 
 echo "\nA store whose prices include tax\n";
 $ids5 = $service->submit( array( 'name' => 'Noah Newcomer', 'email' => 'noah@example.test' ), array( array( 'fish' => 'Striped Test Damsel' ) ), array( 'source' => 'link', 'link' => $link ) )['ids'];

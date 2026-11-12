@@ -60,6 +60,14 @@ class Front {
 	const HONEYPOT = 'fh_rq_topic';
 
 	/**
+	 * The prefix of the transient that counts one visitor address (the
+	 * e-mail counter has another, so each has its own allowance).
+	 *
+	 * @var string
+	 */
+	const RATE_ADDRESS = 'fhrq_rla_';
+
+	/**
 	 * The AJAX action of the name suggestions.
 	 *
 	 * @var string
@@ -241,12 +249,44 @@ class Front {
 	}
 
 	/**
+	 * The account a sheet from the private form belongs to: the logged-in
+	 * visitor's — but only when the e-mail address typed is that account's.
+	 * Somebody who sends the form for another address (a friend's, a second
+	 * one of their own) is not made the owner of a request whose invoice
+	 * goes elsewhere: it joins the account of its address when approved.
+	 *
+	 * @param int    $user_id The logged-in visitor (0 = nobody).
+	 * @param string $account That account's e-mail address.
+	 * @param string $typed   The e-mail address typed in the form.
+	 * @return int
+	 */
+	public static function sender_id( $user_id, $account, $typed ) {
+		$typed = Rules::email( $typed );
+		return (int) $user_id > 0 && '' !== $typed && Rules::email( $account ) === $typed ? (int) $user_id : 0;
+	}
+
+	/**
 	 * The visitor's address (never a forwarded header: those can be typed).
+	 * A site behind a proxy or a CDN sees the proxy here for every visitor;
+	 * it can name the header it trusts through the
+	 * fishotel_requests_client_address filter (the limit per e-mail
+	 * address works either way).
 	 *
 	 * @return string
 	 */
 	private static function address() {
-		return isset( $_SERVER['REMOTE_ADDR'] ) && is_string( $_SERVER['REMOTE_ADDR'] ) ? substr( preg_replace( '/[^0-9a-fA-F:.]/', '', $_SERVER['REMOTE_ADDR'] ), 0, 45 ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+		$address = isset( $_SERVER['REMOTE_ADDR'] ) && is_string( $_SERVER['REMOTE_ADDR'] ) ? $_SERVER['REMOTE_ADDR'] : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput
+		return self::clean_address( apply_filters( 'fishotel_requests_client_address', $address ) );
+	}
+
+	/**
+	 * An address as it is counted: digits, hex letters, dots and colons.
+	 *
+	 * @param mixed $address Raw.
+	 * @return string
+	 */
+	public static function clean_address( $address ) {
+		return is_string( $address ) ? substr( (string) preg_replace( '/[^0-9a-fA-F:.]/', '', $address ), 0, 45 ) : '';
 	}
 
 	/**
@@ -260,7 +300,7 @@ class Front {
 	public static function rate_keys( $address, $email ) {
 		$keys = array();
 		if ( '' !== (string) $address ) {
-			$keys[] = 'fhrq_rl_' . md5( 'a|' . $address );
+			$keys[] = self::RATE_ADDRESS . md5( 'a|' . $address );
 		}
 		$email = Rules::email( $email );
 		if ( '' !== $email ) {
@@ -270,18 +310,22 @@ class Front {
 	}
 
 	/**
-	 * Whether one of the keys has used up its submissions.
+	 * Whether one of the keys has used up its submissions: $limit per
+	 * e-mail address, Rules::RATE_ADDRESS_FACTOR times that per visitor
+	 * address (several people may share one).
 	 *
 	 * @param string[] $keys  rate_keys().
-	 * @param int      $limit Submissions allowed per window.
+	 * @param int      $limit Submissions allowed per e-mail address per window.
 	 * @return bool
 	 */
 	public static function rate_limited( array $keys, $limit = Rules::RATE_LIMIT ) {
 		if ( function_exists( 'apply_filters' ) ) {
 			$limit = (int) apply_filters( 'fishotel_requests_rate_limit', $limit );
 		}
+		$limit = max( 1, (int) $limit );
 		foreach ( $keys as $key ) {
-			if ( (int) get_transient( $key ) >= max( 1, (int) $limit ) ) {
+			$allowed = 0 === strpos( (string) $key, self::RATE_ADDRESS ) ? $limit * Rules::RATE_ADDRESS_FACTOR : $limit;
+			if ( (int) get_transient( $key ) >= $allowed ) {
 				return true;
 			}
 		}
@@ -368,7 +412,7 @@ class Front {
 						array(
 							'source'  => 'link',
 							'link'    => $link,
-							'user_id' => get_current_user_id(),
+							'user_id' => self::sender_id( get_current_user_id(), self::prefill()['email'], $person['email'] ),
 							'fee'     => (float) $link['fee_amount'],
 							'sizes'   => $sizes,
 						)
