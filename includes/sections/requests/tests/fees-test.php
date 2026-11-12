@@ -404,6 +404,25 @@ $result = Fees::record( $short, $service );
 check_same( 'an order line that paid less than the fee is NOT recorded as paid', array( array(), array( $ids4[0] ), 'awaiting_payment' ), array( $result['paid'], $result['short'], $store->get( $ids4[0] )['state'] ) );
 check_contains( 'and the history says so', 'NOT recorded as paid', implode( ' | ', $store->notes( $ids4[0] ) ) );
 
+echo "\nA store whose prices include tax\n";
+$ids5 = $service->submit( array( 'name' => 'Noah Newcomer', 'email' => 'noah@example.test' ), array( array( 'fish' => 'Striped Test Damsel' ) ), array( 'source' => 'link', 'link' => $link ) )['ids'];
+$service->approve( $ids5, '12', fh_staff() );
+fh_take_mails();
+
+/**
+ * An order line whose price included tax: 11.11 before tax + 0.89 tax = the 12.00 that was paid.
+ */
+class Fh_Fake_Taxed_Item extends Fh_Fake_Item {
+	public function get_total_tax() {
+		return 0.89;
+	}
+}
+$taxed                               = new Fh_Fake_Order( 705, 8, 'sam@example.test', array( new Fh_Fake_Taxed_Item( 9001, 11.11, array( Fees::ITEM_META => $ids5[0] ) ) ) );
+$taxed->meta[ Fees::BATCH_CREDITED ] = 1;
+$result                              = Fees::record( $taxed, $service );
+check_same( 'the customer paid the whole fee, tax included: recorded as paid', array( array( $ids5[0] ), 'waiting' ), array( $result['paid'], $store->get( $ids5[0] )['state'] ) );
+check_contains( 'and the history says what Batch Manager credits: the line before tax', 'before tax: $11.11', implode( ' | ', $store->notes( $ids5[0] ) ) );
+
 echo "\nAn order that has nothing to do with requests\n";
 $before = array( count( $store->log ), count( $store->rows ) );
 $result = Fees::record( new Fh_Fake_Order( 703, 8, 'sam@example.test', array( new Fh_Fake_Item( 501, 59.0 ) ) ), $service );

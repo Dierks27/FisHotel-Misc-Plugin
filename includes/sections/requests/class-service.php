@@ -829,9 +829,10 @@ class Service {
 	 * list. Safe to call twice — only the first call does anything.
 	 *
 	 * @param int   $carrier_id The request that carries the invoice.
-	 * @param array $how        order_id, amount (what was paid), user_id (the customer of the order),
-	 *                          wallet (true = credited, false = NOT credited, null = not known —
-	 *                          paid by hand), actor.
+	 * @param array $how        order_id, amount (what was paid), credit (what Batch Manager credits:
+	 *                          the line before tax), user_id (the customer of the order), wallet
+	 *                          (true = credited, false = NOT credited, null = not known — paid by
+	 *                          hand), actor.
 	 * @return array{ok: bool, message: string, ids?: int[]}
 	 */
 	public function paid( $carrier_id, array $how = array() ) {
@@ -869,6 +870,10 @@ class Service {
 			$note = sprintf( __( 'Fee of %1$s paid with order #%2$d.', 'fishotel-misc-plugin' ), Rules::money( $amount ), $order_id );
 			if ( true === ( $how['wallet'] ?? null ) ) {
 				$note .= ' ' . __( 'The wallet of the customer was credited by Batch Manager.', 'fishotel-misc-plugin' );
+				if ( isset( $how['credit'] ) && (float) $how['credit'] + 0.005 < $amount ) {
+					/* translators: %s: amount */
+					$note .= ' ' . sprintf( __( 'It credits the line before tax: %s.', 'fishotel-misc-plugin' ), Rules::money( (float) $how['credit'] ) );
+				}
 			} elseif ( false === ( $how['wallet'] ?? null ) ) {
 				$note .= ' ' . __( 'Batch Manager did NOT credit a wallet for this order — check the customer\'s wallet.', 'fishotel-misc-plugin' );
 			}

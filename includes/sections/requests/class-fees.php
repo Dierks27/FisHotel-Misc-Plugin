@@ -36,7 +36,9 @@
  *     joins the account that paid;
  *   - the credit is the line's total after discounts → no coupon is ever
  *     applied to a fee line, and its quantity is always 1, so what is
- *     credited is the fee;
+ *     credited is the fee (on a store whose prices include tax and whose
+ *     deposit product is taxable, the credit is the fee before tax — the
+ *     request's history then says how much was credited);
  *   - the amount is whatever the cart line says → it comes from a signed
  *     token and is checked again every time the cart is priced.
  *
@@ -621,7 +623,10 @@ class Fees {
 				continue;
 			}
 
-			$paid = method_exists( $item, 'get_total' ) ? (float) $item->get_total() : 0.0;
+			// What the customer paid for the line (with its tax, on a store whose
+			// prices include it); what Batch Manager credits is the total before tax.
+			$before_tax = method_exists( $item, 'get_total' ) ? (float) $item->get_total() : 0.0;
+			$paid       = $before_tax + ( method_exists( $item, 'get_total_tax' ) ? (float) $item->get_total_tax() : 0.0 );
 			if ( $paid + 0.005 < (float) $carrier['fee_amount'] ) {
 				$out['short'][] = $carrier_id;
 				$service->store->log(
@@ -641,6 +646,7 @@ class Fees {
 				array(
 					'order_id' => $order_id,
 					'amount'   => $paid,
+					'credit'   => $before_tax,
 					'user_id'  => $user_id,
 					'wallet'   => $credited,
 				)
