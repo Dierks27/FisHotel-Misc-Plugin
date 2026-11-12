@@ -1145,3 +1145,182 @@ a.fh-cr-unknown {
 .fh-cr-metabox .fh-cr-suggest-date {
 	font-size: 12px;
 }
+
+/* ------------------------------------------------------------------ */
+/*  Stats: the strip of views, estimates and actuals, the comparison   */
+/* ------------------------------------------------------------------ */
+.fh-cr-subtabs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	margin: -8px 0 16px;
+	padding-bottom: 8px;
+	border-bottom: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+}
+
+.fh-cr-subtab {
+	padding: 5px 12px;
+	border-radius: 4px;
+	font-size: 12px;
+	font-weight: 600;
+	text-decoration: none;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-subtab:hover,
+.fh-cr-subtab:focus {
+	color: var(--fh-text-primary, #e0e0e0);
+	background: var(--fh-bg-secondary, #2d2d2d);
+}
+
+.fh-cr-subtab.is-active {
+	color: var(--fh-text-primary, #e0e0e0);
+	background: var(--fh-bg-secondary, #2d2d2d);
+	box-shadow: inset 0 -2px 0 var(--fh-accent, #00a0d2);
+}
+
+/* Which numbers are estimates and which are actual: said on every view. */
+.fh-cr-legend {
+	margin: 0 0 14px;
+	padding: 10px 14px;
+	font-size: 12px;
+	line-height: 1.7;
+	color: var(--fh-text-secondary, #a0a0a0);
+	background: var(--fh-bg-secondary, #2d2d2d);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	border-radius: var(--fh-radius, 8px);
+}
+
+.fh-cr-legend a {
+	color: var(--fh-accent, #00a0d2);
+}
+
+.fh-cr-kind {
+	display: inline-block;
+	margin-right: 6px;
+	padding: 1px 8px;
+	border-radius: 10px;
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: 0.4px;
+	text-transform: uppercase;
+	color: #fff;
+	background: #6b6b6b;
+}
+
+.fh-cr-kind--est    { background: #b7791f; }
+.fh-cr-kind--actual { background: #2e9e47; }
+.fh-cr-kind--read   { background: #2d5fb8; }
+
+.fh-cr-wrap .widefat th.fh-cr-est,
+.fh-cr-wrap .widefat td.fh-cr-est {
+	box-shadow: inset 0 2px 0 rgba(183, 121, 31, 0.55);
+}
+
+.fh-cr-wrap .widefat th.fh-cr-actual,
+.fh-cr-wrap .widefat td.fh-cr-actual {
+	box-shadow: inset 0 2px 0 rgba(46, 158, 71, 0.55);
+}
+
+.fh-cr-wrap .widefat tbody td.fh-cr-est,
+.fh-cr-wrap .widefat tbody td.fh-cr-actual {
+	box-shadow: none;
+}
+
+.fh-cr-wrap .widefat td.fh-cr-nocost {
+	white-space: normal;
+	max-width: 220px;
+	font-size: 11px;
+	color: var(--fh-warning, #ffb900);
+}
+
+/* A column heading that sorts. */
+.fh-cr-wrap .widefat th.fh-cr-sort a {
+	text-decoration: none;
+	white-space: nowrap;
+}
+
+.fh-cr-wrap .widefat th.fh-cr-sort.is-sorted a {
+	color: var(--fh-accent, #00a0d2);
+}
+
+/* Compare years: a block per name, a row per year, the change under it. */
+.fh-cr-years {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 4px 14px;
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+.fh-cr-years legend {
+	padding: 0 0 4px;
+	font-size: 12px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-years .fh-cr-filter--check {
+	padding-bottom: 0;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-wrap .fh-cr-compare tbody + tbody {
+	border-top: 2px solid var(--fh-border, rgba(255, 255, 255, 0.18));
+}
+
+.fh-cr-wrap .fh-cr-compare th[scope="row"],
+.fh-cr-wrap .fh-cr-compare .fh-cr-compare__name {
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.fh-cr-wrap .fh-cr-compare .fh-cr-compare__name {
+	background: var(--fh-bg-primary, #1a1a1a);
+}
+
+.fh-cr-wrap .fh-cr-compare tr.is-missing td,
+.fh-cr-wrap .fh-cr-compare tr.is-missing th[scope="row"] {
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-wrap .fh-cr-compare tr.fh-cr-compare__change td,
+.fh-cr-wrap .fh-cr-compare tr.fh-cr-compare__change th {
+	font-size: 11px;
+	background: var(--fh-bg-primary, #1a1a1a);
+}
+
+.fh-cr-wrap .fh-cr-compare tr.fh-cr-compare__change td:not(.fh-cr-up):not(.fh-cr-down),
+.fh-cr-wrap .fh-cr-compare tr.fh-cr-compare__change th {
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+/* Real sales: the Refresh form sits among the export buttons; the sums. */
+.fh-cr-refresh {
+	margin: 0;
+}
+
+.fh-cr-addsup {
+	max-width: 760px;
+	grid-template-columns: 1fr;
+}
+
+/* Settings → Sales statuses. */
+.fh-cr-statuses {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+	gap: 2px 16px;
+	margin: 12px 0;
+}
+
+.fh-cr-statuses .fh-cr-filter--check {
+	padding-bottom: 2px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-statuses code {
+	font-size: 11px;
+	color: var(--fh-text-secondary, #a0a0a0);
+	background: transparent;
+}
