@@ -1,12 +1,14 @@
 <?php
 /**
  * Requests contract tests — WITH the Requests section's
- * fishotel_requests_create() present (a stand-in here): a "try again"
- * hands it the fish as an owed request — source lost_fish, the fish, its
- * size, the customer, the order — exactly once; no other choice calls it;
- * when it says no, throws or answers something unusable the case shows
- * the reminder and the owner's "Add to Requests" can try again; and what
- * it may answer with (an id, a row, an object, true).
+ * fishotel_requests_create() present (a stand-in here, taking the keys
+ * that section documents and answering an id or a WP_Error): a "try
+ * again" hands it the fish as an owed request — source lost_fish, the
+ * fish, its size, the customer, the order — exactly once; no other choice
+ * calls it; a size it does not know does not cost the customer the
+ * request; when it says no, throws or answers something unusable the case
+ * shows the reminder and the owner's "Add to Requests" can try again; and
+ * what it may answer with (an id, a row, an object, true).
  *
  * Run from the plugin root:
  *   php includes/sections/lost-fish/tests/requests-contract-test.php
@@ -24,10 +26,34 @@ use FisHotel\Misc\Sections\Lost_Fish\Store;
 $GLOBALS['fh_requests']       = array();
 $GLOBALS['fh_request_answer'] = 310;
 
-function fishotel_requests_create( $args ) {
+/**
+ * WordPress's error object, as far as it is read.
+ */
+class WP_Error {
+
+	private $message;
+
+	public function __construct( $code = '', $message = '' ) {
+		$this->message = (string) $message;
+	}
+
+	public function get_error_message() {
+		return $this->message;
+	}
+}
+
+function is_wp_error( $thing ) {
+	return $thing instanceof WP_Error;
+}
+
+function fishotel_requests_create( array $args ) {
 	$GLOBALS['fh_requests'][] = $args;
 	if ( 'throw' === $GLOBALS['fh_request_answer'] ) {
 		throw new \RuntimeException( 'the requests table is gone' );
+	}
+	if ( 'no-size' === $GLOBALS['fh_request_answer'] ) {
+		// As a receiver that only takes the sizes of its own list.
+		return isset( $args['size_slug'] ) ? new WP_Error( 'size', 'That size is not in the list.' ) : 320;
 	}
 	return $GLOBALS['fh_request_answer'];
 }
@@ -65,10 +91,11 @@ $answer = $cases->answer( 1, 'retry', 'customer' );
 check( 'the customer chooses to try again', $answer['ok'] );
 check_same( 'the Requests section is called once', 1, count( $GLOBALS['fh_requests'] ) );
 $args = $GLOBALS['fh_requests'][0];
-check_same( 'source lost_fish, owed', array( 'lost_fish', 'owed', true ), array( $args['source'], $args['status'], $args['owed'] ) );
-check_same( 'the fish and its size', array( 'Lagoon Goby', 'Lagoon Goby', 812, 'Medium', 'm', 'Medium', 1 ), array( $args['fish'], $args['species'], $args['product_id'], $args['size'], $args['size_slug'], $args['size_label'], $args['qty'] ) );
-check_same( 'the customer', array( 42, 'Blake Sample', 'blake@example.test' ), array( $args['customer_id'], $args['customer_name'], $args['customer_email'] ) );
+check_same( 'source lost_fish, owed', array( 'lost_fish', true ), array( $args['source'], $args['owed'] ) );
+check_same( 'the fish, its product, its size, how many', array( 'Lagoon Goby', 812, 'm', 'Medium', 1 ), array( $args['fish'], $args['product_id'], $args['size_slug'], $args['size_label'], $args['qty'] ) );
+check_same( 'the customer: the site account, the name and the e-mail of the order', array( 42, 'Blake Sample', 'blake@example.test' ), array( $args['user_id'], $args['name'], $args['email'] ) );
 check_same( 'the order and its line', array( 502, 53 ), array( $args['order_id'], $args['order_item_id'] ) );
+check_same( 'no fee is ever asked for a fish that was already paid for', false, array_key_exists( 'fee', $args ) );
 check_same( 'the case it came from, and a note that it is already paid for', array( 1, true ), array( $args['lost_fish_case'], false !== strpos( $args['note'], 'already paid for' ) ) );
 $case = $store->get_case( 1 );
 check_same( 'the case keeps the request\'s id', '310', $case['request_ref'] );
@@ -113,6 +140,21 @@ check_contains( '… the owner is pointed at "Add to Requests"', 'use "Add to Re
 $GLOBALS['fh_request_answer'] = 311;
 $retry                        = $cases->create_request( 1, 5 );
 check_same( '… which works once the section answers', array( true, '311' ), array( $retry['ok'], $store->get_case( 1 )['request_ref'] ) );
+
+echo "\nA size the Requests section does not know\n";
+list( $cases, $store )        = fh_sent_case();
+$GLOBALS['fh_request_answer'] = 'no-size';
+$cases->answer( 1, 'retry', 'customer' );
+check_same( 'refused with the size, it is asked once more without it', array( 2, true, false ), array( count( $GLOBALS['fh_requests'] ), isset( $GLOBALS['fh_requests'][0]['size_slug'] ), isset( $GLOBALS['fh_requests'][1]['size_slug'] ) ) );
+check_contains( '… the size goes into the note instead', 'Size: Medium.', $GLOBALS['fh_requests'][1]['note'] );
+check_same( '… and the request is made', '320', $store->get_case( 1 )['request_ref'] );
+
+list( $cases, $store )        = fh_sent_case();
+$GLOBALS['fh_request_answer'] = new WP_Error( 'fishotel_requests_unavailable', 'The Requests section is switched off.' );
+$answer                       = $cases->answer( 1, 'retry', 'customer' );
+check_same( 'a WP_Error both times: the choice is recorded, no request', array( true, 'retry', '' ), array( $answer['ok'], $store->get_case( 1 )['choice'], $store->get_case( 1 )['request_ref'] ) );
+check_contains( '… and the log keeps what the section said', 'The Requests section is switched off.', $store->log[ count( $store->log ) - 1 ]['message'] );
+$GLOBALS['fh_request_answer'] = 310;
 
 echo "\nWhat it may answer with\n";
 foreach ( array(

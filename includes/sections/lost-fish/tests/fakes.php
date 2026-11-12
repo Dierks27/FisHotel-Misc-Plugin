@@ -642,6 +642,18 @@ class Fh_Fake_Store {
 		return $this->prefilter;
 	}
 
+	/** @var string[] "lock <name>" / "unlock <name>", in order. */
+	public $locks = array();
+
+	public function lock( $name, $seconds = 3 ) {
+		$this->locks[] = 'lock ' . $name;
+		return empty( $this->fail['lock'] );
+	}
+
+	public function unlock( $name ) {
+		$this->locks[] = 'unlock ' . $name;
+	}
+
 	/**
 	 * The log's events, oldest first.
 	 *

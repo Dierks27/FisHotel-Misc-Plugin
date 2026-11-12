@@ -137,6 +137,7 @@ check_same( 'other sections are told', 1, count( fh_fired( 'fishotel_lostfish_ca
 check_same( 'the menu count: one case needs the owner', 1, Store::needs_you_count() );
 check_same( 'nothing is scheduled to go out by itself — the setting is off', array(), $GLOBALS['fh_cron'] );
 check_same( 'the Health log hears about it too', 2, count( fh_fired( 'fishotel_log' ) ) );
+check_same( 'each loss was worked out under the lock of its kind of fish, and gave it back', array( 'lock p:812', 'unlock p:812', 'lock p:812', 'unlock p:812' ), $store->locks );
 
 echo "\nMore losses\n";
 fh_loss( $rooms, 1, 9003 );
@@ -183,6 +184,14 @@ $GLOBALS['fh_options'][ Store::DB_VERSION_OPTION ] = Store::DB_VERSION;
 $rooms->available                                  = false;
 fh_loss( $rooms, 1, 9108 );
 check_same( 'the Clean Room cannot be read: nothing is tried', array(), $store->cases() );
+
+echo "\nTwo phones at once\n";
+list( $cases, $store, $rooms ) = fh_world();
+$store->fail['lock']           = true;
+fh_loss( $rooms, 1, 9001 );
+fh_loss( $rooms, 1, 9002 );
+check_same( 'the lock cannot be taken (another request holds it past the wait, or the database has none): the loss is still worked out', 1, count( $store->cases() ) );
+check_same( '… and a lock that was not taken is not given back', array( 'lock p:812', 'lock p:812' ), $store->locks );
 
 echo "\nA listener must never break the Clean Room\n";
 list( $cases, $store, $rooms ) = fh_world();

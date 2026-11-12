@@ -759,6 +759,59 @@ class Store {
 	}
 
 	/* ============================================================== */
+	/*  One loss at a time per kind of fish                            */
+	/* ============================================================== */
+
+	/**
+	 * Take a named database lock (MySQL / MariaDB GET_LOCK), so two phones
+	 * recording a loss of the same fish in the same second do not both
+	 * open a case for the same order line. The lock belongs to this
+	 * request's connection and ends with it at the latest.
+	 *
+	 * @param string $name    Lock name (the kind's key).
+	 * @param int    $seconds How long to wait for it.
+	 * @return bool False when it could not be taken (or the database has no such thing) — the caller carries on.
+	 */
+	public function lock( $name, $seconds = 3 ) {
+		global $wpdb;
+
+		try {
+			$got = $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, %d)', self::lock_name( $name ), max( 0, (int) $seconds ) ) );
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+
+		return '1' === (string) $got;
+	}
+
+	/**
+	 * Give a named lock back.
+	 *
+	 * @param string $name Lock name.
+	 */
+	public function unlock( $name ) {
+		global $wpdb;
+
+		try {
+			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', self::lock_name( $name ) ) );
+		} catch ( \Throwable $e ) {
+			unset( $e );
+		}
+	}
+
+	/**
+	 * A lock's name in the database: per site (the table prefix), never
+	 * longer than MySQL's 64 characters.
+	 *
+	 * @param string $name Lock name.
+	 * @return string
+	 */
+	public static function lock_name( $name ) {
+		global $wpdb;
+		return 'fh_lostfish_' . md5( $wpdb->prefix . '|' . (string) $name );
+	}
+
+	/* ============================================================== */
 	/*  Counts                                                         */
 	/* ============================================================== */
 
@@ -941,7 +994,7 @@ class Store {
 		try {
 			foreach ( array_chunk( $order_ids, 200 ) as $chunk ) {
 				$params = $chunk;
-				$match  = "m.meta_key IN ('_fh_invoice_fish','_fh_invoice_lines')";
+				$match  = "m.meta_key IN ('_fh_invoice_fish','_fh_invoice_lines','_fh_invoice_product_id')";
 				if ( $product_ids ) {
 					$match .= " OR ( m.meta_key IN ('_product_id','_variation_id') AND m.meta_value IN (" . implode( ',', array_fill( 0, count( $product_ids ), '%s' ) ) . ') )';
 					$params = array_merge( $params, array_map( 'strval', $product_ids ) );

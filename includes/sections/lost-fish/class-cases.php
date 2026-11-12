@@ -308,6 +308,31 @@ class Cases {
 			return $report;
 		}
 
+		// One loss at a time per kind of fish: two phones in the same second must not both open a case
+		// for the same order line.
+		$lock = Cover::kind_key( (int) ( $stay['product_id'] ?? 0 ), (string) ( $stay['species'] ?? '' ), (string) ( $stay['size_slug'] ?? '' ) );
+		$held = '' !== $lock && method_exists( $this->store, 'lock' ) && $this->store->lock( $lock );
+
+		try {
+			return $this->loss_assessed( $stay, (int) $event_id, (int) $qty, (int) $actor, $report );
+		} finally {
+			if ( $held ) {
+				$this->store->unlock( $lock );
+			}
+		}
+	}
+
+	/**
+	 * The work of loss_recorded(), under the kind's lock.
+	 *
+	 * @param array $stay     The tank group.
+	 * @param int   $event_id The loss event.
+	 * @param int   $qty      How many were lost.
+	 * @param int   $actor    Who recorded it.
+	 * @param array $report   The report so far.
+	 * @return array{outcome: string, opened: int[], assess: array|null}
+	 */
+	private function loss_assessed( array $stay, $event_id, $qty, $actor, array $report ) {
 		$assess           = $this->assess_stay( $stay );
 		$report['assess'] = $assess;
 		if ( '' === $assess['kind']['key'] || $assess['committed'] <= 0 ) {
@@ -1077,12 +1102,14 @@ class Cases {
 
 		$case   = $this->store->get_case( (int) $case['id'] );
 		$amount = Money::amount_for( $choice, $this->numbers( $case ) );
+		$order  = $this->orders->get( (int) $case['order_id'] );
+		$symbol = $order ? $this->orders->facts( $order )['symbol'] : '$';
 		$text   = sprintf(
 			/* translators: 1: who, 2: the choice, 3: the amount (may be empty) */
 			__( '%1$s: %2$s%3$s. Nothing was done by the site — see FisHotel Tools → Lost Fish for what to do.', 'fishotel-misc-plugin' ),
 			'owner' === $via ? __( 'The customer\'s answer, recorded by hand', 'fishotel-misc-plugin' ) : __( 'The customer chose', 'fishotel-misc-plugin' ),
 			self::choice_label( $choice ),
-			null !== $amount && 'retry' !== $choice ? ' — ' . Money::format( $amount ) : ''
+			null !== $amount && 'retry' !== $choice ? ' — ' . Money::format( $amount, $symbol ) : ''
 		);
 		$this->note( $case, $text, 'owner' === $via );
 		$this->log( 'answered', $text, (int) $case['id'], (int) $case['order_id'], $actor );
@@ -1152,20 +1179,20 @@ class Cases {
 			return self::result( false, __( 'The Requests section is not available — note this fish in your own list.', 'fishotel-misc-plugin' ), $case );
 		}
 
+		// The Requests section's own keys: who (a site customer, else a name and an e-mail), the fish (and
+		// its product), its size, how many, that it is owed, and the order it came from. order_item_id and
+		// lost_fish_case are extras a receiver may ignore.
 		$args = array(
 			'source'         => 'lost_fish',
-			'status'         => 'owed',
 			'owed'           => true,
-			'fish'           => $case['fish_name'],
-			'species'        => '' !== $case['species'] ? $case['species'] : $case['fish_name'],
+			'user_id'        => (int) $case['customer_id'],
+			'name'           => $case['customer_name'],
+			'email'          => $case['customer_email'],
+			'fish'           => '' !== $case['fish_name'] ? $case['fish_name'] : $case['species'],
 			'product_id'     => (int) $case['product_id'],
-			'size'           => '' !== $case['size_label'] ? $case['size_label'] : $case['size_slug'],
 			'size_slug'      => $case['size_slug'],
 			'size_label'     => $case['size_label'],
 			'qty'            => (int) $case['qty'],
-			'customer_id'    => (int) $case['customer_id'],
-			'customer_name'  => $case['customer_name'],
-			'customer_email' => $case['customer_email'],
 			'order_id'       => (int) $case['order_id'],
 			'order_item_id'  => (int) $case['order_item_id'],
 			/* translators: %d: case id */
@@ -1176,28 +1203,23 @@ class Cases {
 			$args = (array) apply_filters( 'fishotel_lostfish_request_args', $args, $case );
 		}
 
-		try {
-			$made = fishotel_requests_create( $args );
-		} catch ( \Throwable $e ) {
-			$made = false;
+		$made = self::ask_requests( $args );
+		if ( '' === $made['ref'] && ( '' !== (string) ( $args['size_slug'] ?? '' ) || '' !== (string) ( $args['size_label'] ?? '' ) ) ) {
+			// A size the Requests section does not know must not cost the customer the request: once more,
+			// the size in the note instead.
+			$plain = $args;
+			$size  = '' !== (string) ( $args['size_label'] ?? '' ) ? (string) $args['size_label'] : (string) $args['size_slug'];
+			unset( $plain['size_slug'], $plain['size_label'] );
+			/* translators: %s: size */
+			$plain['note'] = trim( (string) ( $args['note'] ?? '' ) . ' ' . sprintf( __( 'Size: %s.', 'fishotel-misc-plugin' ), $size ) );
+			$made          = self::ask_requests( $plain );
 		}
-
-		$ref = '';
-		if ( is_int( $made ) && $made > 0 ) {
-			$ref = (string) $made;
-		} elseif ( is_string( $made ) && '' !== trim( $made ) ) {
-			$ref = trim( $made );
-		} elseif ( is_array( $made ) && ! empty( $made['id'] ) && is_scalar( $made['id'] ) ) {
-			$ref = (string) $made['id'];
-		} elseif ( is_object( $made ) && ! ( $made instanceof \Throwable ) && ! ( function_exists( 'is_wp_error' ) && is_wp_error( $made ) ) && ! empty( $made->id ) && is_scalar( $made->id ) ) {
-			$ref = (string) $made->id;
-		} elseif ( true === $made ) {
-			$ref = 'created';
-		}
+		$ref = $made['ref'];
 
 		if ( '' === $ref ) {
-			$this->log( 'request_failed', __( 'The Requests section did not take the "try again" — note this fish in Requests by hand.', 'fishotel-misc-plugin' ), (int) $case['id'], (int) $case['order_id'], $actor );
-			return self::result( false, __( 'The Requests section did not take it — add the request there by hand.', 'fishotel-misc-plugin' ), $case );
+			$why = '' !== $made['error'] ? ' ' . sprintf( /* translators: %s: what the Requests section answered */ __( '(It said: %s)', 'fishotel-misc-plugin' ), $made['error'] ) : '';
+			$this->log( 'request_failed', __( 'The Requests section did not take the "try again" — note this fish in Requests by hand.', 'fishotel-misc-plugin' ) . $why, (int) $case['id'], (int) $case['order_id'], $actor );
+			return self::result( false, __( 'The Requests section did not take it — add the request there by hand.', 'fishotel-misc-plugin' ) . $why, $case );
 		}
 
 		$this->store->update_case( (int) $case['id'], array( 'request_ref' => $ref ) );
@@ -1208,6 +1230,46 @@ class Cases {
 		$this->log( 'request', $text, (int) $case['id'], (int) $case['order_id'], $actor );
 
 		return self::result( true, __( 'Added to Requests.', 'fishotel-misc-plugin' ), $case );
+	}
+
+	/**
+	 * Call fishotel_requests_create() and read what it answers: an id (a
+	 * number or text), a row or an object with an id, or true; a WP_Error,
+	 * false, null or an exception mean it was not created.
+	 *
+	 * @param array $args The request.
+	 * @return array{ref: string, error: string}
+	 */
+	private static function ask_requests( array $args ) {
+		try {
+			$made = fishotel_requests_create( $args );
+		} catch ( \Throwable $e ) {
+			return array(
+				'ref'   => '',
+				'error' => $e->getMessage(),
+			);
+		}
+
+		$ref   = '';
+		$error = '';
+		if ( function_exists( 'is_wp_error' ) && is_wp_error( $made ) ) {
+			$error = method_exists( $made, 'get_error_message' ) ? (string) $made->get_error_message() : '';
+		} elseif ( is_int( $made ) && $made > 0 ) {
+			$ref = (string) $made;
+		} elseif ( is_string( $made ) && '' !== trim( $made ) ) {
+			$ref = trim( $made );
+		} elseif ( is_array( $made ) && ! empty( $made['id'] ) && is_scalar( $made['id'] ) ) {
+			$ref = (string) $made['id'];
+		} elseif ( is_object( $made ) && ! ( $made instanceof \Throwable ) && ! empty( $made->id ) && is_scalar( $made->id ) ) {
+			$ref = (string) $made->id;
+		} elseif ( true === $made ) {
+			$ref = 'created';
+		}
+
+		return array(
+			'ref'   => $ref,
+			'error' => substr( $error, 0, 200 ),
+		);
 	}
 
 	/**

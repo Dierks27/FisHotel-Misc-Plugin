@@ -60,6 +60,7 @@ fh_order( 106, array( 'paid' => 3000, 'status' => 'cancelled', 'lines' => array(
 fh_order( 107, array( 'paid' => 3000, 'status' => 'refunded', 'lines' => array( 17 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'total' => 60.00 ) ) ) );
 fh_order( 108, array( 'paid' => 3000, 'status' => 'fulfillment', 'meta' => array( '_fishotel_is_fulfillment' => '1' ), 'lines' => array( 18 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'total' => 60.00 ) ) ) );
 fh_order( 109, array( 'paid' => 3000, 'status' => 'processing', 'lines' => array( 19 => array( 'name' => 'Sand Shrimp', 'product_id' => 900, 'total' => 20.00 ) ) ) );
+fh_order( 110, array( 'paid' => 3000, 'status' => 'shipped', 'lines' => array( 20 => array( 'name' => 'Lagoon Goby', 'product_id' => 812, 'total' => 60.00 ) ) ) );
 
 $orders  = new Orders( $store );
 $holders = $orders->holders( $goby );
@@ -68,12 +69,23 @@ sort( $ids );
 check_same( 'the holders: a paid date (101), is_paid() without one (103), a paid date under the status "pending" (104)', array( 101, 103, 104 ), $ids );
 check( 'no paid date and not is_paid(): not a holder, though its status is "processing"', ! in_array( 102, $ids, true ) );
 check( 'completed, cancelled and refunded orders owe nothing', ! array_intersect( array( 105, 106, 107 ), $ids ) );
+check( 'nor does an order whose status is "shipped"', ! in_array( 110, $ids, true ) );
+add_filter(
+	'fishotel_lostfish_closed_statuses',
+	static function ( $closed ) {
+		return array_values( array_diff( $closed, array( 'shipped' ) ) );
+	}
+);
+$filtered = new Orders( $store );
+check( '… unless a site says otherwise through fishotel_lostfish_closed_statuses', in_array( 110, array_column( $filtered->holders( $goby ), 'order_id' ), true ) );
+$GLOBALS['fh_filters']['fishotel_lostfish_closed_statuses'] = array();
+$GLOBALS['fh_wc_queries']                                   = array_slice( $GLOBALS['fh_wc_queries'], 0, 1 );
 check( 'a combined-box wrapper is skipped — its lines are copies', ! in_array( 108, $ids, true ) );
 check( 'another product is not the kind', ! in_array( 109, $ids, true ) );
 
 $query = $GLOBALS['fh_wc_queries'][0];
 check_same( 'the open orders are asked for through wc_get_orders(), ids only', array( 'shop_order', 'ids' ), array( $query['type'], $query['return'] ) );
-check( '… every status except the closed ones', in_array( 'wc-processing', $query['status'], true ) && in_array( 'wc-shipped', $query['status'], true ) && in_array( 'wc-pending', $query['status'], true ) && ! array_intersect( array( 'wc-completed', 'wc-cancelled', 'wc-refunded', 'wc-failed' ), $query['status'] ) );
+check( '… every status except the closed ones — "shipped" (every line is in a box) among the closed', in_array( 'wc-processing', $query['status'], true ) && in_array( 'wc-on-hold', $query['status'], true ) && in_array( 'wc-pending', $query['status'], true ) && ! array_intersect( array( 'wc-completed', 'wc-shipped', 'wc-cancelled', 'wc-refunded', 'wc-failed' ), $query['status'] ) );
 $orders->holders( $goby );
 check_same( '… once per request, however many times a kind is asked about', 1, count( $GLOBALS['fh_wc_queries'] ) );
 

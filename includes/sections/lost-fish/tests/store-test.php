@@ -100,8 +100,13 @@ class Fh_Wpdb {
 		if ( preg_match( "/SHOW TABLES LIKE '([^']+)'/", $sql, $m ) ) {
 			return in_array( $m[1], $this->tables, true ) ? $m[1] : null;
 		}
+		if ( false !== strpos( $sql, 'GET_LOCK' ) ) {
+			return $this->lock_answer;
+		}
 		return 0;
 	}
+
+	public $lock_answer = '1';
 
 	public function get_col( $sql ) {
 		$this->queries[] = $sql;
@@ -285,6 +290,18 @@ check( 'a reminder is marked only on a sent case that has none yet', $store->mar
 $GLOBALS['wpdb']->affected = 0;
 check_same( '… a second run marks nothing', false, $store->mark_reminded( 12, '2026-11-28 15:00:00' ) );
 
+echo "\nThe lock of a kind of fish\n";
+$GLOBALS['wpdb'] = new Fh_Wpdb();
+$store           = new Store();
+check( 'taken with GET_LOCK, under a name of the site and the kind, waiting a few seconds at most', $store->lock( 'p:812' ) && 1 === preg_match( "/^SELECT GET_LOCK\('fh_lostfish_[a-f0-9]{32}', 3\)$/", end( $GLOBALS['wpdb']->queries ) ), end( $GLOBALS['wpdb']->queries ) );
+$store->unlock( 'p:812' );
+check( 'given back with RELEASE_LOCK, under the same name', 1 === preg_match( "/^SELECT RELEASE_LOCK\('" . Store::lock_name( 'p:812' ) . "'\)$/", end( $GLOBALS['wpdb']->queries ) ) );
+check( 'the name fits MySQL\'s 64 characters and differs per kind', strlen( Store::lock_name( str_repeat( 'x', 300 ) ) ) <= 64 && Store::lock_name( 'p:812' ) !== Store::lock_name( 'p:813' ) );
+$GLOBALS['wpdb']->lock_answer = '0';
+check_same( 'somebody else holds it past the wait: not taken', false, $store->lock( 'p:812' ) );
+$GLOBALS['wpdb']->lock_answer = null;
+check_same( 'a database without it: not taken', false, $store->lock( 'p:812' ) );
+
 echo "\nInsert, log\n";
 $GLOBALS['wpdb'] = new Fh_Wpdb();
 $store           = new Store();
@@ -305,11 +322,11 @@ $sql                  = end( $GLOBALS['wpdb']->queries );
 check_same( 'the orders it names', array( 602, 601 ), $found );
 check( 'reads the order-item tables — the same with HPOS on or off', false !== strpos( $sql, 'wp_woocommerce_order_items oi' ) && false !== strpos( $sql, 'wp_woocommerce_order_itemmeta m' ) );
 check( '… only among the orders it was handed', false !== strpos( $sql, 'oi.order_id IN (601,602,603)' ) );
-check( '… a line of the product or the variation, or a line out of an invoice', false !== strpos( $sql, "m.meta_key IN ('_product_id','_variation_id') AND m.meta_value IN ('812')" ) && false !== strpos( $sql, "m.meta_key IN ('_fh_invoice_fish','_fh_invoice_lines')" ) );
+check( '… a line of the product or the variation, or a line out of an invoice', false !== strpos( $sql, "m.meta_key IN ('_product_id','_variation_id') AND m.meta_value IN ('812')" ) && false !== strpos( $sql, "m.meta_key IN ('_fh_invoice_fish','_fh_invoice_lines','_fh_invoice_product_id')" ) );
 check( '… and never touches the orders tables themselves', 0 === preg_match( '/wc_orders|wp_posts|postmeta/', $sql ) );
 
 $store->orders_with_lines( array( 601 ), array() );
-check( 'without a product: only the invoice lines are looked for', false === strpos( end( $GLOBALS['wpdb']->queries ), '_product_id' ) );
+check( 'without a product: only the invoice lines are looked for', false === strpos( end( $GLOBALS['wpdb']->queries ), "'_product_id'" ) && false === strpos( end( $GLOBALS['wpdb']->queries ), '_variation_id' ) );
 $before = count( $GLOBALS['wpdb']->queries );
 check_same( 'no orders: no query, no orders', array( array(), $before ), array( $store->orders_with_lines( array(), array( 812 ) ), count( $GLOBALS['wpdb']->queries ) ) );
 $GLOBALS['wpdb']->fail_next_col = true;

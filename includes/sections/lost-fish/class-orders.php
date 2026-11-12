@@ -9,9 +9,9 @@
  *   holders( $kind )  the order lines that are OWED a fish of a kind:
  *       - the order is PAID — it has a paid date, or is_paid() says so;
  *         never the status name;
- *       - the order is not completed / cancelled / refunded / failed, and
- *         is not a combined-box wrapper (its lines are copies of the source
- *         orders' lines, which are read instead);
+ *       - the order is not completed / shipped / cancelled / refunded /
+ *         failed, and is not a combined-box wrapper (its lines are copies
+ *         of the source orders' lines, which are read instead);
  *       - the line is not shipped: no ShipTracker shipment names it
  *         (FST_Shipment::get_by_order() and its line_item_ids, when that
  *         plugin is active — a shipment without a list covers nothing, as
@@ -19,11 +19,14 @@
  *         "shipped" / "na";
  *       - the line is of the kind: its product or variation is the tank
  *         group's product; or the Invoices section links it to that
- *         product / species / group (fishotel_invoices_for_order() and
- *         fishotel_invoices_lines_for_product(), when present); or it is a
- *         product-less fish line out of an invoice whose NAME is the
- *         group's species or product title — matched by name, so such a
- *         case is marked "check" and is never sent by itself.
+ *         product / species and size / tank group — the invoices of the
+ *         order with their lines from fishotel_invoices_for_order(), and,
+ *         for an invoice product of the order that function did not
+ *         answer for, its lines from fishotel_invoices_lines_for_product()
+ *         (both only when present); or it is a product-less fish line out
+ *         of an invoice whose NAME is the group's species or product
+ *         title — matched by name, so such a case is marked "check" and is
+ *         never sent by itself.
  *
  *   lines( $order )   every line of one order in the same shape (the list
  *                     a case is opened from by hand).
@@ -61,10 +64,12 @@ class Orders {
 
 	/**
 	 * Order statuses (without the wc- prefix) that owe nothing any more.
+	 * "shipped" is ShipTracker's: it sets it once EVERY line of the order
+	 * is in a box. Filter: fishotel_lostfish_closed_statuses.
 	 *
 	 * @var string[]
 	 */
-	const CLOSED_STATUSES = array( 'completed', 'cancelled', 'refunded', 'failed', 'checkout-draft', 'draft', 'auto-draft', 'trash' );
+	const CLOSED_STATUSES = array( 'completed', 'shipped', 'cancelled', 'refunded', 'failed', 'checkout-draft', 'draft', 'auto-draft', 'trash' );
 
 	/**
 	 * The most open orders one loss looks at.
@@ -88,11 +93,12 @@ class Orders {
 	private $open_ids = null;
 
 	/**
-	 * What the Invoices section says about a product, once per request.
+	 * The lines of an invoice product, as the Invoices section gives them,
+	 * once per request.
 	 *
 	 * @var array<int, array[]>
 	 */
-	private $product_lines = array();
+	private $invoice_lines = array();
 
 	/**
 	 * The shipped line ids per order, once per request.
@@ -125,7 +131,7 @@ class Orders {
 	 * @return bool
 	 */
 	public static function invoices_available() {
-		return function_exists( 'fishotel_invoices_for_order' );
+		return function_exists( 'fishotel_invoices_for_order' ) || function_exists( 'fishotel_invoices_lines_for_product' );
 	}
 
 	/**
@@ -259,14 +265,14 @@ class Orders {
 	/**
 	 * Every line of an order.
 	 *
-	 * @param object     $order Order.
-	 * @param array|null $kind  The kind being looked for (so the Invoices section can be asked about its product), or null.
+	 * @param object $order Order.
 	 * @return array<int, array{ref: string, item_id: int, name: string, qty: int, qty_refunded: int, shipped: bool,
 	 *               unit_paid: int, paid_known: bool, product_id: int, variation_id: int, type: string, link: array}>
 	 */
-	public function lines( $order, $kind = null ) {
-		$shipped = $this->shipped_item_ids( $order );
-		$rows    = array();
+	public function lines( $order ) {
+		$shipped  = $this->shipped_item_ids( $order );
+		$rows     = array();
+		$invoices = array(); // The invoice products this order's lines came out of.
 
 		try {
 			$items = (array) $order->get_items( 'line_item' );
@@ -285,6 +291,10 @@ class Orders {
 			$refunded   = method_exists( $order, 'get_qty_refunded_for_item' ) ? abs( (int) $order->get_qty_refunded_for_item( $item_id ) ) : 0;
 			$is_fish    = self::truthy( self::meta( $item, self::META_INV_FISH ) );
 			$sublines   = $is_fish ? null : self::invoice_sublines( self::meta( $item, self::META_INV_LINES ) );
+			$invoice_id = (int) self::meta_string( $item, self::META_INV_PRODUCT );
+			if ( $invoice_id > 0 ) {
+				$invoices[ $invoice_id ] = true;
+			}
 
 			if ( null !== $sublines ) {
 				// An invoice kept as ONE line: each fish of its snapshot is a line of its own.
@@ -323,7 +333,7 @@ class Orders {
 			);
 		}
 
-		return $this->with_invoice_lines( $rows, (int) $order->get_id(), $kind );
+		return $this->with_invoice_lines( $rows, (int) $order->get_id(), array_keys( $invoices ) );
 	}
 
 	/**
@@ -581,7 +591,7 @@ class Orders {
 			}
 
 			$facts = null;
-			foreach ( $this->lines( $order, $kind ) as $row ) {
+			foreach ( $this->lines( $order ) as $row ) {
 				if ( $row['shipped'] || $row['qty'] <= 0 ) {
 					continue;
 				}
@@ -669,10 +679,9 @@ class Orders {
 	}
 
 	/**
-	 * The open orders that may hold the kind: every open order when the
-	 * prefilter cannot say (or the Invoices section has to be asked about
-	 * each of them), else the ones the order-item tables name plus the
-	 * ones the Invoices section names for the product.
+	 * The open orders that may hold the kind: the ones the order-item
+	 * tables name — a line of the product, or a line out of an invoice —
+	 * or every open order when that read cannot say.
 	 *
 	 * @param array $kind Cover::kind_of_stay().
 	 * @return int[]
@@ -682,24 +691,14 @@ class Orders {
 		if ( ! $open ) {
 			return array();
 		}
-
-		$product_id = (int) ( $kind['product_id'] ?? 0 );
 		if ( ! is_object( $this->store ) || ! method_exists( $this->store, 'orders_with_lines' ) ) {
 			return $open;
 		}
-		if ( $product_id <= 0 && self::invoices_available() ) {
-			return $open; // A species without a product: only the Invoices section knows which orders hold it.
-		}
 
-		$found = $this->store->orders_with_lines( $open, $product_id > 0 ? array( $product_id ) : array() );
+		$product_id = (int) ( $kind['product_id'] ?? 0 );
+		$found      = $this->store->orders_with_lines( $open, $product_id > 0 ? array( $product_id ) : array() );
 		if ( ! is_array( $found ) ) {
 			return $open;
-		}
-
-		foreach ( $this->product_invoice_lines( $product_id ) as $line ) {
-			if ( $line['order_id'] > 0 ) {
-				$found[] = $line['order_id'];
-			}
 		}
 
 		return array_values( array_intersect( $open, array_map( 'intval', $found ) ) );
@@ -769,24 +768,29 @@ class Orders {
 	/* ============================================================== */
 
 	/**
-	 * Add what the Invoices section knows to an order's lines: a line it
-	 * ties to an order item gives that item its link (product, species,
-	 * size, tank group); a line without an order item becomes a line of
+	 * Add what the Invoices section knows to an order's lines. A line it
+	 * ties to an order item, or that is plainly the same fish as an
+	 * invoice line the order already lists (same name, same quantity),
+	 * gives that line its link (product, variation, species, size, tank
+	 * group) instead of counting twice; any other line becomes a line of
 	 * its own.
 	 *
-	 * @param array[]    $rows     lines() so far.
-	 * @param int        $order_id Order id.
-	 * @param array|null $kind     The kind being looked for.
+	 * @param array[] $rows        lines() so far.
+	 * @param int     $order_id    Order id.
+	 * @param int[]   $invoice_ids The invoice products the order's lines came out of.
 	 * @return array[]
 	 */
-	private function with_invoice_lines( array $rows, $order_id, $kind ) {
+	private function with_invoice_lines( array $rows, $order_id, array $invoice_ids ) {
 		$extra = $this->order_invoice_lines( $order_id );
 
-		$product_id = is_array( $kind ) ? (int) ( $kind['product_id'] ?? 0 ) : 0;
-		foreach ( $this->product_invoice_lines( $product_id ) as $line ) {
-			if ( $line['order_id'] === (int) $order_id ) {
-				$line['link']['product_id'] = $line['link']['product_id'] > 0 ? $line['link']['product_id'] : $product_id;
-				$extra[]                    = $line;
+		// An invoice of the order that fishotel_invoices_for_order() did not answer for.
+		$answered = array();
+		foreach ( $extra as $line ) {
+			$answered[ $line['invoice_product_id'] ] = true;
+		}
+		foreach ( $invoice_ids as $invoice_id ) {
+			if ( ! isset( $answered[ (int) $invoice_id ] ) ) {
+				$extra = array_merge( $extra, $this->invoice_product_lines( (int) $invoice_id, $order_id ) );
 			}
 		}
 		if ( ! $extra ) {
@@ -794,9 +798,13 @@ class Orders {
 		}
 
 		$by_item = array();
+		$by_name = array();
 		foreach ( $rows as $index => $row ) {
 			if ( 'i:' . $row['item_id'] === $row['ref'] ) {
 				$by_item[ $row['item_id'] ] = $index;
+			}
+			if ( 'product' !== $row['type'] ) {
+				$by_name[ Cover::norm( $row['name'] ) ][] = $index;
 			}
 		}
 
@@ -809,6 +817,21 @@ class Orders {
 			}
 			if ( isset( $seen[ $line['ref'] ] ) ) {
 				$rows[ $seen[ $line['ref'] ] ]['link'] = self::merge_link( $rows[ $seen[ $line['ref'] ] ]['link'], $line['link'] );
+				continue;
+			}
+			// The same fish the order already lists as an invoice line of its own (same name, same
+			// quantity, not yet linked): it is that line, not a second fish.
+			$name = Cover::norm( $line['name'] );
+			$twin = null;
+			foreach ( '' !== $name && isset( $by_name[ $name ] ) ? $by_name[ $name ] : array() as $index ) {
+				if ( (int) $rows[ $index ]['qty'] === (int) $line['qty'] && self::no_link() === $rows[ $index ]['link'] ) {
+					$twin = $index;
+					break;
+				}
+			}
+			if ( null !== $twin ) {
+				$rows[ $twin ]['link'] = self::merge_link( $rows[ $twin ]['link'], $line['link'] );
+				$seen[ $line['ref'] ]  = $twin;
 				continue;
 			}
 			$seen[ $line['ref'] ] = count( $rows );
@@ -838,7 +861,7 @@ class Orders {
 	 * @return array[] Normalised lines.
 	 */
 	private function order_invoice_lines( $order_id ) {
-		if ( ! self::invoices_available() ) {
+		if ( ! function_exists( 'fishotel_invoices_for_order' ) ) {
 			return array();
 		}
 		try {
@@ -850,50 +873,51 @@ class Orders {
 	}
 
 	/**
-	 * The invoice lines the Invoices section ties to a product, from
-	 * fishotel_invoices_lines_for_product() (memoised per request).
+	 * The lines of one invoice product, from
+	 * fishotel_invoices_lines_for_product() (asked once per request).
 	 *
-	 * @param int $product_id Product id.
+	 * @param int $invoice_product_id The invoice's product.
+	 * @param int $order_id           The order they are on.
 	 * @return array[] Normalised lines.
 	 */
-	private function product_invoice_lines( $product_id ) {
-		$product_id = (int) $product_id;
-		if ( $product_id <= 0 || ! function_exists( 'fishotel_invoices_lines_for_product' ) ) {
+	private function invoice_product_lines( $invoice_product_id, $order_id ) {
+		$invoice_product_id = (int) $invoice_product_id;
+		if ( $invoice_product_id <= 0 || ! function_exists( 'fishotel_invoices_lines_for_product' ) ) {
 			return array();
 		}
-		if ( ! isset( $this->product_lines[ $product_id ] ) ) {
+		if ( ! isset( $this->invoice_lines[ $invoice_product_id ] ) ) {
 			try {
-				$lines = fishotel_invoices_lines_for_product( $product_id );
+				$lines = fishotel_invoices_lines_for_product( $invoice_product_id );
 			} catch ( \Throwable $e ) {
 				$lines = array();
 			}
-			$this->product_lines[ $product_id ] = self::normalize_invoice_lines( $lines, 0 );
+			$this->invoice_lines[ $invoice_product_id ] = is_array( $lines ) ? $lines : array();
 		}
-		return $this->product_lines[ $product_id ];
+		return self::normalize_invoice_lines( $this->invoice_lines[ $invoice_product_id ], (int) $order_id, $invoice_product_id );
 	}
 
 	/**
-	 * Whatever the Invoices section returned, as flat lines. Accepted: a
-	 * list of invoices each carrying `lines`, one invoice, or a list of
-	 * lines; arrays or objects. Per line, the first key that is there
-	 * wins: the order (order_id), its item (order_item_id | item_id), the
-	 * line's own id (line_id | id | index), the invoice (invoice_id), the
-	 * fish (name | species | fish | title), product_id, variation_id,
-	 * size_slug | size, the tank group (stay_id | group_id), qty |
-	 * quantity, the price of ONE fish (unit_price | price, dollars — or
-	 * unit_cents | price_cents), shipped, and kind (anything but "fish"
-	 * is skipped).
+	 * What the Invoices section returned, as flat lines on one order.
+	 * Accepted: the invoices of an order, each with `id`, `product_id`
+	 * (the invoice's own product) and `lines` — or one such invoice, or a
+	 * flat list of lines; arrays or objects. Per line, as that section
+	 * documents them: `id`, `invoice_id`, `kind` (anything but "fish" is
+	 * skipped), `name`, `qty`, `unit_price` (dollars, or null),
+	 * `product_id`, `variation_id`, `stay_id` (the tank group),
+	 * `size_slug`; and, should a line carry them, `order_item_id` and
+	 * `shipped`.
 	 *
-	 * @param mixed $data     What the function returned.
-	 * @param int   $order_id The order asked about (0 = the lines say).
+	 * @param mixed $data               What the function returned.
+	 * @param int   $order_id           The order the lines are on.
+	 * @param int   $invoice_product_id The invoice product, when the data is the lines of one.
 	 * @return array[]
 	 */
-	public static function normalize_invoice_lines( $data, $order_id = 0 ) {
+	public static function normalize_invoice_lines( $data, $order_id = 0, $invoice_product_id = 0 ) {
 		$data = self::to_array( $data );
 		if ( ! $data ) {
 			return array();
 		}
-		if ( isset( $data['lines'] ) ) {
+		if ( array_key_exists( 'lines', $data ) ) {
 			$data = array( $data ); // One invoice.
 		}
 
@@ -903,23 +927,23 @@ class Orders {
 			if ( ! $entry ) {
 				continue;
 			}
-			if ( isset( $entry['lines'] ) ) {
-				$invoice_id    = (int) self::pick( $entry, array( 'invoice_id', 'id' ), 0 );
-				$invoice_order = (int) self::pick( $entry, array( 'order_id' ), 0 );
-				foreach ( self::to_array( $entry['lines'] ) as $position => $line ) {
+			if ( array_key_exists( 'lines', $entry ) ) {
+				$invoice_id = (int) self::pick( $entry, array( 'id', 'invoice_id' ), 0 );
+				$product_id = (int) self::pick( $entry, array( 'product_id' ), 0 );
+				foreach ( array_values( self::to_array( $entry['lines'] ) ) as $position => $line ) {
 					$line = self::to_array( $line );
 					if ( $line ) {
-						$flat[] = array( $line, $invoice_id, $invoice_order, $position );
+						$flat[] = array( $line, $invoice_id, $product_id, $position );
 					}
 				}
 			} else {
-				$flat[] = array( $entry, (int) self::pick( $entry, array( 'invoice_id' ), 0 ), 0, count( $flat ) );
+				$flat[] = array( $entry, 0, (int) $invoice_product_id, count( $flat ) );
 			}
 		}
 
 		$out = array();
 		foreach ( $flat as $tuple ) {
-			list( $line, $invoice_id, $invoice_order, $position ) = $tuple;
+			list( $line, $invoice_id, $product_id, $position ) = $tuple;
 
 			if ( 'fish' !== (string) self::pick( $line, array( 'kind' ), 'fish' ) ) {
 				continue;
@@ -928,35 +952,34 @@ class Orders {
 			if ( $qty <= 0 ) {
 				continue;
 			}
-
-			$cents = self::pick( $line, array( 'unit_cents', 'price_cents' ), null );
-			$price = self::pick( $line, array( 'unit_price', 'price' ), null );
-			if ( is_numeric( $cents ) ) {
-				$unit_paid = (int) $cents;
-			} elseif ( is_numeric( $price ) ) {
-				$unit_paid = Money::cents( $price );
-			} else {
-				$unit_paid = null;
+			if ( $invoice_id <= 0 ) {
+				$invoice_id = (int) self::pick( $line, array( 'invoice_id' ), 0 );
 			}
 
-			$species = trim( (string) self::pick( $line, array( 'species', 'name', 'fish', 'title' ), '' ) );
-			$line_id = (string) self::pick( $line, array( 'line_id', 'id', 'index' ), (string) $position );
-			$size    = (string) self::pick( $line, array( 'size_slug', 'size' ), '' );
+			$price     = self::pick( $line, array( 'unit_price', 'price' ), null );
+			$unit_paid = is_numeric( $price ) ? Money::cents( $price ) : null;
+			$name      = trim( (string) self::pick( $line, array( 'name', 'species', 'fish', 'title' ), '' ) );
+			$line_id   = (int) self::pick( $line, array( 'id', 'line_id' ), 0 );
+
+			// An invoice built in the Invoices section has ids; one made by hand has none: its product and the
+			// line's place in it name the line instead.
+			$ref = 'inv:' . ( $invoice_id > 0 ? $invoice_id : 'p' . $product_id ) . ':' . ( $line_id > 0 ? $line_id : 'n' . (int) $position );
 
 			$out[] = array(
-				'ref'        => substr( 'inv:' . $invoice_id . ':' . preg_replace( '/[^A-Za-z0-9_\-]/', '', $line_id ), 0, 64 ),
-				'order_id'   => (int) self::pick( $line, array( 'order_id' ), $invoice_order > 0 ? $invoice_order : (int) $order_id ),
-				'item_id'    => (int) self::pick( $line, array( 'order_item_id', 'item_id' ), 0 ),
-				'name'       => trim( (string) self::pick( $line, array( 'name', 'species', 'fish', 'title' ), '' ) ),
-				'qty'        => $qty,
-				'shipped'    => self::truthy( self::pick( $line, array( 'shipped' ), false ) ),
-				'unit_paid'  => null !== $unit_paid ? max( 0, $unit_paid ) : 0,
-				'paid_known' => null !== $unit_paid,
-				'link'       => array(
+				'ref'                => substr( $ref, 0, 64 ),
+				'order_id'           => (int) $order_id,
+				'invoice_product_id' => (int) $product_id,
+				'item_id'            => (int) self::pick( $line, array( 'order_item_id', 'item_id' ), 0 ),
+				'name'               => $name,
+				'qty'                => $qty,
+				'shipped'            => self::truthy( self::pick( $line, array( 'shipped' ), false ) ),
+				'unit_paid'          => null !== $unit_paid ? max( 0, $unit_paid ) : 0,
+				'paid_known'         => null !== $unit_paid,
+				'link'               => array(
 					'product_id'   => max( 0, (int) self::pick( $line, array( 'product_id' ), 0 ) ),
 					'variation_id' => max( 0, (int) self::pick( $line, array( 'variation_id' ), 0 ) ),
-					'species'      => $species,
-					'size_slug'    => strtolower( trim( $size ) ),
+					'species'      => $name,
+					'size_slug'    => strtolower( trim( (string) self::pick( $line, array( 'size_slug', 'size' ), '' ) ) ),
 					'stay_id'      => max( 0, (int) self::pick( $line, array( 'stay_id', 'group_id' ), 0 ) ),
 				),
 			);
