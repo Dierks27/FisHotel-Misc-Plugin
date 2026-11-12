@@ -14,8 +14,10 @@
  * this line" note), the Stays tab's Identify and Edit, the order page's
  * "Correct the fish…" and its grid, the Front Desk's unknown arrival and
  * identify, the flags and filters (Board chip, Stays filter, markers),
- * the mislabel stats, the exports, the importer that flags nothing, and
- * the capability and nonce in front of the three AJAX endpoints.
+ * the mislabel stats, the exports, the importer that flags nothing, the
+ * capability and nonce in front of the three AJAX endpoints, and the page
+ * loaded before a correction that must not undo it (the order page and
+ * the Stays tab's Edit post the token their row was rendered with).
  *
  * Run from the plugin root:  php includes/sections/clean-room/tests/identify-test.php
  */
@@ -227,6 +229,10 @@ check( 'still unknown: "??" and what it looks like, no product, no species-list 
 check( 'a name typed with "??" is unknown without the box; unknown with nothing typed is "??"', true === Identify::fish_from( $store, array( 'species' => '?? striped eel' ), $settings )['unknown'] && '??' === Identify::fish_from( $store, array( 'unknown' => 'yes' ), $settings )['name'] && false === Identify::fish_from( $store, array( 'species' => 'x', 'unknown' => '0' ), $settings )['unknown'] );
 check( 'no fish at all is refused', isset( Identify::fish_from( $store, array(), $settings )['error'] ) && isset( Identify::fish_from( $store, array( 'species' => array( 'x' ), 'product_id' => 999 ), $settings )['error'] ) );
 check( 'a size that is not in the list is refused; the row\'s own stale size is kept', isset( Identify::fish_from( $store, array( 'species' => 'x', 'size' => 'jumbo' ), $settings, $stay )['error'] ) && isset( Identify::fish_from( $store, array( 'species' => 'x', 'size' => array( '2-3' ) ), $settings, $stay )['error'] ) && 'jumbo' === Identify::fish_from( $store, array( 'species' => 'x', 'size' => 'jumbo' ), $settings, array( 'size_slug' => 'jumbo', 'size_label' => 'Jumbo 8"' ) )['size_slug'] );
+$linked = array( 'species' => 'Powder Test Tang', 'product_id' => 22, 'size_slug' => null );
+$fish   = Identify::fish_from( $store, array( 'species' => ' powder test  tang', 'product_id' => 0, 'size' => '2-3' ), $settings, $linked );
+check( 'the fish the row already is, typed again (not picked) to set its size: it keeps the product the row is linked to', 22 === $fish['product_id'] && 'Powder Test Tang' === $fish['name'] && '2-3' === $fish['size_slug'], json_encode( $fish ) );
+check( '…another fish does not inherit that product, and a product that no longer exists is not assumed', null === Identify::fish_from( $store, array( 'species' => 'Green Test Blenny' ), $settings, $linked )['product_id'] && null === Identify::fish_from( $store, array( 'species' => 'Powder Test Tang' ), $settings, array( 'species' => 'Powder Test Tang', 'product_id' => 999 ) )['product_id'] && 21 === Identify::fish_from( $store, array( 'species' => 'Lined Test Wrasse' ), $settings, $linked )['product_id'] );
 check( 'markup in a typed name is stripped', 'Bold Test Fish' === Identify::fish_from( $store, array( 'species' => '<b>Bold</b> Test Fish' ), $settings )['name'] );
 
 echo "6. One correction: the stay and its order line together\n";
@@ -247,7 +253,7 @@ $stay     = $store->stay( $a, $today, $settings );
 $line     = fh_line( $store, $order_id, 0 );
 check( 'identified: the stay has the fish, its product and its size, and no longer needs identifying', true === $r['ok'] && 200 === $r['status'] && 'Lined Test Wrasse' === $stay['species'] && 21 === $stay['product_id'] && '3-4' === $stay['size_slug'] && '3-4"' === $stay['size_label'] && false === $stay['needs_id'], json_encode( $r ) );
 check( '…and its order line with it: the species-list id, the name, the scientific name, the size, the flag gone', 1 === $line['species_id'] && 'Lined Test Wrasse' === $line['species'] && 'Testus lineatus' === $line['sci_name'] && '3-4' === $line['size_slug'] && '3-4"' === $line['size_label'] && false === $line['needs_id'] && 'followed' === $r['result']['line'] && $line['id'] === $r['result']['line_id'] );
-check( 'a "??" placeholder is not something a label said: the line gets no label_name', null === $line['label_name'] && null === $r['result']['label'] );
+check( 'a fish that arrived unknown had no label to be wrong: its "??" name is kept in the label\'s place — reported, shown and counted nowhere', '?? small wrasse' === $line['label_name'] && null === $r['result']['label'] && '' === Identify::label_shown( $line ) && false === Identify::is_mislabeled( $line ) );
 $event = $store->last_event();
 check( 'one note event on the stay says who corrected what: "identified: <old> → <new>"', $events + 1 === $store->event_count() && 'note' === $event['type'] && 'identified: ?? small wrasse → Lined Test Wrasse · 3-4"' === $event['note'] && 7 === $event['actor_id'] && $a === $event['stay_id'] && array( $event['id'] ) === $r['result']['event_ids'] );
 check( 'the Events tab reads it as it is; any other note keeps its "note:"', 'identified: ?? small wrasse → Lined Test Wrasse · 3-4"' === Admin::event_text( $event ) && 'note: fed twice' === Admin::event_text( array( 'type' => 'note', 'note' => 'fed twice' ) ) && Identify::is_note( 'marked unknown: a → ?? b' ) && ! Identify::is_note( 'sale_ready:2026-01-01' ) );
@@ -278,8 +284,18 @@ check( 'its event says so; the fish it was is not remembered any more, and is no
 $r    = Admin::identify_stay( $store, $store->stay( $b, $today, $settings ), array( 'species' => 'blue test tang', 'size' => '2-3' ), $base, $today, $settings );
 $line = fh_line( $store, $order_id, 1 );
 check( 'identified as what the label said after all (typed any which way → the list\'s spelling): not mislabeled, the label still there', 'Blue Test Tang' === $line['species'] && 2 === $line['species_id'] && false === $line['needs_id'] && 'Blue Test Tang' === $line['label_name'] && false === Identify::is_mislabeled( $line ) && 2 === count( $store->box_shares ) );
-check( 'label_for(): the old name once; never over a label; never a "??" placeholder or a flagged line; never the same fish', 'Blue Test Tang' === Identify::label_for( array( 'species' => 'Blue Test Tang' ), 'Powder Test Tang' ) && null === Identify::label_for( array( 'species' => 'Blue Test Tang', 'label_name' => 'Older Label' ), 'Powder Test Tang' ) && null === Identify::label_for( array( 'species' => '?? eel', 'needs_id' => true ), 'Powder Test Tang' ) && null === Identify::label_for( array( 'species' => '?? eel' ), 'x' ) && null === Identify::label_for( array( 'species' => 'Blue Test Tang', 'needs_id' => true ), 'x' ) && null === Identify::label_for( array( 'species' => 'blue  test tang' ), 'Blue Test Tang' ) && null === Identify::label_for( array( 'species' => '' ), 'x' ) && 'Blue Test Tang' === Identify::label_for( array( 'species' => 'Blue Test Tang' ), '?? eel' ) );
-check( 'is_mislabeled(): a label, an identified fish, and another fish than the label', ! Identify::is_mislabeled( array( 'species' => 'x' ) ) && ! Identify::is_mislabeled( array( 'species' => 'x', 'label_name' => ' X ' ) ) && Identify::is_mislabeled( array( 'species' => 'x', 'label_name' => 'y' ) ) && ! Identify::is_mislabeled( array( 'species' => '?? x', 'label_name' => 'y', 'needs_id' => true ) ) );
+check( 'label_for(): the old name once; never over a label; never the same fish', 'Blue Test Tang' === Identify::label_for( array( 'species' => 'Blue Test Tang' ), 'Powder Test Tang' ) && null === Identify::label_for( array( 'species' => 'Blue Test Tang', 'label_name' => 'Older Label' ), 'Powder Test Tang' ) && null === Identify::label_for( array( 'species' => 'blue  test tang' ), 'Blue Test Tang' ) && null === Identify::label_for( array( 'species' => '' ), 'x' ) && 'Blue Test Tang' === Identify::label_for( array( 'species' => 'Blue Test Tang' ), '?? eel' ) );
+check( 'label_for(): a fish that arrived unknown keeps its "??" name in the label\'s place the first time it is identified — not while it is only described again, never over a label', '?? eel' === Identify::label_for( array( 'species' => '?? eel', 'needs_id' => true ), 'Powder Test Tang' ) && '?? eel' === Identify::label_for( array( 'species' => '?? eel' ), 'x' ) && '?? Blue Test Tang' === Identify::label_for( array( 'species' => 'Blue Test Tang', 'needs_id' => true ), 'x' ) && null === Identify::label_for( array( 'species' => '?? eel', 'needs_id' => true ), '?? striped eel' ) && null === Identify::label_for( array( 'species' => '?? eel', 'needs_id' => true, 'label_name' => 'Blue Test Tang' ), 'x' ) );
+check( 'is_mislabeled(): a label, an identified fish, and another fish than the label — a "??" label is none', ! Identify::is_mislabeled( array( 'species' => 'x' ) ) && ! Identify::is_mislabeled( array( 'species' => 'x', 'label_name' => ' X ' ) ) && Identify::is_mislabeled( array( 'species' => 'x', 'label_name' => 'y' ) ) && ! Identify::is_mislabeled( array( 'species' => '?? x', 'label_name' => 'y', 'needs_id' => true ) ) && ! Identify::is_mislabeled( array( 'species' => 'x', 'label_name' => '?? y' ) ) && 'y' === Identify::label_shown( array( 'label_name' => ' y ' ) ) && '' === Identify::label_shown( array( 'label_name' => '?? y' ) ) && '' === Identify::label_shown( array() ) );
+$guess    = fh_identify_store();
+$guess_id = fh_identify_order( $guess, array( array( 'species' => 'small wrasse', 'needs_id' => '1', 'qty_ordered' => 3, 'qty_received' => 3, 'box_no' => 1, 'box_pct' => '30', 'unit_price' => '5' ) ), $today );
+$out      = Orders::check_in( $guess, $guess->order( $guess_id ), $today, $settings, array( 'actor_id' => 7 ) );
+$gid      = $out['created'][0]['stay_id'];
+Admin::identify_stay( $guess, $guess->stay( $gid, $today, $settings ), array( 'species' => 'Lined Test Wrasse', 'product_id' => 21 ), $base, $today, $settings );
+$r    = Admin::identify_stay( $guess, $guess->stay( $gid, $today, $settings ), array( 'species' => 'Blue Test Tang' ), $base, $today, $settings );
+$line = fh_line( $guess, $guess_id, 0 );
+check( 'an unknown fish identified, then corrected again: the first guess is not "what the label said" — nothing arrived labeled, nothing is mislabeled', 'Blue Test Tang' === $line['species'] && '?? small wrasse' === $line['label_name'] && '' === Identify::label_shown( $line ) && false === Identify::is_mislabeled( $line ) && null === $r['result']['label'] && 'Identified: Lined Test Wrasse → Blue Test Tang · the order line follows.' === $r['message'], $r['message'] );
+check( '…and the stats agree: 0 mislabeled of 1 received line', array( 'received_lines' => 1, 'mislabeled' => 0, 'unidentified' => 0 ) === Stats::label_counts( $guess->order( $guess_id )['lines'] ) );
 
 echo "8. The split rule: a line follows its stays only when they all agree\n";
 $store    = fh_identify_store();
@@ -352,7 +368,7 @@ $closed_store->record_event( $dead, array( 'type' => 'loss', 'qty' => 1, 'actor_
 $r            = Admin::identify_stay( $closed_store, $closed_store->stay( $alive, $today, $settings ), array( 'species' => 'Lined Test Wrasse', 'product_id' => 21 ), $base, $today, $settings );
 check( 'a sister stay that died unidentified still counts: the line waits (and still reads "??")', 'closed' === $closed_store->stay( $dead, $today, $settings )['status'] && 'part' === $r['result']['line'] && true === fh_line( $closed_store, $closed_order, 0 )['needs_id'] && 1 === Admin_Workbook::unknown_lines( $closed_store->order( $closed_order ) ) && false !== strpos( $r['message'], 'the whole line on its order' ) );
 $r = Admin_Workbook::identify_line( $closed_store, $closed_store->order( $closed_order ), array( 'line_id' => fh_line( $closed_store, $closed_order, 0 )['id'], 'species' => 'Lined Test Wrasse', 'product_id' => 21 ), $today, $settings, 7 );
-check( 'correcting the line on its order reaches the closed stay too: the line and every stay are the fish, nothing left to identify, the note gone, the share written', empty( $r['error'] ) && array( $dead ) === $r['stays'] && 'Lined Test Wrasse' === $closed_store->stay( $dead, $today, $settings )['species'] && false === $closed_store->stay( $dead, $today, $settings )['needs_id'] && false === fh_line( $closed_store, $closed_order, 0 )['needs_id'] && '' === fh_line( $closed_store, $closed_order, 0 )['notes'] && null === fh_line( $closed_store, $closed_order, 0 )['label_name'] && 0 === Admin_Workbook::unknown_lines( $closed_store->order( $closed_order ) ) && 1 === count( $closed_store->box_shares ) && near( array_values( $closed_store->box_shares )[0]['pct_per_fish'], 10.0 ), json_encode( $r ) );
+check( 'correcting the line on its order reaches the closed stay too: the line and every stay are the fish, nothing left to identify, the note gone, the share written', empty( $r['error'] ) && array( $dead ) === $r['stays'] && 'Lined Test Wrasse' === $closed_store->stay( $dead, $today, $settings )['species'] && false === $closed_store->stay( $dead, $today, $settings )['needs_id'] && false === fh_line( $closed_store, $closed_order, 0 )['needs_id'] && '' === fh_line( $closed_store, $closed_order, 0 )['notes'] && '?? striped eel' === fh_line( $closed_store, $closed_order, 0 )['label_name'] && null === $r['label'] && 0 === Admin_Workbook::unknown_lines( $closed_store->order( $closed_order ) ) && 1 === count( $closed_store->box_shares ) && near( array_values( $closed_store->box_shares )[0]['pct_per_fish'], 10.0 ), json_encode( $r ) );
 
 echo "10. The order editor's grid\n";
 $post = static function ( $store, $order_id, array $changes = array(), array $header = array() ) use ( $today ) {
@@ -396,6 +412,11 @@ check( 'identified later in the grid: the label is still the first one, and the 
 $none  = fh_identify_order( $store, array( array( 'species' => 'Red Test Goby', 'qty_ordered' => 5 ) ), $today, array( 'ref' => 'T-3', 'status' => 'draft' ) );
 $saved = $post( $store, $none, array( 0 => array( 'needs_id' => '1' ) ) );
 check( 'a line nothing arrived on yet, ticked "??": unknown, but nothing was labeled', true === fh_line( $store, $none, 0 )['needs_id'] && '?? Red Test Goby' === fh_line( $store, $none, 0 )['species'] && null === fh_line( $store, $none, 0 )['label_name'] && false === $saved['reload'] );
+$arrived = fh_identify_order( $store, array( array( 'species' => 'spotted thing', 'needs_id' => '1', 'qty_ordered' => 2, 'qty_received' => 2, 'box_pct' => '10' ) ), $today, array( 'ref' => 'T-4' ) );
+$saved   = $post( $store, $arrived, array( 0 => array( 'needs_id' => '0', 'species' => 'Red Test Goby' ) ) );
+check( 'a line that arrived unknown, named in the grid before it is a stay: its "??" name is kept in the label\'s place (nothing to show: no reload)', 'Red Test Goby' === fh_line( $store, $arrived, 0 )['species'] && false === fh_line( $store, $arrived, 0 )['needs_id'] && '?? spotted thing' === fh_line( $store, $arrived, 0 )['label_name'] && false === $saved['reload'] );
+Admin_Workbook::identify_line( $store, $store->order( $arrived ), array( 'line_id' => fh_line( $store, $arrived, 0 )['id'], 'species' => 'Green Test Blenny' ), $today, $settings, 7 );
+check( '…so correcting that name later is no mislabel', 'Green Test Blenny' === fh_line( $store, $arrived, 0 )['species'] && '?? spotted thing' === fh_line( $store, $arrived, 0 )['label_name'] && false === Identify::is_mislabeled( fh_line( $store, $arrived, 0 ) ) );
 check( 'line_differs(): the name as written, the flag or the size', ! Identify::line_differs( array( 'species' => 'A ', 'size_slug' => null ), array( 'species' => 'A', 'size_slug' => '' ) ) && Identify::line_differs( array( 'species' => 'A' ), array( 'species' => 'a' ) ) && Identify::line_differs( array( 'species' => 'A' ), array( 'species' => 'A', 'needs_id' => true ) ) && Identify::line_differs( array( 'species' => 'A', 'size_slug' => '1-2' ), array( 'species' => 'A', 'size_slug' => '2-3' ) ) );
 
 echo "11. The Stays tab: Identify… refuses bad input; the plain Edit follows the same rules\n";
@@ -464,6 +485,13 @@ $order_id = fh_identify_order( $store, array( array( 'species' => 'Blue Test Tan
 $out      = Orders::check_in( $store, $store->order( $order_id ), $today, $settings, array( 'actor_id' => 7 ) );
 $r        = Front_Desk::perform( 'identify', array_merge( $fd, array( 'tank' => $store->tank_by_number( (int) $out['created'][0]['tank'] ) ) ), array( 'stay_id' => $out['created'][0]['stay_id'], 'species' => 'Powder Test Tang', 'product_id' => 22 ) );
 check( 'from the phone too the order line follows, keeps the label and the share is written', empty( $r['error'] ) && 'Powder Test Tang' === fh_line( $store, $order_id, 0 )['species'] && 'Blue Test Tang' === fh_line( $store, $order_id, 0 )['label_name'] && 's:3' === $store->box_share_by_key( (string) fh_line( $store, $order_id, 0 )['share_key'] )['fish_key'] && 'Identified: Blue Test Tang → Powder Test Tang · the order line follows · arrived labeled: Blue Test Tang' === $r['message'], json_encode( $r ) );
+$pstore = fh_identify_store();
+Front_Desk::perform( 'arrival', array_merge( $fd, array( 'store' => $pstore ) ), array( 'species' => 'Powder Test Tang', 'product_id' => 22, 'qty' => 3 ) );
+$live   = $pstore->product_facts( 22, $today, $settings )['live_total'];
+$r      = Admin::identify_stay( $pstore, $pstore->stay( 1, $today, $settings ), array( 'species' => 'Powder Test Tang', 'product_id' => 0, 'size' => '2-3', 'unknown' => 0 ), $base, $today, $settings );
+check( '"Correct fish…" with the same name typed (not picked) and a size: the size is set, the product link stays, the fish page keeps the group', true === $r['ok'] && 22 === $pstore->stay( 1, $today, $settings )['product_id'] && '2-3' === $pstore->stay( 1, $today, $settings )['size_slug'] && 3 === $live && 3 === $pstore->product_facts( 22, $today, $settings )['live_total'], json_encode( $r ) );
+$r = Front_Desk::perform( 'identify', array_merge( $fd, array( 'store' => $pstore ) ), array( 'stay_id' => 1, 'species' => 'powder test tang', 'size' => '3-4' ) );
+check( '…from the phone too', empty( $r['error'] ) && 22 === $pstore->stay( 1, $today, $settings )['product_id'] && '3-4' === $pstore->stay( 1, $today, $settings )['size_slug'] );
 
 echo "13. Flags and filters\n";
 $open = $store->open_stays( array(), $today, $settings );
@@ -614,5 +642,117 @@ foreach ( $endpoints as $label => $endpoint ) {
 }
 $_POST    = array();
 $_REQUEST = array();
+
+echo "18. A page loaded before a correction cannot undo it\n";
+check( 'seen(): the name (spacing aside), the "??" flag, the size and a stay\'s product, as one token', 32 === strlen( Identify::seen( array() ) ) && Identify::seen( array( 'species' => ' Blue  Test Tang ', 'size_slug' => null ) ) === Identify::seen( array( 'species' => 'Blue Test Tang', 'needs_id' => false, 'size_slug' => '', 'product_id' => null ) ) && Identify::seen( array( 'species' => 'Blue Test Tang' ) ) !== Identify::seen( array( 'species' => 'Powder Test Tang' ) ) && Identify::seen( array( 'species' => '?? eel' ) ) !== Identify::seen( array( 'species' => '?? eel', 'needs_id' => true ) ) && Identify::seen( array( 'species' => 'x' ) ) !== Identify::seen( array( 'species' => 'x', 'size_slug' => '2-3' ) ) && Identify::seen( array( 'species' => 'x' ) ) !== Identify::seen( array( 'species' => 'x', 'product_id' => 22 ) ) );
+check( 'is_stale(): a token that is no longer the row; no token (an older page, the importer) is never stale', Identify::is_stale( Identify::seen( array( 'species' => 'a' ) ), array( 'species' => 'b' ) ) && ! Identify::is_stale( Identify::seen( array( 'species' => 'a' ) ), array( 'species' => 'a' ) ) && ! Identify::is_stale( null, array( 'species' => 'b' ) ) && ! Identify::is_stale( '', array( 'species' => 'b' ) ) && ! Identify::is_stale( array( 'x' ), array( 'species' => 'b' ) ) );
+/** The order page as it would post the order as stored now: every row with the token it was rendered with. */
+$page = static function ( $store, $order_id ) {
+	$rows = array();
+	foreach ( $store->order( $order_id )['lines'] as $line ) {
+		$row = array( 'id' => $line['id'], 'seen' => Identify::seen( $line ), 'species' => $line['species'], 'species_id' => (string) $line['species_id'], 'sci_name' => $line['sci_name'], 'size_slug' => (string) $line['size_slug'], 'qty_ordered' => $line['qty_ordered'], 'qty_received' => $line['qty_received'], 'box_no' => $line['box_no'], 'box_pct' => $line['box_pct'], 'unit_price' => $line['unit_price'] );
+		if ( $line['needs_id'] ) {
+			$row['needs_id'] = '1';
+		}
+		$rows[] = $row;
+	}
+	return $rows;
+};
+$save = static function ( $store, $order_id, array $rows ) use ( $today ) {
+	$order = $store->order( $order_id );
+	return Admin_Workbook::save_order( $store, array( 'ref' => $order['ref'], 'supplier' => $order['supplier'], 'origin' => $order['origin'], 'order_date' => $order['order_date'], 'received_date' => $order['received_date'], 'status' => $order['status'], 'cost_mode' => 'box', 'boxes' => 1, 'domestic_flight' => '100', 'import_fees' => '100', 'lines' => $rows ), $order_id, $today );
+};
+$phone = static function ( $store, $stay_id, array $fish ) use ( $settings, $today ) {
+	$stay = $store->stay( $stay_id, $today, $settings );
+	return Front_Desk::perform(
+		'identify',
+		array(
+			'store'    => $store,
+			'settings' => $settings,
+			'today'    => $today,
+			'tank'     => $store->tank_by_number( (int) $stay['tank_number'] ),
+			'base'     => array( 'actor_id' => 8, 'source' => 'qr' ),
+		),
+		array_merge( array( 'stay_id' => $stay_id ), $fish )
+	);
+};
+$store    = fh_identify_store();
+$order_id = fh_identify_order(
+	$store,
+	array(
+		array( 'species' => 'small wrasse', 'needs_id' => '1', 'size_slug' => '1-2', 'qty_ordered' => 3, 'qty_received' => 3, 'box_no' => 1, 'box_pct' => '30', 'unit_price' => '5' ),
+		array( 'species' => 'Powder Test Tang', 'species_id' => 3, 'qty_ordered' => 1, 'qty_received' => 1, 'box_no' => 1, 'box_pct' => '40', 'unit_price' => '30' ),
+	),
+	$today
+);
+$out      = Orders::check_in( $store, $store->order( $order_id ), $today, $settings, array( 'actor_id' => 7 ) );
+list( $a, $b ) = array_column( $out['created'], 'stay_id' );
+$open     = $page( $store, $order_id ); // The order page is loaded now…
+$phone( $store, $a, array( 'species' => 'Lined Test Wrasse', 'product_id' => 21, 'size' => '2-3' ) ); // …and the phone identifies both fish.
+$phone( $store, $b, array( 'species' => 'Blue Test Tang' ) );
+$events   = $store->event_count();
+$shares   = $store->box_shares;
+$open[1]['unit_price'] = '31'; // Only a price is changed on the page that was open.
+$saved    = $save( $store, $order_id, $open );
+$one      = fh_line( $store, $order_id, 0 );
+$two      = fh_line( $store, $order_id, 1 );
+check( 'the page that was open is saved: both lines keep the fish they were corrected to — name, species-list id, scientific name, flag and size', empty( $saved['error'] ) && 'Lined Test Wrasse' === $one['species'] && 1 === $one['species_id'] && 'Testus lineatus' === $one['sci_name'] && false === $one['needs_id'] && '2-3' === $one['size_slug'] && '2-3"' === $one['size_label'] && 'Blue Test Tang' === $two['species'] && 2 === $two['species_id'] && 'Testus caeruleus' === $two['sci_name'], json_encode( $saved ) );
+check( '…their stays are not touched: the fish, the product link, no second event', 'Lined Test Wrasse' === $store->stay( $a, $today, $settings )['species'] && 21 === $store->stay( $a, $today, $settings )['product_id'] && '2-3' === $store->stay( $a, $today, $settings )['size_slug'] && 'Blue Test Tang' === $store->stay( $b, $today, $settings )['species'] && $events === $store->event_count() && 0 === $saved['followed'] );
+check( '…what the label said, the remembered shares and the mislabel count stand', 'Powder Test Tang' === $two['label_name'] && '?? small wrasse' === $one['label_name'] && $shares == $store->box_shares && 2 === count( $store->box_shares ) && array( 'received_lines' => 2, 'mislabeled' => 1, 'unidentified' => 0 ) === Stats::label_counts( $store->order( $order_id )['lines'] ) );
+check( '…and the rest of the row IS saved (the price that was typed)', 31.0 === (float) $two['unit_price'] );
+check( 'the reply says so and asks for a reload', 2 === $saved['kept'] && true === $saved['reload'] && array() === $saved['warnings'] && 'Order saved. 2 lines were corrected after this page was loaded and keep that fish.' === $saved['message'], $saved['message'] );
+check( 'a kept line stays stale on that page (it still shows the old fish): the reply hands its own token back, not the stored line\'s', array_column( $open, 'seen' ) === $saved['seen'] && array_column( $page( $store, $order_id ), 'seen' ) !== $saved['seen'] && count( $saved['seen'] ) === count( $saved['line_ids'] ) );
+foreach ( $saved['seen'] as $i => $token ) {
+	$open[ $i ]['seen'] = $token; // What the page's JS does with the reply.
+}
+$saved = $save( $store, $order_id, $open );
+check( '…so Save pressed twice before the reload keeps the correction twice', 2 === $saved['kept'] && 0 === $saved['followed'] && 'Lined Test Wrasse' === fh_line( $store, $order_id, 0 )['species'] && 'Blue Test Tang' === fh_line( $store, $order_id, 1 )['species'] && $events === $store->event_count() );
+$rows                  = $page( $store, $order_id );
+$rows[1]['species']    = 'Powder Test Tang';
+$rows[1]['species_id'] = '3';
+$saved                 = $save( $store, $order_id, $rows );
+check( 'a page that is up to date still corrects in the grid: the stay follows, nothing is "kept"', 1 === $saved['followed'] && 0 === $saved['kept'] && 'Powder Test Tang' === fh_line( $store, $order_id, 1 )['species'] && 'Powder Test Tang' === $store->stay( $b, $today, $settings )['species'] && 'identified: Blue Test Tang → Powder Test Tang' === $store->last_event()['note'] );
+check( '…and its reply carries the tokens of the lines as saved, so the page that stays open is not stale after its own save', array_column( $page( $store, $order_id ), 'seen' ) === $saved['seen'] && $saved['seen'][1] !== $rows[1]['seen'] );
+foreach ( $saved['seen'] as $i => $token ) {
+	$rows[ $i ]['seen'] = $token;
+}
+$rows[1]['species']    = 'Blue Test Tang';
+$rows[1]['species_id'] = '2';
+$saved                 = $save( $store, $order_id, $rows );
+check( '…a second change from that same page goes through', 1 === $saved['followed'] && 0 === $saved['kept'] && 'Blue Test Tang' === fh_line( $store, $order_id, 1 )['species'] && 'Blue Test Tang' === $store->stay( $b, $today, $settings )['species'] );
+$open = $page( $store, $order_id );
+$phone( $store, $b, array( 'species' => 'Green Test Blenny' ) );
+$open[1]['species']    = 'Red Test Goby'; // Typed on the page that is now stale.
+$open[1]['species_id'] = '';
+$events                = $store->event_count();
+$saved                 = $save( $store, $order_id, $open );
+check( 'a fish typed on a stale row is not written over the correction — and the reply names what was not saved', 1 === $saved['kept'] && 0 === $saved['followed'] && 'Green Test Blenny' === fh_line( $store, $order_id, 1 )['species'] && 'Green Test Blenny' === $store->stay( $b, $today, $settings )['species'] && $events === $store->event_count() && 1 === count( $saved['warnings'] ) && false !== strpos( $saved['warnings'][0], 'the fish typed over Green Test Blenny' ) && false !== strpos( $saved['message'], 'Not saved: the fish typed over Green Test Blenny' ), $saved['message'] );
+$open = $page( $store, $order_id );
+$phone( $store, $b, array( 'species' => 'Red Test Goby' ) );
+$open[1]['species'] = 'Red Test Goby'; // Typed to the very fish the line is now.
+$saved              = $save( $store, $order_id, $open );
+check( 'a stale row typed to the fish the line already is: nothing to keep, nothing to correct', 0 === $saved['kept'] && 0 === $saved['followed'] && 'Order saved.' === $saved['message'] && 'Red Test Goby' === fh_line( $store, $order_id, 1 )['species'] );
+$draft = fh_identify_order( $store, array( array( 'species' => 'Red Test Goby', 'qty_ordered' => 5, 'qty_received' => 5, 'box_pct' => '10' ) ), $today, array( 'ref' => 'T-7' ) );
+$open  = $page( $store, $draft );
+Admin_Workbook::identify_line( $store, $store->order( $draft ), array( 'line_id' => fh_line( $store, $draft, 0 )['id'], 'species' => 'Lined Test Wrasse', 'product_id' => 21 ), $today, $settings, 7 );
+$saved = $save( $store, $draft, $open );
+check( 'a line that is not a stay yet, corrected in another tab: the stale tab keeps it too, label and share with it', 1 === $saved['kept'] && 'Lined Test Wrasse' === fh_line( $store, $draft, 0 )['species'] && 1 === fh_line( $store, $draft, 0 )['species_id'] && 'Red Test Goby' === fh_line( $store, $draft, 0 )['label_name'] && 's:1' === $store->box_share_by_key( (string) fh_line( $store, $draft, 0 )['share_key'] )['fish_key'] );
+$kept = array();
+check( 'keep_corrected(): a row without a token, a new row and a row of another order are taken as typed', array( array( 'id' => 5, 'species' => 'typed' ), array( 'id' => 0, 'species' => 'new' ), array( 'id' => 6, 'species' => 'typed' ) ) === Identify::keep_corrected( array( array( 'id' => 5, 'species' => 'typed' ), array( 'id' => 0, 'species' => 'new' ), array( 'id' => 6, 'species' => 'typed' ) ), array( 6 => Identify::seen( array( 'species' => 'old' ) ) ), array( 5 => array( 'species' => 'stored' ) ), $kept ) && array() === $kept );
+
+$stay = $store->stay( $a, $today, $settings ); // The Stays tab is loaded now: its Edit row holds these values.
+$form = array( 'seen' => Identify::seen( $stay ), 'species' => $stay['species'], 'size_slug' => (string) $stay['size_slug'], 'product_id' => (string) $stay['product_id'], 'supplier' => (string) $stay['supplier'], 'order_ref' => (string) $stay['order_ref'], 'landed_cost' => '12.50', 'checkin_date' => $stay['checkin_date'] );
+$phone( $store, $a, array( 'species' => 'Powder Test Tang', 'product_id' => 22, 'size' => '3-4' ) );
+$events = $store->event_count();
+$r      = Admin::edit_stay_fields( $store, $store->stay( $a, $today, $settings ), $form, $base, $today, $settings );
+$stay   = $store->stay( $a, $today, $settings );
+check( 'the Stays tab\'s Edit on a row loaded before the correction, only the landed cost changed: the cost is saved, the fish, its size and its product stay as corrected', true === $r['ok'] && 12.5 === (float) $stay['landed_cost'] && 'Powder Test Tang' === $stay['species'] && '3-4' === $stay['size_slug'] && 22 === $stay['product_id'] && $events === $store->event_count() && 'Powder Test Tang' === fh_line( $store, $order_id, 0 )['species'] && 'Stay saved. Its fish was corrected after this page was loaded and stays Powder Test Tang.' === $r['message'] && true === $r['kept'], json_encode( $r ) );
+$phone( $store, $a, array( 'species' => 'Blue Test Tang', 'size' => '2-3' ) );
+$events = $store->event_count();
+$r      = Admin::edit_stay_fields( $store, $store->stay( $a, $today, $settings ), array_merge( $form, array( 'species' => 'Red Test Goby', 'landed_cost' => '13.00' ) ), $base, $today, $settings );
+check( '…and when the fish was also changed on that stale row, nothing is saved (409): reload first', false === $r['ok'] && 409 === $r['status'] && false !== strpos( $r['message'], 'it is now Blue Test Tang' ) && 'Blue Test Tang' === $store->stay( $a, $today, $settings )['species'] && 12.5 === (float) $store->stay( $a, $today, $settings )['landed_cost'] && $events === $store->event_count() );
+$stay = $store->stay( $a, $today, $settings );
+$r    = Admin::edit_stay_fields( $store, $stay, array( 'seen' => Identify::seen( $stay ), 'species' => 'Green Test Blenny', 'size_slug' => '2-3', 'product_id' => '', 'supplier' => (string) $stay['supplier'], 'order_ref' => (string) $stay['order_ref'], 'landed_cost' => '13.00' ), $base, $today, $settings );
+check( 'a row that is up to date edits the fish as before', true === $r['ok'] && 'Green Test Blenny' === $store->stay( $a, $today, $settings )['species'] && 'Green Test Blenny' === fh_line( $store, $order_id, 0 )['species'] && 13.0 === (float) $store->stay( $a, $today, $settings )['landed_cost'] && $events + 1 === $store->event_count() && false === $r['kept'], json_encode( $r ) );
 
 fh_finish();

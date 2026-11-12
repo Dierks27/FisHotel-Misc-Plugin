@@ -37,9 +37,11 @@
  *
  * The fees are split by each line's SHARE of Σ fraction, so the percents
  * only need to be right compared to each other: every guess a little
- * high gives the same costs. box_summary() adds the percents up per box
- * number (under / about full / over) for the order page — a check on the
- * guesses, never an input of the costing.
+ * high gives the same costs — once every line that received fish has a
+ * percent (a line without one still weighs in by its per-box count).
+ * box_summary() adds the percents up per box number (under / about full /
+ * over) and counts the received lines still without one, for the order
+ * page — a check on the guesses, never an input of the costing.
  *
  * Every division is guarded: an undefined ratio is null (never a
  * warning), a sum stays 0. Full float precision is kept throughout —
@@ -412,12 +414,16 @@ class Costing {
 	 * per box number the sum with its state, the lines with a percent but
 	 * no box number together, and the boxes the percents add up to (the
 	 * sum ÷ 100) beside the order's Boxes field. Lines without a percent
-	 * are left out (they use their per-box count). Sums are counted in
-	 * whole hundredths, so 33.33 + 33.33 + 33.34 is exactly 100.
+	 * are left out (they use their per-box count) — the ones that received
+	 * fish are counted as 'missing': while some lines have a percent and
+	 * others none, the fees are split between a guess and a per-box count,
+	 * and the percents are not yet only "compared to each other". Sums
+	 * are counted in whole hundredths, so 33.33 + 33.33 + 33.34 is exactly
+	 * 100.
 	 *
-	 * @param array[]  $lines box_no, box_pct.
+	 * @param array[]  $lines box_no, box_pct, qty_received.
 	 * @param int|null $boxes The order's Boxes field.
-	 * @return array{boxes: array[], unboxed: array{pct: float, lines: int}, lines: int, pct_total: float, boxes_total: float, order_boxes: int|null}
+	 * @return array{boxes: array[], unboxed: array{pct: float, lines: int}, lines: int, pct_total: float, boxes_total: float, order_boxes: int|null, missing: int}
 	 */
 	public static function box_summary( array $lines, $boxes = null ) {
 		$by_box    = array();
@@ -425,10 +431,12 @@ class Costing {
 		$unboxed_n = 0;
 		$total     = 0;
 		$count     = 0;
+		$missing   = 0;
 
 		foreach ( $lines as $line ) {
 			$pct = is_array( $line ) ? self::box_pct_in( $line['box_pct'] ?? null ) : null;
 			if ( null === $pct ) {
+				$missing += is_array( $line ) && isset( $line['qty_received'] ) && is_scalar( $line['qty_received'] ) && ! is_bool( $line['qty_received'] ) && (int) $line['qty_received'] >= 1 ? 1 : 0;
 				continue;
 			}
 			$hundredths = (int) round( $pct * 100 );
@@ -471,6 +479,7 @@ class Costing {
 			'pct_total'   => (float) ( $total / 100 ),
 			'boxes_total' => (float) ( $total / 10000 ),
 			'order_boxes' => $order_boxes,
+			'missing'     => $count > 0 ? $missing : 0,
 		);
 	}
 

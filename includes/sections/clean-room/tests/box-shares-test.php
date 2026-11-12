@@ -181,7 +181,7 @@ check( 'saved: the lines keep their box number and percent', empty( $r['error'] 
  * fees per box = 300 ÷ 1.05 ; landed 1 = 20 + 0.5 × 300 ÷ 1.05
  */
 check( 'the costing uses the percents: fractions 0.5 / 0.3 / 0 / 0.25, fees per box 300 ÷ 1.05', near( $order['lines'][0]['fraction'], 0.5 ) && near( $order['lines'][1]['fraction'], 0.3 ) && near( $order['lines'][2]['fraction'], 0 ) && near( $order['lines'][3]['fraction'], 0.25 ) && near( $order['costing']['fees_per_box'], 300 / 1.05 ) && near( $order['lines'][0]['landed_total'], 20 + 0.5 * 300 / 1.05 ) );
-check( 'the Save reply carries the figures, and the location\'s remembered shares for the page', isset( $r['figures']['lines'][0]['units'] ) && '0.5' === $r['figures']['lines'][0]['units'] && 2 === count( $r['shares'] ) && array( 'fish_key', 'size_slug', 'pct_per_fish', 'order_count' ) === array_keys( $r['shares'][0] ) && array() === $r['warnings'] );
+check( 'the Save reply carries the figures, and the location\'s remembered shares for the page', isset( $r['figures']['lines'][0]['units'] ) && '0.5' === $r['figures']['lines'][0]['units'] && 2 === count( $r['shares'] ) && array( 'fish_key', 'name_key', 'size_slug', 'pct_per_fish', 'order_count' ) === array_keys( $r['shares'][0] ) && array() === $r['warnings'] );
 
 echo "4. The Boxes card: chips, total, \"How full\" (the fixture the page's JS reads too)\n";
 foreach ( $fixture['summary'] as $case ) {
@@ -190,9 +190,22 @@ foreach ( $fixture['summary'] as $case ) {
 	check( 'total — ' . $case['name'], $case['total'] === Admin_Workbook::box_total_text( $summary ), Admin_Workbook::box_total_text( $summary ) );
 }
 $panel = Admin_Workbook::boxes_panel( $order, $store->box_shares() );
-check( 'this order: box 1 holds 80 % (under), the 20 % of the line without a box number apart, 1 box in all beside Boxes = 1', array( array( 'state' => 'under', 'text' => 'Box 1 · 80% · under' ), array( 'state' => 'unboxed', 'text' => 'no box number · 20% · lines: 1' ) ) === $panel['rows'] && 'Boxes by the percents: 1 · Boxes field: 1' === $panel['total'] && near( $panel['summary']['pct_total'], 100 ) );
+check( 'this order: box 1 holds 80 % (under), the 20 % of the line without a box number apart, 1 box in all beside Boxes = 1 — and the one received line still without a percent is counted', array( array( 'state' => 'under', 'text' => 'Box 1 · 80% · under' ), array( 'state' => 'unboxed', 'text' => 'no box number · 20% · lines: 1' ) ) === $panel['rows'] && 'Boxes by the percents: 1 · Boxes field: 1 · received lines without a %: 1 (still on their per-box count)' === $panel['total'] && near( $panel['summary']['pct_total'], 100 ) && 1 === $panel['summary']['missing'], $panel['total'] );
+/*
+ * Why the card counts them: one box, 200 in fees, line A at 25 % and one big fish left blank
+ * (1 ÷ 24 of a box). A pays 0.25 ÷ (0.25 + 1 ÷ 24) of the fees; with the blank line at 25 % too,
+ * half. And raising A alone by a tenth moves the split — the percents are only "right compared
+ * to each other" once every received line has one.
+ */
+$half = static function ( $pct_a, $pct_b ) {
+	$lines = array( array( 'species' => 'A', 'qty_ordered' => 1, 'qty_received' => 1, 'box_no' => 1, 'box_pct' => $pct_a, 'unit_price' => 0 ), array( 'species' => 'B', 'qty_ordered' => 1, 'qty_received' => 1, 'box_pct' => $pct_b, 'unit_price' => 0 ) );
+	$cost  = Costing::compute( array( 'cost_mode' => 'box', 'domestic_flight' => 100, 'import_fees' => 100 ), $lines );
+	return array( round( $cost['lines'][0]['landed_total'], 2 ), round( $cost['lines'][1]['landed_total'], 2 ), Admin_Workbook::box_total_text( Costing::box_summary( $lines, 1 ) ) );
+};
+check( 'a half-filled order: 25 % beside a blank line splits 171.43 / 28.57 and says "received lines without a %: 1"', array( 171.43, 28.57, 'Boxes by the percents: 0.25 · Boxes field: 1 · received lines without a %: 1 (still on their per-box count)' ) === $half( '25', '' ), json_encode( $half( '25', '' ) ) );
+check( '…every guess a little high only gives the same costs once every received line has a percent: 25 / 25 and 27.5 / 27.5 both split 100 / 100, the card silent', array( 100.0, 100.0, 'Boxes by the percents: 0.5 · Boxes field: 1' ) === $half( '25', '25' ) && array( 100.0, 100.0 ) === array_slice( $half( '27.5', '27.5' ), 0, 2 ) && array( 173.68, 26.32 ) === array_slice( $half( '27.5', '' ), 0, 2 ) );
 check( 'a received order shows no "How full" line; a draft or an ordered one does', '' === $panel['how_full'] && '' !== Admin_Workbook::boxes_panel( array_merge( $order, array( 'status' => 'ordered' ) ), array() )['how_full'] && '' !== Admin_Workbook::boxes_panel( array_merge( $order, array( 'status' => 'draft' ) ), array() )['how_full'] && '' === Admin_Workbook::boxes_panel( array_merge( $order, array( 'status' => 'closed' ) ), array() )['how_full'] );
-check( 'the page and its JS fill the same templates: every sentence is in one table', array( 'box', 'unboxed', 'under', 'full', 'over', 'none', 'total', 'totalField', 'suggest1', 'suggestN', 'howNone', 'howNothing', 'howFull' ) === array_keys( Admin_Workbook::box_strings() ) );
+check( 'the page and its JS fill the same templates: every sentence is in one table', array( 'box', 'unboxed', 'under', 'full', 'over', 'none', 'total', 'totalField', 'missing', 'suggest1', 'suggestN', 'howNone', 'howNothing', 'howFull' ) === array_keys( Admin_Workbook::box_strings() ) );
 check( 'the chips take a translated table', 'Kiste 1: 95.5 (voll)' === Admin_Workbook::box_summary_rows( array( 'boxes' => array( array( 'box_no' => 1, 'pct' => 95.5, 'lines' => 1, 'state' => 'full' ) ), 'unboxed' => array( 'pct' => 0, 'lines' => 0 ) ), array_merge( Admin_Workbook::box_strings(), array( 'box' => 'Kiste %1$s: %2$s (%3$s)', 'full' => 'voll' ) ) )[0]['text'] );
 
 echo "5. Keys: a location, a fish, a share\n";
@@ -336,6 +349,34 @@ fh_save( $store, $d, array( 'ref' => '2026-5', 'supplier' => 'Test Supplier One'
 $p = fh_share_of( $store, 'n:purple test wrasse', '2-3' );
 check( 'once its fish are received and a percent is typed, the order teaches the share: 80 ÷ 5 = 16, two lines now', 16.0 === $p['pct_per_fish'] && 2 === $p['order_count'] && '2026-05-19' === $p['last_date'] );
 
+/*
+ * A fish picked from the species list on one order (its id) and typed on the next (its name) is
+ * one fish: one share, one count per line, and a suggestion either way.
+ */
+$twice = fh_box_store();
+$place = array( 'supplier' => 'Test Supplier One', 'origin' => 'Testland' );
+$r     = fh_save( $twice, 0, array_merge( $place, array( 'ref' => '2026-20', 'received_date' => '2026-05-10' ) ), array( array( 'species' => 'Blue Test Wrasse', 'species_id' => 1, 'size_slug' => '2-3', 'qty_ordered' => 2, 'qty_received' => 2, 'box_pct' => '25', 'unit_price' => 5 ) ) );
+$typed = array( 'species' => 'blue  test wrasse', 'size_slug' => '2-3', 'qty_ordered' => 4, 'qty_received' => 4, 'unit_price' => 5 );
+$page  = Admin_Workbook::shares_for( $twice, $place );
+check( 'picked on one order (kept under its species-list id), typed on the next: the typed line is offered its share — 12.5 × 4 = 50 %', 's:1' === $page[0]['fish_key'] && 'n:blue test wrasse' === $page[0]['name_key'] && array( 'pct' => 50.0, 'orders' => 1, 'count' => 4 ) === Box_Shares::suggest_for( $page, $typed ) && array( 'pct' => 50.0, 'orders' => 1, 'count' => 4 ) === Box_Shares::suggest_for( $twice->box_shares( array( 'location_key' => Box_Shares::location_key( 'Test Supplier One', 'Testland' ) ) ), $typed ) );
+$r     = fh_save( $twice, 0, array_merge( $place, array( 'ref' => '2026-21', 'received_date' => '2026-05-12' ) ), array( array_merge( $typed, array( 'box_pct' => '40' ) ) ) );
+$two   = $r['order_id'];
+$only  = array_values( $twice->box_shares );
+check( '…and saving it counts in that same share — one row, 40 ÷ 4 = 10 from 2 lines, never a second row under the name', 1 === count( $only ) && 's:1' === $only[0]['fish_key'] && 10.0 === (float) $only[0]['pct_per_fish'] && 2 === (int) $only[0]['order_count'] && $only[0]['share_key'] === $twice->order( $two )['lines'][0]['share_key'] && '2026-05-12' === $only[0]['last_date'] );
+fh_save( $twice, $two, array_merge( $place, array( 'ref' => '2026-21', 'received_date' => '2026-05-12' ) ), fh_form_lines( $twice, $two ) );
+check( '…saving it again counts nothing twice', 1 === count( $twice->box_shares ) && 2 === (int) array_values( $twice->box_shares )[0]['order_count'] );
+check( '…and the next order that picks the fish is offered the latest guess (10 %, from 2 orders), not the older one', array( 'pct' => 10.0, 'orders' => 2, 'count' => 1 ) === Box_Shares::suggest_for( Admin_Workbook::shares_for( $twice, $place ), array( 'species_id' => 1, 'species' => 'Blue Test Wrasse', 'size_slug' => '2-3', 'qty_ordered' => 1 ) ) );
+$form               = fh_form_lines( $twice, $two );
+$form[0]['box_pct'] = '';
+fh_save( $twice, $two, array_merge( $place, array( 'ref' => '2026-21', 'received_date' => '2026-05-12' ) ), $form );
+check( '…a typed line that loses its percent gives its count back to that share', 1 === count( $twice->box_shares ) && 1 === (int) array_values( $twice->box_shares )[0]['order_count'] && null === $twice->order( $two )['lines'][0]['share_key'] );
+$other = fh_box_store();
+fh_save( $other, 0, array_merge( $place, array( 'ref' => '2026-30', 'received_date' => '2026-05-10' ) ), array( array_merge( $typed, array( 'box_pct' => '40' ) ) ) );
+fh_save( $other, 0, array_merge( $place, array( 'ref' => '2026-31', 'received_date' => '2026-05-12' ) ), array( array( 'species' => 'Blue Test Wrasse', 'species_id' => 1, 'size_slug' => '2-3', 'qty_ordered' => 2, 'qty_received' => 2, 'box_pct' => '25', 'unit_price' => 5 ) ) );
+check( 'the other way round — typed first, picked next: one share too (kept under the name), 25 ÷ 2 = 12.5 from 2 lines', 1 === count( $other->box_shares ) && 'n:blue test wrasse' === array_values( $other->box_shares )[0]['fish_key'] && 12.5 === (float) array_values( $other->box_shares )[0]['pct_per_fish'] && 2 === (int) array_values( $other->box_shares )[0]['order_count'] );
+fh_save( $other, 0, array_merge( $place, array( 'ref' => '2026-32', 'received_date' => '2026-05-13' ) ), array( array( 'species' => 'Blue Test Wrasse', 'species_id' => 1, 'size_slug' => '3-4', 'qty_ordered' => 1, 'qty_received' => 1, 'box_pct' => '30', 'unit_price' => 5 ) ) );
+check( 'another size of that fish is still another share', 2 === count( $other->box_shares ) );
+
 echo "11. Settings → Box shares: change a value, forget a row\n";
 $GLOBALS['fh_user_caps']    = array( Clean_Room::SETTINGS_CAPABILITY => array( 1 ), Clean_Room::CAPABILITY => array( 1, 2 ) );
 $GLOBALS['fh_current_user'] = 2;
@@ -362,7 +403,10 @@ check( 'a typed value is saved, dated today, belonging to no order line; the cou
 fh_save( $store, $d, array( 'ref' => '2026-5', 'supplier' => 'Test Supplier One', 'origin' => 'Testland', 'order_date' => '2026-05-18', 'received_date' => '2026-05-19' ), fh_form_lines( $store, $d ) );
 check( 're-saving an order dated before the typed value keeps the typed value', 7.5 === $store->box_share( $id )['pct_per_fish'] );
 fh_save( $store, $d, array( 'ref' => '2026-5', 'supplier' => 'Test Supplier One', 'origin' => 'Testland', 'order_date' => '2026-05-18', 'received_date' => $today ), fh_form_lines( $store, $d ) );
-check( 'an order dated on or after it replaces it again (80 ÷ 5 = 16)', 16.0 === $store->box_share( $id )['pct_per_fish'] );
+check( 'saving that day\'s order again does not put the old guess back: the typed value stands, still nobody\'s line', 7.5 === $store->box_share( $id )['pct_per_fish'] && null === $store->box_share( $id )['last_line_id'] && $today === $store->box_share( $id )['last_date'] && 2 === $store->box_share( $id )['order_count'] );
+fh_save( $store, $d, array( 'ref' => '2026-5', 'supplier' => 'Test Supplier One', 'origin' => 'Testland', 'order_date' => '2026-05-18', 'received_date' => '2026-05-21' ), fh_form_lines( $store, $d ) );
+check( 'an order dated after it replaces it again (80 ÷ 5 = 16)', 16.0 === $store->box_share( $id )['pct_per_fish'] && '2026-05-21' === $store->box_share( $id )['last_date'] );
+check( 'is_latest(): a value typed in Settings (a date, no line) yields only to an order dated after it; a value from a line, to one dated on or after', ! Box_Shares::is_latest( array( 'last_line_id' => null, 'last_date' => '2026-05-20' ), 9, '2026-05-20' ) && Box_Shares::is_latest( array( 'last_line_id' => null, 'last_date' => '2026-05-20' ), 9, '2026-05-21' ) && ! Box_Shares::is_latest( array( 'last_line_id' => 0, 'last_date' => '2026-05-20' ), 9, '2026-05-19' ) && Box_Shares::is_latest( array( 'last_line_id' => 4, 'last_date' => '2026-05-20' ), 9, '2026-05-20' ) && ! Box_Shares::is_latest( array( 'last_line_id' => null, 'last_date' => '2026-05-20' ), 9, '' ) );
 check( 'per_fish_in(): above 0 and at most 400, to four decimals', 8.3333 === Box_Shares::per_fish_in( '8.33333' ) && 400.0 === Box_Shares::per_fish_in( 400 ) && null === Box_Shares::per_fish_in( 400.0001 ) && null === Box_Shares::per_fish_in( 0 ) && null === Box_Shares::per_fish_in( null ) && null === Box_Shares::per_fish_in( true ) );
 $r = Settings::box_share_request( $store, array( '_wpnonce' => $nonce, 'op' => 'delete', 'id' => $id ), $today );
 check( 'Forget removes the row, and the lines that counted in it count nowhere', 200 === $r['status'] && true === $r['ok'] && null === $store->box_share( $id ) && null === fh_share_of( $store, 'n:purple test wrasse', '2-3' ) && null === $store->order( $a )['lines'][0]['share_key'] && null === $store->order( $d )['lines'][0]['share_key'] && null !== $store->order( $a )['lines'][1]['share_key'] );

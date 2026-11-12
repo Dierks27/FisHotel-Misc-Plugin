@@ -10,7 +10,11 @@
  *
  *   key      supplier and origin (trimmed, lower-cased), the fish — the
  *            species list id when the line has one, else the lower-cased
- *            name — and the size's slug ('' = no size).
+ *            name — and the size's slug ('' = no size). A fish picked
+ *            from the species list on one order and typed on the next is
+ *            still ONE fish: a line whose own key has no share counts in
+ *            the share kept for that name under the other key (find()),
+ *            and is offered its suggestion.
  *   written  when an order is saved (remember()), for every line of a
  *            box-mode order that has a percent of a box, received fish
  *            and an identified fish (eligible()): value = the line's
@@ -19,7 +23,10 @@
  *            order is dated (received date, else order date, else today)
  *            on or after the order the value came from — or when it is
  *            the very line the value came from, corrected. Re-saving an
- *            older order never overwrites a newer guess.
+ *            older order never overwrites a newer guess. A value typed in
+ *            Settings → Box shares (a date, no line) yields only to an
+ *            order dated AFTER it: saving that day's order again does not
+ *            put the old guess back.
  *   count    goes up once per order line: the line carries the key it
  *            counts in (fh_order_lines.share_key), so saving an order
  *            twice counts once. A line that changes fish, size or
@@ -103,6 +110,17 @@ class Box_Shares {
 	public static function fish_key( array $line ) {
 		$id = (int) ( $line['species_id'] ?? 0 );
 		return $id > 0 ? 's:' . $id : self::name_key( $line );
+	}
+
+	/**
+	 * The name key of a remembered share: as the page's JS carries it
+	 * (for_js()), else from its name.
+	 *
+	 * @param array $share name_key, or species.
+	 * @return string
+	 */
+	public static function share_name_key( array $share ) {
+		return isset( $share['name_key'] ) && is_string( $share['name_key'] ) ? $share['name_key'] : self::name_key( $share );
 	}
 
 	/**
@@ -262,8 +280,16 @@ class Box_Shares {
 			return $out;
 		}
 
-		$old = isset( $line['share_key'] ) && null !== $line['share_key'] ? (string) $line['share_key'] : '';
-		$key = self::eligible( $order, $line ) ? self::line_key( $order, $line ) : '';
+		$old      = isset( $line['share_key'] ) && null !== $line['share_key'] ? (string) $line['share_key'] : '';
+		$key      = self::eligible( $order, $line ) ? self::line_key( $order, $line ) : '';
+		$location = self::location_key( $order['supplier'] ?? '', $order['origin'] ?? '' );
+		$share    = '' !== $key ? $store->box_share_by_key( $key ) : null;
+		if ( '' !== $key && ! $share ) {
+			// The same fish under its other key — picked from the species list on one order,
+			// typed on another: one share, never a second row.
+			$share = self::find( (array) $store->box_shares( array( 'location_key' => $location ) ), $line );
+			$key   = $share ? (string) $share['share_key'] : $key;
+		}
 
 		if ( '' !== $old && $old !== $key ) {
 			$out['released'] = self::release( $store, $old, $line_id ) ? 1 : 0;
@@ -277,10 +303,8 @@ class Box_Shares {
 
 		$value = self::per_fish( $line );
 		$date  = self::order_date( $order, $today );
-		$share = $store->box_share_by_key( $key );
 
 		if ( ! $share ) {
-			$location = self::location_key( $order['supplier'] ?? '', $order['origin'] ?? '' );
 			$inserted = $store->insert_box_share(
 				array(
 					'share_key'    => $key,
@@ -343,7 +367,10 @@ class Box_Shares {
 	/**
 	 * Whether a line's guess replaces a share's value (pure): it is the
 	 * line the value came from, or the share carries no date, or the
-	 * line's order is dated on or after the value's.
+	 * line's order is dated on or after the value's. A value with a date
+	 * and no line was typed in Settings → Box shares: only an order dated
+	 * strictly after it replaces it, so saving that day's order again
+	 * does not undo the edit.
 	 *
 	 * @param array  $share   last_line_id, last_date.
 	 * @param int    $line_id The line.
@@ -351,13 +378,18 @@ class Box_Shares {
 	 * @return bool
 	 */
 	public static function is_latest( array $share, $line_id, $date ) {
-		if ( (int) ( $share['last_line_id'] ?? 0 ) === (int) $line_id && (int) $line_id > 0 ) {
+		$from = (int) ( $share['last_line_id'] ?? 0 );
+		if ( $from === (int) $line_id && (int) $line_id > 0 ) {
 			return true;
 		}
 		if ( ! Replay::is_date( $share['last_date'] ?? null ) ) {
 			return true;
 		}
-		return Replay::is_date( $date ) && strcmp( (string) $date, (string) $share['last_date'] ) >= 0;
+		if ( ! Replay::is_date( $date ) ) {
+			return false;
+		}
+		$later = strcmp( (string) $date, (string) $share['last_date'] );
+		return $from > 0 ? $later >= 0 : $later > 0;
 	}
 
 	/**
@@ -436,18 +468,29 @@ class Box_Shares {
 	/**
 	 * The remembered share of a line among the shares of its order's
 	 * location (pure): the fish by its species list id first, then by its
-	 * name, with the same size.
+	 * name, then the share kept under an id for a fish of that name (the
+	 * fish was picked from the species list then, and typed now) — with
+	 * the same size.
 	 *
-	 * @param array[] $shares The location's shares (fish_key, size_slug, pct_per_fish, order_count).
+	 * @param array[] $shares The location's shares (fish_key, species or name_key, size_slug,
+	 *                        pct_per_fish, order_count).
 	 * @param array   $line   species_id, species, size_slug.
 	 * @return array|null
 	 */
 	public static function find( array $shares, array $line ) {
 		$size = self::size_key( $line );
-		$keys = array_values( array_unique( array_filter( array( self::fish_key( $line ), self::name_key( $line ) ), 'strlen' ) ) );
+		$name = self::name_key( $line );
+		$keys = array_values( array_unique( array_filter( array( self::fish_key( $line ), $name ), 'strlen' ) ) );
 		foreach ( $keys as $key ) {
 			foreach ( $shares as $share ) {
 				if ( is_array( $share ) && (string) ( $share['fish_key'] ?? '' ) === $key && (string) ( $share['size_slug'] ?? '' ) === $size ) {
+					return $share;
+				}
+			}
+		}
+		if ( '' !== $name ) {
+			foreach ( $shares as $share ) {
+				if ( is_array( $share ) && self::share_name_key( $share ) === $name && (string) ( $share['size_slug'] ?? '' ) === $size ) {
 					return $share;
 				}
 			}
@@ -553,13 +596,15 @@ class Box_Shares {
 	 * The shares of a location as the order page's JS reads them.
 	 *
 	 * @param array[] $shares Hydrated shares.
-	 * @return array[] fish_key, size_slug, pct_per_fish, order_count.
+	 * @return array[] fish_key, name_key (the fish by its name, whatever its key), size_slug,
+	 *                 pct_per_fish, order_count.
 	 */
 	public static function for_js( array $shares ) {
 		$out = array();
 		foreach ( $shares as $share ) {
 			$out[] = array(
 				'fish_key'     => (string) ( $share['fish_key'] ?? '' ),
+				'name_key'     => is_array( $share ) ? self::share_name_key( $share ) : '',
 				'size_slug'    => (string) ( $share['size_slug'] ?? '' ),
 				'pct_per_fish' => (float) ( $share['pct_per_fish'] ?? 0 ),
 				'order_count'  => (int) ( $share['order_count'] ?? 0 ),

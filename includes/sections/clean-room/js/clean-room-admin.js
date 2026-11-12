@@ -109,6 +109,7 @@
 		none: 'No line has a percent yet: every line uses its per-box count.',
 		total: 'Boxes by the percents: %1$s · Boxes field: not set',
 		totalField: 'Boxes by the percents: %1$s · Boxes field: %2$s',
+		missing: 'received lines without a %%: %1$d (still on their per-box count)',
 		suggest1: 'suggested %1$s%% (from %2$d order)',
 		suggestN: 'suggested %1$s%% (from %2$d orders)',
 		howNone: 'How full: nothing to add up yet — no line has an ordered count.',
@@ -223,10 +224,11 @@
 
 	/**
 	 * The percents added up per box number, the lines without a box
-	 * number together, and the boxes they add up to beside the order's
-	 * Boxes field (Costing::box_summary()).
+	 * number together, the boxes they add up to beside the order's Boxes
+	 * field, and how many received lines still have no percent
+	 * (Costing::box_summary()).
 	 *
-	 * @param {Object[]} lines {box_no, box_pct}.
+	 * @param {Object[]} lines {box_no, box_pct, qty_received}.
 	 * @param {*}        boxes The order's Boxes field.
 	 * @return {Object}
 	 */
@@ -236,9 +238,14 @@
 		var unboxedN = 0;
 		var total = 0;
 		var count = 0;
+		var missing = 0;
 		(lines || []).forEach(function (line) {
 			var pct = line && typeof line === 'object' ? boxPct(line.box_pct) : null;
 			if (pct === null) {
+				var received = line && typeof line === 'object' ? line.qty_received : null;
+				if ((typeof received === 'number' || typeof received === 'string') && (parseInt(received, 10) || 0) >= 1) {
+					missing++;
+				}
 				return;
 			}
 			var hundredths = Math.round(pct * 100);
@@ -275,7 +282,8 @@
 			lines: count,
 			pct_total: total / 100,
 			boxes_total: total / 10000,
-			order_boxes: orderBoxes
+			order_boxes: orderBoxes,
+			missing: count > 0 ? missing : 0
 		};
 	}
 
@@ -311,7 +319,9 @@
 			return s.none;
 		}
 		var boxes = num(Math.round(summary.pct_total) / 100);
-		return summary.order_boxes === null || typeof summary.order_boxes === 'undefined' ? fmt(s.total, boxes) : fmt(s.totalField, boxes, String(summary.order_boxes));
+		var text = summary.order_boxes === null || typeof summary.order_boxes === 'undefined' ? fmt(s.total, boxes) : fmt(s.totalField, boxes, String(summary.order_boxes));
+		var missing = parseInt(summary.missing, 10) || 0;
+		return missing > 0 ? text + ' · ' + fmt(s.missing, missing) : text;
 	}
 
 	/* A name as the PHP keys it (Species::key()): spaces collapsed, trimmed, ASCII lower-cased. */
@@ -337,20 +347,32 @@
 
 	/**
 	 * The remembered share of a line among its location's shares: the fish
-	 * by its species list id first, then by its name, with the same size
-	 * (Box_Shares::find()).
+	 * by its species list id first, then by its name, then the share kept
+	 * under an id for a fish of that name (picked from the species list
+	 * then, typed now) — with the same size (Box_Shares::find()).
 	 *
-	 * @param {Object[]} shares {fish_key, size_slug, pct_per_fish, order_count}.
+	 * @param {Object[]} shares {fish_key, name_key, size_slug, pct_per_fish, order_count}.
 	 * @param {Object}   line   {species_id, species, size_slug}.
 	 * @return {Object|null}
 	 */
 	function findShare(shares, line) {
 		var size = sizeKeyOf(line);
-		var keys = [fishKeyOf(line), nameKeyOf(line && line.species)].filter(function (key, i, all) { return key !== '' && all.indexOf(key) === i; });
+		var name = nameKeyOf(line && line.species);
+		var keys = [fishKeyOf(line), name].filter(function (key, i, all) { return key !== '' && all.indexOf(key) === i; });
+		var share;
+		var i;
 		for (var k = 0; k < keys.length; k++) {
-			for (var i = 0; i < (shares || []).length; i++) {
-				var share = shares[i];
+			for (i = 0; i < (shares || []).length; i++) {
+				share = shares[i];
 				if (share && String(share.fish_key || '') === keys[k] && String(share.size_slug || '') === size) {
+					return share;
+				}
+			}
+		}
+		if (name !== '') {
+			for (i = 0; i < (shares || []).length; i++) {
+				share = shares[i];
+				if (share && typeof share.name_key === 'string' && share.name_key === name && String(share.size_slug || '') === size) {
 					return share;
 				}
 			}
@@ -1285,7 +1307,7 @@
 				});
 			}
 
-			function fillFigures(fig, ids) {
+			function fillFigures(fig, ids, seen) {
 				if (!fig) {
 					return;
 				}
@@ -1294,6 +1316,11 @@
 					var $row = $(this);
 					if (ids && ids[i]) {
 						$row.find('input[name$="[id]"]').val(ids[i]).end().attr('data-line', ids[i]);
+					}
+					if (seen && typeof seen[i] === 'string') {
+						// The token the server hands back: the line as saved (this page's own save does not
+						// make it stale) — or the row's own token when it kept a fish corrected elsewhere.
+						$row.find('input[name$="[seen]"]').val(seen[i]);
 					}
 					if (!f) {
 						return;
@@ -1344,7 +1371,7 @@
 							root.location.href = d.redirect;
 							return;
 						}
-						fillFigures(d.figures, d.line_ids);
+						fillFigures(d.figures, d.line_ids, d.seen);
 						if (Array.isArray(d.shares)) {
 							boxShares = d.shares; // What this save taught: the chips of the lines still without a percent follow.
 						}
@@ -1360,7 +1387,8 @@
 						if (done) {
 							done(d);
 						} else if (d.reload) {
-							// A correction changed stays or what a label said: show the lines as they are now.
+							// A correction changed stays or what a label said, or a line kept a fish that was
+							// corrected elsewhere after this page was loaded: show the lines as they are now.
 							root.setTimeout(function () { root.location.reload(); }, 1200);
 						}
 					})

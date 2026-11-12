@@ -25,6 +25,7 @@ defined( 'ABSPATH' ) || exit;
 use FisHotel\Misc\Sections\Clean_Room\Admin;
 use FisHotel\Misc\Sections\Clean_Room\Admin_Workbook;
 use FisHotel\Misc\Sections\Clean_Room\Clean_Room;
+use FisHotel\Misc\Sections\Clean_Room\Identify;
 use FisHotel\Misc\Sections\Clean_Room\Layout;
 use FisHotel\Misc\Sections\Clean_Room\Replay;
 use FisHotel\Misc\Sections\Clean_Room\Sizes;
@@ -130,6 +131,7 @@ $fh_table = static function ( array $rows, $open ) use ( $today, $sizes ) {
 					<tr class="fh-cr-fields" hidden data-stay="<?php echo esc_attr( $fh_stay['id'] ); ?>">
 						<td colspan="10">
 							<div class="fh-cr-fields__row">
+								<input type="hidden" name="seen" value="<?php echo esc_attr( Identify::seen( $fh_stay ) ); ?>">
 								<label><?php esc_html_e( 'Species', 'fishotel-misc-plugin' ); ?> <input type="text" class="fh-cr-input" name="species" value="<?php echo esc_attr( $fh_stay['species'] ); ?>"></label>
 								<label><?php esc_html_e( 'Size', 'fishotel-misc-plugin' ); ?>
 									<select class="fh-cr-input" name="size_slug">

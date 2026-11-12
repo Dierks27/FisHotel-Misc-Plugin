@@ -213,8 +213,9 @@ system temp directory (`FH_TEST_TMP` overrides).
   mode untouched, an order without percents unchanged — and every guess
   scaled alike giving the same costs), what a typed percent and box
   number read as, and the per-box summary with its states (under / about
-  full 90–110 / over, the lines without a box number apart) against
-  `fixtures/box-maths.json`.
+  full 90–110 / over, the lines without a box number apart, the
+  received lines still without a percent counted once some line has
+  one) against `fixtures/box-maths.json`.
 - **stats-test.php** — the year of an order; per-order rows over four
   invented orders (a bag-mode one dated by its order date, one that
   received nothing, one whose survivors are unknown); the weighted Σ/Σ
@@ -373,16 +374,21 @@ system temp directory (`FH_TEST_TMP` overrides).
   `fh_box_shares` table, the version gate that stays shut while an added
   column is missing), a line's box number and percent from a form and
   the save refused on a mistyped one (nothing written), the Boxes card
-  (chips, total, against the fixture), what is remembered (percent ÷
+  (chips, total, against the fixture — and the received lines still
+  without a percent counted, with the half-filled order worked by hand
+  that shows why), what is remembered (percent ÷
   received per supplier + origin + fish + size; only box-mode lines with
   received fish and an identified fish), the count going up once per
   order line, the latest order winning (an older order never overwrites
   a newer guess), the releases (a line that changes fish / size, loses
   its percent, is removed, or whose order is deleted; a share at zero
   deleted), the suggestion (per fish × received, else × ordered; never
-  for a line with a percent) and "How full", the Settings → Box shares
-  handler (capability, nonce, invalid input, change, forget), the
-  exports.
+  for a line with a percent) and "How full", a fish picked from the
+  species list on one order and typed on the next (one share, one count
+  per line, a suggestion either way round), the Settings → Box shares
+  handler (capability, nonce, invalid input, change, forget — and a
+  typed value that yields only to an order dated after it, not to that
+  day's order saved again), the exports.
 - **identify-test.php** — unknown and mislabeled fish and the one
   correction: the "??" name against `fixtures/unknown-names.json`, the
   schema (needs_id on lines and stays, label_name, version 1.5, the
@@ -391,10 +397,13 @@ system temp directory (`FH_TEST_TMP` overrides).
   a box share), check-in and a split (as unknown as the line), the fish
   a correction names (a product, a species-list fish typed any which
   way, a typed name, still unknown, a product that does not exist, a
-  size refused), the correction itself (stay + line together, no label
-  from a "??" placeholder, the note event, the share written after, the
-  same again changing nothing), the label (set once, never overwritten,
-  kept through "marked unknown", not mislabeled when corrected back),
+  size refused; the fish the row already is, typed again, keeping its
+  product link), the correction itself (stay + line together, the note
+  event, the share written after, the same again changing nothing), the
+  label (set once, never overwritten, kept through "marked unknown",
+  not mislabeled when corrected back; a fish that arrived unknown
+  keeping its "??" name in the label's place, so a second correction is
+  no mislabel — shown and counted nowhere),
   the split rule (only the stay changes and the line gets its "part of
   this line" note; the last sister agreeing makes the line follow; a
   correction from the order line leaves a sister that is something
@@ -407,9 +416,19 @@ system temp directory (`FH_TEST_TMP` overrides).
   writing no event), the Front Desk (an unknown arrival, identify on a
   group's sheet with no Undo, a group of another tank refused), flags
   and filters, the mislabel stats (by supplier, by origin, totals, an
-  undefined rate), the exports, the importer flagging nothing — and the
+  undefined rate), the exports, the importer flagging nothing, the
   capability and the nonce in front of the three AJAX endpoints the new
-  action rides on (called for real, up to their reply).
+  action rides on (called for real, up to their reply) — and the page
+  loaded before a correction: the token a row is rendered with, an order
+  page saved after the phone identified its fish (the lines, stays,
+  events, label, shares and mislabel count stand; the price typed is
+  saved; the reply counts the lines and hands a kept line its stale
+  token back, so Save pressed twice keeps the correction twice), a fish
+  typed on a stale row named as not saved, an up-to-date page still
+  correcting — twice in a row, with the tokens of its own save —, a line
+  corrected in another tab, and the Stays tab's Edit
+  (the other fields saved and the fish left; refused with 409 when the
+  fish was changed on the stale row).
 - **fake-store.php** — not a test (exits 0 when run directly): the
   in-memory store the above drives (tanks and buildings from the seed,
   stays — joined with their batch's order and sale date like the real
@@ -434,8 +453,10 @@ system temp directory (`FH_TEST_TMP` overrides).
   template row's `__i__`, `suggestImportFees()` (the exact pair, the
   origin-less fallback, nulls, cents); the order page's box helpers
   against `fixtures/box-maths.json` (a typed percent and box number, the
-  per-box summary, its chips and total, the remembered share of a line,
-  its suggestion and its text, "How full"); `unknownName()` /
+  per-box summary with the received lines still without a percent, its
+  chips and total, the remembered share of a line — by its id, its name,
+  or the name of a share kept under an id —, its suggestion and its
+  text, "How full"); `unknownName()` /
   `knownName()` (the "??" box of an order line) against
   `fixtures/unknown-names.json`.
 

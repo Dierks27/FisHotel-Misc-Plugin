@@ -104,7 +104,9 @@ fixture.summary.forEach( function ( c ) {
 	check( 'boxSummaryRows: ' + c.name, same( c.rows, helpers.boxSummaryRows( summary ) ), JSON.stringify( helpers.boxSummaryRows( summary ) ) );
 	check( 'boxTotalText: ' + c.name, c.total === helpers.boxTotalText( summary ), helpers.boxTotalText( summary ) );
 } );
-check( 'boxSummary: no lines at all, junk rows skipped', same( { boxes: [], unboxed: { pct: 0, lines: 0 }, lines: 0, pct_total: 0, boxes_total: 0, order_boxes: null }, helpers.boxSummary( null ) ) && 0 === helpers.boxSummary( [ 'junk', null, 7 ], 'x' ).lines );
+check( 'boxSummary: no lines at all, junk rows skipped', same( { boxes: [], unboxed: { pct: 0, lines: 0 }, lines: 0, pct_total: 0, boxes_total: 0, order_boxes: null, missing: 0 }, helpers.boxSummary( null ) ) && 0 === helpers.boxSummary( [ 'junk', null, 7 ], 'x' ).lines );
+check( 'boxSummary: a received count that is not a number is no received line', 0 === helpers.boxSummary( [ { box_pct: '25' }, { qty_received: [ 3 ] }, { qty_received: true }, { qty_received: 'x' }, { qty_received: null } ] ).missing && 1 === helpers.boxSummary( [ { box_pct: '25' }, { qty_received: ' 2 ' } ] ).missing );
+check( 'boxTotalText: a summary without the count (an older reply) reads as before', 'Boxes by the percents: 0.5 · Boxes field: not set' === helpers.boxTotalText( { lines: 1, pct_total: 50, order_boxes: null } ) );
 check( 'the chips and the total take a translated table', 'Kiste 1: 95.5 (voll)' === helpers.boxSummaryRows( { boxes: [ { box_no: 1, pct: 95.5, lines: 1, state: 'full' } ], unboxed: { pct: 0, lines: 0 } }, { box: 'Kiste %1$s: %2$s (%3$s)', full: 'voll' } )[0].text );
 check( 'fmt: positional and plain arguments, a literal percent', 'a 2 b 1 100%' === helpers.fmt( 'a %2$d b %1$s 100%%', '1', 2 ) && 'x-y' === helpers.fmt( '%s-%s', 'x', 'y' ) );
 check( 'num: no trailing zeros, two decimals at most', '95.5' === helpers.num( 95.5 ) && '100' === helpers.num( 100 ) && '0' === helpers.num( 0 ) && '89.99' === helpers.num( 89.99 ) && '' === helpers.num( null ) );
@@ -118,6 +120,7 @@ fixture.suggest.forEach( function ( c ) {
 	}
 } );
 check( 'findShare: the id first, then the name; null when the fish is not remembered', 12.5 === helpers.findShare( fixture.shares, { species_id: 7, species: 'Blue Test Wrasse', size_slug: '2-3' } ).pct_per_fish && 99 === helpers.findShare( fixture.shares, { species: 'blue test wrasse', size_slug: '2-3' } ).pct_per_fish && null === helpers.findShare( fixture.shares, { species: 'Red Test Goby', size_slug: '2-3' } ) && null === helpers.findShare( null, {} ) );
+check( 'findShare: a fish kept under its species-list id is found by its name when it is typed — in its own size only, and never by an empty name', 20 === helpers.findShare( fixture.shares, { species: 'orange test dart', size_slug: '3-4' } ).pct_per_fish && null === helpers.findShare( fixture.shares, { species: 'Orange Test Dart', size_slug: '2-3' } ) && null === helpers.findShare( [ { fish_key: 's:9', name_key: '', size_slug: '' } ], { species: '', size_slug: '' } ) );
 check( 'suggestPct: no share, or a share worth nothing → null', null === helpers.suggestPct( null, { qty_received: 2 } ) && null === helpers.suggestPct( { pct_per_fish: 0, order_count: 1 }, { qty_received: 2 } ) );
 fixture.how_full.forEach( function ( c ) {
 	var full = helpers.howFull( c.lines, fixture.shares );

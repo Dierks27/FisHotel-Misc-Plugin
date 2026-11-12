@@ -62,7 +62,8 @@
 				"lines": 5,
 				"pct_total": 190.5,
 				"boxes_total": 1.905,
-				"order_boxes": 2
+				"order_boxes": 2,
+				"missing": 0
 			},
 			"rows": [
 				{ "state": "full", "text": "Box 1 · 95.5% · about full" },
@@ -94,7 +95,8 @@
 				"lines": 7,
 				"pct_total": 640,
 				"boxes_total": 6.4,
-				"order_boxes": null
+				"order_boxes": null,
+				"missing": 0
 			},
 			"rows": [
 				{ "state": "full", "text": "Box 1 · 100% · about full" },
@@ -118,7 +120,53 @@
 				"lines": 0,
 				"pct_total": 0,
 				"boxes_total": 0,
-				"order_boxes": 3
+				"order_boxes": 3,
+				"missing": 0
+			},
+			"rows": [],
+			"total": "No line has a percent yet: every line uses its per-box count."
+		},
+		{
+			"name": "a half-filled order: the received lines still without a percent are counted (a line that received nothing is not)",
+			"lines": [
+				{ "box_no": "1", "box_pct": "25", "qty_received": "1" },
+				{ "qty_received": "1" },
+				{ "box_no": "1", "box_pct": "", "qty_received": 3 },
+				{ "qty_received": "0", "qty_ordered": "4" },
+				{ "qty_ordered": "2" }
+			],
+			"boxes": "1",
+			"expect": {
+				"boxes": [
+					{ "box_no": 1, "pct": 25, "lines": 1, "state": "under" }
+				],
+				"unboxed": { "pct": 0, "lines": 0 },
+				"lines": 1,
+				"pct_total": 25,
+				"boxes_total": 0.25,
+				"order_boxes": 1,
+				"missing": 2
+			},
+			"rows": [
+				{ "state": "under", "text": "Box 1 · 25% · under" }
+			],
+			"total": "Boxes by the percents: 0.25 · Boxes field: 1 · received lines without a %: 2 (still on their per-box count)"
+		},
+		{
+			"name": "received lines without a percent are not counted while no line has one",
+			"lines": [
+				{ "qty_received": "2" },
+				{ "qty_received": 5 }
+			],
+			"boxes": "",
+			"expect": {
+				"boxes": [],
+				"unboxed": { "pct": 0, "lines": 0 },
+				"lines": 0,
+				"pct_total": 0,
+				"boxes_total": 0,
+				"order_boxes": null,
+				"missing": 0
 			},
 			"rows": [],
 			"total": "No line has a percent yet: every line uses its per-box count."
@@ -128,7 +176,8 @@
 		{ "fish_key": "s:7", "size_slug": "2-3", "pct_per_fish": 12.5, "order_count": 3 },
 		{ "fish_key": "s:7", "size_slug": "", "pct_per_fish": 10, "order_count": 1 },
 		{ "fish_key": "n:green test blenny", "size_slug": "1-2", "pct_per_fish": 8.3333, "order_count": 2 },
-		{ "fish_key": "n:blue test wrasse", "size_slug": "2-3", "pct_per_fish": 99, "order_count": 9 }
+		{ "fish_key": "n:blue test wrasse", "size_slug": "2-3", "pct_per_fish": 99, "order_count": 9 },
+		{ "fish_key": "s:9", "name_key": "n:orange test dart", "size_slug": "3-4", "pct_per_fish": 20, "order_count": 2 }
 	],
 	"suggest": [
 		{
@@ -160,6 +209,18 @@
 			"line": { "species_id": 99, "species": "Blue Test Wrasse", "size_slug": "2-3", "qty_received": 1 },
 			"expect": { "pct": 99, "orders": 9, "count": 1 },
 			"text": "suggested 99% (from 9 orders)"
+		},
+		{
+			"name": "picked from the species list on an earlier order, typed on this one: the share kept under the id, by its name",
+			"line": { "species": " orange  TEST dart", "size_slug": "3-4", "qty_received": 2 },
+			"expect": { "pct": 40, "orders": 2, "count": 2 },
+			"text": "suggested 40% (from 2 orders)"
+		},
+		{
+			"name": "...and with another id on the line (the list was re-made): still that fish, by its name",
+			"line": { "species_id": 31, "species": "Orange Test Dart", "size_slug": "3-4", "qty_ordered": 1 },
+			"expect": { "pct": 20, "orders": 2, "count": 1 },
+			"text": "suggested 20% (from 2 orders)"
 		},
 		{
 			"name": "another size: nothing",

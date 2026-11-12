@@ -20,11 +20,15 @@
  *   label     an order line keeps label_name: what the supplier's label or
  *             invoice called the fish. It is set from the line's name the
  *             first time the line is corrected to a different fish, and
- *             never overwritten after that; a "??" placeholder is never a
- *             label (label_for()). A received line whose label differs
- *             from the fish it turned out to be is "mislabeled"
- *             (is_mislabeled()) — the Stats tab counts them per supplier
- *             and per origin.
+ *             never overwritten after that (label_for()). A fish that
+ *             arrived unknown had no usable label: the first time it is
+ *             identified its "??" name takes the label's place, so a later
+ *             correction of that first guess is not read as a mislabel —
+ *             such a "??" label is never shown as "arrived labeled" and
+ *             never counted (label_shown(), is_mislabeled()). A received
+ *             line whose label differs from the fish it turned out to be
+ *             is "mislabeled" — the Stats tab counts them per supplier and
+ *             per origin.
  *
  *   correct   stay() (from the Stays tab, its Edit and the Front Desk) and
  *             line() (from the order page) take the real fish — picked
@@ -55,6 +59,13 @@
  *             line's old name (closed ones too) — the one step for a
  *             split group that is all the same fish; a sister already
  *             identified as something else keeps its own.
+ *
+ *   stale     a page loaded before a fish was corrected elsewhere (the
+ *             phone, the Stays tab, another tab) still holds the old fish.
+ *             The order page and the Stays tab's Edit post back the token
+ *             their row was rendered with (seen()); when it is no longer
+ *             the row as stored, that page's copy of the fish is never
+ *             written over the correction (keep_corrected()).
  *
  * Nothing here touches $wpdb: stay() and line() take the store they write
  * to (the real Store or the tests' stand-in), like Orders::check_in().
@@ -174,10 +185,13 @@ class Identify {
 
 	/**
 	 * The label_name a correction gives a line (pure): its old name, the
-	 * first time it is corrected to a different fish. Null = leave the
-	 * column alone — the line has one already (never overwritten), its old
-	 * name is a "??" placeholder (not something a label said), or the new
-	 * name is the same fish.
+	 * first time it is corrected to a different fish. A fish that arrived
+	 * unknown had no usable label: the first time it is identified, its
+	 * "??" name is kept in the label's place — so correcting that first
+	 * guess later does not make the guess "what the label said". Null =
+	 * leave the column alone — the line has one already (never
+	 * overwritten), it has no name, an unknown fish is only described
+	 * again, or the new name is the same fish.
 	 *
 	 * @param array  $line     The line before the correction (species, needs_id, label_name).
 	 * @param string $new_name The corrected name.
@@ -188,8 +202,11 @@ class Identify {
 			return null;
 		}
 		$old = trim( (string) ( $line['species'] ?? '' ) );
-		if ( '' === $old || ! empty( $line['needs_id'] ) || self::is_unknown_name( $old ) ) {
+		if ( '' === $old ) {
 			return null;
+		}
+		if ( ! empty( $line['needs_id'] ) || self::is_unknown_name( $old ) ) {
+			return self::is_unknown_name( $new_name ) ? null : self::unknown_name( $old );
 		}
 		if ( self::same_fish( $old, $new_name ) ) {
 			return null;
@@ -198,14 +215,28 @@ class Identify {
 	}
 
 	/**
+	 * What a line's label said, to show or export as such (pure): its
+	 * label_name — '' when it has none, or when it is the "??" name of a
+	 * fish that arrived unknown (no label said that).
+	 *
+	 * @param array $line label_name.
+	 * @return string
+	 */
+	public static function label_shown( array $line ) {
+		$label = isset( $line['label_name'] ) ? trim( (string) $line['label_name'] ) : '';
+		return self::is_unknown_name( $label ) ? '' : $label;
+	}
+
+	/**
 	 * Whether a line was mislabeled (pure): it has a label, the fish is
-	 * identified, and the label names a different fish.
+	 * identified, and the label names a different fish. A fish that
+	 * arrived unknown (a "??" label) was never mislabeled.
 	 *
 	 * @param array $line species, needs_id, label_name.
 	 * @return bool
 	 */
 	public static function is_mislabeled( array $line ) {
-		$label = isset( $line['label_name'] ) ? trim( (string) $line['label_name'] ) : '';
+		$label = self::label_shown( $line );
 		return '' !== $label && empty( $line['needs_id'] ) && ! self::same_fish( $label, $line['species'] ?? '' );
 	}
 
@@ -248,14 +279,15 @@ class Identify {
 	 * exist is dropped (never assumed); a species-list fish is found by
 	 * its product, else by its name, and brings its id, its scientific
 	 * name and, when no product was picked, its spelling and its product
-	 * link. A size is
-	 * one of the standard sizes, the row's own stored size, or none; a
-	 * payload without a `size` leaves the size as it is.
+	 * link. A name that is the fish the row already is — typed again, not
+	 * picked from the list — keeps the product the row is linked to. A
+	 * size is one of the standard sizes, the row's own stored size, or
+	 * none; a payload without a `size` leaves the size as it is.
 	 *
 	 * @param object $store    Store (or stand-in) with product_title(), species_by_product(), species_by_name().
 	 * @param array  $raw      Unslashed payload: species, product_id, unknown, size.
 	 * @param array  $settings Settings (for the standard sizes).
-	 * @param array  $current  The stay or the line being corrected (size_slug, size_label).
+	 * @param array  $current  The stay or the line being corrected (species, product_id, size_slug, size_label).
 	 * @return array name, unknown, product_id, species_id, sci_name, size_slug, size_label — or error.
 	 */
 	public static function fish_from( $store, array $raw, array $settings, array $current = array() ) {
@@ -296,6 +328,10 @@ class Identify {
 			}
 			if ( $row && $product_id <= 0 && ! empty( $row['product_id'] ) && '' !== (string) $store->product_title( (int) $row['product_id'] ) ) {
 				$product_id = (int) $row['product_id'];
+			}
+			// The same fish typed again (to set its size, say) keeps the product it is linked to.
+			if ( $product_id <= 0 && ! empty( $current['product_id'] ) && self::same_fish( $current['species'] ?? '', $name ) && '' !== (string) $store->product_title( (int) $current['product_id'] ) ) {
+				$product_id = (int) $current['product_id'];
 			}
 			$fish = array(
 				'name'       => $name,
@@ -355,6 +391,71 @@ class Identify {
 			'size_slug'  => $size,
 			'size_label' => null !== $size && isset( $line['size_label'] ) ? (string) $line['size_label'] : null,
 		);
+	}
+
+	/**
+	 * What a screen showed of a row's fish, as one token (pure): the name
+	 * (spacing aside), the "??" flag, the size and — on a stay — the
+	 * product link. The order page (per line) and the Stays tab's Edit
+	 * post it back as "seen".
+	 *
+	 * @param array $row A line or a stay: species, needs_id, size_slug, product_id.
+	 * @return string 32 hex.
+	 */
+	public static function seen( array $row ) {
+		$name = trim( (string) preg_replace( '/\s+/', ' ', (string) ( $row['species'] ?? '' ) ) );
+		return md5( $name . '|' . ( ! empty( $row['needs_id'] ) ? '1' : '0' ) . '|' . (string) ( $row['size_slug'] ?? '' ) . '|' . (int) ( $row['product_id'] ?? 0 ) );
+	}
+
+	/**
+	 * Whether a posted "seen" token says the page was loaded before the
+	 * row's fish changed (pure). No token — an older page, a test, the
+	 * importer — is never stale.
+	 *
+	 * @param mixed $seen The posted token.
+	 * @param array $row  The line or the stay as stored.
+	 * @return bool
+	 */
+	public static function is_stale( $seen, array $row ) {
+		return is_string( $seen ) && '' !== $seen && self::seen( $row ) !== $seen;
+	}
+
+	/**
+	 * The lines of an order form with the fish of every stale row put
+	 * back (pure). A row is stale when the token it was rendered with is
+	 * no longer the line as stored: the fish was corrected elsewhere after
+	 * the page was loaded — the phone, the Stays tab, another tab — and
+	 * what the form posts for it is the old fish. Such a line keeps its
+	 * stored name, species-list id, scientific name, flag and size; a row
+	 * that posts no token, or the fish the line already is, is taken as
+	 * typed.
+	 *
+	 * @param array[]  $lines  Clean lines (Orders::normalize_lines(), flag_lines()).
+	 * @param string[] $seen   Line id → the posted token.
+	 * @param array[]  $before Line id → the line as stored.
+	 * @param array    $kept   Filled: line id → array( species: the stored name, typed: whether the
+	 *                         form had changed the fish itself — a change that is not saved ).
+	 * @return array[]
+	 */
+	public static function keep_corrected( array $lines, array $seen, array $before, array &$kept ) {
+		foreach ( $lines as $index => $line ) {
+			$id = is_array( $line ) ? (int) ( $line['id'] ?? 0 ) : 0;
+			if ( $id <= 0 || ! isset( $before[ $id ], $seen[ $id ] ) || ! self::is_stale( $seen[ $id ], $before[ $id ] ) ) {
+				continue;
+			}
+			$posted = self::seen( $line );
+			if ( self::seen( $before[ $id ] ) === $posted ) {
+				continue; // Typed to the very fish the line is now.
+			}
+			$kept[ $id ] = array(
+				'species' => (string) ( $before[ $id ]['species'] ?? '' ),
+				'typed'   => $posted !== $seen[ $id ],
+			);
+			foreach ( array( 'species', 'species_id', 'sci_name', 'needs_id', 'size_slug', 'size_label' ) as $key ) {
+				$lines[ $index ][ $key ] = isset( $before[ $id ][ $key ] ) ? $before[ $id ][ $key ] : null;
+			}
+		}
+		return $lines;
 	}
 
 	/**
@@ -507,7 +608,8 @@ class Identify {
 	 * @param array   $fish  The fish.
 	 * @param array[] $stays Every stay of the line, as they are now.
 	 * @param array   $ctx   today.
-	 * @return string|null The label_name this correction set (null = none).
+	 * @return string|null The label_name this correction set (null = none, or the "??" name of a
+	 *                     fish that arrived unknown — kept, but nothing a label said).
 	 */
 	private static function apply_to_line( $store, array $order, array $line, array $fish, array $stays, array $ctx ) {
 		$line_id = (int) $line['id'];
@@ -548,7 +650,7 @@ class Identify {
 			}
 		}
 
-		return $label;
+		return null !== $label && ! self::is_unknown_name( $label ) ? $label : null;
 	}
 
 	/**

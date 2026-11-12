@@ -658,6 +658,8 @@ class Admin_Workbook {
 				'total'      => __( 'Boxes by the percents: %1$s · Boxes field: not set', 'fishotel-misc-plugin' ),
 				/* translators: 1: boxes, 2: the order's Boxes field */
 				'totalField' => __( 'Boxes by the percents: %1$s · Boxes field: %2$s', 'fishotel-misc-plugin' ),
+				/* translators: %1$d: order lines */
+				'missing'    => __( 'received lines without a %%: %1$d (still on their per-box count)', 'fishotel-misc-plugin' ),
 			),
 			Box_Shares::strings()
 		);
@@ -692,7 +694,11 @@ class Admin_Workbook {
 
 	/**
 	 * The Boxes card's total (pure): the boxes the percents add up to (the
-	 * sum ÷ 100, to two decimals) beside the order's Boxes field.
+	 * sum ÷ 100, to two decimals) beside the order's Boxes field — and,
+	 * while some received lines have a percent and others none, how many
+	 * have none: those still take their share by their per-box count, so
+	 * the percents are only right "compared to each other" once every
+	 * received line has one.
 	 *
 	 * @param array      $summary Costing::box_summary().
 	 * @param array|null $strings box_strings() (null = the site's).
@@ -704,8 +710,10 @@ class Admin_Workbook {
 			return $s['none'];
 		}
 		// The sum is a whole number of hundredths, so this rounds the same in PHP and in JS.
-		$boxes = Costing::num( round( (float) ( $summary['pct_total'] ?? 0 ) ) / 100, '0', 2 );
-		return null === ( $summary['order_boxes'] ?? null ) ? sprintf( $s['total'], $boxes ) : sprintf( $s['totalField'], $boxes, (string) (int) $summary['order_boxes'] );
+		$boxes   = Costing::num( round( (float) ( $summary['pct_total'] ?? 0 ) ) / 100, '0', 2 );
+		$text    = null === ( $summary['order_boxes'] ?? null ) ? sprintf( $s['total'], $boxes ) : sprintf( $s['totalField'], $boxes, (string) (int) $summary['order_boxes'] );
+		$missing = (int) ( $summary['missing'] ?? 0 );
+		return $missing > 0 ? $text . ' · ' . sprintf( $s['missing'], $missing ) : $text;
 	}
 
 	/**
@@ -774,6 +782,9 @@ class Admin_Workbook {
 			switch ( $op ) {
 				case 'save':
 					$result = self::save_order( $store, $raw, $id, $today );
+					if ( ! empty( $result['kept'] ) ) {
+						self::flash( (string) $result['message'] ); // The page reloads on those lines as they are: say why there.
+					}
 					break;
 				case 'checkin':
 					if ( ! $current ) {
@@ -927,15 +938,29 @@ class Admin_Workbook {
 	 * no label ("Correct the fish…" does) — but ticking "??" on a named
 	 * line that received fish keeps the name as what the label said, so a
 	 * fish marked unknown while unloading still counts as mislabeled once
-	 * it is identified as something else.
+	 * it is identified as something else; unticking it on a line that
+	 * arrived unknown keeps the "??" name in the label's place, so no later
+	 * correction reads as a mislabel.
+	 *
+	 * A page loaded before a fish was corrected elsewhere must not undo
+	 * the correction: every row posts the token it was rendered with
+	 * (lines[n][seen], Identify::seen()), and a line whose stored fish is
+	 * no longer that keeps its stored fish (Identify::keep_corrected()) —
+	 * the rest of the row is saved, the reply says so and asks for a
+	 * reload. The reply carries the tokens of the lines as saved, so the
+	 * page that stays open is not stale after its own save — except for a
+	 * line that kept such a fish: the page still shows the old one, so it
+	 * gets its stale token back and a second Save before the reload keeps
+	 * the correction again.
 	 *
 	 * @param Store  $store Store.
 	 * @param array  $raw   Unslashed payload.
 	 * @param int    $id    Order id (0 = new).
 	 * @param string $today Site date.
-	 * @return array message, order_id, is_new, redirect (new), line_ids, figures, can_checkin, shares,
-	 *               warnings, followed (stays corrected with their lines), reload (the page shows
-	 *               labels or stays that changed) — or error.
+	 * @return array message, order_id, is_new, redirect (new), line_ids, seen (their tokens), figures,
+	 *               can_checkin, shares, warnings, followed (stays corrected with their lines), kept
+	 *               (lines that kept a fish corrected elsewhere), reload (the page shows labels,
+	 *               stays or fish that changed) — or error.
 	 */
 	public static function save_order( $store, array $raw, $id, $today ) {
 		$header = Orders::normalize_order( array_merge( $raw, array( 'id' => $id ) ) );
@@ -975,6 +1000,18 @@ class Admin_Workbook {
 				$lines[ $index ]['notes'] = (string) $before[ (int) $line['id'] ]['notes'];
 			}
 		}
+
+		// A page loaded before a fish was corrected elsewhere (the phone, the Stays tab, another
+		// tab) still holds the old fish: such a line keeps the fish as stored, never the page's copy.
+		$seen = array();
+		foreach ( $raw_lines as $row ) {
+			if ( is_array( $row ) && isset( $row['id'], $row['seen'] ) && is_scalar( $row['id'] ) && is_string( $row['seen'] ) && (int) $row['id'] > 0 ) {
+				$seen[ (int) $row['id'] ] = $row['seen'];
+			}
+		}
+		$kept  = array();
+		$lines = Identify::keep_corrected( $lines, $seen, $before, $kept );
+
 		$sized = array_filter(
 			$lines,
 			static function ( $line ) {
@@ -1006,9 +1043,11 @@ class Admin_Workbook {
 			}
 			if ( empty( $line['stay_id'] ) ) {
 				// Not a stay yet: the grid is the order as typed. Only the "??" box says something
-				// about the label — the fish that arrived is not known to be what the line said.
-				$label = ! empty( $line['needs_id'] ) && empty( $before[ $line_id ]['needs_id'] ) && (int) ( $line['qty_received'] ?? 0 ) > 0 ? Identify::label_for( $before[ $line_id ], (string) $line['species'] ) : null;
-				if ( null !== $label && $store->update_line_fields( $line_id, array( 'label_name' => $label ) ) ) {
+				// about the label — ticked, the fish that arrived is not known to be what the line
+				// said; unticked, a fish that arrived unknown had no label to be wrong.
+				$flagged = ! empty( $line['needs_id'] ) !== ! empty( $before[ $line_id ]['needs_id'] );
+				$label   = $flagged && (int) ( $line['qty_received'] ?? 0 ) > 0 ? Identify::label_for( $before[ $line_id ], (string) $line['species'] ) : null;
+				if ( null !== $label && $store->update_line_fields( $line_id, array( 'label_name' => $label ) ) && ! Identify::is_unknown_name( $label ) ) {
 					$labeled++;
 				}
 				continue;
@@ -1039,9 +1078,26 @@ class Admin_Workbook {
 			/* translators: %d: stays */
 			$message .= ' ' . sprintf( _n( '%d stay follows its corrected line.', '%d stays follow their corrected lines.', $followed, 'fishotel-misc-plugin' ), $followed );
 		}
+		if ( $kept ) {
+			/* translators: %d: order lines */
+			$message .= ' ' . sprintf( _n( '%d line was corrected after this page was loaded and keeps that fish.', '%d lines were corrected after this page was loaded and keep that fish.', count( $kept ), 'fishotel-misc-plugin' ), count( $kept ) );
+			foreach ( $kept as $was ) {
+				if ( $was['typed'] ) {
+					/* translators: %s: the fish the line was corrected to */
+					$warnings[] = sprintf( __( 'the fish typed over %s (corrected after this page was loaded — change it on the reloaded page)', 'fishotel-misc-plugin' ), $was['species'] );
+				}
+			}
+		}
 		if ( $warnings ) {
 			/* translators: %s: what was not saved */
 			$message .= ' ' . sprintf( __( 'Not saved: %s.', 'fishotel-misc-plugin' ), implode( '; ', $warnings ) );
+		}
+
+		// The tokens the page goes on with: the lines as saved — but a line that kept a fish corrected
+		// elsewhere still shows the old one on that page, so it stays stale there until the reload.
+		$tokens = array();
+		foreach ( $order['lines'] as $line ) {
+			$tokens[] = isset( $kept[ (int) $line['id'] ] ) ? $seen[ (int) $line['id'] ] : Identify::seen( $line );
 		}
 
 		return array(
@@ -1052,12 +1108,14 @@ class Admin_Workbook {
 			'ref'      => (string) $order['ref'],
 			'status'   => (string) $order['status'],
 			'line_ids'    => array_values( array_map( 'intval', array_column( $order['lines'], 'id' ) ) ),
+			'seen'        => $tokens,
 			'figures'     => self::figures( $order ),
 			'can_checkin' => self::can_check_in( $order ),
 			'shares'      => self::shares_for( $store, $order ),
 			'warnings'    => $warnings,
 			'followed'    => $followed,
-			'reload'      => $followed > 0 || $labeled > 0,
+			'kept'        => count( $kept ),
+			'reload'      => $followed > 0 || $labeled > 0 || count( $kept ) > 0,
 		);
 	}
 

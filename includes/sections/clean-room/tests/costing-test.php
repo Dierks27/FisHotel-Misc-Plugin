@@ -249,6 +249,7 @@ foreach ( $fixture['summary'] as $case ) {
 }
 $s = Costing::box_summary( array( 'junk', null, array( 'box_no' => 2, 'box_pct' => 'x' ) ) );
 check( 'no lines with a percent: nothing per box, nothing loose, 0 boxes, no Boxes field', array() === $s['boxes'] && 0 === $s['lines'] && 0 === $s['unboxed']['lines'] && near( $s['boxes_total'], 0 ) && null === $s['order_boxes'] );
+check( 'a received count that is not a number is no received line (as the page\'s JS reads it)', 0 === Costing::box_summary( array( array( 'box_pct' => '25' ), array( 'qty_received' => array( 3 ) ), array( 'qty_received' => true ), array( 'qty_received' => 'x' ), array( 'qty_received' => null ) ) )['missing'] && 1 === Costing::box_summary( array( array( 'box_pct' => '25' ), array( 'qty_received' => ' 2 ' ) ) )['missing'] && 0 === $s['missing'] );
 $s = Costing::box_summary( array( array( 'box_no' => 1, 'box_pct' => 0.1 ), array( 'box_no' => 1, 'box_pct' => 0.2 ) ) );
 check( 'sums are counted in whole hundredths: 0.1 + 0.2 is exactly 0.3', 0.3 === $s['boxes'][0]['pct'] && 0.3 === $s['pct_total'] );
 $s = Costing::box_summary( array( array( 'box_no' => 1000, 'box_pct' => 20 ), array( 'box_no' => 'A', 'box_pct' => 30 ) ), -4 );

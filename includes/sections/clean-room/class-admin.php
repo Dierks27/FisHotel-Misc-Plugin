@@ -819,6 +819,9 @@ class Admin {
 					if ( ! $outcome['ok'] && $outcome['status'] < 500 ) {
 						wp_send_json_error( array( 'message' => $outcome['message'] ), $outcome['status'] );
 					}
+					if ( ! empty( $outcome['kept'] ) ) {
+						Admin_Workbook::flash( $outcome['message'] ); // The tab reloads on the stay as it is: say why there.
+					}
 					$ok  = $outcome['ok'];
 					$msg = $outcome['message'];
 					break;
@@ -858,14 +861,23 @@ class Admin {
 	 * event; a name typed with a leading "??" marks the fish unknown. The
 	 * product link is exactly the Product ID typed here.
 	 *
+	 * A Stays tab loaded before the fish was corrected elsewhere (the
+	 * phone, the order page, another tab) still holds the old fish: the
+	 * row posts the token it was rendered with (seen, Identify::seen()),
+	 * and when the stay is no longer that, its species, size and product
+	 * are not the form's to write back — they stay as corrected and the
+	 * other fields are saved. When the fish was also changed on that stale
+	 * row, nothing is saved and the reply asks for a reload.
+	 *
 	 * @param object $store    Store (or the tests' stand-in).
 	 * @param array  $stay     The hydrated stay.
 	 * @param array  $raw      Unslashed payload: supplier, order_ref, landed_cost, product_id, species,
-	 *                         size_slug, checkin_date.
+	 *                         size_slug, checkin_date, seen.
 	 * @param array  $base     actor_id, source, event_at.
 	 * @param string $today    Site date.
 	 * @param array  $settings Settings.
-	 * @return array{ok: bool, status: int, message: string}
+	 * @return array{ok: bool, status: int, message: string, kept?: bool} kept: the fish was left as
+	 *                         corrected elsewhere.
 	 */
 	public static function edit_stay_fields( $store, array $stay, array $raw, array $base, $today, array $settings ) {
 		$stay_id = (int) ( $stay['id'] ?? 0 );
@@ -883,7 +895,25 @@ class Admin {
 			'landed_cost' => isset( $raw['landed_cost'] ) && '' !== trim( (string) $raw['landed_cost'] ) ? (float) $raw['landed_cost'] : null,
 			'product_id'  => isset( $raw['product_id'] ) ? absint( $raw['product_id'] ) : 0,
 		);
-		if ( $fields['product_id'] > 0 && '' === $store->product_title( $fields['product_id'] ) ) {
+
+		// The fish was corrected elsewhere after this row was rendered: what the form holds of it is old.
+		$stale = Identify::is_stale( $raw['seen'] ?? null, $stay );
+		if ( $stale ) {
+			$typed = isset( $raw['species'] ) && is_scalar( $raw['species'] ) && '' !== trim( (string) $raw['species'] ) ? sanitize_text_field( (string) $raw['species'] ) : (string) $stay['species'];
+			$form  = array(
+				'species'    => $typed,
+				'needs_id'   => Identify::is_unknown_name( $typed ),
+				'size_slug'  => isset( $raw['size_slug'] ) && is_scalar( $raw['size_slug'] ) ? trim( (string) $raw['size_slug'] ) : '',
+				'product_id' => $fields['product_id'],
+			);
+			if ( Identify::seen( $form ) !== (string) $raw['seen'] ) {
+				/* translators: %s: the fish the stay is now */
+				return $refuse( sprintf( __( 'This fish was corrected after this page was loaded (it is now %s). Nothing was saved: reload the page, then make your change.', 'fishotel-misc-plugin' ), (string) $stay['species'] ), 409 );
+			}
+			unset( $raw['species'], $raw['size_slug'], $fields['product_id'] );
+		}
+
+		if ( ! $stale && $fields['product_id'] > 0 && '' === $store->product_title( $fields['product_id'] ) ) {
 			return $refuse( __( 'No product has that ID.', 'fishotel-misc-plugin' ) );
 		}
 		if ( isset( $raw['species'] ) && '' !== trim( (string) $raw['species'] ) ) {
@@ -951,10 +981,16 @@ class Admin {
 			return $refuse( __( 'That could not be saved.', 'fishotel-misc-plugin' ), 500 );
 		}
 
+		if ( $stale ) {
+			/* translators: %s: the fish the stay is now */
+			$extra = sprintf( __( 'Its fish was corrected after this page was loaded and stays %s', 'fishotel-misc-plugin' ), (string) $stay['species'] );
+		}
+
 		return array(
 			'ok'      => true,
 			'status'  => 200,
 			'message' => __( 'Stay saved.', 'fishotel-misc-plugin' ) . ( '' !== $extra ? ' ' . $extra . '.' : '' ),
+			'kept'    => $stale,
 		);
 	}
 

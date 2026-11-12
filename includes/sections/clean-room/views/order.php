@@ -6,7 +6,9 @@
  * up, the totals and the stats block, Save and Check in. A line can be an
  * unknown fish (the "??" box); a line that received fish shows what its
  * label said once it was corrected, and "Identify…" / "Correct the fish…"
- * opens the panel of views/identify-panel.php under it.
+ * opens the panel of views/identify-panel.php under it. Every saved line
+ * posts the token of the fish it was rendered with (Identify::seen()), so
+ * a page loaded before a correction made elsewhere cannot undo it.
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  *
@@ -36,6 +38,7 @@ use FisHotel\Misc\Sections\Clean_Room\Admin_Workbook;
 use FisHotel\Misc\Sections\Clean_Room\Box_Shares;
 use FisHotel\Misc\Sections\Clean_Room\Clean_Room;
 use FisHotel\Misc\Sections\Clean_Room\Costing;
+use FisHotel\Misc\Sections\Clean_Room\Identify;
 use FisHotel\Misc\Sections\Clean_Room\Layout;
 use FisHotel\Misc\Sections\Clean_Room\Orders;
 use FisHotel\Misc\Sections\Clean_Room\Replay;
@@ -81,7 +84,7 @@ $fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks,
 	$correct = (int) $value( 'id', 0 ) > 0 && ( $linked || (int) $value( 'qty_received', 0 ) > 0 );
 	?>
 	<tr class="fh-cr-line<?php echo $linked ? ' is-linked' : ''; ?><?php echo $unknown ? ' is-unknown' : ''; ?>" data-line="<?php echo esc_attr( $value( 'id', 0 ) ); ?>">
-		<td class="fh-cr-num fh-cr-line__n"><span class="fh-cr-line__num"><?php echo esc_html( is_int( $i ) ? (string) ( $i + 1 ) : '' ); ?></span><input type="hidden" name="<?php echo esc_attr( $name( 'id' ) ); ?>" value="<?php echo esc_attr( $value( 'id', 0 ) ); ?>"><input type="hidden" name="<?php echo esc_attr( $name( 'species_id' ) ); ?>" value="<?php echo esc_attr( $value( 'species_id' ) ); ?>"></td>
+		<td class="fh-cr-num fh-cr-line__n"><span class="fh-cr-line__num"><?php echo esc_html( is_int( $i ) ? (string) ( $i + 1 ) : '' ); ?></span><input type="hidden" name="<?php echo esc_attr( $name( 'id' ) ); ?>" value="<?php echo esc_attr( $value( 'id', 0 ) ); ?>"><input type="hidden" name="<?php echo esc_attr( $name( 'species_id' ) ); ?>" value="<?php echo esc_attr( $value( 'species_id' ) ); ?>"><input type="hidden" name="<?php echo esc_attr( $name( 'seen' ) ); ?>" value="<?php echo esc_attr( (int) $value( 'id', 0 ) > 0 ? Identify::seen( $line ) : '' ); ?>"></td>
 		<td class="fh-cr-line__fish">
 			<span class="fh-cr-line__name fh-cr-suggest-wrap">
 				<input type="text" class="fh-cr-input fh-cr-species" name="<?php echo esc_attr( $name( 'species' ) ); ?>" value="<?php echo esc_attr( $value( 'species' ) ); ?>" placeholder="<?php esc_attr_e( 'species', 'fishotel-misc-plugin' ); ?>" autocomplete="off" maxlength="120">
@@ -93,8 +96,8 @@ $fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks,
 			<?php if ( $unknown ) : ?>
 				<span class="fh-cr-sub"><?php echo Admin::unknown_html( $line ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by unknown_html(). ?></span>
 			<?php endif; ?>
-			<?php if ( '' !== $value( 'label_name' ) ) : ?>
-				<span class="fh-cr-sub fh-cr-label-name" title="<?php esc_attr_e( 'What the supplier\'s label or invoice called this fish before it was corrected. Kept for the mislabel stats; a later correction never replaces it.', 'fishotel-misc-plugin' ); ?>"><?php echo esc_html( sprintf( /* translators: %s: what the label called the fish */ __( 'arrived labeled: %s', 'fishotel-misc-plugin' ), $value( 'label_name' ) ) ); ?></span>
+			<?php if ( '' !== Identify::label_shown( $line ) ) : ?>
+				<span class="fh-cr-sub fh-cr-label-name" title="<?php esc_attr_e( 'What the supplier\'s label or invoice called this fish before it was corrected. Kept for the mislabel stats; a later correction never replaces it.', 'fishotel-misc-plugin' ); ?>"><?php echo esc_html( sprintf( /* translators: %s: what the label called the fish */ __( 'arrived labeled: %s', 'fishotel-misc-plugin' ), Identify::label_shown( $line ) ) ); ?></span>
 			<?php endif; ?>
 			<?php if ( '' !== $value( 'notes' ) ) : ?>
 				<span class="fh-cr-sub fh-cr-line__notes"><?php echo esc_html( $value( 'notes' ) ); ?></span>
@@ -372,7 +375,7 @@ $fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks,
 				<div class="fishotel-misc-card-icon"><span class="dashicons dashicons-archive"></span></div>
 				<h2 class="fishotel-misc-card-title"><?php esc_html_e( 'Boxes', 'fishotel-misc-plugin' ); ?></h2>
 			</div>
-			<p class="fishotel-misc-card-desc"><?php esc_html_e( 'While unloading, type the box a line came out of and about how much of that box the whole line took (25 = a quarter of a box). The fees are split by each fish\'s share of the total, so the percents only need to be right compared to each other: if you guess everything a little high, the costs still come out the same. A line without a percent keeps its per-box count.', 'fishotel-misc-plugin' ); ?></p>
+			<p class="fishotel-misc-card-desc"><?php esc_html_e( 'While unloading, type the box a line came out of and about how much of that box the whole line took (25 = a quarter of a box). The fees are split by each fish\'s share of the total, so the percents only need to be right compared to each other: if you guess everything a little high, the costs still come out the same. That holds once every line that received fish has a percent — a line without one keeps its per-box count, and the card counts those.', 'fishotel-misc-plugin' ); ?></p>
 			<div class="fh-cr-summary fh-cr-boxes__list" data-box="rows">
 				<?php foreach ( $boxes['rows'] as $fh_row ) : ?>
 					<span class="fh-cr-chip fh-cr-chip--box-<?php echo esc_attr( $fh_row['state'] ); ?>"><?php echo esc_html( $fh_row['text'] ); ?></span>

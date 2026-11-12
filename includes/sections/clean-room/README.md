@@ -456,12 +456,17 @@ everything downstream is unchanged — fees per box = (flight + import) ÷
 Σ fraction, tariffs by goods value. **The fees are split by each line's
 share of the total, so the percents only need to be right compared to
 each other**: guess everything a little high and the costs come out the
-same. Bag mode is untouched, and so is every order without a percent.
+same. That holds once every line that received fish has a percent: a
+line without one still weighs in by its per-box count, so on a
+half-filled order one high guess does move the split. Bag mode is
+untouched, and so is every order without a percent.
 
 The **Boxes** card under the lines adds the percents up per box number
 with a state — *under*, *about full* (90 to 110) or *over* —, the lines
-with a percent but no box number apart, and the boxes the percents come
-to (the sum ÷ 100) beside the order's Boxes field. It is a check on the
+with a percent but no box number apart, the boxes the percents come
+to (the sum ÷ 100) beside the order's Boxes field, and — while some
+lines have a percent and others none — *received lines without a %: N*
+(still on their per-box count). It is a check on the
 guesses, never an input of the costing; the page recalculates it as the
 numbers are typed, exactly as the server renders it (one fixture tests
 both sides).
@@ -489,8 +494,15 @@ and when (`fh_box_shares`).
   itself. A draft / ordered order shows **How full**: the boxes the
   remembered shares predict for the ordered counts, and how many lines
   have no remembered share yet.
-- **Settings → Box shares** lists the rows, each editable (dated today,
-  so only a later order replaces it) and forgettable.
+- **One fish, one share.** A fish picked from the species list on one
+  order (kept under its id) and typed on the next (its name) is the
+  same fish: a line whose own key has no share counts in — and is
+  offered — the share kept for that name under the other key, never a
+  second row.
+- **Settings → Box shares** lists the rows, each editable and
+  forgettable. A value typed there is dated today and belongs to no
+  order line, so only an order dated *after* it replaces it: saving
+  that day's order again does not put the old guess back.
 - A fish that still **needs identifying is never remembered**.
 
 ## Unknown and mislabeled fish
@@ -514,9 +526,12 @@ remembered box share is never written for it.
 supplier's label or invoice called the fish. It is set from the line's
 name the first time the line is corrected to a different fish (case and
 spacing aside), and never overwritten after that — a second correction,
-or marking the fish unknown, leaves it; a "??" placeholder is never a
-label. The order page shows it under the line (*arrived labeled: X*)
-and the orders export carries it.
+or marking the fish unknown, leaves it. A fish that **arrived unknown**
+had no usable label: the first time it is identified, its "??" name is
+kept in the label's place, so correcting that first guess later is not
+read as a mislabel — such a "??" label is never shown and never
+counted. The order page shows a label under the line (*arrived labeled:
+X*) and the orders export carries the column as stored.
 
 **One correction.** *Identify…* / *Correct the fish…* — on the Stays
 tab, on a group's sheet on the phone, and on an order line that received
@@ -525,7 +540,8 @@ fish — takes the real fish from the same search the Arrival sheet uses
 one go:
 
 1. the **stay** gets the name, the product link and the size, and is no
-   longer flagged;
+   longer flagged (the fish it already is, typed again rather than
+   picked — to set its size, say — keeps its product link);
 2. its **order line** gets the species-list id, the name, the scientific
    name and the size, is no longer flagged, and keeps its old name as
    `label_name` (first time only);
@@ -543,7 +559,35 @@ grid. A line without a stay is the order as typed: retyping its species
 there records no label (*Correct the fish…* does) — except that ticking
 ?? on a named line that received fish keeps the name as what the label
 said, so a fish marked unknown while unloading still counts as
-mislabeled once it turns out to be something else.
+mislabeled once it turns out to be something else; and unticking it on
+a line that arrived unknown keeps the "??" name in the label's place.
+
+**A page that was already open.** A page loaded before a fish was
+corrected elsewhere — the phone, the other tab, another window — still
+holds the old fish, and saving it must not undo the correction. The
+order page (per line) and the Stays tab's Edit post back the token
+their row was rendered with: the name, the "??" flag, the size and, on
+a stay, the product link (`Identify::seen()`). When the row as stored is
+no longer that:
+
+- an **order save** keeps the stored fish on that line — name,
+  species-list id, scientific name, flag and size — and saves the rest
+  of the row; no stay is touched, no event written, the label and the
+  remembered share stand. The reply says how many lines kept a fish
+  corrected after the page was loaded, names a fish that was typed over
+  one as *not saved*, and the page reloads on the lines as they are
+  (the notice is repeated there). *Check in* and *Correct the fish…*
+  save the page first, so they are covered too;
+- the **Stays tab's Edit** saves its other fields and leaves the fish,
+  its size and its product as corrected (the reloaded tab says so);
+  when the fish was changed on that stale row as well, nothing is saved
+  and the reply asks for a reload.
+
+A save's reply carries the tokens of the lines as saved, so the page
+that stays open is not stale after its own save — except for a line
+that kept a corrected fish, which stays stale on that page until it
+reloads (Save pressed twice keeps the correction twice). A row posted
+without a token (the importer, an older page) is taken as typed.
 
 **A group that was split** has several stays on one order line, and
 **the line follows its stays only when they all agree**. While a sister
@@ -556,7 +600,10 @@ A correction made on the order line itself corrects the line and every
 stay that still carried the line's old name — the one step for a split
 group that is all the same fish, and the way to reach a sister stay that
 is already closed —; a sister already identified as something else keeps
-its own (and stays noted).
+its own (and stays noted). So identifying one half of a split group on
+the phone leaves the line and the other half as they were — nothing is
+identified that nobody looked at — and the toast points at the other
+half and at the order line.
 
 **Where it shows.** A *N need identifying* chip on the Board (linked to
 the Stays tab filtered to them), a *Needs identifying* filter and marker
@@ -569,7 +616,8 @@ when its label names another fish than the one it turned out to be;
 *Stats → By supplier* and *By origin* show them with their rate over the
 lines that received fish, and count the unknown fish **not identified
 yet** apart (a fish is not mislabeled until it has a name). A line
-corrected back to what its label said is not mislabeled.
+corrected back to what its label said is not mislabeled, and neither is
+a fish that arrived unknown, however often its name is corrected.
 
 ## Species
 
@@ -813,7 +861,7 @@ deactivation.
 - `{prefix}fh_aliases` — spoken words → product / species
 - `{prefix}fh_species` — the species master: name (unique), sci_name, group_name, per_box, my_price, online_price, online_site, online_date, reef_safe, max_size, product_id, notes
 - `{prefix}fh_orders` — a supplier order: ref (unique), supplier, origin, order_date, received_date, sale_date (the batch's "Goes on sale", NULL = not set; added in 1.3), status, boxes, cost_mode, tariffs, domestic_flight, import_fees, credit, markup, worth_threshold, schedule, building_id, notes
-- `{prefix}fh_order_lines` — its lines: order_id, species_id, species, sci_name, needs_id (1.5), label_name (1.5: what the label called a corrected fish, NULL = never corrected), size_slug + size_label (1.4), qty_ordered, qty_received, per_box, box_no + box_pct (1.4), bags, unit_price, worth, qty_doa, qty_survived, landed_total (a cache of the costing), stay_id, tank_id, share_key (1.4: the remembered share the line counts in), sort, notes (the "part of this line" notes of a split group live here)
+- `{prefix}fh_order_lines` — its lines: order_id, species_id, species, sci_name, needs_id (1.5), label_name (1.5: what the label called a corrected fish — the "??" name of one that arrived unknown —, NULL = never corrected), size_slug + size_label (1.4), qty_ordered, qty_received, per_box, box_no + box_pct (1.4), bags, unit_price, worth, qty_doa, qty_survived, landed_total (a cache of the costing), stay_id, tank_id, share_key (1.4: the remembered share the line counts in), sort, notes (the "part of this line" notes of a split group live here)
 - `{prefix}fh_box_shares` (1.4) — the remembered shares: share_key (unique: location + fish + size), location_key (supplier + origin), supplier, origin, fish_key (`s:<species id>` or `n:<name>`), species_id, species, size_slug, size_label, pct_per_fish, order_count, last_line_id + last_date (the line and the order date the value came from), updated_at
 
 Three options: `fishotel_cleanroom_settings` (with `size_attribute` and `size_list`, the source of the standard sizes), `fishotel_cleanroom_protocol`
@@ -863,7 +911,8 @@ clean-room/
 │                           suggestion and "How full" (takes the store as a parameter)
 ├── class-identify.php      unknown ("??") and mislabeled fish: the fish a correction names, the one
 │                           correction of a stay and its order line, what the label said, the split
-│                           rule (takes the store as a parameter)
+│                           rule, the token that keeps a page loaded earlier from undoing a
+│                           correction (takes the store as a parameter)
 ├── class-stats.php         PURE: per-order rows, weighted and sheet-style figures, groupings, the
 │                           mislabeled / not-identified-yet counts
 ├── class-species.php       PURE: a species row normalised, the merge into the candidate list
