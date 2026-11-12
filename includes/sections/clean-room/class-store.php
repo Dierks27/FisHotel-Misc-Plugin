@@ -3852,6 +3852,398 @@ class Store {
 	}
 
 	/* ============================================================== */
+	/*  Real sales and current prices (the Stats tab only)             */
+	/* ============================================================== */
+
+	/**
+	 * WooCommerce's tables the sales readers join, by short name:
+	 * wc_order_stats (one row per order and per refund: status, date,
+	 * parent, net total), wc_order_product_lookup (one row per order line
+	 * and per refund line: product, variation, quantity, net revenue),
+	 * and the order items with their meta. WooCommerce keeps all four
+	 * whatever the order storage (HPOS on or off).
+	 *
+	 * @var array<string, string>
+	 */
+	const SALES_TABLES = array(
+		'stats'    => 'wc_order_stats',
+		'lookup'   => 'wc_order_product_lookup',
+		'items'    => 'woocommerce_order_items',
+		'itemmeta' => 'woocommerce_order_itemmeta',
+	);
+
+	/**
+	 * Row caps of the sales and price readers.
+	 */
+	const SALES_YEARS_LIMIT   = 30;
+	const SALES_REFUNDS_LIMIT = 5000;
+	const PRICE_IDS_LIMIT     = 2000;
+	const PRICE_ROWS_LIMIT    = 20000;
+
+	/**
+	 * Whether WooCommerce's order tables are there, memoised per request
+	 * (null = not checked).
+	 *
+	 * @var bool|null
+	 */
+	private static $sales_tables = null;
+
+	/**
+	 * A WooCommerce order table by its short name.
+	 *
+	 * @param string $name One of SALES_TABLES' keys.
+	 * @return string
+	 */
+	private static function sales_table( $name ) {
+		global $wpdb;
+		return $wpdb->prefix . self::SALES_TABLES[ $name ];
+	}
+
+	/**
+	 * Whether the four tables the sales readers join exist (they do on a
+	 * site with WooCommerce; without them Real sales says so and shows
+	 * nothing). One SHOW TABLES per table, once per request, asked only
+	 * by the Stats tab.
+	 *
+	 * @return bool
+	 */
+	public function sales_tables_exist() {
+		if ( null !== self::$sales_tables ) {
+			return self::$sales_tables;
+		}
+
+		global $wpdb;
+
+		self::$sales_tables = true;
+		try {
+			foreach ( array_keys( self::SALES_TABLES ) as $name ) {
+				$table = self::sales_table( $name );
+				if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $wpdb->esc_like( $table ) ) ) !== $table ) {
+					self::$sales_tables = false;
+					break;
+				}
+			}
+		} catch ( \Throwable $e ) {
+			self::$sales_tables = false;
+		}
+
+		return self::$sales_tables;
+	}
+
+	/**
+	 * Order statuses as wc_order_stats stores them ("wc-completed"), with
+	 * one %s each.
+	 *
+	 * @param string[] $statuses Slugs without "wc-".
+	 * @return array{0: string, 1: string[]} The placeholders and their values; '' when the list is empty.
+	 */
+	private static function sales_statuses( array $statuses ) {
+		$slugs = array();
+		foreach ( Stats_Sales::normalize_statuses( $statuses ) as $status ) {
+			$slugs[] = 'wc-' . $status;
+		}
+		return array( implode( ', ', array_fill( 0, count( $slugs ), '%s' ) ), $slugs );
+	}
+
+	/**
+	 * The first moment of a year and of the next, as WooCommerce dates its
+	 * orders (site time).
+	 *
+	 * @param int $year Year.
+	 * @return array{0: string, 1: string}
+	 */
+	private static function sales_year_bounds( $year ) {
+		$year = max( 1, min( 9998, (int) $year ) );
+		return array( sprintf( '%04d-01-01 00:00:00', $year ), sprintf( '%04d-01-01 00:00:00', $year + 1 ) );
+	}
+
+	/**
+	 * The years that have an order in a status that counts, newest first.
+	 *
+	 * @param string[] $statuses Slugs without "wc-".
+	 * @return int[]
+	 */
+	public function sales_years( array $statuses ) {
+		list( $in, $slugs ) = self::sales_statuses( $statuses );
+		if ( '' === $in || ! $this->sales_tables_exist() ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		try {
+			$rows = $wpdb->get_col( $wpdb->prepare( 'SELECT DISTINCT YEAR(date_created) AS y FROM ' . self::sales_table( 'stats' ) . ' WHERE parent_id = 0 AND status IN (' . $in . ') ORDER BY y DESC LIMIT %d', array_merge( $slugs, array( self::SALES_YEARS_LIMIT ) ) ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+
+		return array_values( array_filter( array_map( 'intval', is_array( $rows ) ? $rows : array() ) ) );
+	}
+
+	/**
+	 * One page of the order lines sold in a year, as WooCommerce's lookup
+	 * table holds them: every line of an order dated in that year, and
+	 * every refund line of a refund of such an order (a refund is dated by
+	 * the order it refunds, so a year's sales are net of what was refunded
+	 * later), whose order is in a status that counts. Each row carries its
+	 * own status and date and its parent's, and — for a refund line — the
+	 * line it refunds; Stats_Sales::add_rows() checks the status and the
+	 * year again and nets the refunds. Pages run by order line id: pass
+	 * the last row_id of a page as $after for the next.
+	 *
+	 * @param int      $year     The year.
+	 * @param string[] $statuses Slugs without "wc-".
+	 * @param int      $after    Only lines with an id above this.
+	 * @param int      $limit    Rows per page.
+	 * @return array[] row_id, order_id, product_id, variation_id, qty, revenue, parent_id, status,
+	 *                 date_created, parent_status, parent_date, refunded_item_id.
+	 */
+	public function sales_rows( $year, array $statuses, $after = 0, $limit = Stats_Sales::PAGE_ROWS ) {
+		list( $in, $slugs ) = self::sales_statuses( $statuses );
+		if ( '' === $in || ! $this->sales_tables_exist() ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		list( $from, $to ) = self::sales_year_bounds( $year );
+		$stats             = self::sales_table( 'stats' );
+
+		// A refund is never dated before the order it refunds, so every row wanted is dated from the
+		// year's first moment on: that bound is on the row's own date and uses its index.
+		$sql = 'SELECT l.order_item_id AS row_id, l.order_id AS order_id, l.product_id AS product_id, l.variation_id AS variation_id, l.product_qty AS qty, l.product_net_revenue AS revenue,'
+			. ' s.parent_id AS parent_id, s.status AS status, s.date_created AS date_created, p.status AS parent_status, p.date_created AS parent_date, rf.meta_value AS refunded_item_id'
+			. ' FROM ' . self::sales_table( 'lookup' ) . ' l'
+			. ' INNER JOIN ' . $stats . ' s ON s.order_id = l.order_id'
+			. ' LEFT JOIN ' . $stats . ' p ON s.parent_id > 0 AND p.order_id = s.parent_id'
+			. ' LEFT JOIN ' . self::sales_table( 'itemmeta' ) . ' rf ON rf.order_item_id = l.order_item_id AND rf.meta_key = %s'
+			. ' WHERE l.order_item_id > %d AND s.date_created >= %s'
+			. ' AND COALESCE(p.date_created, s.date_created) >= %s AND COALESCE(p.date_created, s.date_created) < %s'
+			. ' AND COALESCE(p.status, s.status) IN (' . $in . ')'
+			. ' ORDER BY l.order_item_id ASC LIMIT %d';
+
+		$params = array_merge(
+			array( Stats_Sales::META_REFUNDED, max( 0, (int) $after ), $from, $from, $to ),
+			$slugs,
+			array( max( 1, min( Stats_Sales::PAGE_ROWS, (int) $limit ) ) )
+		);
+
+		try {
+			$rows = $wpdb->get_results( $wpdb->prepare( $sql, $params ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+
+		$out = array();
+		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
+			$out[] = array(
+				'row_id'           => (int) $row['row_id'],
+				'order_id'         => (int) $row['order_id'],
+				'product_id'       => (int) $row['product_id'],
+				'variation_id'     => (int) $row['variation_id'],
+				'qty'              => (int) $row['qty'],
+				'revenue'          => (float) $row['revenue'],
+				'parent_id'        => (int) $row['parent_id'],
+				'status'           => (string) $row['status'],
+				'date_created'     => (string) $row['date_created'],
+				'parent_status'    => isset( $row['parent_status'] ) ? (string) $row['parent_status'] : '',
+				'parent_date'      => isset( $row['parent_date'] ) ? (string) $row['parent_date'] : '',
+				'refunded_item_id' => isset( $row['refunded_item_id'] ) && is_numeric( $row['refunded_item_id'] ) ? (int) $row['refunded_item_id'] : 0,
+			);
+		}
+
+		return $out;
+	}
+
+	/**
+	 * What a set of order lines are called and whether they are invoice
+	 * lines: the line's name, the theme's flag on a fish line of an
+	 * itemised invoice, the "Includes" snapshot of an invoice kept as one
+	 * line, and the invoice product either came from. Two queries per
+	 * thousand lines; the order items and their meta are the same tables
+	 * with HPOS on or off.
+	 *
+	 * @param int[] $item_ids Order line ids.
+	 * @return array<int, array{name: string, fish: bool, lines: string|null, invoice_product_id: int}>
+	 */
+	public function sales_item_details( array $item_ids ) {
+		$item_ids = array_values( array_unique( array_filter( array_map( 'intval', $item_ids ) ) ) );
+		if ( ! $item_ids || ! $this->sales_tables_exist() ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		$out = array();
+		foreach ( array_chunk( $item_ids, 1000 ) as $chunk ) {
+			$in = implode( ',', $chunk );
+			try {
+				$names = $wpdb->get_results( 'SELECT order_item_id, order_item_name FROM ' . self::sales_table( 'items' ) . ' WHERE order_item_id IN (' . $in . ')', ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- ids cast to int above.
+				$meta  = $wpdb->get_results( $wpdb->prepare( 'SELECT order_item_id, meta_key, meta_value FROM ' . self::sales_table( 'itemmeta' ) . ' WHERE order_item_id IN (' . $in . ') AND meta_key IN (%s, %s, %s)', Stats_Sales::META_FISH, Stats_Sales::META_LINES, Stats_Sales::META_PRODUCT_ID ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			} catch ( \Throwable $e ) {
+				continue;
+			}
+
+			foreach ( is_array( $names ) ? $names : array() as $row ) {
+				$out[ (int) $row['order_item_id'] ] = array(
+					'name'               => (string) $row['order_item_name'],
+					'fish'               => false,
+					'lines'              => null,
+					'invoice_product_id' => 0,
+				);
+			}
+			foreach ( is_array( $meta ) ? $meta : array() as $row ) {
+				$id = (int) $row['order_item_id'];
+				if ( ! isset( $out[ $id ] ) ) {
+					continue;
+				}
+				$value = (string) $row['meta_value'];
+				if ( Stats_Sales::META_FISH === $row['meta_key'] ) {
+					$out[ $id ]['fish'] = '' !== $value && '0' !== $value;
+				} elseif ( Stats_Sales::META_LINES === $row['meta_key'] ) {
+					$out[ $id ]['lines'] = '' !== trim( $value ) ? $value : null;
+				} else {
+					$out[ $id ]['invoice_product_id'] = max( 0, (int) $value );
+				}
+			}
+		}
+
+		return $out;
+	}
+
+	/**
+	 * The refunds of a year's orders with what they took off: the refund's
+	 * net total (what was refunded before tax and shipping, a negative
+	 * amount) and how much of it sits on refund lines with a quantity —
+	 * the rest named no fish (Stats_Sales::finish() counts it apart).
+	 *
+	 * @param int      $year     The year (of the order refunded).
+	 * @param string[] $statuses Slugs without "wc-".
+	 * @return array[] order_id, net_total, on_lines.
+	 */
+	public function sales_refund_rows( $year, array $statuses ) {
+		list( $in, $slugs ) = self::sales_statuses( $statuses );
+		if ( '' === $in || ! $this->sales_tables_exist() ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		list( $from, $to ) = self::sales_year_bounds( $year );
+		$stats             = self::sales_table( 'stats' );
+
+		$sql = 'SELECT r.order_id AS order_id, r.net_total AS net_total, COALESCE(SUM(l.product_net_revenue), 0) AS on_lines'
+			. ' FROM ' . $stats . ' r'
+			. ' INNER JOIN ' . $stats . ' p ON p.order_id = r.parent_id'
+			. ' LEFT JOIN ' . self::sales_table( 'lookup' ) . ' l ON l.order_id = r.order_id'
+			. ' WHERE r.parent_id > 0 AND r.date_created >= %s AND p.date_created >= %s AND p.date_created < %s AND p.status IN (' . $in . ')'
+			. ' GROUP BY r.order_id, r.net_total ORDER BY r.order_id ASC LIMIT %d';
+
+		try {
+			$rows = $wpdb->get_results( $wpdb->prepare( $sql, array_merge( array( $from, $from, $to ), $slugs, array( self::SALES_REFUNDS_LIMIT ) ) ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+
+		$out = array();
+		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
+			$out[] = array(
+				'order_id'  => (int) $row['order_id'],
+				'net_total' => (float) $row['net_total'],
+				'on_lines'  => (float) $row['on_lines'],
+			);
+		}
+
+		return $out;
+	}
+
+	/**
+	 * The current prices of a set of products, read straight from the
+	 * product tables in one query per 500 products (so it works with or
+	 * without WooCommerce loaded, like the species search): the product's
+	 * own active price (_price — the sale price while a sale runs; a
+	 * product with variations carries its lowest and highest there) and,
+	 * for each of its enabled variations, that variation's active price
+	 * with its attributes. Read-only: nothing here ever writes a price.
+	 *
+	 * @param int[] $ids Product ids (a variation id answers with its own price).
+	 * @return array<int, array{prices: float[], variations: array[]}> variations: id, price, attributes (key → value).
+	 */
+	public function product_prices( array $ids ) {
+		$ids = array_slice( array_values( array_unique( array_filter( array_map( 'intval', $ids ) ) ) ), 0, self::PRICE_IDS_LIMIT );
+		if ( ! $ids ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		$out = array();
+		foreach ( array_chunk( $ids, 500 ) as $chunk ) {
+			$in  = implode( ',', $chunk );
+			$sql = 'SELECT p.ID AS id, p.post_parent AS parent, p.post_type AS type, pm.meta_key AS meta_key, pm.meta_value AS meta_value'
+				. ' FROM ' . $wpdb->posts . ' p INNER JOIN ' . $wpdb->postmeta . ' pm ON pm.post_id = p.ID'
+				. " WHERE ((p.ID IN ({$in}) AND p.post_type IN ('product', 'product_variation')) OR (p.post_parent IN ({$in}) AND p.post_type = 'product_variation' AND p.post_status = 'publish'))"
+				. ' AND (pm.meta_key = %s OR pm.meta_key LIKE %s) ORDER BY p.ID ASC, pm.meta_id ASC LIMIT %d';
+
+			try {
+				$rows = $wpdb->get_results( $wpdb->prepare( $sql, '_price', $wpdb->esc_like( 'attribute_' ) . '%', self::PRICE_ROWS_LIMIT ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- ids cast to int above.
+			} catch ( \Throwable $e ) {
+				continue;
+			}
+
+			foreach ( is_array( $rows ) ? $rows : array() as $row ) {
+				$id     = (int) $row['id'];
+				$parent = (int) $row['parent'];
+				$key    = (string) $row['meta_key'];
+				$value  = (string) $row['meta_value'];
+				$price  = '_price' === $key && '' !== $value && is_numeric( $value ) ? (float) $value : null;
+
+				if ( in_array( $id, $chunk, true ) ) {
+					if ( ! isset( $out[ $id ] ) ) {
+						$out[ $id ] = array(
+							'prices'     => array(),
+							'variations' => array(),
+						);
+					}
+					if ( null !== $price ) {
+						$out[ $id ]['prices'][] = $price;
+					}
+					continue;
+				}
+				if ( 'product_variation' !== (string) $row['type'] || ! in_array( $parent, $chunk, true ) ) {
+					continue;
+				}
+				if ( ! isset( $out[ $parent ] ) ) {
+					$out[ $parent ] = array(
+						'prices'     => array(),
+						'variations' => array(),
+					);
+				}
+				if ( ! isset( $out[ $parent ]['variations'][ $id ] ) ) {
+					$out[ $parent ]['variations'][ $id ] = array(
+						'id'         => $id,
+						'price'      => null,
+						'attributes' => array(),
+					);
+				}
+				if ( '_price' === $key ) {
+					if ( null !== $price && null === $out[ $parent ]['variations'][ $id ]['price'] ) {
+						$out[ $parent ]['variations'][ $id ]['price'] = $price;
+					}
+				} elseif ( '' !== $value ) {
+					$out[ $parent ]['variations'][ $id ]['attributes'][ substr( $key, strlen( 'attribute_' ) ) ] = $value;
+				}
+			}
+		}
+
+		foreach ( $out as $id => $info ) {
+			$out[ $id ]['variations'] = array_values( $info['variations'] );
+		}
+
+		return $out;
+	}
+
+	/* ============================================================== */
 	/*  Product facts                                                  */
 	/* ============================================================== */
 
