@@ -354,10 +354,9 @@ function wp_clear_scheduled_hook( $hook, $args = array() ) {
 /*  The section                                                        */
 /* ------------------------------------------------------------------ */
 
-foreach ( array( 'money', 'cover', 'token', 'store', 'settings', 'rooms', 'orders', 'shipping' ) as $fh_class ) {
-	require_once FISHOTEL_MISC_PATH . 'includes/sections/lost-fish/class-' . $fh_class . '.php';
-}
-unset( $fh_class );
+require_once FISHOTEL_MISC_PATH . 'includes/sections/lost-fish/class-lost-fish.php';
+\FisHotel\Misc\Sections\Lost_Fish\Lost_Fish::load();
+require_once FISHOTEL_MISC_PATH . 'includes/sections/lost-fish/class-admin.php';
 
 /* ------------------------------------------------------------------ */
 /*  check()                                                            */

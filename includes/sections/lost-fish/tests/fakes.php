@@ -747,6 +747,9 @@ class Fh_Fake_Rooms {
 	 * @param int $qty Fish lost.
 	 */
 	public function lose( $id, $qty = 1 ) {
+		if ( ! isset( $this->stays[ (int) $id ] ) ) {
+			return;
+		}
 		$this->stays[ (int) $id ]['qty_live'] = max( 0, (int) $this->stays[ (int) $id ]['qty_live'] - (int) $qty );
 		if ( 0 === $this->stays[ (int) $id ]['qty_live'] ) {
 			$this->stays[ (int) $id ]['status'] = 'closed';
