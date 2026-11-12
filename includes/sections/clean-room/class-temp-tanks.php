@@ -192,6 +192,32 @@ class Temp_Tanks {
 	}
 
 	/**
+	 * The acts that write on the page's own tank — a reading, a dose, a
+	 * tick, a tank note. None of them means anything on a slot with
+	 * nothing set up: there is no water to read and no setup to keep the
+	 * entry.
+	 *
+	 * @var string[]
+	 */
+	const TANK_LOG_ACTS = array( 'copper', 'dose', 'tick', 'note' );
+
+	/**
+	 * Why an act cannot be written on the page's tank: '' when it can,
+	 * else the sentence — the tank is a slot with nothing set up and the
+	 * act would log on it.
+	 *
+	 * @param string     $act  The act.
+	 * @param array|null $tank The page's tank (hydrated).
+	 * @return string
+	 */
+	public static function free_slot_error( $act, $tank ) {
+		if ( ! in_array( (string) $act, self::TANK_LOG_ACTS, true ) ) {
+			return '';
+		}
+		return self::destination_error( $tank );
+	}
+
+	/**
 	 * Every tank with its open setup (slots only) and what it behaves as:
 	 * 'setup' (the row, or null) and 'effective_area'.
 	 *

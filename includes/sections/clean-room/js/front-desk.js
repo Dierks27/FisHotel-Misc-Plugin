@@ -43,8 +43,9 @@
  * englishValue, fmt, escapeHtml, saleSummary, sizeText, unknownName, and
  * the temporary tanks' and the list's: tankHeading, offerTemplates,
  * previewLines, lineDetail, feedText, flagText, todoHeadline, moveClears,
- * gridTanks) are exported for tests/front-desk.test.js and the file skips
- * the DOM wiring when there is no document / config.
+ * gridTanks) are exported for tests/front-desk.test.js and
+ * tests/temp-tanks.test.js, and the file skips the DOM wiring when there
+ * is no document / config.
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  */

@@ -237,6 +237,23 @@ class Fake_Store {
 		return null;
 	}
 
+	/**
+	 * Update a tank that exists (the layout editor's save): its status,
+	 * size, gallons and sort. Returns its id, like the real save_tank().
+	 */
+	public function save_tank( array $tank ) {
+		$id = (int) ( $tank['id'] ?? 0 );
+		if ( ! isset( $this->tanks[ $id ] ) ) {
+			return false;
+		}
+		foreach ( array( 'status', 'size_label', 'gallons', 'sort' ) as $key ) {
+			if ( array_key_exists( $key, $tank ) ) {
+				$this->tanks[ $id ][ $key ] = $tank[ $key ];
+			}
+		}
+		return $id;
+	}
+
 	/* ---- temporary tanks: the slots and their setups ---------------- */
 
 	public function temp_building() {
@@ -956,8 +973,8 @@ class Fake_Store {
 	public function latest_doses( $limit = 500 ) {
 		$out = array();
 		foreach ( array_reverse( $this->logs, true ) as $row ) {
-			if ( 'dose' !== $row['kind'] ) {
-				continue;
+			if ( 'dose' !== $row['kind'] || ! empty( $row['setup_id'] ) ) {
+				continue; // A dose on a slot is that setup's own (setup_doses()).
 			}
 			$building = $row['building_id'] ? (int) $row['building_id'] : 0;
 			if ( ! $building && $row['tank_id'] ) {

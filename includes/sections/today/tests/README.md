@@ -30,7 +30,9 @@ node includes/sections/today/tests/admin.test.js
   the Weather flag off (no weather reason, chip or rank); the header line,
   the widget's date summary, the order label; `cache_key()` changing with
   today and each shaping setting (not the TTL); `Settings::sanitize()`
-  fallbacks and clamping on read.
+  fallbacks and clamping on read; `extra_lines()` — the one-liners other
+  sections add through `fishotel_today_lines` (text only, the link and
+  the tone kept, anything that is not a line dropped, the caps).
 - **collector-test.php** — a fixture of fake orders pinned to Mon
   2025-10-13: ONE `wc_get_orders()` call for the whole window; counts and
   blocks per date; the plan; a wrapper as one destination with the

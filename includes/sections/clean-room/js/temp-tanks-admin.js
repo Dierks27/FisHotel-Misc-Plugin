@@ -12,7 +12,7 @@
  * schedules that carry that word first, and whichever schedule is picked
  * is shown — which steps, which medication, which days — before anything
  * is saved. The pure helpers (offer, previewLines, stepsFromRows) are
- * exported for tests/temp-tanks-admin.test.js and the file skips the DOM
+ * exported for tests/temp-tanks.test.js and the file skips the DOM
  * wiring when there is no jQuery.
  *
  * @package FisHotel\Misc\Sections\Clean_Room

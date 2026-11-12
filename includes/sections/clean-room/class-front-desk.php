@@ -979,6 +979,12 @@ class Front_Desk {
 	 * @return array message, event_ids, tank (optional) — or error.
 	 */
 	public static function perform( $act, array $ctx, array $raw ) {
+		// A slot with nothing set up is a place, not a tank: nothing is logged on it.
+		$refused = Temp_Tanks::free_slot_error( (string) $act, $ctx['tank'] ?? null );
+		if ( '' !== $refused ) {
+			return array( 'error' => $refused );
+		}
+
 		try {
 			switch ( (string) $act ) {
 				case 'arrival':

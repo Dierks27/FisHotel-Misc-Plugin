@@ -56,13 +56,22 @@ class Todo {
 	const TICK_KINDS = array( 'feed', 'dose', 'test', 'water_change', 'other' );
 
 	/**
-	 * The filter the count is offered through, and the Today section's
-	 * filter this section adds its line to.
+	 * The filter the count is offered through —
+	 * apply_filters( 'fishotel_cleanroom_todo', null ) answers summary(),
+	 * or stays null while this section is off — and the Today section's
+	 * filter this section adds its one line to (today_line()).
 	 *
 	 * @var string
 	 */
 	const SUMMARY_FILTER = 'fishotel_cleanroom_todo';
 	const TODAY_FILTER   = 'fishotel_today_lines';
+
+	/**
+	 * The key of this section's line among the Today section's lines.
+	 *
+	 * @var string
+	 */
+	const TODAY_LINE_KEY = 'clean-room-todo';
 
 	/* ============================================================== */
 	/*  Medications and doses a step names                             */
@@ -960,6 +969,54 @@ class Todo {
 		}
 		/* translators: %d: things left to do */
 		return sprintf( _n( 'Tanks: %d thing to do', 'Tanks: %d things to do', $left, 'fishotel-misc-plugin' ), $left );
+	}
+
+	/**
+	 * The one line the Today section shows (pure): "Tanks: 3 things to
+	 * do" with the copper flags beside it and a link to the list, "Tanks:
+	 * all done" once everything is ticked — and null on a day with
+	 * nothing due at all, so a room without fish adds no line.
+	 *
+	 * @param array $summary summary().
+	 * @return array{key: string, text: string, detail: string, url: string, count: int, tone: string}|null
+	 */
+	public static function today_line( array $summary ) {
+		if ( (int) ( $summary['total'] ?? 0 ) <= 0 ) {
+			return null;
+		}
+		$flags = (int) ( $summary['flags'] ?? 0 );
+		$left  = (int) ( $summary['left'] ?? 0 );
+		return array(
+			'key'    => self::TODAY_LINE_KEY,
+			'text'   => (string) ( $summary['text'] ?? '' ),
+			/* translators: %d: copper flags */
+			'detail' => $flags > 0 ? sprintf( _n( '%d copper flag', '%d copper flags', $flags, 'fishotel-misc-plugin' ), $flags ) : '',
+			'url'    => (string) ( $summary['url'] ?? '' ),
+			'count'  => $left,
+			'tone'   => $flags > 0 ? 'bad' : ( $left > 0 ? 'todo' : 'done' ),
+		);
+	}
+
+	/**
+	 * The Today section's lines with this section's one added (pure): a
+	 * line already there under the same key is replaced, never doubled.
+	 *
+	 * @param mixed      $lines What the filter carries so far.
+	 * @param array|null $line  today_line(), or null for none.
+	 * @return array[]
+	 */
+	public static function with_today_line( $lines, $line ) {
+		$out = array();
+		foreach ( is_array( $lines ) ? $lines : array() as $existing ) {
+			if ( is_array( $existing ) && self::TODAY_LINE_KEY === (string) ( $existing['key'] ?? '' ) ) {
+				continue;
+			}
+			$out[] = $existing;
+		}
+		if ( is_array( $line ) ) {
+			$out[] = $line;
+		}
+		return $out;
 	}
 
 	/**
