@@ -76,6 +76,9 @@ $fh_species = (string) $filters['species'];
 		<?php if ( $totals['no_sale_date'] > 0 ) : ?>
 			<a class="fh-cr-chip fh-cr-chip--muted" href="<?php echo esc_url( Admin::page_url( 'arrivals' ) ); ?>" title="<?php esc_attr_e( 'Set the batch\'s sale date on its supplier order (Arrivals), or a group\'s own date on its product page.', 'fishotel-misc-plugin' ); ?>"><strong><?php echo esc_html( $totals['no_sale_date'] ); ?></strong> <?php esc_html_e( 'without a sale date', 'fishotel-misc-plugin' ); ?></a>
 		<?php endif; ?>
+		<?php if ( $totals['needs_id'] > 0 ) : ?>
+			<a class="fh-cr-chip fh-cr-chip--warn" href="<?php echo esc_url( Admin::page_url( 'stays', array( 'needs_id' => '1' ) ) ); ?>" title="<?php esc_attr_e( 'Fish nobody knows yet (their name starts with ??). Name them with Identify… on the Stays tab, or on the phone.', 'fishotel-misc-plugin' ); ?>"><strong><?php echo esc_html( $totals['needs_id'] ); ?></strong> <?php echo esc_html( _n( 'needs identifying', 'need identifying', (int) $totals['needs_id'], 'fishotel-misc-plugin' ) ); ?></a>
+		<?php endif; ?>
 		<span class="fh-cr-chip"><strong><?php echo esc_html( $totals['live'] ); ?></strong> <?php esc_html_e( 'fish alive', 'fishotel-misc-plugin' ); ?></span>
 		<span class="fh-cr-chip"><strong><?php echo esc_html( $totals['empty'] ); ?></strong> / <?php echo esc_html( $totals['tanks'] ); ?> <?php esc_html_e( 'tanks empty', 'fishotel-misc-plugin' ); ?></span>
 		<span class="fh-cr-summary__meta"><?php echo esc_html( $today ); ?></span>
@@ -168,7 +171,7 @@ $fh_species = (string) $filters['species'];
 										<?php if ( $fh_occupants ) : ?>
 											<ul class="fh-cr-tank__list">
 												<?php foreach ( $fh_occupants as $fh_stay ) : ?>
-													<li class="<?php echo ( '' !== $fh_species && Admin::matches_species( $fh_stay, $fh_species ) ) ? 'is-hit' : ''; ?>">
+													<li class="<?php echo ( '' !== $fh_species && Admin::matches_species( $fh_stay, $fh_species ) ) ? 'is-hit' : ''; ?><?php echo ! empty( $fh_stay['needs_id'] ) ? ' is-unknown' : ''; ?>">
 														<span class="fh-cr-tank__species"><?php echo esc_html( $fh_stay['species'] ); ?></span>
 														<?php echo Admin::size_html( $fh_stay, $sizes ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by size_html(). ?>
 														· <?php echo esc_html( $fh_stay['qty_live'] ); ?>
@@ -209,6 +212,6 @@ $fh_species = (string) $filters['species'];
 	<?php endforeach; ?>
 
 	<p class="fh-cr-footnote">
-		<?php esc_html_e( 'Numbering: hundreds = building, tens = level (1 bottom, 2 top), ones = position from the left. Every building is one water system. Arrivals land in the Spa; a stay is cleared the day it moves from the Spa into the Clean Room. A group goes on sale on the date you choose — its batch\'s "Goes on sale" date on the supplier order, or its own date on the product page — and not before; one whose date has come while it is still in the Spa is flagged. Each tank card lists what is still due today; each tank\'s QR opens its Front Desk screen.', 'fishotel-misc-plugin' ); ?>
+		<?php esc_html_e( 'Numbering: hundreds = building, tens = level (1 bottom, 2 top), ones = position from the left. Every building is one water system. Arrivals land in the Spa; a stay is cleared the day it moves from the Spa into the Clean Room. A fish nobody knows yet reads "??" until it is identified (Stays tab, or the phone). A group goes on sale on the date you choose — its batch\'s "Goes on sale" date on the supplier order, or its own date on the product page — and not before; one whose date has come while it is still in the Spa is flagged. Each tank card lists what is still due today; each tank\'s QR opens its Front Desk screen.', 'fishotel-misc-plugin' ); ?>
 	</p>
 </div>

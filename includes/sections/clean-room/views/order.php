@@ -3,7 +3,10 @@
  * The order editor — the header, the lines grid with the sheet's
  * computed columns (each line with its size, the box it came out of and
  * the percent of a box it took), the Boxes card that adds the percents
- * up, the totals and the stats block, Save and Check in.
+ * up, the totals and the stats block, Save and Check in. A line can be an
+ * unknown fish (the "??" box); a line that received fish shows what its
+ * label said once it was corrected, and "Identify…" / "Correct the fish…"
+ * opens the panel of views/identify-panel.php under it.
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  *
@@ -48,6 +51,7 @@ foreach ( $order['lines'] as $fh_l ) {
 		break;
 	}
 }
+$fh_unknown = Admin_Workbook::unknown_lines( $order );
 
 /**
  * One line row (or the template row with index __i__).
@@ -71,13 +75,32 @@ $fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks,
 		return isset( $line[ $field ] ) && null !== $line[ $field ] ? number_format( (float) $line[ $field ], $decimals, '.', '' ) : '';
 	};
 	// The remembered share's suggestion, for a line that has no percent yet (box mode only).
-	$hint   = $line && 'bag' !== $fh_mode ? Box_Shares::suggest_for( $shares, $line ) : null;
+	$hint    = $line && 'bag' !== $fh_mode ? Box_Shares::suggest_for( $shares, $line ) : null;
+	$unknown = ! empty( $line['needs_id'] );
+	// "Correct the fish…" once fish arrived on a saved line; before that its species is simply retyped.
+	$correct = (int) $value( 'id', 0 ) > 0 && ( $linked || (int) $value( 'qty_received', 0 ) > 0 );
 	?>
-	<tr class="fh-cr-line<?php echo $linked ? ' is-linked' : ''; ?>" data-line="<?php echo esc_attr( $value( 'id', 0 ) ); ?>">
+	<tr class="fh-cr-line<?php echo $linked ? ' is-linked' : ''; ?><?php echo $unknown ? ' is-unknown' : ''; ?>" data-line="<?php echo esc_attr( $value( 'id', 0 ) ); ?>">
 		<td class="fh-cr-num fh-cr-line__n"><span class="fh-cr-line__num"><?php echo esc_html( is_int( $i ) ? (string) ( $i + 1 ) : '' ); ?></span><input type="hidden" name="<?php echo esc_attr( $name( 'id' ) ); ?>" value="<?php echo esc_attr( $value( 'id', 0 ) ); ?>"><input type="hidden" name="<?php echo esc_attr( $name( 'species_id' ) ); ?>" value="<?php echo esc_attr( $value( 'species_id' ) ); ?>"></td>
-		<td class="fh-cr-suggest-wrap"><input type="text" class="fh-cr-input fh-cr-species" name="<?php echo esc_attr( $name( 'species' ) ); ?>" value="<?php echo esc_attr( $value( 'species' ) ); ?>" placeholder="<?php esc_attr_e( 'species', 'fishotel-misc-plugin' ); ?>" autocomplete="off" maxlength="120">
+		<td class="fh-cr-line__fish">
+			<span class="fh-cr-line__name fh-cr-suggest-wrap">
+				<input type="text" class="fh-cr-input fh-cr-species" name="<?php echo esc_attr( $name( 'species' ) ); ?>" value="<?php echo esc_attr( $value( 'species' ) ); ?>" placeholder="<?php esc_attr_e( 'species', 'fishotel-misc-plugin' ); ?>" autocomplete="off" maxlength="120">
+				<label class="fh-cr-unknown-box" title="<?php esc_attr_e( 'Nobody knows what this fish is yet: it reads "??" and what you type here (what it looks like). It still gets its tank, count, size, percent of the box and landed cost.', 'fishotel-misc-plugin' ); ?>"><input type="checkbox" name="<?php echo esc_attr( $name( 'needs_id' ) ); ?>" value="1" <?php checked( $unknown ); ?>> ??</label>
+			</span>
 			<?php if ( $linked ) : ?>
 				<span class="fh-cr-sub"><a href="<?php echo esc_url( Admin::page_url( 'stays', array( 's' => $value( 'species' ) ) ) ); ?>"><?php echo esc_html( sprintf( /* translators: %d: stay id */ __( 'stay #%d', 'fishotel-misc-plugin' ), (int) $line['stay_id'] ) ); ?></a></span>
+			<?php endif; ?>
+			<?php if ( $unknown ) : ?>
+				<span class="fh-cr-sub"><?php echo Admin::unknown_html( $line ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by unknown_html(). ?></span>
+			<?php endif; ?>
+			<?php if ( '' !== $value( 'label_name' ) ) : ?>
+				<span class="fh-cr-sub fh-cr-label-name" title="<?php esc_attr_e( 'What the supplier\'s label or invoice called this fish before it was corrected. Kept for the mislabel stats; a later correction never replaces it.', 'fishotel-misc-plugin' ); ?>"><?php echo esc_html( sprintf( /* translators: %s: what the label called the fish */ __( 'arrived labeled: %s', 'fishotel-misc-plugin' ), $value( 'label_name' ) ) ); ?></span>
+			<?php endif; ?>
+			<?php if ( '' !== $value( 'notes' ) ) : ?>
+				<span class="fh-cr-sub fh-cr-line__notes"><?php echo esc_html( $value( 'notes' ) ); ?></span>
+			<?php endif; ?>
+			<?php if ( $correct ) : ?>
+				<button type="button" class="button-link fh-cr-identify-open" data-line="<?php echo esc_attr( $value( 'id', 0 ) ); ?>" data-size="<?php echo esc_attr( $value( 'size_slug' ) ); ?>" data-size-label="<?php echo esc_attr( $value( 'size_label' ) ); ?>" title="<?php esc_attr_e( 'Name the real fish and its size. The line keeps what the label said, its stays follow, and the remembered box share is written for the corrected fish.', 'fishotel-misc-plugin' ); ?>"><?php echo esc_html( $unknown ? __( 'Identify…', 'fishotel-misc-plugin' ) : __( 'Correct the fish…', 'fishotel-misc-plugin' ) ); ?></button>
 			<?php endif; ?>
 		</td>
 		<td>
@@ -215,6 +238,9 @@ $fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks,
 			<h2 class="fh-cr-order__title">
 				<?php echo $is_new ? esc_html__( 'New order', 'fishotel-misc-plugin' ) : esc_html( sprintf( /* translators: %s: order ref */ __( 'Order %s', 'fishotel-misc-plugin' ), $order['ref'] ) ); ?>
 				<span class="fh-cr-badge fh-cr-badge--order-<?php echo esc_attr( $order['status'] ); ?> fh-cr-order__status"><?php echo esc_html( $order['status'] ); ?></span>
+				<?php if ( $fh_unknown > 0 ) : ?>
+					<span class="fh-cr-warn fh-cr-unknown"><?php echo esc_html( sprintf( /* translators: %d: order lines */ __( '?? %d to identify', 'fishotel-misc-plugin' ), $fh_unknown ) ); ?></span>
+				<?php endif; ?>
 			</h2>
 			<div class="fh-cr-actions">
 				<span class="fh-cr-status" aria-live="polite"></span>
@@ -338,7 +364,7 @@ $fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks,
 		<template id="fh-cr-line-template"><?php $fh_line_row( '__i__', array(), array() ); ?></template>
 		<p class="fh-cr-actions-row">
 			<button type="button" class="button fh-cr-line-add"><?php esc_html_e( 'Add line', 'fishotel-misc-plugin' ); ?></button>
-			<span class="fh-cr-sub fh-cr-sub--inline"><?php esc_html_e( 'Type a species for suggestions (products and the species list); picking one fills the scientific name, the per-box count and the worth from the list. Computed columns update on Save; the Boxes card below adds the percents up as they are typed.', 'fishotel-misc-plugin' ); ?></span>
+			<span class="fh-cr-sub fh-cr-sub--inline"><?php esc_html_e( 'Type a species for suggestions (products and the species list); picking one fills the scientific name, the per-box count and the worth from the list. Tick ?? for a fish nobody knows yet — what you type is then what it looks like. Computed columns update on Save; the Boxes card below adds the percents up as they are typed.', 'fishotel-misc-plugin' ); ?></span>
 		</p>
 
 		<div class="fishotel-misc-card fh-cr-card fh-cr-boxes" id="fh-cr-boxes" data-shares="<?php echo esc_attr( (string) wp_json_encode( $boxes['shares'] ) ); ?>">
@@ -380,7 +406,12 @@ $fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks,
 		</div>
 	</form>
 
+	<?php
+	$fh_identify_colspan = 26;
+	include Clean_Room::path() . 'views/identify-panel.php';
+	?>
+
 	<p class="fh-cr-footnote">
-		<?php esc_html_e( 'Box mode: each line takes a fraction of a box (its % of box ÷ 100 when one is typed, else received ÷ per box — the line\'s, else the species list\'s, else 24); the domestic flight and the import & re-ox fees are shared by box space, the tariffs by goods value. Bag mode: bags (else received) × price, plus the flight, import fees and tariffs per bag. Per fish × markup, to the nearest 5, is the suggested price; a line is worth it when its margin (profit ÷ landed) is above the threshold. Checking in creates one stay per line with received fish (the DOA as a loss) and the order becomes "received"; from then on a line\'s DOA, survived, live and sold come from its stay, and its received count is kept as typed.', 'fishotel-misc-plugin' ); ?>
+		<?php esc_html_e( 'Box mode: each line takes a fraction of a box (its % of box ÷ 100 when one is typed, else received ÷ per box — the line\'s, else the species list\'s, else 24); the domestic flight and the import & re-ox fees are shared by box space, the tariffs by goods value. Bag mode: bags (else received) × price, plus the flight, import fees and tariffs per bag. Per fish × markup, to the nearest 5, is the suggested price; a line is worth it when its margin (profit ÷ landed) is above the threshold. Checking in creates one stay per line with received fish (the DOA as a loss) and the order becomes "received"; from then on a line\'s DOA, survived, live and sold come from its stay, and its received count is kept as typed. A fish that is not what its label said: "Correct the fish…" on a line that received fish names the real one — the line keeps what the label said ("arrived labeled"), its stays follow, and the remembered box share is written for the corrected fish; once a line is a stay, changing its species, its ?? box or its size here does the same. A fish that still needs identifying is never remembered as a box share.', 'fishotel-misc-plugin' ); ?>
 	</p>
 </div>

@@ -989,6 +989,104 @@ a.fh-cr-chip--muted {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Unknown and mislabeled fish, the Identify panel                    */
+/* ------------------------------------------------------------------ */
+
+/* The "N need identifying" chip on the Board links to the Stays tab. */
+a.fh-cr-chip--warn {
+	text-decoration: none;
+}
+
+/* "needs identifying" beside a species; "?? N to identify" on an order. */
+.fh-cr-unknown {
+	margin-left: 4px;
+	white-space: nowrap;
+}
+
+a.fh-cr-unknown {
+	margin-left: 0;
+	text-decoration: none;
+}
+
+.fh-cr-order__title .fh-cr-unknown {
+	margin-left: 8px;
+	vertical-align: middle;
+}
+
+.fh-cr-tank__list li.is-unknown .fh-cr-tank__species {
+	color: var(--fh-warning, #ffb900);
+}
+
+/* An order line: the species with its "??" box, then what is known about the fish. */
+.fh-cr-line__name {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.fh-cr-unknown-box {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	font-size: 12px;
+	font-weight: 700;
+	color: var(--fh-text-secondary, #a0a0a0);
+	white-space: nowrap;
+	cursor: pointer;
+}
+
+.fh-cr-grid tr.is-unknown .fh-cr-unknown-box,
+.fh-cr-grid tr.is-unknown .fh-cr-species {
+	color: var(--fh-warning, #ffb900);
+}
+
+.fh-cr-line__fish .fh-cr-sub {
+	white-space: normal;
+}
+
+.fh-cr-label-name {
+	font-style: italic;
+}
+
+.fh-cr-wrap .fh-cr-line__fish .fh-cr-identify-open {
+	color: var(--fh-accent, #00a0d2);
+	font-size: 11px;
+	white-space: nowrap;
+}
+
+/* The panel the "Identify… / Correct the fish…" button opens under a row. */
+.fh-cr-identify td {
+	background: var(--fh-bg-primary, #1a1a1a) !important;
+	white-space: normal;
+}
+
+.fh-cr-identify__fish {
+	flex: 1 1 260px;
+	max-width: 420px;
+}
+
+.fh-cr-identify__fish .fh-cr-suggest-wrap {
+	display: block;
+}
+
+.fh-cr-identify__fish .fh-cr-input {
+	width: 100%;
+}
+
+.fh-cr-fields__row .fh-cr-identify__unknown {
+	flex-direction: row;
+	align-items: center;
+	min-width: 0;
+	min-height: 30px;
+	gap: 6px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-identify__hint {
+	margin: 8px 0 0;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Product meta box (light WP styling)                                */
 /* ------------------------------------------------------------------ */
 .fh-cr-metabox__facts {

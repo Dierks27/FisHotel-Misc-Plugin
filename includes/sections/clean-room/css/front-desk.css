@@ -873,6 +873,12 @@ button.fh-fd-occ:active {
 	font-weight: 700;
 }
 
+/* "Unknown fish (??)" beside "use as an unlisted fish". */
+.fh-fd-chip--unknown {
+	color: var(--fd-warn);
+	border-color: var(--fd-warn);
+}
+
 .fh-fd-facts {
 	display: flex;
 	flex-wrap: wrap;

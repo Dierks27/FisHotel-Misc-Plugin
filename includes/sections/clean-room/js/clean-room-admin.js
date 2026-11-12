@@ -8,8 +8,11 @@
  * which adds the lines' percents of a box up per box number as they are
  * typed, the "suggested N%" chips from the remembered box shares and the
  * "How full" line), the Species tab (inline edit, add, delete, the
- * product link), Settings → Sizes and Box shares, and the "suggested"
- * fill of the sale-date pickers (order page, product page).
+ * product link), Settings → Sizes and Box shares, the "suggested" fill of
+ * the sale-date pickers (order page, product page), and the "Identify… /
+ * Correct the fish…" panel under a stay (Stays tab) or an order line (the
+ * real fish from the species search, its size, or still unknown), with
+ * the "??" box of an order line.
  *
  * The server renders every row; this file posts and fills in. The pure
  * helpers are exported for the node test; the rest needs jQuery and the
@@ -18,7 +21,8 @@
  * box_state() / box_summary(), boxSummaryRows() / boxTotalText() are
  * Admin_Workbook's, findShare() / suggestPct() / suggestFor() /
  * howFull() and their texts are Box_Shares' — and both sides are tested
- * against tests/fixtures/box-maths.json.
+ * against tests/fixtures/box-maths.json. unknownName() is
+ * Identify::unknown_name(): "??" and what the fish looks like.
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  */
@@ -468,9 +472,35 @@
 		return fmt(s.howFull, num(Math.round(Number(full.pct) || 0) / 100) || '0', withShare, unknown);
 	}
 
+	/**
+	 * The name of an unknown fish: "??", or "?? " + what it looks like; a
+	 * mark that is already there is not doubled (Identify::unknown_name()).
+	 *
+	 * @param {*} description What was typed.
+	 * @return {string}
+	 */
+	function unknownName(description) {
+		var text = description === null || typeof description === 'undefined' || typeof description === 'boolean' || typeof description === 'object' ? '' : String(description);
+		text = text.replace(/\s+/g, ' ').replace(/^ +| +$/g, '').replace(/^[? ]+/, '').replace(/^ +| +$/g, '');
+		return (text === '' ? '??' : '?? ' + text).substring(0, 120);
+	}
+
+	/**
+	 * A name without the mark of an unknown fish ("?? small wrasse" →
+	 * "small wrasse") — what the "??" box leaves when it is unticked.
+	 *
+	 * @param {*} name A name.
+	 * @return {string}
+	 */
+	function knownName(name) {
+		return String(name === null || typeof name === 'undefined' ? '' : name).replace(/^[? ]+/, '').replace(/^ +| +$/g, '');
+	}
+
 	var api = {
 		renumber: renumber,
 		suggestImportFees: suggestImportFees,
+		unknownName: unknownName,
+		knownName: knownName,
 		fmt: fmt,
 		num: num,
 		boxPct: boxPct,
@@ -1020,6 +1050,120 @@
 				.fail(fail);
 		});
 
+		/*
+		 * Identify… / Correct the fish…: a panel under the stay (Stays tab)
+		 * or the order line (order page) — the real fish from the species
+		 * search (or a typed name), its size, or "still unknown" with what
+		 * it looks like. One post; the server corrects the stay and its
+		 * order line together, then the page reloads.
+		 */
+		var identifyLine = null; // Set by the order editor: saves the order first.
+
+		function closeIdentify() {
+			$('.fh-cr-identify').remove();
+		}
+
+		$(document).on('click', '.fh-cr-identify-open', function () {
+			var template = root.document.getElementById('fh-cr-identify-template');
+			var $btn = $(this);
+			var $row = $btn.closest('tr');
+			if (!template) {
+				return;
+			}
+			var wasOpen = $row.next('.fh-cr-identify').length > 0;
+			closeIdentify();
+			if (wasOpen) {
+				return; // A second click closes it.
+			}
+			var $panel = $(template.innerHTML);
+			// The row's own size, also when it is no longer in the list.
+			var slug = String($btn.attr('data-size') || '');
+			var $size = $panel.find('.fh-cr-identify-size');
+			var listed = $size.find('option').filter(function () { return this.value === slug; }).length > 0;
+			if (slug && !listed) {
+				$('<option></option>').val(slug).text(String($btn.attr('data-size-label') || slug) + ' (' + (i18n.notStandard || 'not a standard size') + ')').appendTo($size);
+			}
+			$size.val(slug);
+			$panel.data('target', { stay: $btn.attr('data-stay') || '', line: $btn.attr('data-line') || '' });
+			$panel.find('.fh-cr-identify-search').attr('placeholder', i18n.fishHint || '');
+			$row.after($panel);
+			$panel.find('.fh-cr-identify-search').focus();
+		});
+
+		$(document).on('click', '.fh-cr-identify-cancel', closeIdentify);
+
+		// A picked suggestion carries its product; typing after it drops the pick.
+		$(document).on('input', '.fh-cr-identify-search', function () {
+			var $panel = $(this).closest('.fh-cr-identify');
+			var picked = $panel.data('picked');
+			if (picked && picked.name !== this.value) {
+				$panel.removeData('picked');
+			}
+		});
+
+		// Enter saves the panel (on the order page it would otherwise submit the order form).
+		$(document).on('keydown', '.fh-cr-identify-search', function (e) {
+			if (e.key === 'Enter') {
+				e.preventDefault();
+				$(this).closest('.fh-cr-identify').find('.fh-cr-identify-save').trigger('click');
+			}
+		});
+
+		$(document).on('change', '.fh-cr-identify-unknown', function () {
+			$(this).closest('.fh-cr-identify').find('.fh-cr-identify-search').attr('placeholder', this.checked ? (i18n.unknownHint || '') : (i18n.fishHint || ''));
+		});
+
+		attachSuggest($(document), '.fh-cr-identify-search', 'suggest', function ($input, item) {
+			$input.val(item.name || '');
+			$input.closest('.fh-cr-identify').data('picked', { name: item.name || '', product_id: item.product_id || 0 });
+		});
+
+		$(document).on('click', '.fh-cr-identify-save', function () {
+			var $panel = $(this).closest('.fh-cr-identify');
+			var $buttons = $panel.find('button');
+			var target = $panel.data('target') || {};
+			var picked = $panel.data('picked');
+			var text = $.trim($panel.find('.fh-cr-identify-search').val());
+			var unknown = $panel.find('.fh-cr-identify-unknown').prop('checked');
+			if (!text && !unknown) {
+				notice('fishotel-misc-notice--warning', i18n.whichFish || 'Which fish?');
+				return;
+			}
+			var fields = {
+				species: text,
+				product_id: picked && picked.name === text ? picked.product_id : 0,
+				size: $panel.find('.fh-cr-identify-size').val() || '',
+				unknown: unknown ? 1 : 0
+			};
+			function done(res) {
+				if (!res || !res.success) {
+					fail(res);
+					$buttons.prop('disabled', false);
+					return;
+				}
+				notice('fishotel-misc-notice--success', (res.data && res.data.message) || (i18n.saved || 'Saved.'));
+				$('.fh-cr-status').first().removeClass('is-error').addClass('is-ok').text(i18n.reloading || 'Saved. Reloading…');
+				root.setTimeout(function () { root.location.reload(); }, 1200);
+			}
+			function failed(res) {
+				if (res) {
+					fail(res); // null: the order save before it was refused and said why.
+				}
+				$buttons.prop('disabled', false);
+			}
+			$buttons.prop('disabled', true);
+			if (target.line && identifyLine) {
+				fields.line_id = target.line;
+				identifyLine(fields, done, failed);
+				return;
+			}
+			fields.action = 'fishotel_cleanroom_stay';
+			fields.nonce = cfg.nonce;
+			fields.op = 'identify';
+			fields.stay_id = target.stay;
+			$.post(ajaxUrl(), fields).done(done).fail(failed);
+		});
+
 		// The order editor.
 		var $order = $('#fh-cr-order');
 		if ($order.length) {
@@ -1106,6 +1250,24 @@
 				});
 			}
 
+			// A species picked from the list carries its species-list id; a name typed over it is
+			// another fish, so the id goes (picking again sets it again).
+			$order.on('input', '.fh-cr-species', function () {
+				$(this).closest('tr').find('input[name$="[species_id]"]').val('');
+			});
+
+			// The "??" box: an unknown fish reads "??" and what it looks like; unticked, the mark goes.
+			$order.on('change', 'input[name$="[needs_id]"]', function () {
+				var $tr = $(this).closest('tr');
+				var $name = $tr.find('.fh-cr-species');
+				$name.val(this.checked ? unknownName($name.val()) : knownName($name.val()));
+				if (this.checked) {
+					$tr.find('input[name$="[species_id]"]').val('');
+				}
+				$tr.toggleClass('is-unknown', this.checked);
+				refreshBoxes();
+			});
+
 			$order.on('input change', 'input[name$="[box_pct]"], input[name$="[box_no]"], input[name$="[qty_ordered]"], input[name$="[qty_received]"], select[name$="[size_slug]"], .fh-cr-species, [name="boxes"], [name="status"]', refreshBoxes);
 			$order.on('change', '[name="supplier"], [name="origin"]', loadShares);
 
@@ -1155,7 +1317,8 @@
 			 */
 			function saveOrder(done, failed) {
 				$lines.find('tr.fh-cr-line').not('.is-linked').each(function () {
-					if (!$.trim($(this).find('.fh-cr-species').val())) {
+					// A line without a species goes — unless it is ticked "??": an unknown fish needs no description.
+					if (!$.trim($(this).find('.fh-cr-species').val()) && !$(this).find('input[name$="[needs_id]"]').prop('checked')) {
 						$(this).remove();
 					}
 				});
@@ -1196,6 +1359,9 @@
 						$orderStatus.addClass('is-ok').text(d.message || (i18n.saved || 'Saved.'));
 						if (done) {
 							done(d);
+						} else if (d.reload) {
+							// A correction changed stays or what a label said: show the lines as they are now.
+							root.setTimeout(function () { root.location.reload(); }, 1200);
 						}
 					})
 					.fail(function (res) {
@@ -1270,6 +1436,20 @@
 					$btn.prop('disabled', false); // The save was refused: nothing was checked in, try again.
 				});
 			});
+
+			// "Correct the fish…" on a line: what is typed on the page is saved first, then the line
+			// (and its stays) are corrected.
+			identifyLine = function (fields, done, failed) {
+				saveOrder(function () {
+					fields.action = 'fishotel_cleanroom_order';
+					fields.nonce = cfg.nonce;
+					fields.op = 'identify';
+					fields.order_id = $order.data('order');
+					$.post(ajaxUrl(), fields).done(done).fail(failed);
+				}, function () {
+					failed(null); // The save was refused (its notice says why): nothing was corrected.
+				});
+			};
 
 			$order.on('click', '.fh-cr-order-delete', function () {
 				if (!root.confirm(i18n.confirmDelete || 'Delete this order?')) {

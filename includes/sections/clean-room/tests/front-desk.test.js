@@ -2,7 +2,9 @@
  * Front Desk JS — the pure client helpers: number-word normalisation (the
  * "Heard:" line), the tank-number phrases, the preview sentence builder
  * that mirrors the server's Parser::summary(), a group's sale state in
- * words (saleSummary) and its size beside its name (sizeText).
+ * words (saleSummary), its size beside its name (sizeText), and the name
+ * of an unknown fish (unknownName — against fixtures/unknown-names.json,
+ * which the server's Identify::unknown_name() reads too).
  *
  * Runs js/front-desk.js without a DOM or config: the file exports its
  * helpers and skips the app when there is no document / window.fhFrontDesk.
@@ -12,7 +14,9 @@
 'use strict';
 
 var path    = require( 'path' );
+var fs      = require( 'fs' );
 var helpers = require( path.join( __dirname, '..', 'js', 'front-desk.js' ) );
+var names   = JSON.parse( fs.readFileSync( path.join( __dirname, 'fixtures', 'unknown-names.json' ), 'utf8' ) );
 
 var failures = 0;
 var checks   = 0;
@@ -104,6 +108,13 @@ console.log( '7. sizeText()' );
 check( 'a group with a standard size: its label', '2-3"' === helpers.sizeText( { size: '2-3"', sizeStandard: true } ) );
 check( 'a size that is no longer in the list is flagged', 'Jumbo 8" (not a standard size)' === helpers.sizeText( { size: 'Jumbo 8"', sizeStandard: false } ) && 'Jumbo 8" (KEINE)' === helpers.sizeText( { size: 'Jumbo 8"', sizeStandard: false }, { notStandard: 'KEINE' } ) );
 check( 'no size: nothing', '' === helpers.sizeText( { size: '' } ) && '' === helpers.sizeText( {} ) && '' === helpers.sizeText( null ) );
+
+console.log( '8. unknownName(): "Unknown fish (??)"' );
+names.unknown.forEach( function ( c ) {
+	check( 'unknownName(' + JSON.stringify( c[0] ) + ') → ' + JSON.stringify( c[1] ), c[1] === helpers.unknownName( c[0] ), helpers.unknownName( c[0] ) );
+} );
+check( 'junk is no description; the name fits the column (120)', '??' === helpers.unknownName( { a: 1 } ) && '??' === helpers.unknownName( false ) && '??' === helpers.unknownName() && 120 === helpers.unknownName( new Array( 301 ).join( 'x' ) ).length );
+check( 'an unknown arrival reads like any other in the preview sentence', '2 × ?? small wrasse arriving in Tank 521 today' === helpers.previewSentence( { intent: 'arrival', qty: 2, tank: 521, species: { name: helpers.unknownName( 'small wrasse' ) }, needs: [] } ) );
 
 console.log( '' );
 console.log( failures ? failures + ' of ' + checks + ' checks FAILED' : 'All ' + checks + ' checks passed' );

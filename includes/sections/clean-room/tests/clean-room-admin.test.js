@@ -6,7 +6,9 @@
  * box number, the per-box summary and its states, the remembered share
  * of a line, its suggestion, "How full") — run against the same
  * fixtures/box-maths.json the PHP tests read, so the page recalculates
- * exactly what the server does.
+ * exactly what the server does — and the name of an unknown fish
+ * (unknownName, and knownName for the unticked "??" box) against
+ * fixtures/unknown-names.json, which Identify::unknown_name() reads too.
  *
  * Runs js/clean-room-admin.js without a DOM or jQuery: the file exports
  * its helpers and skips the page code when there is no jQuery.
@@ -19,6 +21,7 @@ var path    = require( 'path' );
 var fs      = require( 'fs' );
 var helpers = require( path.join( __dirname, '..', 'js', 'clean-room-admin.js' ) );
 var fixture = JSON.parse( fs.readFileSync( path.join( __dirname, 'fixtures', 'box-maths.json' ), 'utf8' ) );
+var names   = JSON.parse( fs.readFileSync( path.join( __dirname, 'fixtures', 'unknown-names.json' ), 'utf8' ) );
 
 /**
  * Deep equality: numbers within a hair, everything else strictly.
@@ -121,6 +124,16 @@ fixture.how_full.forEach( function ( c ) {
 	check( 'howFull: ' + c.name, same( c.expect, full ), JSON.stringify( full ) );
 	check( 'howFullText: ' + c.name, c.text === helpers.howFullText( full ), helpers.howFullText( full ) );
 } );
+
+console.log( '7. The "??" box of an order line: the name of an unknown fish' );
+names.unknown.forEach( function ( c ) {
+	check( 'unknownName(' + JSON.stringify( c[0] ) + ') → ' + JSON.stringify( c[1] ), c[1] === helpers.unknownName( c[0] ), helpers.unknownName( c[0] ) );
+} );
+names.known.forEach( function ( c ) {
+	check( 'knownName(' + JSON.stringify( c[0] ) + ') → ' + JSON.stringify( c[1] ), c[1] === helpers.knownName( c[0] ), helpers.knownName( c[0] ) );
+} );
+check( 'junk is no description; the name fits the column (120)', '??' === helpers.unknownName( [ 'x' ] ) && '??' === helpers.unknownName( true ) && '??' === helpers.unknownName() && 120 === helpers.unknownName( new Array( 301 ).join( 'x' ) ).length );
+check( 'ticked then unticked gives the description back', 'small wrasse' === helpers.knownName( helpers.unknownName( 'small wrasse' ) ) && '?? small wrasse' === helpers.unknownName( helpers.unknownName( 'small wrasse' ) ) );
 
 console.log( '' );
 console.log( failures ? failures + ' of ' + checks + ' checks FAILED' : 'All ' + checks + ' checks passed' );
