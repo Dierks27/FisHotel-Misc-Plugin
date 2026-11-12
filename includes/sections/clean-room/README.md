@@ -7,7 +7,9 @@ an event history that is replayed, never edited; a one-thumb phone screen
 (the **Front Desk**) opened by a QR label on every tank, driven by big
 buttons or one spoken sentence; a dark **Room Board** under FisHotel
 Tools; the **named treatment schedules** that turn into each tank's
-daily to-do, a **dose log** on the whole system or one tank; the
+daily to-do, a **dose log** on the whole system or one tank with the
+**dose sum** for any medication of an editable list (and a Calculator
+that saves nothing); the
 **supplier orders** with the workbook's landed-cost maths and a check-in
 that turns an order's lines into stays; a **species master**; the yearly
 **stats**; Excel exports; the **workbook import** that brings the
@@ -97,11 +99,11 @@ the species list.
   and a dose on the system ticks it on every tank of that building.
 - Every building is one water: its **system gallons** (sump included —
   Spa 500 holds 205, Spa 600 100; blank = the sum of its tanks) drive the
-  Dose sheet's suggested amounts (Metronidazole 25 mg/gal, Praziquantel
-  9.5 mg/gal, Formalin 1 ml per 10 gal, Chloroquine 10 mg/gal,
-  Fenbendazole 1 g per 100 gal; copper has no rate — it is dosed to the
-  test reading) and tell the workbook import which building a log row's
-  205 / 100 system is.
+  Dose sheet's sums (see *Medications and the dose sum*: Metronidazole
+  25 mg per gallon, Praziquantel 9.5 mg, Formalin 1 ml per 10 gal,
+  Chloroquine 10 mg, Fenbendazole 1 g per 100 gal; copper to a level,
+  0.692 ml per gallon per 1.0 ppm) and tell the workbook import which
+  building a log row's 205 / 100 system is.
 
 ## The numbering rule
 
@@ -163,18 +165,30 @@ name): the Arrival sheet's species search and the Size dropdown — or
 who a fish is is corrected again, not reversed (see *Unknown and
 mislabeled fish*).
 
-**Dose** — medication chips (Copper · Metro · Prazi · Formalin ·
-Chloroquine · Fenben · Salt), the amount with its unit (g / ml / tsp; the
-medication's usual unit is preselected), the suggested amount as a
-tap-to-fill chip (gallons × the rate, for the system or for the tank —
-none for copper, which is dosed to the test), and **whole system** (the
-default when the building has a volume: "Whole system — Building 500 ·
-205 gal system") or **this tank only**. Save writes a `dose` log — on the
-building with tank 0 for the system, on the tank otherwise — and the
-toast reads "Metronidazole 5.1 g · Building 500, whole system" or
-"… · Tank 521". **A dose has no undo**: it cannot come back out of the
-water, so the log stands and a correction is a note; the toast says so
-on the sheet.
+**Dose** — medication chips (the list of Settings → Medications:
+Copper · Metro · Prazi · Formalin · Chloroquine · Fenben · Salt until it
+is edited), **the water** — the whole system (the default when the
+building has a volume: "Whole system — Building 600 · 100 gal") or this
+tank only —, then the sum for that medication and the result line with
+its working small under it: per gallon "Add 2.5 g Metronidazole" /
+"100 gal × 25 mg"; to a level two numbers, **Now** and **Bring it to**,
+"Add 16.6 ml Copper Power" / "100 gal × 0.24 ppm × 0.692"; a **Top-up**
+switch for after a water change. The **amount** field is filled with the
+result and stays editable, because what was really added is what is
+logged (a typed-over amount offers "Use the result: …"). Save writes ONE
+`dose` log — on the building with tank 0 for the system, on the tank
+otherwise — whose note carries the working, and for the copper product
+the copper reading too; the toast says all of it: "Copper Power 16.6 ml
+· Building 600, whole system · 2.16 → 2.40 ppm, 100 gal · copper reading
+2.16 logged". **A dose has no undo**: it cannot come back out of the
+water, so the log stands and a correction is a note; the sheet says so
+before Save. All of it is in *Medications and the dose sum*, below.
+
+**Calculator** (in the links under the fish rows, on the tank picker, and
+at `/?fh_front_desk=1&calc=1`) — a medication and any number of gallons
+(a bucket, a tub, a tank that is not set up; the page's own system and
+tank are one tap away) give the same result and working. Nothing is
+saved.
 
 **Arrival** — species search with instant suggestions (products, common
 names, scientific names, learned aliases), recent-species chips, "use as
@@ -213,9 +227,16 @@ fish) for next time.
 | `move 3 cardinals 121 to 221` · `move the clowns to building one top left` · `move all to 222` | a move (a quantity smaller than the group splits it) |
 | `four pajama cardinalfish in tank 521` · `put a dozen banggai cardinals into 522` | an arrival (a Clean Room tank is refused — pick a Spa tank) |
 | `521 copper 2.4` · `copper two point four` | a copper reading on the tank |
+| `copper 2.16 to 2.4` · `bring copper from 2.16 to 2.4` · `raise copper to 2.4` · `dose copper` | a dose of the copper product to a level: the result line and its working, then Confirm (today's latest reading is Now when none is said — asked for when there is none) |
+| `dose metro` · `metro for the system` · `prazi this tank` · `cq loading` · `metro for the 100 gallon system` | a dose per gallon for that water, with its sum; a named dose is heard |
+| `metro 5 g` · `dosed 5 grams of metro` · `copper power 55 ml` | a dose spoken with its amount: that amount is logged, no sum |
 | `count five clowns` · `there are 3 pajamas` | a full recount |
 | `clear the cardinals` | the cleared date set by hand (today) |
 | `note water change done` | a note on the tank's log |
+
+A dose phrase is never auto-confirmed (a dose has no undo): it waits for
+the tap on Confirm, which posts what the Dose sheet's Save posts; *Open
+the Dose sheet* carries what was said into the sheet instead.
 
 Numbers: digits, number words, "a couple" = 2, "a dozen" = 12, "half a
 dozen" = 6, "two dozen" = 24. Tanks: "tank 121", "one twenty one", "five
@@ -233,7 +254,11 @@ Tabs: **Board · Stays · Arrivals · Species · Stats · Events · Settings**.
 species · size · live · day N · badge; empty tanks dimmed; coming-soon buildings
 greyed), a header per building with its system gallons ("205 gal
 system"), its schedule, the count in QT and the last dose per medication
-(a system dose or a tank dose in that building, with its time), the last
+(a system dose or a tank dose in that building, with its amount, its
+working and its time — "Copper Power 16.6 ml (2.16 → 2.40 ppm, 100 gal)
+2026-11-12 09:20"), a **Calculator** button in the toolbar (the phone's
+sum for any gallons, each building's water one click away; nothing is
+saved), the last
 copper reading, the to-do count and what is still due today (printed on
 the card — a tooltip is invisible on a tablet) per tank, area and species
 filters, a *Front Desk* link per tank, and in the summary the groups for
@@ -252,18 +277,104 @@ correction as Identify…), a *For sale now* and a *Needs identifying* filter, c
 with a toggle, a CSV and an XLSX export with the formula-cell guard.
 **Arrivals**, **Species** and **Stats** — the workbook replacement, below.
 **Events** — the latest 200 stay events and 100 tank-log entries in plain
-words (a dose row reads like the toast — "Metronidazole 5.1 g · Building
-500, whole system" — and a log on a building is listed under "Building
-500" rather than a tank), with a per-row **Undo** on the stay events (a
+words (a dose row reads like the toast, working included — "Copper Power
+16.6 ml · 2.16 → 2.40 ppm, 100 gal · Building 600, whole system" — and a
+log on a building is listed under "Building 600" rather than a tank), with a per-row **Undo** on the stay events (a
 compensating event, no actor or age guard, refused a second time; tank
 logs and doses have none). **Settings** (`manage_options`) — the numbers,
-the schedule templates (a picker, add / rename / delete / make default,
+**Medications** (the list: add, edit, retire, bring back), the schedule
+templates (a picker, add / rename / delete / make default,
 the steps editor per template, Reset to that template's seed), the layout
 editor (each building's schedule and system gallons beside its name and
 status), the box rates, **Sizes** (the standard list and the sizes in use
 on products), **Box shares** (the remembered rows, each editable and
 forgettable), **Import workbook**, the learned aliases, *Print
 tank labels*.
+
+## Medications and the dose sum
+
+**The list** (Settings → Medications) is what the Dose sheet, the
+Calculator and the dose phrases offer. It is seeded from the fixed list
+the section had — the same keys, names and rates — so nothing changes
+until somebody edits it. Each medication has a name, a chip for the
+phone, other names (for speech, for log notes and for matching the steps
+of a treatment schedule), a unit (mg, g, ml, tsp, drops, each) and HOW
+IT IS DOSED:
+
+| | The rate | The sum |
+|---|---|---|
+| **per gallon** | an amount for so many gallons — "25 mg per gallon", "1 ml per 10 gal" | gallons × the rate |
+| **to a level** | an amount (for so many gallons) that raises a reading by 1.0, and the reading's unit — the copper product: 0.692 ml per gallon per 1.0 ppm | gallons × (Bring it to − Now) × the rate |
+| **typed** | none (Salt) | no sum: the amount is typed |
+
+A per-gallon medication may have **named doses** (Chloroquine's
+*Loading* 40, *Top-up* 12 and *Last* 6 mg per gallon — the three the
+seeded CQ schedule uses), shown as chips; any medication may have a
+**measure** ("one scoop = 0.5 g"), and its result then also reads "5
+scoops (one scoop = 0.5 g)". A medication can be added, edited and
+**retired** — never deleted: a retired one is no longer offered but the
+logs that name it still read, and an edit that changes the name or the
+chip keeps the old one as an other name for the same reason (a dose log
+carries no key; its note starts with the medication's name). Two
+medications cannot share a name. The editor says what 100 gallons take
+at the rate being typed.
+
+**The copper product** is the row with the key `copper` (seeded "Copper
+Power") while it is dosed to a level: its "Now" is today's copper
+reading and saving a dose of it logs that reading. Another copper
+product is that row renamed and re-rated. Beside its rate the panel
+shows the figure the **store's public Medication Calculator** uses when
+the theme's medication data is there (through the filter
+`fishotel_cleanroom_theme_medication_data`, else the theme's
+`FisHotel_Medication_Data` class) — "the same figure", or both figures
+and that one is out of date — and says plainly when it is not there.
+Nothing depends on it.
+
+**The sum** (`Dose::plan()`; the same sum in `js/dose-math.js`, both run
+against `tests/fixtures/dose-maths.json`):
+
+- the **water**: the whole system — the building's system gallons — or
+  this tank only (the tank's gallons). Unknown gallons: the sheet says
+  so and the amount is typed.
+- **per gallon**: the medication's own rate, or a named dose chip, or
+  the rate of a schedule step that is due today and names the medication
+  with a rate ("Chloroquine 40 mg/gal") — that one is picked and marked
+  "due today".
+- **to a level**: **Now** — for the copper product today's latest copper
+  reading for that water, with its time (a reading on any tank of the
+  building, or on the building, reads the system; a tank alone is read
+  by its own readings and the building's; yesterday's does not count),
+  otherwise empty and asked for — and **Bring it to** — the level a
+  schedule step due today names ("Copper Power to 2.0" on day 1, "to
+  2.4" on day 2), else for the copper product the copper target of
+  Settings, else empty; both always editable. At or above the target:
+  "Nothing to add".
+- two groups in one water on different days: the LOWER rate or level is
+  offered first, the other is one tap away.
+- the **Top-up** switch, for after a water change: "I changed __ % of
+  the water" (or gallons) — a per-gallon medication is summed for the
+  water that was replaced; a medication dosed to a level stays Now →
+  Bring it to.
+- **rounding**: one decimal from 1 up, two below 1 (16.608 → 16.6 ml);
+  a weight reads in grams from 1 g up and in milligrams below (2,500 mg
+  → 2.5 g; 0.4 g → 400 mg).
+
+**Save** logs the dose once through the existing dose log — the
+medication, the amount as it stands in the field, its unit, the system
+or the tank — with a note that carries the working, built on the server
+from the store's own gallons: "2.16 → 2.40 ppm, 100 gal", "25 mg per
+gallon, 100 gal", "Loading: 40 mg per gallon, 100 gal", "… · top-up
+after a 25 % water change". For the copper product it also logs the
+copper READING — the "Now" value, on the same water (the building for
+the system, else the tank) — unless that value is today's latest reading
+for that water already. The day's to-do then ticks as it always did: the
+dose step that names the medication, and the copper test by the
+reading. A plain typed dose (no sum behind it) logs exactly what it
+always logged.
+
+**Afterwards** the working is in the log's own note, so everything that
+shows or lists a dose shows it: the Events tab line, the Board's "last
+dose", and any export that carries the tank log's note.
 
 ## Supplier orders (Arrivals)
 
@@ -864,7 +975,7 @@ deactivation.
 - `{prefix}fh_order_lines` — its lines: order_id, species_id, species, sci_name, needs_id (1.5), label_name (1.5: what the label called a corrected fish — the "??" name of one that arrived unknown —, NULL = never corrected), size_slug + size_label (1.4), qty_ordered, qty_received, per_box, box_no + box_pct (1.4), bags, unit_price, worth, qty_doa, qty_survived, landed_total (a cache of the costing), stay_id, tank_id, share_key (1.4: the remembered share the line counts in), sort, notes (the "part of this line" notes of a split group live here)
 - `{prefix}fh_box_shares` (1.4) — the remembered shares: share_key (unique: location + fish + size), location_key (supplier + origin), supplier, origin, fish_key (`s:<species id>` or `n:<name>`), species_id, species, size_slug, size_label, pct_per_fish, order_count, last_line_id + last_date (the line and the order date the value came from), updated_at
 
-Three options: `fishotel_cleanroom_settings` (with `size_attribute` and `size_list`, the source of the standard sizes), `fishotel_cleanroom_protocol`
+Three options: `fishotel_cleanroom_settings` (with `size_attribute` and `size_list`, the source of the standard sizes, and `medications`, the medication list — absent until it is first edited, which means the seed; no table and no schema change), `fishotel_cleanroom_protocol`
 (`{ default: name, templates: { name: steps[] } }` — an older bare steps
 array is read as the "14 Day CM" template next to the other four seeds)
 and `fishotel_cleanroom_box_rates` (rows of supplier, origin, per box,
@@ -899,8 +1010,18 @@ clean-room/
 ├── class-replay.php        PURE: events → state, day math, the chosen sale date (own > batch > none,
 │                           the suggestion, ready, "still in the Spa"), splits, compensating events
 ├── class-protocol.php      PURE: the named treatment templates (the five seeds, the option's
-│                           shape, steps_for a building) → a tank's daily to-do; the medications,
-│                           their aliases and dose rates, the dose suggestion and the dose tick
+│                           shape, steps_for a building) → a tank's daily to-do and the dose tick;
+│                           the fixed medication list the editable one is seeded from; loads the
+│                           two files below
+├── class-medications.php   PURE: the editable medication list — the seed, the lenient reader of
+│                           what is stored, the strict add / edit / retire operations, a
+│                           medication by its names, the public calculator's figure beside ours
+├── class-dose.php          the dose sum (plan(): per gallon, to a level, the top-up — mirrored in
+│                           js/dose-math.js), what the room fills in (the two waters, today's
+│                           reading, the due steps), the working as the log's note, the copper
+│                           reading a dose brings along, a dose phrase's preview, the Board's
+│                           "last dose" (takes the store as a parameter)
+├── class-medications-admin.php  Settings → Medications' save (AJAX), its panel, the Board's Calculator
 ├── class-parser.php        PURE: a spoken / typed phrase → structured preview
 ├── class-qr.php            PURE: byte-mode QR encoder (EC M, v1–6) → inline SVG
 ├── class-costing.php       PURE: the order sheet's landed-cost maths (box / bag), a line's percent
@@ -937,9 +1058,13 @@ clean-room/
 │                           "Goes on sale" (admin-post)
 ├── class-admin-import.php  Settings → Import workbook: the private folder, upload → preview → import
 ├── css/front-desk.css, js/front-desk.js      the phone screen (inlined into the page)
+├── js/dose-math.js         the dose sum for the pages (inlined before front-desk.js; enqueued on
+│                           the Board and Settings)
 ├── css/clean-room-admin.css, js/clean-room-admin.js
+├── css/medications-admin.css, js/medications-admin.js   Settings → Medications, the Board's Calculator
 ├── views/front-desk.php, board.php, stays.php, arrivals.php, order.php, species.php, stats.php,
 │          events.php, settings.php, import.php, tabs.php, labels.php, meta-box.php,
-│          identify-panel.php (the Identify… panel of the Stays tab and the order page)
+│          identify-panel.php (the Identify… panel of the Stays tab and the order page),
+│          medications.php + medication-form.php (Settings → Medications)
 └── tests/                  headless PHP + node tests (see tests/README.md)
 ```

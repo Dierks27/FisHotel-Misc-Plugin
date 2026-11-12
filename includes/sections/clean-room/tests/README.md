@@ -16,11 +16,15 @@ statics only and stands replaced by `fake-store.php` — an in-memory
 store that runs the same Replay and hydration code — so no `$wpdb`
 method is ever called. `fixtures/qr-front-desk-521.txt` is the module
 matrix python-qrcode produces for the Front Desk URL of tank 521 (byte
-mode, level M, mask 2). Two fixtures are read by the PHP tests AND the
+mode, level M, mask 2). Four fixtures are read by the PHP tests AND the
 node tests, so the server and the page cannot drift apart:
 `fixtures/box-maths.json` (the percent-of-a-box maths: typed percents
-and box numbers, the per-box summary, the remembered shares, "How full")
-and `fixtures/unknown-names.json` (the "??" name of an unknown fish).
+and box numbers, the per-box summary, the remembered shares, "How full"),
+`fixtures/unknown-names.json` (the "??" name of an unknown fish),
+`fixtures/dose-maths.json` (the dose sums: the rounding, the unit of a
+weight, the words, and every sum with its amount, result line, working
+and note) and `fixtures/dose-phrases.json` (a dose phrase in plain
+words).
 
 ```
 php  includes/sections/clean-room/tests/layout-test.php
@@ -43,8 +47,16 @@ php  includes/sections/clean-room/tests/sale-dates-test.php
 php  includes/sections/clean-room/tests/sizes-test.php
 php  includes/sections/clean-room/tests/box-shares-test.php
 php  includes/sections/clean-room/tests/identify-test.php
+php  includes/sections/clean-room/tests/medications-test.php
+php  includes/sections/clean-room/tests/dose-test.php
+php  includes/sections/clean-room/tests/dose-save-test.php
+php  includes/sections/clean-room/tests/dose-phrases-test.php
+php  includes/sections/clean-room/tests/medications-admin-test.php
 node includes/sections/clean-room/tests/front-desk.test.js
 node includes/sections/clean-room/tests/clean-room-admin.test.js
+node includes/sections/clean-room/tests/dose-math.test.js
+node includes/sections/clean-room/tests/front-desk-dose.test.js
+node includes/sections/clean-room/tests/medications-admin.test.js
 ```
 
 Every species, price, supplier and figure in these tests is invented
@@ -58,7 +70,8 @@ row-2 totals, the right-hand label block, a second unused "DOA" block,
 box-rate blocks, FishSheetStock, a `PW` sheet that must never be read)
 with `xlsx-builder.php`, a tiny .xlsx writer of hand-written XML parts.
 The CI job runs every `tests/*.php`, so both builders (and
-`fake-store.php`) exit 0 when run directly. Temporary files go to the
+`fake-store.php`, and `dose-helpers.php` — what the two dose tests
+share) exit 0 when run directly. Temporary files go to the
 system temp directory (`FH_TEST_TMP` overrides).
 
 - **layout-test.php** — the seed (six buildings, 22 tanks, 100–400
@@ -460,6 +473,131 @@ system temp directory (`FH_TEST_TMP` overrides).
   `knownName()` (the "??" box of an order line) against
   `fixtures/unknown-names.json`.
 
+- **medications-test.php** — the editable medication list: the seed IS
+  the old fixed list (the same keys in the same order, names, chips, the
+  same names to answer to, the five rates — 25 mg, 9.5 mg, 1 ml per
+  10 gal, 10 mg, 1 g per 100 gal — equal to `Protocol::DOSE_RATES`,
+  copper to a level at 0.692 ml per gallon per 1.0 ppm, Salt typed,
+  Chloroquine's three named doses equal to the seeded CQ schedule's
+  rates); a medication by its names (whole words, the first named, the
+  longer name at the same place, a log note with its working, a retired
+  one still found); the lenient reader of what is stored (drops, caps, a
+  bad rate makes it typed, a measure only in a unit of the same kind);
+  Settings → Medications' operations — add (the key from the name, never
+  digits only, nineteen refusals each naming what is wrong, a name
+  another medication answers to, the cap), edit (the key and the place
+  stay, a changed name or chip is kept as an other name so an old log
+  still reads, the copper row re-rated stays the copper product and made
+  typed is none), retire and bring back (still read in logs, its names
+  still taken); where the list is kept (the settings option, the seed
+  until edited, the Numbers and Sizes saves keep it, no stale copy within
+  a request, junk reads as the seed); that `Protocol::medication_key()` /
+  `medication_label()` / `dose_text()` / `dose_suggestion()`, the to-do
+  tick and the store's "last dose" follow an edited list; and the
+  store's public calculator's copper figure — present and the same,
+  ours edited, ours typed for 10 gallons, absent, no entry of that name,
+  another unit, junk in the data, through the filter, a filter that
+  throws, the theme's own class.
+- **dose-test.php** — `Dose` against `fixtures/dose-maths.json` (the
+  file the page's JS is run against too): `round_amount()` (16.608 →
+  16.6, 5.125 → 5.1, 1.15 → 1.2 although binary floating point holds it
+  a breath low, 0.004 stays 0.004), `display()` (2,500 mg → 2.5 g,
+  0.4 g → 400 mg, 999.96 mg → 1 g), the words (levels, rates, a
+  measure's plural), and 51 sums — the copper example (100 gal, 2.16 →
+  2.40 ppm = 16.6 ml), 100 gallons of Metronidazole (2.5 g), a rate for
+  10 or 100 gallons, a rate typed in grams, a named dose, a schedule
+  step's rate, the top-up in percent and in gallons (with and without a
+  system volume, missing, too much), zero and negative differences, a
+  missing or unreadable reading, unknown gallons, a measure, pieces /
+  drops / teaspoons, three-decimal levels, typed — each with its state,
+  amount, unit, result line, working and note; that the PHP words are
+  the JS file's English; that the seeded list gives the fixed list's
+  amounts on 205, 100, 40 and 20 gal; what a schedule step names
+  (`step_rate()`, `step_level()`); what is due today per medication
+  (day 1, day 2, a day with no copper step, two groups on different days
+  — the lower first —, the CQ rates, the first medication a step names);
+  today's copper reading (from today with its site time, from yesterday,
+  none, the site day rather than the UTC day); what "Now" and "Bring it
+  to" start with (`defaults()`); the two waters of a tank's page against
+  the in-memory store (a reading on another tank of the building reads
+  the system, not this tank; a building reading reads both; the due
+  steps of the system and of the tank); what a Save's post turns into
+  (`args_from_request()`, `working_note()`: the gallons never from the
+  post, a named dose only when it is one, no note without the sum);
+  `save_reading()` (logged on the building or the tank, not again when
+  it is today's latest, a failing store); and the Board's "last dose"
+  text.
+- **dose-save-test.php** — the Save through `Front_Desk::perform()`: a
+  plain typed dose logs exactly what it always did; with the sum ONE
+  dose log whose note is the working (per gallon on the system's 100 or
+  205 gal and on the tank's 40, a named dose, a schedule step's rate,
+  the top-up in percent and gallons, a typed medication after a water
+  change), the gallons the store's whatever is posted, the typed amount
+  what is logged; the copper example on the 100 gallon system — the
+  reading 2.16 and the dose with its working, each once, the toast
+  saying both, the day's "Copper Power to 2.4" and the copper test
+  ticked in every tank of the water; saved again with the same Now, or
+  after "611 copper 2.16": no second reading; another Now, this tank
+  only, a reading two days old: logged; nothing to add but typed
+  anyway; a Now that is no number; unknown gallons; a medication added
+  in Settings (to a level: no copper reading), a retired one refused and
+  not offered; a store whose dose log fails; the Events line and the
+  Board's last dose afterwards; and that every label front-desk.js asks
+  for is sent.
+- **dose-phrases-test.php** — the dose phrases: "copper 2.16 to 2.4"
+  and its relatives ("bring my copper up from 2.16 to 2.4", "cu 2.16 to
+  2.4", in words, with "ppm"), "raise / bump / top up copper to 2.4",
+  "dose copper", "dose metro", "metro for the system", "prazi this
+  tank", a name alone, a named dose ("cq loading"), a spoken tank, "the
+  100 gallon system" (the building that holds that much; none or two of
+  that size ask which tank), a tank that is not in the layout, a dose
+  spoken with its amount ("metro 5 g", "copper power 55 ml", "metro 212
+  mg"); that a reading is still a reading ("521 copper 2.16", "copper
+  2.4", "copper to 2.4" …) and a phrase with anything but dose words is
+  read as before; the sentences against `fixtures/dose-phrases.json`;
+  then the preview (`Front_Desk::dose_preview()`): the result line, the
+  working, the water, Now from today's reading or asked for, Bring it to
+  from the due step (day 1, day 2) or the copper target, the tank alone,
+  nothing to add, a named dose, the CQ step's rate, a spoken amount, a
+  typed medication, an unknown or offline tank, unknown gallons — and
+  Confirm's post through the same Save.
+- **medications-admin-test.php** — Settings → Medications' save
+  (`Medications_Admin::request()`): the crew without `manage_options`,
+  nobody, a wrong or missing nonce (403), an unknown operation and the
+  list's refusals (400) — nothing stored each time; add / edit / retire
+  / bring back stored in the settings option with every other setting
+  untouched; the real `wp_ajax` handler up to its reply; what the panel
+  shows (how each is dosed in words, named doses, the measure, "the
+  built-in list, unchanged"); the public calculator's figure beside
+  ours in each state, absent said plainly; what the Board's Calculator
+  is handed (the medications offered, each building's water, a store
+  that cannot be read); every label the script asks for is sent.
+- **dose-math.test.js** — `js/dose-math.js` against
+  `fixtures/dose-maths.json`: the same tables and the same 51 sums as
+  dose-test.php, plus the page's own spelling of the inputs and
+  translated words.
+- **front-desk-dose.test.js** — the Dose sheet, the Calculator and a
+  dose phrase's preview run for real: `js/front-desk.js` started against
+  a small stand-in DOM and a `fetch` that records what is posted. "Now"
+  filled with today's reading and its time, "Bring it to" with the due
+  step's level; the result line and its working; the amount filled and
+  editable ("Use the result"); typing re-runs the sum in place; nothing
+  to add; a missing reading; the water (this tank alone has no reading
+  of its own); a single rate said, several as chips, the due step's
+  rate picked and marked, a named dose; the Top-up switch in percent
+  and gallons, too much refused; a measure; a typed medication; another
+  medication dosed to a level; unknown gallons; "a dose cannot be
+  undone" and "saving also logs the copper reading" before Save; Save
+  posts ONE request with the amount as it stands and the sum's inputs;
+  the Calculator posts nothing, with a tank, without one, with no
+  medication offered; the phrase preview is never auto-confirmed, asks
+  for a missing reading and runs the sum on the page, Confirm posts the
+  Save by voice, a spoken amount posts no sum, *Open the Dose sheet*
+  carries what was said, an unknown tank asks the server again.
+- **medications-admin.test.js** — the pure parts of
+  `js/medications-admin.js`: what 100 gallons take at a rate (the
+  editor's hint), the rates the Board's Calculator offers, its sum.
+
 ## By hand, once, on a real site
 
 1. FisHotel Tools → Dashboard → enable **Clean Room**. The six buildings
@@ -629,3 +767,25 @@ system temp directory (`FH_TEST_TMP` overrides).
     and "Not identified yet"; the XLSX has the four columns on Orders,
     By supplier and By origin, the stays export a needs_id column, the
     orders export needs_id and label_name on Lines.
+23. Doses. Settings → Medications lists the seven built-in medications
+    ("the built-in list, unchanged"), copper as "0.692 ml per gallon
+    raises the level by 1.0 ppm" with the store's public calculator's
+    figure beside it ("the same figure" — or that the theme's data is not
+    available here). Log "611 copper 2.16" on the phone, open 621 (same
+    building, 100 gal) → Today → Dose + → Copper: Now 2.16 with its
+    time, Bring it to the due step's level or the copper target; set it
+    to 2.4 — "Add 16.6 ml Copper Power" / "100 gal × 0.24 ppm × 0.692",
+    the amount 16.6 ml. Save: the toast names the dose, the system, the
+    working and that the reading was logged already; the Events tab has
+    ONE new dose row with the working and no second reading; the Board's
+    header for the building reads "last dose: Copper Power 16.6 ml (2.16
+    → 2.40 ppm, 100 gal) …". Dose → Metro: "Add 2.5 g Metronidazole" /
+    "100 gal × 25 mg"; *This tank only* → the tank's gallons; Top-up →
+    25 % → 625 mg. Calculator (phone and Board): Metro, 55 gallons →
+    1.4 g; nothing appears in the Events tab. Mic (or the typed box):
+    "bring copper from 2.16 to 2.4" → the same result and working, no
+    countdown, Confirm; "521 copper 2.2" is still a plain reading. Edit
+    Metronidazole (add a measure "scoop = 0.5 g"), add a medication,
+    retire one: the phone's chips follow, the result reads in scoops,
+    the retired one is gone from the chips and its old log rows still
+    read.

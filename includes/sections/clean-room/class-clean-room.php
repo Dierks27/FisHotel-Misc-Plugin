@@ -31,7 +31,13 @@
  *                           else its batch's on the supplier order; splits),
  *                           the day math, the compensating (undo) event.
  *   - class-protocol.php    PURE: the editable treatment template → each
- *                           tank's daily to-do (feeding + due steps).
+ *                           tank's daily to-do (feeding + due steps). It
+ *                           loads the next two itself:
+ *   - class-medications.php PURE: the editable medication list (seeded from
+ *                           the fixed one; kept in the settings option).
+ *   - class-dose.php        the dose sum (per gallon, to a level, the
+ *                           top-up), what the room fills in, the working
+ *                           as the dose log's note.
  *   - class-parser.php      PURE: a spoken / typed phrase → structured
  *                           preview (verbs incl. loss / shipped / copper,
  *                           number words, tank references, fuzzy species
@@ -72,6 +78,8 @@
  *                           AJAX and the XLSX / CSV exports.
  *   - class-admin-import.php  Settings → Import workbook: upload to a private
  *                           folder, preview, Import now (manage_options).
+ *   - class-medications-admin.php  Settings → Medications' save and the
+ *                           Board's Calculator (hooked from Settings::init()).
  *
  * The file uses bracketed namespaces because the facts helper must live in
  * the global namespace.
