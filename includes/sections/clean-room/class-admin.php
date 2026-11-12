@@ -260,7 +260,8 @@ class Admin {
 	 * (a group for sale counts as ready, wherever it is), fish alive,
 	 * tanks; and the warnings — groups for sale while still in the Spa,
 	 * groups without a sale date, and groups whose fish still has to be
-	 * identified.
+	 * identified. A temporary slot counts as a tank only while something
+	 * is set up in it.
 	 *
 	 * @param array[] $tanks Tanks with occupants.
 	 * @return array{in_qt: int, cleared: int, ready: int, live: int, tanks: int, empty: int, ready_in_spa: int, no_sale_date: int, needs_id: int}
@@ -280,6 +281,9 @@ class Admin {
 		foreach ( $tanks as $tank ) {
 			if ( 'offline' === (string) ( $tank['status'] ?? '' ) ) {
 				continue;
+			}
+			if ( Temp_Tanks::is_free( $tank ) ) {
+				continue; // A slot with nothing set up is a place, not a tank.
 			}
 			$out['tanks']++;
 			$occupants = (array) ( $tank['occupants'] ?? array() );
@@ -663,7 +667,7 @@ class Admin {
 					'whichSaleBatch' => __( 'This group\'s own sale date (YYYY-MM-DD)? Leave empty to use the batch date (%s).', 'fishotel-misc-plugin' ),
 					'whichSale'      => __( 'This group\'s own sale date (YYYY-MM-DD)? Leave empty for none — the batch has no date yet.', 'fishotel-misc-plugin' ),
 					'whichTank'      => __( 'Move to which tank number?', 'fishotel-misc-plugin' ),
-					'whyMove'        => __( 'Why? (optional: clear building / bullying / pairing / other)', 'fishotel-misc-plugin' ),
+					'whyMove'        => __( 'Why? (optional: clear building / bullying / pairing / hospital / other)', 'fishotel-misc-plugin' ),
 					'confirmCheckin' => __( 'Check the received fish in? One stay per line with fish (lines already checked in are skipped). The order becomes "received".', 'fishotel-misc-plugin' ),
 					'confirmDelete'  => __( 'Delete this order and its lines?', 'fishotel-misc-plugin' ),
 					'confirmSpecies' => __( 'Remove this species from the list?', 'fishotel-misc-plugin' ),
@@ -765,6 +769,10 @@ class Admin {
 					}
 					if ( (int) $to['id'] === (int) $stay['tank_id'] ) {
 						wp_send_json_error( array( 'message' => __( 'The group is already in that tank.', 'fishotel-misc-plugin' ) ), 400 );
+					}
+					$refused = Temp_Tanks::destination_error( $to );
+					if ( '' !== $refused ) {
+						wp_send_json_error( array( 'message' => $refused ), 400 ); // A slot with nothing set up takes no fish.
 					}
 					if ( 'closed' === (string) $stay['status'] ) {
 						wp_send_json_error( array( 'message' => __( 'That group is closed.', 'fishotel-misc-plugin' ) ), 400 );

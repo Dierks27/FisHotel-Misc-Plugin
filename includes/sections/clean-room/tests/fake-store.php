@@ -2,10 +2,13 @@
 /**
  * An in-memory Store: the methods the Front Desk's perform() and the
  * Admin's stay edits call, with no $wpdb. Tanks come from the seed
- * layout; stays, events and tank logs are kept in insertion order with
- * integer ids and run through the SAME pure code as the real Store
- * (Replay::state for the replay, Store::hydrate_* for the row shapes,
- * Store::site_noon_utc for backdating).
+ * layout — plus the Temporary building with its six slots, as the 1.6
+ * install adds it —; stays, events, tank logs and setups are kept in
+ * insertion order with integer ids and run through the SAME pure code as
+ * the real Store (Replay::state for the replay, Store::hydrate_* for the
+ * row shapes, Store::site_noon_utc for backdating, Store::event_setups /
+ * spread_logs / merge_copper / assemble_room for the temporary tanks and
+ * the to-do).
  *
  * Two seams a test may use that the real Store has no need for:
  * record_event() honours a 'created_at' in the event (to age an event
@@ -27,6 +30,7 @@ use FisHotel\Misc\Sections\Clean_Room\Settings;
 use FisHotel\Misc\Sections\Clean_Room\Species;
 use FisHotel\Misc\Sections\Clean_Room\Stats;
 use FisHotel\Misc\Sections\Clean_Room\Store;
+use FisHotel\Misc\Sections\Clean_Room\Temp_Tanks;
 
 // Helper, not a test: the CI lint job runs every tests/*.php with php, so
 // exit cleanly when executed directly instead of as a require. (The
@@ -114,6 +118,14 @@ class Fake_Store {
 	public $size_terms      = array();
 	public $variation_sizes = array();
 
+	/**
+	 * Setup rows (raw, as the table holds them), id => row.
+	 *
+	 * @var array[]
+	 */
+	public $setups = array();
+
+	private $next_setup   = 1;
 	private $next_share   = 1;
 	private $next_stay    = 1;
 	private $next_event   = 1;
@@ -129,29 +141,47 @@ class Fake_Store {
 	 */
 	public $buildings = array();
 
-	public function __construct( array $products = array() ) {
+	/**
+	 * @param array $products Products the species search knows: id => title.
+	 * @param bool  $temp     Whether the layout has the Temporary building (the 1.6 install adds it;
+	 *                        false = a layout as it was before).
+	 */
+	public function __construct( array $products = array(), $temp = true ) {
 		$this->products = $products;
 
+		$seed = Layout::seed();
+		if ( $temp ) {
+			$seed[] = Layout::temp_seed( Layout::temp_building_number( array_column( $seed, 'number' ) ), Layout::TEMP_SLOTS, count( $seed ) + 1 );
+		}
+
 		$tank_id = 0;
-		foreach ( Layout::seed() as $index => $building ) {
+		foreach ( $seed as $index => $building ) {
 			$this->buildings[ $index + 1 ] = Store::hydrate_building( array_merge( $building, array( 'id' => $index + 1 ) ) );
 			foreach ( $building['tanks'] as $tank ) {
 				$tank_id++;
-				$this->tanks[ $tank_id ] = Store::hydrate_tank(
-					array_merge(
-						$tank,
-						array(
-							'id'              => $tank_id,
-							'building_id'     => $index + 1,
-							'building_area'   => $building['area'],
-							'building_number' => $building['number'],
-							'building_name'   => $building['name'] ?? '',
-							'building_status' => $building['status'] ?? 'active',
-						)
-					)
-				);
+				$this->tanks[ $tank_id ] = $this->tank_row( $tank, $tank_id, $this->buildings[ $index + 1 ] );
 			}
 		}
+	}
+
+	/**
+	 * A tank in the shape the real Store's tanks() query hydrates.
+	 */
+	private function tank_row( array $tank, $tank_id, array $building ) {
+		return Store::hydrate_tank(
+			array_merge(
+				$tank,
+				array(
+					'id'                 => (int) $tank_id,
+					'building_id'        => (int) $building['id'],
+					'building_area'      => $building['area'],
+					'building_number'    => $building['number'],
+					'building_name'      => $building['name'],
+					'building_status'    => $building['status'],
+					'building_own_water' => ! empty( $building['own_water'] ) ? 1 : 0,
+				)
+			)
+		);
 	}
 
 	/* ---- buildings and tanks -------------------------------------- */
@@ -164,6 +194,10 @@ class Fake_Store {
 		return isset( $this->buildings[ (int) $id ] ) ? $this->buildings[ (int) $id ] : null;
 	}
 
+	/**
+	 * Every tank; a slot with what is set up in it and every tank with
+	 * what it behaves as (Temp_Tanks::attach(), as the real tanks() does).
+	 */
 	public function tanks( $include_offline = true ) {
 		$out = array();
 		foreach ( $this->tanks as $tank ) {
@@ -172,20 +206,233 @@ class Fake_Store {
 			}
 			$out[] = $tank;
 		}
+		return Temp_Tanks::attach( $out, $this->open_setups() );
+	}
+
+	public function tanks_in_building( $building_id ) {
+		$out = array();
+		foreach ( $this->tanks() as $tank ) {
+			if ( (int) $tank['building_id'] === (int) $building_id ) {
+				$out[] = $tank;
+			}
+		}
 		return $out;
 	}
 
 	public function tank( $id ) {
-		return isset( $this->tanks[ (int) $id ] ) ? $this->tanks[ (int) $id ] : null;
+		foreach ( $this->tanks() as $tank ) {
+			if ( (int) $tank['id'] === (int) $id ) {
+				return $tank;
+			}
+		}
+		return null;
 	}
 
 	public function tank_by_number( $number ) {
-		foreach ( $this->tanks as $tank ) {
+		foreach ( $this->tanks() as $tank ) {
 			if ( (int) $tank['number'] === (int) $number ) {
 				return $tank;
 			}
 		}
 		return null;
+	}
+
+	/* ---- temporary tanks: the slots and their setups ---------------- */
+
+	public function temp_building() {
+		foreach ( $this->buildings as $building ) {
+			if ( Layout::is_own_water( $building ) ) {
+				return $building;
+			}
+		}
+		return null;
+	}
+
+	public function add_slot() {
+		$building = $this->temp_building();
+		if ( ! $building ) {
+			return false;
+		}
+		$numbers = array();
+		foreach ( $this->tanks as $tank ) {
+			if ( (int) $tank['building_id'] === (int) $building['id'] ) {
+				$numbers[] = (int) $tank['number'];
+			}
+		}
+		$slot = Layout::next_slot( (int) $building['number'], $numbers );
+		if ( $slot <= 0 ) {
+			return false;
+		}
+		$id                 = $this->tanks ? max( array_keys( $this->tanks ) ) + 1 : 1;
+		$this->tanks[ $id ] = $this->tank_row( Layout::slot_row( (int) $building['number'], $slot ), $id, $building );
+		return (int) $this->tanks[ $id ]['number'];
+	}
+
+	/**
+	 * A setup row as the real Store's setup_select() joins it.
+	 */
+	private function setup_row( array $row ) {
+		$tank = isset( $this->tanks[ (int) $row['tank_id'] ] ) ? $this->tanks[ (int) $row['tank_id'] ] : null;
+		return Store::hydrate_setup( array_merge( $row, array( 'tank_number' => $tank ? $tank['number'] : null ) ) );
+	}
+
+	public function open_setups() {
+		$out = array();
+		foreach ( $this->setups as $row ) {
+			if ( ! empty( $row['open_tank_id'] ) ) {
+				$out[ (int) $row['tank_id'] ] = $this->setup_row( $row );
+			}
+		}
+		return $out;
+	}
+
+	public function slot_setups() {
+		$out = array();
+		foreach ( $this->tanks as $id => $tank ) {
+			if ( Layout::is_slot( $tank ) ) {
+				$out[ (int) $id ] = 0;
+			}
+		}
+		foreach ( $this->setups as $row ) {
+			if ( ! empty( $row['open_tank_id'] ) && isset( $out[ (int) $row['tank_id'] ] ) ) {
+				$out[ (int) $row['tank_id'] ] = (int) $row['id'];
+			}
+		}
+		return $out;
+	}
+
+	public function setup( $id ) {
+		return isset( $this->setups[ (int) $id ] ) ? $this->setup_row( $this->setups[ (int) $id ] ) : null;
+	}
+
+	public function closed_setups( $limit = 200 ) {
+		$out = array();
+		foreach ( array_reverse( $this->setups, true ) as $row ) {
+			if ( empty( $row['open_tank_id'] ) ) {
+				$out[] = $this->setup_row( $row );
+			}
+		}
+		return array_slice( $out, 0, max( 1, (int) $limit ) );
+	}
+
+	/**
+	 * As the real Store: only into a slot, and only one open setup per
+	 * slot (its unique open_tank_id key).
+	 */
+	public function insert_setup( array $setup ) {
+		$tank_id = (int) ( $setup['tank_id'] ?? 0 );
+		$slots   = $this->slot_setups();
+		if ( $tank_id <= 0 || ! isset( $slots[ $tank_id ] ) || $slots[ $tank_id ] > 0 ) {
+			return false;
+		}
+		$id  = $this->next_setup++;
+		$now = gmdate( 'Y-m-d H:i:s' );
+
+		$this->setups[ $id ] = array(
+			'id'           => $id,
+			'tank_id'      => $tank_id,
+			'open_tank_id' => $tank_id,
+			'slot'         => (int) ( $setup['slot'] ?? 0 ),
+			'name'         => substr( (string) ( $setup['name'] ?? '' ), 0, 60 ),
+			'purpose'      => substr( (string) ( $setup['purpose'] ?? '' ), 0, 120 ),
+			'kind'         => Temp_Tanks::kind( $setup['kind'] ?? '' ),
+			'gallons'      => (int) ( $setup['gallons'] ?? 0 ),
+			'template'     => substr( (string) ( $setup['template'] ?? '' ), 0, 40 ),
+			'start_date'   => (string) $setup['start_date'],
+			'steps'        => (string) json_encode( Protocol::normalize( $setup['steps'] ?? array() ) ),
+			'note'         => (string) ( $setup['note'] ?? '' ),
+			'created_by'   => (int) ( $setup['created_by'] ?? 0 ),
+			'created_at'   => $now,
+			'updated_at'   => $now,
+			'closed_by'    => 0,
+			'closed_at'    => null,
+		);
+
+		return $id;
+	}
+
+	public function update_setup( $id, array $fields ) {
+		if ( ! isset( $this->setups[ (int) $id ] ) || empty( $this->setups[ (int) $id ]['open_tank_id'] ) ) {
+			return false;
+		}
+		foreach ( array( 'name', 'purpose', 'gallons', 'start_date', 'note' ) as $key ) {
+			if ( array_key_exists( $key, $fields ) ) {
+				$this->setups[ (int) $id ][ $key ] = 'gallons' === $key ? (int) $fields[ $key ] : (string) $fields[ $key ];
+			}
+		}
+		if ( array_key_exists( 'steps', $fields ) && is_array( $fields['steps'] ) ) {
+			$this->setups[ (int) $id ]['steps'] = (string) json_encode( Protocol::normalize( $fields['steps'] ) );
+		}
+		return true;
+	}
+
+	public function close_setup( $id, $actor_id = 0 ) {
+		if ( ! isset( $this->setups[ (int) $id ] ) || empty( $this->setups[ (int) $id ]['open_tank_id'] ) ) {
+			return false;
+		}
+		$this->setups[ (int) $id ]['open_tank_id'] = null;
+		$this->setups[ (int) $id ]['closed_at']    = gmdate( 'Y-m-d H:i:s' );
+		$this->setups[ (int) $id ]['closed_by']    = (int) $actor_id;
+		return true;
+	}
+
+	public function setup_logs( $setup_id, $limit = 3000 ) {
+		$out = array();
+		foreach ( $this->logs as $row ) {
+			if ( (int) $setup_id > 0 && (int) ( $row['setup_id'] ?? 0 ) === (int) $setup_id ) {
+				$tank  = $row['tank_id'] ? ( $this->tanks[ (int) $row['tank_id'] ] ?? null ) : null;
+				$out[] = Store::hydrate_log( array_merge( $row, array( 'tank_number' => $tank ? $tank['number'] : null, 'building_number' => null, 'actor_name' => '' ) ) );
+			}
+		}
+		usort(
+			$out,
+			static function ( $a, $b ) {
+				return strcmp( $a['logged_at'], $b['logged_at'] ) ?: ( $a['id'] <=> $b['id'] );
+			}
+		);
+		return $out;
+	}
+
+	public function setup_events( $setup_id, $limit = 3000 ) {
+		$out = array();
+		foreach ( $this->events as $row ) {
+			if ( (int) $setup_id > 0 && ( (int) ( $row['to_setup_id'] ?? 0 ) === (int) $setup_id || (int) ( $row['from_setup_id'] ?? 0 ) === (int) $setup_id ) ) {
+				$out[] = $this->event_row( $row );
+			}
+		}
+		return Replay::sort_events( $out );
+	}
+
+	public function setup_doses( array $setup_ids ) {
+		$rows = array();
+		foreach ( array_reverse( $this->logs, true ) as $row ) {
+			if ( 'dose' === $row['kind'] && in_array( (int) ( $row['setup_id'] ?? 0 ), array_map( 'intval', $setup_ids ), true ) ) {
+				$rows[] = $row;
+			}
+		}
+		return Store::last_doses( $rows, 'setup_id' );
+	}
+
+	/* ---- the room: every tank with its to-do, and the list by system - */
+
+	public function latest_copper( $tanks = null ) {
+		$rows = array();
+		foreach ( array_reverse( $this->logs, true ) as $row ) {
+			if ( 'copper' === $row['kind'] && null !== $row['value'] ) {
+				$rows[] = $row;
+			}
+		}
+		return Store::merge_copper( $rows, is_array( $tanks ) ? $tanks : $this->tanks() );
+	}
+
+	public function room( $today, array $settings, array $protocol = array() ) {
+		$tanks = $this->tanks();
+		return Store::assemble_room( $tanks, $this->buildings(), $this->open_stays( array(), $today, $settings ), $this->latest_copper( $tanks ), $this->day_logs( $today ), $today, $settings, $protocol );
+	}
+
+	public function tanks_with_occupants( $today, array $settings, array $protocol = array() ) {
+		$room = $this->room( $today, $settings, $protocol );
+		return $room['tanks'];
 	}
 
 	public function tank_areas() {
@@ -248,6 +495,7 @@ class Fake_Store {
 				'building_number' => $tank ? $tank['building']['number'] : null,
 				'building_area'   => $tank ? $tank['building']['area'] : '',
 				'building_name'   => $tank ? $tank['building']['name'] : '',
+				'building_own_water' => $tank && ! empty( $tank['building']['own_water'] ) ? 1 : 0,
 				'batch_order_id'  => $order ? (int) $order['id'] : null,
 				'batch_order_ref' => $order ? (string) $order['ref'] : null,
 				'batch_sale_date' => $order ? ( $order['sale_date'] ?? null ) : null,
@@ -417,6 +665,9 @@ class Fake_Store {
 					'from_tank_number' => $from ? $from['number'] : null,
 					'to_tank_number'   => $to ? $to['number'] : null,
 					'actor_name'       => '',
+					// As the real event_select(): the kind of the setup the move touched.
+					'from_setup_kind'  => ! empty( $row['from_setup_id'] ) && isset( $this->setups[ (int) $row['from_setup_id'] ] ) ? $this->setups[ (int) $row['from_setup_id'] ]['kind'] : null,
+					'to_setup_kind'    => ! empty( $row['to_setup_id'] ) && isset( $this->setups[ (int) $row['to_setup_id'] ] ) ? $this->setups[ (int) $row['to_setup_id'] ]['kind'] : null,
 				)
 			)
 		);
@@ -445,20 +696,29 @@ class Fake_Store {
 		if ( ! isset( $this->stays[ (int) $stay_id ] ) || ! in_array( $type, Replay::TYPES, true ) ) {
 			return false;
 		}
+		// As the real record_event(): the setups the tanks are tied to — and nothing lands in a free slot.
+		$from   = ! empty( $event['from_tank_id'] ) ? (int) $event['from_tank_id'] : 0;
+		$to     = ! empty( $event['to_tank_id'] ) ? (int) $event['to_tank_id'] : 0;
+		$setups = Store::event_setups( $type, $from, $to, $this->slot_setups() );
+		if ( false === $setups ) {
+			return false;
+		}
 		$id = $this->next_event++;
 
 		$this->events[ $id ] = array(
-			'id'           => $id,
-			'stay_id'      => (int) $stay_id,
-			'type'         => $type,
-			'qty'          => isset( $event['qty'] ) && null !== $event['qty'] ? (int) $event['qty'] : null,
-			'from_tank_id' => ! empty( $event['from_tank_id'] ) ? (int) $event['from_tank_id'] : null,
-			'to_tank_id'   => ! empty( $event['to_tank_id'] ) ? (int) $event['to_tank_id'] : null,
-			'note'         => (string) ( $event['note'] ?? '' ),
-			'event_at'     => Store::utc_datetime( $event['event_at'] ?? '' ),
-			'actor_id'     => (int) ( $event['actor_id'] ?? 0 ),
-			'source'       => in_array( (string) ( $event['source'] ?? '' ), Store::SOURCES, true ) ? (string) $event['source'] : 'manual',
-			'created_at'   => ! empty( $event['created_at'] ) ? Store::utc_datetime( $event['created_at'] ) : gmdate( 'Y-m-d H:i:s' ),
+			'id'            => $id,
+			'stay_id'       => (int) $stay_id,
+			'type'          => $type,
+			'qty'           => isset( $event['qty'] ) && null !== $event['qty'] ? (int) $event['qty'] : null,
+			'from_tank_id'  => $from > 0 ? $from : null,
+			'to_tank_id'    => $to > 0 ? $to : null,
+			'note'          => (string) ( $event['note'] ?? '' ),
+			'event_at'      => Store::utc_datetime( $event['event_at'] ?? '' ),
+			'actor_id'      => (int) ( $event['actor_id'] ?? 0 ),
+			'source'        => in_array( (string) ( $event['source'] ?? '' ), Store::SOURCES, true ) ? (string) $event['source'] : 'manual',
+			'created_at'    => ! empty( $event['created_at'] ) ? Store::utc_datetime( $event['created_at'] ) : gmdate( 'Y-m-d H:i:s' ),
+			'from_setup_id' => $setups['from'],
+			'to_setup_id'   => $setups['to'],
 		);
 
 		return $id;
@@ -606,12 +866,15 @@ class Fake_Store {
 	}
 
 	private function insert_log( $tank_id, $building_id, array $log ) {
-		$id = $this->next_log++;
+		$id    = $this->next_log++;
+		$slots = $this->slot_setups();
 
 		$this->logs[ $id ] = array(
 			'id'          => $id,
 			'tank_id'     => (int) $tank_id,
 			'building_id' => (int) $building_id > 0 ? (int) $building_id : null,
+			// As the real Store: an entry on a slot belongs to the setup that stands there now.
+			'setup_id'    => (int) $tank_id > 0 && ! empty( $slots[ (int) $tank_id ] ) ? (int) $slots[ (int) $tank_id ] : null,
 			'kind'        => in_array( (string) ( $log['kind'] ?? '' ), Store::LOG_KINDS, true ) ? (string) $log['kind'] : 'note',
 			'value'       => isset( $log['value'] ) && null !== $log['value'] && is_numeric( $log['value'] ) ? round( (float) $log['value'], 3 ) : null,
 			'note'        => substr( (string) ( $log['note'] ?? '' ), 0, 2000 ),
@@ -629,6 +892,13 @@ class Fake_Store {
 	 * Protocol::todo().
 	 */
 	public function logs_on_date( $date ) {
+		return Store::spread_logs( $this->day_logs( $date ), $this->tanks() );
+	}
+
+	/**
+	 * The day's log rows as written, oldest first (Store::day_logs()).
+	 */
+	public function day_logs( $date ) {
 		list( $start, $end ) = Store::site_day_bounds( $date );
 		$rows                = array();
 		foreach ( $this->logs as $row ) {
@@ -636,7 +906,7 @@ class Fake_Store {
 				$rows[] = $row;
 			}
 		}
-		return Store::spread_logs( $rows, $this->tanks() );
+		return $rows;
 	}
 
 	/**
@@ -731,6 +1001,29 @@ class Fake_Store {
 			'species'    => (string) $species,
 		);
 		return true;
+	}
+
+	/**
+	 * The species of the latest stays, newest first (Store::recent_species()).
+	 */
+	public function recent_species( $limit = 10 ) {
+		$out  = array();
+		$seen = array();
+		foreach ( array_reverse( $this->stays, true ) as $row ) {
+			$key = strtolower( (string) $row['species'] );
+			if ( '' === $key || isset( $seen[ $key ] ) ) {
+				continue;
+			}
+			$seen[ $key ] = true;
+			$out[]        = array(
+				'species'    => (string) $row['species'],
+				'product_id' => $row['product_id'],
+			);
+			if ( count( $out ) >= max( 1, (int) $limit ) ) {
+				break;
+			}
+		}
+		return $out;
 	}
 
 	public function last_event() {

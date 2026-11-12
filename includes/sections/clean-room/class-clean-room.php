@@ -177,6 +177,8 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 			require_once self::path() . 'class-layout.php';
 			require_once self::path() . 'class-replay.php';
 			require_once self::path() . 'class-protocol.php';
+			require_once self::path() . 'class-temp-tanks.php';
+			require_once self::path() . 'class-todo.php';
 			require_once self::path() . 'class-parser.php';
 			require_once self::path() . 'class-qr.php';
 			require_once self::path() . 'class-costing.php';

@@ -10,6 +10,14 @@
  * skimmer): nothing extra is stored, but every tank title says which
  * tanks it shares water with.
  *
+ * The one exception is a building flagged own_water — "Temporary" (900):
+ * its tanks are numbered SLOTS, each its own water. Hundreds = building,
+ * tens 0 = not on a rack, ones = the slot (901 … 909). A slot is a place
+ * and a laminated label ("TEMP 1 · 901"); what is set up in it comes and
+ * goes (Temp_Tanks). Such a building has the area 'temp', which is
+ * neither 'clean' nor 'spa': code that knows nothing about temporary
+ * tanks never takes one for a Spa or a Clean Room tank.
+ *
  * @package FisHotel\Misc\Sections\Clean_Room
  */
 
@@ -48,6 +56,23 @@ class Layout {
 	const MAX_POSITION = 9;
 	const MAX_BUILDING = 900;
 	const MAX_GALLONS  = 9999;
+
+	/**
+	 * The area of a building whose tanks are each their own water (the
+	 * temporary tanks) and its display name. Deliberately not in AREAS:
+	 * the two permanent areas are what the pickers and filters offer.
+	 */
+	const TEMP_AREA  = 'temp';
+	const TEMP_LABEL = 'Temporary';
+
+	/**
+	 * The Temporary building's number (the highest free round hundred when
+	 * 900 is already an ordinary building), how many slots it starts with
+	 * and how many it can have — the ones digit is the slot.
+	 */
+	const TEMP_BUILDING = 900;
+	const TEMP_SLOTS    = 6;
+	const MAX_SLOTS     = 9;
 
 	/**
 	 * The seed's system volumes (sump included) of the two Spa buildings —
@@ -127,6 +152,9 @@ class Layout {
 	 * @return int 0 when nothing is known.
 	 */
 	public static function system_gallons( array $building, array $tanks ) {
+		if ( self::is_own_water( $building ) ) {
+			return 0; // Each tank its own water: there is no system to add up.
+		}
 		if ( isset( $building['system_gallons'] ) && null !== $building['system_gallons'] && (int) $building['system_gallons'] > 0 ) {
 			return (int) $building['system_gallons'];
 		}
@@ -216,6 +244,194 @@ class Layout {
 		return null !== $parts && $parts['building'] === (int) ( floor( (int) $building_number / 100 ) * 100 );
 	}
 
+	/* ============================================================== */
+	/*  Slots: the tanks of an own-water building                      */
+	/* ============================================================== */
+
+	/**
+	 * Whether a building's tanks are each their own water (the Temporary
+	 * building) rather than one shared system.
+	 *
+	 * @param array $building Building row, or a tank's 'building' part (own_water).
+	 * @return bool
+	 */
+	public static function is_own_water( array $building ) {
+		return ! empty( $building['own_water'] );
+	}
+
+	/**
+	 * Whether a tank is a slot of an own-water building.
+	 *
+	 * @param array $tank Tank (own_water, or its 'building' part).
+	 * @return bool
+	 */
+	public static function is_slot( array $tank ) {
+		if ( ! empty( $tank['own_water'] ) ) {
+			return true;
+		}
+		return isset( $tank['building'] ) && is_array( $tank['building'] ) && self::is_own_water( $tank['building'] );
+	}
+
+	/**
+	 * The number of a slot: building + slot (900, 3 → 903).
+	 *
+	 * @param int $building_number Building number.
+	 * @param int $slot            1–9.
+	 * @return int
+	 */
+	public static function slot_number( $building_number, $slot ) {
+		return (int) ( floor( (int) $building_number / 100 ) * 100 ) + (int) $slot;
+	}
+
+	/**
+	 * Split a slot number into its parts, or null when it is not one
+	 * (hundreds = building, tens 0, ones 1–9).
+	 *
+	 * @param mixed $number Tank number.
+	 * @return array{building: int, slot: int}|null
+	 */
+	public static function parse_slot( $number ) {
+		if ( ! is_scalar( $number ) || ! is_numeric( $number ) ) {
+			return null;
+		}
+		$number = (int) $number;
+		if ( $number < 101 || $number > 909 ) {
+			return null;
+		}
+		$slot = $number % 100;
+		if ( $slot < 1 || $slot > self::MAX_SLOTS ) {
+			return null;
+		}
+		return array(
+			'building' => (int) floor( $number / 100 ) * 100,
+			'slot'     => $slot,
+		);
+	}
+
+	/**
+	 * The slot of a tank row (0 when it is not a slot).
+	 *
+	 * @param array $tank Tank (number; own_water or its building).
+	 * @return int
+	 */
+	public static function slot_of( array $tank ) {
+		if ( ! self::is_slot( $tank ) ) {
+			return 0;
+		}
+		$parts = self::parse_slot( $tank['number'] ?? 0 );
+		return $parts ? $parts['slot'] : 0;
+	}
+
+	/**
+	 * 'TEMP 1' — what a slot is called on its label and on every screen.
+	 *
+	 * @param int $slot Slot.
+	 * @return string
+	 */
+	public static function slot_name( $slot ) {
+		return 'TEMP ' . (int) $slot;
+	}
+
+	/**
+	 * 'TEMP 1 · 901' for a slot ('Tank 121' for any other tank).
+	 *
+	 * @param array $tank Tank.
+	 * @return string
+	 */
+	public static function tank_label( array $tank ) {
+		$slot = self::slot_of( $tank );
+		if ( $slot > 0 ) {
+			return self::slot_name( $slot ) . ' · ' . (int) $tank['number'];
+		}
+		return 'Tank ' . (int) ( $tank['number'] ?? 0 );
+	}
+
+	/**
+	 * The number the Temporary building gets: 900, else the highest round
+	 * hundred no building uses (0 when all nine are taken).
+	 *
+	 * @param int[] $taken Building numbers in use.
+	 * @return int
+	 */
+	public static function temp_building_number( array $taken ) {
+		$taken = array_map( 'intval', $taken );
+		for ( $number = self::TEMP_BUILDING; $number >= 100; $number -= 100 ) {
+			if ( ! in_array( $number, $taken, true ) ) {
+				return $number;
+			}
+		}
+		return 0;
+	}
+
+	/**
+	 * The Temporary building with its slots, in the shape of a seed()
+	 * entry — inserted once, when the layout has no own-water building.
+	 *
+	 * @param int $number Building number (temp_building_number()).
+	 * @param int $slots  How many slots (1–9).
+	 * @param int $sort   Sort (after the seeded buildings).
+	 * @return array
+	 */
+	public static function temp_seed( $number = self::TEMP_BUILDING, $slots = self::TEMP_SLOTS, $sort = 90 ) {
+		$slots = max( 1, min( self::MAX_SLOTS, (int) $slots ) );
+		$tanks = array();
+		for ( $slot = 1; $slot <= $slots; $slot++ ) {
+			$tanks[] = self::slot_row( $number, $slot );
+		}
+
+		return array(
+			'area'           => self::TEMP_AREA,
+			'number'         => (int) $number,
+			'name'           => self::TEMP_LABEL,
+			'status'         => 'active',
+			'sort'           => (int) $sort,
+			'notes'          => '',
+			'schedule'       => '',
+			'system_gallons' => null,
+			'own_water'      => 1,
+			'tanks'          => $tanks,
+		);
+	}
+
+	/**
+	 * One slot as a tank row: level 0 (not on a rack), position = the
+	 * slot, no size and no gallons of its own — those belong to what is
+	 * set up in it.
+	 *
+	 * @param int $building_number Building number.
+	 * @param int $slot            Slot.
+	 * @return array
+	 */
+	public static function slot_row( $building_number, $slot ) {
+		return array(
+			'number'     => self::slot_number( $building_number, $slot ),
+			'level'      => 0,
+			'position'   => (int) $slot,
+			'size_label' => '',
+			'gallons'    => 0,
+			'status'     => 'active',
+			'sort'       => (int) $slot,
+		);
+	}
+
+	/**
+	 * The next slot an own-water building can get: the lowest free one,
+	 * or 0 when all nine exist.
+	 *
+	 * @param int   $building_number Building number.
+	 * @param int[] $numbers         Tank numbers already in the building.
+	 * @return int Slot (1–9) or 0.
+	 */
+	public static function next_slot( $building_number, array $numbers ) {
+		$numbers = array_map( 'intval', $numbers );
+		for ( $slot = 1; $slot <= self::MAX_SLOTS; $slot++ ) {
+			if ( ! in_array( self::slot_number( $building_number, $slot ), $numbers, true ) ) {
+				return $slot;
+			}
+		}
+		return 0;
+	}
+
 	/**
 	 * Validate a building before it is saved. Returns a list of problems
 	 * (empty = fine).
@@ -234,8 +450,9 @@ class Layout {
 		if ( in_array( $number, array_map( 'intval', $existing ), true ) ) {
 			$errors[] = 'building number ' . $number . ' is already used';
 		}
-		if ( ! isset( self::AREAS[ (string) ( $building['area'] ?? '' ) ] ) ) {
-			$errors[] = 'area must be clean or spa';
+		$area = (string) ( $building['area'] ?? '' );
+		if ( self::is_own_water( $building ) ? self::TEMP_AREA !== $area : ! isset( self::AREAS[ $area ] ) ) {
+			$errors[] = self::is_own_water( $building ) ? 'the temporary tanks keep their own area' : 'area must be clean or spa';
 		}
 		if ( ! in_array( (string) ( $building['status'] ?? 'active' ), self::BUILDING_STATUSES, true ) ) {
 			$errors[] = 'unknown building status';
@@ -307,6 +524,9 @@ class Layout {
 	 */
 	public static function area_label( $area ) {
 		$area = (string) $area;
+		if ( self::TEMP_AREA === $area ) {
+			return self::TEMP_LABEL;
+		}
 		return isset( self::AREAS[ $area ] ) ? self::AREAS[ $area ] : ucfirst( $area );
 	}
 
@@ -326,13 +546,17 @@ class Layout {
 
 	/**
 	 * The numbers of the other tanks in the same building (shared water),
-	 * ascending. Offline tanks are left out: they are dry.
+	 * ascending. Offline tanks are left out: they are dry. A slot of an
+	 * own-water building shares with nobody.
 	 *
 	 * @param array   $tank  The tank (building_id or building_number, number).
 	 * @param array[] $tanks Every tank.
 	 * @return int[]
 	 */
 	public static function shares_water( array $tank, array $tanks ) {
+		if ( self::is_slot( $tank ) ) {
+			return array(); // Its own water, whatever else stands in the building.
+		}
 		$out = array();
 		foreach ( $tanks as $other ) {
 			if ( (int) ( $other['number'] ?? 0 ) === (int) ( $tank['number'] ?? 0 ) ) {
@@ -401,17 +625,34 @@ class Layout {
 	 * @return string
 	 */
 	public static function tank_path( array $tank, array $building ) {
+		if ( self::is_own_water( $building ) ) {
+			// 'Temporary · TEMP 1 · Tank 901' — the area and the building are the same thing here.
+			$parts = self::parse_slot( $tank['number'] ?? 0 );
+			return self::building_label( $building ) . ( $parts ? ' · ' . self::slot_name( $parts['slot'] ) : '' ) . ' · Tank ' . (int) ( $tank['number'] ?? 0 );
+		}
 		return self::area_label( $building['area'] ?? '' ) . ' · ' . self::building_label( $building ) . ' · Tank ' . (int) ( $tank['number'] ?? 0 );
 	}
 
 	/**
-	 * The printed label: the number large, the rest small.
+	 * The printed label: the number large, the rest small. A slot of an
+	 * own-water building prints 'TEMP 1' large and its number small (and
+	 * carries 'slot', so the page can fit the longer word).
 	 *
 	 * @param array $tank     Tank.
 	 * @param array $building Building.
-	 * @return array{number: string, line: string}
+	 * @return array{number: string, line: string, slot?: int}
 	 */
 	public static function label( array $tank, array $building ) {
+		$parts = self::is_own_water( $building ) ? self::parse_slot( $tank['number'] ?? 0 ) : null;
+		if ( $parts ) {
+			// A slot's label is laminated once and reused: it names the slot,
+			// never what happens to be set up in it.
+			return array(
+				'number' => self::slot_name( $parts['slot'] ),
+				'line'   => (int) $tank['number'] . ' · ' . self::building_label( $building ) . ' · scan to see what is set up here',
+				'slot'   => $parts['slot'],
+			);
+		}
 		$bits = array( self::area_label( $building['area'] ?? '' ), self::building_label( $building ) );
 		$size = trim( (string) ( $tank['size_label'] ?? '' ) );
 		if ( '' !== $size ) {

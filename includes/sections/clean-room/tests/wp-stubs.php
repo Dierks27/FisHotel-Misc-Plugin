@@ -284,6 +284,8 @@ require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-clean-room
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-layout.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-replay.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-protocol.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-temp-tanks.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-todo.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-parser.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-qr.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-costing.php';

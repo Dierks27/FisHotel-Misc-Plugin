@@ -15,7 +15,11 @@
  *     unknown one) into a Clean Room tank (the day it comes off copper); a
  *     'clear' event sets or corrects that date by hand — the date in its
  *     note ("cleared:YYYY-MM-DD"), else the event's own date — and a clear
- *     with qty −1 unsets it;
+ *     with qty −1 unsets it. A temporary tank counts as what it was set up
+ *     as WHEN THE MOVE HAPPENED — a quarantine one as the Spa, a clean one
+ *     as the Clean Room: the move event carries that (from_area / to_area)
+ *     and it wins over the layout's own area, because a slot is quarantine
+ *     this month and clean the next;
  *   - the check-in date is the SITE date of the first arrival, corrected
  *     by a note event "checkin:YYYY-MM-DD";
  *   - the sale date is CHOSEN, never computed: the stay's own date (a note
@@ -491,9 +495,9 @@ class Replay {
 						// The first move INTO the Clean Room clears — but only out
 						// of the Spa (or an unknown tank): after a hand unset, a
 						// Clean → Clean move must not re-clear.
-						$from_area = ! empty( $event['from_tank_id'] ) ? (string) ( $areas[ (int) $event['from_tank_id'] ] ?? '' ) : '';
+						$from_area = self::event_area( $event, 'from', $areas );
 						$tank_id   = (int) $event['to_tank_id'];
-						if ( null === $cleared_date && '' !== $date && self::CLEAN_AREA === (string) ( $areas[ $tank_id ] ?? '' ) && self::CLEAN_AREA !== $from_area ) {
+						if ( null === $cleared_date && '' !== $date && self::CLEAN_AREA === self::event_area( $event, 'to', $areas ) && self::CLEAN_AREA !== $from_area ) {
 							$cleared_date = $date;
 						}
 					}
@@ -573,6 +577,24 @@ class Replay {
 				'last_event_at' => $last_at,
 			)
 		);
+	}
+
+	/**
+	 * The area one end of a move was in: what the event itself says
+	 * (from_area / to_area — a temporary tank, by the kind of what was set
+	 * up in it at the time), else the layout's area of that tank, else ''.
+	 *
+	 * @param array  $event Event (from_tank_id / to_tank_id, from_area / to_area).
+	 * @param string $side  from|to.
+	 * @param array  $areas tank id => area.
+	 * @return string
+	 */
+	public static function event_area( array $event, $side, array $areas ) {
+		if ( ! empty( $event[ $side . '_area' ] ) ) {
+			return (string) $event[ $side . '_area' ];
+		}
+		$tank_id = ! empty( $event[ $side . '_tank_id' ] ) ? (int) $event[ $side . '_tank_id' ] : 0;
+		return $tank_id > 0 ? (string) ( $areas[ $tank_id ] ?? '' ) : '';
 	}
 
 	/**
