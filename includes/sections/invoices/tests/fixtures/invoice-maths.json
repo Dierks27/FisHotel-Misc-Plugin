@@ -1,0 +1,227 @@
+{
+	"_note": "Invented fish, handles and prices. Read by lines-test.php AND invoices-admin.test.js, so the picker's live preview and the server cannot drift apart: the same typed lines must give the same sums, the same description lines and the same rows for the theme.",
+	"money": [
+		{ "typed": "82", "amount": 82 },
+		{ "typed": "$82", "amount": 82 },
+		{ "typed": "1,250.50", "amount": 1250.5 },
+		{ "typed": "$ 1,250", "amount": 1250 },
+		{ "typed": "-$82", "amount": -82 },
+		{ "typed": "$-82", "amount": -82 },
+		{ "typed": "−82", "amount": -82 },
+		{ "typed": " 7 ", "amount": 7 },
+		{ "typed": ".5", "amount": 0.5 },
+		{ "typed": "12.344", "amount": 12.34 },
+		{ "typed": "12.345", "amount": 12.35 },
+		{ "typed": "0.005", "amount": 0.01 },
+		{ "typed": "12.999", "amount": 13 },
+		{ "typed": "999999.99", "amount": 999999.99 },
+		{ "typed": "", "amount": null },
+		{ "typed": "  ", "amount": null },
+		{ "typed": "abc", "amount": null },
+		{ "typed": "1e3", "amount": null },
+		{ "typed": "5.", "amount": null },
+		{ "typed": "1000000", "amount": null },
+		{ "typed": "12 50", "amount": null }
+	],
+	"money_text": [
+		{ "amount": 82, "text": "82" },
+		{ "amount": 82.5, "text": "82.50" },
+		{ "amount": 1250, "text": "1,250" },
+		{ "amount": 1250.05, "text": "1,250.05" },
+		{ "amount": -82, "text": "82" },
+		{ "amount": 0, "text": "0" },
+		{ "amount": 19.99, "text": "19.99" }
+	],
+	"cases": [
+		{
+			"name": "two fish, the total is the sum",
+			"lines": [
+				{ "kind": "fish", "name": "Blue Test Tang", "qty": 2, "unit_price": "45" },
+				{ "kind": "fish", "name": "Red Test Goby (Small)", "qty": 1, "unit_price": "12.50" }
+			],
+			"flat_total": null,
+			"subtotal": 102.5,
+			"discount": 0,
+			"total": 102.5,
+			"texts": [ "Blue Test Tang x2 — $45", "Red Test Goby (Small) x1 — $12.50" ],
+			"rows": [
+				{ "name": "Blue Test Tang", "qty": 2, "price": 45, "kind": "fish" },
+				{ "name": "Red Test Goby (Small)", "qty": 1, "price": 12.5, "kind": "fish" }
+			]
+		},
+		{
+			"name": "a credit for a lost fish the customer already paid for",
+			"lines": [
+				{ "kind": "fish", "name": "Yellow Test Wrasse", "qty": 1, "unit_price": "89" },
+				{ "kind": "credit", "name": "lost Test Cleaner Wrasse", "unit_price": "82" }
+			],
+			"flat_total": null,
+			"subtotal": 7,
+			"discount": 0,
+			"total": 7,
+			"texts": [ "Yellow Test Wrasse x1 — $89", "Credit: lost Test Cleaner Wrasse — -$82" ],
+			"rows": [
+				{ "name": "Yellow Test Wrasse", "qty": 1, "price": 89, "kind": "fish" },
+				{ "name": "Credit: lost Test Cleaner Wrasse", "qty": 1, "price": -82, "kind": "credit" }
+			]
+		},
+		{
+			"name": "a credit typed with its own minus and a Credit: in front is still one credit",
+			"lines": [
+				{ "kind": "fish", "name": "Yellow Test Wrasse", "qty": 1, "unit_price": "89" },
+				{ "kind": "credit", "name": "Credit: DOA Test Chromis", "unit_price": "-$10.50" }
+			],
+			"flat_total": null,
+			"subtotal": 78.5,
+			"discount": 0,
+			"total": 78.5,
+			"texts": [ "Yellow Test Wrasse x1 — $89", "Credit: DOA Test Chromis — -$10.50" ],
+			"rows": [
+				{ "name": "Yellow Test Wrasse", "qty": 1, "price": 89, "kind": "fish" },
+				{ "name": "Credit: DOA Test Chromis", "qty": 1, "price": -10.5, "kind": "credit" }
+			]
+		},
+		{
+			"name": "charge a flat total below the sum: a Discount line makes the lines add up",
+			"lines": [
+				{ "kind": "fish", "name": "Blue Test Tang", "qty": 2, "unit_price": "45" },
+				{ "kind": "fish", "name": "Green Test Blenny", "qty": 1, "unit_price": "60" }
+			],
+			"flat_total": "120",
+			"subtotal": 150,
+			"discount": -30,
+			"total": 120,
+			"texts": [ "Blue Test Tang x2 — $45", "Green Test Blenny x1 — $60", "Discount — -$30" ],
+			"rows": [
+				{ "name": "Blue Test Tang", "qty": 2, "price": 45, "kind": "fish" },
+				{ "name": "Green Test Blenny", "qty": 1, "price": 60, "kind": "fish" },
+				{ "name": "Discount", "qty": 1, "price": -30, "kind": "credit" }
+			]
+		},
+		{
+			"name": "charge a flat total above the sum: an Adjustment line, sent to the theme as a one-off fish line",
+			"lines": [
+				{ "kind": "fish", "name": "Blue Test Tang", "qty": 2, "unit_price": "45" }
+			],
+			"flat_total": "100",
+			"subtotal": 90,
+			"discount": 10,
+			"total": 100,
+			"texts": [ "Blue Test Tang x2 — $45", "Adjustment x1 — $10" ],
+			"rows": [
+				{ "name": "Blue Test Tang", "qty": 2, "price": 45, "kind": "fish" },
+				{ "name": "Adjustment", "qty": 1, "price": 10, "kind": "fish" }
+			]
+		},
+		{
+			"name": "a flat total equal to the sum adds no line",
+			"lines": [
+				{ "kind": "fish", "name": "Blue Test Tang", "qty": 2, "unit_price": "45" }
+			],
+			"flat_total": "90.00",
+			"subtotal": 90,
+			"discount": 0,
+			"total": 90,
+			"texts": [ "Blue Test Tang x2 — $45" ],
+			"rows": [
+				{ "name": "Blue Test Tang", "qty": 2, "price": 45, "kind": "fish" }
+			]
+		},
+		{
+			"name": "a flat total with a credit: the discount covers what is left",
+			"lines": [
+				{ "kind": "fish", "name": "Orange Test Clown", "qty": 3, "unit_price": "19.99" },
+				{ "kind": "credit", "name": "lost Test Firefish", "unit_price": "12" }
+			],
+			"flat_total": "40",
+			"subtotal": 47.97,
+			"discount": -7.97,
+			"total": 40,
+			"texts": [ "Orange Test Clown x3 — $19.99", "Credit: lost Test Firefish — -$12", "Discount — -$7.97" ],
+			"rows": [
+				{ "name": "Orange Test Clown", "qty": 3, "price": 19.99, "kind": "fish" },
+				{ "name": "Credit: lost Test Firefish", "qty": 1, "price": -12, "kind": "credit" },
+				{ "name": "Discount", "qty": 1, "price": -7.97, "kind": "credit" }
+			]
+		},
+		{
+			"name": "a note, a fish without a price, an empty row and a typed discount row that is ignored",
+			"lines": [
+				{ "kind": "fish", "name": "Green Test Blenny", "qty": 3, "unit_price": "" },
+				{ "kind": "note", "name": "  Ships   Tuesday  " },
+				{ "kind": "fish", "name": "   ", "qty": 2, "unit_price": "5" },
+				{ "kind": "discount", "name": "Sneaky", "unit_price": "-500" },
+				{ "kind": "fish", "name": "Purple Test Dottyback", "qty": 1, "unit_price": "1,250" }
+			],
+			"flat_total": null,
+			"subtotal": 1250,
+			"discount": 0,
+			"total": 1250,
+			"texts": [ "Green Test Blenny x3", "Ships Tuesday", "Purple Test Dottyback x1 — $1,250" ],
+			"rows": [
+				{ "name": "Green Test Blenny", "qty": 3, "price": null, "kind": "fish" },
+				{ "name": "Ships Tuesday", "qty": 1, "price": null, "kind": "note" },
+				{ "name": "Purple Test Dottyback", "qty": 1, "price": 1250, "kind": "fish" }
+			]
+		},
+		{
+			"name": "take from shop stock: product_id only on a ticked line picked from a shop product",
+			"lines": [
+				{ "kind": "fish", "name": "Blue Test Tang (Medium)", "qty": 1, "unit_price": "45", "source": "product", "product_id": 501, "variation_id": 777, "take_stock": true },
+				{ "kind": "fish", "name": "Green Test Blenny", "qty": 2, "unit_price": "30", "source": "product", "product_id": 502, "take_stock": false },
+				{ "kind": "fish", "name": "Red Test Goby", "qty": 1, "unit_price": "12", "source": "tank", "stay_id": 9, "product_id": 503, "take_stock": true },
+				{ "kind": "fish", "name": "Orange Test Clown", "qty": 1, "unit_price": "20", "source": "product", "product_id": 504, "take_stock": "1" },
+				{ "kind": "fish", "name": "Pink Test Anthias", "qty": 1, "unit_price": "25", "source": "species", "species_id": 31, "product_id": 505, "take_stock": true },
+				{ "kind": "fish", "name": "Typed Test Fish", "qty": 1, "unit_price": "8", "take_stock": true }
+			],
+			"flat_total": null,
+			"subtotal": 170,
+			"discount": 0,
+			"total": 170,
+			"texts": [ "Blue Test Tang (Medium) x1 — $45", "Green Test Blenny x2 — $30", "Red Test Goby x1 — $12", "Orange Test Clown x1 — $20", "Pink Test Anthias x1 — $25", "Typed Test Fish x1 — $8" ],
+			"rows": [
+				{ "name": "Blue Test Tang (Medium)", "qty": 1, "price": 45, "kind": "fish", "product_id": 777 },
+				{ "name": "Green Test Blenny", "qty": 2, "price": 30, "kind": "fish" },
+				{ "name": "Red Test Goby", "qty": 1, "price": 12, "kind": "fish" },
+				{ "name": "Orange Test Clown", "qty": 1, "price": 20, "kind": "fish", "product_id": 504 },
+				{ "name": "Pink Test Anthias", "qty": 1, "price": 25, "kind": "fish" },
+				{ "name": "Typed Test Fish", "qty": 1, "price": 8, "kind": "fish" }
+			]
+		},
+		{
+			"name": "cents never drift: 0.1 + 0.2 and thirds",
+			"lines": [
+				{ "kind": "fish", "name": "Tiny Test Shrimp", "qty": 3, "unit_price": "0.10" },
+				{ "kind": "fish", "name": "Small Test Snail", "qty": 7, "unit_price": "0.20" },
+				{ "kind": "fish", "name": "Third Test Crab", "qty": 3, "unit_price": "33.33" }
+			],
+			"flat_total": "100",
+			"subtotal": 101.69,
+			"discount": -1.69,
+			"total": 100,
+			"texts": [ "Tiny Test Shrimp x3 — $0.10", "Small Test Snail x7 — $0.20", "Third Test Crab x3 — $33.33", "Discount — -$1.69" ],
+			"rows": [
+				{ "name": "Tiny Test Shrimp", "qty": 3, "price": 0.1, "kind": "fish" },
+				{ "name": "Small Test Snail", "qty": 7, "price": 0.2, "kind": "fish" },
+				{ "name": "Third Test Crab", "qty": 3, "price": 33.33, "kind": "fish" },
+				{ "name": "Discount", "qty": 1, "price": -1.69, "kind": "credit" }
+			]
+		},
+		{
+			"name": "a quantity is at least 1 and at most 999; an ampersand in a name is kept as typed",
+			"lines": [
+				{ "kind": "fish", "name": "Black & White Test Clown", "qty": 0, "unit_price": "30" },
+				{ "kind": "fish", "name": "Bulk Test Chromis", "qty": 5000, "unit_price": "1" }
+			],
+			"flat_total": null,
+			"subtotal": 1029,
+			"discount": 0,
+			"total": 1029,
+			"texts": [ "Black & White Test Clown x1 — $30", "Bulk Test Chromis x999 — $1" ],
+			"rows": [
+				{ "name": "Black & White Test Clown", "qty": 1, "price": 30, "kind": "fish" },
+				{ "name": "Bulk Test Chromis", "qty": 999, "price": 1, "kind": "fish" }
+			]
+		}
+	]
+}
