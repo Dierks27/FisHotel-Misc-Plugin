@@ -614,7 +614,7 @@ class Publisher {
 				'shipping_slug' => $writes['shipping_slug'],
 				'total'         => $writes['total'],
 				'published_by'  => (int) $user_id,
-				'published_at'  => Store::now(),
+				'published_at'  => $this->store->now(),
 			),
 			null,
 			(int) $claim['version'],

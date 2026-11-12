@@ -427,7 +427,9 @@ class Store {
 	}
 
 	/**
-	 * "Now" as the tables store it (UTC).
+	 * "Now" as the tables store it (UTC). Callers ask the store they were
+	 * given (`$store->now()`), so a test's in-memory store can keep its
+	 * own clock.
 	 *
 	 * @return string
 	 */

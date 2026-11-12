@@ -53,6 +53,13 @@ class Admin {
 	const VIEWS = array( 'list', 'new', 'edit', 'invoice', 'forum', 'settings' );
 
 	/**
+	 * Stand-ins for the store, the shop and the tanks (tests only).
+	 *
+	 * @var array|null
+	 */
+	private static $stand_in = null;
+
+	/**
 	 * Register hooks.
 	 */
 	public function init() {
@@ -97,10 +104,8 @@ class Admin {
 		$request = wp_unslash( $_GET );
 		// phpcs:enable WordPress.Security.NonceVerification.Recommended
 
-		$store     = new Store();
-		$shop      = new Shop();
-		$tanks     = new Tanks();
-		$settings  = Settings::get();
+		list( , $store, $shop, $tanks, $settings ) = self::services();
+
 		$tables_ok = Store::ready();
 		$shop_ok   = $shop->available();
 		$tab       = in_array( $view, array( 'edit', 'invoice' ), true ) ? 'list' : $view;
@@ -491,6 +496,64 @@ class Admin {
 	}
 
 	/* ============================================================== */
+	/*  Small things the views share                                   */
+	/* ============================================================== */
+
+	/**
+	 * A stored (UTC) time on the site's clock: "Nov 3, 2026 9:15 am".
+	 *
+	 * @param string|null $utc Y-m-d H:i:s in UTC.
+	 * @return string '' without a time.
+	 */
+	public static function site_time( $utc ) {
+		$ts = empty( $utc ) ? false : strtotime( $utc . ' UTC' );
+		if ( ! $ts ) {
+			return '';
+		}
+		return function_exists( 'wp_date' ) ? (string) wp_date( 'M j, Y g:i a', $ts ) : gmdate( 'M j, Y g:i a', $ts ) . ' UTC';
+	}
+
+	/**
+	 * A state as a small coloured badge (escaped HTML).
+	 *
+	 * @param string $state draft|published|paid|cancelled|trashed|hand.
+	 * @param string $label The text ('' = the state's own label).
+	 * @return string
+	 */
+	public static function badge( $state, $label = '' ) {
+		$state = in_array( (string) $state, array_merge( Rules::STATES, array( 'hand', 'locked' ) ), true ) ? (string) $state : 'draft';
+		$label = '' !== (string) $label ? (string) $label : Rules::state_label( $state );
+		return '<span class="fh-inv-badge fh-inv-badge--' . esc_attr( $state ) . '">' . esc_html( $label ) . '</span>';
+	}
+
+	/**
+	 * Where a line's fish came from, in a few words.
+	 *
+	 * @param array $line A stored line.
+	 * @return string
+	 */
+	public static function source_text( array $line ) {
+		if ( 'fish' !== $line['kind'] ) {
+			return '';
+		}
+		switch ( (string) $line['source'] ) {
+			case 'tank':
+				/* translators: %d: tank group (Clean Room stay) id */
+				return sprintf( __( 'tank group #%d', 'fishotel-misc-plugin' ), (int) $line['stay_id'] );
+			case 'product':
+				return ! empty( $line['variation_id'] )
+					/* translators: 1: product id, 2: variation id */
+					? sprintf( __( 'shop product #%1$d, variation #%2$d', 'fishotel-misc-plugin' ), (int) $line['product_id'], (int) $line['variation_id'] )
+					/* translators: %d: product id */
+					: sprintf( __( 'shop product #%d', 'fishotel-misc-plugin' ), (int) $line['product_id'] );
+			case 'species':
+				/* translators: %d: species-list id */
+				return sprintf( __( 'species list #%d', 'fishotel-misc-plugin' ), (int) $line['species_id'] );
+		}
+		return __( 'typed', 'fishotel-misc-plugin' );
+	}
+
+	/* ============================================================== */
 	/*  Assets                                                         */
 	/* ============================================================== */
 
@@ -506,6 +569,12 @@ class Admin {
 
 		$settings = Settings::get();
 
+		// The Settings screen picks its two images from the media library.
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only navigation.
+		if ( isset( $_GET['view'] ) && 'settings' === sanitize_key( wp_unslash( $_GET['view'] ) ) && function_exists( 'wp_enqueue_media' ) ) {
+			wp_enqueue_media();
+		}
+
 		wp_enqueue_style( 'fishotel-invoices-admin', Invoices::url() . 'css/invoices-admin.css', array(), FISHOTEL_MISC_VERSION );
 		wp_enqueue_script( 'fishotel-invoices-admin', Invoices::url() . 'js/invoices-admin.js', array( 'jquery' ), FISHOTEL_MISC_VERSION, true );
 		wp_localize_script(
@@ -517,6 +586,7 @@ class Admin {
 				'listUrl'       => self::page_url( 'list' ),
 				'viewUrl'       => self::page_url( 'invoice', array( 'id' => '__ID__' ) ),
 				'editUrl'       => self::page_url( 'edit', array( 'id' => '__ID__' ) ),
+				'forumUrl'      => self::page_url( 'forum', array( 'ids' => '__IDS__' ) ),
 				'titleFormat'   => $settings['title_format'],
 				'excerptFormat' => $settings['excerpt_format'],
 				'titleDate'     => Format::date_njy( Invoices::today() ),
@@ -624,14 +694,33 @@ class Admin {
 	}
 
 	/**
-	 * The publisher with the real store and shop.
+	 * A store, a shop and the tanks to use instead of the real ones — the
+	 * headless tests hand in their in-memory twins, so the handlers and
+	 * the screens run end to end without a database. Null puts the real
+	 * ones back.
 	 *
-	 * @return array{0: Publisher, 1: Store, 2: Shop, 3: Tanks, 4: array}
+	 * @param object|null $store Store twin.
+	 * @param object|null $shop  Shop (the real class on the WooCommerce stand-ins).
+	 * @param object|null $tanks Tanks twin.
+	 */
+	public static function stand_in( $store = null, $shop = null, $tanks = null ) {
+		self::$stand_in = $store && $shop && $tanks ? array( $store, $shop, $tanks ) : null;
+	}
+
+	/**
+	 * The publisher, the store, the shop, the tanks and the settings every
+	 * screen and handler works with.
+	 *
+	 * @return array{0: Publisher, 1: object, 2: object, 3: object, 4: array}
 	 */
 	private static function services() {
-		$store    = new Store();
-		$shop     = new Shop();
-		$tanks    = new Tanks();
+		if ( self::$stand_in ) {
+			list( $store, $shop, $tanks ) = self::$stand_in;
+		} else {
+			$store = new Store();
+			$shop  = new Shop();
+			$tanks = new Tanks();
+		}
 		$settings = Settings::get();
 		return array( new Publisher( $store, $shop, $tanks, $settings ), $store, $shop, $tanks, $settings );
 	}
@@ -662,9 +751,10 @@ class Admin {
 	 * @param object $store  Store.
 	 * @param object $shop   Shop.
 	 * @param string $mode   draft|update — how the picker is open.
+	 * @param int    $asked  The invoice the request was about (for a refusal that names none).
 	 */
-	private static function reply( array $result, $store, $shop, $mode ) {
-		$id   = isset( $result['id'] ) ? (int) $result['id'] : 0;
+	private static function reply( array $result, $store, $shop, $mode, $asked = 0 ) {
+		$id   = ! empty( $result['id'] ) ? (int) $result['id'] : (int) $asked;
 		$data = array(
 			'code'    => isset( $result['code'] ) ? (string) $result['code'] : '',
 			'message' => isset( $result['message'] ) ? (string) $result['message'] : '',
@@ -716,7 +806,7 @@ class Admin {
 	 */
 	public function ajax_handles() {
 		self::guard();
-		$store = new Store();
+		list( , $store ) = self::services();
 		wp_send_json_success( array( 'handles' => $store->handles( self::posted( 'term' ), 8 ) ) );
 	}
 
@@ -725,7 +815,7 @@ class Admin {
 	 */
 	public function ajax_customers() {
 		self::guard();
-		$shop = new Shop();
+		list( , , $shop ) = self::services();
 		wp_send_json_success( array( 'customers' => $shop->search_customers( self::posted( 'term' ), 8 ) ) );
 	}
 
@@ -735,7 +825,9 @@ class Admin {
 	public function ajax_save() {
 		self::guard();
 		list( $publisher, $store, $shop ) = self::services();
-		self::reply( $publisher->save_draft( self::payload(), get_current_user_id() ), $store, $shop, 'draft' );
+
+		$payload = self::payload();
+		self::reply( $publisher->save_draft( $payload, get_current_user_id() ), $store, $shop, 'draft', isset( $payload['id'] ) ? absint( $payload['id'] ) : 0 );
 	}
 
 	/**
@@ -747,12 +839,13 @@ class Admin {
 		list( $publisher, $store, $shop ) = self::services();
 
 		$payload = self::payload();
+		$id      = isset( $payload['id'] ) ? absint( $payload['id'] ) : 0;
 		$update  = isset( $payload['mode'] ) && 'update' === $payload['mode'];
 		$result  = $update
-			? $publisher->precheck_update( isset( $payload['id'] ) ? absint( $payload['id'] ) : 0, $payload, get_current_user_id(), Invoices::today() )
+			? $publisher->precheck_update( $id, $payload, get_current_user_id(), Invoices::today() )
 			: $publisher->precheck( $payload, get_current_user_id(), Invoices::today() );
 
-		self::reply( $result, $store, $shop, $update ? 'update' : 'draft' );
+		self::reply( $result, $store, $shop, $update ? 'update' : 'draft', $id );
 	}
 
 	/**
@@ -779,11 +872,8 @@ class Admin {
 		self::guard();
 		list( $publisher, $store, $shop ) = self::services();
 
-		$result = $publisher->publish( absint( self::posted( 'id' ) ), self::posted( 'token' ), self::confirmed(), get_current_user_id(), Invoices::today() );
-		if ( ! isset( $result['id'] ) ) {
-			$result['id'] = absint( self::posted( 'id' ) );
-		}
-		self::reply( $result, $store, $shop, 'draft' );
+		$id = absint( self::posted( 'id' ) );
+		self::reply( $publisher->publish( $id, self::posted( 'token' ), self::confirmed(), get_current_user_id(), Invoices::today() ), $store, $shop, 'draft', $id );
 	}
 
 	/**
@@ -795,11 +885,7 @@ class Admin {
 
 		$payload = self::payload();
 		$id      = isset( $payload['id'] ) ? absint( $payload['id'] ) : 0;
-		$result  = $publisher->update( $id, $payload, self::posted( 'token' ), self::confirmed(), get_current_user_id(), Invoices::today() );
-		if ( ! isset( $result['id'] ) ) {
-			$result['id'] = $id;
-		}
-		self::reply( $result, $store, $shop, 'update' );
+		self::reply( $publisher->update( $id, $payload, self::posted( 'token' ), self::confirmed(), get_current_user_id(), Invoices::today() ), $store, $shop, 'update', $id );
 	}
 
 	/**
@@ -808,11 +894,9 @@ class Admin {
 	public function ajax_trash() {
 		self::guard();
 		list( $publisher, $store, $shop ) = self::services();
-		$result                           = $publisher->trash( absint( self::posted( 'id' ) ), get_current_user_id() );
-		if ( ! isset( $result['id'] ) ) {
-			$result['id'] = absint( self::posted( 'id' ) );
-		}
-		self::reply( $result, $store, $shop, 'draft' );
+
+		$id = absint( self::posted( 'id' ) );
+		self::reply( $publisher->trash( $id, get_current_user_id() ), $store, $shop, 'draft', $id );
 	}
 
 	/**
@@ -821,11 +905,9 @@ class Admin {
 	public function ajax_discard() {
 		self::guard();
 		list( $publisher, $store, $shop ) = self::services();
-		$result                           = $publisher->discard( absint( self::posted( 'id' ) ), get_current_user_id() );
-		if ( ! isset( $result['id'] ) ) {
-			$result['id'] = absint( self::posted( 'id' ) );
-		}
-		self::reply( $result, $store, $shop, 'draft' );
+
+		$id = absint( self::posted( 'id' ) );
+		self::reply( $publisher->discard( $id, get_current_user_id() ), $store, $shop, 'draft', $id );
 	}
 
 	/**
@@ -902,8 +984,8 @@ class Admin {
 		$raw   = isset( $_POST['settings'] ) && is_array( $_POST['settings'] ) ? wp_unslash( $_POST['settings'] ) : array();
 		$clean = Settings::save( $raw );
 
-		$shop     = new Shop();
-		$messages = $clean['errors'];
+		list( , , $shop ) = self::services();
+		$messages         = $clean['errors'];
 		if ( $shop->available() && ! $shop->category( $clean['settings']['category_slug'] ) ) {
 			/* translators: %s: category slug */
 			$messages[] = sprintf( __( 'Saved — but the product category "%s" does not exist yet, so nothing can be published until it does.', 'fishotel-misc-plugin' ), $clean['settings']['category_slug'] );

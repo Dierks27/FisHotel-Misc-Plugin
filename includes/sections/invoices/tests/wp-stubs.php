@@ -151,6 +151,37 @@ function is_wp_error( $thing ) {
 	return false;
 }
 
+function wp_kses( $html, $allowed ) {
+	return strip_tags( (string) $html, '<' . implode( '><', array_keys( (array) $allowed ) ) . '>' );
+}
+
+function wp_date( $format, $timestamp = null ) {
+	$date = new \DateTime( '@' . (int) $timestamp );
+	$date->setTimezone( wp_timezone() );
+	return $date->format( $format );
+}
+
+/**
+ * Styles and scripts a screen enqueued: handle → array( src, data ).
+ */
+$GLOBALS['fh_enqueued'] = array();
+
+function wp_enqueue_style( $handle, $src = '', $deps = array(), $ver = false ) {
+	$GLOBALS['fh_enqueued'][ 'style:' . $handle ] = array( $src, null );
+}
+
+function wp_enqueue_script( $handle, $src = '', $deps = array(), $ver = false, $in_footer = false ) {
+	$GLOBALS['fh_enqueued'][ 'script:' . $handle ] = array( $src, null );
+}
+
+function wp_localize_script( $handle, $name, $data ) {
+	$GLOBALS['fh_enqueued'][ 'data:' . $name ] = array( $handle, $data );
+}
+
+function wp_enqueue_media() {
+	$GLOBALS['fh_enqueued']['media'] = array( '', null );
+}
+
 function is_admin() {
 	return ! empty( $GLOBALS['fh_is_admin'] );
 }

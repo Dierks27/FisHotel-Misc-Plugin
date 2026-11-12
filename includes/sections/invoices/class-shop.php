@@ -756,8 +756,10 @@ class Shop {
 		}
 
 		try {
+			// WC_Data_Store hands the call on to the real store (its own class has no such method,
+			// so method_exists() would say no); an unknown call simply answers null.
 			$store = \WC_Data_Store::load( 'product' );
-			$ids   = method_exists( $store, 'search_products' ) ? (array) $store->search_products( $term, '', false, true, 60 ) : array();
+			$ids   = is_callable( array( $store, 'search_products' ) ) ? (array) $store->search_products( $term, '', false, true, 60 ) : array();
 		} catch ( \Throwable $e ) {
 			return array();
 		}
@@ -1117,7 +1119,7 @@ class Shop {
 		try {
 			if ( class_exists( '\WC_Data_Store' ) ) {
 				$store = \WC_Data_Store::load( 'customer' );
-				if ( method_exists( $store, 'search_customers' ) ) {
+				if ( is_callable( array( $store, 'search_customers' ) ) ) {
 					$ids = (array) $store->search_customers( $term, (int) $limit );
 				}
 			}

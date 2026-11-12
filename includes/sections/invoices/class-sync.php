@@ -171,7 +171,7 @@ class Sync {
 			array(
 				'state'    => 'paid',
 				'order_id' => (int) $order_id,
-				'paid_at'  => Store::now(),
+				'paid_at'  => $store->now(),
 			),
 			null,
 			null,
