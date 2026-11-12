@@ -95,7 +95,7 @@ $fh_th = static function ( $key, $label, $text = false, $title = '' ) use ( $fh_
 					<tr>
 						<?php
 						$fh_th( 'name', __( 'Species', 'fishotel-misc-plugin' ), true );
-						$fh_th( 'group', __( 'Group', 'fishotel-misc-plugin' ), true );
+						$fh_th( 'group', __( 'Group', 'fishotel-misc-plugin' ), true, __( 'The group "By year" counts these lines under: the group of the species the line is linked to. A line typed without picking the fish from the list is under no group — so a fish can show twice in a year.', 'fishotel-misc-plugin' ) );
 						$fh_th( 'year', __( 'Year', 'fishotel-misc-plugin' ) );
 						$fh_th( 'orders', __( 'Orders', 'fishotel-misc-plugin' ) );
 						$fh_th( 'ordered', __( 'Ordered', 'fishotel-misc-plugin' ) );

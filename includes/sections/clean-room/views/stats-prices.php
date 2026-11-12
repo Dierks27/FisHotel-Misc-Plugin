@@ -6,7 +6,7 @@
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  *
- * @var array  $data         Admin_Stats::prices_data(): filters, rows, counts, suppliers, groups, exports.
+ * @var array  $data         Admin_Stats::prices_data(): filters, rows, counts, suppliers, groups, window, exports.
  * @var string $flash        One-time notice.
  * @var bool   $tables_ok    Whether the tables exist.
  * @var bool   $can_settings Whether the Settings tab is offered.
@@ -77,6 +77,20 @@ $fh_counts     = $data['counts'];
 			<span class="fh-cr-chip"><strong><?php echo esc_html( $fh_counts['no_price'] ); ?></strong> <?php esc_html_e( 'with no price on file', 'fishotel-misc-plugin' ); ?></span>
 		<?php endif; ?>
 	</div>
+
+	<?php if ( ! empty( $data['window'] ) ) : ?>
+		<div class="fishotel-misc-notice fishotel-misc-notice--warning">
+			<?php
+			echo esc_html(
+				sprintf(
+					/* translators: %d: supplier orders */
+					__( 'This list rests on the newest %d supplier orders: a fish last ordered before those is not listed, and its average may count fewer than three orders.', 'fishotel-misc-plugin' ),
+					(int) $data['window']
+				)
+			);
+			?>
+		</div>
+	<?php endif; ?>
 
 	<?php if ( ! $data['rows'] ) : ?>
 		<div class="fishotel-misc-empty"><span class="dashicons dashicons-yes-alt"></span><p>

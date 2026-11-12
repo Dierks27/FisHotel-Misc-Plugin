@@ -234,6 +234,9 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 			foreach ( array( 'woocommerce_order_status_changed', 'woocommerce_analytics_update_order_stats', 'woocommerce_analytics_delete_order_stats' ) as $hook ) {
 				add_action( $hook, array( Stats_Sales::class, 'flush' ), 10, 0 );
 			}
+			// The theme's Tools button "Add fish lines to past invoice orders" rewrites order lines without
+			// a status change, and ends its request: drop the cache just before it runs.
+			add_action( 'admin_post_fishotel_invoice_backfill', array( Stats_Sales::class, 'flush' ), 1, 0 );
 
 			$front = new Front_Desk();
 			$front->init();

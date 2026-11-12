@@ -12,7 +12,9 @@
  * units and money so the totals always add up; the Invoices section
  * absent and present; the sales beside the landed cost (a profit only
  * when the fish landed that year); the cache, its flush and the Refresh
- * button; the statuses list and its form; the export sheets.
+ * button; the statuses list and its form; the export sheets (the CSV
+ * as one table that carries the "not matched" too); a read that fails
+ * part-way — said, never cached, read again.
  *
  * Run from the plugin root:  php includes/sections/clean-room/tests/stats-sales-test.php
  */
@@ -469,6 +471,7 @@ add_action( 'woocommerce_order_status_changed', array( Stats_Sales::class, 'flus
 do_action( 'woocommerce_order_status_changed', 9001, 'pending', 'processing' );
 check( 'an order changing status drops the cache', false === get_transient( Stats_Sales::TRANSIENT ) );
 $source = (string) file_get_contents( Clean_Room::path() . 'class-clean-room.php' );
+check( 'the section also drops the cache just before the theme\'s "Add fish lines to past invoice orders" tool runs (it rewrites order lines without a status change)', false !== strpos( $source, "add_action( 'admin_post_fishotel_invoice_backfill', array( Stats_Sales::class, 'flush' ), 1, 0 );" ) );
 check( 'the section hooks that flush to an order\'s status change and to WooCommerce\'s own updates of its order tables', false !== strpos( $source, "'woocommerce_order_status_changed'" ) && false !== strpos( $source, "'woocommerce_analytics_update_order_stats'" ) && false !== strpos( $source, "'woocommerce_analytics_delete_order_stats'" ) && false !== strpos( $source, "array( Stats_Sales::class, 'flush' )" ) );
 list( $late ) = $store->sale( 'completed', '2026-10-01 10:00:00', array( array( 'product_id' => 12, 'name' => 'Test Wrasse, Blue', 'qty' => 1, 'revenue' => 44 ) ) );
 $after        = Admin_Stats::sales_data( $store, array( 'year' => 2026 ) );
@@ -600,13 +603,74 @@ foreach ( array_slice( $missed, 1 ) as $line ) {
 }
 check( '… and the items in words: the unlinked product, the product that is gone, the name, why each invoice was not split, the credits', 48.0 === $items['Unlinked Test Shrimp'] && 9.0 === $items['#99 (no longer a product)'] && 25.0 === $items['Mystery Test Eel'] && 90.0 === $items['its lines do not add up to what was paid'] && 77.0 === $items['no fish lines recorded on the order'] && 50.0 === $items['a fish on it has no price'] && -10.0 === $items['credits'] && 5.0 === $items['Gift wrap'] );
 $export = Admin_Stats::export( 'sales', 'xlsx', $store, array( 'year' => '2026' ), '2026-11-12' );
-check( 'the export of the view is these sheets; a CSV carries Sales by species; the link names the year', $sheets == $export['sheets'] && 'Sales by species' === $export['csv'] && false !== strpos( $data['exports']['csv'], 'what=sales' ) && false !== strpos( $data['exports']['xlsx'], 'year=2026' ) && false === strpos( $data['exports']['xlsx'], 'sort=' ) );
+check( 'the XLSX export of the view is these sheets; the link names the year', $sheets == $export['sheets'] && 'Sales by species' === $export['csv'] && false !== strpos( $data['exports']['csv'], 'what=sales' ) && false !== strpos( $data['exports']['xlsx'], 'year=2026' ) && false === strpos( $data['exports']['xlsx'], 'sort=' ) );
+$csv  = Admin_Stats::export( 'sales', 'csv', $store, array( 'year' => '2026' ), '2026-11-12' );
+$one  = $csv['sheets']['Real sales'];
+$sums = array();
+$rows = array();
+foreach ( array_slice( $one, 1 ) as $line ) {
+	$cells                     = array_combine( $one[0], $line );
+	$rows[ $cells['section'] ] = ( $rows[ $cells['section'] ] ?? 0 ) + 1;
+	$sums[ $cells['section'] ] = ( $sums[ $cells['section'] ] ?? 0.0 ) + (float) $cells['actual_revenue'];
+}
+check( 'a CSV is ONE table and it carries the "not matched" too: a section column, the species sheet\'s headings, the order lines', array( 'Real sales' ) === array_keys( $csv['sheets'] ) && 'Real sales' === $csv['csv'] && 'section' === $one[0][0] && array_slice( $one[0], 1, -1 ) === $sheets['Sales by species'][0] && 'order_lines' === $one[0][ count( $one[0] ) - 1 ] && array( 'Sales by species', 'Not matched', 'Not matched, biggest items', 'Sums' ) === array_keys( $rows ), json_encode( array_keys( $rows ) ) );
+check( '… the five fish (696.00) and one row per kind of "not matched" (294.00) add up to every paid line: 990.00 — the items and the sums sit in sections of their own, so nothing is counted twice', 5 === $rows['Sales by species'] && near( $sums['Sales by species'], 696 ) && 5 === $rows['Not matched'] && near( $sums['Not matched'], 294 ) && near( $sums['Sales by species'] + $sums['Not matched'], $data['match']['totals']['revenue'] ) && 4 === $rows['Sums'], json_encode( array( $rows, $sums ) ) );
+$kind = null;
+$item = null;
+foreach ( array_slice( $one, 1 ) as $line ) {
+	$cells = array_combine( $one[0], $line );
+	if ( 'Not matched' === $cells['section'] && 'Invoices kept as one line' === $cells['group'] ) {
+		$kind = $cells;
+	}
+	if ( 'Not matched, biggest items' === $cells['section'] && 'Unlinked Test Shrimp' === $cells['species'] ) {
+		$item = $cells;
+	}
+}
+check( '… a kind sits under "group" with "all" as its name, an item under "species"; units, money and lines under the same headings as a fish, the year filled, the rest empty', 'all' === $kind['species'] && 3 === $kind['units_sold'] && 217.0 === $kind['actual_revenue'] && 2026 === $kind['year'] && null === $kind['actual_profit'] && null === $kind['species_id'] && 'Shop products without a species' === $item['group'] && 4 === $item['units_sold'] && 48.0 === $item['actual_revenue'] && 1 === $item['order_lines'] && count( $one[0] ) === count( $one[1] ) && count( $one[0] ) === count( $one[ count( $one ) - 1 ] ) );
 $shown = Admin_Stats::sales_data( $store, array( 'year' => 2026, 'search' => 'gob', 'sort' => 'units', 'dir' => 'asc' ) );
 $as    = Admin_Stats::export( 'sales', 'csv', $store, array( 'year' => '2026', 's' => 'gob', 'sort' => 'units', 'dir' => 'asc' ), '2026-11-12' );
-check( 'a searched and sorted view exports as shown: the link carries the search and the sort, and the sheet has that one fish', false !== strpos( $shown['exports']['csv'], 's=gob' ) && false !== strpos( $shown['exports']['csv'], 'sort=units' ) && false !== strpos( $shown['exports']['csv'], 'dir=asc' ) && 2 === count( $as['sheets']['Sales by species'] ) && 'Red Test Goby' === $as['sheets']['Sales by species'][1][0] );
+check( 'a searched and sorted view exports as shown: the link carries the search and the sort, and the sheet has that one fish', false !== strpos( $shown['exports']['csv'], 's=gob' ) && false !== strpos( $shown['exports']['csv'], 'sort=units' ) && false !== strpos( $shown['exports']['csv'], 'dir=asc' ) && 'Sales by species' === $as['sheets']['Real sales'][1][0] && 'Red Test Goby' === $as['sheets']['Real sales'][1][1] && 'Not matched' === $as['sheets']['Real sales'][2][0] );
 check( 'the words on the screen: how a sale was matched, the kinds of "not matched"', 'product link' === Admin_Stats::via_label( 'product' ) && 'invoice line' === Admin_Stats::via_label( 'invoice' ) && 'exact name' === Admin_Stats::via_label( 'name' ) && 'exact product title' === Admin_Stats::via_label( 'title' ) && 'learned alias' === Admin_Stats::via_label( 'alias' ) && array( 'products', 'names', 'invoices', 'other', 'credits' ) === array_keys( Admin_Stats::unmatched_labels() ) && array_keys( $data['match']['unmatched'] ) === array_keys( Admin_Stats::unmatched_labels() ) );
 
-echo "16. Nothing was written anywhere but the cache and the statuses option\n";
+echo "16. A read that fails is not the end of the year\n";
+/** Whether the cache holds a ledger of that year. */
+function fh_year_cached( $year ) {
+	$cache = get_transient( Stats_Sales::TRANSIENT );
+	return is_array( $cache ) && isset( $cache['years'][ $year ] );
+}
+delete_transient( Stats_Sales::TRANSIENT );
+$whole              = Admin_Stats::build_ledger( $store, 2026, $statuses, 3 );
+$store->sales_reads = 0;
+$store->sales_break = 'rows:3';
+$broken             = Admin_Stats::build_ledger( $store, 2026, $statuses, 3 );
+check( 'the third page of order lines fails (the store answers null, not an empty page): the ledger holds the two pages read and SAYS it failed — it is not taken for the end of the year', true === $broken['failed'] && false === $whole['failed'] && $broken['rows'] < $whole['rows'] && $broken['rows'] > 0 && 3 === $store->sales_reads );
+$store->sales_reads = 0;
+$store->sales_break = 'rows:1';
+$first              = Admin_Stats::sales_data( $store, array( 'year' => 2026 ) );
+check( 'the view of a reading that failed (here on its first page): marked failed, nothing sold shown as the year\'s — and NOT kept: no ledger of the year in the cache', true === $first['ledger']['failed'] && false === $first['ledger']['cached'] && 0 === $first['ledger']['rows'] && ! fh_year_cached( 2026 ) );
+$store->sales_break = '';
+$second             = Admin_Stats::sales_data( $store, array( 'year' => 2026 ) );
+check( '… so the page reopened reads the year again, whole (990.00), and only that reading is cached', false === $second['ledger']['cached'] && false === $second['ledger']['failed'] && near( $second['match']['totals']['revenue'], 990 ) && true === Admin_Stats::sales_data( $store, array( 'year' => 2026 ) )['ledger']['cached'] );
+foreach ( array( 'details', 'refunds' ) as $what ) {
+	delete_transient( Stats_Sales::TRANSIENT );
+	$store->sales_break = $what;
+	$bad                = Admin_Stats::sales_data( $store, array( 'year' => 2026 ) );
+	$store->sales_break = '';
+	check( 'the same when the ' . ( 'details' === $what ? 'names of the lines' : 'refunds' ) . ' cannot be read: failed, not cached, still balanced on what it holds', true === $bad['ledger']['failed'] && ! fh_year_cached( 2026 ) && true === $bad['match']['totals']['balanced'] );
+}
+$bad_sheet  = Admin_Stats::sales_sheets( $bad )['Not matched'];
+$good_sheet = Admin_Stats::sales_sheets( $second )['Not matched'];
+$bad_table  = Admin_Stats::sales_sheets( $bad, true )['Real sales'];
+check( 'the sheets of a failed reading end with INCOMPLETE; those of a whole one do not', 0 === strpos( (string) $bad_sheet[ count( $bad_sheet ) - 1 ][0], 'INCOMPLETE' ) && 0 !== strpos( (string) $good_sheet[ count( $good_sheet ) - 1 ][0], 'INCOMPLETE' ) && 'Sums' === $bad_table[ count( $bad_table ) - 1 ][0] && 0 === strpos( (string) $bad_table[ count( $bad_table ) - 1 ][2], 'INCOMPLETE' ) );
+delete_transient( Stats_Sales::TRANSIENT );
+$store->sales_break = 'years';
+$no_years           = Admin_Stats::sales_years( $store, $statuses );
+$store->sales_break = '';
+check( 'the years with sales: a failed read offers none now and is not remembered as "no year"', array() === $no_years && array( 2026, 2025 ) === Admin_Stats::sales_years( $store, $statuses ) );
+delete_transient( Stats_Sales::TRANSIENT );
+Admin_Stats::sales_data( $store, array( 'year' => 2026 ) );
+
+echo "17. Nothing was written anywhere but the cache and the statuses option\n";
 check( 'no order, line, item, species price or product changed through all of this', 22 === count( $store->wc_orders ) && 25 === count( $store->wc_lines ) && 40.0 === $store->species( $wrasse )['my_price'] && array( 45.0 ) === $store->product_prices[12]['prices'] && 2 === count( $store->orders ) );
 check( 'the only options and transients this feature knows', 'fishotel_cleanroom_sales_statuses' === Stats_Sales::OPTION && 'fishotel_cleanroom_sales' === Stats_Sales::TRANSIENT && array() === array_diff( array_keys( $GLOBALS['fh_options'] ), array( Stats_Sales::OPTION ) ) && array() === array_diff( array_keys( $GLOBALS['fh_transients'] ), array( Stats_Sales::TRANSIENT ) ) );
 

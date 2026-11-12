@@ -237,8 +237,11 @@ system temp directory (`FH_TEST_TMP` overrides).
   (`Stats::by_species()`): the rows of a year and their estimates, the
   rows adding up to the year's weighted totals, which fish a line is (a
   list row by id or by its exact name, the unidentified ones as one
-  row), and the sort (numbers, text, empties last, stable) and the
-  search the report views use.
+  row), the groups as "By year" files the lines (a line only typed with
+  a species' name is in no group there, so a fish with linked and typed
+  lines is two rows and every group adds up to "By year"'s), and the
+  sort (numbers, text, empties last, stable) and the search the report
+  views use.
 - **stats-prices-test.php** — Prices to raise: which lines give a fish
   a row (received at a price; not a free, unknown or nameless one), the
   landed cost per fish of the latest order (by date, then id; two lines
@@ -281,7 +284,11 @@ system temp directory (`FH_TEST_TMP` overrides).
   bounded number of years, another version ignored), Refresh and the
   Sales statuses form (capability, nonce, an empty or unknown list
   refused, save, reset — each dropping the cache), no WooCommerce
-  tables, and the export sheets.
+  tables, the export sheets (the CSV as ONE table that carries the "not
+  matched" too, its first two sections adding up to every paid line),
+  and **a read that fails** (a page of lines, the names of the lines,
+  the refunds, the years: marked failed, never cached, read again on
+  the next view, the sheets ending with INCOMPLETE).
 - **stats-admin-test.php** — the Stats tab's further views on the fake
   store: which view a request asks for, the years of a comparison (the
   last two with orders by default, one picked → the default and a
@@ -298,7 +305,15 @@ system temp directory (`FH_TEST_TMP` overrides).
   name with markup escaped, Prices' read-only page without a form that
   posts, Real sales' statuses, profit, "no landed cost in …", the not
   matched lists, "How it adds up", the Refresh form and — without
-  WooCommerce's tables — the plain notice; the Settings card.
+  WooCommerce's tables — the plain notice; the Settings card. Then:
+  **past the newest 500 orders** (600 orders over twelve years on a store that hands out 500 a read,
+  as the real one does) Compare years offers and shows the oldest years
+  as "By year" does, Real sales has the whole year's landed cost, and
+  Prices to raise says on how many orders it rests; the Species rows of
+  a group add up to that group on "By year" when lines were typed, not
+  linked; the pointer to the theme's "Add fish lines to past invoice
+  orders" tool (only when that theme is there); and the notice of a
+  reading that failed.
 - **species-test.php** — a form row normalised (whitespace, per box,
   money, dates, reef-safe, product); the candidate merge (a species row
   folding into a same-named or linked product, a duplicate dropped, a
@@ -519,7 +534,10 @@ system temp directory (`FH_TEST_TMP` overrides).
   (a refund row carries its parent's status and date and the line it
   refunds; pages by line id, then order id) but hands over the rows of
   EVERY status, so the tests prove that `Stats_Sales::add_rows()` is what
-  keeps the unpaid ones out — and the products' current prices.
+  keeps the unpaid ones out — and the products' current prices. Like the
+  real store, `orders()` hands out the newest 500 at most
+  (`ORDERS_LIMIT`), and `$sales_break` makes one sales read fail the way
+  a database error does (it answers null).
 - **xlsx-builder.php**, **fixture-builder.php** — not tests (exit 0 when
   run directly): the tiny .xlsx writer and the synthetic FisHotel-style
   workbook the reader, mapper and import tests use.

@@ -8,8 +8,9 @@
  * side by side (the change between consecutive years — absolute, percent
  * where one is defined, rates in points — and no figure, never a zero,
  * for a supplier, origin or group with no order in a year), one row per
- * fish and year (adding up to the year's totals), and the sort and the
- * search the report views use.
+ * fish and year (adding up to the year's totals — and, grouped as "By
+ * year" groups the lines, to each group's), and the sort and the search
+ * the report views use.
  *
  * Run from the plugin root:  php includes/sections/clean-room/tests/stats-test.php
  */
@@ -289,7 +290,35 @@ check( 'the fish nobody has identified yet are one row — "(not identified yet)
 check( 'a typed fish that is in no list keeps its name as typed', 'Typed Test Fish' === $k['n:typed test fish']['name'] && null === $k['n:typed test fish']['species_id'] );
 check( 'and the rows still add up to the order (9 received, landed 6 × 5 + 9 + 3 + 2 = 44)', 9 === Stats::species_totals( $m )['received'] && near( Stats::species_totals( $m )['total'], 44 ) && near( Stats::build( $mixed )['totals']['total'], 44 ) );
 
-echo "15. Sorting and searching a report\n";
+echo "15. Per species: the groups as \"By year\" files the lines\n";
+$g_orders = array(
+	array(
+		'id' => 1, 'ref' => '2026-1', 'received_date' => '2026-03-01', 'cost_mode' => 'box',
+		'lines' => array(
+			array( 'species_id' => 7, 'species' => 'Blue Test Wrasse', 'group_name' => 'Listed Wrasses', 'qty_ordered' => 6, 'qty_received' => 6, 'qty_survived' => 5, 'unit_price' => 5, 'worth' => 40 ),
+			array( 'species' => 'blue test wrasse', 'qty_ordered' => 2, 'qty_received' => 2, 'qty_survived' => 2, 'unit_price' => 5, 'worth' => 40 ), // Typed with the row's name, not linked to it.
+			array( 'species' => 'Spotted Test Eel', 'qty_ordered' => 3, 'qty_received' => 3, 'qty_survived' => 3, 'unit_price' => 4, 'worth' => 30 ), // The same: only typed.
+		),
+	),
+);
+$by_list = Stats::by_species( $g_orders, $list );
+check( 'as the Real sales view needs it — one row per fish, under the list\'s group: the wrasse 8 received in Listed Wrasses, the eel 3 in Eels', array( array( 'blue test WRASSE', 'Listed Wrasses', 8 ), array( 'Spotted Test Eel', 'Eels', 3 ) ) === array_map( static function ( $r ) { return array( $r['name'], $r['group'], $r['received'] ); }, $by_list ) );
+$by_line = Stats::by_species( $g_orders, $list, \FisHotel\Misc\Sections\Clean_Room\Costing::DEFAULT_PER_BOX, true );
+check( 'as the Species view shows it — every line under the group "By year" files it under: the linked wrasse line in Listed Wrasses (6), the typed ones in no group (the eel 3, the wrasse 2 — the same fish, a second row)', array( array( 'blue test WRASSE', 'Listed Wrasses', 6, 7 ), array( 'Spotted Test Eel', '', 3, 8 ), array( 'blue test WRASSE', '', 2, 7 ) ) === array_map( static function ( $r ) { return array( $r['name'], $r['group'], $r['received'], $r['species_id'] ); }, $by_line ), json_encode( $by_line ) );
+$groups = array();
+foreach ( $by_line as $r ) {
+	$name                           = '' !== $r['group'] ? $r['group'] : Stats::NO_GROUP;
+	$groups[ $name ]['received']    = ( $groups[ $name ]['received'] ?? 0 ) + $r['received'];
+	$groups[ $name ]['total']       = ( $groups[ $name ]['total'] ?? 0.0 ) + $r['total'];
+	$groups[ $name ]['revenue']     = ( $groups[ $name ]['revenue'] ?? 0.0 ) + $r['revenue'];
+}
+$agree = true;
+foreach ( Stats::build( $g_orders )['by_group'] as $g ) {
+	$agree = $agree && isset( $groups[ $g['name'] ] ) && $groups[ $g['name'] ]['received'] === $g['received'] && near( $groups[ $g['name'] ]['total'], $g['total'] ) && near( $groups[ $g['name'] ]['revenue'], $g['revenue'] );
+}
+check( '… so the rows of a group add up to that group\'s row on "By year" (Listed Wrasses 6, no group 5), and to the same totals either way', $agree && 2 === count( $groups ) && 6 === $groups['Listed Wrasses']['received'] && 5 === $groups[ Stats::NO_GROUP ]['received'] && Stats::species_totals( $by_line )['received'] === Stats::species_totals( $by_list )['received'] && near( Stats::species_totals( $by_line )['total'], Stats::species_totals( $by_list )['total'] ) );
+
+echo "16. Sorting and searching a report\n";
 check( 'sort_rows: most landed first; least first; text A to Z without regard to case', array( 'Blue Test Wrasse', 'Red Test Goby', 'Yellow Test Goby', 'Green Test Blenny' ) === array_column( Stats::sort_rows( $sp, 'total', 'desc' ), 'name' ) && array( 'Green Test Blenny', 'Yellow Test Goby', 'Red Test Goby', 'Blue Test Wrasse' ) === array_column( Stats::sort_rows( $sp, 'total', 'asc' ), 'name' ) && array( 'Blue Test Wrasse', 'Green Test Blenny', 'Red Test Goby', 'Yellow Test Goby' ) === array_column( Stats::sort_rows( $sp, 'name', 'asc' ), 'name' ) );
 check( 'a row without a value in the sorted column goes last whichever way the sort runs (the blenny has no margin)', 'Green Test Blenny' === Stats::sort_rows( $sp, 'margin', 'desc' )[3]['name'] && 'Green Test Blenny' === Stats::sort_rows( $sp, 'margin', 'asc' )[3]['name'] && 'Red Test Goby' === Stats::sort_rows( $sp, 'margin', 'desc' )[0]['name'] && 'Yellow Test Goby' === Stats::sort_rows( $sp, 'margin', 'asc' )[0]['name'] );
 check( 'the sort is stable: equal rows keep their order; an unknown column changes nothing', array_column( $sp, 'name' ) === array_column( Stats::sort_rows( $sp, 'no_such_column', 'desc' ), 'name' ) && array( 'Blue Test Wrasse', 'Red Test Goby', 'Green Test Blenny', 'Yellow Test Goby' ) === array_column( Stats::sort_rows( $sp, 'year', 'desc' ), 'name' ) );

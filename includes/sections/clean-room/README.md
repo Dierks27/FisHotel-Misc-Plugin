@@ -701,6 +701,10 @@ there, never a zero**, and no change is shown into or out of that year
 (a change never jumps over a missing year either). The totals of a year
 without orders are real zeros. Suppliers and origins are one name
 whatever the case; a species group is its exact name, as on *By year*.
+The years offered are every year that has orders
+(`Store::order_years()`), and each year picked is read by itself,
+exactly as *By year* reads it — one read of every order stops at the
+newest 500 (`Store::ORDERS_LIMIT`) and would lose the old years.
 
 ### Species
 
@@ -713,9 +717,15 @@ script: most first, then the other way round). A fish is its row of the
 species list — a line typed with the exact lower-cased name of a row
 counts for that row — else its name as typed; the fish nobody has
 identified yet are one row, so **the rows of a year add up to that
-year's totals**. A fish with no survivor count on any line has no
-estimate: it shows "survivors not known yet", sorts last by those
-columns, and exports empty cells.
+year's totals**. **The rows of a group add up to that group on *By
+year*** too: a row's group is the one *By year* files its lines under —
+the group of the species row a line is linked to, and none for a line
+that was only typed with a species' name (it is not linked, so it is
+"(no group)" there). A fish that has both kinds of line in one year is
+therefore two rows that year, one per group (pick the fish from the list
+on the order line and they are one). A fish with no survivor count on
+any line has no estimate: it shows "survivors not known yet", sorts last
+by those columns, and exports empty cells.
 
 ### Prices to raise
 
@@ -744,7 +754,12 @@ first; *Show all fish* adds the rest (by gap, then those with no price
 on file). Filters: species group, and supplier — which costs every fish
 from that supplier's orders alone. The current prices are read in one
 query straight from the product tables (`Store::product_prices()`: the
-active `_price` of the product and of its enabled variations).
+active `_price` of the product and of its enabled variations). A fish's
+group here is the species list's (the row its price comes from). The
+list is built from one read of the orders — the newest 500: it is the
+latest order of a fish and its last three that matter — and once there
+are more orders than that the page says so: a fish last ordered before
+those is not listed.
 
 ### Real sales
 
@@ -826,11 +841,28 @@ kept in ONE transient (`fishotel_cleanroom_sales`: the last eight years
 read, twelve hours) and dropped when an order changes status and when
 WooCommerce updates its order tables — which it does a moment after the
 order is saved, usually in another request — and by the **Refresh**
-button. Without WooCommerce's tables the view says the sales are not
+button. **A read that fails is never taken for the end of the year**:
+the store's sales readers answer `null` (not an empty list) when a
+query fails, the reading is then marked failed — the page says every
+figure is INCOMPLETE, the export's last row says so too — and it is
+**not cached**, so reopening the page reads the year again. The landed
+cost beside the sales is the whole year's even past the newest 500
+supplier orders (the year shown is then read by itself); the "last
+landed" note about an earlier year rests on those newest orders.
+Without WooCommerce's tables the view says the sales are not
 available and still shows the landed costs and the estimates. The
 numbers come from WooCommerce's Analytics tables: orders from before
 Analytics existed show only after *WooCommerce → Analytics → Settings →
 Import historical data*.
+
+**Old invoice orders.** An invoice order from before the theme itemised
+invoices is one line with no fish recorded: it shows under *Invoices
+kept as one line* as "no fish lines recorded on the order". When the
+theme that has the tool is running, the help there names it — *FisHotel
+Theme → Tools → "Add fish lines to past invoice orders"* — and says to
+press Refresh afterwards; the cache is also dropped just before that
+tool runs (`admin_post_fishotel_invoice_backfill`, priority 1), since it
+rewrites order lines without any status change.
 
 **For the Invoices section (and anyone else).** Before
 `fishotel_invoices_for_order( $order_id )` is called, the filter
@@ -871,7 +903,12 @@ Species view as shown: its year, search and sort), **prices** (the
 Prices view as shown: its filters and "show all") and **sales** (Sales
 by species, and Not matched — the kinds with their biggest items, then
 matched + not matched = every paid line, and the refunds that named no
-line; the CSV is Sales by species). An empty cell is "no figure": never
+line; the CSV is ONE table that carries both, behind a leading `section`
+column and under the species sheet's headings plus `order_lines`: *Sales
+by species*, *Not matched* — one row per kind, the kind under `group` —,
+*Not matched, biggest items* — already counted in their kind — and
+*Sums*; without a search the revenue of the first two sections adds up
+to every paid line). An empty cell is "no figure": never
 a 0 for a fish without a price, a profit without a landed cost or an
 estimate without a survivor count. Columns added since are appended last,
 so a sheet built on the older positions keeps reading them: `size` and

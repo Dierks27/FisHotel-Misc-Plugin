@@ -11,6 +11,10 @@
  * an estimate and which actual, "no landed cost" instead of a profit,
  * the "not matched" lists, the Refresh form and the Settings card with
  * their nonces, a name with markup escaped, and no PHP notice anywhere.
+ * Then what holds past the newest 500 orders one read of the store
+ * returns (Compare years, Real sales' landed cost, the note on Prices),
+ * the Species rows of a group adding up to "By year"'s, the pointer to
+ * the theme's tool for old invoice orders, and a reading that failed.
  *
  * Run from the plugin root:  php includes/sections/clean-room/tests/stats-admin-test.php
  */
@@ -369,5 +373,84 @@ $html = (string) ob_get_clean();
 check( 'once saved: it says so, offers "Back to the suggested list", and keeps a status the store no longer has (marked) so it can be unticked', false !== strpos( $html, 'saved by hand' ) && false !== strpos( $html, 'value="reset"' ) && false !== strpos( $html, 'value="old-custom"  checked="checked"' ) && false !== strpos( $html, 'not a status of this store now' ) && 2 === substr_count( $html, 'checked="checked"' ) );
 delete_option( Stats_Sales::OPTION );
 check( 'the Settings tab includes the card, between the import and the aliases', false !== strpos( (string) file_get_contents( Clean_Room::path() . 'views/settings.php' ), "views/settings-sales.php" ) );
+
+echo "13. Past the newest 500 orders (what one read of the store returns)\n";
+$big = new Fake_Store();
+$fid = $big->save_species( Species::normalize( array( 'name' => 'Plain Test Fish', 'group_name' => 'Plain', 'my_price' => 30 ) ) );
+for ( $y = 2015; $y <= 2026; $y++ ) {
+	for ( $i = 1; $i <= 50; $i++ ) {
+		$oid = $big->save_order( Orders::normalize_order( array( 'ref' => $y . '-' . $i, 'supplier' => 'Test Supplier One', 'origin' => 'Testland', 'received_date' => sprintf( '%d-%02d-%02d', $y, 1 + $i % 12, 1 + $i % 27 ), 'status' => 'closed' ) ) );
+		$big->save_order_lines( $oid, Orders::normalize_lines( array( array( 'species_id' => $fid, 'species' => 'Plain Test Fish', 'qty_ordered' => 10, 'qty_received' => 10, 'qty_survived' => 9, 'unit_price' => 5, 'worth' => 30 ) ) ) );
+	}
+}
+check( 'the fake store reads as the real one: 600 orders on file, 500 handed out by one read, every year of them on its own', 500 === Fake_Store::ORDERS_LIMIT && 500 === count( $big->orders() ) && 50 === count( $big->orders( array( 'year' => 2015 ) ) ) && 12 === count( $big->order_years() ) && true === Admin_Stats::orders_window_full( $big, $big->orders() ) && false === Admin_Stats::orders_window_full( $store, $store->orders() ) );
+$old = Admin_Stats::compare_data( $big, array( 2015, 2016 ) );
+check( 'Compare years offers every year with orders — the two oldest too — and shows them as "By year" does: 50 orders, 500 received each', range( 2026, 2015 ) === $old['years'] && array( 2015, 2016 ) === $old['picked'] && false === $old['defaulted'] && 50 === $old['compare']['totals']['values']['orders'][2015] && 500 === $old['compare']['totals']['values']['received'][2015] && Admin_Workbook::stats_for_year( $big, 2016 )['totals']['received'] === $old['compare']['totals']['values']['received'][2016] && near( $old['compare']['totals']['values']['total'][2016], Admin_Workbook::stats_for_year( $big, 2016 )['totals']['total'] ) );
+delete_transient( Stats_Sales::TRANSIENT );
+$sold = Admin_Stats::sales_data( $big, array( 'year' => 2015 ) );
+check( 'Real sales of an old year: the year is offered, and its landed cost is the whole year\'s (500 received at 5.00), not the part inside the newest 500 orders', in_array( 2015, $sold['years'], true ) && 1 === count( $sold['rows'] ) && 500 === $sold['rows'][0]['received'] && near( $sold['rows'][0]['landed_per_fish'], 5 ) );
+$sold = Admin_Stats::sales_data( $big, array( 'year' => 2017 ) );
+check( '… and a year the newest 500 cut in half (2017: 50 orders, 500 received) is whole too', 500 === $sold['rows'][0]['received'] && 1 === count( $sold['rows'] ) );
+delete_transient( Stats_Sales::TRANSIENT );
+$p = Admin_Stats::prices_data( $big, array( 'all' => true ) );
+check( 'Prices to raise keeps to the newest orders — a fish\'s latest order and its last three — and its data says on how many it rests (0 while every order fits)', 500 === $p['window'] && 0 === Admin_Stats::prices_data( $store, array() )['window'] && 1 === count( $p['rows'] ) && '2026-23' === $p['rows'][0]['latest_ref'] && '2026-12-24' === $p['rows'][0]['latest_date'], json_encode( array( $p['window'], $p['rows'][0]['latest_ref'] ?? null ) ) );
+$html = fh_render( $big, array( 'view' => 'prices', 'all' => '1' ) );
+check( '… and the screen says so; a store under the limit shows no such note', false === strpos( $html, 'RENDER FAILED' ) && false !== strpos( $html, 'rests on the newest 500 supplier orders' ) && false === strpos( fh_render( $store, array( 'view' => 'prices', 'all' => '1' ) ), 'rests on the newest' ) );
+
+echo "14. Species: a group adds up to the same group on \"By year\"\n";
+$typed = new Fake_Store();
+$tw    = $typed->save_species( Species::normalize( array( 'name' => 'Blue Test Wrasse', 'group_name' => 'Wrasses', 'my_price' => 30 ) ) );
+$typed->save_species( Species::normalize( array( 'name' => 'Green Test Tang', 'group_name' => 'Tangs', 'my_price' => 80 ) ) );
+$oid = $typed->save_order( Orders::normalize_order( array( 'ref' => '2026-1', 'supplier' => 'Test Supplier One', 'origin' => 'Testland', 'received_date' => '2026-02-01', 'status' => 'closed' ) ) );
+$typed->save_order_lines( $oid, Orders::normalize_lines( array(
+	array( 'species_id' => $tw, 'species' => 'Blue Test Wrasse', 'qty_ordered' => 6, 'qty_received' => 6, 'qty_survived' => 5, 'unit_price' => 6, 'worth' => 40 ),
+	array( 'species' => 'Blue Test Wrasse', 'qty_ordered' => 2, 'qty_received' => 2, 'qty_survived' => 2, 'unit_price' => 7, 'worth' => 40 ), // Typed with the exact name, not picked from the list.
+	array( 'species' => 'Green Test Tang', 'qty_ordered' => 3, 'qty_received' => 3, 'qty_doa' => 1, 'qty_survived' => 2, 'unit_price' => 17, 'worth' => 80 ), // The same.
+) ) );
+$view   = Admin_Stats::species_data( $typed, array( 'year' => 2026 ) );
+$sums   = array();
+foreach ( $view['rows'] as $r ) {
+	$name                      = '' !== $r['group'] ? $r['group'] : Stats::NO_GROUP;
+	$sums[ $name ]['received'] = ( $sums[ $name ]['received'] ?? 0 ) + $r['received'];
+	$sums[ $name ]['total']    = ( $sums[ $name ]['total'] ?? 0.0 ) + $r['total'];
+}
+$same   = true;
+$groups = Admin_Workbook::stats_for_year( $typed, 2026 )['by_group'];
+foreach ( $groups as $g ) {
+	$same = $same && isset( $sums[ $g['name'] ] ) && $sums[ $g['name'] ]['received'] === $g['received'] && near( $sums[ $g['name'] ]['total'], $g['total'] );
+}
+check( 'lines typed with a species\' exact name but not linked to it: "By year" files them under "(no group)" (5 fish) and the linked wrasse line under Wrasses (6) — and the Species rows say the same, group by group', $same && count( $sums ) === count( $groups ) && 6 === $sums['Wrasses']['received'] && 5 === $sums[ Stats::NO_GROUP ]['received'] && ! isset( $sums['Tangs'] ), json_encode( $sums ) );
+check( '… the wrasse is then two rows of the year (6 linked, 2 typed), both under its list name and id; the year\'s totals are unchanged', array( array( 'Blue Test Wrasse', 'Wrasses', 6 ), array( 'Green Test Tang', '', 3 ), array( 'Blue Test Wrasse', '', 2 ) ) === array_map( static function ( $r ) { return array( $r['name'], $r['group'], $r['received'] ); }, $view['rows'] ) && $tw === $view['rows'][2]['species_id'] && 11 === $view['year_totals']['received'] && Admin_Workbook::stats_for_year( $typed, 2026 )['totals']['received'] === $view['year_totals']['received'] );
+delete_transient( Stats_Sales::TRANSIENT );
+$typed_sales = Admin_Stats::sales_data( $typed, array( 'year' => 2026 ) );
+check( 'Real sales still has ONE row per fish, with the landed cost of all its lines (the wrasse: 8 received) under the list\'s group', array( 'Blue Test Wrasse', 'Green Test Tang' ) === array_column( $typed_sales['rows'], 'name' ) && 8 === $typed_sales['rows'][0]['received'] && 'Wrasses' === $typed_sales['rows'][0]['group'] && 'Tangs' === $typed_sales['rows'][1]['group'] );
+$html = fh_render( $typed, array( 'view' => 'species', 'year' => '2026' ) );
+check( 'the screen renders the three rows: the wrasse twice, the tang once', false === strpos( $html, 'RENDER FAILED' ) && 2 === substr_count( $html, 'Blue Test Wrasse' ) && 1 === substr_count( $html, 'Green Test Tang' ), substr_count( $html, 'Blue Test Wrasse' ) . ' / ' . substr_count( $html, 'Green Test Tang' ) );
+
+echo "15. Old invoice orders: where their fish lines can be recorded\n";
+delete_transient( Stats_Sales::TRANSIENT );
+check( 'without the theme that has the tool, nothing points at it', '' === Admin_Stats::backfill_hint() && false === strpos( Admin_Stats::unmatched_labels()['invoices'][1], 'Tools' ) );
+if ( ! class_exists( 'FisHotel_Invoice_Lines' ) ) {
+	// The theme's class, as far as this section looks at it.
+	eval( 'class FisHotel_Invoice_Lines { public static function handle_backfill() {} }' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- a stand-in declared late, in a test.
+}
+check( 'with it, the help under "Invoices kept as one line" names the Tools button and says to press Refresh afterwards', false !== strpos( Admin_Stats::unmatched_labels()['invoices'][1], 'FisHotel Theme → Tools → "Add fish lines to past invoice orders"' ) && false !== strpos( Admin_Stats::backfill_hint(), 'then press Refresh here' ) );
+$store->products[50] = 'tester Invoice (1/2/26)'; // An invoice product from before invoices were itemised: one line, no fish recorded.
+$store->sale( 'completed', '2026-05-05 10:00:00', array( array( 'product_id' => 50, 'name' => 'tester Invoice (1/2/26)', 'qty' => 1, 'revenue' => 77 ) ) );
+$html = fh_render( $store, array( 'view' => 'sales', 'year' => '2026' ) );
+check( '… on the screen, beside "no fish lines recorded on the order"', false === strpos( $html, 'RENDER FAILED' ) && false !== strpos( $html, 'no fish lines recorded on the order' ) && false !== strpos( $html, 'Add fish lines to past invoice orders' ) && false !== strpos( $html, 'then press Refresh here' ), substr( $html, 0, 200 ) );
+
+echo "16. Real sales: a reading that failed says so\n";
+delete_transient( Stats_Sales::TRANSIENT );
+$store->sales_reads = 0;
+$store->sales_break = 'rows:1';
+$html               = fh_render( $store, array( 'view' => 'sales', 'year' => '2026' ) );
+$store->sales_break = '';
+$cache              = get_transient( Stats_Sales::TRANSIENT );
+$cache              = is_array( $cache ) ? $cache : array();
+check( 'the page says the tables could not be read and that every figure is INCOMPLETE — and keeps nothing of it', false === strpos( $html, 'RENDER FAILED' ) && false !== strpos( $html, 'could not be read all the way through' ) && false !== strpos( $html, 'INCOMPLETE' ) && ! isset( $cache['years'][2026] ) );
+$html  = fh_render( $store, array( 'view' => 'sales', 'year' => '2026' ) );
+$cache = get_transient( Stats_Sales::TRANSIENT );
+check( 'reopened, it reads the year again and the notice is gone', false === strpos( $html, 'could not be read all the way through' ) && is_array( $cache ) && isset( $cache['years'][2026] ) );
 
 fh_finish();

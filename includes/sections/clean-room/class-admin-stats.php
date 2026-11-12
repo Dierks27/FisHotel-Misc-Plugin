@@ -23,9 +23,15 @@
  * transient (Stats_Sales::TRANSIENT) for twelve hours — dropped when an
  * order changes status or WooCommerce updates its order tables
  * (Stats_Sales::flush(), hooked in Clean_Room::boot()) and by the
- * Refresh button. Nothing here runs outside the Stats tab; which fish a
+ * Refresh button. A read that fails part-way is said on the screen and
+ * never cached. Nothing here runs outside the Stats tab; which fish a
  * sale is gets decided on every view from the species list as it is now,
  * so linking a species to its product shows at once, without a refresh.
+ *
+ * One read of every supplier order stops at the store's newest 500:
+ * Compare years and the landed costs of the year Real sales shows read
+ * their years one at a time, as "By year" does; Prices to raise keeps to
+ * that one read and says so when it came back full.
  *
  * The Invoices section, when it is there, is asked for the lines of the
  * invoices an order paid (fishotel_invoices_for_order(), guarded with
@@ -289,6 +295,31 @@ class Admin_Stats {
 		);
 	}
 
+	/**
+	 * Whether a read of every order came back full: the store hands out
+	 * its newest ORDERS_LIMIT orders at most, so a full read may have left
+	 * older orders out. A store without that limit is never full.
+	 *
+	 * @param object  $store  Store.
+	 * @param array[] $orders What Store::orders() returned without a year.
+	 * @return bool
+	 */
+	public static function orders_window_full( $store, array $orders ) {
+		$limit = self::orders_limit( $store );
+		return $limit > 0 && count( $orders ) >= $limit;
+	}
+
+	/**
+	 * How many orders one read of the store returns at most (0: no limit).
+	 *
+	 * @param object $store Store.
+	 * @return int
+	 */
+	public static function orders_limit( $store ) {
+		$name = is_object( $store ) ? get_class( $store ) . '::ORDERS_LIMIT' : '';
+		return '' !== $name && defined( $name ) ? max( 0, (int) constant( $name ) ) : 0;
+	}
+
 	/* ============================================================== */
 	/*  Compare years                                                  */
 	/* ============================================================== */
@@ -302,8 +333,9 @@ class Admin_Stats {
 	 * @return array{years: int[], picked: int[], defaulted: bool, compare: array, exports: array}
 	 */
 	public static function compare_data( $store, array $picked ) {
-		$by_year = Stats::orders_by_year( Admin_Workbook::resolved_orders( $store, array() ) );
-		$years   = array_keys( $by_year );
+		// The years come from the store and each one is read by itself, exactly as "By year" reads it:
+		// one read of every order stops at the newest Store::ORDERS_LIMIT and would lose the old years.
+		$years   = array_values( array_map( 'intval', (array) $store->order_years() ) );
 		$chosen  = array_values( array_intersect( $years, array_map( 'intval', $picked ) ) );
 		$default = count( $chosen ) < 2;
 		if ( $default ) {
@@ -314,7 +346,7 @@ class Admin_Stats {
 
 		$stats = array();
 		foreach ( $chosen as $year ) {
-			$stats[ $year ] = Stats::build( $by_year[ $year ] );
+			$stats[ $year ] = Admin_Workbook::stats_for_year( $store, $year );
 		}
 
 		$args = array( 'years' => implode( ',', $chosen ) );
@@ -511,7 +543,8 @@ class Admin_Stats {
 	public static function species_data( $store, array $filters ) {
 		$year    = (int) ( $filters['year'] ?? 0 );
 		$orders  = Admin_Workbook::resolved_orders( $store, $year > 0 ? array( 'year' => $year ) : array() );
-		$all     = Stats::by_species( $orders, (array) $store->species_brief() );
+		// Grouped as "By year" groups the same lines, so the two views add up group by group.
+		$all     = Stats::by_species( $orders, (array) $store->species_brief(), Costing::DEFAULT_PER_BOX, true );
 		$rows    = Stats::search_rows( $all, (string) ( $filters['search'] ?? '' ) );
 		$sort    = (string) ( $filters['sort'] ?? '' );
 		$dir     = 'asc' === ( $filters['dir'] ?? '' ) ? 'asc' : 'desc';
@@ -631,7 +664,8 @@ class Admin_Stats {
 	 *
 	 * @param object $store   Store.
 	 * @param array  $filters supplier, group, all.
-	 * @return array{filters: array, rows: array[], counts: array, suppliers: string[], groups: string[], exports: array}
+	 * @return array{filters: array, rows: array[], counts: array, suppliers: string[], groups: string[], window: int, exports: array}
+	 *               window: 0, or the number of newest orders the list rests on when there are more.
 	 */
 	public static function prices_data( $store, array $filters ) {
 		$filters = array(
@@ -640,7 +674,10 @@ class Admin_Stats {
 			'all'      => ! empty( $filters['all'] ),
 		);
 		$species = (array) $store->species_brief();
-		$built   = Stats_Prices::build( Admin_Workbook::resolved_orders( $store, array() ), $species, self::product_prices( $store, $species ), $filters );
+		// The latest order of a fish and its last three: the newest orders are the ones that matter here,
+		// so this view keeps to one read — and says so when that read came back full.
+		$orders = Admin_Workbook::resolved_orders( $store, array() );
+		$built  = Stats_Prices::build( $orders, $species, self::product_prices( $store, $species ), $filters );
 
 		$args = array_filter(
 			array(
@@ -657,6 +694,7 @@ class Admin_Stats {
 			'counts'    => $built['counts'],
 			'suppliers' => $built['suppliers'],
 			'groups'    => $built['groups'],
+			'window'    => self::orders_window_full( $store, $orders ) ? self::orders_limit( $store ) : 0,
 			'exports'   => array(
 				'xlsx' => Admin_Workbook::export_url( 'prices', 'xlsx', $args ),
 				'csv'  => Admin_Workbook::export_url( 'prices', 'csv', $args ),
@@ -777,7 +815,9 @@ class Admin_Stats {
 	 * the lines each page points at, the Invoices section's lines for the
 	 * orders that hold invoice lines (at most
 	 * Stats_Sales::INVOICE_ORDERS_MAX), and the refunds that named no
-	 * line.
+	 * line. When one of those reads fails (the store answers null, not an
+	 * empty list) the ledger holds what was read until then and says
+	 * "failed".
 	 *
 	 * @param object   $store     Store.
 	 * @param int      $year      The year.
@@ -794,13 +834,23 @@ class Admin_Stats {
 		$pages     = 0;
 		$more      = false;
 
+		$failed    = false;
+
 		do {
-			$rows = (array) $store->sales_rows( $year, $ledger['statuses'], $after[0], $after[1], $page_rows );
+			// An empty page is the end of the year; a read that failed (null) is not: the ledger is then
+			// marked "failed" — incomplete, said so on the screen, and never cached.
+			$rows    = $store->sales_rows( $year, $ledger['statuses'], $after[0], $after[1], $page_rows );
+			$details = is_array( $rows ) && $rows ? $store->sales_item_details( Stats_Sales::source_ids( $rows ) ) : array();
+			if ( ! is_array( $rows ) || ! is_array( $details ) ) {
+				$failed = true;
+				$more   = false;
+				break;
+			}
 			if ( ! $rows ) {
 				$more = false;
 				break;
 			}
-			Stats_Sales::add_rows( $ledger, $rows, (array) $store->sales_item_details( Stats_Sales::source_ids( $rows ) ) );
+			Stats_Sales::add_rows( $ledger, $rows, $details );
 			$last  = end( $rows );
 			$after = array( (int) $last['row_id'], (int) $last['order_id'] ); // The lookup table's key: line id, then order id.
 			$more  = count( $rows ) >= $page_rows;
@@ -823,7 +873,9 @@ class Admin_Stats {
 			}
 		}
 
-		$ledger             = Stats_Sales::finish( $ledger, $parts, (array) $store->sales_refund_rows( $year, $ledger['statuses'] ) );
+		$refunds            = $store->sales_refund_rows( $year, $ledger['statuses'] );
+		$ledger             = Stats_Sales::finish( $ledger, $parts, is_array( $refunds ) ? $refunds : array() );
+		$ledger['failed']   = $failed || ! is_array( $refunds );
 		$ledger['built_at'] = gmdate( 'Y-m-d H:i:s' );
 
 		return $ledger;
@@ -854,7 +906,8 @@ class Admin_Stats {
 	 * cache keeps the Stats_Sales::CACHE_YEARS years read last). A cached
 	 * year that was read while the Invoices section was not there is read
 	 * again once it is (and the other way round): what it knows about the
-	 * invoice lines is part of the ledger.
+	 * invoice lines is part of the ledger. A ledger whose reading failed
+	 * part-way is handed back but not cached.
 	 *
 	 * @param object   $store    Store.
 	 * @param int      $year     The year.
@@ -871,6 +924,10 @@ class Admin_Stats {
 		}
 
 		$ledger = self::build_ledger( $store, $year, $statuses );
+		if ( ! empty( $ledger['failed'] ) ) {
+			// Part of a year must never be served again as the year: the next view reads it afresh.
+			return array_merge( $ledger, array( 'cached' => false ) );
+		}
 		unset( $cache['years'][ $year ] );
 		$cache['years'][ $year ] = $ledger;
 		while ( count( $cache['years'] ) > Stats_Sales::CACHE_YEARS ) {
@@ -896,7 +953,11 @@ class Admin_Stats {
 		if ( is_array( $cache['sales_years'] ) ) {
 			return array_map( 'intval', $cache['sales_years'] );
 		}
-		$cache['sales_years'] = array_values( array_map( 'intval', (array) $store->sales_years( $statuses ) ) );
+		$read = $store->sales_years( $statuses );
+		if ( ! is_array( $read ) ) {
+			return array(); // The read failed: nothing to offer now, and nothing to remember.
+		}
+		$cache['sales_years'] = array_values( array_map( 'intval', $read ) );
 		set_transient( Stats_Sales::TRANSIENT, $cache, Stats_Sales::CACHE_TTL );
 		return $cache['sales_years'];
 	}
@@ -913,11 +974,9 @@ class Admin_Stats {
 		$statuses  = Stats_Sales::statuses();
 		$available = is_object( $store ) && method_exists( $store, 'sales_tables_exist' ) && $store->sales_tables_exist();
 		$species   = (array) $store->species_brief();
-		$orders    = Admin_Workbook::resolved_orders( $store, array() );
-		$landed    = Stats::by_species( $orders, $species );
 
 		$sales_years = $available ? self::sales_years( $store, $statuses ) : array();
-		$years       = array_values( array_unique( array_merge( $sales_years, array_keys( Stats::orders_by_year( $orders ) ) ) ) );
+		$years       = array_values( array_unique( array_merge( $sales_years, array_map( 'intval', (array) $store->order_years() ) ) ) );
 		rsort( $years );
 		$year = (int) ( $filters['year'] ?? 0 );
 		if ( $year < 1 ) {
@@ -926,6 +985,26 @@ class Admin_Stats {
 		if ( ! in_array( $year, $years, true ) ) {
 			$years[] = $year;
 			rsort( $years );
+		}
+
+		// One read of every order: this year's landed costs and, for a fish that sold without one, the last
+		// earlier year's. When that read came back full (the store hands out its newest orders only), the
+		// year shown is read again by itself, as "By year" reads it, so its costs are complete; what is said
+		// about earlier years then rests on the newest orders alone.
+		$orders = Admin_Workbook::resolved_orders( $store, array() );
+		$landed = Stats::by_species( $orders, $species );
+		if ( self::orders_window_full( $store, $orders ) ) {
+			$landed = array_merge(
+				array_values(
+					array_filter(
+						$landed,
+						static function ( $row ) use ( $year ) {
+							return (int) $row['year'] !== $year;
+						}
+					)
+				),
+				Stats::by_species( Admin_Workbook::resolved_orders( $store, array( 'year' => $year ) ), $species )
+			);
 		}
 
 		$ledger = $available ? self::ledger( $store, $year, $statuses ) : array_merge( Stats_Sales::new_ledger( $year, $statuses ), array( 'cached' => false ) );
@@ -1042,10 +1121,26 @@ class Admin_Stats {
 		return array(
 			'products' => array( __( 'Shop products without a species', 'fishotel-misc-plugin' ), __( 'Link the species to its product on the Species tab (Link product), or give a species the product\'s exact title: its sales then count at once.', 'fishotel-misc-plugin' ) ),
 			'names'    => array( __( 'Invoice fish whose name is no species', 'fishotel-misc-plugin' ), __( 'A name typed on an invoice counts only when it is exactly a species name, the title of a species\' linked product, or a learned alias.', 'fishotel-misc-plugin' ) ),
-			'invoices' => array( __( 'Invoices kept as one line', 'fishotel-misc-plugin' ), __( 'An invoice that was not itemised into its fish is split only when its lines carry prices that add up to what was paid for it, to the cent.', 'fishotel-misc-plugin' ) ),
+			'invoices' => array( __( 'Invoices kept as one line', 'fishotel-misc-plugin' ), __( 'An invoice that was not itemised into its fish is split only when its lines carry prices that add up to what was paid for it, to the cent.', 'fishotel-misc-plugin' ) . self::backfill_hint() ),
 			'other'    => array( __( 'Lines without a product', 'fishotel-misc-plugin' ), __( 'Order lines that name no product and are not invoice fish.', 'fishotel-misc-plugin' ) ),
 			'credits'  => array( __( 'Credits inside invoices kept as one line', 'fishotel-misc-plugin' ), __( 'A credit that was part of such an invoice: money off, no fish.', 'fishotel-misc-plugin' ) ),
 		);
+	}
+
+	/**
+	 * Where the fish lines of an old invoice order can be recorded: the
+	 * theme's Tools button, when that theme is the one running ('' when it
+	 * is not — this section never needs it). The button saves order lines
+	 * without touching an order's status, so the hint also says to press
+	 * Refresh.
+	 *
+	 * @return string '' or a sentence with a leading space.
+	 */
+	public static function backfill_hint() {
+		if ( ! class_exists( 'FisHotel_Invoice_Lines' ) || ! method_exists( 'FisHotel_Invoice_Lines', 'handle_backfill' ) ) {
+			return '';
+		}
+		return ' ' . __( 'For orders from before invoices were itemised ("no fish lines recorded on the order"), the theme can record them: FisHotel Theme → Tools → "Add fish lines to past invoice orders" — then press Refresh here.', 'fishotel-misc-plugin' );
 	}
 
 	/**
@@ -1115,13 +1210,24 @@ class Admin_Stats {
 	 * then the sums that show matched + not matched = every paid line,
 	 * and the refunds that named no line.
 	 *
-	 * @param array $data sales_data() (rows, match, filters).
+	 * A CSV is one table, so it carries both behind a leading "section"
+	 * column, under the species sheet's headings plus "order_lines":
+	 * "Sales by species" (the fish), "Not matched" (one row per kind: the
+	 * kind under "group", "all" under "species"), "Not matched, biggest
+	 * items" (the items of those kinds, already counted in them) and
+	 * "Sums". Without a search, the revenue of the first two sections adds
+	 * up to every paid line.
+	 *
+	 * @param array $data sales_data() (rows, match, filters, ledger).
+	 * @param bool  $one  One table with a "section" column (the CSV).
 	 * @return array<string, array[]>
 	 */
-	public static function sales_sheets( array $data ) {
-		$sales = array( array( 'species', 'group', 'year', 'units_sold', 'actual_revenue', 'avg_price_paid', 'list_price', 'list_price_source', 'est_revenue', 'received', 'survived', 'landed_per_fish', 'cost_of_units_sold', 'actual_profit', 'profit_note', 'matched_by', 'species_id' ) );
+	public static function sales_sheets( array $data, $one = false ) {
+		$head  = array( 'species', 'group', 'year', 'units_sold', 'actual_revenue', 'avg_price_paid', 'list_price', 'list_price_source', 'est_revenue', 'received', 'survived', 'landed_per_fish', 'cost_of_units_sold', 'actual_profit', 'profit_note', 'matched_by', 'species_id' );
+		$sales = array( $head );
+		$all   = array( array_merge( array( 'section' ), $head, array( 'order_lines' ) ) );
 		foreach ( (array) ( $data['rows'] ?? array() ) as $row ) {
-			$sales[] = array(
+			$cells = array(
 				(string) $row['name'],
 				(string) $row['group'],
 				(int) $row['year'],
@@ -1140,12 +1246,15 @@ class Admin_Stats {
 				implode( ', ', (array) $row['via'] ),
 				$row['species_id'],
 			);
+			$sales[] = $cells;
+			$all[]   = array_merge( array( 'Sales by species' ), $cells, array( (int) ( $row['lines'] ?? 0 ) ) );
 		}
 
 		$match  = (array) ( $data['match'] ?? array() );
 		$totals = (array) ( $match['totals'] ?? array() );
 		$labels = self::unmatched_labels();
 		$missed = array( array( 'kind', 'item', 'units', 'revenue', 'lines' ) );
+		$items  = array();
 		foreach ( (array) ( $match['unmatched'] ?? array() ) as $kind => $bucket ) {
 			if ( (int) $bucket['lines'] < 1 ) {
 				continue;
@@ -1154,17 +1263,36 @@ class Admin_Stats {
 			$missed[] = array( $title, 'all', (int) $bucket['units'], (float) $bucket['revenue'], (int) $bucket['lines'] );
 			foreach ( (array) $bucket['items'] as $item ) {
 				$missed[] = array( $title, self::unmatched_item_label( $kind, $item ), (int) $item['units'], (float) $item['revenue'], (int) $item['lines'] );
+				$items[]  = count( $missed ) - 1;
 			}
 		}
+		$foot     = count( $missed );
 		$missed[] = array( 'matched to a species', 'all', (int) ( $totals['matched_units'] ?? 0 ), (float) ( $totals['matched_revenue'] ?? 0 ), null );
 		$missed[] = array( 'not matched', 'all', (int) ( $totals['unmatched_units'] ?? 0 ), (float) ( $totals['unmatched_revenue'] ?? 0 ), null );
 		$missed[] = array( 'every paid line', 'all', (int) ( $totals['units'] ?? 0 ), (float) ( $totals['revenue'] ?? 0 ), null );
 		$missed[] = array( 'refunded without naming a line (not taken off any fish)', 'all', null, (float) ( $match['refunds']['amount'] ?? 0 ), (int) ( $match['refunds']['count'] ?? 0 ) );
+		if ( ! empty( $data['ledger']['failed'] ) || ! empty( $data['ledger']['truncated'] ) ) {
+			$missed[] = array( 'INCOMPLETE: not every order line of the year was read', 'all', null, null, null );
+		}
 
-		return array(
-			'Sales by species' => $sales,
-			'Not matched'      => $missed,
-		);
+		if ( ! $one ) {
+			return array(
+				'Sales by species' => $sales,
+				'Not matched'      => $missed,
+			);
+		}
+
+		$year  = isset( $data['filters']['year'] ) ? (int) $data['filters']['year'] : null;
+		$blank = array_fill( 0, count( $head ) - 5, null );
+		foreach ( $missed as $n => $line ) {
+			if ( 0 === $n ) {
+				continue;
+			}
+			$section = $n >= $foot ? 'Sums' : ( in_array( $n, $items, true ) ? 'Not matched, biggest items' : 'Not matched' );
+			$all[]   = array_merge( array( $section, (string) $line[1], (string) $line[0], $year, $line[2], $line[3] ), $blank, array( $line[4] ) );
+		}
+
+		return array( 'Real sales' => $all );
 	}
 
 	/* ============================================================== */
@@ -1205,9 +1333,10 @@ class Admin_Stats {
 				);
 			case 'sales':
 				$data = self::sales_data( $store, self::sales_filters( $request ) );
+				$one  = 'csv' === $format; // A CSV is one table: the fish and the "not matched", by section.
 				return array(
-					'sheets' => self::sales_sheets( $data ),
-					'csv'    => 'Sales by species',
+					'sheets' => self::sales_sheets( $data, $one ),
+					'csv'    => $one ? 'Real sales' : 'Sales by species',
 				);
 		}
 		return null;

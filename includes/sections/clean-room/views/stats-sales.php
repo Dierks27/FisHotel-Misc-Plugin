@@ -145,6 +145,11 @@ $fh_th = static function ( $key, $label, $kind = '', $text = false, $title = '' 
 			}
 			?>
 		</p>
+		<?php if ( ! empty( $fh_ledger['failed'] ) ) : ?>
+			<div class="fishotel-misc-notice fishotel-misc-notice--error">
+				<?php esc_html_e( 'WooCommerce\'s order tables could not be read all the way through just now, so every figure below is INCOMPLETE. Nothing of this reading is kept: reload the page, or press Refresh, to read the year again.', 'fishotel-misc-plugin' ); ?>
+			</div>
+		<?php endif; ?>
 		<?php if ( ! empty( $fh_ledger['truncated'] ) ) : ?>
 			<div class="fishotel-misc-notice fishotel-misc-notice--error">
 				<?php

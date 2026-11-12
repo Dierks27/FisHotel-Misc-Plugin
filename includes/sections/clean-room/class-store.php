@@ -3967,7 +3967,7 @@ class Store {
 	 * The years that have an order in a status that counts, newest first.
 	 *
 	 * @param string[] $statuses Slugs without "wc-".
-	 * @return int[]
+	 * @return int[]|null Null when the read failed (not the same as "no year").
 	 */
 	public function sales_years( array $statuses ) {
 		list( $in, $slugs ) = self::sales_statuses( $statuses );
@@ -3980,10 +3980,27 @@ class Store {
 		try {
 			$rows = $wpdb->get_col( $wpdb->prepare( 'SELECT DISTINCT YEAR(date_created) AS y FROM ' . self::sales_table( 'stats' ) . ' WHERE parent_id = 0 AND status IN (' . $in . ') ORDER BY y DESC LIMIT %d', array_merge( $slugs, array( self::SALES_YEARS_LIMIT ) ) ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
 		} catch ( \Throwable $e ) {
-			return array();
+			return null;
+		}
+		if ( self::sales_read_failed( $rows ) ) {
+			return null;
 		}
 
-		return array_values( array_filter( array_map( 'intval', is_array( $rows ) ? $rows : array() ) ) );
+		return array_values( array_filter( array_map( 'intval', $rows ) ) );
+	}
+
+	/**
+	 * Whether the sales read just made failed: no result set, or a
+	 * database error (wpdb answers a failed query with an empty list, which
+	 * would read as "no sales"). Ask right after the query: the next one
+	 * clears the error.
+	 *
+	 * @param mixed $rows What get_results() / get_col() returned.
+	 * @return bool
+	 */
+	private static function sales_read_failed( $rows ) {
+		global $wpdb;
+		return ! is_array( $rows ) || '' !== (string) $wpdb->last_error;
 	}
 
 	/**
@@ -4007,8 +4024,9 @@ class Store {
 	 * @param int      $after_item  Only rows after this order line id …
 	 * @param int      $after_order … and, on that same line id, after this order id.
 	 * @param int      $limit       Rows per page.
-	 * @return array[] row_id, order_id, product_id, variation_id, qty, revenue, parent_id, status,
-	 *                 date_created, parent_status, parent_date, refunded_item_id.
+	 * @return array[]|null row_id, order_id, product_id, variation_id, qty, revenue, parent_id, status,
+	 *                      date_created, parent_status, parent_date, refunded_item_id. Null when the
+	 *                      read failed: an empty page means "no more lines", a failed one must not.
 	 */
 	public function sales_rows( $year, array $statuses, $after_item = 0, $after_order = 0, $limit = Stats_Sales::PAGE_ROWS ) {
 		list( $in, $slugs ) = self::sales_statuses( $statuses );
@@ -4043,11 +4061,14 @@ class Store {
 		try {
 			$rows = $wpdb->get_results( $wpdb->prepare( $sql, $params ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		} catch ( \Throwable $e ) {
-			return array();
+			return null;
+		}
+		if ( self::sales_read_failed( $rows ) ) {
+			return null;
 		}
 
 		$out = array();
-		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
+		foreach ( $rows as $row ) {
 			$out[] = array(
 				'row_id'           => (int) $row['row_id'],
 				'order_id'         => (int) $row['order_id'],
@@ -4076,7 +4097,8 @@ class Store {
 	 * with HPOS on or off.
 	 *
 	 * @param int[] $item_ids Order line ids.
-	 * @return array<int, array{name: string, fish: bool, lines: string|null, invoice_product_id: int}>
+	 * @return array<int, array{name: string, fish: bool, lines: string|null, invoice_product_id: int}>|null
+	 *         Null when a read failed (lines without their names would be filed wrongly).
 	 */
 	public function sales_item_details( array $item_ids ) {
 		$item_ids = array_values( array_unique( array_filter( array_map( 'intval', $item_ids ) ) ) );
@@ -4091,12 +4113,18 @@ class Store {
 			$in = implode( ',', $chunk );
 			try {
 				$names = $wpdb->get_results( 'SELECT order_item_id, order_item_name FROM ' . self::sales_table( 'items' ) . ' WHERE order_item_id IN (' . $in . ')', ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- ids cast to int above.
-				$meta  = $wpdb->get_results( $wpdb->prepare( 'SELECT order_item_id, meta_key, meta_value FROM ' . self::sales_table( 'itemmeta' ) . ' WHERE order_item_id IN (' . $in . ') AND meta_key IN (%s, %s, %s)', Stats_Sales::META_FISH, Stats_Sales::META_LINES, Stats_Sales::META_PRODUCT_ID ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				if ( self::sales_read_failed( $names ) ) {
+					return null;
+				}
+				$meta = $wpdb->get_results( $wpdb->prepare( 'SELECT order_item_id, meta_key, meta_value FROM ' . self::sales_table( 'itemmeta' ) . ' WHERE order_item_id IN (' . $in . ') AND meta_key IN (%s, %s, %s)', Stats_Sales::META_FISH, Stats_Sales::META_LINES, Stats_Sales::META_PRODUCT_ID ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				if ( self::sales_read_failed( $meta ) ) {
+					return null;
+				}
 			} catch ( \Throwable $e ) {
-				continue;
+				return null;
 			}
 
-			foreach ( is_array( $names ) ? $names : array() as $row ) {
+			foreach ( $names as $row ) {
 				$out[ (int) $row['order_item_id'] ] = array(
 					'name'               => (string) $row['order_item_name'],
 					'fish'               => false,
@@ -4104,7 +4132,7 @@ class Store {
 					'invoice_product_id' => 0,
 				);
 			}
-			foreach ( is_array( $meta ) ? $meta : array() as $row ) {
+			foreach ( $meta as $row ) {
 				$id = (int) $row['order_item_id'];
 				if ( ! isset( $out[ $id ] ) ) {
 					continue;
@@ -4131,7 +4159,7 @@ class Store {
 	 *
 	 * @param int      $year     The year (of the order refunded).
 	 * @param string[] $statuses Slugs without "wc-".
-	 * @return array[] order_id, net_total, on_lines.
+	 * @return array[]|null order_id, net_total, on_lines. Null when the read failed.
 	 */
 	public function sales_refund_rows( $year, array $statuses ) {
 		list( $in, $slugs ) = self::sales_statuses( $statuses );
@@ -4154,11 +4182,14 @@ class Store {
 		try {
 			$rows = $wpdb->get_results( $wpdb->prepare( $sql, array_merge( array( $from, $from, $to ), $slugs, array( self::SALES_REFUNDS_LIMIT ) ) ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		} catch ( \Throwable $e ) {
-			return array();
+			return null;
+		}
+		if ( self::sales_read_failed( $rows ) ) {
+			return null;
 		}
 
 		$out = array();
-		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
+		foreach ( $rows as $row ) {
 			$out[] = array(
 				'order_id'  => (int) $row['order_id'],
 				'net_total' => (float) $row['net_total'],

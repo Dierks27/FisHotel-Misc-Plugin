@@ -1001,6 +1001,9 @@ class Fake_Store {
 		return (string) ( $row['received_date'] ?: ( $row['order_date'] ?: substr( (string) $row['created_at'], 0, 10 ) ) );
 	}
 
+	/** As the real store: a read returns the newest 500 headers at most. */
+	const ORDERS_LIMIT = 500;
+
 	public function orders( array $filters = array() ) {
 		$out = array();
 		foreach ( $this->orders as $row ) {
@@ -1022,7 +1025,7 @@ class Fake_Store {
 				return strcmp( $this->order_sort_date( $b ), $this->order_sort_date( $a ) ) ?: ( $b['id'] <=> $a['id'] );
 			}
 		);
-		return $out;
+		return array_slice( $out, 0, isset( $filters['limit'] ) ? max( 1, min( self::ORDERS_LIMIT, (int) $filters['limit'] ) ) : self::ORDERS_LIMIT );
 	}
 
 	public function order_years() {
@@ -1446,6 +1449,8 @@ class Fake_Store {
 	 */
 	public $wc_tables      = true;
 	public $sales_reads    = 0;
+	/** Make one read fail as a database error does: 'rows:3' (the third sales_rows() call), 'details', 'refunds', 'years'. */
+	public $sales_break    = '';
 	public $product_prices = array();
 
 	private $next_wc_order = 9000;
@@ -1578,6 +1583,9 @@ class Fake_Store {
 	}
 
 	public function sales_years( array $statuses ) {
+		if ( 'years' === $this->sales_break ) {
+			return null;
+		}
 		$years = array();
 		foreach ( $this->wc_orders as $order ) {
 			if ( 0 === (int) $order['parent_id'] && in_array( substr( $order['status'], 3 ), $statuses, true ) ) {
@@ -1594,6 +1602,9 @@ class Fake_Store {
 			return array();
 		}
 		$this->sales_reads++;
+		if ( 'rows:' . $this->sales_reads === $this->sales_break ) {
+			return null;
+		}
 		$out = array();
 		foreach ( $this->wc_lines as $line ) {
 			$order = $this->wc_orders[ (int) $line['order_id'] ];
@@ -1628,6 +1639,9 @@ class Fake_Store {
 	}
 
 	public function sales_item_details( array $item_ids ) {
+		if ( 'details' === $this->sales_break ) {
+			return null;
+		}
 		$out = array();
 		foreach ( array_unique( array_map( 'intval', $item_ids ) ) as $id ) {
 			if ( ! isset( $this->wc_items[ $id ] ) ) {
@@ -1645,6 +1659,9 @@ class Fake_Store {
 	}
 
 	public function sales_refund_rows( $year, array $statuses ) {
+		if ( 'refunds' === $this->sales_break ) {
+			return null;
+		}
 		$out = array();
 		foreach ( $this->wc_orders as $id => $order ) {
 			if ( 0 === (int) $order['parent_id'] ) {

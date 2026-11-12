@@ -287,6 +287,7 @@ class Stats_Sales {
 			'qty'       => 0,
 			'revenue'   => 0.0,
 			'truncated' => false,
+			'failed'    => false,
 			'products'  => array(),
 			'items'     => array(),
 			'named'     => array(),

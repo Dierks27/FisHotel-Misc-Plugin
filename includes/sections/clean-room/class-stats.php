@@ -41,7 +41,9 @@
  *                 A fish is its species-list row (a line typed with the
  *                 exact name of a row counts for that row), else its
  *                 lower-cased name; the fish nobody has identified yet are
- *                 one row, so the rows add up to the year's totals.
+ *                 one row, so the rows add up to the year's totals. Asked
+ *                 to, it groups each line as build() does, so the rows of
+ *                 a group add up to that group's row too.
  *
  * The revenue, "up or down", profit and margin here are estimates, as the
  * spreadsheet's were: what customers really paid is Stats_Sales.
@@ -784,12 +786,20 @@ class Stats {
 	 * whose survivors are not known yet: their revenue is not in the
 	 * estimate. Newest year first, then most fish received, then by name.
 	 *
+	 * The group of a row is the species list's — unless $line_groups is
+	 * set: then every line counts under the group build() files it under
+	 * (the group of the species row its id links; none for a line that is
+	 * only typed with a species' name), so the rows of a group add up to
+	 * that group's row on "By year". A fish with linked and unlinked lines
+	 * in one year is then two rows, one per group.
+	 *
 	 * @param array[] $orders          Orders, each with 'lines' (resolved).
 	 * @param array[] $species         Species rows — names and groups of the rows a line belongs to.
 	 * @param int     $default_per_box Fish per box when nothing says.
+	 * @param bool    $line_groups     Group by the line's own group, as build() does.
 	 * @return array[]
 	 */
-	public static function by_species( array $orders, array $species = array(), $default_per_box = Costing::DEFAULT_PER_BOX ) {
+	public static function by_species( array $orders, array $species = array(), $default_per_box = Costing::DEFAULT_PER_BOX, $line_groups = false ) {
 		$index   = self::species_index( $species );
 		$buckets = array();
 		$meta    = array();
@@ -805,6 +815,10 @@ class Stats {
 				$line = isset( $lines[ $i ] ) && is_array( $lines[ $i ] ) ? $lines[ $i ] : array();
 				$key  = self::fish_key( $line, $index['names'] );
 				$slot = ( null === $year ? 0 : $year ) . '|' . $key;
+				$own  = trim( (string) ( $line['group_name'] ?? '' ) );
+				if ( $line_groups ) {
+					$slot .= '|' . $own;
+				}
 
 				if ( ! isset( $buckets[ $slot ] ) ) {
 					$id               = 0 === strpos( $key, 's:' ) ? (int) substr( $key, 2 ) : 0;
@@ -816,7 +830,7 @@ class Stats {
 						'key'           => $key,
 						'species_id'    => $id > 0 ? $id : null,
 						'name'          => self::UNKNOWN_KEY === $key ? self::UNKNOWN_NAME : ( $row && '' !== trim( (string) ( $row['name'] ?? '' ) ) ? (string) $row['name'] : ( '' !== $name ? $name : '(no name)' ) ),
-						'group'         => $row ? trim( (string) ( $row['group_name'] ?? '' ) ) : ( self::UNKNOWN_KEY === $key ? '' : trim( (string) ( $line['group_name'] ?? '' ) ) ),
+						'group'         => $line_groups ? $own : ( $row ? trim( (string) ( $row['group_name'] ?? '' ) ) : ( self::UNKNOWN_KEY === $key ? '' : $own ) ),
 						'year'          => $year,
 						'unknown_lines' => 0,
 					);
