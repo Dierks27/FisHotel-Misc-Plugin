@@ -181,6 +181,11 @@ check( 'an answer that is not a number above one counts as one', 1 === Bags::fis
 fh_reset_hooks();
 
 echo "9. Fill empty ones from the map — the preview changes nothing\n";
+// Product 100 is a fish; 150 is a net sold by size, with the same Size attribute.
+$GLOBALS['fh_terms'] = array(
+	100 => array( 'Quarantined-Fish' ),
+	150 => array( 'dry-goods' ),
+);
 $store = new Fh_Fake_Store();
 $nonce = wp_create_nonce( Fill::NONCE_ACTION );
 fh_login( 0 );
@@ -202,6 +207,42 @@ check( 'no product was changed or saved by the preview', 0 === $touched && ! iss
 $plan = Fill::plan( $store->variations_without_bag(), $settings, $standard );
 check( 'the plan: variation → bag, counts by bag, sizes without a bag, variations without a size', array( 101 => 1, 105 => 3 ) === $plan['set'] && array( 1 => 1, 3 => 1 ) === $plan['by_bag'] && array( 'show' => 1 ) === $plan['unmapped'] && 1 === $plan['no_size'] && 4 === $plan['empty'], fh_test_export( $plan ) );
 check( 'a variation whose value names a removed bag is NOT empty: it is left alone', ! isset( $plan['set'][106] ) );
+check( 'asked about nothing, the plan takes every row for a fish', 0 === $plan['not_fish'] );
+
+echo "9b. Only fish are filled\n";
+fh_product( new Fh_Fake_Product( 150, 'variable', array( 'pa_size' => array( 'small', 'big' ) ) ) );
+fh_product( new Fh_Fake_Product( 151, 'variation', array( 'pa_size' => 'small' ), array(), 150 ) );
+fh_product( new Fh_Fake_Product( 152, 'variation', array( 'pa_size' => 'big' ), array(), 150 ) );
+fh_product( new Fh_Fake_Product( 161, 'variation', array( 'pa_size' => 'small' ), array(), 160 ) ); // Its product has no category at all.
+$asked = array();
+$plan  = Fill::plan(
+	$store->variations_without_bag(),
+	$settings,
+	$standard,
+	static function ( $parent_id ) use ( &$asked ) {
+		$asked[] = $parent_id;
+		return 100 === $parent_id;
+	}
+);
+check( 'a variation of a product that is not a fish is counted and not planned, whatever its size', array( 101 => 1, 105 => 3 ) === $plan['set'] && 3 === $plan['not_fish'] && 7 === $plan['empty'] && 1 === $plan['no_size'] && array( 'show' => 1 ) === $plan['unmapped'], fh_test_export( $plan ) );
+check( 'each product is asked about once', array( 100, 150, 160 ) === $asked, fh_test_export( $asked ) );
+$is_fish = Fill::fish_test( array( 100, 150, 160, 0 ) );
+check( 'a fish is a product in one of the fish categories (its own category slugs, any case) — the list the order lines go by', true === $is_fish( 100 ) && false === $is_fish( 150 ) && false === $is_fish( 160 ) && false === $is_fish( 0 ) );
+add_filter(
+	'fishotel_ship_day_fish_categories',
+	static function ( $categories ) {
+		return array_merge( $categories, array( 'dry-goods' ) );
+	}
+);
+$wider = Fill::fish_test();
+check( 'the filter on that list widens it here too', true === $wider( 150 ) && false === $wider( 160 ) );
+fh_reset_hooks();
+$preview = Fill::preview_request( array( '_wpnonce' => $nonce ), $store, $standard );
+check( 'the preview leaves them out and says how many', 2 === $preview['would_set'] && 7 === $preview['empty'] && false !== strpos( $preview['message'], 'The map would set 2 of them (Small: 1, Large: 1).' ) && false !== strpos( $preview['message'], '3 are of products that are not in a fish category — they stay empty' ), $preview['message'] );
+$run = Fill::run( $store, $settings, $standard, 0, 50, static function () {
+	return 'set';
+} );
+check( 'the run does not hand them to the writer, and still passes them (the cursor moves on)', 2 === $run['set'] && 7 === $run['looked'] && 161 === $run['last_id'] && true === $run['done'], fh_test_export( $run ) );
 
 echo "10. The run sets only what has no value, through the product object\n";
 $run = Fill::run_request( array( '_wpnonce' => $nonce, 'after' => '0' ), $store, $standard );
@@ -211,11 +252,16 @@ check( 'written through update_meta_data() + save_meta_data() — the product it
 check( 'a variation that had a value keeps it, untouched', '3' === wc_get_product( 102 )->meta['_fh_bag_size'] && 0 === wc_get_product( 102 )->meta_saves && '77' === wc_get_product( 106 )->meta['_fh_bag_size'] && 0 === wc_get_product( 106 )->meta_saves );
 check( 'a variation the map cannot answer for stays empty', ! isset( wc_get_product( 103 )->meta['_fh_bag_size'] ) && ! isset( wc_get_product( 104 )->meta['_fh_bag_size'] ) && 0 === wc_get_product( 103 )->meta_saves );
 check( 'simple products and the variable parent are not in the tool\'s reach', ! isset( wc_get_product( 110 )->meta['_fh_bag_size'] ) && ! isset( wc_get_product( 100 )->meta['_fh_bag_size'] ) );
+check( 'the net and the product without a category were not written to: they are still not fish on an order', ! isset( wc_get_product( 151 )->meta['_fh_bag_size'] ) && ! isset( wc_get_product( 152 )->meta['_fh_bag_size'] ) && ! isset( wc_get_product( 161 )->meta['_fh_bag_size'] ) && 0 === wc_get_product( 151 )->meta_saves + wc_get_product( 152 )->meta_saves + wc_get_product( 161 )->meta_saves );
 $again = Fill::preview_request( array( '_wpnonce' => $nonce ), $store, $standard );
-check( 'run again: nothing left to set', 0 === $again['would_set'] && 2 === $again['empty'] && 0 === Fill::run_request( array( '_wpnonce' => $nonce ), $store, $standard )['set'] );
+check( 'run again: nothing left to set', 0 === $again['would_set'] && 5 === $again['empty'] && 0 === Fill::run_request( array( '_wpnonce' => $nonce ), $store, $standard )['set'] );
 
 echo "11. The run goes a batch at a time and cannot loop\n";
 fh_reset_shop();
+$GLOBALS['fh_terms'] = array(
+	200 => array( 'inverts' ),
+	300 => array( 'quarantined-fish' ),
+);
 for ( $i = 1; $i <= 7; $i++ ) {
 	fh_product( new Fh_Fake_Product( 200 + $i, 'variation', array( 'pa_size' => $i % 2 ? 'small' : 'show' ), array(), 200 ) );
 }
@@ -227,6 +273,7 @@ check( 'the next batches carry on after the cursor, and the last one says done',
 check( 'the variations it could not answer for are passed once, not asked about for ever', 3 === count( $store->variations_without_bag() ) && 0 === Fill::run( $store, $settings, $standard, 207, 3 )['looked'] );
 
 fh_reset_shop();
+$GLOBALS['fh_terms'] = array( 300 => array( 'quarantined-fish' ) );
 fh_product( new Fh_Fake_Product( 301, 'variation', array( 'pa_size' => 'small' ), array(), 300 ) );
 fh_product( new Fh_Fake_Product( 302, 'variation', array( 'pa_size' => 'small' ), array(), 300 ) );
 $rows = $store->variations_without_bag();

@@ -65,7 +65,8 @@ if ( Size_List::SOURCE_CLEAN_ROOM === $standard['source'] && Size_List::KIND_ATT
 	<?php elseif ( ! $fh_sizes && ! $fh_stale ) : ?>
 		<div class="fishotel-misc-notice fishotel-misc-notice--error"><?php esc_html_e( 'There are no sizes to map.', 'fishotel-misc-plugin' ); ?></div>
 	<?php else : ?>
-		<form class="fh-pack-form" method="post" action="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>">
+		<?php // Reloads once saved: whether the fill tool below can run depends on the map. ?>
+		<form class="fh-pack-form" method="post" action="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>" data-reload="1">
 			<?php wp_nonce_field( Settings::NONCE_ACTION ); ?>
 			<input type="hidden" name="action" value="fishotel_packing_map">
 
@@ -123,7 +124,7 @@ if ( Size_List::SOURCE_CLEAN_ROOM === $standard['source'] && Size_List::KIND_ATT
 		<h2 class="fishotel-misc-card-title"><?php esc_html_e( 'Fill empty ones from the map', 'fishotel-misc-plugin' ); ?></h2>
 	</div>
 	<p class="fishotel-misc-card-desc">
-		<?php esc_html_e( 'Writes the map\'s bag onto every variation that has no Bag size, so each product shows it. It never changes a variation that already has one, and it writes nothing but that one hidden field. Save the map first, preview, then set. A variation keeps the bag it was given even when the map changes later: set it back to "Not set" on the variation to make it follow the map again.', 'fishotel-misc-plugin' ); ?>
+		<?php esc_html_e( 'Writes the map\'s bag onto every fish variation that has no Bag size, so each product shows it. It never changes a variation that already has one, it leaves products that are not in a fish category alone, and it writes nothing but that one hidden field. Get the map right and save it first, then preview, then set: a variation keeps the bag it was given even when the map changes later (set it back to "Not set" on the variation to make it follow the map again).', 'fishotel-misc-plugin' ); ?>
 	</p>
 	<p class="fishotel-misc-card-desc">
 		<?php

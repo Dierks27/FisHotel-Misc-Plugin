@@ -7,7 +7,9 @@
  * box on the order.
  *
  * The body is drawn by one view on the server; the AJAX reply ships that
- * same HTML again, so the script never builds markup from data. The one
+ * same HTML again (also with a refusal that has the box to show: a
+ * suggestion that changed since it was drawn), so the script never builds
+ * markup from data. The one
  * write (confirm / change / clear) is Order_Packing::confirm_request():
  * manage_woocommerce + a nonce, order meta through the order object.
  *
@@ -158,11 +160,16 @@ class Order_Box {
 			// Read the order again so the reply shows exactly what was stored.
 			$order_id = method_exists( $outcome['order'], 'get_id' ) ? (int) $outcome['order']->get_id() : 0;
 			$fresh    = $order_id > 0 && function_exists( 'wc_get_order' ) ? wc_get_order( $order_id ) : null;
-			$html     = self::render_body( is_object( $fresh ) ? $fresh : $outcome['order'], (string) $outcome['message'], false );
+			$html     = self::render_body( is_object( $fresh ) ? $fresh : $outcome['order'], (string) $outcome['message'], empty( $outcome['ok'] ) );
 		}
 
 		if ( empty( $outcome['ok'] ) ) {
-			wp_send_json_error( array( 'message' => (string) $outcome['message'] ), (int) $outcome['status'] );
+			$error = array( 'message' => (string) $outcome['message'] );
+			if ( '' !== $html ) {
+				// Refused because what was shown is out of date: the box as it is now.
+				$error['html'] = $html;
+			}
+			wp_send_json_error( $error, (int) $outcome['status'] );
 		}
 
 		wp_send_json_success(

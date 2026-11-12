@@ -114,7 +114,12 @@ if ( $fh_from_st ) {
 					);
 					?>
 					<tr<?php echo isset( $fh_own[ $fh_i ] ) ? '' : ' class="fh-pack-row--new"'; ?>>
-						<td><input type="text" class="fh-pack-input" name="boxes[<?php echo esc_attr( $fh_i ); ?>][name]" value="<?php echo esc_attr( $fh_row['name'] ); ?>" maxlength="<?php echo esc_attr( Settings::MAX_NAME ); ?>" aria-label="<?php esc_attr_e( 'Name', 'fishotel-misc-plugin' ); ?>"></td>
+						<td>
+							<?php if ( isset( $fh_own[ $fh_i ] ) ) : ?>
+								<input type="hidden" name="boxes[<?php echo esc_attr( $fh_i ); ?>][was]" value="<?php echo esc_attr( $fh_row['name'] ); ?>">
+							<?php endif; ?>
+							<input type="text" class="fh-pack-input" name="boxes[<?php echo esc_attr( $fh_i ); ?>][name]" value="<?php echo esc_attr( $fh_row['name'] ); ?>" maxlength="<?php echo esc_attr( Settings::MAX_NAME ); ?>" aria-label="<?php esc_attr_e( 'Name', 'fishotel-misc-plugin' ); ?>">
+						</td>
 						<?php foreach ( array( 'length', 'width', 'height' ) as $fh_side ) : ?>
 							<td><input type="number" class="fh-pack-input fh-pack-input--num" name="boxes[<?php echo esc_attr( $fh_i ); ?>][<?php echo esc_attr( $fh_side ); ?>]" value="<?php echo esc_attr( $fh_row[ $fh_side ] ); ?>" min="0" step="0.01" aria-label="<?php echo esc_attr( ucfirst( $fh_side ) ); ?>"></td>
 						<?php endforeach; ?>

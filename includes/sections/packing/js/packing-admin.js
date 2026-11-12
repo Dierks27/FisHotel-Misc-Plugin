@@ -6,8 +6,8 @@
  *
  * The server draws every piece of HTML and writes every sentence; this
  * file posts forms and swaps the answers in. The pure helpers (fmt,
- * rowFromTemplate, fillStep, confirmPayload) are exported for
- * tests/packing-admin.test.js.
+ * rowFromTemplate, fillStep, confirmPayload, afterSave, unsavedElsewhere)
+ * are exported for tests/packing-admin.test.js.
  *
  * @package FisHotel\Misc\Sections\Packing
  */
@@ -99,9 +99,11 @@
 	 * @param {string} choice   "suggested" or "chosen" (confirm only).
 	 * @param {string} selected The key of the box picked in the list.
 	 * @param {*}      count    How many of it.
+	 * @param {*}      shown    The suggestion as the button showed it: the server
+	 *                          refuses to confirm one that is different by now.
 	 * @return {Object|null} The fields, or null when a box has to be picked first.
 	 */
-	function confirmPayload(op, choice, selected, count) {
+	function confirmPayload(op, choice, selected, count, shown) {
 		op = String(op || '');
 		if (op === 'view' || op === 'clear') {
 			return { op: op };
@@ -110,7 +112,7 @@
 			return null;
 		}
 		if (choice !== 'chosen') {
-			return { op: 'confirm', choice: 'suggested' };
+			return { op: 'confirm', choice: 'suggested', shown: String(shown === null || typeof shown === 'undefined' ? '' : shown) };
 		}
 		selected = String(selected === null || typeof selected === 'undefined' ? '' : selected);
 		if (selected === '') {
@@ -120,11 +122,48 @@
 		return { op: 'confirm', choice: selected, count: isNaN(n) || n < 1 ? 1 : n };
 	}
 
+	/**
+	 * What follows a form's save. A saved form that reloads the page keeps
+	 * its button disabled until the page is there again: a second click in
+	 * between would post the same rows against a list that has changed.
+	 *
+	 * @param {Object}  reply   The AJAX reply.
+	 * @param {boolean} reloads Whether the form reloads the page once saved.
+	 * @return {Object} { ok, reload, enable }.
+	 */
+	function afterSave(reply, reloads) {
+		var ok = !!(reply && reply.success);
+		return { ok: ok, reload: ok && !!reloads, enable: !(ok && !!reloads) };
+	}
+
+	/**
+	 * Whether saving a form now would throw away what was typed into
+	 * another: it reloads the page while another form has unsaved changes.
+	 *
+	 * @param {Array}  forms   [{ dirty: boolean }] — every form of the page.
+	 * @param {number} index   The form being saved.
+	 * @param {boolean} reloads Whether it reloads the page once saved.
+	 * @return {boolean}
+	 */
+	function unsavedElsewhere(forms, index, reloads) {
+		if (!reloads || !forms || !forms.length) {
+			return false;
+		}
+		for (var i = 0; i < forms.length; i++) {
+			if (i !== index && forms[i] && forms[i].dirty) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	var api = {
 		fmt: fmt,
 		rowFromTemplate: rowFromTemplate,
 		fillStep: fillStep,
-		confirmPayload: confirmPayload
+		confirmPayload: confirmPayload,
+		afterSave: afterSave,
+		unsavedElsewhere: unsavedElsewhere
 	};
 
 	root.fhPacking = root.fhPacking || {};
@@ -165,34 +204,52 @@
 
 		/* ---- The page: every form saves by AJAX ------------------- */
 
+		// What was typed into a form and not saved yet.
+		$(document).on('input change', '.fh-pack-form', function () {
+			$(this).data('fhDirty', true);
+		});
+
 		$(document).on('submit', '.fh-pack-form', function (e) {
 			e.preventDefault();
 
 			var $form = $(this);
 			var $btn = $form.find('button[type="submit"]');
 			var $status = $form.find('.fh-pack-status').last();
+			var reloads = !!$form.attr('data-reload');
+			var $forms = $('.fh-pack-form');
+			var states = $forms.map(function () {
+				return { dirty: !!$(this).data('fhDirty') };
+			}).get();
+
+			// This save reloads the page: what is typed into another form would be gone.
+			if (unsavedElsewhere(states, $forms.index($form), reloads)) {
+				setStatus($status, i18n.unsaved || 'Nothing was saved: another form on this page has changes that are not saved, and saving this one reloads the page. Save that one first (or reload the page to drop them).', 'is-error');
+				return;
+			}
 
 			$btn.prop('disabled', true);
 			setStatus($status, i18n.saving || 'Saving…', '');
 
 			$.post(ajaxUrl, $form.serialize())
 				.done(function (reply) {
-					if (reply && reply.success) {
+					var next = afterSave(reply, reloads);
+					if (next.ok) {
+						$form.data('fhDirty', false);
 						setStatus($status, messageOf(reply, ''), 'is-ok');
-						if ($form.attr('data-reload')) {
-							// The list changed (new numbers, new columns): draw the page again.
-							root.setTimeout(function () {
-								root.location.reload();
-							}, 900);
-						}
 					} else {
 						setStatus($status, messageOf(reply), 'is-error');
+					}
+					$btn.prop('disabled', !next.enable);
+					if (next.reload) {
+						// The list changed (new numbers, new columns): draw the page again.
+						// The button stays disabled until then.
+						root.setTimeout(function () {
+							root.location.reload();
+						}, 900);
 					}
 				})
 				.fail(function (xhr) {
 					setStatus($status, messageOf(xhr), 'is-error');
-				})
-				.always(function () {
 					$btn.prop('disabled', false);
 				});
 		});
@@ -299,7 +356,7 @@
 			var $btn = $(this);
 			var $box = $btn.closest('.fh-pack-box');
 			var $status = $box.find('.fh-pack-status');
-			var payload = confirmPayload($btn.attr('data-op'), $btn.attr('data-choice'), $box.find('.fh-pack-choice').val(), $box.find('.fh-pack-count').val());
+			var payload = confirmPayload($btn.attr('data-op'), $btn.attr('data-choice'), $box.find('.fh-pack-choice').val(), $box.find('.fh-pack-count').val(), $btn.attr('data-shown'));
 
 			if (!payload) {
 				$box.find('.fh-pack-choice').trigger('focus');
@@ -323,6 +380,12 @@
 					setStatus($status, messageOf(reply), 'is-error');
 				})
 				.fail(function (xhr) {
+					var data = xhr && xhr.responseJSON && xhr.responseJSON.data ? xhr.responseJSON.data : null;
+					if (data && data.html) {
+						// Refused because the box on screen was out of date: here it is as it stands now.
+						$box.replaceWith(data.html);
+						return;
+					}
 					$box.find('button').prop('disabled', false);
 					setStatus($status, messageOf(xhr), 'is-error');
 				});

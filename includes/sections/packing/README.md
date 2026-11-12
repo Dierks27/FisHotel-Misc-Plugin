@@ -22,11 +22,17 @@ Nothing is seeded: no bag, no box and no number is filled in by the code.
 - **Bags** — the standard bags: a name, an optional width and length in
   inches, a sort number. A bag keeps its `#` for good, so renaming one
   changes nothing on the products that use it; a removed bag's `#` is never
-  given to another.
+  given to another, and a page that was drawn before the bag was removed
+  cannot bring it back under a new `#` (that save is refused: reload).
 - **Sizes → bags** — one row per fish size with a bag dropdown (the map),
   and the *Fill empty ones from the map* tool.
 - **Boxes** — where the boxes come from, this section's own list of boxes,
   the *how many fit* table (box × bag), and the *on the line* percent.
+  *Save boxes* draws the page again, so it refuses to run while *how many
+  fit* holds numbers that are not saved yet: save those first.
+
+A save that draws the page again (bags, the map, boxes) keeps its button
+disabled until the page is back, so the same rows are never posted twice.
 
 **The product editor** (the classic one) — a **Bag size** dropdown on every
 variation, and on a simple product under *Shipping*. Its first option is
@@ -36,7 +42,10 @@ variation, and on a simple product under *Shipping*. Its first option is
 one) — a **Packing** box: each fish line with its bag and where the bag
 came from, the bags needed by size, the suggested box with its fill, the
 *on the line* flag, what was ignored and what was left out, and the
-Confirm / change control.
+Confirm / change control. *Confirm* stores the suggestion that is on the
+screen and no other: when the order, a bag size or the numbers changed
+since the box was drawn, nothing is stored, the box is drawn again with
+the suggestion as it stands now, and it is confirmed from there.
 
 ## Which bag
 
@@ -63,13 +72,21 @@ attribute itself — the first global attribute whose name or label contains
 With neither there is no list, the page says so, and a Bag size can still
 be set on each variation by hand.
 
-**Fill empty ones from the map** writes the map's bag onto every variation
-that has no Bag size, so the product record shows it. *Preview* counts and
-changes nothing; *Set them* runs a batch at a time. It never touches a
-variation that already has a value — the list is read from the variations
-without one, and each is checked once more on the product object just
-before it is written. A variation keeps the bag it was given even when the
-map changes later.
+**Fill empty ones from the map** writes the map's bag onto every **fish**
+variation that has no Bag size, so the product record shows it. *Preview*
+counts and changes nothing; *Set them* runs a batch at a time. It never
+touches a variation that already has a value — the list is read from the
+variations without one, and each is checked once more on the product
+object just before it is written. A variation whose product is in none of
+the fish categories (see *What is a fish*) is counted in the preview and
+left alone: a Bag size of its own is what makes any other product count as
+a fish on an order, so the tool must not hand one to a net or a jar of
+food that happens to use the Size attribute. Set such a product's Bag size
+by hand when it really is packed in a bag.
+
+A variation keeps the bag it was given even when the map changes later,
+and there is no bulk reset — so get the map right before *Set them* (a
+variation set back to "Not set" follows the map again).
 
 ## Which box
 
@@ -92,7 +109,8 @@ map changes later.
   marked *incomplete* — it is worked out for the lines that do have one.
 - **What is not a fish** is ignored, and named as ignored.
 - A bag size that goes in **no** box is set aside and named; the rest is
-  boxed as usual (status `partial`).
+  boxed as usual (status `partial`). A suggestion names at most 40 boxes;
+  what is left after that is named as not boxed.
 
 Fills are compared after rounding the percent to four places, so 4/6 + 1/3
 is exactly 100 % and 9/10 is exactly 90 %.
@@ -122,9 +140,13 @@ them — `FST_Settings::get_standard_boxes()`, reached through
 costs and for packing. Otherwise (ShipTracker is not active, its version
 has no such list yet, or the list is still empty) this section's own list
 is used, and the Boxes tab says which. *How many fit* is stored under the
-box's name; a box whose name has no numbers yet takes over those of a box
-that is no longer in the list and has exactly the same size, so a renamed
-box and the move from the own list to ShipTracker's keep what was typed.
+box's name. In the own list each row says which box it was drawn as, so a
+box that is renamed there takes its numbers along — a rename is never
+read off a row's position, which a form posted twice or from an
+out-of-date page gets wrong. Besides that, a box whose name has no numbers
+yet takes over those of a box that is no longer in the list and has
+exactly the same size, so the move from the own list to ShipTracker's
+(where the boxes are typed again) keeps what was typed.
 
 ## What is stored
 
@@ -214,7 +236,10 @@ into a combined box has none of its own — ask the combined box
 `fishotel_packing_boxes`, `fishotel_packing_fits`, `fishotel_packing_map`
 (nonce `fishotel_packing_settings`), `fishotel_packing_fill_preview`,
 `fishotel_packing_fill_run` (nonce `fishotel_packing_fill`) and
-`fishotel_packing_confirm` (nonce `fishotel_packing_order`). The product
+`fishotel_packing_confirm` (nonce `fishotel_packing_order`; with
+`choice=suggested` the screen posts `shown`, the suggestion it displayed,
+and gets 409 plus the box drawn again when that is not the suggestion any
+more). The product
 dropdown is saved by WooCommerce's own product saves, behind this
 section's nonce `fishotel_packing_bag_size` as well.
 

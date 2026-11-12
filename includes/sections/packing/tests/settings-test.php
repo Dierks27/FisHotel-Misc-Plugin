@@ -117,6 +117,14 @@ check( 'more than ' . Settings::MAX_BAGS . ' bags: refused', 400 === $out['statu
 $out = Settings::bags_request( array( '_wpnonce' => $nonce, 'bags' => 'junk' ) );
 check( 'a form with no rows changes nothing', 200 === $out['status'] && $before['bags'] === Settings::get()['bags'] );
 
+$before = Settings::get();
+$out    = Settings::bags_request( array( '_wpnonce' => $nonce, 'bags' => array( array( 'id' => '3', 'name' => 'Medium bag', 'width' => '6', 'length' => '', 'sort' => '40' ) ) ) );
+check( 'a page drawn before a bag was removed, saved afterwards: 400, nothing saved — the bag does not come back under a new id', 400 === $out['status'] && $before === Settings::get() && false !== strpos( $out['message'], '"Medium bag" is not in the list of bags any more' ), $out['message'] );
+$out = Settings::bags_request( array( '_wpnonce' => $nonce, 'bags' => array( array( 'id' => '999', 'name' => '', 'width' => '6' ) ) ) );
+check( 'an id the list never gave is refused the same way', 400 === $out['status'] && $before === Settings::get() && false !== strpos( $out['message'], '#999 is not in the list' ), $out['message'] );
+$out = Settings::bags_request( array( '_wpnonce' => $nonce, 'bags' => array( array( 'id' => '3', 'name' => 'Medium bag', 'remove' => '1' ) ) ) );
+check( 'removing a bag that is already gone is nothing to refuse', 200 === $out['status'] && $before['bags'] === Settings::get()['bags'] && $before['last_bag_id'] === Settings::get()['last_bag_id'] );
+
 echo "4. The field sanitisers\n";
 check( 'a name: tags, control characters and backslashes dropped, whitespace collapsed, cut to ' . Settings::MAX_NAME, 'A b c' === Settings::name_in( " A \x07 b\\ <i>c</i> " ) && Settings::MAX_NAME === strlen( Settings::name_in( str_repeat( 'x', 90 ) ) ) && '' === Settings::name_in( array( 'x' ) ) && '' === Settings::name_in( true ) );
 check( 'a dimension: blank stays blank, a number is tidied, anything else is null', '' === Settings::dim_in( '' ) && '' === Settings::dim_in( null ) && '6' === Settings::dim_in( '6.00' ) && '6.25' === Settings::dim_in( ' 6.250 ' ) && null === Settings::dim_in( 'six' ) && null === Settings::dim_in( '0' ) && null === Settings::dim_in( '1000' ) && null === Settings::dim_in( array( 6 ) ) );
@@ -202,13 +210,49 @@ $out  = Settings::boxes_request(
 	array(
 		'_wpnonce' => $nonce,
 		'boxes'    => array(
-			array( 'name' => 'Cube 8', 'length' => '8', 'width' => '8', 'height' => '8' ),
-			array( 'name' => 'Long box', 'length' => '20', 'width' => '14', 'height' => '12.5' ),
+			array( 'was' => 'Cube 8', 'name' => 'Cube 8', 'length' => '8', 'width' => '8', 'height' => '8' ),
+			array( 'was' => 'Long 20', 'name' => 'Long box', 'length' => '20', 'width' => '14', 'height' => '12.5' ),
 		),
 	)
 );
 $fits = Settings::get()['fits'];
-check( 'the own list: a row that comes back under its number with another name was renamed — the numbers follow', 200 === $out['status'] && ! isset( $fits['long 20'] ) && array( 2 => 10, 1 => 28 ) === $fits['long box']['bags'] && 'Long box' === $fits['long box']['name'], fh_test_export( $fits ) );
+check( 'the own list: a row that says which box it was and comes back with another name was renamed — the numbers follow', 200 === $out['status'] && ! isset( $fits['long 20'] ) && array( 2 => 10, 1 => 28 ) === $fits['long box']['bags'] && 'Long box' === $fits['long box']['name'], fh_test_export( $fits ) );
+
+// A rename is never read off a row's number: a form posted twice, or from
+// a page that is out of date, has its rows in other places than the list.
+$keep  = Settings::get();
+$three = Settings::normalize(
+	array_merge(
+		$keep,
+		array(
+			'boxes' => array(
+				array( 'name' => 'Cube 8', 'length' => '8', 'width' => '8', 'height' => '8' ),
+				array( 'name' => 'Cube 12', 'length' => '12', 'width' => '12', 'height' => '12' ),
+				array( 'name' => 'Long box', 'length' => '20', 'width' => '14', 'height' => '12.5' ),
+			),
+		)
+	)
+);
+$rows  = array(
+	array( 'was' => 'Cube 8', 'name' => 'Cube 8', 'length' => '8', 'width' => '8', 'height' => '8' ),
+	array( 'was' => 'Cube 12', 'name' => 'Cube 12', 'length' => '12', 'width' => '12', 'height' => '12' ),
+	array( 'was' => 'Long box', 'name' => 'Long box', 'length' => '20', 'width' => '14', 'height' => '12.5' ),
+);
+$drop  = array( array( 'remove' => '1' ) + $rows[0], $rows[1], $rows[2] );
+$once  = Settings::apply_boxes( $three, $drop );
+$twice = Settings::apply_boxes( $once['settings'], $drop );
+check( 'the same form posted twice (a second click before the page is back): nothing is renamed, the numbers stay on their box', array() === $once['renamed'] && array() === $twice['renamed'] && array() === $twice['errors'] && array( 'long box' ) === array_keys( $twice['settings']['fits'] ) && array( 'Cube 12', 'Long box' ) === array_column( $twice['settings']['boxes'], 'name' ), fh_test_export( $twice['renamed'] ) );
+$late = Settings::apply_boxes( $once['settings'], $rows );
+check( 'a page drawn before a box was removed, saved afterwards: the numbers stay on their box (the rows are the list, so the box is back — with no numbers)', array() === $late['renamed'] && array( 'long box' ) === array_keys( $late['settings']['fits'] ) && array( 2 => 10, 1 => 28 ) === $late['settings']['fits']['long box']['bags'] && 3 === count( $late['settings']['boxes'] ), fh_test_export( $late['settings']['fits'] ) );
+$bare = Settings::apply_boxes( $three, array( array( 'name' => 'Tiny cube', 'length' => '8', 'width' => '8', 'height' => '8' ), array( 'name' => 'Cube 12', 'length' => '12', 'width' => '12', 'height' => '12' ), array( 'name' => 'Longest', 'length' => '20', 'width' => '14', 'height' => '12.5' ) ) );
+check( 'rows that do not say which box they were rename nothing by their place', array() === $bare['renamed'] && array( 'long box' ) === array_keys( $bare['settings']['fits'] ) );
+$with = Boxes::with_fits( Boxes::rows( $bare['settings']['boxes'], Boxes::SOURCE_OWN ), $bare['settings']['fits'] );
+check( '— the numbers still reach a box of exactly the same size, and no other', array( 'tiny cube' => array(), 'cube 12' => array(), 'longest' => array( 2 => 10, 1 => 28 ) ) === array_column( $with, 'fits', 'key' ), fh_test_export( array_column( $with, 'fits', 'key' ) ) );
+$forged = Settings::apply_boxes( $three, array( array( 'was' => 'Long box', 'name' => 'Cube 9', 'length' => '9', 'width' => '9', 'height' => '9' ), $rows[1], $rows[2] ) );
+check( 'a row that claims to have been a box which is still in the list is a new box, not a rename', array() === $forged['renamed'] && array( 'long box' ) === array_keys( $forged['settings']['fits'] ) );
+$ghost = Settings::apply_boxes( $three, array( array( 'was' => 'No such box', 'name' => 'Cube 9', 'length' => '9', 'width' => '9', 'height' => '9' ), array( 'was' => array( 'x' ), 'name' => 'Cube 10', 'length' => '10', 'width' => '10', 'height' => '10' ) ) );
+check( 'nor is one that names a box the list never had, or sends something that is not a name', array() === $ghost['renamed'] && array() === $ghost['errors'] && array( 'long box' ) === array_keys( $ghost['settings']['fits'] ) );
+check( 'none of that was stored', $keep === Settings::get() );
 
 $settings = Settings::get();
 $renamed  = Boxes::rows( array( array( 'name' => 'Shipper L', 'length' => '20', 'width' => '14', 'height' => '12.5' ), array( 'name' => 'Brand new', 'length' => '9', 'width' => '9', 'height' => '9' ) ), Boxes::SOURCE_SHIPTRACKER );

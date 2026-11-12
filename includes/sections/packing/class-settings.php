@@ -368,7 +368,10 @@ class Settings {
 	 * The bag list after a posted form (pure). Every stored bag stays
 	 * unless its row is ticked "remove"; a row with a known id changes
 	 * that bag; a row without one adds a bag under the next id. A bag that
-	 * the form did not post is left alone (a stale page never deletes).
+	 * the form did not post is left alone (a stale page never deletes) —
+	 * and a row whose id is not in the list any more (the bag was removed
+	 * since the page was drawn) is refused: it never comes back under a new
+	 * id, with its products, its sizes and its numbers left behind.
 	 *
 	 * @param array $settings Stored settings (normalised).
 	 * @param array $rows     bags[n][id|name|width|length|sort|remove].
@@ -405,6 +408,11 @@ class Settings {
 			}
 			if ( ! $existing && $blank ) {
 				continue; // An empty spare row.
+			}
+			if ( ! $existing && ! self::is_blank( $row['id'] ?? '' ) ) {
+				/* translators: %s: bag name, or its number */
+				$errors[] = sprintf( __( '%s is not in the list of bags any more — reload the page', 'fishotel-misc-plugin' ), '' !== $name ? '"' . $name . '"' : '#' . $id );
+				continue;
 			}
 			if ( '' === $name ) {
 				/* translators: %d: row number */
@@ -472,25 +480,32 @@ class Settings {
 
 	/**
 	 * This section's own box list after a posted form (pure): the posted
-	 * rows ARE the list. Rows are posted under the number they were shown
-	 * with, so a stored box whose row comes back with another name was
-	 * renamed — its "how many fit" follows the new name when $move_fits
-	 * says the own list is the one in use.
+	 * rows ARE the list. Each row of a stored box says which box it was
+	 * drawn as (`was`, its name then); a row that comes back with another
+	 * name was renamed — its "how many fit" follows the new name when
+	 * $move_fits says the own list is the one in use. The row's NUMBER says
+	 * nothing: a form posted twice, or from a page that is out of date, has
+	 * its rows in other places than the stored list, and must never move
+	 * one box's numbers onto another. A `was` that names no stored box, or
+	 * a box that is still in the posted list, is no rename.
 	 *
 	 * @param array $settings  Stored settings (normalised).
-	 * @param array $rows      boxes[n][name|length|width|height|remove].
+	 * @param array $rows      boxes[n][was|name|length|width|height|remove].
 	 * @param bool  $move_fits Whether a rename carries the box's "how many fit" along.
 	 * @return array{settings: array, errors: string[], renamed: array<string, string>}
 	 */
 	public static function apply_boxes( array $settings, array $rows, $move_fits = true ) {
-		$stored  = array_values( $settings['boxes'] );
+		$stored = array();
+		foreach ( $settings['boxes'] as $box ) {
+			$stored[ Boxes::key( $box['name'] ) ] = true;
+		}
 		$boxes   = array();
 		$seen    = array();
 		$errors  = array();
 		$renamed = array();
 		$line    = 0;
 
-		foreach ( $rows as $index => $row ) {
+		foreach ( $rows as $row ) {
 			if ( ! is_array( $row ) ) {
 				continue;
 			}
@@ -530,11 +545,16 @@ class Settings {
 				'height' => Boxes::num_text( $height ),
 			);
 
-			if ( is_numeric( $index ) && isset( $stored[ (int) $index ] ) ) {
-				$old = Boxes::key( $stored[ (int) $index ]['name'] );
-				if ( $old !== $key ) {
-					$renamed[ $old ] = $key;
-				}
+			$old = Boxes::key( self::name_in( $row['was'] ?? '' ) );
+			if ( '' !== $old && $old !== $key && isset( $stored[ $old ] ) ) {
+				$renamed[ $old ] = $key;
+			}
+		}
+
+		// A name that is still in the list was not renamed away.
+		foreach ( array_keys( $renamed ) as $old ) {
+			if ( isset( $seen[ $old ] ) ) {
+				unset( $renamed[ $old ] );
 			}
 		}
 
@@ -837,7 +857,7 @@ class Settings {
 	/**
 	 * Save this section's own list of boxes.
 	 *
-	 * @param array $raw Unslashed POST: _wpnonce, boxes[n][name|length|width|height|remove].
+	 * @param array $raw Unslashed POST: _wpnonce, boxes[n][was|name|length|width|height|remove].
 	 * @return array{status: int, ok: bool, message: string, settings?: array}
 	 */
 	public static function boxes_request( array $raw ) {

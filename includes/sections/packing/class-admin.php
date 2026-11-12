@@ -78,6 +78,7 @@ class Admin {
 					'error'    => __( 'Something went wrong. Please try again.', 'fishotel-misc-plugin' ),
 					'counting' => __( 'Counting…', 'fishotel-misc-plugin' ),
 					'working'  => __( 'Working…', 'fishotel-misc-plugin' ),
+					'unsaved'  => __( 'Nothing was saved: another form on this page has changes that are not saved, and saving this one reloads the page. Save that one first (or reload the page to drop them).', 'fishotel-misc-plugin' ),
 					/* translators: %d: number of variations set so far */
 					'progress' => __( '%d set so far…', 'fishotel-misc-plugin' ),
 					/* translators: 1: variations set, 2: variations that could not be saved */

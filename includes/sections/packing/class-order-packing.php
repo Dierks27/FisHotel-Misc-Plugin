@@ -265,8 +265,13 @@ class Order_Packing {
 			foreach ( $result['unplaced'] as $bag ) {
 				$names[] = $bag['count'] . ' × ' . $bag['name'];
 			}
-			/* translators: %s: bags, as "2 × Name" separated by commas */
-			$out[] = sprintf( __( 'No box takes: %s — type how many fit under FisHotel Tools → Packing → Boxes.', 'fishotel-misc-plugin' ), implode( ', ', $names ) );
+			if ( count( $result['boxes'] ) >= Suggest::MAX_BOXES ) {
+				/* translators: 1: bags, as "2 × Name" separated by commas, 2: the most boxes a suggestion names */
+				$out[] = sprintf( __( 'Not boxed: %1$s — a suggestion stops at %2$d boxes.', 'fishotel-misc-plugin' ), implode( ', ', $names ), Suggest::MAX_BOXES );
+			} else {
+				/* translators: %s: bags, as "2 × Name" separated by commas */
+				$out[] = sprintf( __( 'No box takes: %s — type how many fit under FisHotel Tools → Packing → Boxes.', 'fishotel-misc-plugin' ), implode( ', ', $names ) );
+			}
 		}
 
 		foreach ( $result['boxes'] as $box ) {
@@ -302,6 +307,23 @@ class Order_Packing {
 		$parts = array();
 		foreach ( $counts as $name => $count ) {
 			$parts[] = $count > 1 ? $count . ' × ' . $name : (string) $name;
+		}
+		return implode( ' + ', $parts );
+	}
+
+	/**
+	 * A suggestion as the screen showed it, in one line (pure): each box
+	 * with its fill — "Medium box 83.3%", "Large box 100% + Small box 40%".
+	 * The Confirm button posts it back, so the server can tell whether the
+	 * suggestion it is about to store is the one that was looked at.
+	 *
+	 * @param array[] $boxes The suggested boxes (name, fill_pct).
+	 * @return string
+	 */
+	public static function shown_token( array $boxes ) {
+		$parts = array();
+		foreach ( $boxes as $box ) {
+			$parts[] = (string) ( $box['name'] ?? '' ) . ' ' . Boxes::num_text( (float) ( $box['fill_pct'] ?? 0 ), 1 ) . '%';
 		}
 		return implode( ' + ', $parts );
 	}
@@ -450,12 +472,18 @@ class Order_Packing {
 	 *   view     nothing is written (the box is drawn again);
 	 *   confirm  `choice` = "suggested" (the suggestion as it stands now)
 	 *            or the key of a box of the list, with `count` (1 unless
-	 *            given) — stored on the order;
+	 *            given) — stored on the order. With "suggested" the screen
+	 *            says what it showed (`shown`, shown_token()): when the
+	 *            suggestion is another one by now — the order, a bag size
+	 *            or the numbers changed since the box was drawn — nothing
+	 *            is stored and the answer is 409 with the order, so the box
+	 *            is drawn again and the new suggestion is seen before it is
+	 *            confirmed;
 	 *   clear    the confirmed box is removed.
 	 *
 	 * An order that went into a combined box is confirmed there, not here.
 	 *
-	 * @param array $raw Unslashed POST: _wpnonce, order_id, op, choice, count.
+	 * @param array $raw Unslashed POST: _wpnonce, order_id, op, choice, count, shown.
 	 * @return array{status: int, ok: bool, message: string, order?: object}
 	 */
 	public static function confirm_request( array $raw ) {
@@ -510,7 +538,11 @@ class Order_Packing {
 		if ( '' === $choice || 'suggested' === $choice ) {
 			$usable = in_array( $result['status'], array( Suggest::STATUS_FITS, Suggest::STATUS_SPLIT ), true ) && $result['boxes'] && ! $result['unplaced'];
 			if ( ! $usable ) {
-				return self::answer( 409, __( 'There is no suggestion to confirm right now — choose a box from the list.', 'fishotel-misc-plugin' ) );
+				return self::answer( 409, __( 'There is no suggestion to confirm right now — choose a box from the list.', 'fishotel-misc-plugin' ), $order );
+			}
+			if ( isset( $raw['shown'] ) && ( ! is_scalar( $raw['shown'] ) || self::shown_token( $result['boxes'] ) !== trim( (string) $raw['shown'] ) ) ) {
+				/* translators: %s: the suggested box or boxes, with their fill */
+				return self::answer( 409, sprintf( __( 'Nothing was confirmed: the suggestion changed since this box was drawn — it is now %s. Look at it, then confirm.', 'fishotel-misc-plugin' ), self::shown_token( $result['boxes'] ) ), $order );
 			}
 			$boxes     = $result['boxes'];
 			$fills     = array();
@@ -521,7 +553,7 @@ class Order_Packing {
 		} else {
 			$box = Boxes::find( $current['boxes'], $choice );
 			if ( null === $box ) {
-				return self::answer( 400, __( 'That box is not in the list any more. Reload the page and choose again.', 'fishotel-misc-plugin' ) );
+				return self::answer( 400, __( 'That box is not in the list any more — choose again.', 'fishotel-misc-plugin' ), $order );
 			}
 			$count = 1;
 			if ( isset( $raw['count'] ) && ! Settings::is_blank( $raw['count'] ) ) {

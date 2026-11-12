@@ -107,6 +107,32 @@ check( 'fishotel_packing_confirmed_box(): the boxes with their size, the first b
 check( 'the suggestion carries it too', $box === fishotel_packing_suggest( 700 )['confirmed'] );
 check( 'an order without one, or no order at all: null', null === fishotel_packing_confirmed_box( 999 ) && null === fishotel_packing_confirmed_box( 0 ) && null === fishotel_packing_confirmed_box( 'x' ) );
 
+echo "2b. Only the suggestion that was looked at is confirmed\n";
+check( 'a suggestion in one line, as the button carries it: each box with its fill', 'Cube 12 100%' === Order_Packing::shown_token( $suggestion['boxes'] ) && 'Long 20 100% + Cube 8 33.3%' === Order_Packing::shown_token( array( array( 'name' => 'Long 20', 'fill_pct' => 100.0 ), array( 'name' => 'Cube 8', 'fill_pct' => 33.3 ) ) ) && '' === Order_Packing::shown_token( array() ) );
+Order_Packing::confirm_request( array( 'op' => 'clear' ) + $post );
+$order->calls      = array();
+$order->items[1]->qty = 10; // The order changed after the box was drawn: 10/12 + 2/4 is over one Cube 12.
+$now               = fishotel_packing_suggest( 700 );
+$GLOBALS['fh_did'] = array();
+$out               = Order_Packing::confirm_request( array( 'shown' => 'Cube 12 100%' ) + $post );
+check( 'the box on screen is not the suggestion any more: 409, nothing written, no action fired', 'Long 20' === $now['boxes'][0]['name'] && 409 === $out['status'] && false === $out['ok'] && array() === $order->writes() && null === fishotel_packing_confirmed_box( 700 ) && array() === fh_actions_done(), fh_test_export( $out['message'] ) );
+check( 'the answer says what it is now, and carries the order so the box is drawn again', false !== strpos( $out['message'], 'the suggestion changed since this box was drawn — it is now Long 20 53.3%' ) && isset( $out['order'] ) && $order === $out['order'], $out['message'] );
+$out = Order_Packing::confirm_request( array( 'shown' => '' ) + $post );
+check( 'a button that says nothing about what it showed is refused the same way', 409 === $out['status'] && array() === $order->writes() );
+$out = Order_Packing::confirm_request( array( 'shown' => array( 'Long 20 53.3%' ) ) + $post );
+check( 'so is something that is not text', 409 === $out['status'] && array() === $order->writes() );
+$order->items[2]->qty = 3; // The same box, fuller: 10/30 + 3/10.
+$out = Order_Packing::confirm_request( array( 'shown' => 'Long 20 53.3%' ) + $post );
+check( 'the same box at another fill is not what was looked at either', 409 === $out['status'] && false !== strpos( $out['message'], 'Long 20 63.3%' ) && array() === $order->writes(), $out['message'] );
+$out = Order_Packing::confirm_request( array( 'shown' => 'Long 20 63.3%' ) + $post );
+check( 'what the screen showed is what stands: confirmed', 200 === $out['status'] && 'Long 20' === fishotel_packing_confirmed_box( 700 )['name'] );
+$order->items[1]->qty = 6;
+$order->items[2]->qty = 2;
+Order_Packing::confirm_request( array( 'op' => 'clear' ) + $post );
+$out = Order_Packing::confirm_request( $post );
+check( 'a caller that does not say what was shown (not the screen) confirms the suggestion as it stands', 200 === $out['status'] && 'Cube 12' === fishotel_packing_confirmed_box( 700 )['name'] );
+$order->calls = array();
+
 echo "3. Choosing another box\n";
 $order->calls = array();
 $out          = Order_Packing::confirm_request( array( 'choice' => 'long 20' ) + $post );
@@ -285,6 +311,19 @@ try {
 	$replied = true;
 }
 check( 'refused: an error with its status, no HTML', $reply instanceof Fh_Test_Json && false === $reply->success && 403 === $reply->status && ! isset( $reply->data['html'] ) );
+Order_Packing::confirm_request( array( 'op' => 'clear' ) + $post );
+$html = Order_Box::render_body( $order );
+check( 'the Confirm button carries the suggestion it shows', false !== strpos( $html, 'data-choice="suggested" data-shown="Cube 12 100%"' ) );
+$order->items[1]->qty = 10;
+$_POST                = array( 'choice' => 'suggested', 'shown' => 'Cube 12 100%' ) + $post;
+try {
+	$box_ui->ajax_confirm();
+	$reply = null;
+} catch ( Fh_Test_Json $reply ) {
+	$replied = true;
+}
+check( 'refused because the box on screen is out of date: 409 — with the box as it stands now, the reason at its top, nothing confirmed', $reply instanceof Fh_Test_Json && false === $reply->success && 409 === $reply->status && false !== strpos( $reply->data['html'], 'fh-pack-box__flash is-error' ) && false !== strpos( $reply->data['html'], 'it is now Long 20 53.3%' ) && false !== strpos( $reply->data['html'], 'data-shown="Long 20 53.3%"' ) && false === strpos( $reply->data['html'], 'fh-pack-box__confirmed' ) && null === fishotel_packing_confirmed_box( 700 ) );
+$order->items[1]->qty = 6;
 $_POST = array();
 
 fh_finish();

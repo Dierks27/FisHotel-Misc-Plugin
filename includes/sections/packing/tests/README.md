@@ -45,11 +45,13 @@ helper files exit cleanly when they are run directly (the CI runs every
   order for the "choose another box" list.
 - **settings-test.php** — nothing is seeded; who may save and with which
   nonce, for all four saves; bag sizes (ids are kept on a rename and never
-  reused, a stale page never deletes, the option is stored without
-  autoload); the field sanitisers; the own box list; how many fit (blank
+  reused, a stale page never deletes and never brings a removed bag back,
+  the option is stored without autoload); the field sanitisers; the own box list; how many fit (blank
   and 0 = does not go, a column the form never had keeps its number); the
-  percent; a renamed box keeping its numbers — by its row in the own list,
-  by its size otherwise; the size → bag map; a removed bag taking its
+  percent; a renamed box keeping its numbers — by the box its row says it
+  was in the own list (never by the row's place: the same form posted
+  twice, a page drawn before a box was removed, rows that say nothing, a
+  row that claims another box), by its size otherwise; the size → bag map; a removed bag taking its
   numbers and its sizes with it; a corrupted option reading as safe
   values; one invalid value and nothing is saved, for every save; the AJAX
   handlers only sending the answer.
@@ -64,7 +66,9 @@ helper files exit cleanly when they are run directly (the CI runs every
   that changes nothing, a run that sets only what has no value through
   `update_meta_data()` + `save_meta_data()`, a batch at a time behind a
   cursor, a value set since the list was read left alone, a failed write
-  counted, and every reason the tool refuses to run.
+  counted, only fish filled (a variation of a product outside the fish
+  categories counted, never planned and never written), and every reason
+  the tool refuses to run.
 - **boxes-test.php** — a box (key, inches, size, volume); ShipTracker
   absent; an older build without `get_standard_boxes()` (guarded with
   `method_exists`); the active build providing them (they are the boxes in
@@ -82,25 +86,30 @@ helper files exit cleanly when they are run directly (the CI runs every
   through its live sources (not its copies, not a cancelled source; no
   source loading; every source cancelled); an order that went into one;
   what a person is told (split, on the line said once for two boxes of a
-  kind, no boxes, no numbers, a bag no box takes, no bags defined, no
-  fish); and with stand-ins for the Batch plugin's Ship Day class and the
+  kind, no boxes, no numbers, a bag no box takes, a split that stops at
+  the most boxes a suggestion names, no bags defined, no fish); and with stand-ins for the Batch plugin's Ship Day class and the
   theme's invoice reader.
 - **order-test.php** — who may confirm; confirming the suggestion (two
   `update_meta_data()` and one `save()` on the order object, nothing
-  else: no note, no status change); the stored record; choosing another
+  else: no note, no status change); only the suggestion that was looked at
+  is confirmed (the order changed since the box was drawn, the same box at
+  another fill, a button that says nothing: 409, nothing written, the box
+  drawn again); the stored record; choosing another
   box, several of a box; every refused value; clearing; an incomplete
   suggestion; nothing to suggest; an order that went into a combined box
   (confirmed there, not here); what is read back; the contracts with their
   filters and actions, a filter that answers nonsense, the "unavailable"
   answer; the Packing box on both order screens and what it draws
-  (escaped); the AJAX handler.
+  (escaped); the AJAX handler, also when it refuses with the box as it
+  stands now.
 - **product-test.php** — the dropdown's options; the rule of a save; who
   may save; the field on a variation and on a simple product; the two save
   handlers writing one hidden meta through the product object; a variable
   product having none of its own.
 - **page-test.php** — the Packing page drawn headless: who may open it;
   the three tabs with nothing typed, then with bags, sizes and boxes; each
-  form with its nonce and the fields its save reads; what the page says
+  form with its nonce and the fields its save reads (which forms redraw
+  the page once saved; each stored box saying which box it is); what the page says
   when something is not available; names escaped; ShipTracker providing
   the boxes; the assets.
 - **storefront-test.php** — a front-end request loads nothing but the
@@ -119,7 +128,9 @@ helper files exit cleanly when they are run directly (the CI runs every
 - **packing-admin.test.js** — the script's pure helpers: the tiny
   sprintf, a new table row from its template, the fill tool's run loop
   (it must end: a cursor that does not move, an answer that is not a
-  success and a run that never says done all stop it), and what a button
-  of the Packing box posts.
+  success and a run that never says done all stop it), what a button of
+  the Packing box posts (Confirm carries what it showed), a saved form
+  that redraws the page keeping its button disabled, and a save that would
+  redraw the page being stopped while another form holds unsaved changes.
 
-462 checks in the nine PHP files and 26 in the node test.
+494 checks in the nine PHP files and 35 in the node test.

@@ -240,6 +240,9 @@ $order  = fh_order( new Fh_Fake_Order( 522, array( new Fh_Fake_Item( 1, 'Invente
 wc_get_product( 130 )->meta['_fh_bag_size'] = '4';
 $result = Order_Packing::for_order( $order, $settings, $standard, Boxes::current( array_merge( $settings, array( 'boxes' => array_slice( $settings['boxes'], 0, 2 ) ) ), null, false ) );
 check( 'a bag no box takes is named; the rest is still boxed, in the smallest box that holds it', Suggest::STATUS_PARTIAL === $result['status'] && array( array( 'id' => 4, 'name' => 'Jumbo', 'count' => 1 ) ) === $result['unplaced'] && 'Cube 8' === $result['boxes'][0]['name'] && array( 'No box takes: 1 × Jumbo — type how many fit under FisHotel Tools → Packing → Boxes.' ) === $result['messages'], fh_test_export( $result['messages'] ) );
+$huge   = fh_order( new Fh_Fake_Order( 525, array( new Fh_Fake_Item( 1, 'Invented Goby - Small', 30 * Suggest::MAX_BOXES + 7, 100, array(), 101 ) ) ) );
+$result = fh_suggest( $huge );
+check( 'a split that stops at the most boxes a suggestion names says that — not that no box takes the bags', Suggest::STATUS_PARTIAL === $result['status'] && Suggest::MAX_BOXES === count( $result['boxes'] ) && array( array( 'id' => 1, 'name' => 'Small', 'count' => 7 ) ) === $result['unplaced'] && in_array( 'Not boxed: 7 × Small — a suggestion stops at ' . Suggest::MAX_BOXES . ' boxes.', $result['messages'], true ) && false === strpos( implode( ' ', $result['messages'] ), 'No box takes' ), fh_test_export( $result['messages'] ) );
 $result = Order_Packing::for_order( $order, array_merge( $settings, array( 'bags' => array(), 'size_map' => array(), 'fits' => array() ) ), $standard, $current );
 check( 'no bag sizes defined at all: said first', false !== strpos( $result['messages'][0], 'No bag sizes yet' ) && false === $result['complete'] );
 $order  = fh_order( new Fh_Fake_Order( 523, array( new Fh_Fake_Item( 1, 'Reef Salt 5 lb', 1, 120 ) ) ) );

@@ -253,7 +253,7 @@ if ( $fh_confirmed && $fh_can_use ) {
 	<?php if ( ! $fh_folded ) : ?>
 		<div class="fh-pack-box__controls">
 			<?php if ( $fh_can_use && ! ( $fh_confirmed && $fh_same ) ) : ?>
-				<button type="button" class="button button-primary fh-pack-confirm" data-op="confirm" data-choice="suggested">
+				<button type="button" class="button button-primary fh-pack-confirm" data-op="confirm" data-choice="suggested" data-shown="<?php echo esc_attr( Order_Packing::shown_token( $result['boxes'] ) ); ?>">
 					<?php echo esc_html( $result['split'] ? __( 'Confirm these boxes', 'fishotel-misc-plugin' ) : __( 'Confirm this box', 'fishotel-misc-plugin' ) ); ?>
 				</button>
 			<?php endif; ?>

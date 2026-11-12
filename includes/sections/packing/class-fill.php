@@ -10,12 +10,18 @@
  *   preview  counts, and changes nothing: how many variations have no Bag
  *            size, how many of those the map would set (and to which bag),
  *            how many carry a size the map has no bag for, how many carry
- *            no size at all;
+ *            no size at all, how many are not fish;
  *   run      sets them, a batch at a time (the page asks again until it is
  *            done). It never touches a variation that already has a value:
  *            the list comes from the variations WITHOUT one, and each is
  *            checked once more on the product object just before it is
  *            written.
+ *
+ * Only FISH are filled: a variation whose product is in none of the fish
+ * categories (Lines::fish_categories()) is counted and left alone. A Bag
+ * size of its own is what makes any other product count as a fish on an
+ * order, so writing one onto a net or a jar of food that happens to use
+ * the Size attribute would put it in the box suggestion.
  *
  * A value is written through the WooCommerce product object
  * (update_meta_data() + save_meta_data()): the hidden meta `_fh_bag_size`,
@@ -62,28 +68,44 @@ class Fill {
 	 * What the map would do with the variations that have no Bag size
 	 * (pure).
 	 *
-	 * @param array[] $rows     Store::variations_without_bag(): id, parent, attributes.
-	 * @param array   $settings Settings (bags, size_map).
-	 * @param array   $standard Size_List::standard().
-	 * @return array{empty: int, set: array<int, int>, by_bag: array<int, int>, unmapped: array<string, int>, no_size: int}
+	 * @param array[]       $rows     Store::variations_without_bag(): id, parent, attributes.
+	 * @param array         $settings Settings (bags, size_map).
+	 * @param array         $standard Size_List::standard().
+	 * @param callable|null $is_fish  function ( $parent_id ): bool — whether a product is a fish
+	 *                                (fish_test()); asked once per product. Null = every row is.
+	 * @return array{empty: int, set: array<int, int>, by_bag: array<int, int>, unmapped: array<string, int>, no_size: int, not_fish: int}
 	 *         empty = variations without a value; set = variation id → bag id;
 	 *         by_bag = bag id → how many; unmapped = size slug → how many;
-	 *         no_size = how many carry no size.
+	 *         no_size = how many carry no size; not_fish = how many are of a
+	 *         product that is not a fish.
 	 */
-	public static function plan( array $rows, array $settings, array $standard ) {
+	public static function plan( array $rows, array $settings, array $standard, $is_fish = null ) {
 		$out = array(
 			'empty'    => 0,
 			'set'      => array(),
 			'by_bag'   => array(),
 			'unmapped' => array(),
 			'no_size'  => 0,
+			'not_fish' => 0,
 		);
+		$fish = array();
 
 		foreach ( $rows as $row ) {
 			if ( ! is_array( $row ) || (int) ( $row['id'] ?? 0 ) < 1 ) {
 				continue;
 			}
 			$out['empty']++;
+
+			if ( null !== $is_fish ) {
+				$parent = (int) ( $row['parent'] ?? 0 );
+				if ( ! isset( $fish[ $parent ] ) ) {
+					$fish[ $parent ] = (bool) call_user_func( $is_fish, $parent );
+				}
+				if ( ! $fish[ $parent ] ) {
+					$out['not_fish']++;
+					continue;
+				}
+			}
 
 			$size = Size_List::size_of( isset( $row['attributes'] ) && is_array( $row['attributes'] ) ? $row['attributes'] : array(), $standard );
 			if ( '' === $size ) {
@@ -103,6 +125,32 @@ class Fill {
 		}
 
 		return $out;
+	}
+
+	/**
+	 * The question plan() asks about a variation's product: is it in one of
+	 * the fish categories — the same list, read the same way (the product's
+	 * own category slugs), as the order lines are told apart by.
+	 *
+	 * @param int[] $parent_ids The products about to be asked about (their categories are read in one go).
+	 * @return callable function ( $parent_id ): bool.
+	 */
+	public static function fish_test( array $parent_ids = array() ) {
+		$categories = Lines::fish_categories();
+		$parent_ids = array_values( array_unique( array_filter( array_map( 'intval', $parent_ids ) ) ) );
+		if ( $parent_ids && function_exists( 'update_object_term_cache' ) ) {
+			update_object_term_cache( $parent_ids, 'product' );
+		}
+
+		return static function ( $parent_id ) use ( $categories ) {
+			$terms = (int) $parent_id > 0 && $categories && function_exists( 'get_the_terms' ) ? get_the_terms( (int) $parent_id, 'product_cat' ) : false;
+			foreach ( is_array( $terms ) ? $terms : array() as $term ) {
+				if ( is_object( $term ) && isset( $term->slug ) && in_array( strtolower( (string) $term->slug ), $categories, true ) ) {
+					return true;
+				}
+			}
+			return false;
+		};
 	}
 
 	/**
@@ -157,6 +205,10 @@ class Fill {
 			/* translators: %d: how many variations */
 			$lines[] = sprintf( _n( '%d carries no size (any size, or none) — it stays empty.', '%d carry no size (any size, or none) — they stay empty.', (int) $plan['no_size'], 'fishotel-misc-plugin' ), (int) $plan['no_size'] );
 		}
+		if ( ! empty( $plan['not_fish'] ) ) {
+			/* translators: %d: how many variations */
+			$lines[] = sprintf( _n( '%d is of a product that is not in a fish category — it stays empty (set its Bag size by hand if it is packed in a bag).', '%d are of products that are not in a fish category — they stay empty (set their Bag size by hand if they are packed in a bag).', (int) $plan['not_fish'], 'fishotel-misc-plugin' ), (int) $plan['not_fish'] );
+		}
 
 		return $lines;
 	}
@@ -206,7 +258,7 @@ class Fill {
 	public static function run( $store, array $settings, array $standard, $after_id = 0, $limit = self::BATCH, $writer = null ) {
 		$limit = max( 1, (int) $limit );
 		$rows  = is_object( $store ) && method_exists( $store, 'variations_without_bag' ) ? (array) $store->variations_without_bag( (int) $after_id, $limit ) : array();
-		$plan  = self::plan( $rows, $settings, $standard );
+		$plan  = self::plan( $rows, $settings, $standard, self::fish_test( array_column( $rows, 'parent' ) ) );
 
 		$out = array(
 			'set'     => 0,
@@ -285,7 +337,8 @@ class Fill {
 		}
 
 		$store  = is_object( $store ) ? $store : new Store();
-		$plan   = self::plan( (array) $store->variations_without_bag(), $settings, $standard );
+		$rows   = (array) $store->variations_without_bag();
+		$plan   = self::plan( $rows, $settings, $standard, self::fish_test( array_column( $rows, 'parent' ) ) );
 		$counts = method_exists( $store, 'variation_counts' ) ? (array) $store->variation_counts() : array();
 		$lines  = self::describe( $plan, $settings, $standard, $counts );
 

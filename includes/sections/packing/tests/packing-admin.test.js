@@ -1,7 +1,8 @@
 /**
  * Packing admin JS — the pure helpers: the tiny sprintf, a new table row
- * from its template, the fill tool's run loop (it must end), and what a
- * button of the Packing box posts.
+ * from its template, the fill tool's run loop (it must end), what a
+ * button of the Packing box posts, and what a form's save may and may not
+ * do to the page (a second post, another form's unsaved numbers).
  *
  * Runs js/packing-admin.js without jQuery or a DOM: the file exports its
  * helpers and skips the DOM wiring when jQuery is absent.
@@ -75,12 +76,27 @@ while ( ! state.done && ! state.stopped && loops < 10000 ) {
 check( 'a store of 25 batches takes 25 steps', loops === 25 && state.done === true && state.set === 25 );
 
 console.log( '5. confirmPayload(): what a button of the Packing box posts' );
-check( 'Confirm posts the suggestion', same( helpers.confirmPayload( 'confirm', 'suggested', 'long 20', '3' ), { op: 'confirm', choice: 'suggested' } ) );
-check( '"Use this box" posts the picked box and how many', same( helpers.confirmPayload( 'confirm', 'chosen', 'long 20', '2' ), { op: 'confirm', choice: 'long 20', count: 2 } ) );
+check( 'Confirm posts the suggestion — and what the button showed, so the server can refuse one that changed', same( helpers.confirmPayload( 'confirm', 'suggested', 'long 20', '3', 'Cube 12 83.3%' ), { op: 'confirm', choice: 'suggested', shown: 'Cube 12 83.3%' } ) );
+check( 'a button that carries nothing posts an empty "shown" (refused, and the box is drawn again)', same( helpers.confirmPayload( 'confirm', 'suggested' ), { op: 'confirm', choice: 'suggested', shown: '' } ) && helpers.confirmPayload( 'confirm', 'suggested', '', '', null ).shown === '' );
+check( '"Use this box" posts the picked box and how many', same( helpers.confirmPayload( 'confirm', 'chosen', 'long 20', '2', 'Cube 12 83.3%' ), { op: 'confirm', choice: 'long 20', count: 2 } ) );
 check( 'a count that is not a number, or below one, is one', helpers.confirmPayload( 'confirm', 'chosen', 'cube 8', '' ).count === 1 && helpers.confirmPayload( 'confirm', 'chosen', 'cube 8', '0' ).count === 1 && helpers.confirmPayload( 'confirm', 'chosen', 'cube 8', 'x' ).count === 1 );
 check( '"Use this box" with no box picked posts nothing', helpers.confirmPayload( 'confirm', 'chosen', '', '1' ) === null && helpers.confirmPayload( 'confirm', 'chosen', null, '1' ) === null && helpers.confirmPayload( 'confirm', 'chosen', undefined, '1' ) === null );
 check( 'Clear and Refresh post only themselves', same( helpers.confirmPayload( 'clear', 'chosen', 'cube 8', '4' ), { op: 'clear' } ) && same( helpers.confirmPayload( 'view' ), { op: 'view' } ) );
 check( 'an unknown button posts nothing', helpers.confirmPayload( 'delete-everything' ) === null && helpers.confirmPayload() === null );
+
+console.log( '6. afterSave(): what follows a form\'s save' );
+check( 'a saved form that reloads the page keeps its button disabled until the page is back (no second post of the same rows)', same( helpers.afterSave( { success: true, data: { message: 'Boxes saved: 2 boxes.' } }, true ), { ok: true, reload: true, enable: false } ) );
+check( 'a saved form that stays on the page can be saved again', same( helpers.afterSave( { success: true }, false ), { ok: true, reload: false, enable: true } ) );
+check( 'a refused save reloads nothing and gives the button back', same( helpers.afterSave( { success: false, data: { message: 'Nothing was saved' } }, true ), { ok: false, reload: false, enable: true } ) && same( helpers.afterSave( null, true ), { ok: false, reload: false, enable: true } ) );
+
+console.log( '7. unsavedElsewhere(): a save that reloads must not drop what another form holds' );
+var clean = [ { dirty: false }, { dirty: false } ];
+var typed = [ { dirty: false }, { dirty: true } ];
+check( 'boxes saved while "how many fit" has unsaved numbers: stopped', helpers.unsavedElsewhere( typed, 0, true ) === true );
+check( 'nothing typed elsewhere: goes ahead', helpers.unsavedElsewhere( clean, 0, true ) === false );
+check( 'the form\'s own changes are what is being saved', helpers.unsavedElsewhere( typed, 1, true ) === false && helpers.unsavedElsewhere( [ { dirty: true } ], 0, true ) === false );
+check( 'a save that does not reload drops nothing', helpers.unsavedElsewhere( [ { dirty: true }, { dirty: false } ], 1, false ) === false );
+check( 'no forms, or junk: goes ahead', helpers.unsavedElsewhere( [], 0, true ) === false && helpers.unsavedElsewhere( null, 0, true ) === false && helpers.unsavedElsewhere( [ null, undefined ], 0, true ) === false );
 
 console.log( '\n' + ( failures ? failures + ' of ' + checks + ' checks FAILED' : 'All ' + checks + ' checks passed' ) );
 process.exit( failures ? 1 : 0 );
