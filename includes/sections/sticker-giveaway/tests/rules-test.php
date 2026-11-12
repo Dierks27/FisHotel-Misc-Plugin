@@ -135,5 +135,34 @@ check( 'ineligible carts are offered add-ons when for-everyone is on', Rules::of
 check( 'ineligible carts are not offered add-ons when for-everyone is off', ! Rules::offers_upsell( false, array_merge( $settings, array( 'upsell_for_everyone' => false ) ) ) );
 check( 'nobody is offered add-ons when the upsell is off', ! Rules::offers_upsell( true, $no_upsell ) );
 
+echo "7. The section switched off: sticker lines leave the cart\n";
+class FH_Fake_Cart {
+	public $items;
+	public $removed = array();
+	public function __construct( array $items ) {
+		$this->items = $items;
+	}
+	public function get_cart() {
+		return $this->items;
+	}
+	public function remove_cart_item( $key ) {
+		$this->removed[] = $key;
+		unset( $this->items[ $key ] );
+		return true;
+	}
+}
+$fake = new FH_Fake_Cart(
+	array(
+		'fish'  => array( 'product_id' => 10, 'quantity' => 1 ),
+		'free'  => array( 'product_id' => 77, 'quantity' => 1, 'fh_sticker' => 'free' ),
+		'extra' => array( 'product_id' => 78, 'quantity' => 2, 'fh_sticker' => 'extra' ),
+		'own'   => array( 'product_id' => 77, 'quantity' => 1 ), // the same sticker bought the normal way
+	)
+);
+check( 'the free and the add-on sticker lines are removed', 2 === \FisHotel\Misc\Sections\Sticker_Giveaway\Sticker_Giveaway::drop_sticker_lines( $fake ) && array( 'free', 'extra' ) === $fake->removed );
+check( 'the fish and a sticker bought the normal way stay', array( 'fish', 'own' ) === array_keys( $fake->items ) );
+check( 'a second pass removes nothing; something that is not a cart is ignored', 0 === \FisHotel\Misc\Sections\Sticker_Giveaway\Sticker_Giveaway::drop_sticker_lines( $fake ) && 0 === \FisHotel\Misc\Sections\Sticker_Giveaway\Sticker_Giveaway::drop_sticker_lines( null ) );
+check( 'the section declares the switched-off hook the manager calls', method_exists( '\FisHotel\Misc\Sections\Sticker_Giveaway\Sticker_Giveaway', 'boot_disabled' ) && false !== strpos( file_get_contents( FISHOTEL_MISC_PATH . 'includes/class-section-manager.php' ), "method_exists( \$class_name, 'boot_disabled' )" ) );
+
 echo "\n" . ( $failures ? "$failures of $checks checks FAILED\n" : "All $checks checks passed\n" );
 exit( $failures ? 1 : 0 );

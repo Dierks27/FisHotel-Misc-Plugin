@@ -239,7 +239,13 @@ $_REQUEST['redirect_to']                = 'https://example.test/?fh_front_desk=1
 check( 'a login bound for the Front Desk by a crew member: about a year', 365 * 86400 === $front->extend_cookie_life( 2 * 86400, 8, false ) );
 check( 'a user without the capability: WordPress\'s own two days', 2 * 86400 === $front->extend_cookie_life( 2 * 86400, 9, false ) );
 check( 'a longer life (remember me, filtered elsewhere) is never shortened', 400 * 86400 === $front->extend_cookie_life( 400 * 86400, 8, true ) );
+ob_start();
+$front->remember_label_login();
+check( 'the login form for the Front Desk sends "remember me" without the box (else the cookie ends with the browser session)', '<input type="hidden" name="rememberme" value="forever" />' === ob_get_clean() );
 $_REQUEST['redirect_to'] = 'https://example.test/wp-admin/';
+ob_start();
+$front->remember_label_login();
+check( 'the login form for the dashboard is left alone', '' === ob_get_clean() );
 check( 'a login bound for the dashboard: untouched', 2 * 86400 === $front->extend_cookie_life( 2 * 86400, 8, false ) );
 unset( $_REQUEST['redirect_to'] );
 check( 'no redirect at all: untouched', 14 * 86400 === $front->extend_cookie_life( 14 * 86400, 8, true ) );

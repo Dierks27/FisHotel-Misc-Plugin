@@ -74,6 +74,13 @@ class Store {
 	const DB_VERSION_OPTION = 'fishotel_cleanroom_db_version';
 
 	/**
+	 * fish_product_names(), read once per request.
+	 *
+	 * @var array<int, string>|null
+	 */
+	private $fish_product_names = null;
+
+	/**
 	 * Transient caching the species candidate list for the parser.
 	 *
 	 * @var string
@@ -2148,6 +2155,22 @@ class Store {
 		}
 
 		return $out;
+	}
+
+	/**
+	 * The fish products by id with their titles (read once per request) —
+	 * what a supplier order's check-in matches a line's name against.
+	 *
+	 * @return array<int, string> product id => title.
+	 */
+	public function fish_product_names() {
+		if ( null === $this->fish_product_names ) {
+			$this->fish_product_names = array();
+			foreach ( $this->fish_products() as $product ) {
+				$this->fish_product_names[ (int) $product['product_id'] ] = (string) $product['name'];
+			}
+		}
+		return $this->fish_product_names;
 	}
 
 	/**

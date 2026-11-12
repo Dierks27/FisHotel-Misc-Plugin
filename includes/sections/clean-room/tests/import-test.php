@@ -23,6 +23,7 @@ use FisHotel\Misc\Sections\Clean_Room\Admin_Import;
 use FisHotel\Misc\Sections\Clean_Room\Import;
 use FisHotel\Misc\Sections\Clean_Room\Import_Map;
 use FisHotel\Misc\Sections\Clean_Room\Layout;
+use FisHotel\Misc\Sections\Clean_Room\Orders;
 use FisHotel\Misc\Sections\Clean_Room\Settings;
 use FisHotel\Misc\Sections\Clean_Room\Species;
 use FisHotel\Misc\Sections\Clean_Room\Tests\Fake_Store;
@@ -110,7 +111,7 @@ $s2 = $store->stay( $o2['lines'][1]['stay_id'], $today, $settings );
 check( 'the clown: 6 arrived, 1 DOA → 5 live, checked in on the batch date, in the first empty tank of building 500, source import, the seam fields', 6 === $s1['qty_arrived'] && 5 === $s1['qty_live'] && '2026-10-05' === $s1['checkin_date'] && 511 === $s1['tank_number'] && 'import' === $s1['source'] && 'Test Supplier Two' === $s1['supplier'] && '2026-2' === $s1['order_ref'] && (int) $o2['lines'][0]['id'] === $s1['order_line_id'] && is_float( $s1['landed_cost'] ), json_encode( $s1 ) );
 $ev = $store->events( $s1['id'] );
 check( 'the arrival and the doa loss carry source import, the actor, the batch date', 2 === count( $ev ) && 'arrival' === $ev[0]['type'] && 'import' === $ev[0]['source'] && 3 === $ev[0]['actor_id'] && 'loss' === $ev[1]['type'] && 'doa' === $ev[1]['note'] && 'import' === $ev[1]['source'] && 1 === $ev[1]['qty'] );
-check( 'the wrasse: 3 live in 512, linked to the product by the species row? no — the species row has no product, so none', 3 === $s2['qty_live'] && 512 === $s2['tank_number'] && null === $s2['product_id'] );
+check( 'the wrasse: 3 live in 512; its species row has no product, so the stay takes the one fish product named exactly like it (the clown has no such product: none)', 3 === $s2['qty_live'] && 512 === $s2['tank_number'] && 12 === $s2['product_id'] && null === $s1['product_id'], json_encode( array( $s1['product_id'], $s2['product_id'] ) ) );
 check( 'the old batch got no stays', null === $l[0]['stay_id'] && null === $l[1]['stay_id'] );
 check( 'no sale date was invented: the order has none, its groups none (not for sale), and the result says so with the order', null === $o2['sale_date'] && null === $s1['sale_ready_date'] && false === $s1['sale_ready'] && null === $s2['sale_ready_date'] && array( 'missing' => 2, 'refs' => array( '2026-2' ) ) === $r['sale_dates'], json_encode( $r['sale_dates'] ) );
 
@@ -159,6 +160,22 @@ check( 'a 400-day cutoff checks the old batch in too, on building 600: its 3 lin
 $store4 = new Fake_Store();
 $r5     = Import::run( $map, $store4, array( 'today' => $today, 'settings' => $settings, 'stays_days' => 45, 'stays_building_id' => 1, 'dose_logs' => false ) );
 check( 'a building that is not a Spa one is ignored: the order gets none and the stays still land in the first empty Spa tank', 2 === $r5['stays']['created'] && null === $store4->order_by_ref( '2026-2' )['building_id'] && 511 === $store4->stay( 1 )['tank_number'] && array() === $r5['errors'] );
+
+echo "9b. A hand-made order that took a workbook ref\n";
+$store5 = new Fake_Store();
+$hand1  = $store5->save_order( Orders::normalize_order( array( 'ref' => '2026-1', 'supplier' => 'Practice Supplier', 'status' => 'received', 'received_date' => $today ) ) );
+$hand2  = $store5->save_order( Orders::normalize_order( array( 'ref' => '2026-2', 'supplier' => 'Practice Supplier', 'status' => 'ordered' ) ) );
+$store5->save_order_lines( $hand2, Orders::normalize_lines( array( array( 'species' => 'Hand-typed Damsel', 'qty_ordered' => 4, 'qty_received' => 4 ) ) ) );
+$r6 = Import::run( $map, $store5, $options );
+check( 'the two clashing batches are not imported and are named, the third comes in', array( 'created' => 1, 'skipped' => 2, 'lines' => 1 ) === array( 'created' => $r6['orders']['created'], 'skipped' => $r6['orders']['skipped'], 'lines' => min( 1, $r6['orders']['lines'] ) ) && 2 === count( $r6['errors'] ) && false !== strpos( $r6['errors'][0], 'Batch 2026-1 of the workbook was NOT imported' ) && false !== strpos( $r6['errors'][1], 'Batch 2026-2' ) && false !== strpos( $r6['errors'][1], 'Practice Supplier, not received yet, ordered' ) && false !== strpos( $r6['errors'][1], 'Give that order another Ref' ), json_encode( array( $r6['orders'], $r6['errors'] ) ) );
+check( 'the hand-made orders are left exactly as they were: nothing checked in, no stay, no logs, still "ordered"', 0 === count( $store5->stays ) && 0 === count( $store5->logs ) && array( 'created' => 0, 'skipped' => 0, 'orders' => 0 ) === $r6['stays'] && 'ordered' === $store5->order( $hand2 )['status'] && 'Practice Supplier' === $store5->order( $hand1 )['supplier'] && null === $store5->order( $hand2 )['lines'][0]['stay_id'], json_encode( $r6['stays'] ) );
+$renamed = $store5->order( $hand2 );
+$store5->save_order( array_merge( $renamed, array( 'ref' => '2026-90' ) ) );
+$renamed = $store5->order( $hand1 );
+$store5->save_order( array_merge( $renamed, array( 'ref' => '2026-91' ) ) );
+$r7 = Import::run( $map, $store5, $options );
+check( 'after the hand-made orders get another ref the same file brings both batches in, with their stays', 2 === $r7['orders']['created'] && 1 === $r7['orders']['skipped'] && array() === $r7['errors'] && 2 === $r7['stays']['created'] && 'Test Supplier Co' === $store5->order_by_ref( '2026-1' )['supplier'], json_encode( array( $r7['orders'], $r7['stays'], $r7['errors'] ) ) );
+check( 'is_workbook_order: the import\'s own note, or supplier + received date', true === Import::is_workbook_order( array( 'notes' => 'Imported from the workbook sheet "Recieved (1)". Checked by Jeff.', 'supplier' => 'X', 'received_date' => null ), array( 'supplier' => 'Y', 'received_date' => '2026-01-14' ) ) && true === Import::is_workbook_order( array( 'notes' => '', 'supplier' => ' test  supplier co ', 'received_date' => '2026-01-14' ), array( 'supplier' => 'Test Supplier Co', 'received_date' => '2026-01-14' ) ) && false === Import::is_workbook_order( array( 'notes' => '', 'supplier' => 'Test Supplier Co', 'received_date' => '2026-01-15' ), array( 'supplier' => 'Test Supplier Co', 'received_date' => '2026-01-14' ) ) && false === Import::is_workbook_order( array( 'notes' => 'mine', 'supplier' => '', 'received_date' => null ), array( 'supplier' => '', 'received_date' => null ) ) );
 
 echo "10. The system → building rule (pure)\n";
 $spa = array(

@@ -573,9 +573,28 @@ function get_user_meta( $user_id, $key = '', $single = false ) {
 	return $single ? $value : array( $value );
 }
 
+/**
+ * As WordPress: update_metadata() strips one level of slashes from every
+ * string in the value (wp_unslash), so a caller must hand it wp_slash()ed
+ * data or lose its backslashes.
+ */
 function update_user_meta( $user_id, $key, $value ) {
-	$GLOBALS['fh_user_meta'][ (int) $user_id ][ $key ] = $value;
+	$GLOBALS['fh_user_meta'][ (int) $user_id ][ $key ] = fh_strip_slashes_deep( $value );
 	return true;
+}
+
+function fh_strip_slashes_deep( $value ) {
+	if ( is_array( $value ) ) {
+		return array_map( 'fh_strip_slashes_deep', $value );
+	}
+	return is_string( $value ) ? stripslashes( $value ) : $value;
+}
+
+function wp_slash( $value ) {
+	if ( is_array( $value ) ) {
+		return array_map( 'wp_slash', $value );
+	}
+	return is_string( $value ) ? addslashes( $value ) : $value;
 }
 
 function delete_user_meta( $user_id, $key ) {

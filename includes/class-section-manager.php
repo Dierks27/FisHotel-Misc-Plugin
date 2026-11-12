@@ -86,6 +86,10 @@ class Section_Manager {
 				// Boot the section if enabled.
 				if ( $this->sections[ $slug ]['enabled'] && method_exists( $class_name, 'boot' ) ) {
 					$class_name::boot();
+				} elseif ( ! $this->sections[ $slug ]['enabled'] && method_exists( $class_name, 'boot_disabled' ) ) {
+					// A section that left something behind in a visitor's
+					// session cleans it up while it is switched off.
+					$class_name::boot_disabled();
 				}
 			}
 		}

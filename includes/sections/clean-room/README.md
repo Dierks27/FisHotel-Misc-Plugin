@@ -519,6 +519,16 @@ a stay by `Orders::check_in()`, logs by the `import:<ref>#<row>` marker
 each carries at the end of its note (kept out of sight on the Events
 tab); the box rates merge to the same rows.
 
+**A ref taken by hand (0.44.1).** The New order form offers the next
+free `YYYY-N`, the same refs the workbook's batches carry. An order on
+the site only counts as "this batch, imported before" when its notes
+still carry the import's line (`Imported from the workbook sheet …`) or
+its supplier and received date agree with the batch
+(`Import::is_workbook_order()`). Any other order on that ref is left
+untouched — not checked in, no logs — the batch is not imported, and the
+result says so in red with the way out: give the hand-made order another
+Ref and import the same file again.
+
 **The privacy rule.** The workbook holds Jeff's business: species,
 prices, supplier rates, batch figures, log lines, passwords. None of it
 is in this repository — no seed, no fixture, no test, no comment names a

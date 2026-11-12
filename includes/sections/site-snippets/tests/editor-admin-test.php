@@ -187,6 +187,17 @@ $draft = Admin_Editor::draft( 7, $row['id'] );
 check( 'what was typed is kept as the draft, with the reason', is_array( $draft ) && $typed === $draft['fields']['code'] && 'Renamed' === $draft['fields']['name'] && 'refused' === $draft['state'] && false !== strpos( $draft['message'], 'PHP syntax error on line 2' ) );
 $html = fh_page( array( 'tab' => 'mine', 'view' => 'edit', 'id' => (string) $row['id'] ) );
 check( 'the edit screen shows the typed code and name, the reason, and a discard button', false !== strpos( $html, esc_textarea( $typed ) . '</textarea>' ) && false !== strpos( $html, 'value="Renamed"' ) && false !== strpos( $html, 'PHP syntax error on line 2' ) && false !== strpos( $html, Admin_Editor::DISCARD_ACTION ) );
+// Backslashes survive a refused save: update_user_meta() unslashes what it stores.
+$slashy = "function fh_slashy() {\n\techo \"line\\n\" . 'It\\'s' . preg_replace( '/\\d+\\s/', '', 'a1 ' );\n\t\$o = new \\stdClass( ;\n}";
+$halt   = fh_call( 'handle_save', fh_form( array( 'snippet_id' => (string) $row['id'], 'base_version' => '1', 'name' => addslashes( 'Back\\slash' ), 'code' => addslashes( $slashy ) ) ) ); // WordPress hands $_POST over slashed
+$draft  = Admin_Editor::draft( 7, $row['id'] );
+check( 'a refused save keeps every backslash of the typed code and name', $halt instanceof FH_Halt && is_array( $draft ) && $slashy === $draft['fields']['code'] && 'Back\\slash' === $draft['fields']['name'] && false !== strpos( $draft['fields']['code'], '"line\\n"' ) && false !== strpos( $draft['fields']['code'], '\\stdClass' ), is_array( $draft ) ? $draft['fields']['code'] : 'no draft' );
+check( '… and the edit screen hands the same code back', false !== strpos( fh_page( array( 'tab' => 'mine', 'view' => 'edit', 'id' => (string) $row['id'] ) ), esc_textarea( $slashy ) . '</textarea>' ) );
+Admin_Editor::keep_draft( 7, 99, array( 'code' => '$other = "\\t";' ), 'refused', 'kept', array() );
+Admin_Editor::drop_draft( 7, 99 );
+check( '… also after another draft of the same user is dropped', $slashy === Admin_Editor::draft( 7, $row['id'] )['fields']['code'] );
+$halt  = fh_call( 'handle_save', fh_form( array( 'snippet_id' => (string) $row['id'], 'base_version' => '1', 'name' => 'Renamed', 'code' => $typed ) ) );
+$draft = Admin_Editor::draft( 7, $row['id'] );
 $list = fh_page( array( 'tab' => 'mine' ) );
 check( 'the list points at the unsaved changes', false !== strpos( $list, 'You have unsaved changes to this snippet' ) );
 fh_call( 'handle_discard', array( 'snippet_id' => (string) $row['id'], Editor::NONCE_FIELD => fh_nonce() ) );

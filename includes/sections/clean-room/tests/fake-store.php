@@ -639,6 +639,10 @@ class Fake_Store {
 		return $out;
 	}
 
+	public function fish_product_names() {
+		return array_map( 'strval', $this->products );
+	}
+
 	public function product_title( $product_id ) {
 		return isset( $this->products[ (int) $product_id ] ) ? (string) $this->products[ (int) $product_id ] : '';
 	}
