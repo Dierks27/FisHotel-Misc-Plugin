@@ -117,7 +117,7 @@ $fh_th = static function ( $key, $label, $text = false, $title = '' ) use ( $fh_
 						<tr>
 							<td>
 								<strong><?php echo esc_html( $fh_r['name'] ); ?></strong>
-								<?php if ( (int) $fh_r['unknown_lines'] > 0 ) : ?>
+								<?php if ( (int) $fh_r['unknown_lines'] > 0 && $fh_r['survived_known'] ) : ?>
 									<span class="fh-cr-sub"><?php echo esc_html( sprintf( /* translators: %d: order lines */ _n( '%d line without a survivor count: not in the estimate', '%d lines without a survivor count: not in the estimate', (int) $fh_r['unknown_lines'], 'fishotel-misc-plugin' ), (int) $fh_r['unknown_lines'] ) ); ?></span>
 								<?php endif; ?>
 							</td>
