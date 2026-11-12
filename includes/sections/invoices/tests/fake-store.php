@@ -14,7 +14,8 @@
  *
  * Seams a test may use: $reads / $writes count the calls (to prove a
  * code path asked nothing), $fail_saves makes the next saves fail,
- * $orders_unreadable makes the order-line reads answer null ("unknown").
+ * $orders_unreadable makes the order-line reads answer null ("unknown"),
+ * $locks plays another request holding an invoice's lock.
  *
  * @package FisHotel\Misc\Sections\Invoices
  */
@@ -83,6 +84,44 @@ class Fake_Store {
 	 * @var callable|null
 	 */
 	public $after_save = null;
+
+	/**
+	 * Called right before the order lines are searched for a title — once
+	 * per pre-check report, so "meanwhile" between a save's first check
+	 * and its write.
+	 *
+	 * @var callable|null
+	 */
+	public $before_title_search = null;
+
+	/**
+	 * Invoice locks held: id → true. A test sets one to play "another
+	 * request is publishing this invoice right now".
+	 *
+	 * @var array<int, bool>
+	 */
+	public $locks = array();
+
+	/**
+	 * How often a lock was taken and given back.
+	 *
+	 * @var int[]
+	 */
+	public $lock_calls = array( 0, 0 );
+
+	public function lock( $id ) {
+		if ( (int) $id <= 0 || isset( $this->locks[ (int) $id ] ) ) {
+			return false;
+		}
+		$this->locks[ (int) $id ] = true;
+		$this->lock_calls[0]++;
+		return true;
+	}
+
+	public function unlock( $id ) {
+		unset( $this->locks[ (int) $id ] );
+		$this->lock_calls[1]++;
+	}
 
 	/**
 	 * The "now" the rows are stamped with (UTC).
@@ -430,6 +469,9 @@ class Fake_Store {
 
 	public function order_ids_for_invoice_title( $title_start, $limit = 100 ) {
 		$this->reads++;
+		if ( is_callable( $this->before_title_search ) ) {
+			call_user_func( $this->before_title_search );
+		}
 		if ( $this->orders_unreadable ) {
 			return null;
 		}

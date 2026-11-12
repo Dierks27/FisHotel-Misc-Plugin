@@ -201,4 +201,12 @@ check( 'a site customer found by name or e-mail: the billing name, the billing e
 check( 'one letter searches nothing; nobody found: an empty list', array() === $shop->search_customers( 'p' ) && array() === $shop->search_customers( 'nobody-at-all' ) );
 check( 'a user without billing details falls back to the display name', 'Shop Keeper' === $shop->customer( $world['keeper'] )['name'] && null === $shop->customer( 987654 ) );
 
+echo "10. A title WordPress stored with entities\n";
+fh_wc_product( array( 'name' => 'Okapi &amp; Stripe Test Goby &lt;2&quot;', 'regular_price' => '15', 'category_ids' => array( $world['cat_fish'] ) ) );
+$picked = group( Search::run( $shop, $tanks, $store, $settings, 'okapi' ), 'products' )['items'];
+check_same( 'the picker hands on the text the title stands for, not the stored entities', array( 'Okapi & Stripe Test Goby <2"' ), array_column( $picked, 'name' ) );
+$html = Lines::description_html( Lines::normalize( array( array( 'name' => $picked[0]['name'], 'unit_price' => '15' ) ) ) );
+check( 'so the customer reads "&" in the description, not "&amp;"', false !== strpos( $html, 'Okapi &amp; Stripe Test Goby &lt;2" x1' ) && false === strpos( $html, '&amp;amp;' ), $html );
+check_same( 'Shop::plain(): entities decoded, trimmed; plain text untouched', array( 'A & B', "it's", 'Plain Test Tang' ), array( Shop::plain( ' A &amp; B ' ), Shop::plain( 'it&#039;s' ), Shop::plain( 'Plain Test Tang' ) ) );
+
 fh_finish();

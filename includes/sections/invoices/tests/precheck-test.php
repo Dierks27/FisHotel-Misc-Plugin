@@ -314,4 +314,28 @@ check( 'facts(): the product, its orders and what follows', 'paid' === $facts_a[
 check( 'a draft has no product and no orders to read', null === $pre->facts( array( 'id' => 9, 'state' => 'draft', 'product_id' => null, 'order_id' => null ) )['product'] );
 check( 'is_ours(): a product with the mark of an invoice that exists', $pre->is_ours( $shop->product( $a['product_id'] ) ) && ! $pre->is_ours( array( 'marker' => 0 ) ) && ! $pre->is_ours( array( 'marker' => 987654 ) ) );
 
+echo "8. A copy of an invoice built here (WooCommerce's \"Duplicate\") is not that invoice\n";
+// What a copy looked like before the mark and the lines were kept out of it: both carried over, retitled for someone else.
+$original = $shop->product( $a['product_id'] );
+$copy     = fh_wc_product(
+	array( 'name' => 'Otherguy Invoice (11/3/26)', 'description' => '<ul><li>Rewritten Test Fish x1 — $7</li></ul>', 'regular_price' => '7', 'category_ids' => array( $world['cat_invoices'] ), 'manage_stock' => true, 'stock_quantity' => 1 ),
+	array( Invoices::PRODUCT_MARKER_META => $a['id'], Invoices::PRODUCT_LINES_META => $original['lines_json'] )
+);
+$pre = new Precheck( $store, $shop, new Fake_Tanks(), $settings );
+check( 'is_ours(): the invoice\'s own product is; a copy that carries the same mark is not', $pre->is_ours( $shop->product( $a['product_id'] ) ) && ! $pre->is_ours( $shop->product( $copy ) ) );
+$report = $pre->report( building( array( 'handle' => 'Otherguy' ) ), fish_lines( array( 'A Test Fish', 'Rewritten Test Fish' ) ), TODAY );
+$e      = by_ref( $report['invoices'], 'product:' . $copy );
+check( 'the pre-check for the customer the copy is titled for finds it, as made by hand (it used to find nothing)', $e && 'hand' === $e['kind'] && true === $e['counted'] );
+check( '…and flags the fish it will be itemised with — the copied lines win over the description, as in the theme', array( 'A Test Fish' ) === array_column( $e['lines'], 'name' ) && 1 === count( $report['duplicates'] ) && 1 === count( $report['dup_keys'] ) );
+$listed = FisHotel\Misc\Sections\Invoices\Admin::list_data( $store, $shop, new Fake_Tanks(), $settings, array() );
+check( 'the list shows the copy under "made by hand" — it is no longer on neither list', in_array( $copy, array_map( static function ( $row ) { return $row['product']['id']; }, $listed['hand'] ), true ) && ! in_array( $a['product_id'], array_map( static function ( $row ) { return $row['product']['id']; }, $listed['hand'] ), true ) );
+
+$draft  = $publisher->save_draft( array( 'handle' => 'Halfway', 'lines' => array( array( 'kind' => 'fish', 'name' => 'C Test Fish', 'qty' => 1, 'unit_price' => '5' ) ) ), USER );
+$orphan = fh_wc_product( array( 'name' => 'Halfway Invoice (11/3/26)', 'status' => 'draft', 'category_ids' => array( $world['cat_invoices'] ) ), array( Invoices::PRODUCT_MARKER_META => $draft['id'] ) );
+check( 'the product a half-finished Publish left behind (its invoice is a draft without a product yet) is still ours', $pre->is_ours( $shop->product( $orphan ) ) );
+
+check_same( 'the copy itself: the mark never travels, and on a product that carries it the lines for the theme do not either', array( 'x', Invoices::PRODUCT_MARKER_META, Invoices::PRODUCT_LINES_META ), Invoices::duplicate_exclude_meta( array( 'x' ), array( '_price', Invoices::PRODUCT_MARKER_META, Invoices::PRODUCT_LINES_META ) ) );
+check_same( 'a hand-made invoice is copied exactly as before: its lines JSON stays', array( Invoices::PRODUCT_MARKER_META ), Invoices::duplicate_exclude_meta( array(), array( '_price', Invoices::PRODUCT_LINES_META ) ) );
+check_same( 'nonsense from another plugin on the filter does not break it', array( Invoices::PRODUCT_MARKER_META ), Invoices::duplicate_exclude_meta( null, null ) );
+
 fh_finish();

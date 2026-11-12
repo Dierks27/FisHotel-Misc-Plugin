@@ -135,7 +135,12 @@ $fh_url = static function ( array $args ) use ( $data ) {
 								<span class="fh-inv-sub"><?php echo esc_html( $fh_item['summary'] ); ?></span>
 							<?php endif; ?>
 						</td>
-						<td class="fh-inv-num"><?php echo esc_html( Lines::dollars( $fh_inv['total'] ) ); ?></td>
+						<td class="fh-inv-num">
+							<?php echo esc_html( Lines::dollars( $fh_inv['total'] ) ); ?>
+							<?php if ( $fh_item['charged']['differs'] && in_array( $fh_item['effective']['state'], array( 'published', 'paid' ), true ) ) : ?>
+								<span class="fh-inv-sub fh-inv-warn"><?php echo esc_html( sprintf( /* translators: %s: the product's price, e.g. "$520" */ __( 'the product charges %s', 'fishotel-misc-plugin' ), Lines::dollars( $fh_item['charged']['amount'] ) ) ); ?></span>
+							<?php endif; ?>
+						</td>
 						<td>
 							<?php echo esc_html( Settings::shipping_label( $fh_inv['shipping'] ) ); ?>
 							<?php if ( 'other' === $fh_inv['shipping'] && '' !== $fh_inv['shipping_slug'] ) : ?>

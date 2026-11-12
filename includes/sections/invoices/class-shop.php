@@ -177,6 +177,18 @@ class Shop {
 	/* ============================================================== */
 
 	/**
+	 * Whether the store enforces stock at all (WooCommerce → Settings →
+	 * Products → Inventory → "Enable stock management"). With it off, a
+	 * product's "stock 1, no backorders" is stored but not enforced: the
+	 * same invoice could be bought, and paid, twice.
+	 *
+	 * @return bool
+	 */
+	public function stock_managed() {
+		return 'yes' === get_option( 'woocommerce_manage_stock', 'yes' );
+	}
+
+	/**
 	 * A product as plain facts — every field Publish writes, plus the two
 	 * marks: this section's (`_fh_invoice_id`) and the theme's lock
 	 * (`_fh_invoice_order_id`). Null when the product is gone.
@@ -704,6 +716,19 @@ class Shop {
 	}
 
 	/**
+	 * A product title or a term name as the text it stands for. WordPress
+	 * stores "&" (and, for a user who may not post HTML, "<" and ">") as
+	 * entities; taken as it is stored, "Okapi &amp; Stripe" would reach
+	 * the customer as "&amp;" in the description.
+	 *
+	 * @param mixed $text Stored title or name.
+	 * @return string
+	 */
+	public static function plain( $text ) {
+		return trim( html_entity_decode( (string) $text, ENT_QUOTES | ENT_HTML5, 'UTF-8' ) );
+	}
+
+	/**
 	 * One pickable row of a product object.
 	 *
 	 * @param \WC_Product $product   A simple product or a variation.
@@ -714,6 +739,7 @@ class Shop {
 	 * @return array
 	 */
 	private function pick_row( $product, $name, $parent_id, $size, $status ) {
+		$name    = self::plain( $name );
 		$price   = (string) $product->get_price();
 		$regular = (string) $product->get_regular_price();
 		$stock   = $product->get_stock_quantity();
@@ -727,7 +753,7 @@ class Shop {
 			'species_id'    => 0,
 			'stay_id'       => 0,
 			'size_slug'     => $size ? $size['slug'] : null,
-			'size_label'    => $size ? $size['label'] : null,
+			'size_label'    => $size && null !== $size['label'] ? self::plain( $size['label'] ) : null,
 			'price'         => '' === $price ? null : Lines::money( (float) $price ),
 			'regular_price' => '' === $regular ? null : Lines::money( (float) $regular ),
 			'price_from'    => '' === $price ? '' : ( $is_var ? 'variation' : 'product' ),

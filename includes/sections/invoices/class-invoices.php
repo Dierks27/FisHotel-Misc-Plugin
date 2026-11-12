@@ -46,6 +46,8 @@
  *                          unpaid invoice, Trash, withdraw a draft.
  *   - class-sync.php       an order paid → the invoice paid, the action
  *                          fired; cancelled / failed → released.
+ *   - class-visibility.php an invoice is found by its link only: out of
+ *                          the sitemap and the REST product lists, noindex.
  *   - class-admin.php      FisHotel Tools → Invoices: the list, the
  *                          picker, the forum list, Settings; the AJAX.
  *
@@ -190,6 +192,7 @@ namespace FisHotel\Misc\Sections\Invoices {
 			require_once __DIR__ . '/class-store.php';
 			require_once __DIR__ . '/class-shop.php';
 			require_once __DIR__ . '/class-sync.php';
+			require_once __DIR__ . '/class-visibility.php';
 		}
 
 		/**
@@ -209,7 +212,9 @@ namespace FisHotel\Misc\Sections\Invoices {
 		 * first boot only — the version gate is an autoloaded option, so
 		 * every later request pays no query here. The paid sync listens to
 		 * WooCommerce's order hooks and does nothing (not a query) until
-		 * an order is paid, cancelled or failed.
+		 * an order is paid, cancelled or failed; Visibility keeps invoices
+		 * out of the sitemap and the REST product lists and asks nothing
+		 * until one of those is built.
 		 */
 		public static function boot() {
 			self::load();
@@ -222,6 +227,8 @@ namespace FisHotel\Misc\Sections\Invoices {
 			}
 
 			Sync::init();
+			Visibility::init();
+			add_filter( 'woocommerce_duplicate_product_exclude_meta', array( self::class, 'duplicate_exclude_meta' ), 10, 2 );
 
 			if ( is_admin() ) {
 				self::load_admin();
@@ -266,6 +273,30 @@ namespace FisHotel\Misc\Sections\Invoices {
 		 * and no cache, and the tables are deliberately kept.
 		 */
 		public static function deactivate() {
+		}
+
+		/**
+		 * WooCommerce's "Duplicate" of a product: a copy of an invoice
+		 * built here must not pass for that invoice. Without this the copy
+		 * kept the invoice's mark and its lines for the theme — retitled
+		 * for another customer it was listed nowhere, the pre-check for
+		 * that customer did not see it, and the theme itemised it with the
+		 * first customer's fish. So the mark never travels, and the lines
+		 * JSON does not travel with it: the copy is an invoice made by
+		 * hand, read from its description. A product that does not carry
+		 * the mark is copied exactly as before.
+		 *
+		 * @param mixed $exclude  Meta keys left out of the copy so far.
+		 * @param mixed $existing The meta keys the product has.
+		 * @return array
+		 */
+		public static function duplicate_exclude_meta( $exclude, $existing = array() ) {
+			$exclude   = is_array( $exclude ) ? $exclude : array();
+			$exclude[] = self::PRODUCT_MARKER_META;
+			if ( is_array( $existing ) && in_array( self::PRODUCT_MARKER_META, $existing, true ) ) {
+				$exclude[] = self::PRODUCT_LINES_META;
+			}
+			return array_values( array_unique( $exclude ) );
 		}
 
 		/**

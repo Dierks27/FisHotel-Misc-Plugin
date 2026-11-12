@@ -286,6 +286,15 @@ $bad['lines'] = array( array( 'kind' => 'fish', 'name' => 'Blue Test Tang', 'qty
 $check        = $publisher->precheck( array_merge( $bad, array( 'handle' => 'Third' ) ), USER, TODAY );
 check( 'a note that would be read as a fish: an error on that line', array( 1 ) === array_keys( $check['report']['line_errors'] ) && ! $publisher->publish( $check['id'], $check['token'], array(), USER, TODAY )['ok'] );
 
+list( $publisher, $store, $shop, $world )       = setup();
+$GLOBALS['fh_options']['woocommerce_manage_stock'] = 'no';
+$check = $publisher->precheck( form(), USER, TODAY );
+$r     = $publisher->publish( $check['id'], $check['token'], array(), USER, TODAY );
+check( 'the store\'s own "Enable stock management" is off — "stock 1" would not be enforced and the invoice could be paid twice: an error, and Publish refuses', 1 === count( preg_grep( '/Enable stock management/', $check['report']['errors'] ) ) && ! $r['ok'] && 'errors' === $r['code'] && 0 === product_count() );
+$GLOBALS['fh_options']['woocommerce_manage_stock'] = 'yes';
+$check = $publisher->precheck( form( array( 'id' => $check['id'], 'version' => $store->invoice( $check['id'] )['version'] ) ), USER, TODAY );
+check( 'switched on again: no such error, and it publishes', array() === preg_grep( '/Enable stock management/', $check['report']['errors'] ) && $publisher->publish( $check['id'], $check['token'], array(), USER, TODAY )['ok'] && 1 === product_count() );
+
 echo "6. A fish that already appears on another invoice of this customer\n";
 list( $publisher, $store, $shop, $world ) = setup();
 $hand = fh_wc_product(
@@ -401,11 +410,12 @@ check( 'the store\'s out-of-stock threshold makes a stock of 1 "out of stock": p
 echo "8. A Publish that stops half-way never makes a second product\n";
 list( $publisher, $store, $shop, $world ) = setup();
 $check             = $publisher->precheck( form(), USER, TODAY );
-$store->fail_after = 1; // The claim goes through…
-$store->fail_saves = 1; // …the "published" write does not.
+$store->fail_saves = 1; // The product is created; the "published" write fails.
+$before            = $store->invoice( $check['id'] )['version'];
 $r                 = $publisher->publish( $check['id'], $check['token'], array(), USER, TODAY );
 check( 'the product was created but the invoice could not be marked published: said so, with the product', ! $r['ok'] && 'db' === $r['code'] && $r['product_id'] > 0 && 1 === product_count() && 'draft' === $store->invoice( $check['id'] )['state'] );
 $orphan = $r['product_id'];
+check_same( 'a refused Publish does not move the invoice\'s version on: the page that asked is not behind', $before, $store->invoice( $check['id'] )['version'] );
 check_same( 'the product carries the invoice\'s mark, so it can be found again', $orphan, $shop->product_by_marker( $check['id'] ) );
 $r = $publisher->discard( $check['id'], USER );
 check( 'such a draft cannot be withdrawn while that product exists', ! $r['ok'] && 'orphan' === $r['code'] && 'draft' === $store->invoice( $check['id'] )['state'] );
@@ -413,11 +423,32 @@ $check2 = $publisher->precheck( form( array( 'id' => $check['id'], 'version' => 
 $r      = $publisher->publish( $check2['id'], $check2['token'], array(), USER, TODAY );
 check( 'published again: the SAME product is used, there is still only one', $r['ok'] && $orphan === $r['product_id'] && 1 === product_count() && 'published' === $store->invoice( $check['id'] )['state'] && 'publish' === $shop->product( $orphan )['status'] );
 
+echo "8b. One writer per invoice: a double submit makes ONE product\n";
 list( $publisher, $store, $shop, $world ) = setup();
-$check             = $publisher->precheck( form(), USER, TODAY );
-$store->fail_saves = 1;
-$r                 = $publisher->publish( $check['id'], $check['token'], array(), USER, TODAY );
-check( 'the claim itself fails: nothing is created', ! $r['ok'] && 'db' === $r['code'] && 0 === product_count() );
+$check = $publisher->precheck( form(), USER, TODAY );
+// A second Publish with the same token arrives while the first is creating its product.
+$second                      = null;
+$GLOBALS['fh_wc']['on_save'] = static function () use ( &$second, $publisher, $check ) {
+	$GLOBALS['fh_wc']['on_save'] = null;
+	$second                      = $publisher->publish( $check['id'], $check['token'], array(), USER, TODAY );
+};
+$first                       = $publisher->publish( $check['id'], $check['token'], array(), USER, TODAY );
+check( 'two Publish requests at the same moment: the first publishes, the second is refused as busy (it used to make a second live product)', $first['ok'] && is_array( $second ) && ! $second['ok'] && 'busy' === $second['code'] );
+check( 'ONE product, and it is the invoice\'s', 1 === product_count() && $first['product_id'] === $store->invoice( $check['id'] )['product_id'] && 'published' === $store->invoice( $check['id'] )['state'] );
+$third = $publisher->publish( $check['id'], $check['token'], array(), USER, TODAY );
+check( 'a third one afterwards: already published, still one product', ! $third['ok'] && 'state' === $third['code'] && 1 === product_count() );
+check( 'every lock taken was given back', array() === $store->locks && $store->lock_calls[0] === $store->lock_calls[1] && $store->lock_calls[0] > 0 );
+
+list( $publisher, $store, $shop, $world ) = setup();
+$check                         = $publisher->precheck( form(), USER, TODAY );
+$store->locks[ $check['id'] ] = true; // Another request holds this invoice.
+$r                             = $publisher->publish( $check['id'], $check['token'], array(), USER, TODAY );
+check( 'while another request holds the invoice: Publish is refused, nothing is created, nothing is written', ! $r['ok'] && 'busy' === $r['code'] && 0 === product_count() && 'draft' === $store->invoice( $check['id'] )['state'] );
+$v = $store->invoice( $check['id'] )['version'];
+check( '…and so are a draft save, a withdrawal and — of a published one — an edit and the Trash', 'busy' === $publisher->save_draft( form( array( 'id' => $check['id'], 'version' => $v ) ), USER )['code'] && 'busy' === $publisher->discard( $check['id'], USER )['code'] && 'busy' === $publisher->update( $check['id'], form(), 'x', array(), USER, TODAY )['code'] && 'busy' === $publisher->trash( $check['id'], USER )['code'] && $v === $store->invoice( $check['id'] )['version'] );
+unset( $store->locks[ $check['id'] ] );
+check( 'the lock given back: it publishes', $publisher->publish( $check['id'], $check['token'], array(), USER, TODAY )['ok'] && 1 === product_count() );
+check( 'an invoice that does not exist is still "missing", not "busy"', 'missing' === $publisher->publish( 0, 'x', array(), USER, TODAY )['code'] && 'missing' === $publisher->publish( 999, 'x', array(), USER, TODAY )['code'] && array() === $store->locks );
 
 list( $publisher, $store, $shop, $world ) = setup();
 $check                       = $publisher->precheck( form(), USER, TODAY );

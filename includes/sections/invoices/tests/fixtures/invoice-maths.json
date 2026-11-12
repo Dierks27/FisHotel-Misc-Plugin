@@ -219,8 +219,42 @@
 			"total": 1029,
 			"texts": [ "Black & White Test Clown x1 — $30", "Bulk Test Chromis x999 — $1" ],
 			"rows": [
-				{ "name": "Black & White Test Clown", "qty": 1, "price": 30, "kind": "fish" },
+				{ "name": "Black &amp; White Test Clown", "qty": 1, "price": 30, "kind": "fish" },
 				{ "name": "Bulk Test Chromis", "qty": 999, "price": 1, "kind": "fish" }
+			]
+		},
+		{
+			"name": "a bare < in a name is not a tag: the name, the line and its money are kept; real tags go",
+			"lines": [
+				{ "kind": "fish", "name": "Blue Test Tang <3\"", "qty": 1, "unit_price": "45" },
+				{ "kind": "fish", "name": "<2\" <b>Orange</b> Test Clown", "qty": 2, "unit_price": "30" },
+				{ "kind": "note", "name": "Size <2\" ships free > Tuesday" },
+				{ "kind": "credit", "name": "lost <i>Test</i> Goby <1\"", "unit_price": "5" }
+			],
+			"flat_total": null,
+			"subtotal": 100,
+			"discount": 0,
+			"total": 100,
+			"texts": [ "Blue Test Tang <3\" x1 — $45", "<2\" Orange Test Clown x2 — $30", "Size <2\" ships free > Tuesday", "Credit: lost Test Goby <1\" — -$5" ],
+			"rows": [
+				{ "name": "Blue Test Tang &lt;3\"", "qty": 1, "price": 45, "kind": "fish" },
+				{ "name": "&lt;2\" Orange Test Clown", "qty": 2, "price": 30, "kind": "fish" },
+				{ "name": "Size &lt;2\" ships free &gt; Tuesday", "qty": 1, "price": null, "kind": "note" },
+				{ "name": "Credit: lost Test Goby &lt;1\"", "qty": 1, "price": -5, "kind": "credit" }
+			]
+		},
+		{
+			"name": "a name typed with an entity in it is kept letter for letter",
+			"lines": [
+				{ "kind": "fish", "name": "Okapi &amp; Stripe Test Goby", "qty": 1, "unit_price": "15" }
+			],
+			"flat_total": null,
+			"subtotal": 15,
+			"discount": 0,
+			"total": 15,
+			"texts": [ "Okapi &amp; Stripe Test Goby x1 — $15" ],
+			"rows": [
+				{ "name": "Okapi &amp;amp; Stripe Test Goby", "qty": 1, "price": 15, "kind": "fish" }
 			]
 		}
 	]

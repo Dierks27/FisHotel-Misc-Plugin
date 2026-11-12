@@ -107,7 +107,13 @@ same( 'not a date: nothing', [ '', '', '', '', '' ], [ helpers.dateNjy( '2026-02
 console.log( '6. Small things' );
 same( 'sprintf(): %s, %d and numbered placeholders', [ 'only 2 in shop stock, 3 on this invoice', 'b then a', 'x' ], [ helpers.sprintf( 'only %1$s in shop stock, %2$s on this invoice', 2, 3 ), helpers.sprintf( '%2$s then %1$s', 'a', 'b' ), helpers.sprintf( '%s', 'x' ) ] );
 same( 'text(): no tags, one line, non-breaking spaces as spaces', 'Blue Test Tang', helpers.text( ' <i>Blue</i> Test\n Tang ' ) );
-check( 'the page code does not run without jQuery and the page data', typeof helpers.money === 'function' && Object.keys( helpers ).length === 17 );
+check( 'the page code does not run without jQuery and the page data', typeof helpers.money === 'function' && Object.keys( helpers ).length === 18 );
+
+console.log( '7. The version the page holds — a stale window cannot undo a newer save' );
+same( 'a successful save or pre-check of a draft hands its version over', [ 6, 7 ], [ helpers.nextVersion( 5, { version: 6 }, true, false ), helpers.nextVersion( 6, { version: 7, code: 'checked' }, true, false ) ] );
+check( 'a refusal never hands a version over — "changed in another window" stays refused on the next click', helpers.nextVersion( 5, { version: 9, code: 'conflict' }, false, false ) === 5 && helpers.nextVersion( 5, { version: 9, code: 'errors' }, false, false ) === 5 );
+check( 'editing a published invoice: a pre-check saves nothing, so its reply hands no version over', helpers.nextVersion( 5, { version: 9, code: 'checked' }, true, true ) === 5 );
+check( 'a reply without a version changes nothing', helpers.nextVersion( 5, {}, true, false ) === 5 && helpers.nextVersion( 5, null, true, false ) === 5 && helpers.nextVersion( 0, { version: 1 }, true, false ) === 1 );
 
 console.log( '\n' + ( failures ? failures + ' of ' + checks + ' checks FAILED' : 'All ' + checks + ' checks passed' ) );
 process.exit( failures ? 1 : 0 );

@@ -149,6 +149,32 @@ check( 'the lines that stayed kept their rows', $form['lines'][0]['id'] === $lin
 $r = $publisher->update( $id, $form, $check['token'], array(), USER, LATER );
 check( 'the page that saved is now behind (its version is old): a second save from it is refused', ! $r['ok'] && 'conflict' === $r['code'] );
 
+echo "1b. A window that is behind cannot undo a newer save\n";
+list( $publisher, $store, $shop, $world, $id, $pid ) = published();
+$stale = edited( $store, $id ); // Window B opens the editor…
+$stale['flat_total'] = '95';
+$newer = edited( $store, $id ); // …and so does window A, which saves first.
+$check = $publisher->precheck_update( $id, $newer, USER, LATER );
+$r     = $publisher->update( $id, $newer, $check['token'], array(), USER, LATER );
+$was   = snapshot( $pid );
+$rows  = $store->lines( $id );
+check( 'window A saved: $120 on the product, four lines', $r['ok'] && '120.00' === $shop->product( $pid )['regular_price'] && 4 === count( $rows ) );
+$b = $publisher->precheck_update( $id, $stale, USER, LATER );
+check( 'window B, still on the old version, asks for a pre-check: refused as changed elsewhere — no report, no token', ! $b['ok'] && 'conflict' === $b['code'] && ! isset( $b['token'] ) && ! isset( $b['report'] ) );
+$b = $publisher->precheck_update( $id, $stale, USER, LATER );
+check( 'asked again: refused again (it used to pass on the second click and overwrite window A\'s fish)', ! $b['ok'] && 'conflict' === $b['code'] );
+$b = $publisher->update( $id, $stale, $check['token'], array(), USER, LATER );
+check( 'and a save from it is refused before its token is even looked at: the product and the record are window A\'s', ! $b['ok'] && 'conflict' === $b['code'] && $was === snapshot( $pid ) && $rows === $store->lines( $id ) && 120.0 === $store->invoice( $id )['total'] );
+$v     = $store->invoice( $id )['version'];
+$fresh = array_merge( $stale, array( 'version' => $v ) );
+$check = $publisher->precheck_update( $id, $fresh, USER, LATER );
+check( 'a pre-check of an edit saves nothing and moves no version on', $check['ok'] && $v === $store->invoice( $id )['version'] );
+$r = $publisher->update( $id, $fresh, 'not-the-token', array(), USER, LATER );
+check( 'a refused save moves no version on either', ! $r['ok'] && 'precheck' === $r['code'] && $v === $store->invoice( $id )['version'] );
+$r = $publisher->update( $id, $fresh, $check['token'], array(), USER, LATER );
+check( 'reloaded (the version as it is now), window B\'s change is an ordinary edit', $r['ok'] && '95.00' === $shop->product( $pid )['regular_price'] && $v + 1 === $store->invoice( $id )['version'] );
+check( 'every lock taken was given back', array() === $store->locks );
+
 echo "2. A sale price somebody set by hand is never cleared and never changed\n";
 list( $publisher, $store, $shop, $world, $id, $pid ) = published();
 $GLOBALS['fh_wc']['products'][ $pid ]['data']['sale_price'] = '80';
@@ -222,12 +248,12 @@ list( $publisher, $store, $shop, $world, $id, $pid ) = published();
 $form  = edited( $store, $id );
 $check = $publisher->precheck_update( $id, $form, USER, LATER );
 // The payment arrives in the instant between the save's own check and its write.
-$store->after_save = static function () use ( $pid, $store ) {
-	$store->after_save = null;
+$store->before_title_search = static function () use ( $pid, $store ) {
+	$store->before_title_search = null;
 	order_with( $pid, 'processing', true );
 };
-$was               = snapshot( $pid );
-$r                 = $publisher->update( $id, $form, $check['token'], array(), USER, LATER );
+$was                        = snapshot( $pid );
+$r                          = $publisher->update( $id, $form, $check['token'], array(), USER, LATER );
 check( 'paid between the save\'s check and its write: checked once more right before the product is touched — refused', ! $r['ok'] && 'locked' === $r['code'] && $was === snapshot( $pid ) && array() === $GLOBALS['fh_wc']['writes'] && 2 === count( $store->lines( $id ) ) );
 
 echo "7. What cannot be checked is not changed\n";

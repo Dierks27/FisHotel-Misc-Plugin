@@ -201,16 +201,27 @@ class Precheck {
 
 	/**
 	 * Whether a product belongs to an invoice of this section: it carries
-	 * the mark of an invoice that exists. (Such a product may not be in
-	 * that invoice's row yet — a Publish that stopped half-way — and must
-	 * then not be taken for an invoice made by hand.)
+	 * the mark of an invoice that exists, and it IS that invoice's product
+	 * — or the invoice is a draft without one yet (a Publish that stopped
+	 * half-way left the product behind, and it must then not be taken for
+	 * an invoice made by hand).
+	 *
+	 * A product that carries the mark of an invoice whose product is
+	 * another one is a copy (WooCommerce's "Duplicate"): not ours. It is
+	 * listed, and pre-checked, as an invoice made by hand.
 	 *
 	 * @param array $product Shop::product() facts.
 	 * @return bool
 	 */
 	public function is_ours( array $product ) {
-		$marker = (int) ( isset( $product['marker'] ) ? $product['marker'] : 0 );
-		return $marker > 0 && null !== $this->store->invoice( $marker );
+		$marker  = (int) ( isset( $product['marker'] ) ? $product['marker'] : 0 );
+		$invoice = $marker > 0 ? $this->store->invoice( $marker ) : null;
+		if ( ! $invoice ) {
+			return false;
+		}
+
+		$own = (int) $invoice['product_id'];
+		return $own > 0 ? $own === (int) ( isset( $product['id'] ) ? $product['id'] : 0 ) : 'draft' === $invoice['state'];
 	}
 
 	/**
@@ -265,6 +276,10 @@ class Precheck {
 
 		if ( ! $this->shop->available() ) {
 			$errors[] = __( 'WooCommerce is not active. An invoice is a WooCommerce product, so nothing can be published.', 'fishotel-misc-plugin' );
+		}
+
+		if ( $this->shop->available() && ! $this->shop->stock_managed() ) {
+			$errors[] = __( 'WooCommerce\'s "Enable stock management" (WooCommerce → Settings → Products → Inventory) is switched off. Without it the invoice\'s "stock 1" is not enforced, and the same invoice could be paid twice. Switch it on first.', 'fishotel-misc-plugin' );
 		}
 
 		$category = $this->shop->category( $settings['category_slug'] );

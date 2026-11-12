@@ -249,6 +249,7 @@ class Admin {
 				'invoice'   => $row,
 				'effective' => $facts['effective'],
 				'product'   => $facts['product'],
+				'charged'   => self::charged( $row, $facts['product'] ),
 				'summary'   => Lines::summary( isset( $lines[ $row['id'] ] ) ? $lines[ $row['id'] ] : array() ),
 				'who'       => $shop->user_name( $row['created_by'] ),
 			);
@@ -772,11 +773,16 @@ class Admin {
 			$data['lineErrs'] = $result['report']['line_errors'];
 		}
 
-		// The invoice as it is stored now: the page keeps its id and version in step.
+		// The invoice as it is stored now: the page keeps its id in step — and its version, but
+		// only after its OWN successful save. A refusal hands no version over (a window that is
+		// behind would adopt it and undo the newer save on the next click), and neither does the
+		// pre-check of an edit, which saves nothing.
 		$invoice = $id > 0 ? $store->invoice( $id ) : null;
 		if ( $invoice ) {
-			$data['id']      = (int) $invoice['id'];
-			$data['version'] = (int) $invoice['version'];
+			$data['id'] = (int) $invoice['id'];
+			if ( ! empty( $result['ok'] ) && ( 'update' !== $mode || 'updated' === $data['code'] ) ) {
+				$data['version'] = (int) $invoice['version'];
+			}
 			$data['state']   = (string) $invoice['state'];
 			$data['viewUrl'] = self::page_url( 'invoice', array( 'id' => (int) $invoice['id'] ) );
 			if ( ! empty( $result['ok'] ) && in_array( $data['code'], array( 'saved', 'checked' ), true ) && 'draft' === $invoice['state'] && 'draft' === $mode ) {
@@ -911,17 +917,45 @@ class Admin {
 	}
 
 	/**
+	 * What the customer is charged for an invoice right now: the price of
+	 * its product (the sale price, when somebody set one by hand) — which
+	 * is the stored total unless the product was changed by hand since.
+	 *
+	 * @param array      $invoice The stored invoice.
+	 * @param array|null $product Shop::product() facts, or null.
+	 * @return array{amount: float, differs: bool}
+	 */
+	public static function charged( array $invoice, $product ) {
+		$total = (float) $invoice['total'];
+		if ( ! is_array( $product ) || 'publish' !== $product['status'] || '' === (string) $product['price'] || ! is_numeric( $product['price'] ) ) {
+			return array(
+				'amount'  => $total,
+				'differs' => false,
+			);
+		}
+
+		return array(
+			'amount'  => (float) $product['price'],
+			'differs' => Lines::cents( $product['price'] ) !== Lines::cents( $total ),
+		);
+	}
+
+	/**
 	 * The forum list of a set of invoices (the testable core of
 	 * ajax_forum()): one line each, for the ones a customer can open —
-	 * published or paid, with a product that is not in the Trash.
+	 * published or paid, with a product that is not in the Trash. The
+	 * amount on a line is what the customer is charged (charged()): when
+	 * the product's price is no longer the invoice's total, the line shows
+	 * the product's price and a note says so.
 	 *
 	 * @param object  $shop     Shop.
 	 * @param array[] $invoices Stored invoices, in the order to list them.
-	 * @return array{text: string, count: int, skipped: string[]}
+	 * @return array{text: string, count: int, skipped: string[], notes: string[]}
 	 */
 	public static function forum_text( $shop, array $invoices ) {
 		$rows    = array();
 		$skipped = array();
+		$notes   = array();
 
 		foreach ( $invoices as $invoice ) {
 			$product = ! empty( $invoice['product_id'] ) ? $shop->product( (int) $invoice['product_id'] ) : null;
@@ -933,10 +967,16 @@ class Admin {
 				continue;
 			}
 
+			$charged = self::charged( $invoice, $product );
+			if ( $charged['differs'] ) {
+				/* translators: 1: invoice title, 2: the product's price, 3: the invoice's total */
+				$notes[] = sprintf( __( '%1$s: the product\'s price is %2$s, not the invoice\'s total of %3$s — it was changed by hand, or carries a sale price. The list shows %2$s, what the customer is charged.', 'fishotel-misc-plugin' ), $name, Lines::dollars( $charged['amount'] ), Lines::dollars( $invoice['total'] ) );
+			}
+
 			$rows[] = array(
 				'handle'        => $invoice['handle'],
 				'forum_user_id' => $invoice['forum_user_id'],
-				'total'         => $invoice['total'],
+				'total'         => $charged['amount'],
 				'url'           => $product['permalink'],
 			);
 		}
@@ -945,6 +985,7 @@ class Admin {
 			'text'    => Format::forum_list( $rows ),
 			'count'   => count( $rows ),
 			'skipped' => $skipped,
+			'notes'   => $notes,
 		);
 	}
 

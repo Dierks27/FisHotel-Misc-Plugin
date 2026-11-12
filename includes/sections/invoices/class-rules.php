@@ -620,7 +620,8 @@ class Rules {
 	 *
 	 * Errors stop Publish: no handle, no fish, a negative or oversized
 	 * price, a credit without an amount, a line that would not read back
-	 * (roundtrip_problem()), a total below zero. Warnings are shown and
+	 * (roundtrip_problem()), a total below zero, a total (or the Discount
+	 * line of a flat total) beyond what the columns hold. Warnings are shown and
 	 * do not stop it: a fish without a price (the order then shows the
 	 * invoice as one line instead of one line per fish), a total of zero,
 	 * an Adjustment line.
@@ -679,7 +680,19 @@ class Rules {
 			$errors[] = __( 'Add at least one fish.', 'fishotel-misc-plugin' );
 		}
 
-		$total = Lines::cents( Lines::total( $lines ) );
+		$total   = Lines::cents( Lines::total( $lines ) );
+		$largest = abs( $total );
+		foreach ( $lines as $line ) {
+			if ( is_array( $line ) && 'discount' === ( isset( $line['kind'] ) ? $line['kind'] : '' ) ) {
+				$largest = max( $largest, abs( Lines::amount_cents( $line ) ) );
+			}
+		}
+		if ( $largest > Lines::MAX_TOTAL_CENTS ) {
+			// Beyond the column the stored total (or Discount line) would be cut off and no longer be what is charged.
+			/* translators: %s: amount, e.g. "$9,999,999,999.99" */
+			$errors[] = sprintf( __( 'The lines add up to more than an invoice can hold (%s). Check the quantities and prices, or split the invoice.', 'fishotel-misc-plugin' ), '$' . number_format( Lines::MAX_TOTAL_CENTS / 100, 2, '.', ',' ) );
+		}
+
 		if ( $total < 0 ) {
 			/* translators: %s: amount, e.g. "-$12" */
 			$errors[] = sprintf( __( 'The lines add up to %s. An invoice cannot be negative: lower the credit, or refund on the paid order instead.', 'fishotel-misc-plugin' ), Lines::dollars( $total / 100 ) );

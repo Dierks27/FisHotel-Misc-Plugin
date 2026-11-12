@@ -57,11 +57,20 @@ class Lines {
 	const MAX_LINES = 200;
 
 	/**
-	 * The largest amount a field takes (the columns are decimal(12,2)).
+	 * The largest amount a typed field takes.
 	 *
 	 * @var float
 	 */
 	const MAX_MONEY = 999999.99;
+
+	/**
+	 * The largest amount a column holds (decimal(12,2)), in whole cents:
+	 * $9,999,999,999.99. A total or a Discount line beyond it could not be
+	 * stored as it is charged, so validation refuses it.
+	 *
+	 * @var int
+	 */
+	const MAX_TOTAL_CENTS = 999999999999;
 
 	const DISCOUNT_NAME   = 'Discount';
 	const ADJUSTMENT_NAME = 'Adjustment';
@@ -179,6 +188,20 @@ class Lines {
 	/* ============================================================== */
 
 	/**
+	 * Text without its HTML tags — real tags only. strip_tags() also eats
+	 * everything after a bare "<" (a size written `<2"`), which silently
+	 * cut a name or dropped a whole line and its money; the page strips
+	 * the same way, so the preview and the server agree. Whatever is left
+	 * is escaped wherever it is printed.
+	 *
+	 * @param string $text Text.
+	 * @return string
+	 */
+	public static function untag( $text ) {
+		return (string) preg_replace( '/<\/?[a-zA-Z!][^>]*>/', '', (string) $text );
+	}
+
+	/**
 	 * Plain single-line text: no tags, no control characters, whitespace
 	 * (non-breaking spaces too) collapsed, cut to a length.
 	 *
@@ -190,7 +213,7 @@ class Lines {
 		if ( ! is_scalar( $value ) ) {
 			return '';
 		}
-		$text = strip_tags( (string) $value );
+		$text = self::untag( (string) $value );
 		$text = str_replace( array( "\xC2\xA0", "\xE2\x80\xAF" ), ' ', $text );
 		$text = preg_replace( '/[\x00-\x1F\x7F]+/', ' ', $text );
 		$text = trim( (string) preg_replace( '/\s+/u', ' ', (string) $text ) );
@@ -603,6 +626,10 @@ class Lines {
 	 * credit; an Adjustment as a one-off fish line, the only kind that
 	 * adds money there.
 	 *
+	 * A name goes out with its &, < and > as entities: the theme strips
+	 * tags from a name and decodes entities, so only an escaped name reads
+	 * back there exactly as it was typed ("<2\" Clown", "A &amp; B").
+	 *
 	 * @param array[] $lines Lines (with the discount line, when there is one).
 	 * @return array[]
 	 */
@@ -613,7 +640,7 @@ class Lines {
 				continue;
 			}
 			$kind = isset( $line['kind'] ) ? (string) $line['kind'] : 'fish';
-			$name = self::public_name( $line );
+			$name = htmlspecialchars( self::public_name( $line ), ENT_NOQUOTES, 'UTF-8' );
 			if ( '' === $name ) {
 				continue;
 			}

@@ -30,6 +30,14 @@
  * token, and a token is only ever issued together with a report — and
  * what goes live is exactly what was checked.
  *
+ * One writer per invoice: every write of an existing invoice holds its
+ * lock (Store::lock(), given back by the database when the request ends),
+ * and reads the row inside it. Of several Publish requests sent at the
+ * same moment exactly one creates a product; the others are refused. A
+ * refusal never moves the invoice's version on, and a form that names an
+ * older version than the stored one is refused — at the pre-check of an
+ * edit too — so a window that is behind cannot undo a newer save.
+ *
  * A half-finished Publish never makes a second product: the product
  * carries the invoice's marker, and the next attempt finds and reuses it
  * (Shop::adopt_invoice_product()). A product that does not come out as
@@ -153,6 +161,32 @@ class Publisher {
 	}
 
 	/**
+	 * Do one invoice's write while holding its lock, so that of several
+	 * requests for the same invoice at the same moment — a double click,
+	 * two windows — exactly one works and the others are told so. Without
+	 * it five simultaneous Publish requests made three live products.
+	 *
+	 * @param int      $invoice_id Invoice id.
+	 * @param callable $work       The write; its answer is handed on.
+	 * @return array
+	 */
+	private function locked( $invoice_id, callable $work ) {
+		$id = (int) $invoice_id;
+		if ( $id <= 0 ) {
+			return $work(); // No such invoice: the work says so itself.
+		}
+		if ( ! $this->store->lock( $id ) ) {
+			return self::refuse( __( 'This invoice is being saved or published in another window at this very moment (its lock could not be taken). Nothing was done here: reload the page to see how it stands.', 'fishotel-misc-plugin' ), 'busy' );
+		}
+
+		try {
+			return $work();
+		} finally {
+			$this->store->unlock( $id );
+		}
+	}
+
+	/**
 	 * A positive int out of a posted value, or null.
 	 *
 	 * @param mixed $value Value.
@@ -172,7 +206,7 @@ class Publisher {
 		if ( ! is_scalar( $value ) ) {
 			return '';
 		}
-		$text = strip_tags( (string) $value );
+		$text = Lines::untag( (string) $value );
 		$text = (string) preg_replace( '/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]+/', '', $text );
 		$text = trim( str_replace( array( "\r\n", "\r" ), "\n", $text ) );
 		return function_exists( 'mb_substr' ) ? mb_substr( $text, 0, self::MAX_NOTES, 'UTF-8' ) : substr( $text, 0, self::MAX_NOTES );
@@ -324,9 +358,12 @@ class Publisher {
 			$fields['state'] = 'draft';
 		}
 
-		$result = $this->store->save_invoice( $id, $fields, $in['lines'], $version, (int) $user_id );
+		$save   = function () use ( $id, $fields, $in, $version, $user_id ) {
+			return $this->store->save_invoice( $id, $fields, $in['lines'], $version, (int) $user_id );
+		};
+		$result = $id > 0 ? $this->locked( $id, $save ) : $save();
 		if ( empty( $result['ok'] ) ) {
-			return self::store_refusal( $result );
+			return isset( $result['code'] ) ? $result : self::store_refusal( $result );
 		}
 
 		return array(
@@ -371,6 +408,22 @@ class Publisher {
 	 * @return array ok, message.
 	 */
 	public function discard( $invoice_id, $user_id ) {
+		return $this->locked(
+			$invoice_id,
+			function () use ( $invoice_id, $user_id ) {
+				return $this->discard_locked( $invoice_id, $user_id );
+			}
+		);
+	}
+
+	/**
+	 * discard(), holding the invoice's lock.
+	 *
+	 * @param int $invoice_id Invoice id.
+	 * @param int $user_id    Who.
+	 * @return array
+	 */
+	private function discard_locked( $invoice_id, $user_id ) {
 		$invoice = $this->store->invoice( (int) $invoice_id );
 		if ( ! $invoice ) {
 			return self::refuse( __( 'This invoice no longer exists.', 'fishotel-misc-plugin' ), 'missing' );
@@ -529,6 +582,27 @@ class Publisher {
 	 *               A refusal for the pre-check's sake carries the fresh report (and its token).
 	 */
 	public function publish( $invoice_id, $token, $confirmed, $user_id, $today ) {
+		return $this->locked(
+			$invoice_id,
+			function () use ( $invoice_id, $token, $confirmed, $user_id, $today ) {
+				return $this->publish_locked( $invoice_id, $token, $confirmed, $user_id, $today );
+			}
+		);
+	}
+
+	/**
+	 * publish(), holding the invoice's lock: the row is read inside it, so
+	 * a second request finds either the lock taken or the invoice already
+	 * published — never a draft it could publish once more.
+	 *
+	 * @param int    $invoice_id Invoice id.
+	 * @param mixed  $token      The token of the pre-check that was shown.
+	 * @param mixed  $confirmed  The confirmed fish-on-two-invoices keys.
+	 * @param int    $user_id    Who.
+	 * @param string $today      The site date (Y-m-d).
+	 * @return array
+	 */
+	private function publish_locked( $invoice_id, $token, $confirmed, $user_id, $today ) {
 		$invoice = $this->store->invoice( (int) $invoice_id );
 		if ( ! $invoice ) {
 			return self::refuse( __( 'This invoice no longer exists.', 'fishotel-misc-plugin' ), 'missing' );
@@ -561,12 +635,6 @@ class Publisher {
 		}
 		if ( Rules::unconfirmed( $report['duplicates'], $confirmed ) ) {
 			return self::refuse( __( 'A fish on this invoice already appears on another invoice of this customer. Confirm each one before publishing.', 'fishotel-misc-plugin' ), 'confirm', $again );
-		}
-
-		// Claim the row: of two Publish requests only one gets past here.
-		$claim = $this->store->save_invoice( $id, array(), null, (int) $invoice['version'], (int) $user_id );
-		if ( empty( $claim['ok'] ) ) {
-			return self::store_refusal( $claim );
 		}
 
 		$writes = $report['writes'];
@@ -617,7 +685,7 @@ class Publisher {
 				'published_at'  => $this->store->now(),
 			),
 			null,
-			(int) $claim['version'],
+			(int) $invoice['version'],
 			(int) $user_id
 		);
 		if ( empty( $saved['ok'] ) ) {
@@ -676,6 +744,20 @@ class Publisher {
 	}
 
 	/**
+	 * Whether the form comes from a window that is behind: it names a
+	 * version, and the invoice has moved on since (another window saved
+	 * it). Such a window must not pre-check or save — it would lay its old
+	 * lines over the newer ones on the product the customer has.
+	 *
+	 * @param mixed $raw     The form (+ version).
+	 * @param array $invoice The stored invoice.
+	 * @return bool
+	 */
+	private static function behind( $raw, array $invoice ) {
+		return is_array( $raw ) && isset( $raw['version'] ) && is_numeric( $raw['version'] ) && (int) $raw['version'] !== (int) $invoice['version'];
+	}
+
+	/**
 	 * The invoice as it stands, or the refusal to edit it.
 	 *
 	 * @param int $invoice_id Invoice id.
@@ -718,6 +800,9 @@ class Publisher {
 		if ( $in['errors'] ) {
 			return self::refuse( implode( ' ', $in['errors'] ), 'input' );
 		}
+		if ( self::behind( $raw, $invoice ) ) {
+			return self::store_refusal( array( 'error' => 'conflict' ) );
+		}
 
 		$merged = self::merged( $invoice, $in['fields'] );
 		$report = $this->check()->report( $merged, $in['lines'], $today, 'update' );
@@ -753,6 +838,26 @@ class Publisher {
 	 * @return array ok, code, message; on success id, product_id, url, warnings, invoice, lines.
 	 */
 	public function update( $invoice_id, $raw, $token, $confirmed, $user_id, $today ) {
+		return $this->locked(
+			$invoice_id,
+			function () use ( $invoice_id, $raw, $token, $confirmed, $user_id, $today ) {
+				return $this->update_locked( $invoice_id, $raw, $token, $confirmed, $user_id, $today );
+			}
+		);
+	}
+
+	/**
+	 * update(), holding the invoice's lock.
+	 *
+	 * @param int    $invoice_id Invoice id.
+	 * @param mixed  $raw        The form (+ version).
+	 * @param mixed  $token      The token of the pre-check that was shown.
+	 * @param mixed  $confirmed  The confirmed fish-on-two-invoices keys.
+	 * @param int    $user_id    Who.
+	 * @param string $today      The site date (Y-m-d).
+	 * @return array
+	 */
+	private function update_locked( $invoice_id, $raw, $token, $confirmed, $user_id, $today ) {
 		list( $invoice, $facts, $refusal ) = $this->editable( $invoice_id );
 		if ( $refusal ) {
 			return $refusal;
@@ -764,7 +869,7 @@ class Publisher {
 		if ( $in['errors'] ) {
 			return self::refuse( implode( ' ', $in['errors'] ), 'input' );
 		}
-		if ( isset( $raw['version'] ) && is_numeric( $raw['version'] ) && (int) $raw['version'] !== (int) $invoice['version'] ) {
+		if ( self::behind( $raw, $invoice ) ) {
 			return self::store_refusal( array( 'error' => 'conflict' ) );
 		}
 
@@ -784,11 +889,6 @@ class Publisher {
 		}
 		if ( Rules::unconfirmed( $report['duplicates'], $confirmed ) ) {
 			return self::refuse( __( 'A fish on this invoice already appears on another invoice of this customer. Confirm each one before saving.', 'fishotel-misc-plugin' ), 'confirm', $again );
-		}
-
-		$claim = $this->store->save_invoice( $id, array(), null, (int) $invoice['version'], (int) $user_id );
-		if ( empty( $claim['ok'] ) ) {
-			return self::store_refusal( $claim );
 		}
 
 		// Once more, right before the product is touched: is it STILL unpaid and in no live order?
@@ -827,7 +927,7 @@ class Publisher {
 		$stored['total']         = $writes['total'];
 		unset( $stored['handle'], $stored['handle_key'] );
 
-		$saved = $this->store->save_invoice( $id, $stored, $in['lines'], (int) $claim['version'], (int) $user_id );
+		$saved = $this->store->save_invoice( $id, $stored, $in['lines'], (int) $invoice['version'], (int) $user_id );
 		if ( empty( $saved['ok'] ) ) {
 			Invoices::log(
 				'error',
@@ -878,6 +978,22 @@ class Publisher {
 	 * @return array ok, code, message.
 	 */
 	public function trash( $invoice_id, $user_id ) {
+		return $this->locked(
+			$invoice_id,
+			function () use ( $invoice_id, $user_id ) {
+				return $this->trash_locked( $invoice_id, $user_id );
+			}
+		);
+	}
+
+	/**
+	 * trash(), holding the invoice's lock.
+	 *
+	 * @param int $invoice_id Invoice id.
+	 * @param int $user_id    Who.
+	 * @return array
+	 */
+	private function trash_locked( $invoice_id, $user_id ) {
 		$invoice = $this->store->invoice( (int) $invoice_id );
 		if ( ! $invoice ) {
 			return self::refuse( __( 'This invoice no longer exists.', 'fishotel-misc-plugin' ), 'missing' );

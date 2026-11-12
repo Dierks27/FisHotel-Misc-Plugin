@@ -31,11 +31,30 @@ invoice · Forum list · Settings.
 5. **A stated price is the customer's price.** A flat total leaves a
    *Discount* line (or an *Adjustment* line when it is higher), so the
    lines always add up to it.
-6. **Stock 1, backorders off**, on every invoice.
+6. **Stock 1, backorders off**, on every invoice — and the pre-check
+   refuses to publish while WooCommerce's own "Enable stock management"
+   is switched off, because "stock 1" is then stored but not enforced
+   and the same invoice could be paid twice.
 7. **A lost fish that was paid for** is a credit line on the new invoice.
 8. **When someone passes**: Trash, never delete — and only when no order
    of any status contains the invoice. Refused when the site empties its
    Trash at once (`EMPTY_TRASH_DAYS` 0).
+
+Three more things the code holds to:
+
+- **One writer per invoice.** Every write of an existing invoice (save,
+  publish, edit, Trash, withdraw) holds that invoice's lock on the
+  database server and reads the row inside it. Several Publish requests
+  sent at the same moment — a double click, two windows — make ONE
+  product; the others are told the invoice is busy.
+- **A window that is behind cannot undo a newer save.** A form names the
+  version it was opened with; when the invoice has moved on, the save —
+  and, for a published invoice, already the pre-check — is refused, and
+  stays refused on every further click until the page is reloaded. A
+  refusal never moves the version on.
+- **A copy is not the invoice.** WooCommerce's "Duplicate" of an invoice
+  built here leaves out this section's mark and the lines for the theme;
+  the copy is an invoice made by hand, listed and pre-checked as one.
 
 No e-mail is sent, no money is moved and no stock is changed by this
 section. Shop stock goes down only through WooCommerce, at payment, and
@@ -62,6 +81,32 @@ category only:
 The product is read back after it is written; one that does not match is
 taken offline again and the publish is refused.
 
+Names are kept as typed. Real HTML tags are taken out, a bare `<` (a
+size written `<2"`) stays; in the description and in the JSON a name goes
+out with `&`, `<` and `>` as entities, which is what the theme decodes
+back to the exact name. A shop product's title is taken as the text it
+stands for (`Okapi & Stripe`, not the stored `Okapi &amp; Stripe`).
+
+The total has a ceiling: lines that add up to more than the columns hold
+($9,999,999,999.99) are an error in the pre-check.
+
+## Who can find an invoice
+
+An invoice is opened by its link. "Hidden" keeps a product out of the
+shop, the category page and the site search, but WordPress and
+WooCommerce still listed it — handle, fish, price and link — for any
+logged-out visitor in the product sitemap, the REST lists of products
+(`wp/v2/product`, the Store API's `wc/store/…/products`) and the REST
+search. `class-visibility.php` takes the products of the Invoices
+category (the slug in Settings, and `invoices`) out of those four lists
+and marks an invoice's own page `noindex`. Invoices made by hand are
+covered the same way; no product is changed. Someone who may manage the
+shop still sees everything.
+
+Not covered, on purpose: the invoice's own page and a product asked for
+by its id still answer — the link is how the customer opens it. A
+sitemap built by an SEO plugin is that plugin's to configure.
+
 ## Data
 
 `{prefix}fh_invoices` and `{prefix}fh_invoice_lines`, made by dbDelta
@@ -78,7 +123,11 @@ draft, or an invoice whose product is gone).
 
 A front-end request costs no query from this section. The two order
 hooks return before any query unless the order is paid, cancelled or
-failed, and then run one indexed query.
+failed, and then run one indexed query plus one read of the row right
+before it is written — so the paid action fires once per payment even
+when a screen still holds the row from before. The visibility hooks ask
+nothing until a sitemap or a REST product list is built; the `noindex`
+is decided from what WordPress already loaded for the page.
 
 ## What other code can rely on
 
@@ -99,8 +148,9 @@ an empty array while the section is off — guard with `function_exists()`):
 
 Actions:
 
-- `do_action( 'fishotel_invoice_paid', $invoice_id, $order_id )` — once,
-  when an order containing the invoice is paid.
+- `do_action( 'fishotel_invoice_paid', $invoice_id, $order_id )` — once
+  per payment, when an order containing the invoice is paid (again when
+  the same order is paid again after it failed or was cancelled).
 - `do_action( 'fishotel_invoice_released', $invoice_id, $order_id )` —
   when that order is cancelled or fails and the invoice is open again.
 
@@ -116,13 +166,27 @@ item `_fh_invoice_product_id`, `_fh_invoice_title`, `_fh_invoice_fish`,
 order `_fishotel_is_fulfillment` (only read: a combined-box copy pays
 for nothing).
 
+Hooks of WordPress and WooCommerce it listens to, besides the two order
+hooks: `wp_sitemaps_posts_query_args`, `rest_product_query`,
+`rest_post_search_query`, `pre_get_posts` (Store API product list only),
+`wp_robots`, `woocommerce_duplicate_product_exclude_meta`.
+
 Options: `fishotel_invoices_settings` (not autoloaded),
 `fishotel_invoices_db_version`, `fishotel_invoices_db_retry`.
 
 AJAX (`wp_ajax_fishotel_invoices_<op>`, capability + nonce
 `fishotel_invoices_admin`): `search`, `handles`, `customers`, `save`,
 `precheck`, `publish`, `update`, `trash`, `discard`, `forum`, `settings`.
-There is no REST route.
+There is no REST route. A refusal carries a `code`: `conflict` (HTTP 409:
+the page is behind), `busy` (another request holds the invoice),
+`precheck`, `errors`, `confirm`, `locked`, `state`, `missing`, `input`,
+`shop`, `verify`, `db`, `orphan`.
+
+The forum list and the list of invoices show what the customer is
+CHARGED — the product's price. When that is no longer the invoice's
+total (the price was changed on the product by hand, or it carries a
+sale price), the forum line shows the product's price with a note, and
+the list flags the row.
 
 Health log: `do_action( 'fishotel_log', level, 'invoices', message, context )`.
 
@@ -160,8 +224,8 @@ node includes/sections/invoices/tests/invoices-admin.test.js
 `lines` (amounts and sums), `grammar` (the description as the theme
 reads it), `format`, `rules`, `store`, `settings`, `publish`,
 `edit-trash`, `trash-off`, `precheck`, `sync`, `search`, `tanks`,
-`contracts`, `admin` — 947 checks — and `invoices-admin.test.js` — 102
-checks: the picker's sums against the same
+`contracts`, `admin`, `visibility` — 1,063 checks — and
+`invoices-admin.test.js` — 114 checks: the picker's sums against the same
 `tests/fixtures/invoice-maths.json` the server test reads. The real
 `Shop` class runs on in-memory WooCommerce stubs (`wc-stubs.php`); the
 tables are an in-memory twin (`fake-store.php`).

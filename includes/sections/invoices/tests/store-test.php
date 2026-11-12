@@ -176,6 +176,8 @@ $reset();
 $store = new Store();
 check( 'reads', null === $store->invoice( 1 ) && array() === $store->invoices() && 0 === $store->count_invoices() && array() === $store->invoices_by_products( array( 5 ) ) && array() === $store->lines( 1 ) && array() === $store->handles( 'x' ) && array() === $store->stay_reservations( array( 1 ) ) && array() === $store->invoices_for_customer( array( 'handle_key' => 'x' ) ) );
 check( 'a save says "db" and writes nothing', array( false, 'db' ) === array( $store->save_invoice( 0, array( 'handle' => 'x' ) )['ok'], $store->save_invoice( 0, array( 'handle' => 'x' ) )['error'] ) && array() === $GLOBALS['wpdb']->queries );
+$store->unlock( 1 );
+check( 'a lock cannot be taken (and giving one back asks nothing)', false === $store->lock( 1 ) && false === $store->lock( 0 ) && array() === $GLOBALS['wpdb']->queries );
 check( 'the state counts are zeros', array( 'draft' => 0, 'published' => 0, 'paid' => 0, 'cancelled' => 0, 'trashed' => 0 ) === $store->state_counts() );
 
 echo "5. The columns of an invoice\n";
@@ -274,6 +276,7 @@ check( 'every class file of the section was looked at', $scanned >= 13 );
 $source = (string) file_get_contents( dirname( __DIR__ ) . '/class-store.php' );
 check( 'it never drops, truncates or alters a table by hand', ! preg_match( '/\b(DROP|TRUNCATE|ALTER)\s+TABLE\b/i', $source ) );
 check( 'it writes only its own two tables: every INSERT / UPDATE / DELETE goes to self::table() or a variable holding it', ! preg_match( '/(INSERT INTO|UPDATE|DELETE FROM)\s+\{?\$wpdb->(posts|postmeta|options|prefix)/i', $source ) && 0 === preg_match_all( '/woocommerce_order_item(s|meta)[^;]*\b(insert|update|delete)\(/i', $source ) );
+check( 'one writer per invoice: a named lock on the database server, asked for without waiting, with this site\'s database and prefix in its name', 1 === preg_match_all( '/SELECT GET_LOCK\(%s, 0\)/', $source ) && 1 === preg_match_all( '/SELECT RELEASE_LOCK\(%s\)/', $source ) && false !== strpos( $source, "DB_NAME : '' ) . '|' . (string) \$wpdb->prefix" ) );
 check( 'WooCommerce\'s order-line tables are only ever SELECTed from', 2 === preg_match_all( '/\$items\s+=\s+\$wpdb->prefix \. \'woocommerce_order_items\'/', $source ) && ! preg_match( '/(INSERT|UPDATE|DELETE)[^;"]*\{\$(items|meta)\}/i', $source ) );
 
 fh_finish();

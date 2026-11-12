@@ -87,7 +87,7 @@ $asked        = array( $store->reads, $store->writes );
 $invoice      = $store->invoice( $id );
 check( 'paid: the invoice is marked paid with the order', array( $id ) === $r['paid'] && 'paid' === $invoice['state'] && $order === $invoice['order_id'] && null !== $invoice['paid_at'] );
 check_same( 'the action fired once, with the invoice id and the order id', 1, fh_fired( Invoices::PAID_ACTION, array( $id, $order ) ) );
-check_same( 'one read of this section\'s table, one write', array( 1, 1 ), $asked );
+check_same( 'one query for the order\'s invoices, one read of the row right before it is written, one write', array( 2, 1 ), $asked );
 check( 'nothing in the shop was written: no product, no stock, no order', array() === $GLOBALS['fh_wc']['writes'] && 1 === $shop->product( $pid )['stock_quantity'] && 0 === $shop->product( $pid )['lock_order_id'] );
 
 $r = Sync::apply( $store, $shop, $shop->order_brief( $order ) );
@@ -217,6 +217,10 @@ do_action( 'woocommerce_order_status_changed', $order, 'pending', 'completed' );
 do_action( 'woocommerce_payment_complete', $order );
 check( 'before the tables exist the hooks do nothing and raise nothing', ! Store::ready() && 0 === fh_fired( Invoices::PAID_ACTION ) );
 
+check( 'the same order in the same state a second time (the two hooks of one payment) is a repeat', false === Sync::repeat( array( 'id' => 900, 'status' => 'processing', 'paid' => true ) ) && true === Sync::repeat( array( 'id' => 900, 'status' => 'processing', 'paid' => true ) ) );
+check( 'processing → failed → processing in ONE request: each is handled — only the last state counts, not every state seen', false === Sync::repeat( array( 'id' => 900, 'status' => 'failed', 'paid' => true ) ) && false === Sync::repeat( array( 'id' => 900, 'status' => 'processing', 'paid' => true ) ) && true === Sync::repeat( array( 'id' => 900, 'status' => 'processing', 'paid' => true ) ) );
+check( 'another order is not a repeat of this one', false === Sync::repeat( array( 'id' => 901, 'status' => 'processing', 'paid' => true ) ) );
+
 echo "8. reconcile(): a screen finds the stored state behind the truth\n";
 list( $store, $shop, $made ) = world_with( array( 'Tester' ) );
 $id    = $made['Tester']['id'];
@@ -249,5 +253,20 @@ $check = new Precheck( $store, $shop, new Fake_Tanks(), Settings::defaults() );
 $fresh = Sync::reconcile( $store, $shop, $store->invoice( $id ), $check->facts( $store->invoice( $id ) )['effective'] );
 check_same( 'its product deleted by hand: "withdrawn"', 'cancelled', $fresh['state'] );
 check( 'none of this wrote to the shop', array() === $GLOBALS['fh_wc']['writes'] );
+
+echo "9. A paid action never fires twice for one payment\n";
+// A screen read the row as published; the payment's own request marked it paid; the screen goes on with its old row.
+list( $store2, $shop2, $made2 ) = world_with( array( 'Racer' ) );
+$stale  = $store2->invoice( $made2['Racer']['id'] );
+$order2 = fh_wc_order( array( 'status' => 'processing', 'date_paid' => true ), array( whole_line( $made2['Racer']['product_id'] ) ) );
+Sync::apply( $store2, $shop2, $shop2->order_brief( $order2 ) );
+$check2 = new Precheck( $store2, $shop2, new Fake_Tanks(), Settings::defaults() );
+$after  = Sync::reconcile( $store2, $shop2, $stale, $check2->facts( $stale )['effective'] );
+check( 'a screen holding the row from before the payment: the paid action still fired ONCE for that payment', 1 === fh_fired( Invoices::PAID_ACTION ) && 'paid' === $after['state'] && $order2 === $after['order_id'] );
+check( 'mark_paid() on a row already paid by that order writes nothing and says so', false === Sync::mark_paid( $store2, $stale, $order2 ) && 1 === fh_fired( Invoices::PAID_ACTION ) );
+$paid_row = $store2->invoice( $made2['Racer']['id'] );
+fh_wc_order_set( $order2, array( 'status' => 'cancelled' ) );
+Sync::apply( $store2, $shop2, $shop2->order_brief( $order2 ) );
+check( 'and a release is announced once: a second release of the same row does nothing', false === Sync::release( $store2, $shop2, $paid_row, $order2 ) && 1 === fh_fired( Invoices::RELEASED_ACTION ) && 'published' === $store2->invoice( $made2['Racer']['id'] )['state'] );
 
 fh_finish();

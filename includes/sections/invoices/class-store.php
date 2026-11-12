@@ -438,6 +438,67 @@ class Store {
 	}
 
 	/* ============================================================== */
+	/*  One writer per invoice                                         */
+	/* ============================================================== */
+
+	/**
+	 * The name of an invoice's lock on the database server. Such a lock is
+	 * server-wide, so the name carries this site's database and prefix.
+	 *
+	 * @param int $id Invoice id.
+	 * @return string
+	 */
+	private static function lock_name( $id ) {
+		global $wpdb;
+		$site = ( defined( 'DB_NAME' ) ? (string) DB_NAME : '' ) . '|' . (string) $wpdb->prefix;
+		return 'fh_inv_' . substr( md5( $site ), 0, 16 ) . '_' . (int) $id;
+	}
+
+	/**
+	 * Take the lock of one invoice for this request, without waiting:
+	 * of several requests that publish (or change) the same invoice at
+	 * the same moment exactly one gets it. The database server gives it
+	 * back by itself when the request ends, however it ends.
+	 *
+	 * @param int $id Invoice id.
+	 * @return bool False when another request holds it (or it cannot be asked for).
+	 */
+	public function lock( $id ) {
+		if ( (int) $id <= 0 || ! self::ready() ) {
+			return false;
+		}
+
+		global $wpdb;
+		try {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- a named lock, not a table.
+			$got = $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 0)', self::lock_name( $id ) ) );
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+
+		return '1' === (string) $got;
+	}
+
+	/**
+	 * Give an invoice's lock back.
+	 *
+	 * @param int $id Invoice id.
+	 */
+	public function unlock( $id ) {
+		if ( (int) $id <= 0 || ! self::ready() ) {
+			return;
+		}
+
+		global $wpdb;
+		try {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery -- a named lock, not a table.
+			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', self::lock_name( $id ) ) );
+		} catch ( \Throwable $e ) {
+			unset( $e );
+		}
+	}
+
+	/* ============================================================== */
 	/*  Invoices: reads                                                */
 	/* ============================================================== */
 

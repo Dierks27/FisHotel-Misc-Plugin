@@ -403,7 +403,8 @@
 	function themeRows(lines) {
 		var rows = [];
 		(lines || []).forEach(function (line) {
-			var name = publicName(line);
+			// As the server writes it: the theme strips tags and decodes entities.
+			var name = publicName(line).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 			if (name === '') {
 				return;
 			}
@@ -505,7 +506,29 @@
 		});
 	}
 
+	/**
+	 * The version of the invoice the page holds after a reply. A page
+	 * only ever moves on to a version its OWN successful save produced: a
+	 * refusal never hands one over (a stale window told "changed in another
+	 * window" would otherwise pass on the next click and undo the newer
+	 * save), and while a published invoice is being edited a pre-check
+	 * saves nothing, so its reply hands none over either.
+	 *
+	 * @param {number}  current The version the page holds.
+	 * @param {Object}  data    The reply's data.
+	 * @param {boolean} ok      Whether the request succeeded.
+	 * @param {boolean} update  Whether a published invoice is being edited.
+	 * @return {number}
+	 */
+	function nextVersion(current, data, ok, update) {
+		if (!ok || update || !data || !data.version) {
+			return current;
+		}
+		return data.version;
+	}
+
 	var api = {
+		nextVersion: nextVersion,
 		cents: cents,
 		fromCents: fromCents,
 		money: money,
@@ -689,7 +712,7 @@
 				$text.val(out.text || '');
 				$copy.prop('disabled', !out.text);
 				$skipped.empty();
-				(out.skipped || []).forEach(function (line) {
+				(out.skipped || []).concat(out.notes || []).forEach(function (line) {
 					$('<li>').text(line).appendTo($skipped);
 				});
 				setStatus($status, out.text ? '' : t('noResults'), out.text ? '' : 'error');
@@ -1337,13 +1360,12 @@
 			gate();
 		}
 
+		/** Take over what a SUCCESSFUL reply says the invoice now is. */
 		function follow(data) {
 			if (data.id) {
 				state.id = data.id;
 			}
-			if (data.version) {
-				state.version = data.version;
-			}
+			state.version = nextVersion(state.version, data, true, update);
 			if (data.invoice) {
 				adopt(data.invoice);
 				renderLines();
@@ -1401,7 +1423,6 @@
 				dirty = false;
 				setStatus($status, data.message || t('saved'), 'ok');
 			}).fail(function (xhr) {
-				follow(replyData(xhr));
 				setStatus($status, replyMessage(xhr), 'error');
 			}).always(function () {
 				lock(false);
@@ -1431,7 +1452,6 @@
 					$panel[0].scrollIntoView({ behavior: 'smooth', block: 'start' });
 				}
 			}).fail(function (xhr) {
-				follow(replyData(xhr));
 				setStatus($status, replyMessage(xhr), 'error');
 			}).always(function () {
 				lock(false);
@@ -1478,7 +1498,6 @@
 				}
 			}).fail(function (xhr) {
 				var out = replyData(xhr);
-				follow(out);
 				lock(false);
 				showReport(out);
 				setStatus($publishStatus, replyMessage(xhr), 'error');

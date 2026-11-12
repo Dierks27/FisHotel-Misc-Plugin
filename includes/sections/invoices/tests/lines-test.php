@@ -49,6 +49,11 @@ foreach ( $fixture['cases'] as $case ) {
 	check( $case['name'] . ' — the lines ALWAYS add up to the total', near( Lines::total( $sum['lines'] ), $sum['total'] ) );
 	check_same( $case['name'] . ' — description lines', $case['texts'], $texts );
 	check( $case['name'] . ' — rows for the theme', json_encode( $case['rows'] ) === json_encode( $rows ), json_encode( $rows, JSON_UNESCAPED_UNICODE ) );
+
+	// The theme strips tags and decodes entities: every name must come back letter for letter, both ways.
+	$names = array_map( array( Lines::class, 'public_name' ), $sum['lines'] );
+	check_same( $case['name'] . ' — the theme reads every name back from the JSON', $names, array_column( Grammar::lines_from_json( Lines::theme_json( $sum['lines'] ) ), 'name' ) );
+	check_same( $case['name'] . ' — and from the description', $names, array_column( Grammar::parse_lines( Lines::description_html( $sum['lines'] ) ), 'name' ) );
 }
 
 echo "3. Normalising a line\n";
@@ -99,6 +104,10 @@ check( 'without a flat total the discount line goes and the total is the sum', 1
 check( 'a flat total that is no amount is no flat total', 90.0 === Lines::with_flat_total( $lines, 'abc' )['total'] && 90.0 === Lines::with_flat_total( $lines, '' )['total'] );
 check( 'a flat total of 0 is a flat total', 0.0 === Lines::with_flat_total( $lines, '0' )['total'] && -90.0 === Lines::with_flat_total( $lines, '0' )['discount'] );
 
+check_same( 'untag(): real tags go, a bare < stays — strip_tags() would cut the rest of the text', array( 'Blue Tang <3"', '<2" Clown', 'a  b', 'x < y > z', '' ), array( Lines::untag( 'Blue Tang <3"' ), Lines::untag( '<2" <b>Clown</b>' ), Lines::untag( 'a <br/> b' ), Lines::untag( 'x < y > z' ), Lines::untag( '<!-- gone -->' ) ) );
+$kept = Lines::normalize( array( array( 'name' => 'Blue Test Tang <3"', 'unit_price' => '45' ), array( 'name' => '<2" Test Clown', 'qty' => 2, 'unit_price' => '30' ), array( 'kind' => 'note', 'name' => 'Size <2" ships free' ) ) );
+check( 'three lines typed with a bare <: three lines kept, and their money (it was one fish, "Size" and $45)', 3 === count( $kept ) && near( Lines::total( $kept ), 105.0 ) && 'Size <2" ships free' === $kept[2]['name'], json_encode( $kept ) );
+
 echo "5. The description\n";
 $lines = Lines::with_flat_total(
 	Lines::normalize(
@@ -138,6 +147,9 @@ $theme = Grammar::lines_from_json( $json );
 check( 'the theme\'s reader takes it back: same kinds, same prices, the product id on the stock line only', array( 'fish', 'credit', 'note', 'credit' ) === array_column( $theme, 'kind' ) && 777 === $theme[0]['product_id'] && array( 0, 0, 0 ) === array( $theme[1]['product_id'], $theme[2]['product_id'], $theme[3]['product_id'] ) && 45.0 === $theme[0]['price'] );
 check( 'and adds them up to the total, so the order gets one line per fish', near( Grammar::sum( $theme ), 5.0 ) );
 check_same( 'no lines: an empty list', '[]', Lines::theme_json( array() ) );
+$odd = Lines::normalize( array( array( 'name' => 'Okapi & Stripe Test Goby', 'unit_price' => '5' ), array( 'name' => 'Test &nbsp; Wrasse', 'unit_price' => '5' ), array( 'name' => '&lt;b&gt;', 'unit_price' => '5' ) ) );
+check_same( 'a name goes out with &, < and > as entities, so the theme (which decodes) reads it back as typed — never "&amp;" for the customer, never an empty name', array( 'Okapi & Stripe Test Goby', 'Test &nbsp; Wrasse', '&lt;b&gt;' ), array_column( Grammar::lines_from_json( Lines::theme_json( $odd ) ), 'name' ) );
+check( 'so the theme still adds the lines up to the total', near( Grammar::sum( Grammar::lines_from_json( Lines::theme_json( $odd ) ) ), 15.0 ) && near( Grammar::sum( Grammar::parse_lines( Lines::description_html( $odd ) ) ), 15.0 ) );
 
 echo "7. The stock tick: product_id present or absent\n";
 $tick = static function ( array $line ) {

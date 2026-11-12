@@ -255,6 +255,16 @@ $v = Rules::validate( array( 'handle' => 'Tester' ), Lines::with_flat_total( Lin
 check( 'a total of $0: a warning', array() === $v['errors'] && 1 === count( $v['warnings'] ) && false !== strpos( $v['warnings'][0], '$0' ) );
 $v = Rules::validate( array( 'handle' => 'Tester' ), Lines::with_flat_total( Lines::normalize( array( array( 'name' => 'Blue Test Tang', 'unit_price' => '45' ) ) ), '50' )['lines'] );
 check( 'an Adjustment line: a warning that says how it will appear', array() === $v['errors'] && 1 === count( $v['warnings'] ) && false !== strpos( $v['warnings'][0], '$5' ) && false !== strpos( $v['warnings'][0], 'pick list' ) );
+$huge = array();
+for ( $i = 0; $i < 11; $i++ ) {
+	$huge[] = array( 'name' => 'Huge Test Fish ' . $i, 'qty' => 999, 'unit_price' => '999999.99' );
+}
+$v = Rules::validate( array( 'handle' => 'Tester' ), Lines::normalize( $huge ) );
+check( 'lines that add up to more than the columns hold ($9,999,999,999.99): an error — the stored total would be cut off', 1 === count( $v['errors'] ) && false !== strpos( $v['errors'][0], '$9,999,999,999.99' ), json_encode( $v['errors'] ) );
+$v = Rules::validate( array( 'handle' => 'Tester' ), Lines::with_flat_total( Lines::normalize( $huge ), '500' )['lines'] );
+check( 'the same lines under a small flat total: the Discount line would not fit either — an error', 1 === count( preg_grep( '/more than an invoice can hold/', $v['errors'] ) ) );
+$v = Rules::validate( array( 'handle' => 'Tester' ), Lines::normalize( array_slice( $huge, 0, 10 ) ) );
+check( 'just below the limit (ten such lines, $9,989,999,900.10): fine', array() === $v['errors'] );
 
 echo "10. A line must read back from the description as typed\n";
 $problem = static function ( array $line ) {

@@ -19,7 +19,9 @@
  *
  * Cost: the two hooks cost nothing until an order is paid, cancelled or
  * failed — a pending or on-hold order returns before any query — and
- * then ONE indexed query on this section's own table.
+ * then ONE indexed query on this section's own table, plus one read of
+ * the row right before it is written (so a paid action never fires twice
+ * for one payment).
  *
  * Only this section's own table is written here: no product, no stock,
  * no order and no e-mail.
@@ -43,9 +45,10 @@ defined( 'ABSPATH' ) || exit;
 class Sync {
 
 	/**
-	 * Orders already handled in this request, by "id:status:paid".
+	 * The state each order was last handled in during this request:
+	 * order id → "status:paid".
 	 *
-	 * @var array<string, bool>
+	 * @var array<int, string>
 	 */
 	private static $seen = array();
 
@@ -75,16 +78,34 @@ class Sync {
 				return;
 			}
 
-			$key = $order['id'] . ':' . $order['status'] . ':' . ( $order['paid'] ? '1' : '0' );
-			if ( isset( self::$seen[ $key ] ) ) {
+			if ( self::repeat( $order ) ) {
 				return;
 			}
-			self::$seen[ $key ] = true;
 
 			self::apply( new Store(), $shop, $order );
 		} catch ( \Throwable $e ) {
 			Invoices::log( 'error', sprintf( 'The paid sync of order #%1$d failed: %2$s', (int) $order_id, $e->getMessage() ), array( 'order_id' => (int) $order_id ) );
 		}
+	}
+
+	/**
+	 * Whether an order comes in the very state it was last handled in —
+	 * the two hooks fire one after the other for one payment. Only the
+	 * LAST state counts, not every state seen: an order that goes
+	 * processing → failed → processing within one request is handled
+	 * three times, so the invoice ends up paid again.
+	 *
+	 * @param array $order Shop::order_brief(): id, status, paid.
+	 * @return bool
+	 */
+	public static function repeat( array $order ) {
+		$id  = (int) ( isset( $order['id'] ) ? $order['id'] : 0 );
+		$now = ( isset( $order['status'] ) ? (string) $order['status'] : '' ) . ':' . ( ! empty( $order['paid'] ) ? '1' : '0' );
+		if ( isset( self::$seen[ $id ] ) && self::$seen[ $id ] === $now ) {
+			return true;
+		}
+		self::$seen[ $id ] = $now;
+		return false;
 	}
 
 	/**
@@ -166,6 +187,12 @@ class Sync {
 	 * @return bool
 	 */
 	public static function mark_paid( $store, array $invoice, $order_id ) {
+		// The row as it is NOW: a screen may hold it from before the payment's own request marked it.
+		$fresh = $store->invoice( (int) $invoice['id'] );
+		if ( ! $fresh || ( 'paid' === $fresh['state'] && (int) $fresh['order_id'] === (int) $order_id ) ) {
+			return false;
+		}
+
 		$result = $store->save_invoice(
 			(int) $invoice['id'],
 			array(
@@ -207,6 +234,12 @@ class Sync {
 	 * @return bool
 	 */
 	public static function release( $store, $shop, array $invoice, $order_id ) {
+		// Only what is still paid by that order is released (and announced) — once.
+		$fresh = $store->invoice( (int) $invoice['id'] );
+		if ( ! $fresh || 'paid' !== $fresh['state'] || (int) $fresh['order_id'] !== (int) $order_id ) {
+			return false;
+		}
+
 		$state   = 'published';
 		$product = ! empty( $invoice['product_id'] ) ? $shop->product( (int) $invoice['product_id'] ) : null;
 		if ( ! $product ) {
