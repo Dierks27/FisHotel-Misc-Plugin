@@ -1373,6 +1373,8 @@ class Store {
 		$event_id = (int) $wpdb->insert_id;
 		$state    = $this->replay( (int) $stay_id, $today, $settings );
 
+		do_action( 'fishotel_cleanroom_event_recorded', (int) $stay_id, $event_id, $data, $state ); // What other sections listen to (Lost Fish: a `loss` and its undo).
+
 		return array(
 			'event_id'  => $event_id,
 			'state'     => $state,
