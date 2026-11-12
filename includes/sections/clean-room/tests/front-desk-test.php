@@ -194,7 +194,7 @@ foreach ( array( '0', '-1', '10000', 'abc', '' ) as $amount ) {
 }
 check( 'an amount of 0, below 0, above 9999, junk or blank: refused', 5 === $bad );
 $r = act( $store, 521, 'dose', array( 'medication' => 'metro', 'amount' => '5', 'unit' => 'cups', 'whole' => 1 ) );
-check( 'a unit other than g / ml / tsp: refused', 'Which unit? g, ml or tsp.' === ( $r['error'] ?? '' ) );
+check( 'a unit that is not one of the six (mg, g, ml, tsp, drops, each): refused', 'Which unit? mg, g, ml, tsp, drops or each.' === ( $r['error'] ?? '' ) );
 $logs_before = count( $store->logs );
 $r = act( $store, 521, 'dose', array( 'medication' => 'metro', 'amount' => '5.1', 'unit' => 'g', 'whole' => 1 ) );
 $log = end( $store->logs );
@@ -230,7 +230,8 @@ check( 'the last dose per medication per building: metro, copper and formalin on
 $latest = $store->tank_logs( 0, 3 );
 check( 'the Events tab: the dose rows read like the toast, the system one named by its building', 'Formalin 20.5 ml' === Admin::log_text( $latest[0] ) && 'Copper Power 55 ml' === Admin::log_text( $latest[1] ) && 'Metronidazole 5.1 g · Building 500, whole system' === Admin::log_text( $latest[2] ) && 500 === $latest[2]['building_number'] && null === $latest[2]['tank_number'] );
 check( 'a building-level copper reading or note says so too; an import marker is kept out of sight', 'copper 2.01 · Building 600, whole system' === Admin::log_text( array( 'kind' => 'copper', 'value' => 2.01, 'tank_id' => 0, 'building_id' => 6, 'building_number' => 600 ) ) && 'Praziquantel 2.05 · Building 600, whole system' === Admin::log_text( array( 'kind' => 'dose', 'note' => 'Praziquantel 2.05 · import:2026-9#4', 'tank_id' => 0, 'building_id' => 6, 'building_number' => 600 ) ) && 'note: Lost Fish 2' === Admin::log_text( array( 'kind' => 'note', 'note' => 'Lost Fish 2 · import:2026-9#5', 'tank_id' => 7 ) ) );
-check( 'the medications offered with their suggestions: 205 gal → metro 5.1 g, copper none; a 20-gal tank → metro 0.5 g', 5.1 === Front_Desk::medications( 205, 20 )[1]['system'] && 0.5 === Front_Desk::medications( 205, 20 )[1]['tank'] && null === Front_Desk::medications( 205, 20 )[0]['system'] && 'copper' === Front_Desk::medications( 205, 20 )[0]['key'] && 'ml' === Front_Desk::medications( 205, 20 )[0]['unit'] );
+$offered = Front_Desk::medications();
+check( 'the medications offered, as the page reads them (the sums are the page\'s — dose-save-test.php): copper to a level at 0.692 ml per 1.0 ppm, metro 25 mg per gallon, salt typed', 7 === count( $offered ) && array( 'key' => 'copper', 'label' => 'Copper Power', 'short' => 'Copper', 'unit' => 'ml', 'mode' => 'to_level', 'rate' => 0.692, 'per' => 1.0, 'levelUnit' => 'ppm', 'copper' => true, 'doses' => array(), 'measure' => null ) === $offered[0] && array( 'metro', 'per_gallon', 25.0, 'mg', false ) === array( $offered[1]['key'], $offered[1]['mode'], $offered[1]['rate'], $offered[1]['unit'], $offered[1]['copper'] ) && 'typed' === $offered[6]['mode'] && 3 === count( $offered[4]['doses'] ), json_encode( $offered[0] ) );
 
 echo "7. A scanned label keeps the phone signed in\n";
 $front                                  = new Front_Desk();

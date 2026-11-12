@@ -4,7 +4,12 @@
  * that mirrors the server's Parser::summary(), a group's sale state in
  * words (saleSummary), its size beside its name (sizeText), and the name
  * of an unknown fish (unknownName — against fixtures/unknown-names.json,
- * which the server's Identify::unknown_name() reads too).
+ * which the server's Identify::unknown_name() reads too), a dose phrase
+ * in plain words (against fixtures/dose-phrases.json, which the server's
+ * Parser::summary() reads too) and the Dose sheet's own pure parts: what
+ * it starts with (doseStart), the rate chips (rateChoices, pickChoice)
+ * and what Save posts (doseFields). The sheet itself is run in
+ * front-desk-dose.test.js; the sums are dose-math.test.js.
  *
  * Runs js/front-desk.js without a DOM or config: the file exports its
  * helpers and skips the app when there is no document / window.fhFrontDesk.
@@ -17,6 +22,7 @@ var path    = require( 'path' );
 var fs      = require( 'fs' );
 var helpers = require( path.join( __dirname, '..', 'js', 'front-desk.js' ) );
 var names   = JSON.parse( fs.readFileSync( path.join( __dirname, 'fixtures', 'unknown-names.json' ), 'utf8' ) );
+var phrases = JSON.parse( fs.readFileSync( path.join( __dirname, 'fixtures', 'dose-phrases.json' ), 'utf8' ) );
 
 var failures = 0;
 var checks   = 0;
@@ -115,6 +121,42 @@ names.unknown.forEach( function ( c ) {
 } );
 check( 'junk is no description; the name fits the column (120)', '??' === helpers.unknownName( { a: 1 } ) && '??' === helpers.unknownName( false ) && '??' === helpers.unknownName() && 120 === helpers.unknownName( new Array( 301 ).join( 'x' ) ).length );
 check( 'an unknown arrival reads like any other in the preview sentence', '2 × ?? small wrasse arriving in Tank 521 today' === helpers.previewSentence( { intent: 'arrival', qty: 2, tank: 521, species: { name: helpers.unknownName( 'small wrasse' ) }, needs: [] } ) );
+
+console.log( '9. A dose phrase in plain words (the fixture the server reads too)' );
+phrases.sentences.forEach( function ( pair ) {
+	check( pair[1], pair[1] === helpers.previewSentence( pair[0] ), helpers.previewSentence( pair[0] ) );
+} );
+
+console.log( '10. The Dose sheet\'s pure parts' );
+check( 'the dose helpers are exported', [ 'doseStart', 'rateChoices', 'pickChoice', 'doseFields' ].every( function ( k ) { return typeof helpers[ k ] === 'function'; } ) );
+var copper = { key: 'copper', label: 'Copper Power', unit: 'ml', mode: 'to_level', rate: 0.692, per: 1, levelUnit: 'ppm', copper: true, doses: [] };
+var quine  = { key: 'quine', label: 'Test Quine', unit: 'mg', mode: 'per_gallon', rate: 10, per: 1, doses: [ { label: 'Loading', rate: 40 }, { label: 'Top-up', rate: 12 } ] };
+var plain  = { key: 'metro', label: 'Metronidazole', unit: 'mg', mode: 'per_gallon', rate: 25, per: 1, doses: [] };
+var water  = { gallons: 100, reading: { value: 2.16, at: '09:14' }, meds: { copper: { now: 2.16, nowAt: '09:14', target: 2.4, targetFrom: 'schedule', rate: null, rateFrom: '', options: [ { value: 2.4, label: 'Copper Power to 2.4', day: 2 } ] }, quine: { now: null, nowAt: '', target: null, targetFrom: '', rate: 40, rateFrom: 'schedule', options: [ { value: 40, label: 'Test Quine 40 mg/gal', day: 3 } ] } } };
+var start  = helpers.doseStart( copper, water );
+check( 'doseStart: the levels as text for the fields, their source, the due steps', '2.16' === start.now && '09:14' === start.nowAt && '2.4' === start.target && 'schedule' === start.targetFrom && 1 === start.options.length, JSON.stringify( start ) );
+start = helpers.doseStart( quine, water );
+check( '…a per-gallon medication: the due step\'s rate, no levels', 40 === start.rate && 'schedule' === start.rateFrom && '' === start.now && '' === start.target );
+start = helpers.doseStart( plain, water );
+check( '…one the water says nothing about: its own rate', 25 === start.rate && '' === start.rateFrom && 0 === start.options.length );
+start = helpers.doseStart( copper, { gallons: 40, reading: null, meds: { copper: { now: 0, nowAt: '08:00', target: null } } } );
+check( '…a reading of 0 is a reading; a missing target is empty', '0' === start.now && '' === start.target );
+check( '…no medication, no water: nothing, never a throw', null === helpers.doseStart( null, null ).rate && '' === helpers.doseStart( copper, null ).now && '' === helpers.doseStart( copper, {} ).target );
+var choices = helpers.rateChoices( quine, [ { value: 40, label: 'Test Quine 40 mg/gal', day: 3 } ] );
+check( 'rateChoices: its own rate, then the named doses; a due step at a named dose\'s rate marks that one', 3 === choices.length && '10 mg per gallon' === choices[0].text && '' === choices[0].name && ! choices[0].due && 'Loading · 40 mg per gallon' === choices[1].text && 'Loading' === choices[1].name && true === choices[1].due && 'Test Quine 40 mg/gal' === choices[1].step && ! choices[2].due, JSON.stringify( choices ) );
+choices = helpers.rateChoices( quine, [ { value: 20, label: 'Test Quine 20 mg/gal', day: 5 }, { value: 10, label: 'Test Quine 10 mg/gal', day: 9 } ] );
+check( '…a due rate that is none of them gets its own chip; one that is the medication\'s own marks it', 4 === choices.length && 20 === choices[3].rate && '20 mg per gallon' === choices[3].text && true === choices[3].due && '' === choices[3].name && true === choices[0].due );
+check( '…a medication with one rate: one choice; one not dosed per gallon: none', 1 === helpers.rateChoices( plain, [] ).length && 0 === helpers.rateChoices( copper, [] ).length && 0 === helpers.rateChoices( null, [] ).length );
+check( '…a rate for 10 gallons reads so', '1 ml per 10 gal' === helpers.rateChoices( { mode: 'per_gallon', unit: 'ml', rate: 1, per: 10, doses: [] }, [] )[0].text );
+choices = helpers.rateChoices( quine, [ { value: 40, label: 'x', day: 3 } ] );
+check( 'pickChoice: a rate picks the named dose at it; a name picks that one; nothing known picks the medication\'s own', 'Loading' === helpers.pickChoice( choices, 40, '' ).name && 'Top-up' === helpers.pickChoice( choices, 12, 'Top-up' ).name && '' === helpers.pickChoice( choices, 10, '' ).name && 10 === helpers.pickChoice( choices, 99, '' ).rate && 10 === helpers.pickChoice( choices, null, '' ).rate && null === helpers.pickChoice( [], 10, '' ) );
+var fields = helpers.doseFields( copper, { amount: '16.6', unit: 'ml', whole: true, now: '2.16', target: '2.4' }, { state: 'ok' } );
+check( 'doseFields, to a level: the amount as it stands, the water, calc with now and target', JSON.stringify( { medication: 'copper', amount: '16.6', unit: 'ml', whole: 1, calc: 1, now: '2.16', target: '2.4' } ) === JSON.stringify( fields ), JSON.stringify( fields ) );
+check( '…"nothing to add" and unknown gallons still carry the readings; a missing reading carries nothing', 1 === helpers.doseFields( copper, { amount: '4', unit: 'ml', now: '2.5', target: '2.4' }, { state: 'nothing' } ).calc && 1 === helpers.doseFields( copper, { amount: '4', unit: 'ml', now: '2.5', target: '2.4' }, { state: 'no_gallons' } ).calc && ! ( 'calc' in helpers.doseFields( copper, { amount: '4', unit: 'ml', now: '', target: '2.4' }, { state: 'needs_now' } ) ) && ! ( 'now' in helpers.doseFields( copper, { amount: '4', unit: 'ml' }, null ) ) );
+fields = helpers.doseFields( quine, { amount: '4', unit: 'g', whole: false, rate: 40, rateLabel: 'Loading', topup: true, changed: '25', changedUnit: 'pct' }, { state: 'ok' } );
+check( 'doseFields, per gallon: the rate, the named dose, the top-up', JSON.stringify( { medication: 'quine', amount: '4', unit: 'g', whole: 0, calc: 1, rate: 40, dose_label: 'Loading', topup: 1, changed: '25', changed_unit: 'pct' } ) === JSON.stringify( fields ), JSON.stringify( fields ) );
+check( '…no sum (unknown gallons): a plain dose; a top-up without its number says only that it was one', ! ( 'calc' in helpers.doseFields( plain, { amount: '2', unit: 'g', whole: true, rate: 25 }, { state: 'no_gallons' } ) ) && 1 === helpers.doseFields( plain, { amount: '2', unit: 'g', topup: true, changed: '' }, { state: 'needs_changed' } ).topup && ! ( 'changed' in helpers.doseFields( plain, { amount: '2', unit: 'g', topup: true, changed: '' }, { state: 'needs_changed' } ) ) && 'gal' === helpers.doseFields( plain, { amount: '2', unit: 'g', topup: true, changed: '30', changedUnit: 'gal' }, { state: 'ok' } ).changed_unit );
+check( '…a typed medication: never a sum', ! ( 'calc' in helpers.doseFields( { key: 'salt', mode: 'typed' }, { amount: '6', unit: 'tsp', whole: true }, { state: 'typed' } ) ) );
 
 console.log( '' );
 console.log( failures ? failures + ' of ' + checks + ' checks FAILED' : 'All ' + checks + ' checks passed' );
