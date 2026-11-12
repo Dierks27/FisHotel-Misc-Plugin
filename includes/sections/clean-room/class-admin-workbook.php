@@ -7,8 +7,15 @@
  * figures, weighted and as the spreadsheet averaged them), their AJAX,
  * and the XLSX / CSV exports of orders, species, stats and stays.
  *
- * The order editor also takes a size per line — one of the standard
- * sizes (Sizes), the same list the product variations use.
+ * The order editor also takes, per line, a size (one of the standard
+ * sizes — Sizes), the box the line came out of and the percent of ONE box
+ * it took; under the lines the percents are added up per box (under /
+ * about full / over) and against the order's Boxes field
+ * (Costing::box_summary(), which the page's JS recalculates as the
+ * numbers are typed). Saving an order remembers each line's percent per
+ * fish for its supplier + origin + fish + size (Box_Shares), which the
+ * next order from the same place offers back as a "suggested N%" chip and,
+ * while it is a draft or ordered, adds up into a "How full" line.
  *
  * Every write checks manage_woocommerce and the admin nonce; every
  * download is an admin-post action with its own nonce. The XLSX writer
@@ -221,6 +228,8 @@ class Admin_Workbook {
 			$box_rates   = Settings::box_rates();
 			$pick        = self::pick_lists( $store, $box_rates );
 			$sizes       = Sizes::standard( $store, $settings )['sizes'];
+			$shares      = $store->box_shares( array( 'location_key' => Box_Shares::location_key( $order['supplier'], $order['origin'] ) ) );
+			$boxes       = self::boxes_panel( $order, $shares );
 			$can_checkin = self::can_check_in( $order );
 			$is_new      = 0 === (int) $order['id'];
 			$list_url    = Admin::page_url( 'arrivals' );
@@ -598,6 +607,105 @@ class Admin_Workbook {
 	}
 
 	/* ============================================================== */
+	/*  Percent of a box                                               */
+	/* ============================================================== */
+
+	/**
+	 * The sentences of the Boxes card, the suggestion chip and the "How
+	 * full" line — one table for the page and for its JS (which fills the
+	 * same templates as the numbers are typed).
+	 *
+	 * @return array<string, string>
+	 */
+	public static function box_strings() {
+		return array_merge(
+			array(
+				/* translators: 1: box number, 2: percent, 3: under / about full / over */
+				'box'        => __( 'Box %1$s · %2$s%% · %3$s', 'fishotel-misc-plugin' ),
+				/* translators: 1: percent, 2: lines */
+				'unboxed'    => __( 'no box number · %1$s%% · lines: %2$d', 'fishotel-misc-plugin' ),
+				'under'      => __( 'under', 'fishotel-misc-plugin' ),
+				'full'       => __( 'about full', 'fishotel-misc-plugin' ),
+				'over'       => __( 'over', 'fishotel-misc-plugin' ),
+				'none'       => __( 'No line has a percent yet: every line uses its per-box count.', 'fishotel-misc-plugin' ),
+				/* translators: %1$s: boxes */
+				'total'      => __( 'Boxes by the percents: %1$s · Boxes field: not set', 'fishotel-misc-plugin' ),
+				/* translators: 1: boxes, 2: the order's Boxes field */
+				'totalField' => __( 'Boxes by the percents: %1$s · Boxes field: %2$s', 'fishotel-misc-plugin' ),
+			),
+			Box_Shares::strings()
+		);
+	}
+
+	/**
+	 * The Boxes card's chips (pure): one per box number — "Box 1 · 95% ·
+	 * about full" — then the lines with a percent but no box number.
+	 *
+	 * @param array      $summary Costing::box_summary().
+	 * @param array|null $strings box_strings() (null = the site's).
+	 * @return array[] state (under|full|over|unboxed), text.
+	 */
+	public static function box_summary_rows( array $summary, $strings = null ) {
+		$s    = is_array( $strings ) ? $strings : self::box_strings();
+		$rows = array();
+		foreach ( (array) ( $summary['boxes'] ?? array() ) as $box ) {
+			$state  = in_array( (string) ( $box['state'] ?? '' ), Costing::BOX_STATES, true ) ? (string) $box['state'] : 'under';
+			$rows[] = array(
+				'state' => $state,
+				'text'  => sprintf( $s['box'], (string) (int) $box['box_no'], Costing::num( $box['pct'], '0', 2 ), $s[ $state ] ),
+			);
+		}
+		if ( (int) ( $summary['unboxed']['lines'] ?? 0 ) > 0 ) {
+			$rows[] = array(
+				'state' => 'unboxed',
+				'text'  => sprintf( $s['unboxed'], Costing::num( $summary['unboxed']['pct'], '0', 2 ), (int) $summary['unboxed']['lines'] ),
+			);
+		}
+		return $rows;
+	}
+
+	/**
+	 * The Boxes card's total (pure): the boxes the percents add up to (the
+	 * sum ÷ 100, to two decimals) beside the order's Boxes field.
+	 *
+	 * @param array      $summary Costing::box_summary().
+	 * @param array|null $strings box_strings() (null = the site's).
+	 * @return string
+	 */
+	public static function box_total_text( array $summary, $strings = null ) {
+		$s = is_array( $strings ) ? $strings : self::box_strings();
+		if ( (int) ( $summary['lines'] ?? 0 ) < 1 ) {
+			return $s['none'];
+		}
+		// The sum is a whole number of hundredths, so this rounds the same in PHP and in JS.
+		$boxes = Costing::num( round( (float) ( $summary['pct_total'] ?? 0 ) ) / 100, '0', 2 );
+		return null === ( $summary['order_boxes'] ?? null ) ? sprintf( $s['total'], $boxes ) : sprintf( $s['totalField'], $boxes, (string) (int) $summary['order_boxes'] );
+	}
+
+	/**
+	 * What the order page's Boxes card shows (pure): the chips, the total,
+	 * the "How full" line while the order is a draft or ordered ('' once
+	 * the fish are in), and the location's remembered shares as the page's
+	 * JS reads them.
+	 *
+	 * @param array   $order  The order with its lines (boxes, status, cost_mode).
+	 * @param array[] $shares The remembered shares of its supplier + origin.
+	 * @return array{summary: array, rows: array[], total: string, how_full: string, shares: array[]}
+	 */
+	public static function boxes_panel( array $order, array $shares ) {
+		$lines   = (array) ( $order['lines'] ?? array() );
+		$summary = Costing::box_summary( $lines, $order['boxes'] ?? null );
+
+		return array(
+			'summary'  => $summary,
+			'rows'     => self::box_summary_rows( $summary ),
+			'total'    => self::box_total_text( $summary ),
+			'how_full' => in_array( (string) ( $order['status'] ?? '' ), Box_Shares::HOW_FULL_STATUSES, true ) ? Box_Shares::how_full_text( Box_Shares::how_full( $lines, $shares ) ) : '',
+			'shares'   => Box_Shares::for_js( $shares ),
+		);
+	}
+
+	/* ============================================================== */
 	/*  AJAX: orders                                                   */
 	/* ============================================================== */
 
@@ -616,7 +724,9 @@ class Admin_Workbook {
 
 	/**
 	 * AJAX: save (header + lines, the recomputed figures back), checkin
-	 * (the stays), delete (a draft without stays).
+	 * (the stays), delete (a draft without stays), shares (the remembered
+	 * box shares of a supplier + origin — read only, for the suggestion
+	 * chips when either field changes on the page).
 	 */
 	public function ajax_order() {
 		self::guard();
@@ -661,10 +771,14 @@ class Admin_Workbook {
 					if ( ! $deleted ) {
 						wp_send_json_error( array( 'message' => __( 'The order could not be deleted.', 'fishotel-misc-plugin' ) ), 500 );
 					}
+					Box_Shares::release_lines( $store, (array) ( $current['lines'] ?? array() ) ); // Its percents are no longer remembered.
 					$result = array(
 						'message'  => __( 'Order deleted.', 'fishotel-misc-plugin' ),
 						'redirect' => Admin::page_url( 'arrivals' ),
 					);
+					break;
+				case 'shares':
+					$result = array( 'shares' => self::shares_for( $store, $raw ) );
 					break;
 				default:
 					wp_send_json_error( array( 'message' => __( 'Unknown action.', 'fishotel-misc-plugin' ) ), 400 );
@@ -681,17 +795,34 @@ class Admin_Workbook {
 	}
 
 	/**
+	 * The remembered box shares of a posted supplier + origin, as the
+	 * page's JS reads them (Box_Shares::for_js()).
+	 *
+	 * @param object $store Store (or the tests' stand-in).
+	 * @param array  $raw   Unslashed payload: supplier, origin.
+	 * @return array[]
+	 */
+	public static function shares_for( $store, array $raw ) {
+		$text = static function ( $key ) use ( $raw ) {
+			return isset( $raw[ $key ] ) && is_scalar( $raw[ $key ] ) ? substr( sanitize_text_field( (string) $raw[ $key ] ), 0, 80 ) : '';
+		};
+		return Box_Shares::for_js( (array) $store->box_shares( array( 'location_key' => Box_Shares::location_key( $text( 'supplier' ), $text( 'origin' ) ) ) ) );
+	}
+
+	/**
 	 * Save an order from the editor's payload: the header, then the lines
-	 * (upsert + delete), then the landed-total cache, then the figures. A
-	 * size that is no longer in the list leaves that line without one and
-	 * is named in the message.
+	 * (upsert + delete), then the landed-total cache, then the remembered
+	 * box shares, then the figures. A box number or a percent of a box
+	 * that was typed wrong refuses the save before anything is written
+	 * (Orders::line_errors()); a size that is no longer in the list leaves
+	 * that line without one and is named in the message.
 	 *
 	 * @param Store  $store Store.
 	 * @param array  $raw   Unslashed payload.
 	 * @param int    $id    Order id (0 = new).
 	 * @param string $today Site date.
-	 * @return array message, order_id, is_new, redirect (new), line_ids, figures, can_checkin, warnings
-	 *               — or error.
+	 * @return array message, order_id, is_new, redirect (new), line_ids, figures, can_checkin, shares,
+	 *               warnings — or error.
 	 */
 	public static function save_order( $store, array $raw, $id, $today ) {
 		$header = Orders::normalize_order( array_merge( $raw, array( 'id' => $id ) ) );
@@ -712,8 +843,13 @@ class Admin_Workbook {
 		}
 
 		$raw_lines = isset( $raw['lines'] ) && is_array( $raw['lines'] ) ? $raw['lines'] : array();
+		$mistakes  = Orders::line_errors( $raw_lines );
+		if ( $mistakes ) {
+			return array( 'error' => implode( ' ', $mistakes ) . ' ' . __( 'Nothing was saved.', 'fishotel-misc-plugin' ) );
+		}
 
-		// The lines as stored before this save: a stale size stays selectable on its own line.
+		// The lines as stored before this save: a stale size stays selectable on its
+		// own line, and a line the save removes gives its remembered share back.
 		$before  = array();
 		$current = $id > 0 ? $store->order( $id ) : null;
 		foreach ( (array) ( $current['lines'] ?? array() ) as $line ) {
@@ -742,6 +878,7 @@ class Admin_Workbook {
 
 		$order = self::resolve_order( $store, $store->order( $saved_id ) );
 		self::cache_landed_totals( $store, $order );
+		Box_Shares::remember( $store, $order, array_values( $before ), $today );
 
 		$message = __( 'Order saved.', 'fishotel-misc-plugin' );
 		if ( $warnings ) {
@@ -759,6 +896,7 @@ class Admin_Workbook {
 			'line_ids'    => array_values( array_map( 'intval', array_column( $order['lines'], 'id' ) ) ),
 			'figures'     => self::figures( $order ),
 			'can_checkin' => self::can_check_in( $order ),
+			'shares'      => self::shares_for( $store, $order ),
 			'warnings'    => $warnings,
 		);
 	}
@@ -1166,15 +1304,16 @@ class Admin_Workbook {
 
 	/**
 	 * The orders workbook: an "Orders" sheet (one row per order with its
-	 * figures) and a "Lines" sheet (one row per line; its size label is
-	 * the last column, added after the older ones) — pure.
+	 * figures) and a "Lines" sheet (one row per line; its size label, box
+	 * number and percent of a box are the last columns, added after the
+	 * older ones) — pure.
 	 *
 	 * @param array[] $orders Resolved orders.
 	 * @return array{Orders: array[], Lines: array[]}
 	 */
 	public static function orders_sheets( array $orders ) {
 		$head  = array( 'id', 'ref', 'supplier', 'origin', 'order_date', 'received_date', 'sale_date', 'status', 'cost_mode', 'boxes', 'tariffs', 'domestic_flight', 'import_fees', 'credit', 'markup', 'worth_threshold', 'schedule', 'building', 'lines', 'ordered', 'received', 'survived', 'doa', 'fill_rate', 'survival_rate', 'doa_rate', 'fee_rate', 'total', 'grand_total', 'revenue', 'up_down', 'ratio', 'doa_cost_sheet', 'doa_cost_per_fish', 'notes' );
-		$lhead = array( 'order_ref', 'line_id', 'species', 'sci_name', 'species_id', 'group', 'ordered', 'received', 'per_box', 'bags', 'units', 'unit_price', 'landed_total', 'landed_per_fish', 'suggested_price', 'worth', 'profit', 'margin', 'worth_it', 'survived', 'doa', 'revenue', 'doa_cost', 'live', 'sold', 'stay_id', 'tank', 'notes', 'size' );
+		$lhead = array( 'order_ref', 'line_id', 'species', 'sci_name', 'species_id', 'group', 'ordered', 'received', 'per_box', 'bags', 'units', 'unit_price', 'landed_total', 'landed_per_fish', 'suggested_price', 'worth', 'profit', 'margin', 'worth_it', 'survived', 'doa', 'revenue', 'doa_cost', 'live', 'sold', 'stay_id', 'tank', 'notes', 'size', 'box_no', 'box_pct' );
 		$rows  = array( $head );
 		$lines = array( $lhead );
 
@@ -1248,6 +1387,8 @@ class Admin_Workbook {
 					$line['tank_number'],
 					(string) $line['notes'],
 					isset( $line['size_label'] ) ? $line['size_label'] : null,
+					isset( $line['box_no'] ) ? $line['box_no'] : null,
+					self::rate( $line['box_pct'] ?? null ),
 				);
 			}
 		}

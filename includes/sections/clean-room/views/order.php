@@ -1,8 +1,9 @@
 <?php
 /**
  * The order editor — the header, the lines grid with the sheet's
- * computed columns (each line with its size), the totals and the stats
- * block, Save and Check in.
+ * computed columns (each line with its size, the box it came out of and
+ * the percent of a box it took), the Boxes card that adds the percents
+ * up, the totals and the stats block, Save and Check in.
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  *
@@ -13,6 +14,8 @@
  * @var array[] $box_rates     Settings::box_rates().
  * @var array   $pick          suppliers, origins.
  * @var array[] $sizes         The standard sizes (slug, label).
+ * @var array[] $shares        The remembered box shares of the order's supplier + origin.
+ * @var array   $boxes         Admin_Workbook::boxes_panel(): summary, rows, total, how_full, shares.
  * @var bool    $can_checkin   Whether a line can be checked in.
  * @var bool    $is_new        Whether the order is unsaved.
  * @var array   $batch         Admin_Workbook::batch_sale_panel() (empty for a new order).
@@ -27,6 +30,7 @@ defined( 'ABSPATH' ) || exit;
 
 use FisHotel\Misc\Sections\Clean_Room\Admin;
 use FisHotel\Misc\Sections\Clean_Room\Admin_Workbook;
+use FisHotel\Misc\Sections\Clean_Room\Box_Shares;
 use FisHotel\Misc\Sections\Clean_Room\Clean_Room;
 use FisHotel\Misc\Sections\Clean_Room\Costing;
 use FisHotel\Misc\Sections\Clean_Room\Layout;
@@ -52,7 +56,7 @@ foreach ( $order['lines'] as $fh_l ) {
  * @param array      $line Resolved line (empty for the template).
  * @param array      $fig  Its figures (empty for the template).
  */
-$fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks, $sizes ) {
+$fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks, $sizes, $shares, $fh_mode ) {
 	$name   = static function ( $field ) use ( $i ) {
 		return 'lines[' . $i . '][' . $field . ']';
 	};
@@ -66,6 +70,8 @@ $fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks,
 	$money  = static function ( $field, $decimals ) use ( $line ) {
 		return isset( $line[ $field ] ) && null !== $line[ $field ] ? number_format( (float) $line[ $field ], $decimals, '.', '' ) : '';
 	};
+	// The remembered share's suggestion, for a line that has no percent yet (box mode only).
+	$hint   = $line && 'bag' !== $fh_mode ? Box_Shares::suggest_for( $shares, $line ) : null;
 	?>
 	<tr class="fh-cr-line<?php echo $linked ? ' is-linked' : ''; ?>" data-line="<?php echo esc_attr( $value( 'id', 0 ) ); ?>">
 		<td class="fh-cr-num fh-cr-line__n"><span class="fh-cr-line__num"><?php echo esc_html( is_int( $i ) ? (string) ( $i + 1 ) : '' ); ?></span><input type="hidden" name="<?php echo esc_attr( $name( 'id' ) ); ?>" value="<?php echo esc_attr( $value( 'id', 0 ) ); ?>"><input type="hidden" name="<?php echo esc_attr( $name( 'species_id' ) ); ?>" value="<?php echo esc_attr( $value( 'species_id' ) ); ?>"></td>
@@ -85,9 +91,14 @@ $fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks,
 		<td><input type="text" class="fh-cr-input fh-cr-input--sci" name="<?php echo esc_attr( $name( 'sci_name' ) ); ?>" value="<?php echo esc_attr( $value( 'sci_name' ) ); ?>" maxlength="120"></td>
 		<td class="fh-cr-num"><input type="number" class="fh-cr-input fh-cr-input--qty" name="<?php echo esc_attr( $name( 'qty_ordered' ) ); ?>" value="<?php echo esc_attr( $value( 'qty_ordered', 0 ) ); ?>" min="0" max="9999"></td>
 		<td class="fh-cr-num fh-cr-col--per-box"><input type="number" class="fh-cr-input fh-cr-input--qty" name="<?php echo esc_attr( $name( 'per_box' ) ); ?>" value="<?php echo esc_attr( $value( 'per_box' ) ); ?>" min="1" max="999" placeholder="<?php echo esc_attr( $f( 'per_box_used' ) ); ?>"></td>
+		<td class="fh-cr-num fh-cr-col--per-box"><input type="number" class="fh-cr-input fh-cr-input--qty" name="<?php echo esc_attr( $name( 'box_no' ) ); ?>" value="<?php echo esc_attr( $value( 'box_no' ) ); ?>" min="1" max="<?php echo esc_attr( Costing::BOX_NO_MAX ); ?>" step="1"></td>
+		<td class="fh-cr-num fh-cr-col--per-box">
+			<input type="number" class="fh-cr-input fh-cr-input--qty" name="<?php echo esc_attr( $name( 'box_pct' ) ); ?>" value="<?php echo esc_attr( Costing::num( $line['box_pct'] ?? null, '', 2 ) ); ?>" min="0" max="<?php echo esc_attr( Costing::num( Costing::BOX_PCT_MAX ) ); ?>" step="0.01">
+			<span class="fh-cr-pct-hint"><?php if ( $hint ) : ?><button type="button" class="button-link fh-cr-suggest-pct" data-pct="<?php echo esc_attr( Costing::num( $hint['pct'], '', 2 ) ); ?>"><?php echo esc_html( Box_Shares::suggest_text( $hint ) ); ?></button><?php endif; ?></span>
+		</td>
 		<td class="fh-cr-num fh-cr-col--bags"><input type="number" class="fh-cr-input fh-cr-input--qty" name="<?php echo esc_attr( $name( 'bags' ) ); ?>" value="<?php echo esc_attr( $value( 'bags' ) ); ?>" min="1" max="9999"></td>
 		<?php if ( $linked ) : ?>
-			<td class="fh-cr-num"><?php echo esc_html( $value( 'qty_received', 0 ) ); ?></td>
+			<td class="fh-cr-num" data-received="<?php echo esc_attr( $value( 'qty_received', 0 ) ); ?>"><?php echo esc_html( $value( 'qty_received', 0 ) ); ?></td>
 		<?php else : ?>
 			<td class="fh-cr-num"><input type="number" class="fh-cr-input fh-cr-input--qty" name="<?php echo esc_attr( $name( 'qty_received' ) ); ?>" value="<?php echo esc_attr( $value( 'qty_received' ) ); ?>" min="0" max="9999"></td>
 		<?php endif; ?>
@@ -274,6 +285,8 @@ $fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks,
 						<th scope="col"><?php esc_html_e( 'Sci name', 'fishotel-misc-plugin' ); ?></th>
 						<th scope="col" class="fh-cr-num"><?php esc_html_e( 'Order', 'fishotel-misc-plugin' ); ?></th>
 						<th scope="col" class="fh-cr-num fh-cr-col--per-box"><?php esc_html_e( 'Per box', 'fishotel-misc-plugin' ); ?></th>
+						<th scope="col" class="fh-cr-num fh-cr-col--per-box" title="<?php esc_attr_e( 'Which box the line came out of (optional).', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'Box #', 'fishotel-misc-plugin' ); ?></th>
+						<th scope="col" class="fh-cr-num fh-cr-col--per-box" title="<?php esc_attr_e( 'About how much of ONE box the whole line took: 25 = a quarter of a box; above 100 when the line spans boxes. Used in place of received ÷ per box.', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( '% of box', 'fishotel-misc-plugin' ); ?></th>
 						<th scope="col" class="fh-cr-num fh-cr-col--bags"><?php esc_html_e( 'Bags', 'fishotel-misc-plugin' ); ?></th>
 						<th scope="col" class="fh-cr-num"><?php esc_html_e( 'Rcv\'d', 'fishotel-misc-plugin' ); ?></th>
 						<th scope="col" class="fh-cr-num"><?php esc_html_e( 'Price', 'fishotel-misc-plugin' ); ?></th>
@@ -281,7 +294,7 @@ $fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks,
 						<th scope="col" class="fh-cr-num"><?php esc_html_e( 'DOA', 'fishotel-misc-plugin' ); ?></th>
 						<th scope="col" class="fh-cr-num"><?php esc_html_e( 'Srv\'d', 'fishotel-misc-plugin' ); ?></th>
 						<th scope="col"><?php esc_html_e( 'Tank', 'fishotel-misc-plugin' ); ?></th>
-						<th scope="col" class="fh-cr-num" title="<?php esc_attr_e( 'box mode: received ÷ per box; bag mode: bags, else received', 'fishotel-misc-plugin' ); ?>"><?php echo esc_html( 'box' === $fh_mode ? __( 'Box frac.', 'fishotel-misc-plugin' ) : __( 'Units', 'fishotel-misc-plugin' ) ); ?></th>
+						<th scope="col" class="fh-cr-num" title="<?php esc_attr_e( 'box mode: the % of box ÷ 100 when one is typed, else received ÷ per box; bag mode: bags, else received', 'fishotel-misc-plugin' ); ?>"><?php echo esc_html( 'box' === $fh_mode ? __( 'Box frac.', 'fishotel-misc-plugin' ) : __( 'Units', 'fishotel-misc-plugin' ) ); ?></th>
 						<th scope="col" class="fh-cr-num"><?php esc_html_e( 'Total', 'fishotel-misc-plugin' ); ?></th>
 						<th scope="col" class="fh-cr-num"><?php esc_html_e( 'Per fish', 'fishotel-misc-plugin' ); ?></th>
 						<th scope="col" class="fh-cr-num"><?php echo esc_html( Costing::num( $order['markup'] ) ); ?>&times;</th>
@@ -304,6 +317,8 @@ $fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks,
 						<th colspan="4"><?php esc_html_e( 'Totals', 'fishotel-misc-plugin' ); ?></th>
 						<th class="fh-cr-num" data-t="ordered"><?php echo esc_html( $fh_totals['ordered'] ); ?></th>
 						<th class="fh-cr-col--per-box"></th>
+						<th class="fh-cr-col--per-box"></th>
+						<th class="fh-cr-num fh-cr-col--per-box" data-box="pct_total"><?php echo esc_html( $boxes['summary']['lines'] > 0 ? Costing::num( $boxes['summary']['pct_total'], '', 2 ) . '%' : '' ); ?></th>
 						<th class="fh-cr-col--bags"></th>
 						<th class="fh-cr-num" data-t="received"><?php echo esc_html( $fh_totals['received'] ); ?></th>
 						<th></th>
@@ -323,8 +338,23 @@ $fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks,
 		<template id="fh-cr-line-template"><?php $fh_line_row( '__i__', array(), array() ); ?></template>
 		<p class="fh-cr-actions-row">
 			<button type="button" class="button fh-cr-line-add"><?php esc_html_e( 'Add line', 'fishotel-misc-plugin' ); ?></button>
-			<span class="fh-cr-sub fh-cr-sub--inline"><?php esc_html_e( 'Type a species for suggestions (products and the species list); picking one fills the scientific name, the per-box count and the worth from the list. Computed columns update on Save.', 'fishotel-misc-plugin' ); ?></span>
+			<span class="fh-cr-sub fh-cr-sub--inline"><?php esc_html_e( 'Type a species for suggestions (products and the species list); picking one fills the scientific name, the per-box count and the worth from the list. Computed columns update on Save; the Boxes card below adds the percents up as they are typed.', 'fishotel-misc-plugin' ); ?></span>
 		</p>
+
+		<div class="fishotel-misc-card fh-cr-card fh-cr-boxes" id="fh-cr-boxes" data-shares="<?php echo esc_attr( (string) wp_json_encode( $boxes['shares'] ) ); ?>">
+			<div class="fishotel-misc-card-header">
+				<div class="fishotel-misc-card-icon"><span class="dashicons dashicons-archive"></span></div>
+				<h2 class="fishotel-misc-card-title"><?php esc_html_e( 'Boxes', 'fishotel-misc-plugin' ); ?></h2>
+			</div>
+			<p class="fishotel-misc-card-desc"><?php esc_html_e( 'While unloading, type the box a line came out of and about how much of that box the whole line took (25 = a quarter of a box). The fees are split by each fish\'s share of the total, so the percents only need to be right compared to each other: if you guess everything a little high, the costs still come out the same. A line without a percent keeps its per-box count.', 'fishotel-misc-plugin' ); ?></p>
+			<div class="fh-cr-summary fh-cr-boxes__list" data-box="rows">
+				<?php foreach ( $boxes['rows'] as $fh_row ) : ?>
+					<span class="fh-cr-chip fh-cr-chip--box-<?php echo esc_attr( $fh_row['state'] ); ?>"><?php echo esc_html( $fh_row['text'] ); ?></span>
+				<?php endforeach; ?>
+			</div>
+			<p class="fh-cr-boxes__total" data-box="total"><?php echo esc_html( $boxes['total'] ); ?></p>
+			<p class="fh-cr-boxes__full" data-box="how_full" <?php echo '' === $boxes['how_full'] ? 'hidden' : ''; ?>><?php echo esc_html( $boxes['how_full'] ); ?></p>
+		</div>
 
 		<div class="fishotel-misc-card fh-cr-card fh-cr-order__stats">
 			<div class="fishotel-misc-card-header">
@@ -351,6 +381,6 @@ $fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks,
 	</form>
 
 	<p class="fh-cr-footnote">
-		<?php esc_html_e( 'Box mode: each line takes a fraction of a box (received ÷ per box — the line\'s, else the species list\'s, else 24); the domestic flight and the import & re-ox fees are shared by box space, the tariffs by goods value. Bag mode: bags (else received) × price, plus the flight, import fees and tariffs per bag. Per fish × markup, to the nearest 5, is the suggested price; a line is worth it when its margin (profit ÷ landed) is above the threshold. Checking in creates one stay per line with received fish (the DOA as a loss) and the order becomes "received"; from then on a line\'s DOA, survived, live and sold come from its stay, and its received count is kept as typed.', 'fishotel-misc-plugin' ); ?>
+		<?php esc_html_e( 'Box mode: each line takes a fraction of a box (its % of box ÷ 100 when one is typed, else received ÷ per box — the line\'s, else the species list\'s, else 24); the domestic flight and the import & re-ox fees are shared by box space, the tariffs by goods value. Bag mode: bags (else received) × price, plus the flight, import fees and tariffs per bag. Per fish × markup, to the nearest 5, is the suggested price; a line is worth it when its margin (profit ÷ landed) is above the threshold. Checking in creates one stay per line with received fish (the DOA as a loss) and the order becomes "received"; from then on a line\'s DOA, survived, live and sold come from its stay, and its received count is kept as typed.', 'fishotel-misc-plugin' ); ?>
 	</p>
 </div>

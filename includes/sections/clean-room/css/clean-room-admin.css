@@ -894,7 +894,7 @@ a.fh-cr-chip--muted {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Sizes                                                              */
+/*  Sizes, percent of a box, remembered shares                         */
 /* ------------------------------------------------------------------ */
 
 /* A stay's or a line's size beside its species. */
@@ -914,6 +914,62 @@ a.fh-cr-chip--muted {
 	min-width: 92px;
 }
 
+/* The "suggested N%" chip under an empty percent. */
+.fh-cr-pct-hint {
+	display: block;
+	min-height: 0;
+	text-align: right;
+}
+
+.fh-cr-wrap .fh-cr-suggest-pct {
+	color: var(--fh-accent, #00a0d2);
+	font-size: 11px;
+	white-space: nowrap;
+}
+
+/* The Boxes card under the lines of an order. */
+.fh-cr-boxes {
+	margin-top: 14px;
+}
+
+.fh-cr-boxes__list {
+	margin-bottom: 10px;
+}
+
+.fh-cr-boxes__list:empty {
+	display: none;
+}
+
+.fh-cr-chip--box-full {
+	border-left-color: var(--fh-success, #46b450);
+}
+
+.fh-cr-chip--box-over {
+	color: var(--fh-warning, #ffb900);
+	border-left-color: var(--fh-warning, #ffb900);
+}
+
+.fh-cr-chip--box-unboxed {
+	color: var(--fh-text-secondary, #a0a0a0);
+	border-left-color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-boxes__total,
+.fh-cr-boxes__full {
+	margin: 4px 0;
+	font-size: 13px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-boxes__full {
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+/* Bag mode has no boxes to guess. */
+.fh-cr-order[data-mode="bag"] .fh-cr-boxes {
+	display: none;
+}
+
 .fh-cr-wrap .fh-cr-sizes__text {
 	max-width: 320px;
 	font-family: inherit;
@@ -923,8 +979,13 @@ a.fh-cr-chip--muted {
 	margin-bottom: 12px;
 }
 
-.fh-cr-sizes__report {
+.fh-cr-sizes__report,
+.fh-cr-shares {
 	margin-top: 6px;
+}
+
+.fh-cr-shares .fh-cr-input--num {
+	max-width: 110px;
 }
 
 /* ------------------------------------------------------------------ */

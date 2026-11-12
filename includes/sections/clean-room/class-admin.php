@@ -14,7 +14,7 @@
  * A stay's size (one of the standard sizes — Sizes) shows beside its
  * species on the Board and the Stays tab and is set in the Stays tab's
  * Edit (edit_stay_fields(), the testable half of that save); the Settings
- * tab gets the Sizes panel (sizes_panel()).
+ * tab gets the Sizes panel (sizes_panel()) and the remembered box shares.
  *
  * Every write path checks manage_woocommerce (settings: manage_options)
  * and a nonce. The CSV guards every cell that starts with = + - @ or a
@@ -183,6 +183,7 @@ class Admin {
 			$import    = Admin_Import::panel_data( $store );
 			$flash     = Admin_Workbook::take_flash();
 			$sizes     = self::sizes_panel( $store, $settings );
+			$shares    = $store->box_shares();
 
 			include Clean_Room::path() . 'views/settings.php';
 			return;
@@ -657,6 +658,8 @@ class Admin {
 					'linked'         => __( 'Linked', 'fishotel-misc-plugin' ),
 					'yes'            => __( 'Yes', 'fishotel-misc-plugin' ),
 					'no'             => __( 'No', 'fishotel-misc-plugin' ),
+					'confirmShare'   => __( 'Forget this remembered share? It comes back the next time an order with that fish and size is saved with a percent.', 'fishotel-misc-plugin' ),
+					'box'            => Admin_Workbook::box_strings(),
 				),
 			)
 		);

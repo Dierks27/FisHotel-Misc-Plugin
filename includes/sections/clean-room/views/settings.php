@@ -2,8 +2,8 @@
 /**
  * Settings tab — the numbers, the protocol template, the layout editor,
  * the box rates, the standard sizes (with the read-only report of the
- * sizes the products' variations carry), the workbook import, the
- * learned aliases, the labels button.
+ * sizes the products' variations carry), the remembered box shares, the
+ * workbook import, the learned aliases, the labels button.
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  *
@@ -17,6 +17,7 @@
  * @var array[] $aliases      Aliases.
  * @var array[] $box_rates    Settings::box_rates().
  * @var array   $sizes        Admin::sizes_panel(): standard, report, list_text, attributes_url, terms_url.
+ * @var array[] $shares       Store::box_shares() — every remembered share.
  * @var array   $import       Admin_Import::panel_data().
  * @var string  $flash        A one-time notice.
  * @var string  $labels_url   Printable labels URL.
@@ -28,6 +29,7 @@ defined( 'ABSPATH' ) || exit;
 
 use FisHotel\Misc\Sections\Clean_Room\Admin;
 use FisHotel\Misc\Sections\Clean_Room\Clean_Room;
+use FisHotel\Misc\Sections\Clean_Room\Costing;
 use FisHotel\Misc\Sections\Clean_Room\Layout;
 use FisHotel\Misc\Sections\Clean_Room\Protocol;
 use FisHotel\Misc\Sections\Clean_Room\Settings;
@@ -390,6 +392,50 @@ $fh_from_attr = Sizes::SOURCE_ATTRIBUTE === $fh_standard['source'];
 				</table>
 			<?php endif; ?>
 		</form>
+
+		<?php /* ── Box shares ────────────────────────────────────── */ ?>
+		<div class="fishotel-misc-card fh-cr-card fh-cr-card--wide" id="fishotel-cleanroom-box-shares">
+			<div class="fishotel-misc-card-header">
+				<div class="fishotel-misc-card-icon"><span class="dashicons dashicons-chart-pie"></span></div>
+				<h2 class="fishotel-misc-card-title"><?php esc_html_e( 'Box shares', 'fishotel-misc-plugin' ); ?></h2>
+			</div>
+			<p class="fishotel-misc-card-desc"><?php esc_html_e( 'What the site remembers about how much of a box ONE fish takes, per supplier, origin, fish and size — learned from the "% of box" typed on received order lines (the percent ÷ the received count; the latest order wins). The next order from the same place offers it back as "suggested N%". Change a value or forget a row here; a forgotten row comes back the next time such a line is saved.', 'fishotel-misc-plugin' ); ?></p>
+			<?php if ( ! $shares ) : ?>
+				<p class="fh-cr-sub"><?php esc_html_e( 'Nothing remembered yet. Type a % of box on a received line of a supplier order and save it.', 'fishotel-misc-plugin' ); ?></p>
+			<?php else : ?>
+				<table class="widefat striped fh-cr-table fh-cr-shares">
+					<thead>
+						<tr>
+							<th scope="col"><?php esc_html_e( 'Supplier', 'fishotel-misc-plugin' ); ?></th>
+							<th scope="col"><?php esc_html_e( 'Origin', 'fishotel-misc-plugin' ); ?></th>
+							<th scope="col"><?php esc_html_e( 'Fish', 'fishotel-misc-plugin' ); ?></th>
+							<th scope="col"><?php esc_html_e( 'Size', 'fishotel-misc-plugin' ); ?></th>
+							<th scope="col" class="fh-cr-num"><?php esc_html_e( '% of a box per fish', 'fishotel-misc-plugin' ); ?></th>
+							<th scope="col" class="fh-cr-num"><?php esc_html_e( 'From orders', 'fishotel-misc-plugin' ); ?></th>
+							<th scope="col"><?php esc_html_e( 'Updated', 'fishotel-misc-plugin' ); ?></th>
+							<th scope="col"></th>
+						</tr>
+					</thead>
+					<tbody>
+						<?php foreach ( $shares as $fh_share ) : ?>
+							<tr data-share="<?php echo esc_attr( $fh_share['id'] ); ?>">
+								<td><?php echo esc_html( '' !== $fh_share['supplier'] ? $fh_share['supplier'] : '—' ); ?></td>
+								<td><?php echo esc_html( '' !== $fh_share['origin'] ? $fh_share['origin'] : '—' ); ?></td>
+								<td><?php echo esc_html( $fh_share['species'] ); ?><?php echo null === $fh_share['species_id'] ? ' <span class="fh-cr-sub fh-cr-sub--inline">' . esc_html__( 'by name', 'fishotel-misc-plugin' ) . '</span>' : ''; ?></td>
+								<td><?php echo esc_html( '' !== $fh_share['size_slug'] ? ( '' !== $fh_share['size_label'] ? $fh_share['size_label'] : $fh_share['size_slug'] ) : '—' ); ?></td>
+								<td class="fh-cr-num"><input type="number" class="fh-cr-input fh-cr-input--num fh-cr-share-value" value="<?php echo esc_attr( Costing::num( $fh_share['pct_per_fish'], '', 4 ) ); ?>" min="0.0001" max="<?php echo esc_attr( Costing::num( Costing::BOX_PCT_MAX ) ); ?>" step="0.0001" aria-label="<?php esc_attr_e( 'Percent of a box per fish', 'fishotel-misc-plugin' ); ?>"></td>
+								<td class="fh-cr-num"><?php echo esc_html( $fh_share['order_count'] ); ?></td>
+								<td><?php echo esc_html( Admin::site_time( $fh_share['updated_at'] ) ); ?></td>
+								<td class="fh-cr-row__actions">
+									<button type="button" class="button button-small fh-cr-share-save"><?php esc_html_e( 'Save', 'fishotel-misc-plugin' ); ?></button>
+									<button type="button" class="button button-small fh-cr-share-delete"><?php esc_html_e( 'Forget', 'fishotel-misc-plugin' ); ?></button>
+								</td>
+							</tr>
+						<?php endforeach; ?>
+					</tbody>
+				</table>
+			<?php endif; ?>
+		</div>
 
 		<?php /* ── Import workbook ───────────────────────────────── */ ?>
 		<?php include Clean_Room::path() . 'views/import.php'; ?>

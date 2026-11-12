@@ -37,9 +37,9 @@
  * remembered box shares live in their tables, written through the Store
  * with the numbering rule enforced by Layout::validate_*().
  *
- * The newest save — sizes_request() — checks the capability and the
- * nonce itself and answers with a status, so it runs headless; its AJAX
- * handler only sends the answer.
+ * The two newest saves — sizes_request() and box_share_request() — check
+ * the capability and the nonce themselves and answer with a status, so
+ * they run headless; their AJAX handlers only send the answer.
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  */
@@ -112,6 +112,7 @@ class Settings {
 		add_action( 'wp_ajax_fishotel_cleanroom_alias_delete', array( $this, 'ajax_alias_delete' ) );
 		add_action( 'wp_ajax_fishotel_cleanroom_box_rates', array( $this, 'save_box_rates' ) );
 		add_action( 'wp_ajax_fishotel_cleanroom_sizes', array( $this, 'ajax_sizes' ) );
+		add_action( 'wp_ajax_fishotel_cleanroom_box_share', array( $this, 'ajax_box_share' ) );
 	}
 
 	/* ============================================================== */
@@ -964,6 +965,123 @@ class Settings {
 			wp_send_json_error( array( 'message' => $outcome['message'] ), $outcome['status'] );
 		}
 		wp_send_json_success( array( 'message' => $outcome['message'] ) );
+	}
+
+	/* ============================================================== */
+	/*  Remembered box shares                                          */
+	/* ============================================================== */
+
+	/**
+	 * Settings → Box shares: change one remembered share's percent per
+	 * fish, or forget it — the testable half of ajax_box_share(). The
+	 * capability (manage_options) and the nonce first. A value typed here
+	 * is dated today and belongs to no order line, so only an order dated
+	 * today or later replaces it; a forgotten share is deleted and its
+	 * lines count nowhere, so it comes back — counted afresh — the next
+	 * time an order with that fish and size is saved with a percent.
+	 *
+	 * @param object $store Store (or the tests' stand-in).
+	 * @param array  $raw   Unslashed POST: _wpnonce, op (save|delete), id, pct_per_fish.
+	 * @param string $today Site date ('' = Clean_Room::today()).
+	 * @return array{status: int, ok: bool, message: string, share?: array}
+	 */
+	public static function box_share_request( $store, array $raw, $today = '' ) {
+		$out = array(
+			'status'  => 403,
+			'ok'      => false,
+			'message' => '',
+		);
+		if ( ! current_user_can( Clean_Room::SETTINGS_CAPABILITY ) ) {
+			$out['message'] = __( 'Unauthorized.', 'fishotel-misc-plugin' );
+			return $out;
+		}
+		$nonce = isset( $raw['_wpnonce'] ) && is_scalar( $raw['_wpnonce'] ) ? (string) $raw['_wpnonce'] : '';
+		if ( ! wp_verify_nonce( $nonce, self::NONCE_ACTION ) ) {
+			$out['message'] = __( 'This form has expired. Reload the page and try again.', 'fishotel-misc-plugin' );
+			return $out;
+		}
+
+		$id    = isset( $raw['id'] ) && is_scalar( $raw['id'] ) ? absint( $raw['id'] ) : 0;
+		$op    = isset( $raw['op'] ) && is_scalar( $raw['op'] ) ? sanitize_key( (string) $raw['op'] ) : '';
+		$share = $id > 0 ? $store->box_share( $id ) : null;
+		if ( ! $share ) {
+			$out['status']  = 404;
+			$out['message'] = __( 'That remembered share no longer exists.', 'fishotel-misc-plugin' );
+			return $out;
+		}
+
+		if ( 'delete' === $op ) {
+			if ( ! $store->delete_box_share( $id ) ) {
+				$out['status']  = 500;
+				$out['message'] = __( 'The remembered share could not be removed.', 'fishotel-misc-plugin' );
+				return $out;
+			}
+			$store->clear_line_share_keys( (string) $share['share_key'] ); // Its lines count nowhere now; each counts again when its order is next saved.
+			$out['status']  = 200;
+			$out['ok']      = true;
+			$out['message'] = __( 'Remembered share forgotten.', 'fishotel-misc-plugin' );
+			return $out;
+		}
+
+		if ( 'save' !== $op ) {
+			$out['status']  = 400;
+			$out['message'] = __( 'Unknown action.', 'fishotel-misc-plugin' );
+			return $out;
+		}
+
+		$value = Box_Shares::per_fish_in( $raw['pct_per_fish'] ?? null );
+		if ( null === $value ) {
+			$out['status']  = 400;
+			/* translators: %s: the most one fish may take */
+			$out['message'] = sprintf( __( 'The percent of a box per fish must be above 0 and at most %s. Nothing was changed.', 'fishotel-misc-plugin' ), Costing::num( Box_Shares::MAX_PER_FISH ) );
+			return $out;
+		}
+		if ( abs( $value - (float) $share['pct_per_fish'] ) < 0.00005 ) {
+			$out['status']  = 200;
+			$out['ok']      = true;
+			$out['message'] = __( 'Nothing changed.', 'fishotel-misc-plugin' );
+			$out['share']   = $share;
+			return $out;
+		}
+
+		$today = Replay::is_date( $today ) ? (string) $today : Clean_Room::today();
+		$saved = $store->update_box_share(
+			$id,
+			array(
+				'pct_per_fish' => $value,
+				'last_line_id' => null,
+				'last_date'    => $today,
+			)
+		);
+		if ( ! $saved ) {
+			$out['status']  = 500;
+			$out['message'] = __( 'The remembered share could not be saved.', 'fishotel-misc-plugin' );
+			return $out;
+		}
+
+		$out['status']  = 200;
+		$out['ok']      = true;
+		/* translators: 1: fish, 2: percent */
+		$out['message'] = sprintf( __( 'Remembered share saved: %1$s takes %2$s%% of a box per fish.', 'fishotel-misc-plugin' ), (string) $share['species'], Costing::num( $value, '0', 4 ) );
+		$out['share']   = $store->box_share( $id );
+
+		return $out;
+	}
+
+	/**
+	 * AJAX: change or forget a remembered share (box_share_request()).
+	 */
+	public function ajax_box_share() {
+		$outcome = self::box_share_request( new Store(), wp_unslash( $_POST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified in box_share_request().
+		if ( ! $outcome['ok'] ) {
+			wp_send_json_error( array( 'message' => $outcome['message'] ), $outcome['status'] );
+		}
+		wp_send_json_success(
+			array(
+				'message' => $outcome['message'],
+				'value'   => isset( $outcome['share'] ) ? Costing::num( $outcome['share']['pct_per_fish'], '', 4 ) : '',
+			)
+		);
 	}
 
 	/* ============================================================== */
