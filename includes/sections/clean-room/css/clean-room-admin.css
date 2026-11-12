@@ -894,6 +894,40 @@ a.fh-cr-chip--muted {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Sizes                                                              */
+/* ------------------------------------------------------------------ */
+
+/* A stay's or a line's size beside its species. */
+.fh-cr-size {
+	display: inline-block;
+	margin-left: 4px;
+	padding: 0 6px;
+	border-radius: 999px;
+	font-size: 11px;
+	line-height: 18px;
+	color: var(--fh-text-primary, #e0e0e0);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.18));
+	white-space: nowrap;
+}
+
+.fh-cr-grid .fh-cr-input--size {
+	min-width: 92px;
+}
+
+.fh-cr-wrap .fh-cr-sizes__text {
+	max-width: 320px;
+	font-family: inherit;
+}
+
+.fh-cr-sizes__list {
+	margin-bottom: 12px;
+}
+
+.fh-cr-sizes__report {
+	margin-top: 6px;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Product meta box (light WP styling)                                */
 /* ------------------------------------------------------------------ */
 .fh-cr-metabox__facts {

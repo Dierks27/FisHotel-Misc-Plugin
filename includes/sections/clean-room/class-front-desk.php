@@ -13,7 +13,7 @@
  * Writes go through ONE action, fishotel_cleanroom_act:
  *   loss (the fastest path — Jeff counts bodies), sold / shipped, move
  *   (with a quantity = a split, an optional reason), arrival (always into
- *   a Spa tank), clear (the cleared date by hand), checkin (the check-in
+ *   a Spa tank, with an optional size from the standard list), clear (the cleared date by hand), checkin (the check-in
  *   date by hand), ready (the stay's own sale date; empty = back to the
  *   batch's), count (a full
  *   recount), note (on a stay, or on the tank), copper (a reading on the
@@ -294,6 +294,9 @@ class Front_Desk {
 			'noSuggest'   => __( 'Dosed to the test reading', 'fishotel-misc-plugin' ),
 			'noUndoDose'  => __( 'A dose cannot be undone — note a correction instead.', 'fishotel-misc-plugin' ),
 			'schedule'    => __( 'schedule', 'fishotel-misc-plugin' ),
+			'size'        => __( 'Size', 'fishotel-misc-plugin' ),
+			'sizeHint'    => __( 'optional', 'fishotel-misc-plugin' ),
+			'notStandard' => __( 'not a standard size', 'fishotel-misc-plugin' ),
 		);
 	}
 
@@ -305,7 +308,8 @@ class Front_Desk {
 	 * Everything the page needs for one tank (or, without a tank, for the
 	 * tank picker): the tank with its occupants, its to-do and its last
 	 * copper reading, the destination grid, the Spa tanks for a check-in,
-	 * the recent species, the settings the JS honours.
+	 * the recent species, the standard sizes (the Arrival sheet's dropdown),
+	 * the settings the JS honours.
 	 *
 	 * @param int $tank_number Tank number (0 = picker).
 	 * @return array
@@ -324,6 +328,7 @@ class Front_Desk {
 			'grid'        => array(),
 			'spaTanks'    => array(),
 			'recent'      => array(),
+			'sizes'       => array(),
 			'settings'    => array(
 				'autoConfirmSeconds' => (int) $settings['auto_confirm_seconds'],
 				'voiceEnabled'       => ! empty( $settings['voice_enabled'] ),
@@ -352,6 +357,7 @@ class Front_Desk {
 		$data['grid']     = self::grid( $buildings, $tanks, $current ? (int) $current['number'] : 0 );
 		$data['spaTanks'] = self::spa_tanks( $tanks );
 		$data['recent']   = $store->recent_species( 10 );
+		$data['sizes']    = Sizes::standard( $store, $settings )['sizes'];
 
 		if ( ! $current ) {
 			return $data;
@@ -359,7 +365,7 @@ class Front_Desk {
 
 		$occupants = array();
 		foreach ( $current['occupants'] as $stay ) {
-			$occupants[] = self::occupant( $stay );
+			$occupants[] = self::occupant( $stay, $data['sizes'] );
 		}
 
 		$copper = null;
@@ -439,13 +445,18 @@ class Front_Desk {
 	/**
 	 * One occupant for the page.
 	 *
-	 * @param array $stay Hydrated stay.
+	 * @param array        $stay  Hydrated stay.
+	 * @param array[]|null $sizes The standard sizes (null = a stored size is not checked against them).
 	 * @return array
 	 */
-	public static function occupant( array $stay ) {
+	public static function occupant( array $stay, $sizes = null ) {
+		$size = Sizes::of( $stay, $sizes );
 		return array(
 			'stayId'          => (int) $stay['id'],
 			'species'         => (string) $stay['species'],
+			'size'            => $size ? $size['label'] : '',
+			'sizeSlug'        => $size ? $size['slug'] : '',
+			'sizeStandard'    => $size ? $size['standard'] : true,
 			'productId'       => $stay['product_id'],
 			'qtyLive'         => (int) $stay['qty_live'],
 			'qtyArrived'      => (int) $stay['qty_arrived'],
@@ -781,7 +792,8 @@ class Front_Desk {
 
 	/**
 	 * Arrival — always into a Spa tank. The payload may name a Spa tank
-	 * (`to_tank`) when the page's tank is not one.
+	 * (`to_tank`) when the page's tank is not one, and a `size` (the slug
+	 * of a standard size; one that is not in the list is refused).
 	 */
 	private static function act_arrival( array $ctx, array $raw ) {
 		$store      = $ctx['store'];
@@ -816,11 +828,20 @@ class Front_Desk {
 		if ( ! Replay::is_date( $date ) ) {
 			$date = $ctx['today'];
 		}
+		// The slug as posted (a term slug may hold percent-encoded characters, which
+		// sanitize_text_field() would strip): it is only ever compared with the list's own slugs.
+		$size = isset( $raw['size'] ) && is_scalar( $raw['size'] ) && ! is_bool( $raw['size'] ) ? trim( (string) $raw['size'] ) : '';
+		$size = Sizes::pick( $size, '' !== $size ? Sizes::standard( $store, (array) $ctx['settings'] )['sizes'] : array() );
+		if ( ! $size['ok'] ) {
+			return array( 'error' => __( 'That size is not in the list. Pick one, or none.', 'fishotel-misc-plugin' ) );
+		}
 
 		$stay_id = $store->create_stay(
 			array(
 				'product_id'   => $product_id > 0 ? $product_id : null,
 				'species'      => $species,
+				'size_slug'    => $size['slug'],
+				'size_label'   => $size['label'],
 				'checkin_date' => $date,
 				'tank_id'      => (int) $tank['id'],
 				'source'       => $ctx['base']['source'],
@@ -847,8 +868,8 @@ class Front_Desk {
 		}
 
 		return array(
-			/* translators: 1: quantity, 2: species, 3: tank number */
-			'message'   => sprintf( __( '%1$d × %2$s in Tank %3$d', 'fishotel-misc-plugin' ), $qty, $species, (int) $tank['number'] ),
+			/* translators: 1: quantity, 2: species (with its size), 3: tank number */
+			'message'   => sprintf( __( '%1$d × %2$s in Tank %3$d', 'fishotel-misc-plugin' ), $qty, $species . ( null !== $size['label'] ? ' · ' . $size['label'] : '' ), (int) $tank['number'] ),
 			'event_ids' => array( $written['event_id'] ),
 			'tank'      => (int) $tank['number'],
 		);

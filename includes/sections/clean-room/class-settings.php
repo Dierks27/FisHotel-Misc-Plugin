@@ -15,7 +15,13 @@
  *                                 copper floor and target the
  *                                 tank screen warns against (2.25 / 2.5),
  *                                 the voice preview's auto-confirm seconds
- *                                 and whether the Mic button is offered;
+ *                                 and whether the Mic button is offered; and
+ *                                 the standard sizes' source — size_attribute
+ *                                 (which product attribute is the size, when
+ *                                 several match) and size_list (the plain
+ *                                 list used while no such attribute exists),
+ *                                 saved by Settings → Sizes on their own, so
+ *                                 the Numbers form never touches them;
  *   fishotel_cleanroom_protocol   the treatment schedules (Protocol): the
  *                                 default template's name and the named
  *                                 templates, seeded with the workbook's five
@@ -27,9 +33,13 @@
  *                                 empty until typed or imported — never
  *                                 seeded in code.
  *
- * The layout (buildings and tanks) and the learned aliases live in their
- * tables, written through the Store with the numbering rule enforced by
- * Layout::validate_*().
+ * The layout (buildings and tanks), the learned aliases and the
+ * remembered box shares live in their tables, written through the Store
+ * with the numbering rule enforced by Layout::validate_*().
+ *
+ * The newest save — sizes_request() — checks the capability and the
+ * nonce itself and answers with a status, so it runs headless; its AJAX
+ * handler only sends the answer.
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  */
@@ -61,6 +71,8 @@ class Settings {
 		'copper_target'        => 2.5,
 		'auto_confirm_seconds' => 4,
 		'voice_enabled'        => true,
+		'size_attribute'       => '',
+		'size_list'            => array(),
 	);
 
 	const SALE_READY_MIN   = 1;
@@ -99,6 +111,7 @@ class Settings {
 		add_action( 'wp_ajax_fishotel_cleanroom_layout', array( $this, 'ajax_layout' ) );
 		add_action( 'wp_ajax_fishotel_cleanroom_alias_delete', array( $this, 'ajax_alias_delete' ) );
 		add_action( 'wp_ajax_fishotel_cleanroom_box_rates', array( $this, 'save_box_rates' ) );
+		add_action( 'wp_ajax_fishotel_cleanroom_sizes', array( $this, 'ajax_sizes' ) );
 	}
 
 	/* ============================================================== */
@@ -284,6 +297,28 @@ class Settings {
 			'copper_target'        => $target,
 			'auto_confirm_seconds' => self::clamp( $settings['auto_confirm_seconds'] ?? null, self::AUTO_CONFIRM_MIN, self::AUTO_CONFIRM_MAX, self::DEFAULTS['auto_confirm_seconds'] ),
 			'voice_enabled'        => ! empty( $settings['voice_enabled'] ),
+			'size_attribute'       => isset( $settings['size_attribute'] ) && is_scalar( $settings['size_attribute'] ) && ! is_bool( $settings['size_attribute'] ) ? substr( trim( (string) $settings['size_attribute'] ), 0, 60 ) : '',
+			'size_list'            => Sizes::labels( isset( $settings['size_list'] ) && ( is_array( $settings['size_list'] ) || is_string( $settings['size_list'] ) ) ? $settings['size_list'] : array() ),
+		);
+	}
+
+	/**
+	 * Settings with the sizes' source taken from what is stored (pure):
+	 * the Numbers form does not post size_attribute / size_list, so its
+	 * save keeps them.
+	 *
+	 * @param array $settings The settings a form produced.
+	 * @param array $stored   The stored settings.
+	 * @return array
+	 */
+	public static function with_sizes( array $settings, array $stored ) {
+		$stored = self::normalize( $stored );
+		return array_merge(
+			$settings,
+			array(
+				'size_attribute' => $stored['size_attribute'],
+				'size_list'      => $stored['size_list'],
+			)
 		);
 	}
 
@@ -311,7 +346,7 @@ class Settings {
 		check_ajax_referer( self::NONCE_ACTION, '_wpnonce' );
 
 		$dropped  = array();
-		$settings = self::sanitize( wp_unslash( $_POST ), $dropped ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above.
+		$settings = self::with_sizes( self::sanitize( wp_unslash( $_POST ), $dropped ), self::get() ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above.
 
 		update_option( Clean_Room::OPTION_KEY, $settings );
 
@@ -333,7 +368,9 @@ class Settings {
 	/**
 	 * Sanitise a raw (unslashed) POST payload into a settings array.
 	 * Checkboxes are absent when unticked, so every boolean comes from the
-	 * payload, never from the stored value.
+	 * payload, never from the stored value. The sizes' source is not part
+	 * of this form: it comes back empty here and save_settings() puts the
+	 * stored one back (with_sizes()).
 	 *
 	 * @param array    $raw     Raw request data.
 	 * @param string[] $dropped Filled with reasons for anything that fell back.
@@ -827,6 +864,106 @@ class Settings {
 			'id'      => (int) $saved,
 			'number'  => (int) $tank['number'],
 		);
+	}
+
+	/* ============================================================== */
+	/*  Sizes                                                          */
+	/* ============================================================== */
+
+	/**
+	 * Settings → Sizes: which product attribute is the size (when several
+	 * match) and the plain list used while none exists — the testable half
+	 * of ajax_sizes(). The capability (manage_options) and the nonce
+	 * first; then size_attribute must be empty (= the first match) or one
+	 * of the attributes that match "size", and size_list is read as one
+	 * size per line (Sizes::labels()). Only these two keys of the settings
+	 * option change. Nothing here touches a product or a term.
+	 *
+	 * @param object $store Store (or the tests' stand-in) with size_attributes().
+	 * @param array  $raw   Unslashed POST: _wpnonce, size_attribute, size_list.
+	 * @return array{status: int, ok: bool, message: string, settings?: array}
+	 */
+	public static function sizes_request( $store, array $raw ) {
+		$out = array(
+			'status'  => 403,
+			'ok'      => false,
+			'message' => '',
+		);
+		if ( ! current_user_can( Clean_Room::SETTINGS_CAPABILITY ) ) {
+			$out['message'] = __( 'Unauthorized.', 'fishotel-misc-plugin' );
+			return $out;
+		}
+		$nonce = isset( $raw['_wpnonce'] ) && is_scalar( $raw['_wpnonce'] ) ? (string) $raw['_wpnonce'] : '';
+		if ( ! wp_verify_nonce( $nonce, self::NONCE_ACTION ) ) {
+			$out['message'] = __( 'This form has expired. Reload the page and try again.', 'fishotel-misc-plugin' );
+			return $out;
+		}
+
+		$stored    = self::get();
+		$attribute = $stored['size_attribute'];
+		if ( array_key_exists( 'size_attribute', $raw ) ) {
+			// Compared as posted with the attributes that exist — a taxonomy name may
+			// hold percent-encoded characters, which sanitize_text_field() would strip.
+			$attribute = is_scalar( $raw['size_attribute'] ) && ! is_bool( $raw['size_attribute'] ) ? trim( (string) $raw['size_attribute'] ) : '';
+			if ( '' !== $attribute ) {
+				$known = false;
+				foreach ( (array) $store->size_attributes() as $candidate ) {
+					if ( (string) ( $candidate['taxonomy'] ?? '' ) === $attribute ) {
+						$known = true;
+						break;
+					}
+				}
+				if ( ! $known || strlen( $attribute ) > 60 ) {
+					$out['status']  = 400;
+					$out['message'] = __( 'That is not a product attribute with "size" in its name. Nothing was changed.', 'fishotel-misc-plugin' );
+					return $out;
+				}
+			}
+		}
+
+		$list = $stored['size_list'];
+		if ( array_key_exists( 'size_list', $raw ) ) {
+			if ( ! is_string( $raw['size_list'] ) && ! is_array( $raw['size_list'] ) ) {
+				$out['status']  = 400;
+				$out['message'] = __( 'The list of sizes could not be read. Nothing was changed.', 'fishotel-misc-plugin' );
+				return $out;
+			}
+			// Plain text, one size per line: Sizes::labels() trims, drops control characters and caps
+			// it; a label keeps its inch mark and a "<" as typed, and is escaped wherever it is shown.
+			$list = Sizes::labels( $raw['size_list'] );
+		}
+
+		$settings = array_merge(
+			$stored,
+			array(
+				'size_attribute' => $attribute,
+				'size_list'      => $list,
+			)
+		);
+		update_option( Clean_Room::OPTION_KEY, $settings );
+
+		$standard       = Sizes::standard( $store, $settings );
+		$out['status']  = 200;
+		$out['ok']      = true;
+		$out['message'] = Sizes::SOURCE_ATTRIBUTE === $standard['source']
+			/* translators: 1: attribute label, 2: number of sizes */
+			? sprintf( __( 'Sizes saved: the product attribute "%1$s" is the list (%2$d sizes).', 'fishotel-misc-plugin' ), $standard['label'], count( $standard['sizes'] ) )
+			/* translators: %d: number of sizes */
+			: sprintf( __( 'Sizes saved: %d sizes in the list.', 'fishotel-misc-plugin' ), count( $standard['sizes'] ) );
+		$out['settings'] = $settings;
+
+		return $out;
+	}
+
+	/**
+	 * AJAX: save Settings → Sizes (sizes_request()).
+	 */
+	public function ajax_sizes() {
+		$outcome = self::sizes_request( new Store(), wp_unslash( $_POST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified in sizes_request().
+		if ( ! $outcome['ok'] ) {
+			wp_send_json_error( array( 'message' => $outcome['message'] ), $outcome['status'] );
+		}
+		wp_send_json_success( array( 'message' => $outcome['message'] ) );
 	}
 
 	/* ============================================================== */

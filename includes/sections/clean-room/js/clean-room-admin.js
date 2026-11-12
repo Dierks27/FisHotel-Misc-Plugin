@@ -5,8 +5,9 @@
  * check-in date), the Events-tab Undo, the Coming Soon release button,
  * the order editor (lines, species suggestions, Save with the recomputed
  * figures, Check in, Delete, the import-fees suggestion), the Species
- * tab (inline edit, add, delete, the product link) and the "suggested"
- * fill of the sale-date pickers (order page, product page).
+ * tab (inline edit, add, delete, the product link), Settings → Sizes and
+ * the "suggested" fill of the sale-date pickers (order page, product
+ * page).
  *
  * The server renders every row; this file posts and fills in. The pure
  * helpers (renumber(), suggestImportFees()) are exported for the node
@@ -398,6 +399,25 @@
 			return false;
 		});
 
+		// Settings → Sizes: which attribute is the size, or the plain list.
+		$('#fishotel-cleanroom-sizes').on('submit', function (e) {
+			e.preventDefault();
+			var $form = $(this);
+			var $btn = $form.find('.fh-cr-sizes-save').prop('disabled', true);
+			$.post(ajaxUrl(), $form.serialize())
+				.done(function (res) {
+					if (!res || !res.success) {
+						fail(res);
+						return;
+					}
+					notice('fishotel-misc-notice--success', (res.data && res.data.message) || (i18n.saved || 'Saved.'));
+					root.setTimeout(function () { root.location.reload(); }, 900);
+				})
+				.fail(fail)
+				.always(function () { $btn.prop('disabled', false); });
+			return false;
+		});
+
 		// Layout editor (buildings / tanks).
 		$(document).on('submit', '.fh-cr-layout-form', function (e) {
 			e.preventDefault();
@@ -533,7 +553,7 @@
 			var $tr = $(this).closest('tr');
 			var $status = $('.fh-cr-status').first();
 			var fields = { op: 'fields', stay_id: $tr.data('stay') };
-			$tr.find('input').each(function () { fields[this.name] = this.value; });
+			$tr.find('input, select').each(function () { fields[this.name] = this.value; });
 			var note = $.trim(fields.note || '');
 			delete fields.note;
 			stayPost(fields, $status);

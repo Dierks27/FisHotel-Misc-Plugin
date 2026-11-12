@@ -11,6 +11,11 @@
  * nothing on autosave, quick / bulk edit or REST; never in the way of
  * the product save).
  *
+ * A stay's size (one of the standard sizes — Sizes) shows beside its
+ * species on the Board and the Stays tab and is set in the Stays tab's
+ * Edit (edit_stay_fields(), the testable half of that save); the Settings
+ * tab gets the Sizes panel (sizes_panel()).
+ *
  * Every write path checks manage_woocommerce (settings: manage_options)
  * and a nonce. The CSV guards every cell that starts with = + - @ or a
  * tab with a leading apostrophe so a species name can never become a
@@ -177,6 +182,7 @@ class Admin {
 			$box_rates = Settings::box_rates();
 			$import    = Admin_Import::panel_data( $store );
 			$flash     = Admin_Workbook::take_flash();
+			$sizes     = self::sizes_panel( $store, $settings );
 
 			include Clean_Room::path() . 'views/settings.php';
 			return;
@@ -190,6 +196,7 @@ class Admin {
 			$csv_url      = self::csv_url( $show_closed );
 			$xlsx_url     = Admin_Workbook::export_url( 'stays', 'xlsx', $show_closed ? array( 'closed' => '1' ) : array() );
 			$flash        = Admin_Workbook::take_flash();
+			$sizes        = Sizes::standard( $store, $settings )['sizes'];
 
 			include Clean_Room::path() . 'views/stays.php';
 			return;
@@ -210,6 +217,7 @@ class Admin {
 		$groups    = Layout::group( $store->buildings(), $tanks );
 		$totals    = self::totals( $tanks );
 		$doses     = $store->latest_doses();
+		$sizes     = Sizes::standard( $store, $settings )['sizes'];
 
 		include Clean_Room::path() . 'views/board.php';
 	}
@@ -283,6 +291,29 @@ class Admin {
 			}
 		}
 		return $out;
+	}
+
+	/**
+	 * What Settings → Sizes shows: the standard list and where it comes
+	 * from, the plain list as the textarea holds it, the read-only "Sizes
+	 * in use on products" report, and the links to Products → Attributes.
+	 * Reads only; no product and no term is changed.
+	 *
+	 * @param object $store    Store (or the tests' stand-in).
+	 * @param array  $settings Settings.
+	 * @return array{standard: array, report: array[], list_text: string, attributes_url: string, terms_url: string}
+	 */
+	public static function sizes_panel( $store, array $settings ) {
+		$standard = Sizes::standard( $store, $settings );
+		$values   = is_object( $store ) && method_exists( $store, 'variation_size_values' ) ? (array) $store->variation_size_values() : array();
+
+		return array(
+			'standard'       => $standard,
+			'report'         => Sizes::report( $values, $standard ),
+			'list_text'      => implode( "\n", Sizes::labels( $settings['size_list'] ?? array() ) ),
+			'attributes_url' => admin_url( 'edit.php?post_type=product&page=product_attributes' ),
+			'terms_url'      => '' !== $standard['attribute'] ? admin_url( 'edit-tags.php?taxonomy=' . rawurlencode( $standard['attribute'] ) . '&post_type=product' ) : '',
+		);
 	}
 
 	/**
@@ -761,31 +792,12 @@ class Admin {
 					$msg = __( 'Note saved.', 'fishotel-misc-plugin' );
 					break;
 				case 'fields':
-					$fields = array(
-						'supplier'    => isset( $raw['supplier'] ) ? sanitize_text_field( (string) $raw['supplier'] ) : '',
-						'order_ref'   => isset( $raw['order_ref'] ) ? sanitize_text_field( (string) $raw['order_ref'] ) : '',
-						'landed_cost' => isset( $raw['landed_cost'] ) && '' !== trim( (string) $raw['landed_cost'] ) ? (float) $raw['landed_cost'] : null,
-						'product_id'  => isset( $raw['product_id'] ) ? absint( $raw['product_id'] ) : 0,
-					);
-					if ( $fields['product_id'] > 0 && '' === $store->product_title( $fields['product_id'] ) ) {
-						wp_send_json_error( array( 'message' => __( 'No product has that ID.', 'fishotel-misc-plugin' ) ), 400 );
+					$outcome = self::edit_stay_fields( $store, $stay, $raw, $base, $today, $settings );
+					if ( ! $outcome['ok'] && $outcome['status'] < 500 ) {
+						wp_send_json_error( array( 'message' => $outcome['message'] ), $outcome['status'] );
 					}
-					if ( isset( $raw['species'] ) && '' !== trim( (string) $raw['species'] ) ) {
-						$fields['species'] = sanitize_text_field( (string) $raw['species'] );
-					}
-					$checkin = isset( $raw['checkin_date'] ) ? sanitize_text_field( (string) $raw['checkin_date'] ) : '';
-					if ( '' !== $checkin && ! Replay::is_date( $checkin ) ) {
-						wp_send_json_error( array( 'message' => __( 'The check-in date is not a date.', 'fishotel-misc-plugin' ) ), 400 );
-					}
-					if ( '' !== $checkin && strcmp( $checkin, $today ) > 0 ) {
-						wp_send_json_error( array( 'message' => __( 'A check-in cannot be in the future.', 'fishotel-misc-plugin' ) ), 400 );
-					}
-					$ok = $store->update_stay_fields( $stay_id, $fields );
-					if ( '' !== $checkin && $checkin !== (string) $stay['checkin_date'] ) {
-						// The check-in date is history, not identity: a note event the Replay honours.
-						$ok = $store->record_event( $stay_id, array_merge( $base, array( 'type' => 'note', 'note' => Replay::NOTE_CHECKIN . $checkin ) ), $today, $settings ) && $ok;
-					}
-					$msg = __( 'Stay saved.', 'fishotel-misc-plugin' );
+					$ok  = $outcome['ok'];
+					$msg = $outcome['message'];
 					break;
 				default:
 					wp_send_json_error( array( 'message' => __( 'Unknown action.', 'fishotel-misc-plugin' ) ), 400 );
@@ -799,6 +811,78 @@ class Admin {
 		}
 
 		wp_send_json_success( array( 'message' => $msg ) );
+	}
+
+	/**
+	 * The Stays tab's Edit — the testable half of ajax_stay()'s "fields":
+	 * the supplier, the order ref, the landed cost, the product link (which
+	 * must exist), the species, the size (size_slug: one of the standard
+	 * sizes, the stay's own stored size, or empty for none — anything else
+	 * is refused) and the check-in date (a "checkin:" note event, never in
+	 * the future). Nothing is written when anything is refused.
+	 *
+	 * @param object $store    Store (or the tests' stand-in).
+	 * @param array  $stay     The hydrated stay.
+	 * @param array  $raw      Unslashed payload: supplier, order_ref, landed_cost, product_id, species,
+	 *                         size_slug, checkin_date.
+	 * @param array  $base     actor_id, source, event_at.
+	 * @param string $today    Site date.
+	 * @param array  $settings Settings.
+	 * @return array{ok: bool, status: int, message: string}
+	 */
+	public static function edit_stay_fields( $store, array $stay, array $raw, array $base, $today, array $settings ) {
+		$stay_id = (int) ( $stay['id'] ?? 0 );
+		$refuse  = static function ( $message, $status = 400 ) {
+			return array(
+				'ok'      => false,
+				'status'  => (int) $status,
+				'message' => (string) $message,
+			);
+		};
+
+		$fields = array(
+			'supplier'    => isset( $raw['supplier'] ) ? sanitize_text_field( (string) $raw['supplier'] ) : '',
+			'order_ref'   => isset( $raw['order_ref'] ) ? sanitize_text_field( (string) $raw['order_ref'] ) : '',
+			'landed_cost' => isset( $raw['landed_cost'] ) && '' !== trim( (string) $raw['landed_cost'] ) ? (float) $raw['landed_cost'] : null,
+			'product_id'  => isset( $raw['product_id'] ) ? absint( $raw['product_id'] ) : 0,
+		);
+		if ( $fields['product_id'] > 0 && '' === $store->product_title( $fields['product_id'] ) ) {
+			return $refuse( __( 'No product has that ID.', 'fishotel-misc-plugin' ) );
+		}
+		if ( isset( $raw['species'] ) && '' !== trim( (string) $raw['species'] ) ) {
+			$fields['species'] = sanitize_text_field( (string) $raw['species'] );
+		}
+		if ( array_key_exists( 'size_slug', $raw ) ) {
+			$slug   = is_scalar( $raw['size_slug'] ) && ! is_bool( $raw['size_slug'] ) ? trim( (string) $raw['size_slug'] ) : '';
+			$picked = Sizes::pick( $slug, '' !== $slug ? Sizes::standard( $store, $settings )['sizes'] : array(), $stay );
+			if ( ! $picked['ok'] ) {
+				return $refuse( __( 'That size is not in the list of sizes (Settings → Sizes).', 'fishotel-misc-plugin' ) );
+			}
+			$fields['size_slug']  = $picked['slug'];
+			$fields['size_label'] = $picked['label'];
+		}
+		$checkin = isset( $raw['checkin_date'] ) ? sanitize_text_field( (string) $raw['checkin_date'] ) : '';
+		if ( '' !== $checkin && ! Replay::is_date( $checkin ) ) {
+			return $refuse( __( 'The check-in date is not a date.', 'fishotel-misc-plugin' ) );
+		}
+		if ( '' !== $checkin && strcmp( $checkin, (string) $today ) > 0 ) {
+			return $refuse( __( 'A check-in cannot be in the future.', 'fishotel-misc-plugin' ) );
+		}
+
+		$ok = $store->update_stay_fields( $stay_id, $fields );
+		if ( '' !== $checkin && $checkin !== (string) $stay['checkin_date'] ) {
+			// The check-in date is history, not identity: a note event the Replay honours.
+			$ok = $store->record_event( $stay_id, array_merge( $base, array( 'type' => 'note', 'note' => Replay::NOTE_CHECKIN . $checkin ) ), $today, $settings ) && $ok;
+		}
+		if ( ! $ok ) {
+			return $refuse( __( 'That could not be saved.', 'fishotel-misc-plugin' ), 500 );
+		}
+
+		return array(
+			'ok'      => true,
+			'status'  => 200,
+			'message' => __( 'Stay saved.', 'fishotel-misc-plugin' ),
+		);
 	}
 
 	/**
@@ -911,12 +995,13 @@ class Admin {
 	}
 
 	/**
-	 * The CSV header.
+	 * The CSV header. New columns go at the end (size, the stay's size
+	 * label), so a sheet built on the older columns keeps reading them.
 	 *
 	 * @return string[]
 	 */
 	public static function csv_header() {
-		return array( 'id', 'species', 'product_id', 'qty_arrived', 'qty_live', 'checkin_date', 'day', 'state', 'cleared_date', 'sale_ready_date', 'closed_date', 'tank', 'building', 'area', 'source', 'supplier', 'order_ref', 'landed_cost', 'notes' );
+		return array( 'id', 'species', 'product_id', 'qty_arrived', 'qty_live', 'checkin_date', 'day', 'state', 'cleared_date', 'sale_ready_date', 'closed_date', 'tank', 'building', 'area', 'source', 'supplier', 'order_ref', 'landed_cost', 'notes', 'size' );
 	}
 
 	/**
@@ -968,6 +1053,7 @@ class Admin {
 			self::csv_cell( (string) ( $stay['order_ref'] ?? '' ) ),
 			self::csv_cell( null !== ( $stay['landed_cost'] ?? null ) ? number_format( (float) $stay['landed_cost'], 2, '.', '' ) : '' ),
 			self::csv_cell( (string) ( $stay['notes'] ?? '' ) ),
+			self::csv_cell( (string) ( $stay['size_label'] ?? '' ) ),
 		);
 	}
 
@@ -1068,6 +1154,27 @@ class Admin {
 			return '';
 		}
 		return Replay::is_date( $stay['sale_ready_suggested'] ?? null ) ? (string) $stay['sale_ready_suggested'] : '';
+	}
+
+	/**
+	 * The size of a stay or an order line beside its species: its label,
+	 * and "not a standard size" when it is no longer in the list ('' for a
+	 * row without a size).
+	 *
+	 * @param array        $row   size_slug, size_label.
+	 * @param array[]|null $sizes The standard list (null = nothing is flagged).
+	 * @return string Escaped HTML.
+	 */
+	public static function size_html( array $row, $sizes = null ) {
+		$size = Sizes::of( $row, $sizes );
+		if ( null === $size ) {
+			return '';
+		}
+		$html = '<span class="fh-cr-size">' . esc_html( $size['label'] ) . '</span>';
+		if ( ! $size['standard'] ) {
+			$html .= ' <span class="fh-cr-warn" title="' . esc_attr__( 'This size is no longer in the list of sizes (Settings → Sizes). Pick a standard one in Edit.', 'fishotel-misc-plugin' ) . '">' . esc_html__( 'not a standard size', 'fishotel-misc-plugin' ) . '</span>';
+		}
+		return $html;
 	}
 
 	/**

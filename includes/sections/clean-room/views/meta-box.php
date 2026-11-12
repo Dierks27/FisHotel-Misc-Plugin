@@ -5,8 +5,8 @@
  * product (saved with the product's Update button — Admin::save_meta_box()),
  * the closed stays, and a link to the board.
  *
- * Each open stay shows its supplier order (linked), tank, check-in and
- * live count, and a date picker holding its effective sale date —
+ * Each open stay shows its supplier order (linked), tank, check-in, live
+ * count and size (when it has one), and a date picker holding its effective sale date —
  * labelled "from the batch" (the supplier order's "Goes on sale") or
  * "own date" — with "Use the batch date" to drop its own date. The
  * hidden "shown" value is what the picker showed, so an untouched picker
@@ -29,6 +29,7 @@ use FisHotel\Misc\Sections\Clean_Room\Admin;
 use FisHotel\Misc\Sections\Clean_Room\Admin_Workbook;
 use FisHotel\Misc\Sections\Clean_Room\Clean_Room;
 use FisHotel\Misc\Sections\Clean_Room\Replay;
+use FisHotel\Misc\Sections\Clean_Room\Sizes;
 
 $fh_open   = array();
 $fh_closed = array();
@@ -95,6 +96,9 @@ foreach ( $stays as $fh_stay ) {
 							<?php echo esc_html( sprintf( /* translators: 1: check-in date, 2: fish alive */ __( 'in %1$s · %2$d live', 'fishotel-misc-plugin' ), (string) $fh_stay['checkin_date'], (int) $fh_stay['qty_live'] ) ); ?>
 							<?php if ( null !== $fh_stay['day'] ) : ?>
 								· <?php echo esc_html( sprintf( /* translators: %d: day */ __( 'day %d', 'fishotel-misc-plugin' ), (int) $fh_stay['day'] ) ); ?>
+							<?php endif; ?>
+							<?php if ( '' !== Sizes::text( $fh_stay ) ) : ?>
+								· <?php echo esc_html( Sizes::text( $fh_stay ) ); ?>
 							<?php endif; ?>
 						</div>
 						<label class="fh-cr-metabox__date" for="<?php echo esc_attr( $fh_input ); ?>">

@@ -1,8 +1,8 @@
 /**
  * Front Desk JS — the pure client helpers: number-word normalisation (the
  * "Heard:" line), the tank-number phrases, the preview sentence builder
- * that mirrors the server's Parser::summary(), and a group's sale state
- * in words (saleSummary).
+ * that mirrors the server's Parser::summary(), a group's sale state in
+ * words (saleSummary) and its size beside its name (sizeText).
  *
  * Runs js/front-desk.js without a DOM or config: the file exports its
  * helpers and skips the app when there is no document / window.fhFrontDesk.
@@ -99,6 +99,11 @@ check( 'no date: "Sale date not set · suggested <date>" (the suggestion is only
 check( 'no date and no check-in: no suggestion', 'Sale date not set' === helpers.saleSummary( {} ).text && 'Sale date not set' === helpers.saleSummary( null ).text );
 check( 'for sale while still in the Spa: the warning', 'still in the Spa' === helpers.saleSummary( { saleReadyDate: '2026-10-15', saleSource: 'batch', readyInSpa: true } ).warning );
 check( 'the page\'s translated strings are used when given', 'ON SALE 2026-10-25 · BATCH' === helpers.saleSummary( { saleReadyDate: '2026-10-25', saleSource: 'batch' }, { readyOn: 'ON SALE %s', saleBatch: 'BATCH' } ).text );
+
+console.log( '7. sizeText()' );
+check( 'a group with a standard size: its label', '2-3"' === helpers.sizeText( { size: '2-3"', sizeStandard: true } ) );
+check( 'a size that is no longer in the list is flagged', 'Jumbo 8" (not a standard size)' === helpers.sizeText( { size: 'Jumbo 8"', sizeStandard: false } ) && 'Jumbo 8" (KEINE)' === helpers.sizeText( { size: 'Jumbo 8"', sizeStandard: false }, { notStandard: 'KEINE' } ) );
+check( 'no size: nothing', '' === helpers.sizeText( { size: '' } ) && '' === helpers.sizeText( {} ) && '' === helpers.sizeText( null ) );
 
 console.log( '' );
 console.log( failures ? failures + ' of ' + checks + ' checks FAILED' : 'All ' + checks + ' checks passed' );

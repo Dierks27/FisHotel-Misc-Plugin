@@ -50,7 +50,7 @@ $stay = array(
 	'notes'               => '',
 );
 $row = Admin::csv_row( $stay );
-check( 'nineteen columns, matching the header', 19 === count( $row ) && 19 === count( Admin::csv_header() ) );
+check( 'twenty columns, matching the header; the size is the last one, empty for a stay without a size', 20 === count( $row ) && 20 === count( Admin::csv_header() ) && 'size' === Admin::csv_header()[19] && '' === $row[19] );
 check( 'species, supplier and order ref are guarded', "'=HYPERLINK(\"http://x\",\"click\")" === $row[1] && "'-Golden Ina" === $row[15] && "'@PO-7" === $row[16] );
 check( 'numbers and dates pass through as text', array( '7', '12', '5', '3', '2026-04-01', '14' ) === array( $row[0], $row[2], $row[3], $row[4], $row[5], $row[6] ) );
 check( 'state, cleared, sale-ready, closed', array( 'cleared', '2026-04-14', '2026-04-28', '' ) === array( $row[7], $row[8], $row[9], $row[10] ) );

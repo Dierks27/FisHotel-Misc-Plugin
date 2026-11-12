@@ -18,8 +18,12 @@
  * own, else its batch's — or "Sale date not set" with the suggestion, and
  * warns "still in the Spa" when the date has come before it was cleared.
  *
+ * A group's size (one of the standard sizes the server sends in
+ * screen.sizes) shows beside its name (sizeText); the Arrival sheet
+ * has a Size dropdown of them — optional.
+ *
  * The pure helpers (normalizeNumberWords, previewSentence, tankValue,
- * englishValue, fmt, escapeHtml, saleSummary) are exported for tests/front-desk.test.js
+ * englishValue, fmt, escapeHtml, saleSummary, sizeText) are exported for tests/front-desk.test.js
  * and the file skips the DOM wiring when there is no document / config.
  *
  * @package FisHotel\Misc\Sections\Clean_Room
@@ -307,6 +311,24 @@
 		return out;
 	}
 
+	/**
+	 * A group's size beside its name: '' without one, its label, and
+	 * " (not a standard size)" when it is no longer in the list.
+	 *
+	 * @param {Object} o       Occupant (size, sizeStandard).
+	 * @param {Object} strings notStandard (English fallback).
+	 * @return {string}
+	 */
+	function sizeText(o, strings) {
+		if (!o || !o.size) {
+			return '';
+		}
+		if (o.sizeStandard === false) {
+			return String(o.size) + ' (' + ((strings && strings.notStandard) || 'not a standard size') + ')';
+		}
+		return String(o.size);
+	}
+
 	var api = {
 		normalizeNumberWords: normalizeNumberWords,
 		previewSentence: previewSentence,
@@ -314,7 +336,8 @@
 		englishValue: englishValue,
 		fmt: fmt,
 		escapeHtml: escapeHtml,
-		saleSummary: saleSummary
+		saleSummary: saleSummary,
+		sizeText: sizeText
 	};
 
 	root.fhFrontDeskHelpers = api;
@@ -689,7 +712,7 @@
 		var node = el(tag, attrs, [
 			el('span', { class: 'fh-fd-occ__qty' }, [String(o.qtyLive), el('small', { text: t('live', 'live') })]),
 			el('span', { class: 'fh-fd-occ__body' }, [
-				el('span', { class: 'fh-fd-occ__name', text: o.species }),
+				el('span', { class: 'fh-fd-occ__name' }, [o.species, sizeText(o, i18n) ? el('small', { class: 'fh-fd-occ__size' + (o.sizeStandard === false ? ' is-stale' : ''), text: sizeText(o, i18n) }) : null]),
 				el('span', { class: 'fh-fd-occ__meta' }, meta)
 			])
 		]);
@@ -943,6 +966,10 @@
 		var screen = el('div', { class: 'fh-fd-screen' });
 		screen.appendChild(speciesField(f, function () { render(); }));
 		screen.appendChild(stepperField(t('howMany', 'How many?'), f, 'qty', 1, 999));
+		var sizes = sizeChooser(f);
+		if (sizes) {
+			screen.appendChild(sizes);
+		}
 		screen.appendChild(spaChooser(f, render));
 		screen.appendChild(el('div', { class: 'fh-fd-field' }, [
 			el('label', { class: 'fh-fd-label', for: 'fh-fd-date', text: t('date', 'Date') }),
@@ -961,8 +988,25 @@
 					toast(t('notSpa', 'Arrivals go into a Spa tank'), null, true);
 					return;
 				}
-				act({ act: 'arrival', tank: tk.number, to_tank: f.toTank, species: f.species, product_id: f.productId || 0, qty: f.qty, date: f.date, via: 'qr' });
+				act({ act: 'arrival', tank: tk.number, to_tank: f.toTank, species: f.species, product_id: f.productId || 0, qty: f.qty, size: f.size || '', date: f.date, via: 'qr' });
 			})
+		]);
+	}
+
+	/* The Size dropdown: the standard sizes, optional ("—" = none). Nothing when the list is empty. */
+	function sizeChooser(f) {
+		var list = state.screen.sizes || [];
+		if (!list.length) {
+			return null;
+		}
+		var options = [el('option', { value: '', text: '—' })].concat(list.map(function (size) {
+			var option = el('option', { value: size.slug, text: size.label });
+			option.selected = f.size === size.slug;
+			return option;
+		}));
+		return el('div', { class: 'fh-fd-field' }, [
+			el('label', { class: 'fh-fd-label', for: 'fh-fd-size', text: t('size', 'Size') + ' · ' + t('sizeHint', 'optional') }),
+			el('select', { id: 'fh-fd-size', class: 'fh-fd-input', on: { change: function (e) { f.size = e.target.value; } } }, options)
 		]);
 	}
 
@@ -1090,7 +1134,7 @@
 			go('tank');
 			return;
 		}
-		app.appendChild(header(o.species, ['Tank ' + tk.number + ' · ' + o.qtyLive + ' ' + t('live', 'live') + ' / ' + o.qtyArrived]));
+		app.appendChild(header(o.species, [(sizeText(o, i18n) ? sizeText(o, i18n) + ' · ' : '') + 'Tank ' + tk.number + ' · ' + o.qtyLive + ' ' + t('live', 'live') + ' / ' + o.qtyArrived]));
 		var screen = el('div', { class: 'fh-fd-screen' });
 		var sale = saleSummary(o, i18n);
 		screen.appendChild(el('div', { class: 'fh-fd-facts' }, [

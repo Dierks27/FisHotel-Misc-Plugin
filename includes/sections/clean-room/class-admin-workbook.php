@@ -7,6 +7,9 @@
  * figures, weighted and as the spreadsheet averaged them), their AJAX,
  * and the XLSX / CSV exports of orders, species, stats and stays.
  *
+ * The order editor also takes a size per line — one of the standard
+ * sizes (Sizes), the same list the product variations use.
+ *
  * Every write checks manage_woocommerce and the admin nonce; every
  * download is an admin-post action with its own nonce. The XLSX writer
  * never writes a formula; the CSV guards every cell (Admin::csv_cell).
@@ -217,6 +220,7 @@ class Admin_Workbook {
 			}
 			$box_rates   = Settings::box_rates();
 			$pick        = self::pick_lists( $store, $box_rates );
+			$sizes       = Sizes::standard( $store, $settings )['sizes'];
 			$can_checkin = self::can_check_in( $order );
 			$is_new      = 0 === (int) $order['id'];
 			$list_url    = Admin::page_url( 'arrivals' );
@@ -678,13 +682,16 @@ class Admin_Workbook {
 
 	/**
 	 * Save an order from the editor's payload: the header, then the lines
-	 * (upsert + delete), then the landed-total cache, then the figures.
+	 * (upsert + delete), then the landed-total cache, then the figures. A
+	 * size that is no longer in the list leaves that line without one and
+	 * is named in the message.
 	 *
 	 * @param Store  $store Store.
 	 * @param array  $raw   Unslashed payload.
 	 * @param int    $id    Order id (0 = new).
 	 * @param string $today Site date.
-	 * @return array message, order_id, is_new, redirect (new), line_ids, figures, can_checkin — or error.
+	 * @return array message, order_id, is_new, redirect (new), line_ids, figures, can_checkin, warnings
+	 *               — or error.
 	 */
 	public static function save_order( $store, array $raw, $id, $today ) {
 		$header = Orders::normalize_order( array_merge( $raw, array( 'id' => $id ) ) );
@@ -704,12 +711,30 @@ class Admin_Workbook {
 			}
 		}
 
+		$raw_lines = isset( $raw['lines'] ) && is_array( $raw['lines'] ) ? $raw['lines'] : array();
+
+		// The lines as stored before this save: a stale size stays selectable on its own line.
+		$before  = array();
+		$current = $id > 0 ? $store->order( $id ) : null;
+		foreach ( (array) ( $current['lines'] ?? array() ) as $line ) {
+			$before[ (int) $line['id'] ] = $line;
+		}
+
+		$lines = Orders::normalize_lines( $raw_lines );
+		$sized = array_filter(
+			$lines,
+			static function ( $line ) {
+				return null !== $line['size_slug'];
+			}
+		);
+		$warnings = array();
+		$lines    = Sizes::apply_to_lines( $lines, $sized ? Sizes::standard( $store, Settings::get() )['sizes'] : array(), $before, $warnings );
+
 		$saved_id = $store->save_order( $header );
 		if ( ! $saved_id ) {
 			return array( 'error' => __( 'The order could not be saved.', 'fishotel-misc-plugin' ) );
 		}
 
-		$lines = Orders::normalize_lines( isset( $raw['lines'] ) && is_array( $raw['lines'] ) ? $raw['lines'] : array() );
 		$saved = $store->save_order_lines( $saved_id, $lines );
 		if ( false === $saved ) {
 			return array( 'error' => __( 'The lines could not be saved.', 'fishotel-misc-plugin' ) );
@@ -718,8 +743,14 @@ class Admin_Workbook {
 		$order = self::resolve_order( $store, $store->order( $saved_id ) );
 		self::cache_landed_totals( $store, $order );
 
+		$message = __( 'Order saved.', 'fishotel-misc-plugin' );
+		if ( $warnings ) {
+			/* translators: %s: what was not saved */
+			$message .= ' ' . sprintf( __( 'Not saved: %s.', 'fishotel-misc-plugin' ), implode( '; ', $warnings ) );
+		}
+
 		return array(
-			'message'  => __( 'Order saved.', 'fishotel-misc-plugin' ),
+			'message'  => $message,
 			'order_id' => (int) $saved_id,
 			'is_new'   => 0 === (int) $id,
 			'redirect' => 0 === (int) $id ? self::order_url( $saved_id ) : '',
@@ -728,6 +759,7 @@ class Admin_Workbook {
 			'line_ids'    => array_values( array_map( 'intval', array_column( $order['lines'], 'id' ) ) ),
 			'figures'     => self::figures( $order ),
 			'can_checkin' => self::can_check_in( $order ),
+			'warnings'    => $warnings,
 		);
 	}
 
@@ -1134,14 +1166,15 @@ class Admin_Workbook {
 
 	/**
 	 * The orders workbook: an "Orders" sheet (one row per order with its
-	 * figures) and a "Lines" sheet (one row per line) — pure.
+	 * figures) and a "Lines" sheet (one row per line; its size label is
+	 * the last column, added after the older ones) — pure.
 	 *
 	 * @param array[] $orders Resolved orders.
 	 * @return array{Orders: array[], Lines: array[]}
 	 */
 	public static function orders_sheets( array $orders ) {
 		$head  = array( 'id', 'ref', 'supplier', 'origin', 'order_date', 'received_date', 'sale_date', 'status', 'cost_mode', 'boxes', 'tariffs', 'domestic_flight', 'import_fees', 'credit', 'markup', 'worth_threshold', 'schedule', 'building', 'lines', 'ordered', 'received', 'survived', 'doa', 'fill_rate', 'survival_rate', 'doa_rate', 'fee_rate', 'total', 'grand_total', 'revenue', 'up_down', 'ratio', 'doa_cost_sheet', 'doa_cost_per_fish', 'notes' );
-		$lhead = array( 'order_ref', 'line_id', 'species', 'sci_name', 'species_id', 'group', 'ordered', 'received', 'per_box', 'bags', 'units', 'unit_price', 'landed_total', 'landed_per_fish', 'suggested_price', 'worth', 'profit', 'margin', 'worth_it', 'survived', 'doa', 'revenue', 'doa_cost', 'live', 'sold', 'stay_id', 'tank', 'notes' );
+		$lhead = array( 'order_ref', 'line_id', 'species', 'sci_name', 'species_id', 'group', 'ordered', 'received', 'per_box', 'bags', 'units', 'unit_price', 'landed_total', 'landed_per_fish', 'suggested_price', 'worth', 'profit', 'margin', 'worth_it', 'survived', 'doa', 'revenue', 'doa_cost', 'live', 'sold', 'stay_id', 'tank', 'notes', 'size' );
 		$rows  = array( $head );
 		$lines = array( $lhead );
 
@@ -1214,6 +1247,7 @@ class Admin_Workbook {
 					$line['stay_id'],
 					$line['tank_number'],
 					(string) $line['notes'],
+					isset( $line['size_label'] ) ? $line['size_label'] : null,
 				);
 			}
 		}
@@ -1391,6 +1425,7 @@ class Admin_Workbook {
 				isset( $stay['order_ref'] ) ? $stay['order_ref'] : null,
 				isset( $stay['landed_cost'] ) && null !== $stay['landed_cost'] ? (float) $stay['landed_cost'] : null,
 				(string) ( $stay['notes'] ?? '' ),
+				isset( $stay['size_label'] ) ? $stay['size_label'] : null,
 			);
 		}
 		return $out;

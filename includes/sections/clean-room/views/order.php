@@ -1,7 +1,8 @@
 <?php
 /**
  * The order editor — the header, the lines grid with the sheet's
- * computed columns, the totals and the stats block, Save and Check in.
+ * computed columns (each line with its size), the totals and the stats
+ * block, Save and Check in.
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  *
@@ -11,6 +12,7 @@
  * @var array[] $spa_buildings Spa buildings.
  * @var array[] $box_rates     Settings::box_rates().
  * @var array   $pick          suppliers, origins.
+ * @var array[] $sizes         The standard sizes (slug, label).
  * @var bool    $can_checkin   Whether a line can be checked in.
  * @var bool    $is_new        Whether the order is unsaved.
  * @var array   $batch         Admin_Workbook::batch_sale_panel() (empty for a new order).
@@ -30,6 +32,7 @@ use FisHotel\Misc\Sections\Clean_Room\Costing;
 use FisHotel\Misc\Sections\Clean_Room\Layout;
 use FisHotel\Misc\Sections\Clean_Room\Orders;
 use FisHotel\Misc\Sections\Clean_Room\Replay;
+use FisHotel\Misc\Sections\Clean_Room\Sizes;
 
 $tab        = 'arrivals';
 $fh_mode    = (string) $order['cost_mode'];
@@ -49,7 +52,7 @@ foreach ( $order['lines'] as $fh_l ) {
  * @param array      $line Resolved line (empty for the template).
  * @param array      $fig  Its figures (empty for the template).
  */
-$fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks ) {
+$fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks, $sizes ) {
 	$name   = static function ( $field ) use ( $i ) {
 		return 'lines[' . $i . '][' . $field . ']';
 	};
@@ -70,6 +73,14 @@ $fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks 
 			<?php if ( $linked ) : ?>
 				<span class="fh-cr-sub"><a href="<?php echo esc_url( Admin::page_url( 'stays', array( 's' => $value( 'species' ) ) ) ); ?>"><?php echo esc_html( sprintf( /* translators: %d: stay id */ __( 'stay #%d', 'fishotel-misc-plugin' ), (int) $line['stay_id'] ) ); ?></a></span>
 			<?php endif; ?>
+		</td>
+		<td>
+			<select class="fh-cr-input fh-cr-input--size" name="<?php echo esc_attr( $name( 'size_slug' ) ); ?>">
+				<option value="">—</option>
+				<?php foreach ( Sizes::options( $sizes, $line ) as $fh_o ) : ?>
+					<option value="<?php echo esc_attr( $fh_o['value'] ); ?>" <?php selected( $fh_o['selected'] ); ?>><?php echo esc_html( $fh_o['label'] ); ?></option>
+				<?php endforeach; ?>
+			</select>
 		</td>
 		<td><input type="text" class="fh-cr-input fh-cr-input--sci" name="<?php echo esc_attr( $name( 'sci_name' ) ); ?>" value="<?php echo esc_attr( $value( 'sci_name' ) ); ?>" maxlength="120"></td>
 		<td class="fh-cr-num"><input type="number" class="fh-cr-input fh-cr-input--qty" name="<?php echo esc_attr( $name( 'qty_ordered' ) ); ?>" value="<?php echo esc_attr( $value( 'qty_ordered', 0 ) ); ?>" min="0" max="9999"></td>
@@ -259,6 +270,7 @@ $fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks 
 					<tr>
 						<th scope="col">#</th>
 						<th scope="col"><?php esc_html_e( 'Species', 'fishotel-misc-plugin' ); ?></th>
+						<th scope="col" title="<?php esc_attr_e( 'One of the standard sizes (Settings → Sizes) — the same list the product variations use.', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'Size', 'fishotel-misc-plugin' ); ?></th>
 						<th scope="col"><?php esc_html_e( 'Sci name', 'fishotel-misc-plugin' ); ?></th>
 						<th scope="col" class="fh-cr-num"><?php esc_html_e( 'Order', 'fishotel-misc-plugin' ); ?></th>
 						<th scope="col" class="fh-cr-num fh-cr-col--per-box"><?php esc_html_e( 'Per box', 'fishotel-misc-plugin' ); ?></th>
@@ -289,7 +301,7 @@ $fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks 
 				</tbody>
 				<tfoot>
 					<tr>
-						<th colspan="3"><?php esc_html_e( 'Totals', 'fishotel-misc-plugin' ); ?></th>
+						<th colspan="4"><?php esc_html_e( 'Totals', 'fishotel-misc-plugin' ); ?></th>
 						<th class="fh-cr-num" data-t="ordered"><?php echo esc_html( $fh_totals['ordered'] ); ?></th>
 						<th class="fh-cr-col--per-box"></th>
 						<th class="fh-cr-col--bags"></th>

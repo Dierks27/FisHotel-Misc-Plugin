@@ -1,7 +1,9 @@
 <?php
 /**
  * Settings tab — the numbers, the protocol template, the layout editor,
- * the learned aliases, the labels button.
+ * the box rates, the standard sizes (with the read-only report of the
+ * sizes the products' variations carry), the workbook import, the
+ * learned aliases, the labels button.
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  *
@@ -14,6 +16,7 @@
  * @var array   $groups       Layout::group().
  * @var array[] $aliases      Aliases.
  * @var array[] $box_rates    Settings::box_rates().
+ * @var array   $sizes        Admin::sizes_panel(): standard, report, list_text, attributes_url, terms_url.
  * @var array   $import       Admin_Import::panel_data().
  * @var string  $flash        A one-time notice.
  * @var string  $labels_url   Printable labels URL.
@@ -28,8 +31,11 @@ use FisHotel\Misc\Sections\Clean_Room\Clean_Room;
 use FisHotel\Misc\Sections\Clean_Room\Layout;
 use FisHotel\Misc\Sections\Clean_Room\Protocol;
 use FisHotel\Misc\Sections\Clean_Room\Settings;
+use FisHotel\Misc\Sections\Clean_Room\Sizes;
 
-$tab = 'settings';
+$tab          = 'settings';
+$fh_standard  = $sizes['standard'];
+$fh_from_attr = Sizes::SOURCE_ATTRIBUTE === $fh_standard['source'];
 ?>
 <div class="wrap fishotel-misc-wrap fh-cr-wrap">
 
@@ -298,6 +304,91 @@ $tab = 'settings';
 				<button type="button" class="button fh-cr-rate-add"><?php esc_html_e( 'Add rate', 'fishotel-misc-plugin' ); ?></button>
 				<button type="submit" class="button button-primary fh-cr-box-rates-save"><?php esc_html_e( 'Save box rates', 'fishotel-misc-plugin' ); ?></button>
 			</p>
+		</form>
+
+		<?php /* ── Sizes ─────────────────────────────────────────── */ ?>
+		<form id="fishotel-cleanroom-sizes" class="fishotel-misc-card fh-cr-card fh-cr-card--wide" method="post" action="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>" onsubmit="return false;">
+			<?php wp_nonce_field( Settings::NONCE_ACTION ); ?>
+			<input type="hidden" name="action" value="fishotel_cleanroom_sizes">
+			<div class="fishotel-misc-card-header">
+				<div class="fishotel-misc-card-icon"><span class="dashicons dashicons-editor-expand"></span></div>
+				<h2 class="fishotel-misc-card-title"><?php esc_html_e( 'Sizes', 'fishotel-misc-plugin' ); ?></h2>
+			</div>
+			<p class="fishotel-misc-card-desc"><?php esc_html_e( 'One list of fish sizes for supplier order lines and stays — the same list the product variations use, so everything matches. It is the product attribute with "size" in its name; its terms are the sizes, in the order and with the labels (in inches) they have there. Nothing on this page changes a product.', 'fishotel-misc-plugin' ); ?></p>
+
+			<?php if ( $fh_from_attr ) : ?>
+				<div class="fh-cr-field fh-cr-field--row">
+					<label class="fh-cr-label" for="fh-cr-size-attribute"><?php esc_html_e( 'Product attribute in use', 'fishotel-misc-plugin' ); ?></label>
+					<?php if ( count( $fh_standard['attributes'] ) > 1 ) : ?>
+						<select id="fh-cr-size-attribute" class="fh-cr-input" name="size_attribute">
+							<?php foreach ( $fh_standard['attributes'] as $fh_attribute ) : ?>
+								<option value="<?php echo esc_attr( $fh_attribute['taxonomy'] ); ?>" <?php selected( $fh_standard['attribute'], $fh_attribute['taxonomy'] ); ?>><?php echo esc_html( $fh_attribute['label'] . ' (' . $fh_attribute['taxonomy'] . ')' ); ?></option>
+							<?php endforeach; ?>
+						</select>
+					<?php else : ?>
+						<span id="fh-cr-size-attribute"><strong><?php echo esc_html( $fh_standard['label'] ); ?></strong> <code><?php echo esc_html( $fh_standard['attribute'] ); ?></code></span>
+					<?php endif; ?>
+				</div>
+				<p class="fh-cr-sub"><?php esc_html_e( 'The standard sizes (read-only here):', 'fishotel-misc-plugin' ); ?></p>
+				<?php if ( $fh_standard['sizes'] ) : ?>
+					<div class="fh-cr-summary fh-cr-sizes__list">
+						<?php foreach ( $fh_standard['sizes'] as $fh_size ) : ?>
+							<span class="fh-cr-chip" title="<?php echo esc_attr( $fh_size['slug'] ); ?>"><?php echo esc_html( $fh_size['label'] ); ?></span>
+						<?php endforeach; ?>
+					</div>
+				<?php else : ?>
+					<p class="fh-cr-muted"><?php esc_html_e( 'This attribute has no terms yet — add the sizes under Products → Attributes.', 'fishotel-misc-plugin' ); ?></p>
+				<?php endif; ?>
+				<p class="fh-cr-actions-row">
+					<?php if ( count( $fh_standard['attributes'] ) > 1 ) : ?>
+						<button type="submit" class="button button-primary fh-cr-sizes-save"><?php esc_html_e( 'Use this attribute', 'fishotel-misc-plugin' ); ?></button>
+					<?php endif; ?>
+					<a class="button" href="<?php echo esc_url( '' !== $sizes['terms_url'] ? $sizes['terms_url'] : $sizes['attributes_url'] ); ?>"><?php esc_html_e( 'Edit the sizes (Products → Attributes)', 'fishotel-misc-plugin' ); ?></a>
+				</p>
+			<?php else : ?>
+				<p class="fh-cr-sub"><?php esc_html_e( 'No product attribute with "size" in its name exists yet, so this plain list is used until one does. One size per line, as it should be labelled (in inches).', 'fishotel-misc-plugin' ); ?></p>
+				<div class="fh-cr-field">
+					<label class="screen-reader-text" for="fh-cr-size-list"><?php esc_html_e( 'Sizes, one per line', 'fishotel-misc-plugin' ); ?></label>
+					<textarea id="fh-cr-size-list" class="fh-cr-input fh-cr-sizes__text" name="size_list" rows="6" placeholder="<?php echo esc_attr( "1-2\"\n2-3.5\"\n3.5-5\"" ); ?>"><?php echo esc_textarea( $sizes['list_text'] ); ?></textarea>
+				</div>
+				<p class="fh-cr-actions-row">
+					<button type="submit" class="button button-primary fh-cr-sizes-save"><?php esc_html_e( 'Save sizes', 'fishotel-misc-plugin' ); ?></button>
+					<a class="button" href="<?php echo esc_url( $sizes['attributes_url'] ); ?>"><?php esc_html_e( 'Products → Attributes', 'fishotel-misc-plugin' ); ?></a>
+				</p>
+			<?php endif; ?>
+
+			<h3 class="fh-cr-h3"><?php esc_html_e( 'Sizes in use on products', 'fishotel-misc-plugin' ); ?></h3>
+			<p class="fh-cr-sub"><?php esc_html_e( 'Every size the variations of the fish products carry today — a term of a product attribute, or a value typed on one product — and how many products use it. The ones that are not in the standard list come first: they are what needs cleaning up, on the products themselves.', 'fishotel-misc-plugin' ); ?></p>
+			<?php if ( ! $sizes['report'] ) : ?>
+				<p class="fh-cr-muted"><?php esc_html_e( 'No variation of a fish product carries a size.', 'fishotel-misc-plugin' ); ?></p>
+			<?php else : ?>
+				<table class="widefat striped fh-cr-table fh-cr-sizes__report">
+					<thead>
+						<tr>
+							<th scope="col"><?php esc_html_e( 'Size', 'fishotel-misc-plugin' ); ?></th>
+							<th scope="col"><?php esc_html_e( 'Where it comes from', 'fishotel-misc-plugin' ); ?></th>
+							<th scope="col" class="fh-cr-num"><?php esc_html_e( 'Products', 'fishotel-misc-plugin' ); ?></th>
+							<th scope="col"><?php esc_html_e( 'Standard?', 'fishotel-misc-plugin' ); ?></th>
+						</tr>
+					</thead>
+					<tbody>
+						<?php foreach ( $sizes['report'] as $fh_row ) : ?>
+							<tr>
+								<td><strong><?php echo esc_html( $fh_row['label'] ); ?></strong><?php echo $fh_row['label'] !== $fh_row['value'] ? ' <code>' . esc_html( $fh_row['value'] ) . '</code>' : ''; ?></td>
+								<td><?php echo esc_html( $fh_row['global'] ? sprintf( /* translators: %s: attribute taxonomy */ __( 'attribute term (%s)', 'fishotel-misc-plugin' ), $fh_row['key'] ) : sprintf( /* translators: %s: attribute key */ __( 'typed on the product (%s)', 'fishotel-misc-plugin' ), $fh_row['key'] ) ); ?></td>
+								<td class="fh-cr-num"><?php echo esc_html( $fh_row['products'] ); ?></td>
+								<td>
+									<?php if ( $fh_row['standard'] ) : ?>
+										<span class="fh-cr-up"><?php esc_html_e( 'yes', 'fishotel-misc-plugin' ); ?></span>
+									<?php else : ?>
+										<span class="fh-cr-warn"><?php echo esc_html( $fh_row['why'] ); ?></span>
+									<?php endif; ?>
+								</td>
+							</tr>
+						<?php endforeach; ?>
+					</tbody>
+				</table>
+			<?php endif; ?>
 		</form>
 
 		<?php /* ── Import workbook ───────────────────────────────── */ ?>

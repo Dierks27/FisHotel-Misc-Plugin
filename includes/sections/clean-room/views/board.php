@@ -10,6 +10,7 @@
  * @var array  $settings     Settings.
  * @var array  $protocols    Settings::protocols().
  * @var array  $doses        Store::latest_doses(): building id => medication => { label, logged_at }.
+ * @var array[] $sizes       The standard sizes (slug, label).
  * @var string $today        Site date.
  * @var bool   $tables_ok    Whether the tables exist.
  * @var bool   $can_settings Whether the Settings tab is offered.
@@ -169,6 +170,7 @@ $fh_species = (string) $filters['species'];
 												<?php foreach ( $fh_occupants as $fh_stay ) : ?>
 													<li class="<?php echo ( '' !== $fh_species && Admin::matches_species( $fh_stay, $fh_species ) ) ? 'is-hit' : ''; ?>">
 														<span class="fh-cr-tank__species"><?php echo esc_html( $fh_stay['species'] ); ?></span>
+														<?php echo Admin::size_html( $fh_stay, $sizes ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by size_html(). ?>
 														· <?php echo esc_html( $fh_stay['qty_live'] ); ?>
 														<?php if ( null !== $fh_stay['day'] ) : ?>
 															· <?php echo esc_html( sprintf( /* translators: %d: day number */ __( 'day %d', 'fishotel-misc-plugin' ), $fh_stay['day'] ) ); ?>
