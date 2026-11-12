@@ -7,7 +7,8 @@
  * no reading, dose, tick or note, the slots in Settings → Layout (one
  * more, retiring one), "Used for" saved, renamed and deleted with its
  * template, the list's lines in words against fixtures/todo-lines.json
- * (the pages read the same file), and the count other screens read: the
+ * (the pages read the same file), a temporary tank spoken of by its
+ * number, and the count other screens read: the
  * fishotel_cleanroom_todo filter and the Today section's line.
  *
  * Run from the plugin root:  php includes/sections/clean-room/tests/temp-board-test.php
@@ -20,6 +21,7 @@ use FisHotel\Misc\Sections\Clean_Room\Admin_Temp;
 use FisHotel\Misc\Sections\Clean_Room\Clean_Room;
 use FisHotel\Misc\Sections\Clean_Room\Front_Desk;
 use FisHotel\Misc\Sections\Clean_Room\Layout;
+use FisHotel\Misc\Sections\Clean_Room\Parser;
 use FisHotel\Misc\Sections\Clean_Room\Replay;
 use FisHotel\Misc\Sections\Clean_Room\Settings;
 use FisHotel\Misc\Sections\Clean_Room\Temp_Tanks;
@@ -237,7 +239,54 @@ foreach ( $fixture['offers']['cases'] as $case ) {
 check( 'copper_text: the reading, the tank it was taken on, its age', 'Cu 2.4 · tank 513 · 3 h ago' === Admin_Temp::copper_text( array( 'value' => 2.4, 'tank' => 513, 'ago' => '3 h' ) ) && 'Cu 2' === Admin_Temp::copper_text( array( 'value' => 2.0, 'tank' => 0, 'ago' => '' ) ) && '' === Admin_Temp::copper_text( array( 'value' => null ) ) );
 
 /* ------------------------------------------------------------------ */
-echo "7. The count other screens read\n";
+echo "7. By voice: a temporary tank is spoken of by its number\n";
+
+// The tanks the phone hands the parser: a slot that is set up, with the area it behaves as; a free slot is not in the list.
+$heard   = fh_seed_tanks();
+$heard[] = array( 'id' => 23, 'building_id' => 7, 'number' => 901, 'building' => 900, 'area' => Temp_Tanks::kind_area( 'quarantine' ), 'level' => 0, 'position' => 1, 'status' => 'active', 'sort' => 1 );
+$heard[] = array( 'id' => 24, 'building_id' => 7, 'number' => 902, 'building' => 900, 'area' => Temp_Tanks::kind_area( 'clean' ), 'level' => 0, 'position' => 2, 'status' => 'active', 'sort' => 2 );
+$said    = static function ( $text ) use ( $heard ) {
+	return Parser::parse(
+		$text,
+		array(
+			'tank'      => 521,
+			'tanks'     => $heard,
+			'species'   => array(
+				array(
+					'product_id' => 12,
+					'name'       => 'Blue Test Wrasse',
+					'variants'   => array(
+						array(
+							'text' => 'Blue Test Wrasse',
+							'kind' => 'title',
+						),
+					),
+				),
+			),
+			'occupants' => array(
+				array(
+					'stay_id'    => 7,
+					'species'    => 'Blue Test Wrasse',
+					'product_id' => 12,
+					'qty_live'   => 4,
+				),
+			),
+		)
+	);
+};
+$r = $said( 'four blue test wrasse in tank 901' );
+check( 'an arrival into a quarantine temporary tank is taken as said', 'arrival' === $r['intent'] && 901 === $r['tank'] && ! in_array( 'tank', $r['needs'], true ) );
+$r = $said( 'four blue test wrasse in tank 902' );
+check( 'into a clean one it asks for a quarantine tank, as for the Clean Room', 'arrival' === $r['intent'] && in_array( 'tank', $r['needs'], true ) );
+$r = $said( 'four blue test wrasse in tank 903' );
+check( 'a slot with nothing set up is no tank to check in to', 'arrival' === $r['intent'] && in_array( 'tank', $r['needs'], true ) );
+$r = $said( 'move the wrasse to 901' );
+check( 'a move names it as its destination', 'move' === $r['intent'] && 901 === $r['to_tank'] );
+$r = $said( '901 copper 2.4' );
+check( 'a reading on it', 'copper' === $r['intent'] && 901 === $r['tank'] && 2.4 === (float) $r['value'] );
+
+/* ------------------------------------------------------------------ */
+echo "8. The count other screens read\n";
 
 $store = new Fake_Store( array( 12 => 'Blue Test Wrasse' ) );
 phone( $store, 521, 'arrival', array( 'product_id' => 12, 'qty' => 4 ) );
