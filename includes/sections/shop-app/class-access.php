@@ -169,7 +169,8 @@ class Access {
 	 */
 	public static function clean_name( $name, $fallback = '' ) {
 		$name = is_scalar( $name ) ? trim( preg_replace( '/\s+/', ' ', wp_strip_all_tags( (string) $name ) ) ) : '';
-		$name = function_exists( 'mb_substr' ) ? mb_substr( $name, 0, self::NAME_MAX ) : substr( $name, 0, self::NAME_MAX );
+		// (string): before PHP 8 substr() of an empty string is false.
+		$name = (string) ( function_exists( 'mb_substr' ) ? mb_substr( $name, 0, self::NAME_MAX ) : substr( $name, 0, self::NAME_MAX ) );
 		return '' !== $name ? $name : (string) $fallback;
 	}
 

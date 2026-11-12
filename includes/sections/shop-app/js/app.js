@@ -894,8 +894,30 @@
 			showHome();
 		}
 
+		/* What decides which screen is shown. */
+		function signature(st) {
+			if (!st) {
+				return 'none';
+			}
+			return [
+				st.https ? 1 : 0,
+				st.enrolled ? 1 : 0,
+				st.hasPeople ? 1 : 0,
+				st.pinLength || 0,
+				st.session ? st.session.person + '|' + st.session.account : '',
+				st.lockout && st.lockout.locked ? 1 : 0,
+				st.frontDesk && st.frontDesk.available ? 1 : 0,
+				st.wpLogin ? st.wpLogin.name : ''
+			].join('~');
+		}
+
 		function accept(next) {
 			deadline = next && next.session ? deadlineFrom(next.session, Date.now()) : 0;
+			if (pad && state && !wantTank && signature(next) === signature(state)) {
+				// The keypad is up and nothing changed: what is typed stays typed.
+				state = next;
+				return;
+			}
 			render(next);
 		}
 

@@ -557,9 +557,12 @@ function get_users( $args = array() ) {
 		if ( ! empty( $args['role__in'] ) && ! array_intersect( $row['roles'], (array) $args['role__in'] ) ) {
 			continue;
 		}
+		if ( ! empty( $args['role'] ) && ! in_array( $args['role'], $row['roles'], true ) ) {
+			continue;
+		}
 		$out[] = new WP_User( $id );
 	}
-	return $out;
+	return empty( $args['number'] ) ? $out : array_slice( $out, 0, (int) $args['number'] );
 }
 
 function wp_insert_user( $data ) {

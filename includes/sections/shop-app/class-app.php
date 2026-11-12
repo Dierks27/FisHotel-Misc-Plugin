@@ -432,18 +432,16 @@ class App {
 	 * @return array
 	 */
 	public static function state() {
-		$access   = Access::instance();
-		$now      = $access->now();
-		$ctx      = $access->context();
-		$desk     = Shop_App::front_desk();
-		$settings = Settings::get();
+		$access = Access::instance();
+		$now    = $access->now();
+		$ctx    = $access->context();
+		$desk   = Shop_App::front_desk();
 
 		$state = array(
 			'ok'        => true,
 			'now'       => $now,
 			'https'     => Shop_App::https_ok(),
 			'enrolled'  => (bool) $ctx['device'],
-			'pinLength' => (int) $settings['pin_length'],
 			'frontDesk' => array(
 				'available' => (bool) $desk['available'],
 				'reason'    => (string) $desk['reason'],
@@ -463,11 +461,14 @@ class App {
 			);
 		}
 
+		// A device that is not enrolled is told nothing more — not even how
+		// many digits a PIN has — and costs no query.
 		if ( ! $ctx['device'] ) {
 			return $state;
 		}
 
-		$usable = 0;
+		$settings = Settings::get();
+		$usable   = 0;
 		foreach ( $access->store()->people() as $person ) {
 			if ( Pins::usable( $person, $settings['pin_length'] ) ) {
 				++$usable;
@@ -475,6 +476,7 @@ class App {
 		}
 
 		$state['device']    = array( 'name' => (string) $ctx['device']['name'] );
+		$state['pinLength'] = (int) $settings['pin_length'];
 		$state['hasPeople'] = $usable > 0;
 		$state['lockout']   = array(
 			'locked'  => (bool) $ctx['lockout']['locked'],
@@ -603,8 +605,12 @@ class App {
 			if ( 0 !== strpos( $link['url'], $home ) ) {
 				continue;
 			}
+			$label = (string) substr( sanitize_text_field( (string) $link['label'] ), 0, 40 );
+			if ( '' === $label ) {
+				continue;
+			}
 			$out[] = array(
-				'label' => substr( sanitize_text_field( (string) $link['label'] ), 0, 40 ),
+				'label' => $label,
 				'url'   => esc_url_raw( $link['url'] ),
 			);
 		}

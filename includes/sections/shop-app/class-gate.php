@@ -81,6 +81,13 @@ class Gate {
 	private static $granted = false;
 
 	/**
+	 * The shop-floor capabilities, worked out once per request.
+	 *
+	 * @var string[]|null
+	 */
+	private static $caps = null;
+
+	/**
 	 * Register the two hooks. Neither costs a query unless the request
 	 * carries both of this section's cookies AND is a shop-floor request.
 	 */
@@ -96,6 +103,7 @@ class Gate {
 		self::$state     = null;
 		self::$resolving = false;
 		self::$granted   = false;
+		self::$caps      = null;
 	}
 
 	/* ============================================================== */
@@ -481,6 +489,10 @@ class Gate {
 	 * @return string[]
 	 */
 	public static function capabilities() {
+		if ( null !== self::$caps ) {
+			return self::$caps;
+		}
+
 		$desk = Shop_App::front_desk();
 
 		/**
@@ -498,7 +510,9 @@ class Gate {
 				$out[] = $cap;
 			}
 		}
-		return array_values( array_unique( $out ) );
+
+		self::$caps = array_values( array_unique( $out ) );
+		return self::$caps;
 	}
 
 	/**

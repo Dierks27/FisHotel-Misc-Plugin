@@ -355,7 +355,7 @@ class Store {
 
 		$now  = gmdate( 'Y-m-d H:i:s' );
 		$data = array(
-			'name'          => substr( (string) ( $row['name'] ?? '' ), 0, 80 ),
+			'name'          => self::cut( $row['name'] ?? '', 80 ),
 			'status'        => self::STATUS_ACTIVE === ( $row['status'] ?? '' ) ? self::STATUS_ACTIVE : self::STATUS_PENDING,
 			'token_hash'    => (string) ( $row['token_hash'] ?? '' ),
 			'enrol_hash'    => (string) ( $row['enrol_hash'] ?? '' ),
@@ -631,7 +631,7 @@ class Store {
 
 		$now  = gmdate( 'Y-m-d H:i:s' );
 		$data = array(
-			'name'       => substr( (string) ( $row['name'] ?? '' ), 0, 80 ),
+			'name'       => self::cut( $row['name'] ?? '', 80 ),
 			'pin_hash'   => (string) ( $row['pin_hash'] ?? '' ),
 			'pin_salt'   => (string) ( $row['pin_salt'] ?? '' ),
 			'pin_length' => (int) ( $row['pin_length'] ?? 0 ),
@@ -711,13 +711,13 @@ class Store {
 		global $wpdb;
 
 		$data = array(
-			'event'       => substr( (string) ( $row['event'] ?? '' ), 0, 30 ),
+			'event'       => self::cut( $row['event'] ?? '', 30 ),
 			'device_id'   => (int) ( $row['device_id'] ?? 0 ),
-			'device_name' => substr( (string) ( $row['device_name'] ?? '' ), 0, 80 ),
+			'device_name' => self::cut( $row['device_name'] ?? '', 80 ),
 			'person_id'   => (int) ( $row['person_id'] ?? 0 ),
-			'person_name' => substr( (string) ( $row['person_name'] ?? '' ), 0, 80 ),
+			'person_name' => self::cut( $row['person_name'] ?? '', 80 ),
 			'user_id'     => (int) ( $row['user_id'] ?? 0 ),
-			'note'        => substr( (string) ( $row['note'] ?? '' ), 0, 191 ),
+			'note'        => self::cut( $row['note'] ?? '', 191 ),
 			'created_at'  => ! empty( $row['created_at'] ) ? (string) $row['created_at'] : gmdate( 'Y-m-d H:i:s' ),
 		);
 
@@ -905,6 +905,18 @@ class Store {
 	/* ============================================================== */
 	/*  Helpers                                                        */
 	/* ============================================================== */
+
+	/**
+	 * A value cut to a column's width — always a string (before PHP 8
+	 * substr() of an empty string is false).
+	 *
+	 * @param mixed $value Value.
+	 * @param int   $max   Characters.
+	 * @return string
+	 */
+	private static function cut( $value, $max ) {
+		return (string) substr( (string) $value, 0, (int) $max );
+	}
 
 	/**
 	 * Rows of a table.

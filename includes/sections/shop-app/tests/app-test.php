@@ -132,9 +132,9 @@ fh_request( array( 'uri' => '/?fh_shop_app=state' ) );
 $response = App::respond( 'state', 'GET' );
 $state    = json_decode( $response['body'], true );
 check( 'JSON that nothing may store: no-store, private, varies by cookie', 'application/json; charset=utf-8' === fh_header( $response, 'Content-Type' ) && false !== strpos( fh_header( $response, 'Cache-Control' ), 'no-store' ) && false !== strpos( fh_header( $response, 'Cache-Control' ), 'private' ) && 'Cookie' === fh_header( $response, 'Vary' ) && 'nosniff' === fh_header( $response, 'X-Content-Type-Options' ) );
-check( 'a device that is not enrolled: "not enrolled" — no device, no person, no tank, no PIN length to guess from… only what the screen needs', false === $state['enrolled'] && null === $state['session'] && ! isset( $state['device'], $state['home'], $state['hasPeople'], $state['lockout'] ) && false === strpos( $response['body'], 'Sam' ) && false === strpos( $response['body'], 'Shop tablet' ) );
+check( 'a device that is not enrolled: "not enrolled" — no device, no person, no tank, not even how many digits a PIN has', false === $state['enrolled'] && null === $state['session'] && ! isset( $state['device'] ) && ! isset( $state['home'] ) && ! isset( $state['hasPeople'] ) && ! isset( $state['lockout'] ) && ! isset( $state['pinLength'] ) && false === strpos( $response['body'], 'Sam' ) && false === strpos( $response['body'], 'Shop tablet' ) );
 check( '… and where a manager can set it up', 'https://shop.example.test/wp-admin/admin.php?page=fishotel-misc-shop-app' === $state['adminUrl'] );
-check( '… at no query', 0 === $store->queries );
+check( '… at no query and no option read', 0 === $store->queries && array() === $GLOBALS['fh_option_reads'], json_encode( $GLOBALS['fh_option_reads'] ) );
 
 fh_request( array( 'cookies' => $jar ) );
 Access::instance()->lock();
@@ -246,6 +246,7 @@ function fh_links( $links ) {
 	$links[] = array( 'label' => 'Elsewhere', 'url' => 'https://elsewhere.example/?fh_packing=1' );
 	$links[] = array( 'label' => 'Script', 'url' => 'javascript:alert(1)' );
 	$links[] = array( 'label' => '', 'url' => 'https://shop.example.test/?x=1' );
+	$links[] = array( 'label' => '<b></b>', 'url' => 'https://shop.example.test/?y=1' );
 	$links[] = 'nonsense';
 	return $links;
 }
@@ -255,7 +256,7 @@ fh_boot_hooks(
 	}
 );
 fh_request();
-check( 'a link of this site is kept, its label as plain text', array( array( 'label' => 'Packing table', 'url' => 'https://shop.example.test/?fh_packing=1' ) ) === App::home_links() );
+check( 'a link of this site is kept, its label as plain text; another site, a script address, an empty label and nonsense are dropped', array( array( 'label' => 'Packing table', 'url' => 'https://shop.example.test/?fh_packing=1' ) ) === App::home_links() );
 fh_request( array( 'uri' => '/?fh_shop_app=state', 'cookies' => $jar ) );
 check( '… and it is only ever sent to an unlocked device', ! isset( json_decode( App::respond( 'state', 'GET' )['body'], true )['links'] ) );
 

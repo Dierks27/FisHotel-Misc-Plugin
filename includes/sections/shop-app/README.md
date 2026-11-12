@@ -217,7 +217,7 @@ bytes for every visitor, with no name, tank or nonce in it — which asks
 
 | | |
 |---|---|
-| `fishotel_shop_app_person()` | Who is working on this request through the app: `array{ id, name, user_id, device_id, device }`, or `null`. Exists only while the section is enabled — guard with `function_exists()`. `get_current_user_id()` is already that person's account; this adds their own name (several people may share *Shop staff*). |
+| `fishotel_shop_app_person()` | Who is working on this request through the app: `array{ id, name, user_id, device_id, device }`, or `null` (also while this section is switched off). Exists only while the Misc plugin is active — guard with `function_exists()`. `get_current_user_id()` is already that person's account; this adds their own name (several people may share *Shop staff*). |
 | filter `fishotel_shop_app_allowed_requests` | Add a shop-floor screen: `array( 'type' => 'page', 'query_var' => 'fh_packing', 'params' => array( 'box' => '/^\d{1,4}$/D' ) )` (a GET of the home address with that switch and at most those parameters) or `array( 'type' => 'ajax', 'action' => 'fh_packing_save' )` (a POST to admin-ajax.php, empty query string). The capability arrives when your handler starts: `template_redirect` priority 0, or `wp_ajax_{action}` priority 0. Keep a rule as narrow as the screen — it is a way in for a four-digit PIN. |
 | filter `fishotel_shop_app_capabilities` | The primitive capabilities a shop session holds while a shop-floor handler runs. Default: the Front Desk's (`manage_woocommerce`). |
 | filter `fishotel_shop_app_home_links` | Buttons on the app's home screen: `array( 'label' => 'Packing', 'url' => home_url( '/?fh_packing=1' ) )`. An address outside this site is dropped. |

@@ -413,9 +413,9 @@ namespace {
 		 * actor; this adds the person's own name, which matters when
 		 * several people share the "Shop staff" account.
 		 *
-		 * This function exists ONLY while the Misc plugin is active and
-		 * the Shop App section is enabled, so guard it with
-		 * function_exists().
+		 * This function exists only while the Misc plugin is active, so
+		 * guard it with function_exists(); while the Shop App section is
+		 * switched off it answers null.
 		 *
 		 * @return array{id: int, name: string, user_id: int, device_id: int, device: string}|null
 		 */

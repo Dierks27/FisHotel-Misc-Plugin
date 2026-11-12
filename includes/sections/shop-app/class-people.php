@@ -117,6 +117,12 @@ class People {
 	/**
 	 * The shared account's user id; created on first need when $create.
 	 *
+	 * The id is kept in an option. When that is lost (or the account was
+	 * deleted) an account that already holds the role is the one; only
+	 * then is a new one made — under the login fishotel-shop-staff, or
+	 * the next free one when somebody's own account already has that
+	 * name: an account that is not this section's is never taken over.
+	 *
 	 * @param bool $create Whether to create it when it is missing.
 	 * @return int 0 when there is none (and none could be made).
 	 */
@@ -126,22 +132,33 @@ class People {
 			return $stored;
 		}
 
-		$existing = get_user_by( 'login', Shop_App::STAFF_LOGIN );
-		if ( $existing && self::is_staff_account( $existing ) ) {
-			update_option( self::STAFF_OPTION, (int) $existing->ID, false );
-			return (int) $existing->ID;
+		$found = get_users(
+			array(
+				'role'    => Shop_App::ROLE,
+				'number'  => 1,
+				'orderby' => 'ID',
+				'order'   => 'ASC',
+			)
+		);
+		if ( $found && is_object( $found[0] ) && ! empty( $found[0]->ID ) ) {
+			update_option( self::STAFF_OPTION, (int) $found[0]->ID, false );
+			return (int) $found[0]->ID;
 		}
 
-		if ( ! $create || $existing ) {
-			// A user of that login without the role is somebody's own account: never taken over.
+		if ( ! $create ) {
 			return 0;
 		}
 
 		self::ensure_role();
 
+		$login = Shop_App::STAFF_LOGIN;
+		for ( $n = 2; $n <= 20 && get_user_by( 'login', $login ); $n++ ) {
+			$login = Shop_App::STAFF_LOGIN . '-' . $n;
+		}
+
 		$user_id = wp_insert_user(
 			array(
-				'user_login'   => Shop_App::STAFF_LOGIN,
+				'user_login'   => $login,
 				'user_pass'    => wp_generate_password( 64, true, true ),
 				'user_email'   => '',
 				'display_name' => __( 'Shop staff', 'fishotel-misc-plugin' ),
@@ -277,11 +294,8 @@ class People {
 		$id     = is_array( $current ) ? (int) $current['id'] : 0;
 
 		$name = isset( $input['name'] ) && is_scalar( $input['name'] ) ? trim( preg_replace( '/\s+/', ' ', wp_strip_all_tags( (string) $input['name'] ) ) ) : '';
-		if ( function_exists( 'mb_substr' ) ) {
-			$name = mb_substr( $name, 0, self::NAME_MAX );
-		} else {
-			$name = substr( $name, 0, self::NAME_MAX );
-		}
+		// (string): before PHP 8 substr() of an empty string is false.
+		$name = (string) ( function_exists( 'mb_substr' ) ? mb_substr( $name, 0, self::NAME_MAX ) : substr( $name, 0, self::NAME_MAX ) );
 		if ( '' === $name ) {
 			$errors[] = __( 'Give the person a name.', 'fishotel-misc-plugin' );
 		}

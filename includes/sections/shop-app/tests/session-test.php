@@ -212,6 +212,31 @@ check( 'a new unlock on the device ends the earlier session: its cookie is dead'
 fh_request( array( 'cookies' => $jar ) );
 check( '… and the new one is live', 'Robin' === ( Access::instance()->context()['session']['person']['name'] ?? '' ) );
 
+// The same person, twice: only the session id tells the two unlocks apart.
+$store->update_person( $robin, array( 'active' => 1 ) );
+fh_request( array( 'cookies' => $jar ) );
+Access::instance()->lock();
+$jar = fh_jar( $jar );
+fh_request( array( 'cookies' => $jar ) );
+Access::instance()->unlock( '4821' );
+$first_sam = fh_jar( $jar );
+fh_request( array( 'cookies' => $first_sam ) );
+Access::instance()->lock();
+fh_request( array( 'cookies' => fh_jar( $first_sam ) ) );
+Access::instance()->unlock( '4821' );
+$second_sam = fh_jar( fh_jar( $first_sam ) );
+fh_request( array( 'cookies' => $first_sam ) );
+check( 'the SAME person locks and unlocks again: the cookie of their earlier session is dead too (it names another session id)', $first_sam[ $session_cookie ] !== $second_sam[ $session_cookie ] && Session::check( $first_sam[ $session_cookie ], Settings::session_key(), $GLOBALS['fh_now'], Settings::get() )['ok'] && null === Access::instance()->context()['session'] );
+fh_request( array( 'cookies' => $second_sam ) );
+check( '… and their new one is live', 'Sam' === ( Access::instance()->context()['session']['person']['name'] ?? '' ) );
+$jar = $second_sam;
+fh_request( array( 'cookies' => $jar ) );
+Access::instance()->lock();
+$jar = fh_jar( $jar );
+fh_request( array( 'cookies' => $jar ) );
+Access::instance()->unlock( '1379' );
+$jar = fh_jar( $jar );
+
 echo "\n10. A person switched off, a missing account\n";
 $store->update_person( $robin, array( 'active' => 0, 'pin_hash' => '', 'pin_salt' => '', 'pin_length' => 0 ) );
 fh_request( array( 'cookies' => $jar ) );
@@ -227,6 +252,10 @@ check( 'a person without an account of their own is recorded under the shared "S
 check( '… which holds a role with no capability at all', array( 'fishotel_shop_staff' ) === $account->roles && array() === $GLOBALS['fh_roles']['fishotel_shop_staff'] && ! $account->has_cap( 'read' ) && ! $account->has_cap( 'manage_woocommerce' ) );
 check( '… and has no e-mail address: nothing can ever be sent to it', '' === $GLOBALS['fh_user_emails'][ $staff ] );
 check( '… and is made once', $staff === \FisHotel\Misc\Sections\Shop_App\People::staff_user_id( true ) && 1 === count( array_filter( $GLOBALS['fh_users'], static function ( $u ) { return 'fishotel-shop-staff' === $u['login']; } ) ) );
+
+$kept = $GLOBALS['fh_options'][ \FisHotel\Misc\Sections\Shop_App\People::STAFF_OPTION ];
+unset( $GLOBALS['fh_options'][ \FisHotel\Misc\Sections\Shop_App\People::STAFF_OPTION ] );
+check( 'when the option naming it is lost the account is found again by its role — not made twice', $staff === \FisHotel\Misc\Sections\Shop_App\People::staff_user_id( true ) && $kept === $GLOBALS['fh_options'][ \FisHotel\Misc\Sections\Shop_App\People::STAFF_OPTION ] );
 
 $own = fh_add_user( 'sam', 'shop_manager', 'Sam Shore' );
 $store->update_person( $sam, array( 'user_id' => $own ) );
@@ -249,5 +278,21 @@ $jar = fh_jar( $jar );
 fh_request( array( 'cookies' => $jar ) );
 check( '… and the same PIN unlocks it again', Access::instance()->unlock( '4821' )['ok'] );
 unset( $GLOBALS['fh_salt'] );
+
+echo "\n12. Somebody's own account already has the shared account's login\n";
+$store = fh_fresh_store();
+$GLOBALS['fh_users'] = array();
+unset( $GLOBALS['fh_options'][ \FisHotel\Misc\Sections\Shop_App\People::STAFF_OPTION ] );
+$squatter = fh_add_user( 'fishotel-shop-staff', 'customer', 'Somebody Else' );
+check( 'it is not the shared account, and asking does not make one', 0 === \FisHotel\Misc\Sections\Shop_App\People::staff_user_id( false ) );
+$made = \FisHotel\Misc\Sections\Shop_App\People::staff_user_id( true );
+check( 'the shared account is made under the next free login — the other account is left exactly as it is', $made > 0 && $made !== $squatter && 'fishotel-shop-staff-2' === $GLOBALS['fh_users'][ $made ]['login'] && array( 'fishotel_shop_staff' ) === $GLOBALS['fh_users'][ $made ]['roles'] && array( 'customer' ) === $GLOBALS['fh_users'][ $squatter ]['roles'] );
+fh_request();
+$pat    = fh_add_person( 'Pat', '2468' );
+$device = Access::instance()->enrol_here( 'Phone', $made );
+$jar    = fh_jar( array() );
+fh_request( array( 'cookies' => $jar ) );
+$r = Access::instance()->unlock( '2468' );
+check( '… and a person without an account of their own unlocks under it', $r['ok'] && $made === $r['person']['user_id'] );
 
 fh_finish();

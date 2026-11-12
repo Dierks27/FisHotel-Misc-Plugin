@@ -225,6 +225,18 @@ while ( ob_get_level() > 0 && in_array( 'FisHotel\Misc\Sections\Shop_App\App::ad
 	ob_end_clean();
 }
 
+// The two filters that hold the account down, each on its own (either would do; both are there).
+fh_visit( array( 'uri' => '/?fh_front_desk=1&tank=521', 'cookies' => $jar ) );
+$rich = array( 'manage_options' => true, 'manage_woocommerce' => true, 'edit_posts' => true, 'read' => true );
+check( 'before the handler — map_meta_cap: every capability, the Front Desk\'s included, maps to do_not_allow', array( 'do_not_allow' ) === Gate::filter_map_meta_cap( array( 'manage_woocommerce' ), 'manage_woocommerce', $staff ) && array( 'do_not_allow' ) === Gate::filter_map_meta_cap( array( 'read' ), 'read', $staff ) && array( 'do_not_allow' ) === Gate::filter_map_meta_cap( array(), 'edit_user', $staff ) );
+check( 'before the handler — user_has_cap: whatever the account\'s role gives it, it holds nothing', array() === Gate::filter_user_has_cap( $rich, array( 'manage_options' ), array( 'manage_options', $staff ), get_userdata( $staff ) ) );
+Gate::grant();
+check( 'once granted — map_meta_cap: the Front Desk\'s capability passes, everything else is still do_not_allow', array( 'manage_woocommerce' ) === Gate::filter_map_meta_cap( array( 'manage_woocommerce' ), 'manage_woocommerce', $staff ) && array( 'do_not_allow' ) === Gate::filter_map_meta_cap( array( 'manage_options' ), 'manage_options', $staff ) && array( 'do_not_allow' ) === Gate::filter_map_meta_cap( array( 'edit_posts' ), 'edit_post', $staff ) );
+check( 'once granted — user_has_cap: exactly the Front Desk\'s capability, none of the role\'s', array( 'manage_woocommerce' => true ) === Gate::filter_user_has_cap( $rich, array( 'manage_options' ), array( 'manage_options', $staff ), get_userdata( $staff ) ) );
+check( 'both filters leave every other account exactly as it is', array( 'manage_options' ) === Gate::filter_map_meta_cap( array( 'manage_options' ), 'manage_options', $owner ) && $rich === Gate::filter_user_has_cap( $rich, array( 'manage_options' ), array( 'manage_options', $owner ), get_userdata( $owner ) ) && array( 'x' ) === Gate::filter_map_meta_cap( array( 'x' ), 'x', 0 ) );
+fh_request( array( 'uri' => '/', 'cookies' => $jar ) );
+check( 'outside a shop-floor request neither filter does anything, not even for that account', array( 'manage_options' ) === Gate::filter_map_meta_cap( array( 'manage_options' ), 'manage_options', $staff ) && $rich === Gate::filter_user_has_cap( $rich, array(), array( 'x', $staff ), get_userdata( $staff ) ) );
+
 $picker = fh_visit( array( 'uri' => '/?fh_front_desk=1', 'cookies' => $jar ) );
 check( 'the Front Desk\'s tank picker (no tank): logged in too', $picker['logged_in'] && $staff === $picker['user'] );
 
