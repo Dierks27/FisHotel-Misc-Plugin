@@ -15,10 +15,16 @@
  * count on the order's received date, into the line's tank, else the
  * first empty active Spa tank of the order's building, else any empty
  * Spa tank, else the first Spa tank of the building, else the first Spa
- * tank — with source 'order', the order line, the supplier, the order
- * ref and the landed cost per fish filled; then a `loss` of the DOA count
+ * tank — with source 'order', the order line, its size, the supplier, the
+ * order ref and the landed cost per fish filled; then a `loss` of the DOA count
  * with the note "doa". A line with a stay is skipped, so a second click
  * creates nothing; the order's status becomes "received".
+ *
+ * A line may carry a size (the slug of a standard size + a snapshot of
+ * its label — Sizes), the box it came out of (box_no) and the percent of
+ * ONE box the whole line took (box_pct; Costing uses it in box mode in
+ * place of received ÷ per box). The check-in carries the size from the
+ * line to its stay; a split carries it on to the sister stay.
  *
  * Once a line is linked, its figures are live: survived = arrived − every
  * loss (any reason), sold = the shipped events, DOA = the losses noted
@@ -108,9 +114,13 @@ class Orders {
 	 * Clean one order line from a form. A line without a species name is
 	 * for the caller to drop (normalize_lines() does).
 	 *
-	 * @param array $raw id, species_id, species, sci_name, qty_ordered, qty_received, per_box, bags,
-	 *                   unit_price, worth, qty_doa, qty_survived, tank_id, sort, notes.
-	 * @return array
+	 * @param array $raw id, species_id, species, sci_name, size_slug, size_label, qty_ordered,
+	 *                   qty_received, per_box, box_no, box_pct, bags, unit_price, worth, qty_doa,
+	 *                   qty_survived, tank_id, sort, notes.
+	 * @return array A box number or a percent that is blank or out of range is null here
+	 *               (line_errors() names the ones that were typed wrong); the size is the
+	 *               posted slug and label as text — Sizes::apply_to_lines() checks it
+	 *               against the standard list before an order from a form is saved.
 	 */
 	public static function normalize_line( array $raw ) {
 		$text = static function ( $key, $max ) use ( $raw ) {
@@ -136,15 +146,20 @@ class Orders {
 
 		$per_box = $int( 'per_box', true );
 		$bags    = $int( 'bags', true );
+		$size    = $text( 'size_slug', Sizes::MAX_LABEL );
 
 		return array(
 			'id'           => isset( $raw['id'] ) && is_scalar( $raw['id'] ) ? max( 0, (int) $raw['id'] ) : 0,
 			'species_id'   => isset( $raw['species_id'] ) && is_scalar( $raw['species_id'] ) && (int) $raw['species_id'] > 0 ? (int) $raw['species_id'] : null,
 			'species'      => $text( 'species', 120 ),
 			'sci_name'     => $text( 'sci_name', 120 ),
+			'size_slug'    => '' !== $size ? $size : null,
+			'size_label'   => '' !== $size && '' !== $text( 'size_label', Sizes::MAX_LABEL ) ? $text( 'size_label', Sizes::MAX_LABEL ) : null,
 			'qty_ordered'  => $int( 'qty_ordered', false ),
 			'qty_received' => $int( 'qty_received', true ),
 			'per_box'      => null === $per_box || $per_box < 1 ? null : min( Species::MAX_PER_BOX, $per_box ),
+			'box_no'       => Costing::box_no_in( $raw['box_no'] ?? null ),
+			'box_pct'      => Costing::box_pct_in( $raw['box_pct'] ?? null ),
 			'bags'         => null === $bags || $bags < 1 ? null : $bags,
 			'unit_price'   => $money( 'unit_price', 4 ),
 			'worth'        => $money( 'worth', 2 ),
@@ -180,6 +195,47 @@ class Orders {
 			}
 		}
 		return $out;
+	}
+
+	/**
+	 * What is wrong with the box numbers and percents typed on a form's
+	 * lines (pure) — checked before an order is saved, so a mistyped
+	 * percent is refused instead of silently falling back to the per-box
+	 * count. A blank field, and a percent of exactly 0, mean "none"; a
+	 * percent must otherwise be above 0 and at most Costing::BOX_PCT_MAX
+	 * (a line may span boxes), a box number a whole number from 1 to
+	 * Costing::BOX_NO_MAX. Lines are numbered as normalize_lines() keeps
+	 * them (a row without a species is skipped).
+	 *
+	 * @param mixed $raw lines[n][…].
+	 * @return string[] One message per mistake; empty when all is well.
+	 */
+	public static function line_errors( $raw ) {
+		$errors = array();
+		$n      = 0;
+		foreach ( (array) $raw as $row ) {
+			if ( ! is_array( $row ) || '' === self::normalize_line( $row )['species'] ) {
+				continue;
+			}
+			$n++;
+			if ( $n > self::MAX_LINES ) {
+				break;
+			}
+			$name = self::normalize_line( $row )['species'];
+
+			$pct = isset( $row['box_pct'] ) && is_scalar( $row['box_pct'] ) ? trim( (string) $row['box_pct'] ) : '';
+			if ( '' !== $pct && null === Costing::box_pct_in( $pct ) && ! ( is_numeric( $pct ) && 0.0 === (float) $pct ) ) {
+				/* translators: 1: line number, 2: species, 3: the most a line may take */
+				$errors[] = sprintf( __( 'Line %1$d (%2$s): the %% of box must be above 0 and at most %3$s.', 'fishotel-misc-plugin' ), $n, $name, Costing::num( Costing::BOX_PCT_MAX ) );
+			}
+
+			$box = isset( $row['box_no'] ) && is_scalar( $row['box_no'] ) ? trim( (string) $row['box_no'] ) : '';
+			if ( '' !== $box && null === Costing::box_no_in( $box ) ) {
+				/* translators: 1: line number, 2: species, 3: the highest box number */
+				$errors[] = sprintf( __( 'Line %1$d (%2$s): the box number must be a whole number from 1 to %3$d.', 'fishotel-misc-plugin' ), $n, $name, Costing::BOX_NO_MAX );
+			}
+		}
+		return $errors;
 	}
 
 	/* ============================================================== */
@@ -445,6 +501,8 @@ class Orders {
 				array(
 					'product_id'    => ! empty( $line['species_product_id'] ) ? (int) $line['species_product_id'] : null,
 					'species'       => (string) $line['species'],
+					'size_slug'     => $line['size_slug'] ?? null,
+					'size_label'    => $line['size_label'] ?? null,
 					'checkin_date'  => $date,
 					'tank_id'       => (int) $tank['id'],
 					'source'        => $source,

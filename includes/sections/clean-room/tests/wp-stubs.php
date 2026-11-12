@@ -245,6 +245,8 @@ require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-protocol.p
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-parser.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-qr.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-costing.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-sizes.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-box-shares.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-stats.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-species.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-orders.php';
@@ -314,6 +316,59 @@ function check_contains( $label, $needle, $haystack ) {
 		}
 	}
 	check( $label, false, '"' . $needle . '" not found in ' . fh_test_export( $list ) );
+}
+
+/**
+ * Whether two decoded-JSON values are the same: numbers within a hair
+ * (95.5 and 95.50, 2 and 2.0), everything else strictly — null is not 0,
+ * a list is not a map, the keys must match.
+ *
+ * @param mixed $a One value.
+ * @param mixed $b The other.
+ * @return bool
+ */
+function fh_json_same( $a, $b ) {
+	if ( ( is_int( $a ) || is_float( $a ) ) && ( is_int( $b ) || is_float( $b ) ) ) {
+		return abs( (float) $a - (float) $b ) < 1e-9;
+	}
+	if ( ! is_array( $a ) || ! is_array( $b ) ) {
+		return $a === $b;
+	}
+	if ( count( $a ) !== count( $b ) ) {
+		return false;
+	}
+	foreach ( $a as $key => $value ) {
+		if ( ! array_key_exists( $key, $b ) || ! fh_json_same( $value, $b[ $key ] ) ) {
+			return false;
+		}
+	}
+	return true;
+}
+
+/**
+ * fh_json_same() as a check, with both sides in the failure detail.
+ *
+ * @param string $label    Label.
+ * @param mixed  $expected Expected (decoded JSON).
+ * @param mixed  $actual   Actual.
+ */
+function check_json( $label, $expected, $actual ) {
+	check( $label, fh_json_same( $expected, $actual ), 'expected ' . fh_test_export( $expected ) . ', got ' . fh_test_export( $actual ) );
+}
+
+/**
+ * The percent-of-a-box fixture the PHP tests and the node test both read
+ * (tests/fixtures/box-maths.json): invented lines, shares and numbers.
+ *
+ * @return array
+ */
+function fh_box_fixture() {
+	$data = json_decode( (string) file_get_contents( __DIR__ . '/fixtures/box-maths.json' ), true );
+	if ( ! is_array( $data ) ) {
+		fwrite( STDERR, "Cannot read fixtures/box-maths.json\n" );
+		exit( 1 );
+	}
+	return $data;
 }
 
 /**

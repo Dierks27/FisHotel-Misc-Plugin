@@ -2,7 +2,7 @@
 /**
  * Clean Room store — the ONLY file in the section that touches $wpdb.
  *
- * Nine tables, created with dbDelta on first boot (gated by the autoloaded
+ * Ten tables, created with dbDelta on first boot (gated by the autoloaded
  * fishotel_cleanroom_db_version option, so a booted site pays no query)
  * and on plugin activation, the layout seeded in the same step:
  *
@@ -10,7 +10,8 @@
  *   {prefix}fh_tanks        building_id, number, level, position, size, gallons, status, sort
  *   {prefix}fh_stays        the cached state of one group of one species
  *                           (+ supplier, order_ref, landed_cost, order_line_id —
- *                           the seam a supplier order's check-in fills)
+ *                           the seam a supplier order's check-in fills; its size
+ *                           as a slug + a label snapshot)
  *   {prefix}fh_stay_events  the history: every change to a stay is an event
  *   {prefix}fh_tank_logs    per-tank entries: copper readings, dose / test
  *                           tick-offs, water changes, feeding, tank notes
@@ -21,8 +22,20 @@
  *   {prefix}fh_orders       a supplier order's header: ref, supplier, origin, dates,
  *                           status, cost mode, tariffs / flight / import fees / credit,
  *                           sale_date (the day the batch goes on sale, chosen by hand)
- *   {prefix}fh_order_lines  its lines: species, ordered / received / DOA / survived,
- *                           per box or bags, price, worth, tank, the stay it became
+ *   {prefix}fh_order_lines  its lines: species, size, ordered / received / DOA /
+ *                           survived, per box or bags, the box it came out of and
+ *                           the percent of a box it took, price, worth, tank, the
+ *                           stay it became, the remembered share it counts in
+ *   {prefix}fh_box_shares   the remembered shares: per supplier + origin + fish +
+ *                           size, the percent of a box ONE fish takes, how many
+ *                           order lines it came from, the line and date of the
+ *                           value (Box_Shares)
+ *
+ * The standard sizes are not stored here: they are the terms of the
+ * WooCommerce "size" product attribute, read by size_attributes() /
+ * size_terms() (and the sizes the variations really carry by
+ * variation_size_values()) — only when a Clean Room admin screen or the
+ * Front Desk asks, never on an ordinary front-end request.
  *
  * record_event() appends and then REPLAYS the stay from all of its events
  * (Replay::state), writing the result back into the stays row — the row is
@@ -60,11 +73,28 @@ class Store {
 	 * stored 1.0 without autoload, so boot() stops costing a query there.
 	 * 1.2 adds the species, orders and order_lines tables, the buildings'
 	 * schedule and system_gallons and the tank logs' building_id. 1.3 adds
-	 * the orders' sale_date (the batch's chosen sale date).
+	 * the orders' sale_date (the batch's chosen sale date). 1.4 adds the
+	 * size of a line and of a stay (slug + label snapshot), a line's box
+	 * number, percent of a box and remembered-share key, and the box_shares
+	 * table.
 	 *
 	 * @var string
 	 */
-	const DB_VERSION = '1.3';
+	const DB_VERSION = '1.4';
+
+	/**
+	 * The columns added after a table's first version. The version option
+	 * is written only once every one of them is really there (and every
+	 * table exists), so an ALTER that failed is retried on the next boot —
+	 * a new column goes into schema() AND into this list.
+	 *
+	 * @var array<string, string[]>
+	 */
+	const REQUIRED_COLUMNS = array(
+		'orders'      => array( 'sale_date' ),
+		'order_lines' => array( 'size_slug', 'size_label', 'box_no', 'box_pct', 'share_key' ),
+		'stays'       => array( 'size_slug', 'size_label' ),
+	);
 
 	/**
 	 * Option holding the installed schema version.
@@ -97,13 +127,15 @@ class Store {
 
 	const SOURCES   = array( 'manual', 'voice', 'qr', 'import', 'order' );
 	const LOG_KINDS = array( 'copper', 'dose', 'test', 'water_change', 'feed', 'note', 'other' );
-	const TABLES    = array( 'buildings', 'tanks', 'stays', 'stay_events', 'tank_logs', 'aliases', 'species', 'orders', 'order_lines' );
+	const TABLES    = array( 'buildings', 'tanks', 'stays', 'stay_events', 'tank_logs', 'aliases', 'species', 'orders', 'order_lines', 'box_shares' );
 
 	/**
 	 * Row caps for the list queries.
 	 */
 	const SPECIES_LIMIT = 5000;
 	const ORDERS_LIMIT  = 500;
+	const SHARES_LIMIT  = 2000;
+	const SIZES_LIMIT   = 200;
 
 	/**
 	 * Whether the tables exist, memoised per request (null = not checked).
@@ -122,7 +154,7 @@ class Store {
 	/**
 	 * Fully-prefixed table name.
 	 *
-	 * @param string $name buildings|tanks|stays|stay_events|tank_logs|aliases.
+	 * @param string $name One of TABLES.
 	 * @return string
 	 */
 	public static function table( $name ) {
@@ -162,10 +194,12 @@ class Store {
 
 		self::$tables_exist = null;
 
-		// Every stay read selects the orders' sale_date: the version is
-		// written only once that column is really there too, so an ALTER
-		// that failed is retried on the next boot like a failed CREATE.
-		if ( self::tables_exist() && self::column_exists( 'orders', 'sale_date' ) ) {
+		// The readers select the added columns (the orders' sale_date on
+		// every stay read) and the writers fill them: the version is written
+		// only once every table AND every added column is really there, so
+		// an ALTER that failed is retried on the next boot like a failed
+		// CREATE.
+		if ( self::tables_exist() && self::schema_ready( self::present_columns() ) ) {
 			update_option( self::DB_VERSION_OPTION, self::DB_VERSION, true );
 			self::seed_if_empty();
 			self::backfill_system_gallons();
@@ -175,23 +209,56 @@ class Store {
 	}
 
 	/**
-	 * Whether a column exists on one of the section's tables (install
-	 * only — never on an ordinary request).
+	 * The columns really present on the tables REQUIRED_COLUMNS names
+	 * (install only — never on an ordinary request). A table that cannot
+	 * be read gives an empty list.
 	 *
-	 * @param string $table  Table name without the prefix (e.g. "orders").
-	 * @param string $column Column.
-	 * @return bool
+	 * @return array<string, string[]> Table name without the prefix → its columns.
 	 */
-	private static function column_exists( $table, $column ) {
+	private static function present_columns() {
 		global $wpdb;
 
-		try {
-			$found = $wpdb->get_var( $wpdb->prepare( 'SHOW COLUMNS FROM ' . self::table( $table ) . ' LIKE %s', (string) $column ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-		} catch ( \Throwable $e ) {
-			return false;
+		$out = array();
+		foreach ( array_keys( self::REQUIRED_COLUMNS ) as $table ) {
+			try {
+				$columns = $wpdb->get_col( 'SHOW COLUMNS FROM ' . self::table( $table ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			} catch ( \Throwable $e ) {
+				$columns = array();
+			}
+			$out[ $table ] = array_map( 'strval', is_array( $columns ) ? $columns : array() );
 		}
 
-		return (string) $column === (string) $found;
+		return $out;
+	}
+
+	/**
+	 * The added columns that are still missing (pure): REQUIRED_COLUMNS
+	 * minus what the tables really have.
+	 *
+	 * @param array<string, string[]> $present Table name without the prefix → its columns.
+	 * @return string[] "table.column".
+	 */
+	public static function missing_columns( array $present ) {
+		$missing = array();
+		foreach ( self::REQUIRED_COLUMNS as $table => $columns ) {
+			$have = isset( $present[ $table ] ) && is_array( $present[ $table ] ) ? array_map( 'strtolower', array_map( 'strval', $present[ $table ] ) ) : array();
+			foreach ( $columns as $column ) {
+				if ( ! in_array( strtolower( $column ), $have, true ) ) {
+					$missing[] = $table . '.' . $column;
+				}
+			}
+		}
+		return $missing;
+	}
+
+	/**
+	 * Whether the version gate may open (pure): no added column is missing.
+	 *
+	 * @param array<string, string[]> $present Table name without the prefix → its columns.
+	 * @return bool
+	 */
+	public static function schema_ready( array $present ) {
+		return ! self::missing_columns( $present );
 	}
 
 	/**
@@ -211,6 +278,7 @@ class Store {
 		$species   = self::table( 'species' );
 		$orders    = self::table( 'orders' );
 		$lines     = self::table( 'order_lines' );
+		$shares    = self::table( 'box_shares' );
 
 		// dbDelta is whitespace-sensitive: each column on its own line,
 		// two spaces after PRIMARY KEY, KEY (not INDEX) with a name.
@@ -246,6 +314,8 @@ class Store {
 				id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
 				product_id BIGINT(20) UNSIGNED NULL,
 				species VARCHAR(120) NOT NULL DEFAULT '',
+				size_slug VARCHAR(100) NULL,
+				size_label VARCHAR(100) NULL,
 				qty_arrived INT NOT NULL DEFAULT 0,
 				qty_live INT NOT NULL DEFAULT 0,
 				checkin_date DATE NOT NULL,
@@ -361,9 +431,13 @@ class Store {
 				species_id BIGINT(20) UNSIGNED NULL,
 				species VARCHAR(120) NOT NULL DEFAULT '',
 				sci_name VARCHAR(120) NOT NULL DEFAULT '',
+				size_slug VARCHAR(100) NULL,
+				size_label VARCHAR(100) NULL,
 				qty_ordered INT NOT NULL DEFAULT 0,
 				qty_received INT NULL,
 				per_box SMALLINT NULL,
+				box_no SMALLINT NULL,
+				box_pct DECIMAL(6,2) NULL,
 				bags SMALLINT NULL,
 				unit_price DECIMAL(10,4) NULL,
 				worth DECIMAL(10,2) NULL,
@@ -372,12 +446,33 @@ class Store {
 				landed_total DECIMAL(10,2) NULL,
 				stay_id BIGINT(20) UNSIGNED NULL,
 				tank_id BIGINT(20) UNSIGNED NULL,
+				share_key CHAR(32) NULL,
 				sort INT NOT NULL DEFAULT 0,
 				notes TEXT NULL,
 				PRIMARY KEY  (id),
 				KEY order_id (order_id),
 				KEY species_id (species_id),
 				KEY stay_id (stay_id)
+			) {$charset_collate};",
+			"CREATE TABLE {$shares} (
+				id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+				share_key CHAR(32) NOT NULL,
+				location_key CHAR(32) NOT NULL,
+				supplier VARCHAR(80) NOT NULL DEFAULT '',
+				origin VARCHAR(80) NOT NULL DEFAULT '',
+				fish_key VARCHAR(130) NOT NULL DEFAULT '',
+				species_id BIGINT(20) UNSIGNED NULL,
+				species VARCHAR(120) NOT NULL DEFAULT '',
+				size_slug VARCHAR(100) NOT NULL DEFAULT '',
+				size_label VARCHAR(100) NOT NULL DEFAULT '',
+				pct_per_fish DECIMAL(9,4) NOT NULL DEFAULT 0,
+				order_count INT NOT NULL DEFAULT 0,
+				last_line_id BIGINT(20) UNSIGNED NULL,
+				last_date DATE NULL,
+				updated_at DATETIME NOT NULL,
+				PRIMARY KEY  (id),
+				UNIQUE KEY share_key (share_key),
+				KEY location_key (location_key)
 			) {$charset_collate};",
 		);
 	}
@@ -995,7 +1090,8 @@ class Store {
 	 * supplier / order_ref / landed_cost / order_line_id are the seam the
 	 * supplier-order import will fill; all may be null.
 	 *
-	 * @param array $fields product_id, species, checkin_date, tank_id, source, order_line_id, supplier, order_ref, landed_cost, notes.
+	 * @param array $fields product_id, species, size_slug, size_label, checkin_date, tank_id, source,
+	 *                      order_line_id, supplier, order_ref, landed_cost, notes.
 	 * @return int|false Stay id.
 	 */
 	public function create_stay( array $fields ) {
@@ -1009,6 +1105,8 @@ class Store {
 		$data = array(
 			'product_id'    => ! empty( $fields['product_id'] ) ? (int) $fields['product_id'] : null,
 			'species'       => substr( (string) ( $fields['species'] ?? '' ), 0, 120 ),
+			'size_slug'     => self::size_or_null( $fields['size_slug'] ?? null ),
+			'size_label'    => null !== self::size_or_null( $fields['size_slug'] ?? null ) ? self::size_or_null( $fields['size_label'] ?? null ) : null,
 			'qty_arrived'   => 0,
 			'qty_live'      => 0,
 			'checkin_date'  => Replay::is_date( $fields['checkin_date'] ?? null ) ? (string) $fields['checkin_date'] : gmdate( 'Y-m-d' ),
@@ -1035,7 +1133,9 @@ class Store {
 
 	/**
 	 * Update the seam fields of a stay (supplier, order_ref, landed_cost,
-	 * order_line_id, product_id, species, notes) — identity, not history.
+	 * order_line_id, product_id, species, the size — size_slug with its
+	 * size_label, an empty slug clears both —, notes) — identity, not
+	 * history.
 	 *
 	 * @param int   $stay_id Stay id.
 	 * @param array $fields  Any of the keys above.
@@ -1052,6 +1152,10 @@ class Store {
 		}
 		if ( array_key_exists( 'species', $fields ) && '' !== trim( (string) $fields['species'] ) ) {
 			$data['species'] = substr( trim( (string) $fields['species'] ), 0, 120 );
+		}
+		if ( array_key_exists( 'size_slug', $fields ) ) {
+			$data['size_slug']  = self::size_or_null( $fields['size_slug'] );
+			$data['size_label'] = null !== $data['size_slug'] ? self::size_or_null( $fields['size_label'] ?? null ) : null;
 		}
 		foreach ( array( 'supplier', 'order_ref' ) as $key ) {
 			if ( array_key_exists( $key, $fields ) ) {
@@ -1326,7 +1430,8 @@ class Store {
 	/**
 	 * Split a group: $qty fish of $stay continue in a sister stay in the
 	 * destination tank. The original gets a move event with the quantity
-	 * (Replay subtracts them); the sister gets a backdated arrival (same
+	 * (Replay subtracts them); the sister is the same fish of the same
+	 * size and gets a backdated arrival (same
 	 * check-in), a clear carrying the original's cleared date when it had
 	 * one, the same own sale date (the batch's comes with the order line),
 	 * and the move itself — so its
@@ -1353,6 +1458,8 @@ class Store {
 			array(
 				'product_id'    => $stay['product_id'],
 				'species'       => $stay['species'],
+				'size_slug'     => $stay['size_slug'] ?? null,
+				'size_label'    => $stay['size_label'] ?? null,
 				'checkin_date'  => $stay['checkin_date'],
 				'tank_id'       => $stay['tank_id'],
 				'source'        => (string) ( $base['source'] ?? 'manual' ),
@@ -3039,7 +3146,10 @@ class Store {
 	 * are updated, rows without one inserted, the order's other lines
 	 * deleted — except lines that already became a stay, which are kept
 	 * and keep their received / DOA / survived figures (those live on the
-	 * stay now). Orders::normalize_lines() first.
+	 * stay now). The size, the box number and the percent of a box are
+	 * saved as given on every line; share_key (the remembered share a line
+	 * counts in) is never touched here — Box_Shares owns it through
+	 * set_line_share_key(). Orders::normalize_lines() first.
 	 *
 	 * @param int     $order_id Order id.
 	 * @param array[] $lines    Clean lines (id 0 = new), each may carry landed_total.
@@ -3068,9 +3178,13 @@ class Store {
 					'species_id'   => ! empty( $line['species_id'] ) ? (int) $line['species_id'] : null,
 					'species'      => (string) ( $line['species'] ?? '' ),
 					'sci_name'     => (string) ( $line['sci_name'] ?? '' ),
+					'size_slug'    => self::size_or_null( $line['size_slug'] ?? null ),
+					'size_label'   => null !== self::size_or_null( $line['size_slug'] ?? null ) ? self::size_or_null( $line['size_label'] ?? null ) : null,
 					'qty_ordered'  => max( 0, (int) ( $line['qty_ordered'] ?? 0 ) ),
 					'qty_received' => $linked ? $current['qty_received'] : ( isset( $line['qty_received'] ) && null !== $line['qty_received'] ? (int) $line['qty_received'] : null ),
 					'per_box'      => isset( $line['per_box'] ) && null !== $line['per_box'] ? (int) $line['per_box'] : null,
+					'box_no'       => Costing::box_no_in( $line['box_no'] ?? null ),
+					'box_pct'      => Costing::box_pct_in( $line['box_pct'] ?? null ),
 					'bags'         => isset( $line['bags'] ) && null !== $line['bags'] ? (int) $line['bags'] : null,
 					'unit_price'   => isset( $line['unit_price'] ) && null !== $line['unit_price'] ? round( (float) $line['unit_price'], 4 ) : null,
 					'worth'        => isset( $line['worth'] ) && null !== $line['worth'] ? round( (float) $line['worth'], 2 ) : null,
@@ -3236,6 +3350,394 @@ class Store {
 	}
 
 	/* ============================================================== */
+	/*  Remembered box shares                                          */
+	/* ============================================================== */
+
+	/**
+	 * Mark the remembered share an order line counts in (null = none).
+	 * Box_Shares owns this column; save_order_lines() never writes it.
+	 *
+	 * @param int         $line_id Line id.
+	 * @param string|null $key     The share key (32 hex), or null.
+	 * @return bool
+	 */
+	public function set_line_share_key( $line_id, $key ) {
+		if ( ! self::tables_exist() || (int) $line_id <= 0 ) {
+			return false;
+		}
+
+		global $wpdb;
+
+		$key = is_string( $key ) && 1 === preg_match( '/^[a-f0-9]{32}$/', $key ) ? $key : null;
+
+		try {
+			return false !== $wpdb->update( self::table( 'order_lines' ), array( 'share_key' => $key ), array( 'id' => (int) $line_id ), null, array( '%d' ) );
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+	}
+
+	/**
+	 * No line counts in a share any more (the share was forgotten in
+	 * Settings → Box shares): every line that carried its key is cleared,
+	 * so each counts again the next time its order is saved.
+	 *
+	 * @param string $key The share key.
+	 * @return bool
+	 */
+	public function clear_line_share_keys( $key ) {
+		if ( ! self::tables_exist() || '' === (string) $key ) {
+			return false;
+		}
+
+		global $wpdb;
+
+		try {
+			return false !== $wpdb->query( $wpdb->prepare( 'UPDATE ' . self::table( 'order_lines' ) . ' SET share_key = NULL WHERE share_key = %s', (string) $key ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+	}
+
+	/**
+	 * The remembered shares, by supplier, origin, fish and size — every
+	 * row (Settings → Box shares), or those of one location.
+	 *
+	 * @param array $filters location_key (Box_Shares::location_key() of a supplier + origin).
+	 * @return array[] Hydrated rows.
+	 */
+	public function box_shares( array $filters = array() ) {
+		if ( ! self::tables_exist() ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		$sql    = 'SELECT * FROM ' . self::table( 'box_shares' );
+		$params = array();
+		if ( isset( $filters['location_key'] ) ) {
+			$sql     .= ' WHERE location_key = %s';
+			$params[] = (string) $filters['location_key'];
+		}
+		$sql     .= ' ORDER BY supplier ASC, origin ASC, species ASC, size_label ASC, id ASC LIMIT %d';
+		$params[] = self::SHARES_LIMIT;
+
+		try {
+			$rows = $wpdb->get_results( $wpdb->prepare( $sql, $params ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+
+		return array_map( array( self::class, 'hydrate_box_share' ), is_array( $rows ) ? $rows : array() );
+	}
+
+	/**
+	 * One remembered share by id.
+	 *
+	 * @param int $id Row id.
+	 * @return array|null
+	 */
+	public function box_share( $id ) {
+		return (int) $id > 0 ? $this->box_share_row( 'id = %d', (int) $id ) : null;
+	}
+
+	/**
+	 * One remembered share by its key (Box_Shares::share_key()).
+	 *
+	 * @param string $key Share key.
+	 * @return array|null
+	 */
+	public function box_share_by_key( $key ) {
+		return '' !== (string) $key ? $this->box_share_row( 'share_key = %s', (string) $key ) : null;
+	}
+
+	private function box_share_row( $where, $value ) {
+		if ( ! self::tables_exist() ) {
+			return null;
+		}
+
+		global $wpdb;
+
+		try {
+			$row = $wpdb->get_row( $wpdb->prepare( 'SELECT * FROM ' . self::table( 'box_shares' ) . ' WHERE ' . $where . ' LIMIT 1', $value ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		} catch ( \Throwable $e ) {
+			return null;
+		}
+
+		return $row ? self::hydrate_box_share( $row ) : null;
+	}
+
+	/**
+	 * Insert a remembered share (Box_Shares builds the row; the unique
+	 * share_key is the net against a second row for the same fish).
+	 *
+	 * @param array $row share_key, location_key, supplier, origin, fish_key, species_id, species,
+	 *                   size_slug, size_label, pct_per_fish, order_count, last_line_id, last_date.
+	 * @return int|false Row id.
+	 */
+	public function insert_box_share( array $row ) {
+		if ( ! self::tables_exist() || '' === (string) ( $row['share_key'] ?? '' ) ) {
+			return false;
+		}
+
+		global $wpdb;
+
+		$data = array(
+			'share_key'    => (string) $row['share_key'],
+			'location_key' => (string) ( $row['location_key'] ?? '' ),
+			'supplier'     => substr( (string) ( $row['supplier'] ?? '' ), 0, 80 ),
+			'origin'       => substr( (string) ( $row['origin'] ?? '' ), 0, 80 ),
+			'fish_key'     => substr( (string) ( $row['fish_key'] ?? '' ), 0, 130 ),
+			'species_id'   => ! empty( $row['species_id'] ) ? (int) $row['species_id'] : null,
+			'species'      => substr( (string) ( $row['species'] ?? '' ), 0, 120 ),
+			'size_slug'    => substr( (string) ( $row['size_slug'] ?? '' ), 0, 100 ),
+			'size_label'   => substr( (string) ( $row['size_label'] ?? '' ), 0, 100 ),
+			'pct_per_fish' => round( (float) ( $row['pct_per_fish'] ?? 0 ), 4 ),
+			'order_count'  => max( 0, (int) ( $row['order_count'] ?? 0 ) ),
+			'last_line_id' => ! empty( $row['last_line_id'] ) ? (int) $row['last_line_id'] : null,
+			'last_date'    => Replay::is_date( $row['last_date'] ?? null ) ? (string) $row['last_date'] : null,
+			'updated_at'   => gmdate( 'Y-m-d H:i:s' ),
+		);
+
+		try {
+			$ok = $wpdb->insert( self::table( 'box_shares' ), $data );
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+
+		return $ok ? (int) $wpdb->insert_id : false;
+	}
+
+	/**
+	 * Change a remembered share: its value, its count, the line and date
+	 * the value came from, the name snapshots.
+	 *
+	 * @param int   $id     Row id.
+	 * @param array $fields Any of pct_per_fish, order_count, last_line_id, last_date, species, size_label.
+	 * @return bool
+	 */
+	public function update_box_share( $id, array $fields ) {
+		if ( ! self::tables_exist() || (int) $id <= 0 ) {
+			return false;
+		}
+
+		$data = array();
+		if ( array_key_exists( 'pct_per_fish', $fields ) ) {
+			$data['pct_per_fish'] = round( (float) $fields['pct_per_fish'], 4 );
+		}
+		if ( array_key_exists( 'order_count', $fields ) ) {
+			$data['order_count'] = max( 0, (int) $fields['order_count'] );
+		}
+		if ( array_key_exists( 'last_line_id', $fields ) ) {
+			$data['last_line_id'] = (int) $fields['last_line_id'] > 0 ? (int) $fields['last_line_id'] : null;
+		}
+		if ( array_key_exists( 'last_date', $fields ) ) {
+			$data['last_date'] = Replay::is_date( $fields['last_date'] ) ? (string) $fields['last_date'] : null;
+		}
+		if ( array_key_exists( 'species', $fields ) ) {
+			$data['species'] = substr( (string) $fields['species'], 0, 120 );
+		}
+		if ( array_key_exists( 'size_label', $fields ) ) {
+			$data['size_label'] = substr( (string) $fields['size_label'], 0, 100 );
+		}
+		if ( ! $data ) {
+			return false;
+		}
+		$data['updated_at'] = gmdate( 'Y-m-d H:i:s' );
+
+		global $wpdb;
+
+		try {
+			return false !== $wpdb->update( self::table( 'box_shares' ), $data, array( 'id' => (int) $id ), null, array( '%d' ) );
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+	}
+
+	/**
+	 * Forget a remembered share.
+	 *
+	 * @param int $id Row id.
+	 * @return bool
+	 */
+	public function delete_box_share( $id ) {
+		if ( ! self::tables_exist() || (int) $id <= 0 ) {
+			return false;
+		}
+
+		global $wpdb;
+
+		try {
+			return (bool) $wpdb->delete( self::table( 'box_shares' ), array( 'id' => (int) $id ), array( '%d' ) );
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+	}
+
+	/* ============================================================== */
+	/*  Standard sizes (the WooCommerce "size" product attribute)      */
+	/* ============================================================== */
+
+	/**
+	 * The global product attributes whose name or slug contains "size"
+	 * (the theme reads any attribute key matching /size/ as the size), in
+	 * the order they were created. Read straight from WooCommerce's
+	 * attribute table, so it works with or without WooCommerce loaded;
+	 * none when the table is not there. Called only from the section's own
+	 * admin screens and the Front Desk (Sizes::standard()).
+	 *
+	 * @return array[] taxonomy ("pa_size"), name ("size"), label ("Size"), orderby.
+	 */
+	public function size_attributes() {
+		global $wpdb;
+
+		$table = $wpdb->prefix . 'woocommerce_attribute_taxonomies';
+
+		try {
+			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
+				return array();
+			}
+			$rows = $wpdb->get_results( 'SELECT attribute_name, attribute_label, attribute_orderby FROM ' . $table . ' ORDER BY attribute_id ASC', ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+
+		$out = array();
+		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
+			$name  = (string) ( $row['attribute_name'] ?? '' );
+			$label = (string) ( $row['attribute_label'] ?? '' );
+			if ( '' === $name || ( ! Sizes::matches( $name ) && ! Sizes::matches( $label ) ) ) {
+				continue;
+			}
+			$out[] = array(
+				'taxonomy' => 'pa_' . $name,
+				'name'     => $name,
+				'label'    => '' !== $label ? $label : $name,
+				'orderby'  => (string) ( $row['attribute_orderby'] ?? 'menu_order' ),
+			);
+		}
+
+		return $out;
+	}
+
+	/**
+	 * The terms of one attribute taxonomy with their custom order (the
+	 * "order_<taxonomy>" term meta WooCommerce's drag-and-drop writes),
+	 * unsorted — Sizes::order_terms() sorts them the way the attribute is
+	 * set to.
+	 *
+	 * @param string $taxonomy Taxonomy ("pa_size").
+	 * @return array[] term_id, name, slug, menu_order.
+	 */
+	public function size_terms( $taxonomy ) {
+		$taxonomy = (string) $taxonomy;
+		if ( '' === $taxonomy ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		try {
+			$rows = $wpdb->get_results(
+				$wpdb->prepare( 'SELECT t.term_id, t.name, t.slug, tm.meta_value AS menu_order FROM ' . $wpdb->terms . ' t INNER JOIN ' . $wpdb->term_taxonomy . ' tt ON tt.term_id = t.term_id LEFT JOIN ' . $wpdb->termmeta . ' tm ON tm.term_id = t.term_id AND tm.meta_key = %s WHERE tt.taxonomy = %s ORDER BY t.term_id ASC LIMIT %d', 'order_' . $taxonomy, $taxonomy, self::SIZES_LIMIT ), // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				ARRAY_A
+			);
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+
+		$out = array();
+		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
+			$id = (int) $row['term_id'];
+			if ( isset( $out[ $id ] ) ) {
+				continue; // A term with its order meta twice is still one size.
+			}
+			$out[ $id ] = array(
+				'term_id'    => $id,
+				'name'       => (string) $row['name'],
+				'slug'       => (string) $row['slug'],
+				'menu_order' => isset( $row['menu_order'] ) && is_numeric( $row['menu_order'] ) ? (int) $row['menu_order'] : 0,
+			);
+		}
+
+		return array_values( $out );
+	}
+
+	/**
+	 * Every distinct size value the variations of the fish products carry
+	 * — the read-only "Sizes in use on products" report of Settings →
+	 * Sizes: the values of every variation attribute whose key matches
+	 * /size/, global-term ones (key "pa_…", the value a term slug, the
+	 * label its term name) and custom per-product ones (the value as
+	 * typed) alike, with how many products use each. Nothing is written.
+	 *
+	 * @return array[] key ("pa_size" / "size"), global (bool), value, label, products.
+	 */
+	public function variation_size_values() {
+		global $wpdb;
+
+		$term_ids = $this->fish_term_ids();
+		if ( ! $term_ids ) {
+			return array();
+		}
+		$ids = implode( ',', array_map( 'intval', $term_ids ) );
+
+		$sql = 'SELECT pm.meta_key AS meta_key, pm.meta_value AS meta_value, COUNT(DISTINCT v.post_parent) AS products FROM ' . $wpdb->posts . ' v'
+			. ' INNER JOIN ' . $wpdb->posts . " p ON p.ID = v.post_parent AND p.post_type = 'product' AND p.post_status IN ('" . implode( "','", self::PRODUCT_STATUSES ) . "')"
+			. ' INNER JOIN ' . $wpdb->postmeta . ' pm ON pm.post_id = v.ID'
+			. " WHERE v.post_type = 'product_variation' AND v.post_status <> 'trash' AND pm.meta_key LIKE %s AND pm.meta_value <> ''"
+			. ' AND v.post_parent IN (SELECT tr.object_id FROM ' . $wpdb->term_relationships . ' tr INNER JOIN ' . $wpdb->term_taxonomy . " tt ON tt.term_taxonomy_id = tr.term_taxonomy_id WHERE tt.taxonomy = 'product_cat' AND (tt.term_id IN ({$ids}) OR tt.parent IN ({$ids})))"
+			. ' GROUP BY pm.meta_key, pm.meta_value ORDER BY pm.meta_key ASC, pm.meta_value ASC LIMIT 2000';
+
+		try {
+			$rows = $wpdb->get_results( $wpdb->prepare( $sql, $wpdb->esc_like( 'attribute_' ) . '%' ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+
+		$out        = array();
+		$taxonomies = array();
+		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
+			$key = substr( (string) $row['meta_key'], strlen( 'attribute_' ) );
+			if ( '' === $key || ! Sizes::matches( $key ) ) {
+				continue;
+			}
+			$global = 0 === strpos( $key, 'pa_' );
+			if ( $global ) {
+				$taxonomies[ $key ] = true;
+			}
+			$out[] = array(
+				'key'      => $key,
+				'global'   => $global,
+				'value'    => (string) $row['meta_value'],
+				'label'    => (string) $row['meta_value'],
+				'products' => (int) $row['products'],
+			);
+		}
+
+		// The term names behind the global values, in one query.
+		if ( $out && $taxonomies ) {
+			$names        = array();
+			$placeholders = implode( ',', array_fill( 0, count( $taxonomies ), '%s' ) );
+			try {
+				$terms = $wpdb->get_results( $wpdb->prepare( 'SELECT tt.taxonomy, t.slug, t.name FROM ' . $wpdb->terms . ' t INNER JOIN ' . $wpdb->term_taxonomy . " tt ON tt.term_id = t.term_id WHERE tt.taxonomy IN ({$placeholders})", array_keys( $taxonomies ) ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			} catch ( \Throwable $e ) {
+				$terms = array();
+			}
+			foreach ( is_array( $terms ) ? $terms : array() as $term ) {
+				$names[ (string) $term['taxonomy'] ][ (string) $term['slug'] ] = (string) $term['name'];
+			}
+			foreach ( $out as $index => $row ) {
+				if ( $row['global'] && isset( $names[ $row['key'] ][ $row['value'] ] ) ) {
+					$out[ $index ]['label'] = $names[ $row['key'] ][ $row['value'] ];
+				}
+			}
+		}
+
+		return $out;
+	}
+
+	/* ============================================================== */
 	/*  Product facts                                                  */
 	/* ============================================================== */
 
@@ -3394,7 +3896,8 @@ class Store {
 	}
 
 	/**
-	 * A stay row with ints, its tank path, its batch (order id, ref and
+	 * A stay row with ints, its size (slug + label snapshot, null without
+	 * one), its tank path, its batch (order id, ref and
 	 * sale date) and the effective state today — the effective sale date
 	 * (sale_ready_date: own, else the batch's, else null), where it comes
 	 * from, the suggestion, whether it is for sale and the "still in the
@@ -3425,6 +3928,8 @@ class Store {
 			'id'                  => (int) ( $row['id'] ?? 0 ),
 			'product_id'          => ! empty( $row['product_id'] ) ? (int) $row['product_id'] : null,
 			'species'             => (string) ( $row['species'] ?? '' ),
+			'size_slug'           => self::size_or_null( $row['size_slug'] ?? null ),
+			'size_label'          => null !== self::size_or_null( $row['size_slug'] ?? null ) ? self::size_or_null( $row['size_label'] ?? null ) : null,
 			'qty_arrived'         => (int) ( $row['qty_arrived'] ?? 0 ),
 			'qty_live'            => (int) ( $row['qty_live'] ?? 0 ),
 			'checkin_date'        => (string) ( $row['checkin_date'] ?? '' ),
@@ -3533,6 +4038,48 @@ class Store {
 		return ! empty( $value ) && '0000-00-00' !== $value ? (string) $value : null;
 	}
 
+	/**
+	 * A size slug or its label snapshot as stored: trimmed, at most 100
+	 * characters, null when empty.
+	 *
+	 * @param mixed $value Raw.
+	 * @return string|null
+	 */
+	public static function size_or_null( $value ) {
+		if ( null === $value || ! is_scalar( $value ) || is_bool( $value ) ) {
+			return null;
+		}
+		$text = substr( trim( (string) $value ), 0, 100 );
+		return '' === $text ? null : $text;
+	}
+
+	/**
+	 * A remembered box share: supplier + origin + fish + size → the percent
+	 * of a box one fish takes.
+	 *
+	 * @param array $row Raw row.
+	 * @return array
+	 */
+	public static function hydrate_box_share( array $row ) {
+		return array(
+			'id'           => (int) ( $row['id'] ?? 0 ),
+			'share_key'    => (string) ( $row['share_key'] ?? '' ),
+			'location_key' => (string) ( $row['location_key'] ?? '' ),
+			'supplier'     => (string) ( $row['supplier'] ?? '' ),
+			'origin'       => (string) ( $row['origin'] ?? '' ),
+			'fish_key'     => (string) ( $row['fish_key'] ?? '' ),
+			'species_id'   => ! empty( $row['species_id'] ) ? (int) $row['species_id'] : null,
+			'species'      => (string) ( $row['species'] ?? '' ),
+			'size_slug'    => (string) ( $row['size_slug'] ?? '' ),
+			'size_label'   => (string) ( $row['size_label'] ?? '' ),
+			'pct_per_fish' => isset( $row['pct_per_fish'] ) && is_numeric( $row['pct_per_fish'] ) ? (float) $row['pct_per_fish'] : 0.0,
+			'order_count'  => (int) ( $row['order_count'] ?? 0 ),
+			'last_line_id' => ! empty( $row['last_line_id'] ) ? (int) $row['last_line_id'] : null,
+			'last_date'    => self::date_or_null( $row['last_date'] ?? null ),
+			'updated_at'   => (string) ( $row['updated_at'] ?? '' ),
+		);
+	}
+
 	public static function hydrate_species( array $row ) {
 		return array(
 			'id'           => (int) ( $row['id'] ?? 0 ),
@@ -3589,9 +4136,14 @@ class Store {
 			'species_id'         => ! empty( $row['species_id'] ) ? (int) $row['species_id'] : null,
 			'species'            => (string) ( $row['species'] ?? '' ),
 			'sci_name'           => (string) ( $row['sci_name'] ?? '' ),
+			'size_slug'          => self::size_or_null( $row['size_slug'] ?? null ),
+			'size_label'         => null !== self::size_or_null( $row['size_slug'] ?? null ) ? self::size_or_null( $row['size_label'] ?? null ) : null,
 			'qty_ordered'        => (int) ( $row['qty_ordered'] ?? 0 ),
 			'qty_received'       => self::int_or_null( $row['qty_received'] ?? null ),
 			'per_box'            => self::int_or_null( $row['per_box'] ?? null ),
+			'box_no'             => Costing::box_no_in( $row['box_no'] ?? null ),
+			'box_pct'            => Costing::box_pct_in( $row['box_pct'] ?? null ),
+			'share_key'          => isset( $row['share_key'] ) && null !== $row['share_key'] && '' !== (string) $row['share_key'] ? (string) $row['share_key'] : null,
 			'bags'               => self::int_or_null( $row['bags'] ?? null ),
 			'unit_price'         => self::money_or_null( $row['unit_price'] ?? null ),
 			'worth'              => self::money_or_null( $row['worth'] ?? null ),

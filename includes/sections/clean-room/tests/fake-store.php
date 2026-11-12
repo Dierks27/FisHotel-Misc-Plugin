@@ -17,6 +17,7 @@
 
 namespace FisHotel\Misc\Sections\Clean_Room\Tests;
 
+use FisHotel\Misc\Sections\Clean_Room\Costing;
 use FisHotel\Misc\Sections\Clean_Room\Import;
 use FisHotel\Misc\Sections\Clean_Room\Layout;
 use FisHotel\Misc\Sections\Clean_Room\Orders;
@@ -93,6 +94,27 @@ class Fake_Store {
 	public $orders = array();
 	public $lines  = array();
 
+	/**
+	 * Remembered box shares (Store::hydrate_box_share shape), id => row.
+	 *
+	 * @var array[]
+	 */
+	public $box_shares = array();
+
+	/**
+	 * What the real Store reads from WooCommerce, seeded by a test: the
+	 * product attributes that match "size" (taxonomy, name, label,
+	 * orderby), their terms by taxonomy (term_id, name, slug, menu_order)
+	 * and the size values the variations carry (key, global, value, label,
+	 * products).
+	 *
+	 * @var array[]
+	 */
+	public $size_attributes = array();
+	public $size_terms      = array();
+	public $variation_sizes = array();
+
+	private $next_share   = 1;
 	private $next_stay    = 1;
 	private $next_event   = 1;
 	private $next_log     = 1;
@@ -184,6 +206,8 @@ class Fake_Store {
 			'id'              => $id,
 			'product_id'      => ! empty( $fields['product_id'] ) ? (int) $fields['product_id'] : null,
 			'species'         => substr( (string) ( $fields['species'] ?? '' ), 0, 120 ),
+			'size_slug'       => Store::size_or_null( $fields['size_slug'] ?? null ),
+			'size_label'      => null !== Store::size_or_null( $fields['size_slug'] ?? null ) ? Store::size_or_null( $fields['size_label'] ?? null ) : null,
 			'qty_arrived'     => 0,
 			'qty_live'        => 0,
 			'checkin_date'    => Replay::is_date( $fields['checkin_date'] ?? null ) ? (string) $fields['checkin_date'] : gmdate( 'Y-m-d' ),
@@ -334,6 +358,11 @@ class Fake_Store {
 				$this->stays[ (int) $stay_id ][ $key ] = $fields[ $key ];
 			}
 		}
+		if ( array_key_exists( 'size_slug', $fields ) ) {
+			$slug                                       = Store::size_or_null( $fields['size_slug'] );
+			$this->stays[ (int) $stay_id ]['size_slug']  = $slug;
+			$this->stays[ (int) $stay_id ]['size_label'] = null !== $slug ? Store::size_or_null( $fields['size_label'] ?? null ) : null;
+		}
 		return true;
 	}
 
@@ -473,6 +502,8 @@ class Fake_Store {
 			array(
 				'product_id'    => $stay['product_id'],
 				'species'       => $stay['species'],
+				'size_slug'     => $stay['size_slug'] ?? null,
+				'size_label'    => $stay['size_label'] ?? null,
 				'checkin_date'  => $stay['checkin_date'],
 				'tank_id'       => $stay['tank_id'],
 				'source'        => (string) ( $base['source'] ?? 'manual' ),
@@ -1108,9 +1139,14 @@ class Fake_Store {
 				'species_id'   => ! empty( $line['species_id'] ) ? (int) $line['species_id'] : null,
 				'species'      => (string) ( $line['species'] ?? '' ),
 				'sci_name'     => (string) ( $line['sci_name'] ?? '' ),
+				'size_slug'    => Store::size_or_null( $line['size_slug'] ?? null ),
+				'size_label'   => null !== Store::size_or_null( $line['size_slug'] ?? null ) ? Store::size_or_null( $line['size_label'] ?? null ) : null,
 				'qty_ordered'  => max( 0, (int) ( $line['qty_ordered'] ?? 0 ) ),
 				'qty_received' => $linked ? $current['qty_received'] : ( isset( $line['qty_received'] ) && null !== $line['qty_received'] ? (int) $line['qty_received'] : null ),
 				'per_box'      => isset( $line['per_box'] ) && null !== $line['per_box'] ? (int) $line['per_box'] : null,
+				'box_no'       => Costing::box_no_in( $line['box_no'] ?? null ),
+				'box_pct'      => Costing::box_pct_in( $line['box_pct'] ?? null ),
+				'share_key'    => $current ? ( $current['share_key'] ?? null ) : null, // Box_Shares owns it (set_line_share_key()).
 				'bags'         => isset( $line['bags'] ) && null !== $line['bags'] ? (int) $line['bags'] : null,
 				'unit_price'   => isset( $line['unit_price'] ) && null !== $line['unit_price'] ? round( (float) $line['unit_price'], 4 ) : null,
 				'worth'        => isset( $line['worth'] ) && null !== $line['worth'] ? round( (float) $line['worth'], 2 ) : null,
@@ -1163,6 +1199,112 @@ class Fake_Store {
 			$this->lines[ (int) $line_id ]['tank_id'] = (int) $tank_id > 0 ? (int) $tank_id : null;
 		}
 		return true;
+	}
+
+	/* ---- remembered box shares ------------------------------------ */
+
+	public function set_line_share_key( $line_id, $key ) {
+		if ( ! isset( $this->lines[ (int) $line_id ] ) ) {
+			return false;
+		}
+		$this->lines[ (int) $line_id ]['share_key'] = is_string( $key ) && 1 === preg_match( '/^[a-f0-9]{32}$/', $key ) ? $key : null;
+		return true;
+	}
+
+	public function clear_line_share_keys( $key ) {
+		if ( '' === (string) $key ) {
+			return false;
+		}
+		foreach ( $this->lines as $id => $line ) {
+			if ( ( $line['share_key'] ?? null ) === (string) $key ) {
+				$this->lines[ $id ]['share_key'] = null;
+			}
+		}
+		return true;
+	}
+
+	public function box_shares( array $filters = array() ) {
+		$out = array();
+		foreach ( $this->box_shares as $row ) {
+			if ( isset( $filters['location_key'] ) && $row['location_key'] !== (string) $filters['location_key'] ) {
+				continue;
+			}
+			$out[] = $row;
+		}
+		usort(
+			$out,
+			static function ( $a, $b ) {
+				return strcasecmp( $a['supplier'], $b['supplier'] ) ?: ( strcasecmp( $a['origin'], $b['origin'] ) ?: ( strcasecmp( $a['species'], $b['species'] ) ?: ( strcasecmp( $a['size_label'], $b['size_label'] ) ?: ( $a['id'] <=> $b['id'] ) ) ) );
+			}
+		);
+		return $out;
+	}
+
+	public function box_share( $id ) {
+		return isset( $this->box_shares[ (int) $id ] ) ? $this->box_shares[ (int) $id ] : null;
+	}
+
+	public function box_share_by_key( $key ) {
+		foreach ( $this->box_shares as $row ) {
+			if ( '' !== (string) $key && $row['share_key'] === (string) $key ) {
+				return $row;
+			}
+		}
+		return null;
+	}
+
+	public function insert_box_share( array $row ) {
+		if ( '' === (string) ( $row['share_key'] ?? '' ) || $this->box_share_by_key( $row['share_key'] ) ) {
+			return false; // The unique key.
+		}
+		$id                      = $this->next_share++;
+		$row['id']               = $id;
+		$row['pct_per_fish']     = round( (float) ( $row['pct_per_fish'] ?? 0 ), 4 );
+		$row['updated_at']       = gmdate( 'Y-m-d H:i:s' );
+		$this->box_shares[ $id ] = Store::hydrate_box_share( $row );
+		return $id;
+	}
+
+	public function update_box_share( $id, array $fields ) {
+		if ( ! isset( $this->box_shares[ (int) $id ] ) ) {
+			return false;
+		}
+		$row     = $this->box_shares[ (int) $id ];
+		$changed = false;
+		foreach ( array( 'pct_per_fish', 'order_count', 'last_line_id', 'last_date', 'species', 'size_label' ) as $key ) {
+			if ( array_key_exists( $key, $fields ) ) {
+				$row[ $key ] = 'pct_per_fish' === $key ? round( (float) $fields[ $key ], 4 ) : $fields[ $key ];
+				$changed     = true;
+			}
+		}
+		if ( ! $changed ) {
+			return false;
+		}
+		$row['updated_at']             = gmdate( 'Y-m-d H:i:s' );
+		$this->box_shares[ (int) $id ] = Store::hydrate_box_share( $row );
+		return true;
+	}
+
+	public function delete_box_share( $id ) {
+		if ( ! isset( $this->box_shares[ (int) $id ] ) ) {
+			return false;
+		}
+		unset( $this->box_shares[ (int) $id ] );
+		return true;
+	}
+
+	/* ---- standard sizes ------------------------------------------- */
+
+	public function size_attributes() {
+		return array_values( $this->size_attributes );
+	}
+
+	public function size_terms( $taxonomy ) {
+		return isset( $this->size_terms[ (string) $taxonomy ] ) ? array_values( $this->size_terms[ (string) $taxonomy ] ) : array();
+	}
+
+	public function variation_size_values() {
+		return array_values( $this->variation_sizes );
 	}
 
 	public function stay_figures( array $stay_ids ) {

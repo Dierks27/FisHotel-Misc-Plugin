@@ -44,7 +44,12 @@
  *                           Settings), CSV, the label print page, the
  *                           product meta box.
  *   - class-costing.php     PURE: the supplier order's landed-cost maths,
- *                           replicating the workbook's order sheet.
+ *                           replicating the workbook's order sheet; a line's
+ *                           percent of a box, and the per-box summary.
+ *   - class-sizes.php       PURE: the standard fish sizes (the product
+ *                           variations' "size" attribute, else a typed list).
+ *   - class-box-shares.php  the remembered shares: the percent of a box one
+ *                           fish takes per supplier + origin + fish + size.
  *   - class-stats.php       PURE: the yearly figures, weighted and as the
  *                           spreadsheet averaged them.
  *   - class-species.php     PURE: the species master row and its merge into
@@ -171,6 +176,8 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 			require_once self::path() . 'class-parser.php';
 			require_once self::path() . 'class-qr.php';
 			require_once self::path() . 'class-costing.php';
+			require_once self::path() . 'class-sizes.php';
+			require_once self::path() . 'class-box-shares.php';
 			require_once self::path() . 'class-stats.php';
 			require_once self::path() . 'class-species.php';
 			require_once self::path() . 'class-orders.php';

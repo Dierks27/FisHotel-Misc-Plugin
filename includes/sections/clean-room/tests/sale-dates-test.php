@@ -155,8 +155,8 @@ foreach ( Store::schema( 'DEFAULT CHARSET=utf8mb4' ) as $statement ) {
 		$orders_sql = $statement;
 	}
 }
-check( 'nine CREATE TABLE statements; fh_orders has "sale_date DATE NULL," on its own line after received_date', 9 === count( Store::schema() ) && 1 === preg_match( "/\n\t+received_date DATE NULL,\n\t+sale_date DATE NULL,\n/", $orders_sql ) );
-check( 'the schema version moved to 1.3 (the install gate opens once on every site)', '1.3' === Store::DB_VERSION );
+check( 'one CREATE TABLE statement per table; fh_orders has "sale_date DATE NULL," on its own line after received_date', count( Store::TABLES ) === count( Store::schema() ) && 1 === preg_match( "/\n\t+received_date DATE NULL,\n\t+sale_date DATE NULL,\n/", $orders_sql ) );
+check( 'the schema version is 1.3 or later, and the install gate still waits for sale_date', version_compare( Store::DB_VERSION, '1.3', '>=' ) && in_array( 'sale_date', Store::REQUIRED_COLUMNS['orders'], true ) && ! Store::schema_ready( array( 'orders' => array( 'id', 'ref' ) ) ) );
 check( 'hydrate_order reads it (a zero date is none)', '2026-10-25' === Store::hydrate_order( array( 'sale_date' => '2026-10-25' ) )['sale_date'] && null === Store::hydrate_order( array( 'sale_date' => '0000-00-00' ) )['sale_date'] && null === Store::hydrate_order( array() )['sale_date'] );
 unset( $GLOBALS['wpdb'] );
 
