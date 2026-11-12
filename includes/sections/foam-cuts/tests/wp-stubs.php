@@ -18,8 +18,25 @@ if ( ! empty( $_SERVER['SCRIPT_FILENAME'] ) && realpath( $_SERVER['SCRIPT_FILENA
 	exit( 0 );
 }
 
+// ABSPATH points at a temp "WordPress" whose wp-admin/includes/upgrade.php
+// is empty: Store::install() requires that file before it calls dbDelta()
+// (which is a stub below).
 if ( ! defined( 'ABSPATH' ) ) {
-	define( 'ABSPATH', '/var/www/html/' );
+	$fh_root = rtrim( sys_get_temp_dir(), '/\\' ) . '/fh-foam-wp-' . getmypid() . '/';
+	if ( ! is_dir( $fh_root . 'wp-admin/includes' ) ) {
+		mkdir( $fh_root . 'wp-admin/includes', 0700, true );
+	}
+	file_put_contents( $fh_root . 'wp-admin/includes/upgrade.php', "<?php\n" );
+	define( 'ABSPATH', $fh_root );
+	register_shutdown_function(
+		static function () use ( $fh_root ) {
+			@unlink( $fh_root . 'wp-admin/includes/upgrade.php' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- test cleanup.
+			@rmdir( $fh_root . 'wp-admin/includes' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			@rmdir( $fh_root . 'wp-admin' ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+			@rmdir( $fh_root ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+		}
+	);
+	unset( $fh_root );
 }
 define( 'FISHOTEL_MISC_PATH', dirname( __DIR__, 4 ) . '/' );
 define( 'FISHOTEL_MISC_URL', 'https://example.test/wp-content/plugins/fishotel-misc-plugin/' );
