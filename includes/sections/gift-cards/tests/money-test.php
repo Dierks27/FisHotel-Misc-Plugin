@@ -45,6 +45,7 @@ check( 'one "issued" line in its ledger', 1 === count( $s->store->ledger_of_card
 $again = $s->issue( array( 'amount' => '50', 'delivery' => 'none', 'request_key' => 'samekeysamekey' ), fh_gc_admin_ctx() );
 $twice = $s->issue( array( 'amount' => '50', 'delivery' => 'none', 'request_key' => 'samekeysamekey' ), fh_gc_admin_ctx() );
 check( 'the same form sent twice (a double click) issues ONE card', $again['ok'] && $twice['ok'] && 'already' === $twice['code'] && 2 === $s->store->count( array( 'filter' => 'all' ) ) );
+check( '…and the second answer names the card the first made', $again['card_id'] === $twice['card_id'] );
 check( 'an amount of 0.50 is refused', ! $s->issue( array( 'amount' => '0.50', 'delivery' => 'none', 'request_key' => 'k' . str_repeat( 'a', 12 ) ), fh_gc_admin_ctx() )['ok'] );
 
 $r = $s->redeem( strtolower( str_replace( '-', ' ', $c['code'] ) ), 5, fh_gc_customer_ctx( 5 ) );

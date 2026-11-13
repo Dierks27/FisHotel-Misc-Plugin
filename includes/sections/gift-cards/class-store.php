@@ -874,6 +874,16 @@ class Store {
 	}
 
 	/**
+	 * The movement with this key, or null.
+	 *
+	 * @param string $key Idempotency key.
+	 * @return array|null
+	 */
+	public function ledger_by_key( $key ) {
+		return $this->row( 'SELECT * FROM ' . $this->table( 'gift_card_ledger' ) . ' WHERE idempotency_key = %s', array( (string) $key ) );
+	}
+
+	/**
 	 * Whether an old activity row was imported.
 	 *
 	 * @param int $legacy_activity_id Old activity id.

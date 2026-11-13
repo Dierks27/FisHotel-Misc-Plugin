@@ -78,6 +78,11 @@ $c->ensure_debited( 1001 );
 $o->update_status( 'processing' );
 check( 'paid / processing: nothing more is taken', 1000 === (int) $s->store->card( $a )['balance_cents'] );
 
+$ff = fh_order( 1009, array( 'status' => 'fulfillment', 'meta' => array( '_fishotel_fulfillment_sources' => array( 1001 ) ) ) );
+$ff->fees[] = new Fh_Fee_Item( 'fh-gift-card', -20.0, array( Checkout::FEE_META => 'yes' ) );
+$c->ensure_debited( 1009 );
+check( 'the theme\'s combined-box Fulfillment order is never charged (its source orders were)', 1000 === (int) $s->store->card( $a )['balance_cents'] && 'fulfillment' === $ff->status );
+
 echo "\nTwo tabs at checkout\n";
 Checkout::set_choice( array( 'use' => true, 'amount' => null ) );
 WC()->cart->contents_total = 40.00;

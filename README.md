@@ -11,7 +11,7 @@ FisHotel Misc Plugin provides a framework for managing independent feature "sect
 **FisHotel Tools** in wp-admin lists the sections that are switched on,
 related screens together: **Dashboard**, **Today** (the one to-do page),
 then **Fish room** — Clean Room; **Customers** — Invoices, Requests,
-Lost Fish; **Shipping** — Packing, Foam Cuts, Weather; **Site** — Health,
+Lost Fish, Gift Cards; **Shipping** — Packing, Foam Cuts, Weather; **Site** — Health,
 Snippets, Shop App and every other section. The Dashboard shows the
 section cards under the same headings, each saying in one sentence what
 the section is for and what switching it on starts by itself. Every
@@ -88,6 +88,7 @@ fishotel-misc-plugin/
 │       ├── invoices/               # Invoices: a customer's invoice built from a pick list (tank groups, shop products, the species list, typed), pre-checked against what the customer already has, published as the hidden product
 │       ├── packing/                # Packing: the standard bags, a bag size per fish, how many bags fit each box, the box suggested for an order and the one confirmed
 │       ├── foam-cuts/              # Foam Cuts: a cut sheet for the foam that lines a box — sheets and labelled leftovers in stock, a plan for the boxes of the day, straight edge-to-edge cuts
+│       ├── gift-cards/             # Gift Cards: FisHotel's own gift cards (to replace WooCommerce Gift Cards) — issue / change cards with a reason, an append-only audit log, cards bought as a product, all / part / none of the balance at checkout, stats for the books, no expiry, the old cards imported; modes Off / Shadow / Live
 │       ├── shop-app/               # Shop App: "FisHotel Shop", an installable web app for the fish room — enrolled devices, a PIN per person, the Front Desk's tank screens without a WordPress login
 │       └── site-snippets/          # Snippets: the site's own code as files in GitHub (was Code Snippets), switched on/off, run at plugins_loaded:1; plus an editor for snippets written in wp-admin (named editors only, history, audit log, export to GitHub)
 ├── admin/
@@ -100,7 +101,7 @@ fishotel-misc-plugin/
 └── README.md
 ```
 
-Each section is switched on and off in **FisHotel Tools → Dashboard** and is described in its own folder: `README.md` (what it does, its screens, its tables and options, its hooks and functions for other code) and, where it has headless tests, `tests/README.md` (how to run them and what each covers, plus what to check by hand on a real site). The sections added in 0.46 — `requests/`, `lost-fish/`, `invoices/`, `packing/`, `foam-cuts/`, `shop-app/` — each have one; so do `clean-room/` (the dose calculator, the temporary tanks, the To do list and the Stats views are chapters of its README), `today/`, `health/`, `weather/`, `lottery-draw/`, `site-snippets/`, `sticker-giveaway/` and `announcer/`.
+Each section is switched on and off in **FisHotel Tools → Dashboard** and is described in its own folder: `README.md` (what it does, its screens, its tables and options, its hooks and functions for other code) and, where it has headless tests, `tests/README.md` (how to run them and what each covers, plus what to check by hand on a real site). The sections added in 0.46 — `requests/`, `lost-fish/`, `invoices/`, `packing/`, `foam-cuts/`, `shop-app/` — and `gift-cards/` (0.47) each have one; so do `clean-room/` (the dose calculator, the temporary tanks, the To do list and the Stats views are chapters of its README), `today/`, `health/`, `weather/`, `lottery-draw/`, `site-snippets/`, `sticker-giveaway/` and `announcer/`.
 
 What the sections offer each other — each function exists while the plugin is active and answers "nothing" while its section is off (null, an empty list, `available: false`; a `WP_Error` from the one that creates), so guard with `function_exists()` and read the answer: `fishotel_cleanroom_product_facts()` and `fishotel_cleanroom_todo()` (Clean Room; actions `fishotel_cleanroom_order_line` and `fishotel_cleanroom_event_recorded`), `fishotel_requests_create()` and `fishotel_requests_get()` (Requests), `fishotel_invoices_lines_for_product()` and `fishotel_invoices_for_order()` (Invoices; action `fishotel_invoice_paid`), `fishotel_lostfish_cases_for_order()` (Lost Fish), `fishotel_packing_suggest()`, `fishotel_packing_bag_for_item()` / `_for_product()` / `_for_size()` and `fishotel_packing_confirmed_box()` (Packing), `fishotel_foam_cuts_plan()` (Foam Cuts). Each section's README has the shapes.
 
@@ -136,6 +137,8 @@ class My_feature {
 The Section Manager will automatically discover and register the section.
 
 ## Version
+
+0.47 — **Gift Cards** (new section, arrives switched off and, once on, in mode Off): FisHotel's own gift cards, built to replace the paid WooCommerce Gift Cards plugin. Cards are issued from wp-admin without an order (e-mailed now, on a date, or not at all) or bought as a product (fixed or custom amount, a recipient, a message, a delivery date); a customer adds a code to their account and at checkout chooses how much of the balance to use — all, part or none — as a "Gift card" line that is a payment, not a coupon, so tax and refunds stay right; the money goes back exactly once when an order fails, is cancelled or refunded (part of it from the order's Gift cards box). Every change to a card is a row in an append-only audit log — who, when (UTC and site time), what changed from what to what, the money, why, from where — chained so that a row edited or removed behind the plugin's back shows, and exported as CSV. The list shows the cards in use by default; Stats gives what is still owed for the books. Nothing expires. Shadow imports and counts the old plugin's cards (copy only, reconciled to the cent) while it stays in charge; Live refuses to switch on while the old plugin is on, and steps back to Shadow by itself if it comes back. Schema 1.0 (`fishotel_gift_cards_db_version`). See `gift-cards/README.md`.
 
 0.46 — Nine features in one build, each built and reviewed on its own branch from 0.45, then stacked into one line, tested together and rehearsed on a copy of the site. Every new section arrives switched off; the details of each are in its own README (`includes/sections/<slug>/README.md`), which this entry only points to.
 

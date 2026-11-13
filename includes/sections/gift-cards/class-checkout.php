@@ -373,7 +373,8 @@ class Checkout {
 			return;
 		}
 		$order = function_exists( 'wc_get_order' ) ? wc_get_order( $order_id ) : null;
-		if ( ! is_object( $order ) ) {
+		// The theme's combined-box Fulfillment order is not a sale: its source orders carry the money.
+		if ( ! is_object( $order ) || 'fulfillment' === $order->get_status() || $order->get_meta( '_fishotel_fulfillment_sources' ) ) {
 			return;
 		}
 		$service = Gift_Cards::service();

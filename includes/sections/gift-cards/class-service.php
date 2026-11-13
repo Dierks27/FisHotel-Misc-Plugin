@@ -495,12 +495,12 @@ class Service {
 			function () use ( $in, $ctx, $amount, $recipient, $sender, $delivery, $at, $order, $req_key ) {
 				$ledger_key = 'issue:' . $req_key;
 				if ( $this->store->ledger_has( $ledger_key ) ) {
-					$existing = $order ? $this->store->card_for_item( (int) $in['order_item_id'], max( 1, (int) ( $in['order_item_unit'] ?? 1 ) ) ) : null;
+					$existing = $this->store->ledger_by_key( $ledger_key );
 					return self::ok(
 						__( 'That card was already issued.', 'fishotel-misc-plugin' ),
 						array(
 							'code'    => 'already',
-							'card_id' => $existing ? (int) $existing['id'] : 0,
+							'card_id' => $existing ? (int) $existing['card_id'] : 0,
 							'send'    => false,
 						)
 					);
