@@ -709,7 +709,7 @@ The **Today** section shows it: the Clean Room hooks that section's
 a day with something due. With the Today section off nobody asks; with
 the Clean Room off there is no line.
 
-## Supplier orders (Arrivals)
+## Supplier orders (the tab once called Arrivals)
 
 What the workbook's "Recieved (N)" sheet held: one **order** per
 delivery (ref `YYYY-N`, supplier, origin, order and received dates,
@@ -804,7 +804,7 @@ the phone, and the state column of the stays CSV / XLSX ("ready (still
 in the Spa)"). The Board's building line counts the way its summary
 does: a group for sale counts as for sale, not as in QT.
 
-**Where to set them.** *Arrivals → the order → Goes on sale*: a date
+**Where to set them.** *Supplier orders → the order → Goes on sale*: a date
 picker (empty until chosen, the suggestion beside it), Save and Clear —
 its own nonce'd admin-post form, `manage_woocommerce` like every order
 edit, an invalid date refused with nothing changed, and every change

@@ -126,6 +126,12 @@ check( 'junk falls back: day 1, no repeat, kind "other", no note', 1 === steps[2
 check( 'a temporary tank is its own place: every step is "anywhere"', steps.every( function ( s ) { return 'any' === s.where; } ) );
 check( 'no rows: no steps', same( [], board.stepsFromRows( [] ) ) && same( [], board.stepsFromRows( null ) ) );
 
+console.log( 'The words on the grid and beside the day\'s headline' );
+check( 'one copper flag: "1 copper flag", two: "2 copper flags", none: nothing', '1 copper flag' === phone.flagsText( 1, {} ) && '2 copper flags' === phone.flagsText( 2, {} ) && '' === phone.flagsText( 0, {} ) );
+check( 'a tank tile counts fish, as the tank\'s own screen does (one group of 3 → "3 fish", not "1")', '3 fish · 20G long' === phone.tileText( { fish: 3, count: 1, empty: false, sizeLabel: '20G long' }, false, {} ) );
+check( '… an empty tank and the tank whose screen this is say so', 'empty' === phone.tileText( { fish: 0, count: 0, empty: true }, false, {} ) && 'here' === phone.tileText( { fish: 3, count: 1 }, true, {} ) );
+check( '… a temporary tank: what is set up in it, then its fish', 'Hospital A · quarantine · 2 fish' === phone.tileText( { temp: true, sub: 'Hospital A · quarantine', fish: 2, count: 1, empty: false }, false, {} ) && 'Hospital A · quarantine' === phone.tileText( { temp: true, sub: 'Hospital A · quarantine', fish: 0, count: 0, empty: true }, false, {} ) );
+
 console.log( '' );
 console.log( failures ? failures + ' of ' + checks + ' checks FAILED' : 'All ' + checks + ' checks passed' );
 process.exit( failures ? 1 : 0 );

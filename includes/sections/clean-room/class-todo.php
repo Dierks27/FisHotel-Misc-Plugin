@@ -617,6 +617,31 @@ class Todo {
 	}
 
 	/**
+	 * A low reading that a copper dose has followed: the water was dosed
+	 * at or after the reading, so it is not "below the floor" any more as far as
+	 * anyone knows — it reads 'dosed' (test again) until the next reading.
+	 * Any other copper is returned as it is.
+	 *
+	 * @param array   $copper system_copper().
+	 * @param array[] $rows   The water's log rows (kind, note, logged_at UTC).
+	 * @return array The same, with state 'dosed' when a copper dose came after a low reading.
+	 */
+	public static function after_dose( array $copper, array $rows ) {
+		if ( 'low' !== (string) ( $copper['state'] ?? '' ) || '' === (string) ( $copper['logged_at'] ?? '' ) ) {
+			return $copper;
+		}
+		foreach ( $rows as $row ) {
+			if ( 'dose' === (string) ( $row['kind'] ?? '' )
+				&& strcmp( (string) ( $row['logged_at'] ?? '' ), (string) $copper['logged_at'] ) >= 0
+				&& 1 === preg_match( '/copper|\bcu\b/i', (string) ( $row['note'] ?? '' ) ) ) {
+				$copper['state'] = 'dosed';
+				return $copper;
+			}
+		}
+		return $copper;
+	}
+
+	/**
 	 * The flag a block raises about its copper (null when there is none):
 	 * 'low' — the last reading is under the floor, as the tank screen
 	 * flags it — and / or 'due' — the copper test is due today and no
@@ -735,7 +760,7 @@ class Todo {
 			self::feed_lines( $live, (int) $building['id'] )
 		);
 		$label   = Layout::building_label( $building );
-		$copper  = self::system_copper( $tanks, (float) ( $settings['copper_floor'] ?? 0 ) );
+		$copper  = self::after_dose( self::system_copper( $tanks, (float) ( $settings['copper_floor'] ?? 0 ) ), $pool );
 
 		return array(
 			'type'        => 'system',
@@ -761,12 +786,13 @@ class Todo {
 	 * The block of one temporary tank that is set up: its own water, its
 	 * own schedule, its own clock. Its lines are the tank's own to-do.
 	 *
-	 * @param array  $tank     Hydrated slot (setup, occupants, todo, copper).
-	 * @param string $today    Site date.
-	 * @param array  $settings Settings (copper_floor).
+	 * @param array   $tank     Hydrated slot (setup, occupants, todo, copper).
+	 * @param string  $today    Site date.
+	 * @param array   $settings Settings (copper_floor).
+	 * @param array[] $rows     The day's log rows (a copper dose after a low reading).
 	 * @return array
 	 */
-	public static function temp_block( array $tank, $today, array $settings ) {
+	public static function temp_block( array $tank, $today, array $settings, array $rows = array() ) {
 		$setup   = (array) $tank['setup'];
 		$gallons = (int) ( $setup['gallons'] ?? 0 );
 		$fish    = 0;
@@ -799,7 +825,7 @@ class Todo {
 
 		$label  = Layout::tank_label( $tank );
 		$name   = trim( (string) ( $setup['name'] ?? '' ) );
-		$copper = self::system_copper( array( $tank ), (float) ( $settings['copper_floor'] ?? 0 ) );
+		$copper = self::after_dose( self::system_copper( array( $tank ), (float) ( $settings['copper_floor'] ?? 0 ) ), self::setup_rows( $rows, (int) $tank['id'], (int) ( $setup['id'] ?? 0 ) ) );
 		$day    = Temp_Tanks::day( $setup, $today );
 
 		return array(
@@ -863,7 +889,7 @@ class Todo {
 			if ( Layout::is_own_water( $building ) ) {
 				foreach ( Temp_Tanks::slots( $mine ) as $tank ) {
 					if ( ! empty( $tank['setup'] ) ) {
-						$temporary[] = self::temp_block( $tank, $today, $settings );
+						$temporary[] = self::temp_block( $tank, $today, $settings, $rows );
 					}
 				}
 				continue;

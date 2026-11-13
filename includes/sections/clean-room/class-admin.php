@@ -1112,7 +1112,7 @@ class Admin {
 			wp_send_json_error( array( 'message' => __( 'This stay is not linked to a product.', 'fishotel-misc-plugin' ) ), 400 );
 		}
 		if ( ! Replay::is_date( $stay['sale_ready_date'] ?? null ) ) {
-			wp_send_json_error( array( 'message' => __( 'This stay has no sale date yet — set one on its supplier order (Arrivals) or on the product page.', 'fishotel-misc-plugin' ) ), 400 );
+			wp_send_json_error( array( 'message' => __( 'This stay has no sale date yet — set one on its supplier order (Clean Room → Supplier orders) or on the product page.', 'fishotel-misc-plugin' ) ), 400 );
 		}
 
 		$product_id = (int) $stay['product_id'];

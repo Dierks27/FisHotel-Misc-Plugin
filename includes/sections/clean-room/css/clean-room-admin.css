@@ -397,6 +397,7 @@ a.fh-cr-chip--muted {
 
 .fh-cr-cu--ok  { color: var(--fh-success, #46b450); }
 .fh-cr-cu--low { color: var(--fh-danger, #dc3232); }
+.fh-cr-cu--dosed { color: #b07d00; }
 
 .fh-cr-todo {
 	color: var(--fh-text-secondary, #a0a0a0);

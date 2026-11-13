@@ -68,7 +68,7 @@ $fh_from_attr = Sizes::SOURCE_ATTRIBUTE === $fh_standard['source'];
 				<div class="fishotel-misc-card-icon"><span class="dashicons dashicons-calendar"></span></div>
 				<h2 class="fishotel-misc-card-title"><?php esc_html_e( 'Numbers', 'fishotel-misc-plugin' ); ?></h2>
 			</div>
-			<p class="fishotel-misc-card-desc"><?php esc_html_e( 'A stay is cleared the day it moves from the Spa into the Clean Room (editable per stay). A group goes on sale on the date you choose: its batch\'s date ("Goes on sale" on the supplier order, Arrivals) or its own date (the Clean room box on the product page, or Dates on the phone). The number below never puts anything on sale: it is only the suggested date (check-in + this many days) shown next to the date pickers, which a tap on "suggested …" fills in.', 'fishotel-misc-plugin' ); ?></p>
+			<p class="fishotel-misc-card-desc"><?php esc_html_e( 'A stay is cleared the day it moves from the Spa into the Clean Room (editable per stay). A group goes on sale on the date you choose: its batch\'s date ("Goes on sale" on the supplier order, Supplier orders tab) or its own date (the Clean room box on the product page, or Dates on the phone). The number below never puts anything on sale: it is only the suggested date (check-in + this many days) shown next to the date pickers, which a tap on "suggested …" fills in.', 'fishotel-misc-plugin' ); ?></p>
 
 			<div class="fh-cr-field fh-cr-field--row">
 				<label class="fh-cr-label" for="fh-cr-days"><?php esc_html_e( 'Suggested sale date: days after check-in (1–120)', 'fishotel-misc-plugin' ); ?></label>

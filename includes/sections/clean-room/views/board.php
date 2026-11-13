@@ -80,7 +80,7 @@ $fh_temp_done = false;
 			<span class="fh-cr-chip fh-cr-chip--warn"><strong><?php echo esc_html( $totals['ready_in_spa'] ); ?></strong> <?php esc_html_e( 'for sale but still in the Spa', 'fishotel-misc-plugin' ); ?></span>
 		<?php endif; ?>
 		<?php if ( $totals['no_sale_date'] > 0 ) : ?>
-			<a class="fh-cr-chip fh-cr-chip--muted" href="<?php echo esc_url( Admin::page_url( 'arrivals' ) ); ?>" title="<?php esc_attr_e( 'Set the batch\'s sale date on its supplier order (Arrivals), or a group\'s own date on its product page.', 'fishotel-misc-plugin' ); ?>"><strong><?php echo esc_html( $totals['no_sale_date'] ); ?></strong> <?php esc_html_e( 'without a sale date', 'fishotel-misc-plugin' ); ?></a>
+			<a class="fh-cr-chip fh-cr-chip--muted" href="<?php echo esc_url( Admin::page_url( 'arrivals' ) ); ?>" title="<?php esc_attr_e( 'Set the batch\'s sale date on its supplier order (Supplier orders tab), or a group\'s own date on its product page.', 'fishotel-misc-plugin' ); ?>"><strong><?php echo esc_html( $totals['no_sale_date'] ); ?></strong> <?php esc_html_e( 'without a sale date', 'fishotel-misc-plugin' ); ?></a>
 		<?php endif; ?>
 		<?php if ( $totals['needs_id'] > 0 ) : ?>
 			<a class="fh-cr-chip fh-cr-chip--warn" href="<?php echo esc_url( Admin::page_url( 'stays', array( 'needs_id' => '1' ) ) ); ?>" title="<?php esc_attr_e( 'Fish nobody knows yet (their name starts with ??). Name them with Identify… on the Stays tab, or on the phone.', 'fishotel-misc-plugin' ); ?>"><strong><?php echo esc_html( $totals['needs_id'] ); ?></strong> <?php echo esc_html( _n( 'needs identifying', 'need identifying', (int) $totals['needs_id'], 'fishotel-misc-plugin' ) ); ?></a>

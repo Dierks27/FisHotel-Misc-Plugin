@@ -696,6 +696,44 @@
 	}
 
 	/**
+	 * The small line under a tank on the grid: "here", "empty", "3 fish ·
+	 * 20G long", or for a temporary tank what is set up in it and its fish.
+	 *
+	 * @param {Object}  tk        A grid tank (fish, count, empty, temp, sub, sizeLabel).
+	 * @param {boolean} isCurrent The tank whose screen this is.
+	 * @param {Object}  strings   here, emptyTank, fishN.
+	 * @return {string}
+	 */
+	function tileText(tk, isCurrent, strings) {
+		var s = strings || {};
+		if (isCurrent) {
+			return s.here || 'here';
+		}
+		// Fish, as the tank's own screen counts them ("3 live"), not groups.
+		var fish = typeof tk.fish === 'number' ? fmt(s.fishN || '%d fish', tk.fish) : String(tk.count);
+		if (tk.temp) {
+			return (tk.sub || '') + (tk.empty ? '' : ' · ' + fish);
+		}
+		return tk.empty ? (s.emptyTank || 'empty') : fish + ' · ' + (tk.sizeLabel || '');
+	}
+
+	/**
+	 * The count of copper flags beside the day's headline: '' for none,
+	 * "1 copper flag", "2 copper flags".
+	 *
+	 * @param {number} n       Flags.
+	 * @param {Object} strings flagsOne, flagsN.
+	 * @return {string}
+	 */
+	function flagsText(n, strings) {
+		var s = strings || {};
+		if (!n) {
+			return '';
+		}
+		return fmt(n === 1 ? (s.flagsOne || '%d copper flag') : (s.flagsN || '%d copper flags'), n);
+	}
+
+	/**
 	 * The tanks of a grid building a screen offers: every rack tank; of the
 	 * temporary slots only the ones that are set up — a slot with nothing
 	 * in it is no tank to pick.
@@ -733,6 +771,8 @@
 	api.todoHeadline = todoHeadline;
 	api.moveClears = moveClears;
 	api.gridTanks = gridTanks;
+	api.tileText = tileText;
+	api.flagsText = flagsText;
 
 	root.fhFrontDeskHelpers = api;
 
@@ -1323,6 +1363,8 @@
 		var text = c ? fmt(t('copperLast', 'Cu %s'), String(parseFloat(Number(c.value).toFixed(2)))) + ' · ' + fmt(t('ago', '%s ago'), c.ago) : t('copperNone', 'no copper reading yet');
 		if (c && c.state === 'low') {
 			text += ' · ' + t('copperLow', 'below the floor');
+		} else if (c && c.state === 'dosed') {
+			text += ' · ' + t('copperDosed', 'dosed since — test again tomorrow');
 		}
 		return el('button', {
 			type: 'button',
@@ -1371,16 +1413,15 @@
 				}
 				shown++;
 				var cls = 'fh-fd-building' + (b.inQt > 0 ? ' is-qt' : '') + (coming ? ' is-coming' : '') + (b.temp ? ' is-temp' : '');
+				// The temporary slots' building is named like its area: one "Temporary" heading, not two.
+				var sameName = String(b.label) === String(area.label);
 				var head = el('div', { class: 'fh-fd-building__head' }, [
-					el('span', {}, [b.label, coming ? el('small', { text: ' · ' + t('comingSoon', 'coming soon') }) : null]),
+					el('span', {}, [sameName ? '' : b.label, coming ? el('small', { text: ' · ' + t('comingSoon', 'coming soon') }) : null]),
 					b.inQt > 0 ? el('span', { class: 'fh-fd-badge fh-fd-badge--qt', text: t('qtHere', 'QT') + ' ' + b.inQt }) : null
 				]);
 				var tanks = el('div', { class: 'fh-fd-tanks' }, list.map(function (tk) {
 					var isCurrent = tk.number === currentNumber;
-					var small = isCurrent ? t('here', 'here') : (tk.empty ? t('emptyTank', 'empty') : tk.count + ' · ' + (tk.sizeLabel || ''));
-					if (tk.temp && !isCurrent) {
-						small = (tk.sub || '') + (tk.empty ? '' : ' · ' + tk.count);
-					}
+					var small = tileText(tk, isCurrent, i18n);
 					return el('button', {
 						type: 'button',
 						class: 'fh-fd-tank' + (tk.empty ? ' is-empty' : '') + (isCurrent ? ' is-current' : '') + (tk.temp ? ' is-temp' + (tk.clean ? ' is-clean' : ' is-quarantine') : ''),
@@ -1397,7 +1438,7 @@
 						el('small', { text: t('setUp', 'Set up') })
 					]));
 				}
-				areaNode.appendChild(el('div', { class: cls }, [head, tanks]));
+				areaNode.appendChild(el('div', { class: cls }, [sameName && !(b.inQt > 0) && !coming ? null : head, tanks]));
 			});
 			if (shown) {
 				host.appendChild(areaNode);
@@ -3282,7 +3323,7 @@
 			on: { click: function () { go('today'); } }
 		}, [
 			el('span', { class: 'fh-fd-today-entry__title', text: t('today', 'Today') }),
-			el('span', { class: 'fh-fd-today-entry__count', text: todoHeadline(list, i18n) + (flags ? ' · ' + fmt(t('flagsN', '%d copper flags'), flags) : '') }),
+			el('span', { class: 'fh-fd-today-entry__count', text: todoHeadline(list, i18n) + (flags ? ' · ' + flagsText(flags, i18n) : '') }),
 			el('span', { class: 'fh-fd-today__caret', text: '▸' })
 		]);
 	}
@@ -3364,7 +3405,7 @@
 		var copper = block.copper || {};
 		var cu = '';
 		if (copper.value !== null && typeof copper.value !== 'undefined') {
-			cu = 'Cu ' + plainNumber(copper.value) + (copper.tank ? ' · ' + fmt(t('tankN', 'tank %d'), copper.tank) : '') + (copper.ago ? ' · ' + fmt(t('ago', '%s ago'), copper.ago) : '');
+			cu = 'Cu ' + plainNumber(copper.value) + (copper.tank ? ' · ' + fmt(t('tankN', 'tank %d'), copper.tank) : '') + (copper.ago ? ' · ' + fmt(t('ago', '%s ago'), copper.ago) : '') + (copper.state === 'dosed' ? ' → ' + t('copperDosedShort', 'dosed since, test again tomorrow') : '');
 		}
 		var items = block.items || [];
 		var node = el('div', { class: 'fh-fd-todo-block' + (temp ? ' is-temp' : '') + (items.length && !block.left ? ' is-done' : '') + (!items.length ? ' is-idle' : '') }, [

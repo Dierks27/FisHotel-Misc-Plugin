@@ -13,6 +13,7 @@
 
 require_once __DIR__ . '/wp-stubs.php';
 
+use FisHotel\Misc\Sections\Clean_Room\Admin_Temp;
 use FisHotel\Misc\Sections\Clean_Room\Clean_Room;
 use FisHotel\Misc\Sections\Clean_Room\Dose;
 use FisHotel\Misc\Sections\Clean_Room\Front_Desk;
@@ -291,6 +292,23 @@ act( $store, 521, 'copper', array( 'value' => '2.1' ) );
 $list = room( $store )['todo'];
 $flag = array_column( $list['flags'], null, 'where' );
 check( 'a reading under the floor is flagged low, the way the tank screen flags it — the test itself is ticked', $flag['Building 500']['low'] && ! $flag['Building 500']['due'] && 'low' === block( $list, 500 )['copper']['state'] && true === lines( block( $list, 500 ) )['Copper test'] );
+// A copper dose after the low reading: the water is no longer "below the floor" as far as anyone knows.
+$fh_low = block( $list, 500 )['copper'];
+check( 'after_dose(): a dose logged before the low reading changes nothing', 'low' === Todo::after_dose( $fh_low, array( array( 'kind' => 'dose', 'note' => 'Copper Power 16.6 ml', 'logged_at' => '2000-01-01 00:00:00' ) ) )['state'] );
+check( 'after_dose(): another medication, or a note with no copper, changes nothing', 'low' === Todo::after_dose( $fh_low, array( array( 'kind' => 'dose', 'note' => 'Test Antibiotic 2 tabs', 'logged_at' => '2999-01-01 00:00:00' ), array( 'kind' => 'note', 'note' => 'copper power bottle low', 'logged_at' => '2999-01-01 00:00:00' ) ) )['state'] );
+check( 'after_dose(): a good reading is never turned into "dosed"', 'ok' === Todo::after_dose( array( 'value' => 2.5, 'logged_at' => '2026-01-01 00:00:00', 'state' => 'ok' ), array( array( 'kind' => 'dose', 'note' => 'Copper Power 2 ml', 'logged_at' => '2999-01-01 00:00:00' ) ) )['state'] );
+act( $store, 0, 'todo_tick', array( 'scope' => 'system', 'building' => $store->tank_by_number( 521 )['building_id'], 'key' => 'copper power to 2.4', 'kind' => 'dose', 'label' => 'Copper Power to 2.4' ) );
+$list = room( $store )['todo'];
+$flag = array_column( $list['flags'], null, 'where' );
+check( 'a copper dose on the system after the low reading: no "below the floor" flag, the block reads "dosed"', ! isset( $flag['Building 500'] ) && 'dosed' === block( $list, 500 )['copper']['state'] && 1 === count( $list['flags'] ), json_encode( $list['flags'] ) );
+check( '… and says so in words: dosed since, test again tomorrow', false !== strpos( Admin_Temp::copper_text( block( $list, 500 )['copper'] ), 'Cu 2.1 · tank 521' ) && false !== strpos( Admin_Temp::copper_text( block( $list, 500 )['copper'] ), '→ dosed since, test again tomorrow' ) );
+$fh_line = Todo::today_line( Todo::summary( $list, 'u' ) );
+check( '… one flag left (the other building): Today says "1 copper flag", not "1 copper flags"', is_array( $fh_line ) && '1 copper flag' === $fh_line['detail'], json_encode( $fh_line ) );
+$fh_521 = $store->tank_by_number( 521 );
+$fh_tk  = array( 'id' => $fh_521['id'], 'building_id' => $fh_521['building_id'], 'copper' => block( $list, 500 )['copper'] );
+check( 'the tank\'s own screen follows: "dosed", not "low"', 'dosed' === Front_Desk::tank_copper_state( $fh_tk, $list, 2.25 ) );
+$fh_tk['building_id'] = (int) $store->tank_by_number( 621 )['building_id'];
+check( '… but only for the water that was dosed', 'low' === Front_Desk::tank_copper_state( $fh_tk, $list, 2.25 ) );
 act( $store, 513, 'copper', array( 'value' => '2.5' ) );
 $list = room( $store )['todo'];
 check( 'a good reading anywhere in the system clears the flag', array( 'Building 600' ) === array_column( $list['flags'], 'where' ) && 'ok' === block( $list, 500 )['copper']['state'] );

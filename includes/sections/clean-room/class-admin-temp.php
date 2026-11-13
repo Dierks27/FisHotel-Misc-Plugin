@@ -336,6 +336,9 @@ class Admin_Temp {
 			/* translators: %s: age, e.g. "3 h" */
 			$text .= ' · ' . sprintf( __( '%s ago', 'fishotel-misc-plugin' ), (string) $copper['ago'] );
 		}
+		if ( 'dosed' === (string) ( $copper['state'] ?? '' ) ) {
+			$text .= ' → ' . __( 'dosed since, test again tomorrow', 'fishotel-misc-plugin' );
+		}
 		return $text;
 	}
 

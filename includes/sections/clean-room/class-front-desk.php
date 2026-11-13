@@ -332,6 +332,7 @@ class Front_Desk {
 			'todayToDo'   => __( 'Today · %d to do', 'fishotel-misc-plugin' ),
 			'todayNone'   => __( 'Today · all done', 'fishotel-misc-plugin' ),
 			'cuLow'       => __( 'Cu low', 'fishotel-misc-plugin' ),
+			'copperDosed' => __( 'dosed since — test again tomorrow', 'fishotel-misc-plugin' ),
 			'whyMove'     => __( 'Why? (optional)', 'fishotel-misc-plugin' ),
 			'clearBuilding' => __( 'Clear building', 'fishotel-misc-plugin' ),
 			'bullying'    => __( 'Bullying', 'fishotel-misc-plugin' ),
@@ -466,6 +467,9 @@ class Front_Desk {
 			'flagLast'           => __( 'last one %1$s, %2$s ago', 'fishotel-misc-plugin' ),
 			/* translators: %d: copper flags */
 			'flagsN'             => __( '%d copper flags', 'fishotel-misc-plugin' ),
+			/* translators: %d: copper flags (one) */
+			'flagsOne'           => __( '%d copper flag', 'fishotel-misc-plugin' ),
+			'copperDosedShort'   => __( 'dosed since, test again tomorrow', 'fishotel-misc-plugin' ),
 			'temporary'          => __( 'Temporary', 'fishotel-misc-plugin' ),
 			/* translators: %d: fish */
 			'fishN'              => __( '%d fish', 'fishotel-misc-plugin' ),
@@ -579,7 +583,7 @@ class Front_Desk {
 				'value'    => (float) $current['copper']['value'],
 				'loggedAt' => (string) $current['copper']['logged_at'],
 				'ago'      => self::relative_age( max( 0, time() - $ts ) ),
-				'state'    => Protocol::copper_state( (float) $current['copper']['value'], (float) $settings['copper_floor'] ),
+				'state'    => self::tank_copper_state( $current, is_array( $room['todo'] ) ? $room['todo'] : array(), (float) $settings['copper_floor'] ),
 			);
 		}
 
@@ -719,6 +723,34 @@ class Front_Desk {
 			'startMin'  => Replay::add_days( $today, -Temp_Tanks::START_BACK ),
 			'startMax'  => Replay::add_days( $today, Temp_Tanks::START_AHEAD ),
 		);
+	}
+
+	/**
+	 * A tank's copper as its screen shows it: ok / low against the floor,
+	 * or 'dosed' when the reading is low but its water (the building's
+	 * system, or a temporary tank's own) was dosed with copper after that
+	 * reading — the day's list knows (Todo::after_dose()).
+	 *
+	 * @param array $tank  Hydrated tank (id, building_id, copper).
+	 * @param array $list  Today's list (blocks with copper).
+	 * @param float $floor The copper floor.
+	 * @return string ok|low|dosed|none
+	 */
+	public static function tank_copper_state( array $tank, array $list, $floor ) {
+		$value = isset( $tank['copper']['value'] ) ? (float) $tank['copper']['value'] : null;
+		$state = Protocol::copper_state( $value, (float) $floor );
+		if ( 'low' !== $state ) {
+			return $state;
+		}
+		foreach ( (array) ( $list['blocks'] ?? array() ) as $block ) {
+			$mine = 'temp' === ( $block['type'] ?? '' )
+				? (int) ( $block['tank_id'] ?? 0 ) === (int) ( $tank['id'] ?? 0 )
+				: (int) ( $block['building_id'] ?? 0 ) === (int) ( $tank['building_id'] ?? 0 );
+			if ( $mine && 'dosed' === ( $block['copper']['state'] ?? '' ) && strcmp( (string) ( $tank['copper']['logged_at'] ?? '' ), (string) ( $block['copper']['logged_at'] ?? '' ) ) <= 0 ) {
+				return 'dosed';
+			}
+		}
+		return $state;
 	}
 
 	/**
@@ -869,6 +901,7 @@ class Front_Desk {
 						'sizeLabel' => (string) $tank['size_label'],
 						'empty'     => empty( $tank['occupants'] ),
 						'count'     => count( (array) ( $tank['occupants'] ?? array() ) ),
+						'fish'      => array_sum( array_map( 'intval', array_column( (array) ( $tank['occupants'] ?? array() ), 'qty_live' ) ) ),
 						'current'   => (int) $tank['number'] === (int) $current,
 						'url'       => Clean_Room::front_desk_url( (int) $tank['number'] ),
 						'temp'      => $slot,

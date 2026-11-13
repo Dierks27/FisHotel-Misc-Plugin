@@ -537,9 +537,9 @@ class Admin_Import {
 		$refs = implode( ', ', array_values( array_unique( array_map( 'strval', $refs ) ) ) );
 		return $done
 			/* translators: 1: groups, 2: order refs */
-			? sprintf( _n( 'Sale dates: %1$d group in tanks has no sale date yet, so it is not for sale — set "Goes on sale" on its supplier order (Arrivals → %2$s), or a group\'s own date on its product page.', 'Sale dates: %1$d groups in tanks have no sale date yet, so they are not for sale — set "Goes on sale" on their supplier orders (Arrivals → %2$s), or a group\'s own date on its product page.', $groups, 'fishotel-misc-plugin' ), $groups, $refs )
+			? sprintf( _n( 'Sale dates: %1$d group in tanks has no sale date yet, so it is not for sale — set "Goes on sale" on its supplier order (Supplier orders → %2$s), or a group\'s own date on its product page.', 'Sale dates: %1$d groups in tanks have no sale date yet, so they are not for sale — set "Goes on sale" on their supplier orders (Supplier orders → %2$s), or a group\'s own date on its product page.', $groups, 'fishotel-misc-plugin' ), $groups, $refs )
 			/* translators: 1: groups, 2: order refs */
-			: sprintf( _n( '%1$d group would be in tanks with no sale date (the workbook carries none): after the import, set "Goes on sale" on its supplier order (Arrivals → %2$s).', '%1$d groups would be in tanks with no sale date (the workbook carries none): after the import, set "Goes on sale" on their supplier orders (Arrivals → %2$s).', $groups, 'fishotel-misc-plugin' ), $groups, $refs );
+			: sprintf( _n( '%1$d group would be in tanks with no sale date (the workbook carries none): after the import, set "Goes on sale" on its supplier order (Supplier orders → %2$s).', '%1$d groups would be in tanks with no sale date (the workbook carries none): after the import, set "Goes on sale" on their supplier orders (Supplier orders → %2$s).', $groups, 'fishotel-misc-plugin' ), $groups, $refs );
 	}
 
 	/**

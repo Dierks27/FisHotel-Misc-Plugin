@@ -1017,3 +1017,6 @@ button.fh-fd-occ:active {
 .fh-fd-dosed.is-after {
 	border-left-color: var(--fd-danger);
 }
+
+/* A low reading followed by a copper dose: amber, "test again tomorrow". */
+.fh-fd-copper.is-dosed { border-color: #d4a017; color: #ffd98a; }

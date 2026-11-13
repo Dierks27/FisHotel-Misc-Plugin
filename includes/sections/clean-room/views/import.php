@@ -98,7 +98,7 @@ $fh_spa     = $import['spa_buildings'];
 					<td class="fh-cr-num"><?php echo esc_html( $fh_p['stays']['lines'] ); ?></td>
 					<td class="fh-cr-num">—</td>
 					<td class="fh-cr-num">—</td>
-					<td class="fh-cr-sub"><?php echo esc_html( sprintf( /* translators: 1: orders, 2: days */ __( 'lines with fish on the %1$d batches received in the last %2$d days, checked in like the Arrivals button (a line that already has a stay is skipped)', 'fishotel-misc-plugin' ), (int) $fh_p['stays']['orders'], (int) Import::DEFAULT_STAYS_DAYS ) ); ?></td>
+					<td class="fh-cr-sub"><?php echo esc_html( sprintf( /* translators: 1: orders, 2: days */ __( 'lines with fish on the %1$d batches received in the last %2$d days, checked in like the "Check in received fish" button (a line that already has a stay is skipped)', 'fishotel-misc-plugin' ), (int) $fh_p['stays']['orders'], (int) Import::DEFAULT_STAYS_DAYS ) ); ?></td>
 				</tr>
 			</tbody>
 		</table>

@@ -62,6 +62,7 @@ php  includes/sections/clean-room/tests/todo-test.php
 php  includes/sections/clean-room/tests/temp-board-test.php
 php  includes/sections/clean-room/tests/temp-guards-test.php
 php  includes/sections/clean-room/tests/dose-temp-test.php
+php  includes/sections/clean-room/tests/order-view-test.php
 node includes/sections/clean-room/tests/front-desk.test.js
 node includes/sections/clean-room/tests/clean-room-admin.test.js
 node includes/sections/clean-room/tests/dose-math.test.js
@@ -572,10 +573,17 @@ system temp directory (`FH_TEST_TMP` overrides).
   one tank — and every tank of the building then showing it; the
   feeding as one line, tank by tank or all at once; the count at the
   top, "all done", an empty room; the copper flags (low, due, overdue,
-  none for a tank without a copper test); a temporary tank beside the
+  none for a tank without a copper test; a copper dose after a low
+  reading turns "below the floor" into "dosed since, test again
+  tomorrow" on the list and on the tank's own screen, and "1 copper
+  flag" is singular); a temporary tank beside the
   buildings (its own lines, marked, not ticked by a building's dose);
   the guards of a tick; the pool, the overlay, `spread_logs()` and
   `merge_copper()` for a slot; the list on the phone's screens.
+- **order-view-test.php** — the supplier order screen read as text: the
+  "Goes on sale" card under the order's title, its fields posting to
+  their own form (no form inside a form), so the order's Save never
+  carries the sale date.
 - **temp-board-test.php** — the Board's side and the seams: the one
   AJAX write (`Admin_Temp::request()`: 403 without the capability or
   with a stale nonce, 400 for an act that is not a temporary-tank or
@@ -895,7 +903,7 @@ system temp directory (`FH_TEST_TMP` overrides).
     product* → type a product title → pick it: the row shows the product
     link. Front Desk → Arrival → type the species' name: it is offered
     once (not twice when its name is a product's title).
-11. Arrivals → New order: supplier, origin, box mode, tariffs / flight /
+11. Supplier orders → New order: supplier, origin, box mode, tariffs / flight /
     import fees; two lines picked from the suggestions (the worth
     prefilled from the species' price), ordered / received / price;
     Save: the ref reads `2026-1`, the computed columns and the stats
@@ -946,7 +954,7 @@ system temp directory (`FH_TEST_TMP` overrides).
     Box rates filled; the file is gone. Upload the same file again and
     Import now: every count but the species updates is 0, nothing new on
     the Board or the Events tab. Upload and Discard: the file is gone.
-17. Sale dates. Arrivals → an order with checked-in fish: the *Goes on
+17. Sale dates. Supplier orders → an order with checked-in fish: the *Goes on
     sale* card shows an empty picker and "suggested <check-in + 28>";
     click the suggestion — the picker fills, nothing is saved; reload —
     still empty. Pick a date in the past and Save: the notice "Order … goes
