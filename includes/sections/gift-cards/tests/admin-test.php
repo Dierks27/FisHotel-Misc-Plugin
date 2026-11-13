@@ -111,6 +111,19 @@ fh_order( 8001, array( 'customer_id' => 9 ) );
 $r = Admin::perform( 'restore_part', array( 'order' => 8001, 'amount' => '4', 'reason' => 'one fish refunded', 'request_key' => Service::new_request_key() ), $o );
 check( 'restore_part: $4 back, with an order note', $r['ok'] && 1400 === (int) $s->store->card( $id )['balance_cents'] && false !== strpos( end( wc_get_order( 8001 )->notes ), '$4.00 was put back' ) );
 
+echo "\nShop managers allowed to edit, but not to see codes\n";
+$GLOBALS['fh_mails'] = array();
+$se   = fh_gc_service( $s->store, array( 'editor_capability' => 'manage_woocommerce' ) );
+$ed   = fh_ctx( $se, 2, 'live' );
+$card = $s->store->card( $id );
+$r    = Admin::perform( 'resend', array( 'card' => $id, 'to' => 'outside@example.net' ), $ed );
+check( 'they cannot send a card\'s e-mail (with its full code) to another address', 'refused' === $r['code'] && array() === $GLOBALS['fh_mails'] && false !== strpos( $r['message'], 'site owner' ) );
+check( '…they can send it again to the card\'s own address (left empty, or typed in another letter case)', Admin::perform( 'resend', array( 'card' => $id ), $ed )['ok'] && Admin::perform( 'resend', array( 'card' => $id, 'to' => strtoupper( $card['recipient_email'] ) ), $ed )['ok'] && 2 === count( $GLOBALS['fh_mails'] ) );
+$r = Admin::perform( 'details', array( 'card' => $id, 'recipient_name' => 'Pat T', 'recipient_email' => 'outside@example.net', 'sender_name' => '', 'sender_email' => '', 'message' => 'hi' ), $ed );
+check( '…nor change where its e-mail goes', 'refused' === $r['code'] && $card['recipient_email'] === $s->store->card( $id )['recipient_email'] );
+$r = Admin::perform( 'details', array( 'card' => $id, 'recipient_name' => 'Pat Tester', 'recipient_email' => $card['recipient_email'], 'sender_name' => '', 'sender_email' => $card['sender_email'], 'message' => 'hi' ), $ed );
+check( '…but can change the name and the message', $r['ok'] && 'Pat Tester' === $s->store->card( $id )['recipient_name'] );
+
 echo "\nThe mode and the settings\n";
 $r = Admin::perform( 'mode', array( 'mode' => 'shadow', 'reason' => 'checking the import' ), $o );
 check( 'Off → Shadow: saved and logged with the reason', $r['ok'] && 'shadow' === Modes::stored() && 1 === $s->store->audit_count( array( 'action' => 'mode' ) ) && 'checking the import' === $s->store->audit_rows( array( 'action' => 'mode' ), 1 )[0]['reason'] );

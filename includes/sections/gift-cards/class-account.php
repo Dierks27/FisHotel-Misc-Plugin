@@ -12,9 +12,10 @@
  * not used either — they belong to the old plugin's cards.
  *
  * The page: the balance, "Redeem a gift card" (a code into the account),
- * cards sent to the customer's e-mail address that are in nobody's account
- * yet ("Add to my account", no code needed), the cards in the account
- * with their full codes (it is theirs), and the activity, 20 a page.
+ * the cards in the account with their full codes (it is theirs), and the
+ * activity, 20 a page. A card only goes into an account with its code
+ * typed: an account's e-mail address is not proof of anything
+ * (WooCommerce saves a changed address without checking it).
  *
  * Every POST: nonce first, then logged in, then the Service decides
  * whose card it is. A customer never sees or uses another's card.
@@ -176,9 +177,6 @@ class Account {
 			}
 			return $r;
 		}
-		if ( 'claim' === $action ) {
-			return $service->claim( (int) ( $post['card'] ?? 0 ), $user_id, $email, $ctx );
-		}
 		return Service::fail( 'form', __( 'That did not work. Please try again.', 'fishotel-misc-plugin' ) );
 	}
 
@@ -225,7 +223,6 @@ class Account {
 		return array(
 			'balance'      => (int) $wallet['balance'],
 			'cards'        => $wallet['all'],
-			'unclaimed'    => $service->store->unclaimed_for_email( (string) $email ),
 			'activity'     => $service->store->ledger_of_cards( $ids, self::PER_PAGE, ( $page - 1 ) * self::PER_PAGE ),
 			'codes'        => $codes,
 			'current_page' => $page,

@@ -64,4 +64,12 @@ $fh_n = static function ( $n ) {
 		<?php endforeach; ?>
 	</div>
 <?php endif; ?>
+<?php if ( ! empty( $fh_s['unlogged'] ) ) : ?>
+	<div class="fishotel-misc-notice fishotel-misc-notice--error">
+		<?php esc_html_e( 'These cards\' money was moved without a matching row in the audit log — something changed them outside this plugin. Look at their history and audit log:', 'fishotel-misc-plugin' ); ?>
+		<?php foreach ( $fh_s['unlogged'] as $fh_u ) : ?>
+			<a href="<?php echo esc_url( Admin::card_url( (int) $fh_u ) ); ?>">#<?php echo esc_html( (string) (int) $fh_u ); ?></a>
+		<?php endforeach; ?>
+	</div>
+<?php endif; ?>
 <p><a class="button" href="<?php echo esc_url( Admin::page_url( 'audit', array( 'verify' => 1 ) ) ); ?>"><?php esc_html_e( 'Check the audit log has not been tampered with', 'fishotel-misc-plugin' ); ?></a></p>

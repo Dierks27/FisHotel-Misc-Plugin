@@ -610,20 +610,6 @@ class Store {
 	}
 
 	/**
-	 * Cards not in anyone's account, sent to this e-mail address.
-	 *
-	 * @param string $email E-mail address.
-	 * @return array[]
-	 */
-	public function unclaimed_for_email( $email ) {
-		$email = strtolower( trim( (string) $email ) );
-		if ( '' === $email ) {
-			return array();
-		}
-		return $this->rows( 'SELECT * FROM ' . $this->table( 'gift_cards' ) . " WHERE owner_user_id = 0 AND status = 'active' AND balance_cents > 0 AND LOWER(recipient_email) = %s ORDER BY id ASC LIMIT 100", array( $email ) );
-	}
-
-	/**
 	 * Cards by id.
 	 *
 	 * @param int[] $ids Card ids.
@@ -974,6 +960,41 @@ class Store {
 	 */
 	public function mismatches( $limit = 50 ) {
 		return $this->rows( 'SELECT c.id, c.balance_cents, COALESCE(SUM(l.amount_cents), 0) AS ledger_cents FROM ' . $this->table( 'gift_cards' ) . ' c LEFT JOIN ' . $this->table( 'gift_card_ledger' ) . ' l ON l.card_id = c.id GROUP BY c.id, c.balance_cents HAVING COALESCE(SUM(l.amount_cents), 0) <> c.balance_cents ORDER BY c.id ASC LIMIT %d', array( max( 1, (int) $limit ) ) );
+	}
+
+	/**
+	 * Cards whose money movements do not each have their audit log row
+	 * (the health check: it must always be empty). Every movement made
+	 * here writes a row with the same amount; imported history must add
+	 * up to the balance the import's own rows wrote down. Money moved by
+	 * SQL alone shows here — and a matching audit row cannot be forged
+	 * without the chain key.
+	 *
+	 * @param int $limit Most.
+	 * @return int[] Card ids.
+	 */
+	public function unlogged_movements( $limit = 50 ) {
+		$l     = $this->table( 'gift_card_ledger' );
+		$a     = $this->table( 'gift_card_audit' );
+		$limit = max( 1, (int) $limit );
+		$own   = $this->rows(
+			'SELECT card_id FROM ('
+			. " SELECT card_id, amount_cents AS d, 1 AS n FROM {$l} WHERE legacy_activity_id IS NULL AND type <> 'import_adjust' AND amount_cents <> 0"
+			. " UNION ALL SELECT card_id, delta_cents AS d, -1 AS n FROM {$a} WHERE action IN ('issue', 'balance', 'use', 'restore') AND delta_cents IS NOT NULL AND delta_cents <> 0"
+			. ' ) x GROUP BY card_id, d HAVING SUM(n) <> 0 ORDER BY card_id ASC LIMIT %d',
+			array( $limit )
+		);
+		$old   = $this->rows(
+			'SELECT card_id FROM ('
+			. " SELECT card_id, amount_cents AS v FROM {$l} WHERE legacy_activity_id IS NOT NULL OR type = 'import_adjust'"
+			. " UNION ALL SELECT card_id, -CAST(new_value AS SIGNED) AS v FROM {$a} WHERE action = 'import' AND field = 'balance'"
+			. " UNION ALL SELECT card_id, -delta_cents AS v FROM {$a} WHERE action = 'import_update' AND field = 'balance' AND delta_cents IS NOT NULL"
+			. ' ) x GROUP BY card_id HAVING SUM(v) <> 0 ORDER BY card_id ASC LIMIT %d',
+			array( $limit )
+		);
+		$ids = array_values( array_unique( array_map( 'intval', array_merge( array_column( $own, 'card_id' ), array_column( $old, 'card_id' ) ) ) ) );
+		sort( $ids );
+		return array_slice( $ids, 0, $limit );
 	}
 
 	/* ============================================================== */

@@ -107,7 +107,12 @@ check( 'in wp-admin the order screen gets its Gift cards box', in_array( 'add_me
 
 echo "\nLive, but the old plugin is switched on again\n";
 $b = fh_boot( 'live', false, array( 'woocommerce-gift-cards/woocommerce-gift-cards.php' ) );
-check( 'it behaves as Shadow by itself: nothing on checkout, My Account or products', array() === array_intersect( $shop_hooks, $b['hooks'] ) );
+$pay_hooks = array( 'woocommerce_cart_calculate_fees', 'woocommerce_checkout_order_created', 'woocommerce_account_giftcards_endpoint', 'woocommerce_before_add_to_cart_button', 'woocommerce_payment_complete', 'woocommerce_order_status_processing' );
+check( 'it behaves as Shadow by itself: nothing pays, nothing on My Account or products', array() === array_intersect( $pay_hooks, $b['hooks'] ) );
+check( '…but money these cards took still goes back: failed, cancelled, refunded, trashed and deleted stay hooked', array() === array_diff( array( 'woocommerce_order_status_failed', 'woocommerce_order_status_cancelled', 'woocommerce_order_status_refunded', 'woocommerce_order_refunded', 'woocommerce_trash_order', 'woocommerce_before_delete_order', 'wp_trash_post', 'before_delete_post' ), $b['hooks'] ) );
+$undo = array_filter( $GLOBALS['fh_actions']['woocommerce_order_status_refunded'] ?? array(), static function ( $e ) { return is_array( $e[0] ) && $e[0][0] instanceof \FisHotel\Misc\Sections\Gift_Cards\Product && 'undone_note' === $e[0][1]; } );
+check( '…and so does holding back a refunded purchase\'s card e-mail', 1 === count( $undo ) );
+check( '…and booting sent no query', array() === $b['queries'] );
 check( 'Modes says why', array( 'stored' => 'live', 'effective' => 'shadow', 'legacy' => true, 'fallback' => true ) === Modes::current() );
 $b = fh_boot( 'live', true, array( 'woocommerce-gift-cards/woocommerce-gift-cards.php' ) );
 $GLOBALS['fh_user_caps']['manage_woocommerce'] = array( 1 );

@@ -10,11 +10,14 @@ What it does:
   the code sent now, on a date (9 am site time) or not at all.
 - **Change a card** — add or take off money (a reason is required), who it is for / from, the message,
   disabled / active (a reason is required), send the e-mail again (to the recipient or another address).
+  The e-mail holds the full code, so only the owner may send it to another address or change a card's
+  e-mail addresses — also when Settings let shop managers change balances.
 - **The audit log** — every change, append-only, exportable (see *The audit log* below).
 - **Buy a card as a product** — fixed amounts (the price, or each variation's price) and/or a custom
   amount, recipient / sender / message / delivery date; issued once per unit when the order is paid.
 - **Redeem a code into the account** and, at checkout, **use all, part or none of the balance**.
-- **My Account → Gift Cards** — balance, redeem, cards sent to me, my cards with their codes, activity.
+- **My Account → Gift Cards** — balance, redeem (a card goes into an account only with its code typed),
+  my cards with their codes, activity.
 - **The list**, **Stats** for the books, **no expiry**, and the **import** of every old card.
 
 ## Modes (`fishotel_gift_cards_mode`, autoloaded)
@@ -30,6 +33,13 @@ entry in the active plugins — whatever its folder), nor while its tables hold 
 cleanly: the last import must be reconciled to the cent and must have seen exactly the rows the old tables
 have now (`Modes::live_blockers()`). If the old plugin is switched on again while Live is stored, the
 section behaves as Shadow by itself and wp-admin says why — two systems never take money for the same cards.
+In that fallback nothing pays with these cards, but money they already took still goes back (failed,
+cancelled, refunded, trashed) and a refunded purchase still holds back its card's e-mail.
+
+**After Live, the old plugin must stay off.** Its tables still hold the balances of the day of the import:
+switched on again, it would let customers spend money that was already spent here, and this section cannot
+stop it (the old plugin's code is not known here). If the old plugin must come back, the old balances have
+to be brought up to date by hand first — the export of this section's cards is the list to do it from.
 
 ## The screens (FisHotel Tools → Gift Cards)
 
@@ -61,8 +71,11 @@ All money is **whole cents** (`bigint`), never a float.
 - **Paying.** The checkout box is the theme's own `#use_gift_card_balance` checkbox (so its CSS, its
   `update_checkout` wiring and its PayPal smart-button guard work unchanged) plus **How much to use** —
   all of it unless changed, never more than the order (goods, shipping and other fees before tax: what a
-  negative fee may cover in WooCommerce). It becomes one **negative, non-taxable fee "Gift card"**: tax is
-  worked out on the goods as before, and WooCommerce, e-mails, PDFs and PayPal all see a fee. A hidden
+  negative fee may cover in WooCommerce). It becomes one **negative fee "Gift card" with no tax of its
+  own**: WooCommerce would otherwise split a negative fee's tax over the goods (at checkout, and again on
+  Recalculate) as if it were a discount, so the shop would collect the card's "own tax" less;
+  `woocommerce_cart_totals_get_fees_from_cart_taxes` and `woocommerce_order_item_fee_after_calculate_taxes`
+  give it none. Tax is worked out on the goods as before, and WooCommerce, e-mails, PDFs and PayPal all see a fee. A hidden
   `.fh-gc-applied` marker goes in the totals, so the theme hides PayPal's smart buttons as it does today.
 - **Charging.** When the order is created (`woocommerce_checkout_order_created`) the fee's amount is taken
   from the customer's cards, the oldest added first, in **one transaction** holding the section's database
@@ -71,13 +84,23 @@ All money is **whole cents** (`bigint`), never a float.
   no longer hold it — spent in another tab — nothing is taken and the checkout stops with *"Your gift card
   balance changed since this page was opened… please check your order and place it again."* The same order
   and amount asked again takes nothing (an order is charged once); a changed amount puts the old one back
-  first. When the order is paid / processing / on hold / completed it is checked again: an order paid again
-  after it failed is charged again; if the cards cannot cover it, the order goes **on hold** with a note.
-- **Putting back — exactly once.** Failed, cancelled (a paid one too unless Settings say no), refunded, or
-  trashed / deleted while unpaid: everything still on the order goes back, keyed
-  `restore:<order>:<card>:<n>`, so however often or in whatever order the hooks fire it happens once. A
-  **partial refund** is never automatic (the refund may already have gone to the payment method): the
-  order gets a note, and the Gift cards box puts back any part of it, never more than is still out.
+  first. When the order is paid / processing / on hold / completed it is checked again, and charged only
+  when nothing is out on it: never charged yet (the block checkout, pay-for-order), or all put back by
+  itself after it failed or was cancelled and then paid after all. An amount already taken is never changed
+  there, and money put back by hand with the Gift cards box is never taken again. If the cards cannot cover
+  it, the order goes **on hold** with a note.
+- **Putting back — exactly once.** Failed, cancelled (a paid one too unless Settings say no), refunded
+  **with every item's whole quantity**, or trashed / deleted while unpaid: everything still on the order
+  goes back, keyed `restore:<order>:<card>:<n>`, so however often or in whatever order the hooks fire it
+  happens once. WooCommerce also marks an order Refunded when only the money paid some other way is all
+  returned (with $90 of $100 on a card, a $10 refund for one of two items), and when the status is set to
+  Refunded by hand: then nothing goes back by itself and a note points at the Gift cards box. A **partial
+  refund** is never automatic either (the refund may already have gone to the payment method): the order
+  gets a note, and the Gift cards box puts back any part of it, never more than is still out.
+- **A bought card's order refunded or cancelled.** Every card it issued that nobody has used or added to
+  an account, and whose e-mail was not sent yet, gets its e-mail **held back** (`email_state` `held`,
+  logged): the hourly job never sends it, and the card's Send button still can. The order note names the
+  held cards and the ones that still work; nothing is switched off by itself.
 - **Several cards** pay one order together; it is all or nothing.
 - **No expiry.** There is no expiry column for a card. An imported card's old expiry date is kept in
   `legacy_expires_at`, shown on its page and in the list filter, and never enforced.
@@ -88,7 +111,8 @@ All money is **whole cents** (`bigint`), never a float.
 
 Imported activity keeps its order ids, so an old order that used a card shows **Gift card: −$X** in its
 totals (e-mails, thank-you page, My Account, the admin screen), **Recalculate** keeps that deduction
-(Settings), and refunding or cancelling it puts the money back on the card — in this system, exactly once.
+(Settings), and refunding (every item) or cancelling it puts the money back on the card — in this system,
+exactly once.
 
 ## The audit log (`{prefix}fh_gift_card_audit`)
 
@@ -103,9 +127,13 @@ shown, import (per card, and per run), mode, every setting, export.
 Nothing in the plugin edits or deletes a row (the Store has no such method; a test reads it). Each row
 carries `prev_hash` and `row_hash` = HMAC-SHA256 of its fields and the previous hash, keyed with
 `FISHOTEL_GIFT_CARDS_AUDIT_KEY` when wp-config.php defines it, else the site's AUTH salt; the newest row's
-id and hash are also kept in `fishotel_gift_cards_audit_head`. **Check the log** shows a row changed, a row
-removed from the middle, or rows cut off the end. Rows written before the site's salts were changed are
-reported as "written under an earlier site key", not as tampered with. (Someone who can change both the
+id and hash are also kept in `fishotel_gift_cards_audit_head`, signed with the same key. **Check the log**
+shows a row changed, a row removed from the middle, rows cut off the end, and that record changed or
+missing. Rows written before the site's salts were changed are reported as "written under an earlier site
+key" — a warning that they could not be checked, not "tampered" — but only rows before the first row
+under today's key: one after it is reported as changed. The Stats tab's **health check** also matches every
+money movement to its audit row (same card, same amount; imported history must add up to what the import's
+own rows wrote down), so money moved with SQL alone — even with the balance kept in step — is named. (Someone who can change both the
 database and wp-config.php could rebuild the chain; the export is the copy kept elsewhere.)
 
 ## The import (Import tab; Shadow or Live; the owner)
@@ -147,7 +175,7 @@ every old card is here and holds exactly its old balance, active and disabled to
 
 | Table | Holds |
 |---|---|
-| `{prefix}fh_gift_cards` | one row per card: `code`, `code_key` (UNIQUE; upper case, letters and digits only), `status` (active / disabled), `amount_cents`, `balance_cents` (a cache of its ledger — the health check compares them), `owner_user_id` (0 = in nobody's account), `redeemed_at`, recipient / sender / message, `deliver_at`, `email_state` (none / pending / sending / sent / failed), `delivered_at`, `order_id`, `order_item_id` + `order_item_unit` (UNIQUE: a paid order line issues each card once), `product_id`, `buyer_user_id`, `source` (admin / order / import), `legacy_id` (UNIQUE), `legacy_expires_at`, dates |
+| `{prefix}fh_gift_cards` | one row per card: `code`, `code_key` (UNIQUE; upper case, letters and digits only), `status` (active / disabled), `amount_cents`, `balance_cents` (a cache of its ledger — the health check compares them), `owner_user_id` (0 = in nobody's account), `redeemed_at`, recipient / sender / message, `deliver_at`, `email_state` (none / pending / sending / sent / failed / held), `delivered_at`, `order_id`, `order_item_id` + `order_item_unit` (UNIQUE: a paid order line issues each card once), `product_id`, `buyer_user_id`, `source` (admin / order / import), `legacy_id` (UNIQUE), `legacy_expires_at`, dates |
 | `{prefix}fh_gift_card_ledger` | append-only money movements: `type` (issued, redeemed_to_account, used, restored, credit, debit, import_adjust, import_note), signed `amount_cents`, `balance_after_cents`, `order_id`, `refund_id`, `user_id`, `idempotency_key` (UNIQUE), `legacy_activity_id` (UNIQUE), `note` |
 | `{prefix}fh_gift_card_audit` | the audit log (above) |
 
@@ -161,7 +189,8 @@ front-end request never installs). Nothing is dropped when the section or the pl
 (autoloaded), `fishotel_gift_cards_audit_head`, `fishotel_gift_cards_import_report` (the last dry run or
 import), `fishotel_gift_cards_last_import`, `fishotel_gift_cards_last_run` (the job),
 `fishotel_gift_cards_flush` (rebuild the rewrite rules once after Live). Transients: `fh_gcard_tries_*`
-(wrong codes per person per hour), `fh_gcard_flash_*`, `fishotel_gift_cards_flash_*`.
+(wrong codes per hour, per account — for a guest per connecting address, never a forwarded-for header,
+which the sender types), `fh_gcard_flash_*`, `fishotel_gift_cards_flash_*`.
 
 ## Hooks used, and the theme
 
@@ -211,7 +240,9 @@ The full list with the reasons is in the build notes; in short:
 - The old tables' real shape (`class-legacy-map.php` is an inference) and whether old orders carry a
   `gift_card` order item; Recalculate on a real old order.
 - The card can only pay what WooCommerce lets a negative fee cover: goods, shipping and fees **before tax**
-  (the rehearsal copy of the shop charges no tax; check live). With tax on, the tax part would be paid by the payment method.
+  (the rehearsal copy of the shop charges no tax; check live). With tax on, the tax part would be paid by
+  the payment method. (The fee itself carries no tax — checked on rehearsal-3 with tax switched on in
+  memory: $100 taxable at 8% and a $50 card → order total $58.00 at checkout and after Recalculate.)
 - PayPal: the smart-button guard of the theme is kept; check a mixed payment through the PayPal redirect on
   staging.
 - No REST endpoint (the audit log has `rest` as a source for when one is added).

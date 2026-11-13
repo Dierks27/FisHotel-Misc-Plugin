@@ -155,6 +155,11 @@ class Fh_Order {
 	public function get_items( $type = 'line_item' ) {
 		return $this->items;
 	}
+	/** Item id => quantity refunded (WooCommerce gives it negative). */
+	public $refunded_qty = array();
+	public function get_qty_refunded_for_item( $item_id, $type = 'line_item' ) {
+		return -abs( (int) ( $this->refunded_qty[ $item_id ] ?? 0 ) );
+	}
 	public function get_meta( $k ) {
 		return $this->meta[ $k ] ?? '';
 	}
@@ -217,6 +222,22 @@ function fh_order( $id, array $props = array() ) {
 	}
 	$GLOBALS['fh_orders'][ (int) $id ] = $o;
 	return $o;
+}
+
+/**
+ * Give an order line items (two of $qty if it has none) and refund the
+ * given quantities (item id => qty; null = every item in full).
+ */
+function fh_refund_items( $order, $qty = null ) {
+	if ( ! $order->items ) {
+		$order->items = array(
+			91 => new Fh_Line_Item( 501, 2 ),
+			92 => new Fh_Line_Item( 502, 1 ),
+		);
+	}
+	foreach ( $order->items as $id => $item ) {
+		$order->refunded_qty[ $id ] = null === $qty ? $item->get_quantity() : (int) ( $qty[ $id ] ?? 0 );
+	}
 }
 
 function wc_get_order( $id ) {

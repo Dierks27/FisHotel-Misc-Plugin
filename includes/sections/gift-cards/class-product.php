@@ -56,12 +56,19 @@ class Product {
 		add_action( 'woocommerce_payment_complete', array( $this, 'issue' ) );
 		add_action( 'woocommerce_order_status_processing', array( $this, 'issue' ) );
 		add_action( 'woocommerce_order_status_completed', array( $this, 'issue' ) );
-		add_action( 'woocommerce_order_status_cancelled', array( $this, 'undone_note' ) );
-		add_action( 'woocommerce_order_status_refunded', array( $this, 'undone_note' ) );
 		add_filter( 'woocommerce_hidden_order_itemmeta', array( $this, 'hidden_meta' ) );
 		add_action( 'woocommerce_after_order_itemmeta', array( $this, 'issued_note' ), 10, 3 );
 		add_filter( 'woocommerce_product_add_to_cart_url', array( $this, 'loop_url' ), 10, 2 );
 		add_filter( 'woocommerce_product_supports', array( $this, 'no_ajax_add' ), 10, 3 );
+		$this->init_undo();
+	}
+
+	/**
+	 * The cancelled / refunded hooks only (also while Live has fallen back).
+	 */
+	public function init_undo() {
+		add_action( 'woocommerce_order_status_cancelled', array( $this, 'undone_note' ) );
+		add_action( 'woocommerce_order_status_refunded', array( $this, 'undone_note' ) );
 	}
 
 	/**
@@ -471,9 +478,11 @@ class Product {
 	}
 
 	/**
-	 * An order that issued cards is cancelled or refunded: a note naming
-	 * them. Nothing is switched off by itself — the card may already have
-	 * been given away or spent.
+	 * An order that issued cards is cancelled or refunded: the e-mail of
+	 * every card nobody has used or added to an account yet, and not sent
+	 * yet, is held back (the Send button on the card still sends it), and
+	 * a note names the cards. Nothing is switched off by itself — a card
+	 * already sent may have been given away or spent.
 	 *
 	 * @param int $order_id Order id.
 	 */
@@ -482,11 +491,22 @@ class Product {
 		if ( ! is_object( $order ) ) {
 			return;
 		}
-		$codes = array();
-		foreach ( Gift_Cards::service()->store->cards_of_order( (int) $order_id ) as $card ) {
-			if ( 'active' === $card['status'] ) {
+		$service = Gift_Cards::service();
+		$held    = $service->hold_order_emails( (int) $order_id, Audit::context( 'order', 'order ' . $order->get_status() ) );
+		$codes   = array();
+		foreach ( $service->store->cards_of_order( (int) $order_id ) as $card ) {
+			if ( 'active' === $card['status'] && ! in_array( (int) $card['id'], $held, true ) ) {
 				$codes[] = Codes::mask( $card['code'] ) . ' (' . Money::words( (int) $card['balance_cents'] ) . ' left)';
 			}
+		}
+		if ( $held ) {
+			$words = array();
+			foreach ( $held as $id ) {
+				$card    = $service->store->card( $id );
+				$words[] = $card ? Codes::mask( $card['code'] ) : '#' . $id;
+			}
+			/* translators: %s: masked codes */
+			$order->add_order_note( sprintf( __( 'This order issued gift cards that were not sent or used yet: %s. Their e-mails are held back and will not go out by themselves. If the refund is final, disable them on FisHotel Tools → Gift Cards; to send one after all, open it there and press Send.', 'fishotel-misc-plugin' ), implode( ', ', $words ) ) );
 		}
 		if ( $codes ) {
 			/* translators: %s: masked codes */

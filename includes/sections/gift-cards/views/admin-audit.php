@@ -24,14 +24,14 @@ $fh_rows  = $data['rows'];
 ?>
 <?php if ( is_array( $data['verify'] ) ) : ?>
 	<?php if ( $data['verify']['ok'] ) : ?>
-		<div class="fishotel-misc-notice fishotel-misc-notice--success">
+		<div class="fishotel-misc-notice <?php echo $data['verify']['other_key'] > 0 ? 'fishotel-misc-notice--warning' : 'fishotel-misc-notice--success'; ?>">
 			<?php
-			/* translators: %d: rows */
-			echo esc_html( sprintf( __( 'The audit log checks out: %d rows, none changed or removed.', 'fishotel-misc-plugin' ), (int) $data['verify']['checked'] ) );
 			if ( $data['verify']['other_key'] > 0 ) {
-				echo ' ';
+				/* translators: 1: rows, 2: rows */
+				echo esc_html( sprintf( __( 'Could not check all of the audit log: %2$d of its %1$d rows were written under an earlier site key (the site\'s salts were changed since), so a change to one of them would not show. The rest checks out.', 'fishotel-misc-plugin' ), (int) $data['verify']['checked'], (int) $data['verify']['other_key'] ) );
+			} else {
 				/* translators: %d: rows */
-				echo esc_html( sprintf( __( '%d older rows were written under an earlier site key (the site\'s salts were changed since) and could not be checked.', 'fishotel-misc-plugin' ), (int) $data['verify']['other_key'] ) );
+				echo esc_html( sprintf( __( 'The audit log checks out: %d rows, none changed or removed.', 'fishotel-misc-plugin' ), (int) $data['verify']['checked'] ) );
 			}
 			?>
 		</div>

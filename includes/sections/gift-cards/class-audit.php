@@ -22,10 +22,12 @@
  * keyed with a secret from wp-config.php (FISHOTEL_GIFT_CARDS_AUDIT_KEY
  * when defined, else the site's AUTH salt) — somebody with only the
  * database cannot rebuild the chain after editing or removing a row. The
- * newest row's id and hash are also kept in an option, so cutting rows
- * off the end shows too. verify() walks the chain. key_fp names the key
- * a row was written with: when the salts are changed, older rows are
- * reported as "written under an earlier key", not as tampered with.
+ * newest row's id and hash are also kept in an option, signed with the
+ * same key, so cutting rows off the end shows too. verify() walks the
+ * chain. key_fp names the key a row was written with: when the salts are
+ * changed, older rows are reported as "written under an earlier key" (a
+ * warning: they could not be checked), not as tampered with — but only
+ * rows BEFORE the first row under today's key; a later one is a problem.
  *
  * Everything but append() and context() is pure.
  *
@@ -204,6 +206,7 @@ class Audit {
 				array(
 					'id'   => (int) $id,
 					'hash' => $row['row_hash'],
+					'sig'  => self::head_sig( (int) $id, $row['row_hash'], $key ),
 				),
 				false
 			);
@@ -212,11 +215,23 @@ class Audit {
 	}
 
 	/**
+	 * The newest-row marker's signature (pure).
+	 *
+	 * @param int    $id   Row id.
+	 * @param string $hash Row hash.
+	 * @param string $key  Key.
+	 * @return string
+	 */
+	public static function head_sig( $id, $hash, $key ) {
+		return hash_hmac( 'sha256', 'head|' . (int) $id . '|' . (string) $hash, (string) $key );
+	}
+
+	/**
 	 * Check the chain (pure apart from the reader).
 	 *
 	 * @param callable   $reader fn( int $after_id ): array[] — the next rows, oldest first ([] at the end).
 	 * @param string     $key    key().
-	 * @param array|null $head   The HEAD_OPTION value.
+	 * @param array|null $head   The HEAD_OPTION value (array() when it is missing; null = not checked).
 	 * @return array{ok: bool, checked: int, other_key: int, problems: string[]}
 	 */
 	public static function verify( callable $reader, $key, $head = null ) {
@@ -227,6 +242,7 @@ class Audit {
 		$other    = 0;
 		$problems = array();
 		$last     = null;
+		$current  = false;
 
 		while ( true ) {
 			$rows = call_user_func( $reader, $after );
@@ -240,15 +256,19 @@ class Audit {
 					/* translators: %d: row id */
 					$problems[] = sprintf( __( 'Row %d does not follow the row before it: a row was removed or changed just before it.', 'fishotel-misc-plugin' ), $id );
 				}
-				if ( (string) $row['key_fp'] !== $fp ) {
+				if ( (string) $row['key_fp'] !== $fp && $current ) {
+					/* translators: %d: row id */
+					$problems[] = sprintf( __( 'Row %d says it was written under an earlier key, after rows written under today\'s key: it was changed after it was written.', 'fishotel-misc-plugin' ), $id );
+				} elseif ( (string) $row['key_fp'] !== $fp ) {
 					$other++;
 				} elseif ( ! hash_equals( self::hash_row( $row, $key ), (string) $row['row_hash'] ) ) {
 					/* translators: %d: row id */
 					$problems[] = sprintf( __( 'Row %d was changed after it was written.', 'fishotel-misc-plugin' ), $id );
 				}
-				$prev  = (string) $row['row_hash'];
-				$after = $id;
-				$last  = $row;
+				$current = $current || (string) $row['key_fp'] === $fp;
+				$prev    = (string) $row['row_hash'];
+				$after   = $id;
+				$last    = $row;
 			}
 			if ( count( $problems ) > 50 ) {
 				break;
@@ -259,7 +279,11 @@ class Audit {
 			if ( ! $last || (int) $last['id'] !== (int) $head['id'] || (string) $last['row_hash'] !== (string) $head['hash'] ) {
 				/* translators: %d: row id */
 				$problems[] = sprintf( __( 'The newest row should be row %d, and it is not there as it was written: rows were removed from the end.', 'fishotel-misc-plugin' ), (int) $head['id'] );
+			} elseif ( (string) $last['key_fp'] === $fp && ! hash_equals( self::head_sig( (int) $head['id'], (string) $head['hash'], $key ), (string) ( $head['sig'] ?? '' ) ) ) {
+				$problems[] = __( 'The record of which row is the newest was changed outside this plugin: rows may have been removed from the end.', 'fishotel-misc-plugin' );
 			}
+		} elseif ( is_array( $head ) && $last && (string) $last['key_fp'] === $fp ) {
+			$problems[] = __( 'The record of which row is the newest is missing: rows may have been removed from the end.', 'fishotel-misc-plugin' );
 		}
 
 		return array(

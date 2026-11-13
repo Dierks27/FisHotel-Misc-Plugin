@@ -1,8 +1,8 @@
 <?php
 /**
  * My Account → Gift Cards (Live): the endpoint and menu entry, the forms
- * (nonce first, then logged in, then whose card it is), "Add to my
- * account" only for cards sent to my own address, the page showing only
+ * (nonce first, then logged in, then whose card it is), a card only
+ * added with its code (never by e-mail address alone), the page showing only
  * my cards and my activity — never another customer's — and the template
  * printed with nothing unescaped.
  *
@@ -50,10 +50,11 @@ $r = Account::perform( $s, fh_post( array( 'fh_gcard_action' => 'redeem', 'fh_gc
 check( 'another customer cannot take it', ! $r['ok'] && 5 === (int) $s->store->card( $card )['owner_user_id'] );
 
 $for_sam = fh_gc_card( $s, '10.00', array( 'recipient_email' => 'Sam@Example.test' ) );
-$r = Account::perform( $s, fh_post( array( 'fh_gcard_action' => 'claim', 'card' => $for_sam ) ), 5, 'pat@example.test', $ctx );
-check( '"Add to my account" for a card sent to someone else: refused', ! $r['ok'] && 0 === (int) $s->store->card( $for_sam )['owner_user_id'] );
-$r = Account::perform( $s, fh_post( array( 'fh_gcard_action' => 'claim', 'card' => $for_sam ), 6 ), 6, 'sam@example.test', fh_gc_customer_ctx( 6 ) );
-check( '…for the recipient (any letter case): added, no code needed', $r['ok'] && 6 === (int) $s->store->card( $for_sam )['owner_user_id'] );
+$r = Account::perform( $s, fh_post( array( 'fh_gcard_action' => 'claim', 'card' => $for_sam ), 9 ), 9, 'sam@example.test', fh_gc_customer_ctx( 9 ) );
+check( 'an account that only says it has the recipient\'s e-mail address (WooCommerce does not check a changed address) cannot take the card: there is no "add without the code"', ! $r['ok'] && 0 === (int) $s->store->card( $for_sam )['owner_user_id'] );
+check( '…nor is the card listed for that account', array() === Account::data( $s, 9, 'sam@example.test' )['cards'] && ! isset( Account::data( $s, 9, 'sam@example.test' )['unclaimed'] ) );
+$r = Account::perform( $s, fh_post( array( 'fh_gcard_action' => 'redeem', 'fh_gcard_code' => $s->store->card( $for_sam )['code'] ), 6 ), 6, 'sam@example.test', fh_gc_customer_ctx( 6 ) );
+check( 'the recipient adds it with the code from the e-mail', $r['ok'] && 6 === (int) $s->store->card( $for_sam )['owner_user_id'] );
 for ( $i = 0; $i < 10; $i++ ) {
 	Account::perform( $s, fh_post( array( 'fh_gcard_action' => 'redeem', 'fh_gcard_code' => 'BADC-ODE' . $i . '-AAAA-BBBB' ) ), 5, 'pat@example.test', $ctx );
 }
@@ -67,7 +68,6 @@ $mine   = Account::data( $s, 5, 'pat@example.test' );
 $theirs = Account::data( $s, 6, 'sam@example.test' );
 check( 'my balance: $20 (the $25 card, $5 used)', 2000 === $mine['balance'] );
 check( 'my cards: one, with its code', 1 === count( $mine['cards'] ) && $code === $mine['codes'][ $card ] );
-check( 'cards sent to my address, not added yet: one', 1 === count( $mine['unclaimed'] ) );
 check( 'my activity: issued, added, used on #7001', array( 'used', 'redeemed_to_account', 'issued' ) === array_column( $mine['activity'], 'type' ) && 'Used on order #7001' === Account::activity_words( $mine['activity'][0] ) );
 check( 'Sam sees only Sam\'s card — none of mine, nor my code', 1 === count( $theirs['cards'] ) && ! in_array( $code, $theirs['codes'], true ) && array() === array_intersect( array_column( $theirs['activity'], 'card_id' ), array( (string) $card, $card ) ) );
 
@@ -78,7 +78,7 @@ include FISHOTEL_MISC_PATH . 'includes/sections/gift-cards/views/' . Account::TE
 $html = ob_get_clean();
 check( 'the page prints the balance, the redeem form and my code', false !== strpos( $html, '$20.00' ) && false !== strpos( $html, 'name="fh_gcard_code"' ) && false !== strpos( $html, $code ) );
 check( 'the flash is escaped', false !== strpos( $html, 'Gift card added &lt;b&gt;to&lt;/b&gt; your account' ) );
-check( 'an unclaimed card is shown masked, with "Add to my account"', false !== strpos( $html, '••••-••••-••••-' ) && false !== strpos( $html, 'Add to my account' ) );
+check( 'a card sent to my address but not added is not on the page, and there is no "Add to my account"', false === strpos( $html, 'Add to my account' ) && false === strpos( $html, '$30.00' ) );
 check( 'the theme\'s classes are used', false !== strpos( $html, 'woocommerce-giftcards-table' ) && false !== strpos( $html, 'fh-giftcard-code' ) );
 
 check( 'no unexpected database error', empty( $GLOBALS['fh_db_errors'] ), implode( "\n", (array) ( $GLOBALS['fh_db_errors'] ?? array() ) ) );

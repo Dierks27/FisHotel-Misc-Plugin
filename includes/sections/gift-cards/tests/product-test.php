@@ -113,6 +113,30 @@ $id = fh_gc_card( $s, '5.00', array( 'delivery' => 'now' ) );
 check( 'an e-mail that fails is marked so (and can be sent again from its page)', 'failed' === $s->store->card( $id )['email_state'] );
 $GLOBALS['fh_mail_fails'] = false;
 
+echo "\nA purchase refunded before its card is sent\n";
+$GLOBALS['fh_mails'] = array();
+$gift      = new Fh_Line_Item( 10, 2, array( Product::ITEM_AMOUNT => 5000, Product::ITEM_DATA => array( 'recipient_name' => 'Ari', 'recipient_email' => 'ari@example.test', 'sender_name' => '', 'message' => '', 'deliver_on' => '2026-03-30' ) ) );
+$o3        = fh_order( 503, array( 'customer_id' => 5 ) );
+$o3->items = array( 903 => $gift );
+$o3->update_status( 'processing' );
+$two = $s->store->cards_of_order( 503 );
+$s->redeem( $two[1]['code'], 8, fh_gc_customer_ctx( 8 ) ); // the second one was already added to an account
+$o3->update_status( 'refunded' );
+check( 'refunded: the e-mail of the card nobody has used or added is held back', 'held' === $s->store->card( (int) $two[0]['id'] )['email_state'] && 'pending' === $s->store->card( (int) $two[1]['id'] )['email_state'] );
+check( '…and the note says so, masked (the added one is listed as still working)', false !== strpos( implode( ' ', $o3->notes ), 'e-mails are held back' ) && false !== strpos( end( $o3->notes ), 'still work' ) && false === strpos( implode( ' ', $o3->notes ), $two[0]['code'] ) );
+fh_gc_days( 30 );
+$r = $s->deliver_due( fh_gc_customer_ctx( 0, 'cron' ) );
+check( 'on the delivery date the held card is not sent (the one in an account is)', 1 === $r['sent'] && 1 === count( $GLOBALS['fh_mails'] ) && false !== strpos( $GLOBALS['fh_mails'][0]['message'], $two[1]['code'] ) && false === strpos( $GLOBALS['fh_mails'][0]['message'], $two[0]['code'] ) );
+check( '…it stays held', 'held' === $s->store->card( (int) $two[0]['id'] )['email_state'] );
+$held_rows = $GLOBALS['wpdb']->pdo->query( 'SELECT action, field, old_value, new_value, source FROM ' . $s->store->table( 'gift_card_audit' ) . " WHERE card_id = " . (int) $two[0]['id'] . " AND new_value = 'held'" )->fetchAll( PDO::FETCH_ASSOC );
+check( 'holding it is in the audit log', array( array( 'action' => 'details', 'field' => 'email_state', 'old_value' => 'pending', 'new_value' => 'held', 'source' => 'order' ) ) === $held_rows );
+$GLOBALS['fh_mails'] = array();
+$r = $s->resend( (int) $two[0]['id'], '', fh_gc_admin_ctx() );
+check( 'the card\'s Send button still sends it, once asked', $r['ok'] && 'sent' === $s->store->card( (int) $two[0]['id'] )['email_state'] && 1 === count( $GLOBALS['fh_mails'] ) );
+$o3->update_status( 'cancelled' );
+check( 'a card already sent is not held again', 'sent' === $s->store->card( (int) $two[0]['id'] )['email_state'] );
+check( 'the ledger adds up and every movement has its audit row', fh_gc_balanced( $s ) );
+
 check( 'no unexpected database error', empty( $GLOBALS['fh_db_errors'] ), implode( "\n", (array) ( $GLOBALS['fh_db_errors'] ?? array() ) ) );
 
 fh_finish();

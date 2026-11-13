@@ -13,8 +13,8 @@
  *   The code    "Have a gift card?" under Payment Method: a logged-in
  *               customer's code goes into their account; a guest's is used
  *               for this checkout only, when Settings allow guests.
- *   The amount  one negative, non-taxable fee "Gift card" (tax stays worked
- *               out on the goods; WooCommerce, e-mails, PDFs and PayPal all
+ *   The amount  one negative fee "Gift card" with no tax of its own (tax
+ *               stays worked out on the goods; WooCommerce, e-mails, PDFs and PayPal all
  *               see a fee, unlike the old plugin's hidden total adjustment).
  *               A hidden .fh-gc-applied marker goes in the totals so the
  *               theme hides PayPal's smart buttons, as it does today.
@@ -23,9 +23,10 @@
  *               (another tab), the checkout stops with a message and
  *               nothing is taken. Checked again when the order is paid.
  *   Putting back  failed, cancelled (a paid one too, unless Settings say
- *               no), refunded, trashed or deleted unpaid: everything still
- *               out goes back, exactly once. A partial refund is put back
- *               with the order screen's Gift cards box (Admin).
+ *               no), refunded with every item, trashed or deleted unpaid:
+ *               everything still out goes back, exactly once. Any other
+ *               refund is put back with the order screen's Gift cards box
+ *               (Admin). These hooks stay while Live has fallen back.
  *   Old orders  an imported order's deduction is shown in its totals
  *               (e-mails, My Account, the admin screen), and kept when
  *               Recalculate is pressed (Settings).
@@ -61,12 +62,15 @@ class Checkout {
 	 * Register hooks.
 	 */
 	public function init() {
+		$this->init_put_back();
 		add_action( 'woocommerce_review_order_before_order_total', array( $this, 'render_control' ) );
 		add_action( 'woocommerce_review_order_before_payment', array( $this, 'render_code_field' ) );
 		add_action( 'woocommerce_review_order_after_order_total', array( $this, 'render_marker' ) );
 		add_action( 'woocommerce_checkout_update_order_review', array( $this, 'read_review_post' ) );
 		add_action( 'woocommerce_checkout_process', array( $this, 'read_checkout_post' ) );
 		add_action( 'woocommerce_cart_calculate_fees', array( $this, 'add_fee' ), 20 );
+		add_filter( 'woocommerce_cart_totals_get_fees_from_cart_taxes', array( $this, 'no_fee_tax' ), 10, 2 );
+		add_action( 'woocommerce_order_item_fee_after_calculate_taxes', array( $this, 'no_item_fee_tax' ) );
 		add_action( 'woocommerce_after_checkout_validation', array( $this, 'validate' ), 10, 2 );
 		add_action( 'woocommerce_checkout_create_order_fee_item', array( $this, 'tag_fee' ), 10, 4 );
 		add_action( 'woocommerce_checkout_create_order', array( $this, 'remember_codes' ), 10, 2 );
@@ -76,14 +80,6 @@ class Checkout {
 		add_action( 'woocommerce_order_status_processing', array( $this, 'ensure_debited' ) );
 		add_action( 'woocommerce_order_status_on-hold', array( $this, 'ensure_debited' ) );
 		add_action( 'woocommerce_order_status_completed', array( $this, 'ensure_debited' ) );
-		add_action( 'woocommerce_order_status_failed', array( $this, 'on_failed' ) );
-		add_action( 'woocommerce_order_status_cancelled', array( $this, 'on_cancelled' ) );
-		add_action( 'woocommerce_order_status_refunded', array( $this, 'on_refunded' ) );
-		add_action( 'woocommerce_order_refunded', array( $this, 'on_partial_refund' ), 10, 2 );
-		add_action( 'woocommerce_trash_order', array( $this, 'on_trash' ) );
-		add_action( 'woocommerce_before_delete_order', array( $this, 'on_trash' ) );
-		add_action( 'wp_trash_post', array( $this, 'on_trash_post' ) );
-		add_action( 'before_delete_post', array( $this, 'on_trash_post' ) );
 		add_filter( 'woocommerce_get_order_item_totals', array( $this, 'order_totals' ), 10, 2 );
 		add_action( 'woocommerce_admin_order_totals_after_discount', array( $this, 'admin_totals_row' ) );
 		add_action( 'woocommerce_order_after_calculate_totals', array( $this, 'keep_old_deduction' ), 10, 2 );
@@ -92,6 +88,23 @@ class Checkout {
 		add_action( 'wp_ajax_' . self::AJAX_APPLY, array( $this, 'ajax_apply' ) );
 		add_action( 'wp_ajax_nopriv_' . self::AJAX_APPLY, array( $this, 'ajax_apply' ) );
 		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue' ) );
+	}
+
+	/**
+	 * The putting-back hooks only. Live registers them with everything
+	 * else; they also stay while Live has fallen back to Shadow (the old
+	 * plugin is on again), so an order paid with these cards and then
+	 * cancelled or refunded in the meantime still gets its money back.
+	 */
+	public function init_put_back() {
+		add_action( 'woocommerce_order_status_failed', array( $this, 'on_failed' ) );
+		add_action( 'woocommerce_order_status_cancelled', array( $this, 'on_cancelled' ) );
+		add_action( 'woocommerce_order_status_refunded', array( $this, 'on_refunded' ) );
+		add_action( 'woocommerce_order_refunded', array( $this, 'on_partial_refund' ), 10, 2 );
+		add_action( 'woocommerce_trash_order', array( $this, 'on_trash' ) );
+		add_action( 'woocommerce_before_delete_order', array( $this, 'on_trash' ) );
+		add_action( 'wp_trash_post', array( $this, 'on_trash_post' ) );
+		add_action( 'before_delete_post', array( $this, 'on_trash_post' ) );
 	}
 
 	/* ============================================================== */
@@ -272,6 +285,31 @@ class Checkout {
 	}
 
 	/**
+	 * The "Gift card" fee carries no tax. It is a payment, not a discount:
+	 * WooCommerce splits a negative fee's tax over the goods even when the
+	 * fee is not taxable, which would take the card's "own tax" off the
+	 * order and leave the shop short by that much.
+	 *
+	 * @param array  $taxes The fee's taxes.
+	 * @param object $fee   WC_Cart_Totals' fee (->object is the cart fee).
+	 * @return array
+	 */
+	public function no_fee_tax( $taxes, $fee ) {
+		return is_object( $fee ) && isset( $fee->object ) && is_object( $fee->object ) && self::FEE_ID === ( $fee->object->id ?? '' ) ? array() : $taxes;
+	}
+
+	/**
+	 * Recalculate on the order screen: the same for the order's fee line.
+	 *
+	 * @param object $item WC_Order_Item_Fee.
+	 */
+	public function no_item_fee_tax( $item ) {
+		if ( is_object( $item ) && method_exists( $item, 'get_meta' ) && 'yes' === $item->get_meta( self::FEE_META ) && method_exists( $item, 'set_taxes' ) ) {
+			$item->set_taxes( false );
+		}
+	}
+
+	/**
 	 * Place order: a guest's typed codes need Settings to allow it.
 	 *
 	 * @param array  $data   Posted data.
@@ -363,8 +401,12 @@ class Checkout {
 
 	/**
 	 * Paid / processing / on hold / completed: make sure the card part was
-	 * taken (an order paid again after it failed takes it again). If the
-	 * card no longer holds it, the order is put on hold with a note.
+	 * taken — only when nothing is out on the order: never taken yet (the
+	 * block checkout and pay-for-order take it here), or all put back by
+	 * itself when the order failed or was cancelled and then paid after
+	 * all. An amount already taken is never changed here, and money put
+	 * back by hand (the order's Gift cards box) is never taken again. If
+	 * the card no longer holds it, the order is put on hold with a note.
 	 *
 	 * @param int $order_id Order id.
 	 */
@@ -379,8 +421,7 @@ class Checkout {
 		}
 		$service = Gift_Cards::service();
 		$cents   = self::fee_cents( $order );
-		$summary = $service->order_summary( (int) $order->get_id() );
-		if ( $summary['outstanding'] === $cents || ( 0 === $cents && $summary['imported'] ) ) {
+		if ( $cents <= 0 || ! self::should_take( $service->store->ledger_of_order( (int) $order->get_id() ) ) ) {
 			return;
 		}
 		$codes  = $order->get_meta( self::CODES_META );
@@ -397,6 +438,27 @@ class Checkout {
 			$order->add_order_note( $note );
 		}
 		self::$busy = false;
+	}
+
+	/**
+	 * Whether a paid order's card part is still to be taken (pure): nothing
+	 * is out, and either nothing was ever taken or the newest movement is
+	 * an automatic put-back (failed / cancelled), not one made by hand.
+	 *
+	 * @param array[] $rows The order's ledger rows, oldest first.
+	 * @return bool
+	 */
+	public static function should_take( array $rows ) {
+		if ( Money::outstanding( Money::order_cards( $rows ) ) > 0 ) {
+			return false;
+		}
+		$last = null;
+		foreach ( $rows as $row ) {
+			if ( in_array( (string) $row['type'], array( 'used', 'restored' ), true ) ) {
+				$last = $row;
+			}
+		}
+		return null === $last || ( 'restored' === (string) $last['type'] && 0 === strpos( (string) $last['idempotency_key'], 'restore:' ) );
 	}
 
 	/* ============================================================== */
@@ -456,12 +518,47 @@ class Checkout {
 	}
 
 	/**
-	 * Refunded in full.
+	 * Refunded: the card part goes back by itself only when every item's
+	 * whole quantity was refunded. WooCommerce also calls an order
+	 * "refunded" when the money paid some other way is all returned —
+	 * which can be a small part of the order when a card paid most of it —
+	 * so otherwise a note points at the Gift cards box.
 	 *
 	 * @param int $order_id Order id.
 	 */
 	public function on_refunded( $order_id ) {
+		$order = function_exists( 'wc_get_order' ) ? wc_get_order( $order_id ) : null;
+		if ( is_object( $order ) && ! self::all_items_refunded( $order ) ) {
+			$out = Gift_Cards::service()->order_summary( (int) $order_id )['outstanding'];
+			if ( $out > 0 ) {
+				/* translators: %s: amount */
+				$order->add_order_note( sprintf( __( 'This order is now marked Refunded, but not every item was refunded, so its gift card money (%s) was NOT put back by itself. If it should go back on the card, use the Gift cards box on this order.', 'fishotel-misc-plugin' ), Money::words( $out ) ) );
+			}
+			return;
+		}
 		$this->restore( $order_id, __( 'refunded', 'fishotel-misc-plugin' ), 'woocommerce_order_status_refunded' );
+	}
+
+	/**
+	 * Whether every item of an order was refunded, its whole quantity.
+	 *
+	 * @param object $order WC_Order.
+	 * @return bool
+	 */
+	public static function all_items_refunded( $order ) {
+		if ( ! is_object( $order ) || ! method_exists( $order, 'get_qty_refunded_for_item' ) ) {
+			return false;
+		}
+		$items = $order->get_items( 'line_item' );
+		if ( ! $items ) {
+			return false;
+		}
+		foreach ( $items as $item_id => $item ) {
+			if ( abs( (float) $order->get_qty_refunded_for_item( $item_id ) ) < (float) $item->get_quantity() ) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/**
@@ -683,12 +780,29 @@ class Checkout {
 		$service = Gift_Cards::service();
 		$user_id = (int) get_current_user_id();
 		$code    = isset( $_POST['code'] ) && is_scalar( $_POST['code'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['code'] ) ) : '';
-		$who     = $user_id > 0 ? 'user:' . $user_id : 'ip:' . Audit::ip( $_SERVER ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- validated in ip().
+		$who     = self::who( $user_id, $_SERVER ); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- validated in who().
 		$result  = self::apply_code( $service, $code, $user_id, $who );
 		if ( $result['ok'] ) {
 			wp_send_json_success( array( 'message' => $result['message'] ) );
 		}
 		wp_send_json_error( array( 'message' => $result['message'] ), 'login' === $result['code'] ? 403 : 200 );
+	}
+
+	/**
+	 * The key wrong codes are counted under (pure): the user, or for a
+	 * guest the connecting address only — a forwarded-for header is typed
+	 * by the sender and would give every try a fresh count.
+	 *
+	 * @param int   $user_id User id (0 = guest).
+	 * @param array $server  $_SERVER.
+	 * @return string
+	 */
+	public static function who( $user_id, array $server ) {
+		if ( (int) $user_id > 0 ) {
+			return 'user:' . (int) $user_id;
+		}
+		$remote = isset( $server['REMOTE_ADDR'] ) ? filter_var( trim( (string) $server['REMOTE_ADDR'] ), FILTER_VALIDATE_IP ) : false;
+		return 'ip:' . ( $remote ? $remote : 'unknown' );
 	}
 
 	/**

@@ -124,6 +124,14 @@ check( 'the books leave out disabled cards when the setting says so', 5500 === f
 check( 'the health check finds nothing wrong', array() === $st['mismatches'] );
 $GLOBALS['wpdb']->query( 'UPDATE ' . $s->store->table( 'gift_cards' ) . ' SET balance_cents = 1 WHERE id = ' . $b );
 check( '…and names a card whose balance was changed behind the ledger\'s back', $b === (int) $s->stats()['mismatches'][0]['id'] );
+check( 'every movement so far has its audit row', array() === $st['unlogged'] );
+$l = $s->store->table( 'gift_card_ledger' );
+$GLOBALS['wpdb']->pdo->exec( "INSERT INTO {$l} (card_id, type, amount_cents, balance_after_cents, user_id, idempotency_key, note, created_at) VALUES ({$a}, 'credit', 50000, 53500, 1, 'adjust:zzzzzzzzzzzz', '', '2026-03-02 15:00:00')" );
+$GLOBALS['wpdb']->query( 'UPDATE ' . $s->store->table( 'gift_cards' ) . ' SET balance_cents = balance_cents + 50000 WHERE id = ' . $a );
+$st = $s->stats();
+check( 'money moved by SQL with its ledger row and balance kept in step: no balance mismatch, but the card is named for having no audit row', ! in_array( $a, array_map( 'intval', array_column( $st['mismatches'], 'id' ) ), true ) && array( $a ) === $st['unlogged'] );
+$GLOBALS['wpdb']->pdo->exec( "UPDATE {$l} SET type = 'import_adjust' WHERE idempotency_key = 'adjust:zzzzzzzzzzzz'" );
+check( '…also when the row is dressed up as an import', array( $a ) === $s->store->unlogged_movements() );
 
 check( 'no unexpected database error', empty( $GLOBALS['fh_db_errors'] ), implode( "\n", (array) ( $GLOBALS['fh_db_errors'] ?? array() ) ) );
 

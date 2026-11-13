@@ -243,7 +243,7 @@ class Admin {
 		if ( empty( $this->mode['fallback'] ) || ! current_user_can( Gift_Cards::VIEW_CAPABILITY ) ) {
 			return;
 		}
-		echo '<div class="notice notice-error"><p><strong>' . esc_html__( 'Gift Cards:', 'fishotel-misc-plugin' ) . '</strong> ' . esc_html__( 'the old gift card plugin (WooCommerce Gift Cards) is switched on again, so FisHotel\'s gift cards have stopped taking payments and behave as in Shadow mode until it is switched off — two systems must never take money for the same cards.', 'fishotel-misc-plugin' ) . '</p></div>';
+		echo '<div class="notice notice-error"><p><strong>' . esc_html__( 'Gift Cards:', 'fishotel-misc-plugin' ) . '</strong> ' . esc_html__( 'the old gift card plugin (WooCommerce Gift Cards) is switched on again. FisHotel\'s gift cards have stopped taking payments (money they already took still goes back on cancel or refund), but the old plugin\'s balances are from the day of the import: customers could spend money there that was already spent here. Switch the old plugin off now.', 'fishotel-misc-plugin' ) . '</p></div>';
 	}
 
 	/* ============================================================== */
@@ -371,6 +371,10 @@ class Admin {
 				return $keep( $service->adjust( $id, $text( 'direction' ), $text( 'amount' ), $text( 'reason' ), $text( 'request_key' ), $audit ) );
 
 			case 'details':
+				$card = $service->store->card( $id );
+				if ( empty( $ctx['can_own'] ) && $card && ( ! Service::same_email( $text( 'recipient_email' ), $card['recipient_email'] ) || ! Service::same_email( $text( 'sender_email' ), $card['sender_email'] ) ) ) {
+					return $keep( Service::fail( 'refused', __( 'Only the site owner (an administrator) may change where a card\'s e-mail goes: the e-mail holds the full code.', 'fishotel-misc-plugin' ) ) );
+				}
 				return $keep(
 					$service->update_details(
 						$id,
@@ -390,6 +394,10 @@ class Admin {
 				return $keep( $service->set_status( $id, $text( 'status' ), $text( 'reason' ), $audit ) );
 
 			case 'resend':
+				$card = $service->store->card( $id );
+				if ( empty( $ctx['can_own'] ) && $card && '' !== trim( $text( 'to' ) ) && ! Service::same_email( $text( 'to' ), Mailer::address( $card ) ) ) {
+					return $keep( Service::fail( 'refused', __( 'Only the site owner (an administrator) may send a card\'s e-mail to another address: the e-mail holds the full code. Leave the address empty to send it to the card\'s own address.', 'fishotel-misc-plugin' ) ) );
+				}
 				return $keep( $service->resend( $id, $text( 'to' ), $audit ) );
 
 			case 'restore_part':
@@ -787,7 +795,7 @@ class Admin {
 							return $store->audit_after( $after, 1000 );
 						},
 						Audit::key(),
-						get_option( Audit::HEAD_OPTION, null )
+						get_option( Audit::HEAD_OPTION, array() )
 					) : null,
 				);
 				break;

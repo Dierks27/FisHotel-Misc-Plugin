@@ -122,8 +122,13 @@ check( 'failed again, then cancelled: nothing more', 5000 === (int) $s->store->c
 $o->status = 'pending';
 $o->update_status( 'processing' );
 check( 'the customer pays it after all (pay-for-order): the $30 is taken again', 2000 === (int) $s->store->card( $a )['balance_cents'] );
+fh_refund_items( $o, array( 91 => 1 ) );
 $o->update_status( 'refunded' );
-check( 'refunded in full: the $30 is back', 5000 === (int) $s->store->card( $a )['balance_cents'] );
+check( 'marked Refunded when only part of the items were refunded (the other money was all given back): nothing back by itself, a note says so', 2000 === (int) $s->store->card( $a )['balance_cents'] && false !== strpos( end( $o->notes ), 'was NOT put back by itself' ) );
+$o->status = 'processing';
+fh_refund_items( $o );
+$o->update_status( 'refunded' );
+check( 'refunded in full (every item): the $30 is back', 5000 === (int) $s->store->card( $a )['balance_cents'] );
 $o->update_status( 'refunded' );
 check( '…once', 5000 === (int) $s->store->card( $a )['balance_cents'] && fh_gc_balanced( $s ) );
 
@@ -151,6 +156,81 @@ $u->update_status( 'completed' );
 do_action( 'woocommerce_trash_order', 2005 );
 check( 'a paid order trashed: NOT put back (it was paid for)', 3500 === (int) $s->store->card( $a )['balance_cents'] );
 check( 'the ledger adds up', fh_gc_balanced( $s ) );
+
+echo "\nPaid after money was put back by hand\n";
+fh_wc_reset();
+$s = fh_gc_use();
+$GLOBALS['fh_current_user'] = 5;
+$a = fh_gc_wallet_card( $s, 5, '30.00' );
+$c = new Checkout();
+Checkout::set_choice( array( 'use' => true, 'amount' => 1000 ) );
+$o = fh_checkout( $c, 2101, 5, 50.00 );
+$o->update_status( 'processing' );
+$s->restore_part( 2101, '4.00', 'one fish refunded', 'partkeytest0001', fh_gc_admin_ctx() );
+$o->update_status( 'completed' );
+check( 'a $10 card payment, $4 put back with the Gift cards box, then Completed: the card keeps the $4 ($24), nothing is taken again', 2400 === (int) $s->store->card( $a )['balance_cents'] && 600 === $s->order_summary( 2101 )['outstanding'] && 'completed' === $o->status );
+$s->restore_part( 2101, '6.00', 'the rest refunded', 'partkeytest0002', fh_gc_admin_ctx() );
+$o->status = 'processing';
+$o->update_status( 'completed' );
+check( '…all of it put back by hand, then Completed again: still nothing taken again', 3000 === (int) $s->store->card( $a )['balance_cents'] && fh_gc_balanced( $s ) );
+Checkout::set_choice( array( 'use' => true, 'amount' => 500 ) );
+WC()->cart->contents_total = 20.00;
+WC()->cart->calculate_fees();
+$blk = fh_order( 2102, array( 'customer_id' => 5, 'total' => 15.0 ) );
+$item = new Fh_Fee_Item( 'fh-gift-card', -5.0 );
+$c->tag_fee( $item, 'fh-gift-card', (object) array( 'id' => 'fh-gift-card' ), $blk );
+$blk->fees[] = $item;
+$blk->update_status( 'processing' );
+check( 'an order whose card part was never taken (block checkout) is charged when it is paid', 2500 === (int) $s->store->card( $a )['balance_cents'] && 500 === $s->order_summary( 2102 )['outstanding'] );
+check( 'should_take (pure): nothing yet → yes; taken → no; put back when it failed → yes; put back by hand → no', Checkout::should_take( array() ) && ! Checkout::should_take( array( array( 'card_id' => 1, 'type' => 'used', 'amount_cents' => -500, 'idempotency_key' => 'use:1:1:1' ) ) ) && Checkout::should_take( array( array( 'card_id' => 1, 'type' => 'used', 'amount_cents' => -500, 'idempotency_key' => 'use:1:1:1' ), array( 'card_id' => 1, 'type' => 'restored', 'amount_cents' => 500, 'idempotency_key' => 'restore:1:1:1' ) ) ) && ! Checkout::should_take( array( array( 'card_id' => 1, 'type' => 'used', 'amount_cents' => -500, 'idempotency_key' => 'use:1:1:1' ), array( 'card_id' => 1, 'type' => 'restored', 'amount_cents' => 500, 'idempotency_key' => 'part:1:1:abc' ) ) ) );
+
+echo "\nRefunded: only every item brings the card part back\n";
+Checkout::set_choice( array( 'use' => true, 'amount' => 2500 ) );
+$r = fh_checkout( $c, 2103, 5, 100.00 );
+$r->items = array( 81 => new Fh_Line_Item( 601, 1 ), 82 => new Fh_Line_Item( 602, 1 ) );
+$r->update_status( 'processing' );
+fh_refund_items( $r, array( 81 => 1 ) );
+$r->update_status( 'refunded' );
+check( 'two items, the card paid most of it; one item returned and its other-money part refunded, so WooCommerce marks it Refunded: the card part is NOT put back by itself', 0 === (int) $s->store->card( $a )['balance_cents'] && 2500 === $s->order_summary( 2103 )['outstanding'] && false !== strpos( end( $r->notes ), 'use the Gift cards box' ) );
+$c->on_partial_refund( 2103, 9 );
+check( '…and no second note from the refund hook', false !== strpos( end( $r->notes ), 'NOT put back by itself' ) );
+check( 'all_items_refunded (pure apart from the order): none, part, all', ! Checkout::all_items_refunded( fh_order( 2199 ) ) && ! Checkout::all_items_refunded( $r ) && ( fh_refund_items( $r ) || Checkout::all_items_refunded( $r ) ) );
+
+echo "\nTax\n";
+$c   = new Checkout();
+$fee = (object) array( 'object' => (object) array( 'id' => 'fh-gift-card' ) );
+check( 'the "Gift card" fee gets no tax share at checkout (it is a payment, not a discount)', array() === $c->no_fee_tax( array( 1 => -400.0 ), $fee ) );
+check( '…any other fee keeps its tax', array( 1 => -400.0 ) === $c->no_fee_tax( array( 1 => -400.0 ), (object) array( 'object' => (object) array( 'id' => 'other-fee' ) ) ) );
+$taxed = new class() extends Fh_Fee_Item {
+	public $taxes = array( 'total' => array( 1 => -4.0 ) );
+	public function __construct() {
+		parent::__construct( 'fh-gift-card', -50.0, array( Checkout::FEE_META => 'yes' ) );
+	}
+	public function set_taxes( $t ) {
+		$this->taxes = $t;
+	}
+};
+$c->no_item_fee_tax( $taxed );
+$other = clone $taxed;
+$other->meta = array();
+$other->taxes = array( 'total' => array( 1 => -4.0 ) );
+$c->no_item_fee_tax( $other );
+check( 'Recalculate on the order screen: our fee line\'s tax is taken off, another fee\'s is not', false === $taxed->taxes && array( 'total' => array( 1 => -4.0 ) ) === $other->taxes );
+
+echo "\nThe wrong-code count\n";
+check( 'a customer is counted by account', 'user:5' === Checkout::who( 5, array( 'REMOTE_ADDR' => '198.51.100.7' ) ) );
+check( 'a guest by the connecting address only — a forwarded-for header changes nothing', 'ip:198.51.100.7' === Checkout::who( 0, array( 'REMOTE_ADDR' => '198.51.100.7', 'HTTP_X_FORWARDED_FOR' => '203.0.113.9' ) ) && 'ip:198.51.100.7' === Checkout::who( 0, array( 'REMOTE_ADDR' => '198.51.100.7', 'HTTP_X_FORWARDED_FOR' => '203.0.113.10' ) ) );
+$g = fh_gc_service( $s->store, array( 'guest_codes' => 'yes' ) );
+$GLOBALS['fh_transients'] = array();
+$refused = 0;
+for ( $i = 0; $i < 40; $i++ ) {
+	$who = Checkout::who( 0, array( 'REMOTE_ADDR' => '198.51.100.7', 'HTTP_X_FORWARDED_FOR' => '203.0.113.' . intdiv( $i, 9 ) ) );
+	if ( 'limit' === Checkout::apply_code( $g, 'WRNG-CODE-' . $i . 'AAA-BBBB', 0, $who )['code'] ) {
+		$refused++;
+	}
+}
+check( '40 wrong codes from one address, a new forwarded-for every 9: 30 refused', 30 === $refused );
+$GLOBALS['fh_transients'] = array();
 
 echo "\nCodes typed at checkout\n";
 fh_wc_reset();
@@ -242,6 +322,7 @@ $c->keep_old_deduction( true, $old );
 check( 'Recalculate keeps the deduction ($45, not $60)', 45.0 === (float) $old->total );
 $c->ensure_debited( 4001 );
 check( 'an old order changing status takes nothing and puts nothing back', 2500 === (int) $s->store->card( $card )['balance_cents'] );
+fh_refund_items( $old );
 $old->update_status( 'refunded' );
 $c->on_refunded( 4001 );
 check( 'refunding it puts the old $15 back on the card', 4000 === (int) $s->store->card( $card )['balance_cents'] );

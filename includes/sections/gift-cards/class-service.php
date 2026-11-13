@@ -379,6 +379,21 @@ class Service {
 	}
 
 	/**
+	 * Whether a typed address is the same as a stored one (any letter
+	 * case, spaces around ignored).
+	 *
+	 * @param mixed $typed  Typed.
+	 * @param mixed $stored Stored.
+	 * @return bool
+	 */
+	public static function same_email( $typed, $stored ) {
+		$clean = static function ( $v ) {
+			return strtolower( trim( is_scalar( $v ) ? (string) $v : '' ) );
+		};
+		return $clean( $typed ) === $clean( $stored );
+	}
+
+	/**
 	 * A cleaned message.
 	 *
 	 * @param mixed $value Typed.
@@ -904,6 +919,39 @@ class Service {
 	}
 
 	/**
+	 * Hold back the e-mails of an order's cards that nobody has used or
+	 * added to an account and that were not sent yet (the order that paid
+	 * for them was cancelled or refunded). The Send button still sends one.
+	 *
+	 * @param int   $order_id Order id.
+	 * @param array $ctx      Audit::context().
+	 * @return int[] The cards held.
+	 */
+	public function hold_order_emails( $order_id, array $ctx ) {
+		$held = array();
+		foreach ( $this->store->cards_of_order( (int) $order_id ) as $card ) {
+			$from = (string) $card['email_state'];
+			if ( 'active' !== $card['status'] || 0 !== (int) $card['owner_user_id'] || (int) $card['balance_cents'] !== (int) $card['amount_cents'] || ! in_array( $from, array( 'pending', 'failed' ), true ) ) {
+				continue;
+			}
+			$r = $this->atomic(
+				function () use ( $card, $from, $ctx, $order_id ) {
+					if ( ! $this->store->change_card( (int) $card['id'], array( 'email_state' => 'held' ), array( 'email_state' => $from ), $this->now() ) ) {
+						throw new Refusal( 'changed', '' );
+					}
+					/* translators: %d: order id */
+					$this->audit( $ctx, (int) $card['id'], 'details', 'email_state', $from, 'held', null, sprintf( __( 'order #%d cancelled or refunded', 'fishotel-misc-plugin' ), (int) $order_id ) );
+					return self::ok( '' );
+				}
+			);
+			if ( $r['ok'] ) {
+				$held[] = (int) $card['id'];
+			}
+		}
+		return $held;
+	}
+
+	/**
 	 * The cron job: send the e-mails whose day has come.
 	 *
 	 * @param array $ctx Audit::context().
@@ -1042,29 +1090,6 @@ class Service {
 				$card = $this->store->card_by_key( $key );
 				if ( ! $card ) {
 					throw new Refusal( 'not_found', $nope );
-				}
-				return $this->claim_card( $card, (int) $user_id, $ctx, $nope );
-			}
-		);
-	}
-
-	/**
-	 * Add an unclaimed card sent to the customer's own e-mail address to
-	 * their account (the "Add to my account" button — no code typed).
-	 *
-	 * @param int    $card_id Card id.
-	 * @param int    $user_id User id.
-	 * @param string $email   The user's e-mail address.
-	 * @param array  $ctx     Audit::context().
-	 * @return array
-	 */
-	public function claim( $card_id, $user_id, $email, array $ctx ) {
-		$nope = __( 'That card cannot be added to your account.', 'fishotel-misc-plugin' );
-		return $this->atomic(
-			function () use ( $card_id, $user_id, $email, $ctx, $nope ) {
-				$card = $this->store->card( (int) $card_id );
-				if ( ! $card || (int) $user_id <= 0 || '' === trim( (string) $email ) || strtolower( trim( (string) $card['recipient_email'] ) ) !== strtolower( trim( (string) $email ) ) ) {
-					throw new Refusal( 'not_yours', $nope );
 				}
 				return $this->claim_card( $card, (int) $user_id, $ctx, $nope );
 			}
@@ -1474,6 +1499,7 @@ class Service {
 		$s                = $this->store->stats( $month, $year, $ago );
 		$s['books_cents'] = (int) ( $s['outstanding_active'] ?? 0 ) + ( Settings::on( $this->settings, 'books_include_disabled' ) ? (int) ( $s['outstanding_disabled'] ?? 0 ) : 0 );
 		$s['mismatches']  = $this->store->mismatches( 20 );
+		$s['unlogged']    = $this->store->unlogged_movements( 20 );
 		return $s;
 	}
 }

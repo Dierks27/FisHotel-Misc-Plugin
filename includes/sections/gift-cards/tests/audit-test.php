@@ -143,6 +143,38 @@ $v = Audit::verify( static function ( $after ) use ( $s ) { return $s->store->au
 check( 'rows cut off the end show', ! $v['ok'] && false !== strpos( implode( ' ', $v['problems'] ), 'removed from the end' ) );
 $v = Audit::verify( static function ( $after ) use ( $s ) { return $s->store->audit_after( $after, 50 ); }, 'a-new-site-key', null );
 check( 'after the site key changes, old rows are "another key", not "tampered"', 3 === $v['other_key'] && $v['ok'] );
+
+$s      = fh_gc_fresh();
+$id     = fh_gc_card( $s, '25.00' );
+$s->adjust( $id, 'credit', '5', 'goodwill note', 'fpkey000000001', fh_gc_admin_ctx() );
+$t      = $s->store->table( 'gift_card_audit' );
+$all    = static function ( $after ) use ( $s ) {
+	return $s->store->audit_after( $after, 50 );
+};
+$row    = (int) $GLOBALS['wpdb']->pdo->query( "SELECT id FROM {$t} WHERE action = 'balance'" )->fetchColumn();
+$GLOBALS['wpdb']->pdo->exec( "UPDATE {$t} SET actor_user_id = 7, actor_name = 'someone else', reason = 'forged', key_fp = '00000000' WHERE id = {$row}" );
+$v = Audit::verify( $all, 'test-audit-key', get_option( Audit::HEAD_OPTION ) );
+check( 'a row edited and marked "earlier key" after rows under today\'s key shows as changed', ! $v['ok'] && false !== strpos( implode( ' ', $v['problems'] ), 'Row ' . $row . ' says it was written under an earlier key' ) );
+
+$s    = fh_gc_fresh();
+fh_gc_card( $s, '10.00' );
+fh_gc_card( $s, '10.00' );
+$t    = $s->store->table( 'gift_card_audit' );
+$all  = static function ( $after ) use ( $s ) {
+	return $s->store->audit_after( $after, 50 );
+};
+$head = get_option( Audit::HEAD_OPTION );
+check( 'the newest-row record is signed', isset( $head['sig'] ) && hash_equals( Audit::head_sig( (int) $head['id'], $head['hash'], 'test-audit-key' ), $head['sig'] ) );
+$prev = $s->store->audit_after( 0, 50 )[2];
+$GLOBALS['wpdb']->pdo->exec( "DELETE FROM {$t} WHERE id = 4" );
+$v = Audit::verify( $all, 'test-audit-key', array( 'id' => (int) $prev['id'], 'hash' => $prev['row_hash'] ) );
+check( 'the newest row removed and the record rewritten to the row before it: shows', ! $v['ok'] && false !== strpos( implode( ' ', $v['problems'] ), 'changed outside this plugin' ) );
+$v = Audit::verify( $all, 'test-audit-key', array( 'id' => (int) $prev['id'], 'hash' => $prev['row_hash'], 'sig' => str_repeat( 'a', 64 ) ) );
+check( '…also with a made-up signature', ! $v['ok'] );
+$v = Audit::verify( $all, 'test-audit-key', array() );
+check( 'the record deleted: shows', ! $v['ok'] && false !== strpos( implode( ' ', $v['problems'] ), 'is missing' ) );
+$v = Audit::verify( $all, 'a-new-site-key', array( 'id' => (int) $prev['id'], 'hash' => $prev['row_hash'], 'sig' => 'x' ) );
+check( 'after a site key change the record cannot be checked either: a warning (rows under another key), not a problem', $v['ok'] && 3 === $v['other_key'] );
 $fake            = $s->store->audit_after( 0, 50 )[0];
 $fake['reason']  = 'edited';
 $fake['row_hash'] = hash_hmac( 'sha256', Audit::canonical( $fake ), 'a-guessed-key' );

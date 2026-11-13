@@ -150,6 +150,13 @@ class Gift_Cards {
 		Cron::init( $mode['effective'] );
 
 		if ( 'live' !== $mode['effective'] ) {
+			if ( ! empty( $mode['fallback'] ) ) {
+				// Live fell back (the old plugin is on again): no paying with
+				// these cards, but money they already took still goes back,
+				// and a refunded purchase still holds its card's e-mail.
+				( new Checkout() )->init_put_back();
+				( new Product() )->init_undo();
+			}
 			return;
 		}
 

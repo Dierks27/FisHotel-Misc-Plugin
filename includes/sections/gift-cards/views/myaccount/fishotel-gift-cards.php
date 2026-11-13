@@ -7,7 +7,6 @@
  *
  * @var int        $balance      Cents usable now.
  * @var array[]    $cards        The cards in the account.
- * @var array[]    $unclaimed    Cards sent to the user's address, in nobody's account.
  * @var array[]    $activity     Ledger rows, newest first.
  * @var array      $codes        Card id → its code (the user's own cards).
  * @var int        $current_page Activity page.
@@ -47,30 +46,6 @@ $fh_date = static function ( $utc ) {
 		<input type="text" id="fh_gcard_code_account" name="fh_gcard_code" autocomplete="off" spellcheck="false" placeholder="XXXX-XXXX-XXXX-XXXX" required>
 		<button type="submit" class="button"><?php esc_html_e( 'Redeem', 'fishotel-misc-plugin' ); ?></button>
 	</form>
-
-	<?php if ( $unclaimed ) : ?>
-		<h3><?php esc_html_e( 'Gift cards sent to you', 'fishotel-misc-plugin' ); ?></h3>
-		<table class="shop_table shop_table_responsive woocommerce-giftcards-table">
-			<thead><tr><th><?php esc_html_e( 'Card', 'fishotel-misc-plugin' ); ?></th><th><?php esc_html_e( 'Amount', 'fishotel-misc-plugin' ); ?></th><th><?php esc_html_e( 'From', 'fishotel-misc-plugin' ); ?></th><th></th></tr></thead>
-			<tbody>
-			<?php foreach ( $unclaimed as $fh_card ) : ?>
-				<tr>
-					<td data-title="<?php esc_attr_e( 'Card', 'fishotel-misc-plugin' ); ?>"><?php echo esc_html( Codes::mask( $fh_card['code'] ) ); ?></td>
-					<td data-title="<?php esc_attr_e( 'Amount', 'fishotel-misc-plugin' ); ?>"><?php echo esc_html( Money::words( (int) $fh_card['balance_cents'] ) ); ?></td>
-					<td data-title="<?php esc_attr_e( 'From', 'fishotel-misc-plugin' ); ?>"><?php echo esc_html( '' !== $fh_card['sender_name'] ? $fh_card['sender_name'] : '—' ); ?></td>
-					<td>
-						<form method="post" action="<?php echo esc_url( $page_url ); ?>">
-							<input type="hidden" name="fh_gcard_action" value="claim">
-							<input type="hidden" name="card" value="<?php echo esc_attr( (int) $fh_card['id'] ); ?>">
-							<input type="hidden" name="_fh_gcard_nonce" value="<?php echo esc_attr( $nonce ); ?>">
-							<button type="submit" class="button fh-giftcard-redeem-btn"><?php esc_html_e( 'Add to my account', 'fishotel-misc-plugin' ); ?></button>
-						</form>
-					</td>
-				</tr>
-			<?php endforeach; ?>
-			</tbody>
-		</table>
-	<?php endif; ?>
 
 	<h3><?php esc_html_e( 'Your gift cards', 'fishotel-misc-plugin' ); ?></h3>
 	<?php if ( ! $cards ) : ?>

@@ -47,6 +47,7 @@ $fh_states = array(
 	'sending' => __( 'being sent', 'fishotel-misc-plugin' ),
 	'sent'    => __( 'sent', 'fishotel-misc-plugin' ),
 	'failed'  => __( 'could not be sent', 'fishotel-misc-plugin' ),
+	'held'    => __( 'held back (its order was cancelled or refunded) — press Send to send it anyway', 'fishotel-misc-plugin' ),
 );
 ?>
 <p><a href="<?php echo esc_url( Admin::page_url( 'cards' ) ); ?>">← <?php esc_html_e( 'All cards', 'fishotel-misc-plugin' ); ?></a></p>

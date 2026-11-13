@@ -748,8 +748,9 @@ function fh_gc_tick( $seconds = 1 ) {
 }
 
 /**
- * Whether the ledger adds up to every card's stored balance.
+ * Whether the ledger adds up to every card's stored balance, and every
+ * money movement has its audit row.
  */
 function fh_gc_balanced( $service ) {
-	return array() === $service->store->mismatches( 10 );
+	return array() === $service->store->mismatches( 10 ) && array() === $service->store->unlogged_movements( 10 );
 }
