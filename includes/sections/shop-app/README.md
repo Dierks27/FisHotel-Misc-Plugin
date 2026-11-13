@@ -214,6 +214,22 @@ priority 0, just before the Front Desk's own handler:
 With a live session, a label address that carries anything extra (a
 tracking parameter a scanner app added) is sent on to the plain one.
 
+**What that water needs today.** On a tank screen opened in the app — a
+label scanned with the camera or in the app, or a tank picked on its home
+screen — a panel sits right under the bar: **Today for this water**, the
+day's To do list cut down to the tank's building (one shared water system:
+every dose, test and water change once for the system, the feeding line),
+or **Today for this tank** for a temporary tank (its own water), with how
+many are still to do, each line ticked and struck when done, and one big
+button **Full list for today ›** (`?fh_front_desk=1&list=1`, which opens
+under the PIN). It is cut from what the Front Desk's page already holds
+(`screen.todoList`, `screen.tank.buildingId` / `ownWater`) — no request of
+its own — and follows every answer the page gets, so a tick on the tank
+screen shows at once. Not on the picker, the full list or the calculator
+(`water.show` in the bar's config). The label's address is unchanged; with
+the Shop App off, or opened with a WordPress login, the tank page is
+exactly the Front Desk's own, without the panel.
+
 ### No connection
 
 Inside the app the script stands between a tank screen and the network. A
@@ -314,8 +330,11 @@ user meta, no REST route, no cron. Deactivating keeps everything.
 4. Switch the tablet to flight mode, record another loss: MAY NOT BE
    SAVED. Switch flight mode off: it saves by itself, once. Do it again,
    tap *Back to the entry*, switch flight mode off, tap Save: one entry.
-5. Scan a tank label with the tablet's camera: that tank. Tap Lock, scan
-   again: the keypad, then that tank.
+5. Scan a tank label with the tablet's camera: that tank, with *Today for
+   this water* under the bar — the same lines as that building's block on
+   the full list; tick one on the tank screen and the panel follows; *Full
+   list for today ›* opens the list. Tap Lock, scan again: the keypad, then
+   that tank.
 6. On the same tablet open `/wp-admin/` and `/my-account/`: a login page.
 7. Enter five wrong PINs: locked for five minutes; Devices shows it, the
    Log lists each wrong PIN; *Clear lockout*. Change a person's PIN while

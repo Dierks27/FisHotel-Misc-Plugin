@@ -111,7 +111,10 @@ Each helper exits 0 when CI runs it directly.
   enrolled device with a live session gets the Front Desk's own page with
   the bar added (take the bar away and it is the page a WordPress login
   gets, but for the nonce); nobody unlocked → the keypad, bound for that
-  tank; expiry, Lock, revoke, an address with something added.
+  tank; expiry, Lock, revoke, an address with something added; a tank
+  screen in the app is told to show what its water needs today with the
+  full list's address (the picker, the list and the calculator are not),
+  and with the Shop App off nothing of it is on the page.
 - **front-desk-seam-test.php** — the seam with the Clean Room, both
   sections real: the AJAX actions and the acts are read from the Clean
   Room's source, and every action is either one the phone page posts (on
@@ -170,7 +173,11 @@ Each helper exits 0 when CI runs it directly.
   tank is loaded afresh, a revoked device, the offline-queue seam) and the
   app itself (not set up → no keypad, the keypad, wrong PIN, lockout,
   home, buildings then tanks, a fresh state redrawing the open building,
-  Lock, a label scanned before the PIN).
+  Lock, a label scanned before the PIN); what a tank's water needs today
+  (`waterToday()`: a building's block, a temporary tank's own, nothing
+  due, no tank) and the panel under the bar — its lines, done ones struck,
+  the count, the full-list button, following a tick in the page's answer,
+  gone on the picker, absent on the list and the calculator.
 - **sw.test.js** — the service worker in a stand-in worker: what it looks
   at and what it leaves alone; its own cookie-less request for the shell;
   network first; an answer that may not be kept (no-store, private, varies

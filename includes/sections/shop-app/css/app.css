@@ -14,6 +14,7 @@ body.fh-sa,
 .fh-sa-layer,
 .fh-sa-sheet,
 .fh-sa-scan,
+.fh-sa-water,
 .fh-sa-bar {
 	--sa-bg: #0f1720;
 	--sa-card: #1b2733;
@@ -47,6 +48,7 @@ body.fh-sa *,
 .fh-sa-layer *,
 .fh-sa-sheet *,
 .fh-sa-scan *,
+.fh-sa-water *,
 .fh-sa-bar * {
 	box-sizing: border-box;
 }
@@ -676,4 +678,75 @@ body.fh-sa *,
 
 .fh-sa-enrol form {
 	margin: 0;
+}
+
+/* What this tank's water needs today — under the bar on a tank screen. */
+.fh-sa-water {
+	margin: 0;
+	padding: 12px 14px 14px;
+	border-bottom: 1px solid var(--sa-border);
+	background: var(--sa-card);
+	font-size: 17px;
+	line-height: 1.35;
+}
+
+.fh-sa-water__head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 4px 10px;
+}
+
+.fh-sa-water__title {
+	font-weight: 800;
+}
+
+.fh-sa-water__where,
+.fh-sa-water__count {
+	color: var(--sa-muted);
+}
+
+.fh-sa-water__count.is-todo {
+	color: var(--sa-warn);
+	font-weight: 700;
+}
+
+.fh-sa-water__count.is-done {
+	color: var(--sa-ok);
+	font-weight: 700;
+}
+
+.fh-sa-water__list {
+	margin: 8px 0 0;
+	padding: 0;
+	list-style: none;
+}
+
+.fh-sa-water__item {
+	padding: 6px 0;
+	border-top: 1px solid var(--sa-border);
+}
+
+.fh-sa-water__item.is-done {
+	color: var(--sa-muted);
+	text-decoration: line-through;
+}
+
+.fh-sa-water__all {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 52px;
+	margin-top: 10px;
+	border: 2px solid var(--sa-accent);
+	border-radius: 12px;
+	color: var(--sa-accent);
+	font-weight: 800;
+	text-decoration: none;
+	touch-action: manipulation;
+}
+
+.fh-sa-water__all:active {
+	background: var(--sa-accent);
+	color: #04121c;
 }

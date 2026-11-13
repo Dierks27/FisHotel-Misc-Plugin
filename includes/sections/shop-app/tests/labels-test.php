@@ -11,7 +11,10 @@
  *     the Clean Room's own page, rendered by its own code — without a
  *     WordPress login, with the app's bar added;
  *   - on an enrolled device with nobody unlocked it goes to the keypad,
- *     bound for that tank.
+ *     bound for that tank;
+ *   - opened in the app, a tank screen is told to show what that tank's
+ *     water needs today with one tap to the full list (the picker, the
+ *     list and the calculator are not).
  *
  * The Front Desk ends its page with a real exit, so every request here is
  * played in a process of its own (page-child.php).
@@ -110,6 +113,19 @@ check( 'take the bar away and the page is the one a WordPress login gets (but fo
 
 $picker = fh_page( array( 'shop_app' => true, 'enrol' => true, 'unlock' => '4821', 'uri' => '/?fh_front_desk=1' ) );
 check( 'the Front Desk\'s tank picker opens too, with the bar', 200 === $picker['result']['status'] && is_array( fh_page_config( $picker['page'], 'fhShopApp' ) ) );
+
+echo "\n3b. A label scanned in the app — what that tank's water needs today, then the full list\n";
+check( 'on the tank: the bar is told to show what this water needs today, with the full list one tap away', true === $app['water']['show'] && 'https://shop.example.test/?fh_front_desk=1&list=1' === $app['water']['listUrl'] );
+$fh_desk_src = (string) file_get_contents( FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-front-desk.php' );
+check( '… from what the Front Desk\'s page already holds — the day\'s list and the tank\'s building and own water, no request of its own', array_key_exists( 'todoList', (array) $fd['screen'] ) && false !== strpos( $fh_desk_src, "\$data['todoList'] = is_array( \$room['todo'] )" ) && false !== strpos( $fh_desk_src, "'buildingId'  => (int) \$current['building_id']," ) && false !== strpos( $fh_desk_src, "'ownWater'    => \$slot," ) );
+check( 'the strings are there, in plain words', 'Today for this water' === $app['i18n']['waterTitle'] && 'Full list for today ›' === $app['i18n']['waterAll'] && 'Nothing due today' === $app['i18n']['waterNothing'] );
+check( 'the tank picker: no panel', false === fh_page_config( $picker['page'], 'fhShopApp' )['water']['show'] );
+$list = fh_page( array( 'shop_app' => true, 'enrol' => true, 'unlock' => '4821', 'uri' => '/?fh_front_desk=1&list=1' ) );
+check( 'the full list itself: opens under the PIN, no panel over it', 200 === $list['result']['status'] && false === fh_page_config( $list['page'], 'fhShopApp' )['water']['show'] );
+$calc = fh_page( array( 'shop_app' => true, 'enrol' => true, 'unlock' => '4821', 'uri' => '/?fh_front_desk=1&calc=1' ) );
+check( 'the dose calculator: no panel', 200 === $calc['result']['status'] && false === fh_page_config( $calc['page'], 'fhShopApp' )['water']['show'] );
+$off = fh_page( array( 'shop_app' => false, 'native' => 'manager', 'uri' => $label ) );
+check( 'with the Shop App off the label is the Front Desk\'s own page, nothing of the panel in it', false === strpos( $off['page'], 'fh-sa-water' ) && false === strpos( $off['page'], 'waterTitle' ) && false === strpos( $off['page'], 'fhShopApp' ) );
 
 $robin = fh_page( array( 'shop_app' => true, 'enrol' => true, 'unlock' => '1379', 'uri' => $label ) );
 check( 'Robin, who has an account of their own: rendered as that account', $robin['result']['user'] === $robin['result']['users']['manager'] && 'Robin' === fh_page_config( $robin['page'], 'fhShopApp' )['session']['person'] );

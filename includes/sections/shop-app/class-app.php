@@ -880,6 +880,7 @@ class App {
 			'write'     => (string) $desk['write'],
 			'actions'   => array_values( $desk['actions'] ),
 			'saveField' => Saves::FIELD,
+			'water'     => self::water_config(),
 			'i18n'      => self::i18n(),
 		);
 
@@ -888,6 +889,28 @@ class App {
 			. '<script>' . str_replace( '</script', '<\/script', self::asset( 'js/app.js' ) ) . '</script>';
 
 		ob_start( array( self::class, 'add_bar' ) );
+	}
+
+	/**
+	 * What the bar needs to show, at the top of a tank screen, what that
+	 * tank's water needs today: on a tank screen (a label scan, or a tank
+	 * picked in the app) the script cuts the Front Desk's own day's list
+	 * (screen.todoList, already on the page) down to the tank's building —
+	 * one shared water system — or, for a temporary tank, to that tank,
+	 * and links to the full list. Not on the picker, the list itself or
+	 * the calculator.
+	 *
+	 * @return array{show: bool, listUrl: string}
+	 */
+	public static function water_config() {
+		$tank = isset( $_GET['tank'] ) && is_scalar( $_GET['tank'] ) ? absint( wp_unslash( $_GET['tank'] ) ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- a read-only page switch.
+		$list = isset( $_GET['list'] ) && '1' === $_GET['list']; // phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput -- compared with a literal.
+		$calc = isset( $_GET['calc'] ) && '1' === $_GET['calc']; // phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput -- compared with a literal.
+
+		return array(
+			'show'    => $tank > 0 && ! $list && ! $calc,
+			'listUrl' => Shop_App::label_url( 0 ) . '&list=1',
+		);
 	}
 
 	/**
@@ -980,6 +1003,13 @@ class App {
 			'keepEditing'   => __( 'Back to the entry', 'fishotel-misc-plugin' ),
 			'saving'        => __( 'Saving…', 'fishotel-misc-plugin' ),
 			'sessionEnded'  => __( 'Locked. Enter your PIN to go on.', 'fishotel-misc-plugin' ),
+			'waterTitle'    => __( 'Today for this water', 'fishotel-misc-plugin' ),
+			'waterTempTitle' => __( 'Today for this tank', 'fishotel-misc-plugin' ),
+			/* translators: 1: things left, 2: things in all */
+			'waterLeft'     => __( '%1$d of %2$d still to do', 'fishotel-misc-plugin' ),
+			'waterDone'     => __( 'All done for today', 'fishotel-misc-plugin' ),
+			'waterNothing'  => __( 'Nothing due today', 'fishotel-misc-plugin' ),
+			'waterAll'      => __( 'Full list for today ›', 'fishotel-misc-plugin' ),
 			/* translators: %s: the person whose entry is waiting */
 			'sessionEndedSave' => __( 'Locked before it was saved. %s: enter your PIN and it is saved.', 'fishotel-misc-plugin' ),
 		);

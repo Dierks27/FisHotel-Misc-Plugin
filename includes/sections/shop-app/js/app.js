@@ -21,7 +21,11 @@
  *                     the server writes it once however often it is sent.
  *                     An entry that can no longer be saved (somebody with
  *                     another account unlocked) is said to be lost before
- *                     the tank is loaded afresh.
+ *                     the tank is loaded afresh. On a tank screen it also
+ *                     shows, under the bar, what that tank's water needs
+ *                     today (the day's list cut to its building, or to
+ *                     the tank for a temporary tank) and a button to the
+ *                     full list; it follows every answer the page gets.
  *
  * The keypad is made for wet fingers: twelve very large buttons, no
  * on-screen keyboard, every press lights the key, the PIN is sent the
@@ -41,7 +45,7 @@
  *
  * The pure helpers (clock, fmt, tankFromLabel, newSaveId, withSaveId,
  * reuseSaveId, bodyAction, classifyReply, padPress, deadlineFrom,
- * findBuilding) are exported for
+ * findBuilding, waterToday) are exported for
  * tests/app.test.js and the file skips the DOM wiring when there is no
  * document / config.
  *
@@ -322,6 +326,49 @@
 		return receivedAt + Math.max(0, (Number(session.expires) || 0) - (Number(session.now) || 0)) * 1000;
 	}
 
+	/**
+	 * What a tank's water needs today, from the Front Desk's screen data:
+	 * the day's list (screen.todoList) cut down to the tank's building —
+	 * one shared water system — or, for a temporary tank (its own water),
+	 * to that tank alone. Null when the screen holds no tank or no list.
+	 *
+	 * @param {Object} screen The Front Desk's screen (tank, todoList).
+	 * @return {null|{title: string, dayText: string, temp: boolean, items: Object[], left: number, total: number}}
+	 */
+	function waterToday(screen) {
+		if (!screen || !screen.tank || !screen.todoList || !screen.todoList.blocks) {
+			return null;
+		}
+		var tank = screen.tank;
+		var temp = !!tank.ownWater;
+		var found = null;
+		screen.todoList.blocks.forEach(function (block) {
+			if (found || !block) {
+				return;
+			}
+			if (temp ? (block.type === 'temp' && Number(block.tank_id) === Number(tank.id)) : (block.type === 'system' && Number(block.building_id) === Number(tank.buildingId))) {
+				found = block;
+			}
+		});
+		var items = (found && found.items ? found.items : []).map(function (item) {
+			return {
+				label: String(item.label || ''),
+				dose: String(item.dose || ''),
+				forText: String(item['for'] || ''),
+				done: !!item.done
+			};
+		});
+		var left = items.filter(function (item) { return !item.done; }).length;
+		return {
+			title: found ? String(found.title || '') : String(tank.building || ''),
+			dayText: found ? String(found.day_text || '') : '',
+			temp: temp,
+			items: items,
+			left: left,
+			total: items.length
+		};
+	}
+
 	var api = {
 		fmt: fmt,
 		clock: clock,
@@ -333,7 +380,8 @@
 		bodyAction: bodyAction,
 		classifyReply: classifyReply,
 		padPress: padPress,
-		deadlineFrom: deadlineFrom
+		deadlineFrom: deadlineFrom,
+		waterToday: waterToday
 	};
 
 	root.fhShopAppHelpers = api;
@@ -1084,6 +1132,68 @@
 		document.body.insertBefore(bar, document.body.firstChild);
 		document.body.classList.add('fh-sa-inside');
 
+		/* What this tank's water needs today, under the bar. */
+		var water = null;
+		function drawWater(screen) {
+			var wcfg = cfg.water || {};
+			if (!wcfg.show) {
+				return;
+			}
+			var today = waterToday(screen);
+			if (!today) {
+				return;
+			}
+			var count;
+			var tone;
+			if (today.total === 0) {
+				count = t('waterNothing', 'Nothing due today');
+				tone = '';
+			} else if (today.left === 0) {
+				count = t('waterDone', 'All done for today');
+				tone = 'is-done';
+			} else {
+				count = String(t('waterLeft', '%1$d of %2$d still to do')).replace('%1$d', String(today.left)).replace('%2$d', String(today.total));
+				tone = 'is-todo';
+			}
+			var heading = today.temp ? t('waterTempTitle', 'Today for this tank') : t('waterTitle', 'Today for this water');
+			var next = el('section', { class: 'fh-sa-water', 'aria-label': heading }, [
+				el('div', { class: 'fh-sa-water__head' }, [
+					el('span', { class: 'fh-sa-water__title', text: heading }),
+					el('span', { class: 'fh-sa-water__where', text: today.title + (today.dayText ? ' · ' + today.dayText : '') }),
+					el('span', { class: 'fh-sa-water__count ' + tone, text: count })
+				]),
+				el('ul', { class: 'fh-sa-water__list' }, today.items.map(function (item) {
+					var line = (item.done ? '✓ ' : '') + item.label + (item.dose && item.label.indexOf(item.dose) === -1 ? ' — ' + item.dose : '') + (item.forText ? ' (' + item.forText + ')' : '');
+					return el('li', { class: 'fh-sa-water__item' + (item.done ? ' is-done' : ''), text: line });
+				})),
+				el('a', { class: 'fh-sa-water__all', href: String(wcfg.listUrl || ''), text: t('waterAll', 'Full list for today ›') })
+			]);
+			if (water && water.parentNode) {
+				water.parentNode.insertBefore(next, water);
+				water.parentNode.removeChild(water);
+			} else {
+				document.body.insertBefore(next, bar.nextSibling);
+			}
+			water = next;
+		}
+		function waterFromReply(text) {
+			if (!(cfg.water || {}).show) {
+				return;
+			}
+			try {
+				var reply = JSON.parse(String(text || ''));
+				var data = reply && reply.data ? reply.data : reply;
+				if (data && data.screen && data.screen.tank) {
+					drawWater(data.screen);
+				} else if (data && data.screen && water && water.parentNode) {
+					// Back on the picker: no tank, no panel.
+					water.parentNode.removeChild(water);
+					water = null;
+				}
+			} catch (e) { /* not JSON: nothing to show */ }
+		}
+		drawWater(root.fhFrontDesk && root.fhFrontDesk.screen);
+
 		// wp-admin is not part of a shop session: its links would only lead to a login page.
 		if (urls.admin) {
 			var hide = document.createElement('style');
@@ -1335,7 +1445,7 @@
 					nativeFetch(input, opts).then(function (res) {
 						root.clearTimeout(timer);
 						return res.clone().text().then(function (text) {
-							return { res: res, kind: classifyReply(res.status, text) };
+							return { res: res, text: text, kind: classifyReply(res.status, text) };
 						});
 					}).then(function (out) {
 						if (out.kind === 'ok') {
@@ -1346,6 +1456,7 @@
 							}
 							closeSheet();
 							contact();
+							waterFromReply(out.text);
 							resolve(out.res);
 							return;
 						}

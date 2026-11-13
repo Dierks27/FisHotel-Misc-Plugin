@@ -150,9 +150,10 @@ function makeDocument() {
 				addEventListener(type, fn) { (this.listeners[type] = this.listeners[type] || []).push(fn); },
 				removeEventListener() {},
 				appendChild(child) { if (child.parentNode) { child.parentNode.removeChild(child); } child.parentNode = this; this.children.push(child); return child; },
-				insertBefore(child, ref) { child.parentNode = this; const i = this.children.indexOf(ref); this.children.splice(i < 0 ? 0 : i, 0, child); return child; },
+				insertBefore(child, ref) { child.parentNode = this; if (!ref) { this.children.push(child); return child; } const i = this.children.indexOf(ref); this.children.splice(i < 0 ? 0 : i, 0, child); return child; },
 				removeChild(child) { this.children = this.children.filter((c) => c !== child); child.parentNode = null; return child; },
 				get firstChild() { return this.children[0] || null; },
+				get nextSibling() { const p = this.parentNode; return p ? (p.children[p.children.indexOf(this) + 1] || null) : null; },
 				get isConnected() { let n = this; while (n) { if (n === doc.body) { return true; } n = n.parentNode; } return false; },
 				get offsetWidth() { return 0; },
 				play() { return Promise.resolve(); }
@@ -267,6 +268,7 @@ function boot(config, opts) {
 	};
 	const win = {
 		fhShopApp: config,
+		fhFrontDesk: opts.frontDesk,
 		document: doc,
 		location: location,
 		isSecureContext: opts.insecure ? false : true,
@@ -739,7 +741,58 @@ const STATE_LOCKED = Object.assign({}, STATE_LIVE, { session: null });
 	await settle();
 	check('a WordPress login on the device is said plainly under the keypad, with a way to log it out', /Also logged in to WordPress as Morgan Manager\./.test(text(page.doc.getElementById('fh-sa-app'))) && findAll(page.doc.getElementById('fh-sa-app'), 'fh-sa-warn').length === 1);
 
-	console.log('\n18. The script itself');
+	console.log('\n18. A tank label scanned in the app: what that water needs today');
+	const BLOCKS = [
+		{ type: 'system', building_id: 5, title: 'Spa · Building 500', day_text: 'Day 3', items: [
+			{ label: 'Chloroquine 40 mg/gal', dose: '40 mg/gal', for: '', done: false },
+			{ label: 'Copper test', dose: '', for: 'Day 3 group', done: true },
+			{ label: 'Feed — 4 tanks with fish', dose: '', for: '', done: false }
+		] },
+		{ type: 'system', building_id: 6, title: 'Spa · Building 600', day_text: '', items: [{ label: 'Water change 25%', dose: '', for: '', done: false }] },
+		{ type: 'temp', building_id: 9, tank_id: 901, number: 901, title: 'TEMP 1 · Invented hospital', day_text: 'Day 2 of 14', items: [{ label: 'Methylene blue bath', dose: '', for: '', done: false }] }
+	];
+	const W = helpers.waterToday;
+	const sys = W({ tank: { id: 52, number: 521, buildingId: 5, ownWater: false, building: 'Building 500' }, todoList: { blocks: BLOCKS } });
+	check('a tank in a building: its building\'s block — the whole shared water — and nothing of the others', sys.title === 'Spa · Building 500' && sys.dayText === 'Day 3' && sys.items.length === 3 && sys.left === 2 && sys.total === 3 && !sys.temp);
+	check('… each line with what it is, its dose, which group, done or not', sys.items[0].label === 'Chloroquine 40 mg/gal' && sys.items[1].forText === 'Day 3 group' && sys.items[1].done === true);
+	const tmp = W({ tank: { id: 901, number: 901, buildingId: 9, ownWater: true }, todoList: { blocks: BLOCKS } });
+	check('a temporary tank: that tank alone (its own water)', tmp.temp === true && tmp.title === 'TEMP 1 · Invented hospital' && tmp.items.length === 1 && tmp.items[0].label === 'Methylene blue bath');
+	const none = W({ tank: { id: 71, number: 711, buildingId: 7, ownWater: false, building: 'Building 700' }, todoList: { blocks: BLOCKS } });
+	check('a building with nothing due: "nothing", under its own name', none.total === 0 && none.title === 'Building 700');
+	check('no tank (the picker), no list, nothing: no answer', W({ tank: null, todoList: { blocks: BLOCKS } }) === null && W({ tank: { id: 1 } }) === null && W(null) === null);
+
+	const SCREEN = { tank: { id: 52, number: 521, buildingId: 5, ownWater: false, building: 'Building 500' }, todoList: { blocks: BLOCKS } };
+	const LIST_URL = SITE + '/?fh_front_desk=1&list=1';
+	const withWater = () => Object.assign(frontDeskConfig(), { water: { show: true, listUrl: LIST_URL }, i18n: Object.assign({}, I18N, { waterTitle: 'Today for this water', waterTempTitle: 'Today for this tank', waterLeft: '%1$d of %2$d still to do', waterDone: 'All done for today', waterNothing: 'Nothing due today', waterAll: 'Full list for today ›' }) });
+	page = boot(withWater(), { frontDesk: { screen: SCREEN } });
+	let water = page.doc.body.children[1];
+	check('on the tank screen, right under the bar: what this water needs today', has(page.doc.body.children[0], 'fh-sa-bar') && water && has(water, 'fh-sa-water'));
+	check('… titled, with its system and day, and how much is left', /Today for this water/.test(text(water)) && /Spa · Building 500 · Day 3/.test(text(water)) && text(find(water, 'fh-sa-water__count')) === '2 of 3 still to do');
+	const lines = findAll(water, 'fh-sa-water__item').map(text);
+	check('… every line of that water, the done one ticked and struck', lines.length === 3 && lines[0] === 'Chloroquine 40 mg/gal' && lines[1] === '✓ Copper test (Day 3 group)' && has(findAll(water, 'fh-sa-water__item')[1], 'is-done'));
+	const all = find(water, 'fh-sa-water__all');
+	check('… and one tap to the full list for today', all.tag === 'a' && all.attrs.href === LIST_URL && text(all) === 'Full list for today ›');
+
+	const DONE = JSON.parse(JSON.stringify(BLOCKS));
+	DONE[0].items.forEach((item) => { item.done = true; });
+	page.answer = () => Promise.resolve(reply(200, { success: true, data: { message: 'Ticked', screen: { tank: SCREEN.tank, todoList: { blocks: DONE } } } }));
+	await page.win.fetch(AJAX, Object.assign({}, SAVE, { body: 'action=fishotel_cleanroom_act&nonce=abc&act=todo_tick&tank=521' }));
+	await settle();
+	water = find(page.doc.body, 'fh-sa-water');
+	check('a tick on the page: the panel follows the answer — "All done for today", still one panel', text(find(water, 'fh-sa-water__count')) === 'All done for today' && findAll(page.doc.body, 'fh-sa-water').length === 1);
+	page.answer = () => Promise.resolve(reply(200, { success: true, data: { screen: { tank: null, todoList: { blocks: DONE } } } }));
+	await page.win.fetch(AJAX, { method: 'POST', body: 'action=fishotel_cleanroom_screen&nonce=abc&tank=0' });
+	await settle();
+	check('back on the tank picker inside the page: the panel goes', findAll(page.doc.body, 'fh-sa-water').length === 0);
+
+	page = boot(Object.assign(withWater(), { water: { show: false, listUrl: LIST_URL } }), { frontDesk: { screen: SCREEN } });
+	check('the day\'s list or the calculator (not a tank screen): no panel', findAll(page.doc.body, 'fh-sa-water').length === 0);
+	page = boot(withWater(), { frontDesk: { screen: { tank: { id: 901, number: 901, buildingId: 9, ownWater: true }, todoList: { blocks: BLOCKS } } } });
+	check('a temporary tank: "Today for this tank"', /Today for this tank/.test(text(find(page.doc.body, 'fh-sa-water'))) && findAll(page.doc.body, 'fh-sa-water__item').length === 1);
+	page = boot(withWater(), { frontDesk: { screen: { tank: { id: 71, number: 711, buildingId: 7, ownWater: false, building: 'Building 700' }, todoList: { blocks: BLOCKS } } } });
+	check('a water with nothing due says so, still with the full list one tap away', text(find(page.doc.body, 'fh-sa-water__count')) === 'Nothing due today' && find(page.doc.body, 'fh-sa-water__all') !== null);
+
+	console.log('\n19. The script itself');
 	const source = fs.readFileSync(FILE, 'utf8');
 	const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 	check('it builds every screen from elements and text — never innerHTML, document.write or eval', !/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\(|new Function\(/.test(code));
