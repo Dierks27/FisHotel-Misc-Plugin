@@ -276,8 +276,13 @@ arrive( $store, 521, 'Blue Test Wrasse', 4, 3 );
 arrive( $store, 621, 'Test Goby', 1, 3 );
 $list = room( $store )['todo'];
 check( 'a copper test due and no reading ever: flagged overdue', 2 === count( $list['flags'] ) && 'Building 500' === $list['flags'][0]['where'] && $list['flags'][0]['due'] && $list['flags'][0]['overdue'] && ! $list['flags'][0]['low'] && null === $list['flags'][0]['days_ago'] );
-$store->log_tank( (int) $store->tank_by_number( 522 )['id'], array( 'kind' => 'copper', 'value' => 2.4, 'logged_at' => gmdate( 'Y-m-d H:i:s', time() - 26 * 3600 ) ) );
-$store->log_tank( (int) $store->tank_by_number( 621 )['id'], array( 'kind' => 'copper', 'value' => 2.5, 'logged_at' => gmdate( 'Y-m-d H:i:s', time() - 4 * 86400 ) ) );
+// Noon on a past day in the shop's time zone (a fixed number of hours back
+// lands two calendar days back when the suite runs just after midnight).
+$noon_ago = function ( $days ) use ( $today ) {
+	return gmdate( 'Y-m-d H:i:s', ( new DateTimeImmutable( $today . ' 12:00:00', wp_timezone() ) )->modify( '-' . (int) $days . ' days' )->getTimestamp() );
+};
+$store->log_tank( (int) $store->tank_by_number( 522 )['id'], array( 'kind' => 'copper', 'value' => 2.4, 'logged_at' => $noon_ago( 1 ) ) );
+$store->log_tank( (int) $store->tank_by_number( 621 )['id'], array( 'kind' => 'copper', 'value' => 2.5, 'logged_at' => $noon_ago( 4 ) ) );
 $list = room( $store )['todo'];
 $flag = array_column( $list['flags'], null, 'where' );
 check( 'yesterday\'s reading: today\'s test is due, not overdue', $flag['Building 500']['due'] && ! $flag['Building 500']['overdue'] && 1 === $flag['Building 500']['days_ago'] && 2.4 === $flag['Building 500']['value'] );
