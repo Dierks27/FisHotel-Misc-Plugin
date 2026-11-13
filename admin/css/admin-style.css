@@ -335,3 +335,48 @@ body[class*="page_fishotel-misc"] .wrap {
 	color: var(--fh-danger);
 	border-color: rgba(220, 50, 50, 0.25);
 }
+
+/* ------------------------------------------------------------------ */
+/*  FisHotel versions card (Dashboard and Health)                      */
+/* ------------------------------------------------------------------ */
+.fishotel-misc-versions {
+	margin: 0 0 24px;
+}
+
+.fishotel-misc-versions:hover {
+	transform: none;
+}
+
+.fishotel-misc-versions--warn {
+	border-left: 3px solid var(--fh-warning, #ffb900);
+}
+
+.fishotel-misc-versions__table {
+	width: 100%;
+	border-collapse: collapse;
+	color: var(--fh-text-primary);
+}
+
+.fishotel-misc-versions__table th,
+.fishotel-misc-versions__table td {
+	text-align: left;
+	padding: 6px 8px;
+	border-bottom: 1px solid var(--fh-border);
+	vertical-align: top;
+}
+
+.fishotel-misc-versions__table th {
+	color: var(--fh-text-secondary);
+	font-weight: 600;
+}
+
+.fishotel-misc-versions__note {
+	display: block;
+	margin-top: 4px;
+	color: var(--fh-warning, #ffb900);
+}
+
+.fishotel-misc-versions__row--off td,
+.fishotel-misc-versions__row--missing td {
+	color: var(--fh-text-secondary);
+}

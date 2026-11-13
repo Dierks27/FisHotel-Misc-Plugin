@@ -180,6 +180,17 @@ last e-mailed, the page note. Switching the alarm off in Settings, switching
 the section off, or deactivating the plugin drops both events and the
 option, so switching back on starts from "now".
 
+## FisHotel versions
+
+The Overview also shows the **FisHotel versions** card the FisHotel Tools
+Dashboard shows (`includes/class-versions.php`, outside this section so the
+Dashboard has it with Health off): one row per FisHotel build — FH Boards,
+FisHotel SMTP, ShipTracker, Batch Manager, Misc, the active theme, WPIT
+Updater when present — with its version, folder and on / off, and a warning
+when the same plugin is installed in two folders or a FisHotel plugin is
+switched off (WPIT Updater off is fine), when the active theme is not
+FisHotel or a second copy of it is installed. Local reads only.
+
 ## Alert email
 
 Settings → *Send alerts to*. When set, a **new** error/critical row from

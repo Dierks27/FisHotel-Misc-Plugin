@@ -136,6 +136,17 @@ $fh_group_icons    = array(
 		<?php endif; ?>
 	</div>
 
+	<?php
+	// FisHotel versions: the same card as on the FisHotel Tools Dashboard.
+	if ( class_exists( 'FisHotel\\Misc\\Versions' ) ) {
+		try {
+			echo \FisHotel\Misc\Versions::card_html( \FisHotel\Misc\Versions::collect() ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by card_html().
+		} catch ( \Throwable $e ) {
+			unset( $e );
+		}
+	}
+	?>
+
 	<div class="fh-health-groups">
 		<?php foreach ( $groups as $fh_group => $fh_rows ) : ?>
 			<div class="fishotel-misc-card fh-health-card">

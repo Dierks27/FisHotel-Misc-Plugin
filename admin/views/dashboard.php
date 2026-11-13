@@ -1,6 +1,7 @@
 <?php
 /**
- * Dashboard view — lists all registered sections, under the headings
+ * Dashboard view — the FisHotel versions card (Versions), then all
+ * registered sections, under the headings
  * Layout::grouped() gives (Today on its own at the top, then Fish room,
  * Customers, Shipping, Site), each card with Layout::card_text(): what
  * the section is for and what switching it on starts by itself.
@@ -19,6 +20,16 @@ defined( 'ABSPATH' ) || exit;
 		<h1><?php esc_html_e( 'FisHotel Misc Plugin', 'fishotel-misc-plugin' ); ?></h1>
 		<span class="version-badge">v<?php echo esc_html( FISHOTEL_MISC_VERSION ); ?></span>
 	</div>
+
+	<?php
+	// FisHotel versions: every FisHotel build on this site, its folder and
+	// whether it is on (local reads only; whatever sections are on).
+	try {
+		echo \FisHotel\Misc\Versions::card_html( \FisHotel\Misc\Versions::collect() ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by card_html().
+	} catch ( \Throwable $e ) {
+		unset( $e );
+	}
+	?>
 
 	<?php if ( empty( $sections ) ) : ?>
 
