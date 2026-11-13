@@ -86,6 +86,7 @@ fishotel-misc-plugin/
 │   ├── js/admin-script.js          # Toggle & AJAX handling
 │   └── views/dashboard.php         # Dashboard template
 ├── tests/layout-test.php           # The menu order and the Dashboard's headings
+├── tests/hook-callbacks-test.php   # Every hook / menu / REST callback names a method that exists
 └── README.md
 ```
 
