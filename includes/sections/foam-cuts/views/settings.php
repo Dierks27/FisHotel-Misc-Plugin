@@ -62,10 +62,14 @@ $fh_fields = array(
 
 <section class="fh-fc-card">
 	<h2><?php esc_html_e( 'For the assistant that prints the day\'s paperwork', 'fishotel-misc-plugin' ); ?></h2>
+	<p class="fh-fc-muted"><?php esc_html_e( 'The assistant can make the day\'s cut plan and print it without this screen. Nothing to do here unless you are setting that up.', 'fishotel-misc-plugin' ); ?></p>
+	<details class="fh-fc-dev">
+	<summary><?php esc_html_e( 'For the developer', 'fishotel-misc-plugin' ); ?></summary>
 	<p class="fh-fc-muted"><?php esc_html_e( 'A plan can be made and fetched without this screen, with an application password of a shop manager or administrator (Users → Profile → Application Passwords). The answer carries a print_url that opens the cut sheet in that user\'s logged-in browser.', 'fishotel-misc-plugin' ); ?></p>
 	<ul class="fh-fc-pieces">
 		<li><code>POST <?php echo esc_html( rest_url( Foam_Cuts::REST_NAMESPACE . Foam_Cuts::REST_BASE . '/plan' ) ); ?></code> — <?php esc_html_e( 'body {"source":"orders"} makes a plan for the orders that ship today (needs the Packing section); {"boxes":{"<box name>":2}} for typed numbers.', 'fishotel-misc-plugin' ); ?></li>
 		<li><code>GET <?php echo esc_html( rest_url( Foam_Cuts::REST_NAMESPACE . Foam_Cuts::REST_BASE . '/plan/latest' ) ); ?></code> — <?php esc_html_e( 'the newest plan; /plan/<number> for one plan; /plans for the list.', 'fishotel-misc-plugin' ); ?></li>
 	</ul>
+	</details>
 	<p class="fh-fc-muted"><?php esc_html_e( 'Making a plan never changes the stock. "Mark as cut" is pressed here, by whoever cut the foam.', 'fishotel-misc-plugin' ); ?></p>
 </section>

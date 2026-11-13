@@ -124,7 +124,7 @@ $fh_group_icons    = array(
 					/* translators: %s: time */
 					echo esc_html( sprintf( __( 'Last look: %s.', 'fishotel-misc-plugin' ), wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $alarm['last_look'] ) ) );
 				} else {
-					esc_html_e( 'It has not looked yet: the first look runs within 5 minutes of the next WP-Cron run.', 'fishotel-misc-plugin' );
+					esc_html_e( 'It has not looked yet: the first look runs within 5 minutes, once the site\'s scheduled jobs next run.', 'fishotel-misc-plugin' );
 				}
 				?>
 			</p>

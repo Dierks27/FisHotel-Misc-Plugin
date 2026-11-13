@@ -20,7 +20,6 @@ use FisHotel\Misc\Sections\Today\Admin;
 use FisHotel\Misc\Sections\Today\Model;
 
 $fh_columns = (array) $data['columns'];
-$fh_notes   = (array) ( $fh_columns['notes'] ?? array() );
 $fh_blocks  = (array) $data['blocks'];
 $fh_chip_defs = array(
 	'orders'         => array( __( 'Orders', 'fishotel-misc-plugin' ), '' ),
@@ -83,9 +82,7 @@ if ( empty( $fh_columns['tracking'] ) ) {
 		<?php endforeach; ?>
 	<?php endforeach; ?>
 
-	<?php foreach ( $fh_notes as $fh_note ) : ?>
-		<p class="fh-today-colnote"><?php echo esc_html( $fh_note ); ?></p>
-	<?php endforeach; ?>
+	<?php // Why a column is off (a plugin it needs is missing) is said under Today → Settings only, not every day here. ?>
 
 	<?php if ( empty( $fh_blocks ) ) : ?>
 		<div class="fishotel-misc-empty">

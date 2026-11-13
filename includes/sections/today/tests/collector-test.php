@@ -120,7 +120,7 @@ check( 'no Ship Day class, no ShipTracker', ! Collector::has_ship_day() && ! Col
 
 $columns = Collector::columns( $settings );
 check( 'weather column shown', true === $columns['weather'] );
-check( 'invoice column hidden without the PDF plugin, with the note', false === $columns['invoice'] && 'Invoice PDF check needs the PDF Invoices plugin' === $columns['notes']['invoice'] );
+check( 'invoice column hidden without the PDF plugin, with the note', false === $columns['invoice'] && 'Invoice column: off — it needs the PDF Invoices plugin.' === $columns['notes']['invoice'] );
 check( 'tracking column hidden without ShipTracker, with a note', false === $columns['tracking'] && false !== strpos( $columns['notes']['tracking'], 'ShipTracker' ) );
 check( 'toggles off hide without a note', array() === Collector::columns( array( 'show_weather' => false, 'show_invoice' => false, 'show_tracking' => false ) )['notes'] );
 

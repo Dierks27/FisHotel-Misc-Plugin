@@ -216,13 +216,13 @@ class Collector {
 		$invoice = ! empty( $settings['show_invoice'] );
 		if ( $invoice && ! self::invoice_available() ) {
 			$invoice = false;
-			$notes['invoice'] = __( 'Invoice PDF check needs the PDF Invoices plugin', 'fishotel-misc-plugin' );
+			$notes['invoice'] = __( 'Invoice column: off — it needs the PDF Invoices plugin.', 'fishotel-misc-plugin' );
 		}
 
 		$tracking = ! empty( $settings['show_tracking'] );
 		if ( $tracking && ! self::has_shiptracker() ) {
 			$tracking = false;
-			$notes['tracking'] = __( 'Tracking check needs the ShipTracker plugin', 'fishotel-misc-plugin' );
+			$notes['tracking'] = __( 'Tracking column: off — it needs the ShipTracker plugin.', 'fishotel-misc-plugin' );
 		}
 
 		return array(
@@ -346,13 +346,17 @@ class Collector {
 			// chip and no rank); the weather state itself stays on the
 			// destination for the widget badge and the cache key.
 			$destinations = Model::sort_destinations( $destinations, $columns );
+			$ship         = Model::ship_date_for( $date, $tz );
+			// A box has no tracking number before it ships: "no tracking"
+			// counts only from the ship day on.
+			$tracking_due = strcmp( (string) $ship, $today ) <= 0;
 
 			$blocks[ $date ] = array(
 				'date'         => $date,
-				'ship'         => Model::ship_date_for( $date, $tz ),
+				'ship'         => $ship,
 				'destinations' => $destinations,
-				'chips'        => Model::chips( $destinations, $columns ),
-				'attention'    => Model::needs_attention( $destinations, $columns ),
+				'chips'        => Model::chips( $destinations, $columns, $tracking_due ),
+				'attention'    => Model::needs_attention( $destinations, $columns, $tracking_due ),
 			);
 		}
 

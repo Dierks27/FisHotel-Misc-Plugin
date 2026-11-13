@@ -335,7 +335,7 @@ $html  = screen( array( 'view' => 'new' ) );
 $state = $state_of( $html );
 check( 'New: an empty draft, Premium, with Save and "Pre-check and publish…" — and no Publish without a pre-check', is_array( $state ) && 0 === $state['id'] && 'draft' === $state['mode'] && '' === $state['handle'] && array() === $state['lines'] && 'premium' === $state['shipping'] && false !== strpos( $html, 'id="fh-inv-save"' ) && false !== strpos( $html, 'id="fh-inv-precheck"' ) && 1 === preg_match( '/id="fh-inv-publish" disabled/', $html ) );
 check( 'the search box, the lines, credits and notes, the flat total, the shipping choices, the preview', false !== strpos( $html, 'id="fh-inv-search"' ) && false !== strpos( $html, 'id="fh-inv-lines"' ) && false !== strpos( $html, 'id="fh-inv-add-credit"' ) && false !== strpos( $html, 'id="fh-inv-add-note"' ) && false !== strpos( $html, 'id="fh-inv-flat-on"' ) && 3 === substr_count( $html, 'name="fh-inv-shipping"' ) && false !== strpos( $html, 'id="fh-inv-preview-list"' ) );
-check( 'the shipping classes of the store are offered for "Another class"', false !== strpos( $html, '<option value="quote"' ) && false !== strpos( $html, 'class &quot;premium&quot;' ) );
+check( 'the shipping classes of the store are offered for "Another class"; the chosen classes are not shown by their code names', false !== strpos( $html, '<option value="quote"' ) && false === strpos( $html, 'class &quot;premium&quot;' ) );
 
 $html  = screen( array( 'view' => 'new', 'from' => $paid['id'] ) );
 $state = $state_of( $html );

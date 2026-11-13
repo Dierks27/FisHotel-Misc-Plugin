@@ -985,3 +985,14 @@ td .fh-inv-entry__lines {
 		width: 100%;
 	}
 }
+
+/* The invoice list on a tablet: the page never scrolls sideways. Below
+   900px the Shipping and Built columns step aside (both are on the
+   invoice itself), and the rest scrolls inside its own box if it must. */
+@media (max-width: 900px) {
+	.fh-inv-list { display: block; overflow-x: auto; max-width: 100%; }
+	.fh-inv-list > thead > tr > th:nth-child(5),
+	.fh-inv-list > thead > tr > th:nth-child(7),
+	.fh-inv-list > tbody > tr > td:nth-child(5),
+	.fh-inv-list > tbody > tr > td:nth-child(7) { display: none; }
+}

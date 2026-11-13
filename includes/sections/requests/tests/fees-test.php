@@ -200,7 +200,7 @@ check_contains( 'and it says where to set one', 'no wallet-deposit product is se
 $GLOBALS['fishotel_instance'] = new FisHotel_Batch_Manager();
 $status                       = Fees::status( $service->settings, true );
 check_same( 'Batch Manager\'s own fallback product is asked from its own code', 4242, $status['product_id'] );
-check_contains( 'that product does not exist: no, and it says which', '#4242 does not exist', $status['reason'] );
+check_contains( 'that product does not exist: no, and it says where to set another, in plain words', 'the deposit product is missing — set it under Requests → Settings → Fees', $status['reason'] );
 
 update_option( 'fishotel_deposit_product_id', 9001 );
 $status = Fees::status( $service->settings, true );

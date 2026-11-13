@@ -1325,3 +1325,16 @@ a.fh-cr-unknown {
 	color: var(--fh-text-secondary, #a0a0a0);
 	background: transparent;
 }
+
+/* Stays on a tablet: the page never scrolls sideways. Below 900px the
+   check-in, cleared and supplier columns step aside (they are in Edit),
+   and what is left scrolls inside its own box if it still must. */
+@media (max-width: 900px) {
+	.fh-cr-stays-table { display: block; overflow-x: auto; max-width: 100%; }
+	.fh-cr-stays-table > thead > tr > th:nth-child(3),
+	.fh-cr-stays-table > thead > tr > th:nth-child(6),
+	.fh-cr-stays-table > thead > tr > th:nth-child(9),
+	.fh-cr-stays-table > tbody > tr:not(.fh-cr-fields) > td:nth-child(3),
+	.fh-cr-stays-table > tbody > tr:not(.fh-cr-fields) > td:nth-child(6),
+	.fh-cr-stays-table > tbody > tr:not(.fh-cr-fields) > td:nth-child(9) { display: none; }
+}

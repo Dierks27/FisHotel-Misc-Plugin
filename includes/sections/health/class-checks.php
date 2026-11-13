@@ -140,6 +140,40 @@ class Checks {
 	}
 
 	/**
+	 * The rows the Today page counts: every error and warning except the
+	 * ones the owner has nothing to do about — an update check that has
+	 * not run yet or is late (it runs by itself; a refused GitHub login
+	 * still counts), WPIT Updater switched off (it is meant to be off on
+	 * this site), and a scheduled job that is only late (it runs on the
+	 * next visit; one that is not scheduled at all still counts). The
+	 * Health page itself still lists them all.
+	 *
+	 * @param array[] $rows From evaluate().
+	 * @return array[]
+	 */
+	public static function owner_rows( array $rows ) {
+		return array_values(
+			array_filter(
+				$rows,
+				static function ( $row ) {
+					$id     = (string) ( $row['id'] ?? '' );
+					$status = (string) ( $row['status'] ?? '' );
+					if ( self::STATUS_WARN === $status && 0 === strpos( $id, 'update-' ) ) {
+						return false;
+					}
+					if ( 'plugin-wpit' === $id ) {
+						return false;
+					}
+					if ( self::STATUS_WARN === $status && 0 === strpos( $id, 'cron-' ) ) {
+						return false;
+					}
+					return true;
+				}
+			)
+		);
+	}
+
+	/**
 	 * Rows grouped by their group, in group order.
 	 *
 	 * @param array[] $rows Rows.
@@ -271,7 +305,7 @@ class Checks {
 			$age   = isset( $update['age'] ) && null !== $update['age'] ? (int) $update['age'] : null;
 
 			if ( null === $age ) {
-				$rows[] = self::row( 'update-' . $key, self::GROUP_UPDATES, $label, self::STATUS_WARN, 'last update check never', 'No cached update check found. Open Plugins → "Check for Updates" on that plugin, or wait for WP-Cron.' );
+				$rows[] = self::row( 'update-' . $key, self::GROUP_UPDATES, $label, self::STATUS_WARN, 'last update check never', 'It checks by itself within a day. To check now: Plugins → "Check for Updates" on that plugin.' );
 				continue;
 			}
 
@@ -292,13 +326,13 @@ class Checks {
 			$rows[] = self::row(
 				'github-auth',
 				self::GROUP_UPDATES,
-				'GitHub authentication',
+				'Plugin updates from GitHub',
 				self::STATUS_ERROR,
 				trim( sprintf( 'GitHub returned %d for %s %s', $code, $host, $when ) ),
 				sprintf( 'GitHub returned %d — the token is expired or the repo is private; see wpit/updater settings', $code )
 			);
 		} else {
-			$rows[] = self::row( 'github-auth', self::GROUP_UPDATES, 'GitHub authentication', self::STATUS_OK, 'no 401/403 in the last 24 h' );
+			$rows[] = self::row( 'github-auth', self::GROUP_UPDATES, 'Plugin updates from GitHub', self::STATUS_OK, 'working (no refusal in the last 24 h)' );
 		}
 
 		return $rows;
@@ -314,11 +348,11 @@ class Checks {
 		$dompdf = (array) ( $facts['dompdf'] ?? array() );
 
 		if ( ! empty( $dompdf['available'] ) ) {
-			$value = ! empty( $dompdf['class'] ) ? 'Dompdf class loaded' : 'theme vendor/autoload.php present';
-			return array( self::row( 'dompdf', self::GROUP_PAPER, 'dompdf (EA packing-slip PDF)', self::STATUS_OK, $value ) );
+			$value = ! empty( $dompdf['class'] ) ? 'works' : 'ready';
+			return array( self::row( 'dompdf', self::GROUP_PAPER, 'Packing-slip printing', self::STATUS_OK, $value ) );
 		}
 
-		return array( self::row( 'dompdf', self::GROUP_PAPER, 'dompdf (EA packing-slip PDF)', self::STATUS_ERROR, 'missing', 'EA packing slips send without the PDF' ) );
+		return array( self::row( 'dompdf', self::GROUP_PAPER, 'Packing-slip printing', self::STATUS_ERROR, 'not working', 'Packing slips are e-mailed without the PDF. Ask the developer: the theme\'s PDF maker (dompdf) is missing.' ) );
 	}
 
 	/**
@@ -338,12 +372,12 @@ class Checks {
 
 		if ( $disabled ) {
 			if ( null === $since || $since > self::CRON_SILENT_AFTER ) {
-				$rows[] = self::row( 'wp-cron', self::GROUP_CRON, 'WP-Cron', self::STATUS_ERROR, null === $since ? 'DISABLE_WP_CRON is on and no run has been seen' : sprintf( 'DISABLE_WP_CRON is on, last run %s', self::relative_age( $since ) ), 'The system cron that is supposed to hit wp-cron.php is not running. Check the host\'s cron job (curl …/wp-cron.php?doing_wp_cron every 5–15 min).' );
+				$rows[] = self::row( 'wp-cron', self::GROUP_CRON, 'Scheduled jobs', self::STATUS_ERROR, null === $since ? 'not running: run by the host, and no run has been seen' : sprintf( 'not running: run by the host, last run %s', self::relative_age( $since ) ), 'Scheduled jobs are not running. Ask the host to switch on the site\'s cron job (it opens wp-cron.php every 5–15 minutes).' );
 			} else {
-				$rows[] = self::row( 'wp-cron', self::GROUP_CRON, 'WP-Cron', self::STATUS_INFO, sprintf( 'DISABLE_WP_CRON on, last run %s', self::relative_age( $since ) ) );
+				$rows[] = self::row( 'wp-cron', self::GROUP_CRON, 'Scheduled jobs', self::STATUS_INFO, sprintf( 'run by the host, last run %s', self::relative_age( $since ) ) );
 			}
 		} else {
-			$rows[] = self::row( 'wp-cron', self::GROUP_CRON, 'WP-Cron', self::STATUS_INFO, null === $since ? 'built-in (request-driven), no run seen yet' : sprintf( 'built-in (request-driven), last run %s', self::relative_age( $since ) ) );
+			$rows[] = self::row( 'wp-cron', self::GROUP_CRON, 'Scheduled jobs', self::STATUS_INFO, null === $since ? 'run by visits to the site, no run seen yet' : sprintf( 'run by visits to the site, last run %s', self::relative_age( $since ) ) );
 		}
 
 		foreach ( (array) ( $cron['hooks'] ?? array() ) as $hook => $def ) {
@@ -372,7 +406,7 @@ class Checks {
 			$delta = $next - $now;
 
 			if ( $delta < -self::CRON_OVERDUE_AFTER ) {
-				$rows[] = self::row( 'cron-' . $hook, self::GROUP_CRON, $label, self::STATUS_WARN, sprintf( 'WP-Cron overdue — due %s', self::relative_age( -$delta ) ), 'WP-Cron has not fired this event. On a quiet site visit the front end once, or set up a system cron.' );
+				$rows[] = self::row( 'cron-' . $hook, self::GROUP_CRON, $label, self::STATUS_WARN, sprintf( 'late — was due %s', self::relative_age( -$delta ) ), 'This job has not run yet. Opening any page of the shop usually starts it; if it stays late, ask the host about the cron job.' );
 				continue;
 			}
 

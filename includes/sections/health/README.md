@@ -226,8 +226,11 @@ its own failure. Blank = off.
 
 While this section is on, the Today page and its widget show one line
 for it under **Site** — **"Site health: 2 problems found"**, the errors
-and warnings beside it (the same checks the Health widget runs) and a
-link to the Overview. No line when every check is fine, and none for a
+and warnings beside it (the same checks the Health widget runs, counting
+only what the owner can act on: an update check that has not run yet or
+is late, WPIT Updater switched off, and a scheduled job that is only late
+are left to the Health page — `Checks::owner_rows()`) and a link to the
+Overview. No line when every check is fine, and none for a
 user without `manage_options`. It is hooked in wp-admin only and worked
 out once per request (`class-today-line.php`).
 

@@ -183,6 +183,20 @@ class Today {
 			self::MENU_SLUG,
 			array( new Admin(), 'render_page' )
 		);
+
+		// Ship Day, right under Today: the same Batch Manager page (Group-order
+		// invoices → Ship Day), listed here so it has one home beside the
+		// to-do page. A menu entry whose slug is an address links straight
+		// to it; nothing new is registered.
+		if ( '' !== Admin::ship_day_url() ) {
+			add_submenu_page(
+				'fishotel-misc',
+				__( 'Ship Day', 'fishotel-misc-plugin' ),
+				__( 'Ship Day', 'fishotel-misc-plugin' ),
+				Admin::SHIP_DAY_CAPABILITY,
+				Admin::SHIP_DAY_URL
+			);
+		}
 	}
 
 	/**

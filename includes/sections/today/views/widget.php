@@ -63,9 +63,6 @@ $fh_more    = array_diff_key( (array) $data['counts'], $fh_blocks );
 	<?php endforeach; ?>
 <?php endforeach; ?>
 
-<?php foreach ( (array) ( $fh_columns['notes'] ?? array() ) as $fh_note ) : ?>
-	<p class="fh-tw-note"><?php echo esc_html( $fh_note ); ?></p>
-<?php endforeach; ?>
 
 <?php if ( $fh_first ) : ?>
 	<?php $fh_chips = (array) $fh_first['chips']; ?>

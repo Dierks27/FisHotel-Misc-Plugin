@@ -8,7 +8,8 @@
  * heading each Dashboard card sits under, and the sentence on the card.
  *
  *   Menu       Dashboard, Today, then Fish room (Clean Room), Customers
- *              (Invoices, Requests, Lost Fish), Shipping (Packing, Foam
+ *              (Invoices, Requests, Lost Fish, Sticker Giveaway — a
+ *              checkout choice for customers), Shipping (Packing, Foam
  *              Cuts, Weather), Site (Health, Snippets, Shop App, then
  *              every other section in folder order). The sections that
  *              were live before 0.46 — Announcer, Coming Soon, Lottery
@@ -38,7 +39,7 @@ class Layout {
 	 *
 	 * @var string[]
 	 */
-	const MENU_FIRST = array( 'today', 'clean-room', 'invoices', 'requests', 'lost-fish', 'packing', 'foam-cuts', 'weather', 'health', 'site-snippets', 'shop-app' );
+	const MENU_FIRST = array( 'today', 'clean-room', 'invoices', 'requests', 'lost-fish', 'sticker-giveaway', 'packing', 'foam-cuts', 'weather', 'health', 'site-snippets', 'shop-app' );
 
 	/**
 	 * The Dashboard's headings and the sections under each. A section
@@ -49,7 +50,7 @@ class Layout {
 	const GROUPS = array(
 		'today'     => array( 'today' ),
 		'fish-room' => array( 'clean-room' ),
-		'customers' => array( 'invoices', 'requests', 'lost-fish' ),
+		'customers' => array( 'invoices', 'requests', 'lost-fish', 'sticker-giveaway' ),
 		'shipping'  => array( 'packing', 'foam-cuts', 'weather' ),
 		'site'      => array( 'health', 'site-snippets', 'shop-app' ),
 	);

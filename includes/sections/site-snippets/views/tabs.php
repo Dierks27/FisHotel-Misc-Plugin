@@ -20,7 +20,7 @@ $fh_tabs = array(
 );
 ?>
 <div class="fishotel-misc-header">
-	<h1><?php esc_html_e( 'Snippets', 'fishotel-misc-plugin' ); ?></h1>
+	<h1><?php esc_html_e( 'FisHotel Snippets', 'fishotel-misc-plugin' ); ?></h1>
 	<span class="version-badge">v<?php echo esc_html( FISHOTEL_MISC_VERSION ); ?></span>
 </div>
 

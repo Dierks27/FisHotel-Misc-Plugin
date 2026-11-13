@@ -205,6 +205,13 @@ check( 'the wrapper carries its combined label', 'Order #200 (combined: #201, #2
 check( 'paperwork-only entry', 'invoice' === $attention[4]['kind'] && array( 'no invoice PDF' ) === $attention[4]['reasons'] );
 check( 'edit URL carried through', false !== strpos( $attention[0]['edit_url'], 'post=102' ) );
 
+// A box cannot have a tracking number before it ships.
+$fh_early = array( fh_dest( 7, fh_checked( 'none' ), array( 'done' => true ), array( 'done' => false ) ) );
+check( 'before the ship day: no "no tracking" entry and no "Need tracking" chip', array() === Model::needs_attention( $fh_early, Model::DEFAULT_FLAGS, false ) && 0 === Model::chips( $fh_early, Model::DEFAULT_FLAGS, false )['needs_tracking'] );
+check( 'from the ship day on: both are there', array( 'no tracking' ) === Model::needs_attention( $fh_early, Model::DEFAULT_FLAGS, true )[0]['reasons'] && 1 === Model::chips( $fh_early, Model::DEFAULT_FLAGS, true )['needs_tracking'] );
+$fh_early_hold = Model::needs_attention( $fixture, Model::DEFAULT_FLAGS, false );
+check( '… and every other reason still shows before the ship day', array( 'HOLD — do not ship', 'no invoice PDF' ) === $fh_early_hold[0]['reasons'] );
+
 $sorted = Model::sort_destinations( array_reverse( $fixture ) );
 check( 'sort: hold, UPS Store, unavailable, not checked, then the rest by number', '102,104,103,200,101,105' === fh_numbers( $sorted ), fh_numbers( $sorted ) );
 $tie = Model::sort_destinations( array( fh_dest( 9, fh_checked( 'none' ) ), fh_dest( 10, fh_checked( 'none' ) ), fh_dest( 100, fh_checked( 'none' ) ) ) );

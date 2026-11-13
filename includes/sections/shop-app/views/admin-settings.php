@@ -86,6 +86,9 @@ if ( ! isset( $fh_choices[ $fh_minutes ] ) ) {
 
 <section class="fh-sa-card fh-sa-card--narrow">
 	<h2 class="fh-sa-h2"><?php esc_html_e( 'The site secret', 'fishotel-misc-plugin' ); ?></h2>
+	<p class="fh-sa-help"><?php esc_html_e( 'The PINs are kept safe with a secret this site holds. Nothing to do here; the details are for whoever looks after the site\'s code.', 'fishotel-misc-plugin' ); ?></p>
+	<details class="fh-sa-dev">
+	<summary><?php esc_html_e( 'For the developer', 'fishotel-misc-plugin' ); ?></summary>
 	<p class="fh-sa-help">
 		<?php
 		if ( Settings::secret_from_constant() ) {
@@ -95,4 +98,5 @@ if ( ! isset( $fh_choices[ $fh_minutes ] ) ) {
 		}
 		?>
 	</p>
+	</details>
 </section>

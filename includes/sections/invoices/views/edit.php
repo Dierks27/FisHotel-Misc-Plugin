@@ -140,13 +140,9 @@ foreach ( $data['classes'] as $fh_class ) {
 						<label>
 							<input type="radio" name="fh-inv-shipping" value="<?php echo esc_attr( $fh_choice ); ?>" <?php checked( $fh_state['shipping'], $fh_choice ); ?>>
 							<?php echo esc_html( Settings::shipping_label( $fh_choice ) ); ?>
-							<?php if ( 'other' !== $fh_choice ) : ?>
-								<small>
-									<?php
-									$fh_slug = Settings::shipping_slug( $settings, $fh_choice );
-									echo esc_html( '' !== $fh_slug ? sprintf( /* translators: %s: shipping class slug */ __( 'class "%s"', 'fishotel-misc-plugin' ), $fh_slug ) : __( 'not set in Settings yet', 'fishotel-misc-plugin' ) );
-									?>
-								</small>
+							<?php // The shipping class's code name is not shown; only a choice that is not set up yet says so. ?>
+							<?php if ( 'other' !== $fh_choice && '' === Settings::shipping_slug( $settings, $fh_choice ) ) : ?>
+								<small><?php esc_html_e( 'not set in Settings yet', 'fishotel-misc-plugin' ); ?></small>
 							<?php endif; ?>
 						</label>
 					<?php endforeach; ?>

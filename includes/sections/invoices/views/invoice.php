@@ -125,9 +125,6 @@ $fh_title   = '' !== $fh_inv['title'] ? $fh_inv['title'] : sprintf( /* translato
 				<dt><?php esc_html_e( 'Shipping', 'fishotel-misc-plugin' ); ?></dt>
 				<dd>
 					<?php echo esc_html( Settings::shipping_label( $fh_inv['shipping'] ) ); ?>
-					<?php if ( '' !== $fh_inv['shipping_slug'] ) : ?>
-						<span class="fh-inv-sub"><?php echo esc_html( sprintf( /* translators: %s: shipping class slug */ __( 'class "%s"', 'fishotel-misc-plugin' ), $fh_inv['shipping_slug'] ) ); ?></span>
-					<?php endif; ?>
 				</dd>
 			</dl>
 		</div>

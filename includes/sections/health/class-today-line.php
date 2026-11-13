@@ -4,7 +4,8 @@
  * `fishotel_today_lines` filter): "Site health: 2 problems found", with
  * the errors and warnings counted beside it and a link to the Overview.
  * The same checks the Health widget runs (Facts::collect() +
- * Checks::evaluate()) — nothing is sent anywhere.
+ * Checks::evaluate()), counting only what the owner can act on
+ * (Checks::owner_rows()) — nothing is sent anywhere.
  *
  * Shown only while this section is switched on (boot() hooks it, in
  * wp-admin only), for a user who may open the section (manage_options),
@@ -102,13 +103,14 @@ class Today_Line {
 	}
 
 	/**
-	 * The counts: the Health checks as the widget runs them.
+	 * The counts: the Health checks as the widget runs them, without the
+	 * ones the owner has nothing to do about (Checks::owner_rows()).
 	 *
 	 * @return array
 	 */
 	private static function counts() {
 		$facts = Facts::collect( new Store() );
-		return Checks::summary( Checks::evaluate( $facts, $facts['now'] ) );
+		return Checks::summary( Checks::owner_rows( Checks::evaluate( $facts, $facts['now'] ) ) );
 	}
 
 	/**

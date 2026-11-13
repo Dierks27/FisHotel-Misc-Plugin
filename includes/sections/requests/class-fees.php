@@ -256,11 +256,9 @@ class Fees {
 			if ( $id <= 0 ) {
 				$out['reason'] = __( 'no wallet-deposit product is set (Batch Manager\'s settings, or Requests → Settings)', 'fishotel-misc-plugin' );
 			} elseif ( ! is_object( $product ) ) {
-				/* translators: %d: product id */
-				$out['reason'] = sprintf( __( 'the wallet-deposit product #%d does not exist', 'fishotel-misc-plugin' ), $id );
+				$out['reason'] = __( 'the deposit product is missing — set it under Requests → Settings → Fees', 'fishotel-misc-plugin' );
 			} elseif ( method_exists( $product, 'get_status' ) && 'trash' === $product->get_status() ) {
-				/* translators: %d: product id */
-				$out['reason'] = sprintf( __( 'the wallet-deposit product #%d is in the trash', 'fishotel-misc-plugin' ), $id );
+				$out['reason'] = __( 'the deposit product is in the trash — restore it under Products, or set another under Requests → Settings → Fees', 'fishotel-misc-plugin' );
 			} else {
 				$out['product_title'] = method_exists( $product, 'get_name' ) ? (string) $product->get_name() : '';
 				if ( self::credited_by_batch( $id, $out['product_title'] ) ) {

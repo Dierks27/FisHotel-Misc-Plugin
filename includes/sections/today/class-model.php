@@ -556,9 +556,11 @@ class Model {
 	 *
 	 * @param array[] $destinations Destinations.
 	 * @param array   $flags        weather / invoice / tracking => bool.
+	 * @param bool    $tracking_due Whether the box has shipped by now (ship day today or past): before
+	 *                              that a missing tracking number is not counted — a box cannot have one yet.
 	 * @return array<string, int>
 	 */
-	public static function chips( array $destinations, array $flags = self::DEFAULT_FLAGS ) {
+	public static function chips( array $destinations, array $flags = self::DEFAULT_FLAGS, $tracking_due = true ) {
 		$weather_on = self::weather_on( $flags );
 
 		$chips = array(
@@ -604,7 +606,7 @@ class Model {
 			}
 
 			$tracking = $destination['tracking'] ?? null;
-			if ( is_array( $tracking ) && empty( $tracking['done'] ) ) {
+			if ( $tracking_due && is_array( $tracking ) && empty( $tracking['done'] ) ) {
 				$chips['needs_tracking']++;
 			}
 		}
@@ -621,9 +623,11 @@ class Model {
 	 *
 	 * @param array[] $destinations Destinations.
 	 * @param array   $flags        weather / invoice / tracking => bool.
+	 * @param bool    $tracking_due Whether the box has shipped by now (see chips()): "no tracking"
+	 *                              is raised only from the ship day on.
 	 * @return array<int, array{order_id: int, number: string, label: string, edit_url: string, kind: string, reasons: string[], rank: int}>
 	 */
-	public static function needs_attention( array $destinations, array $flags = self::DEFAULT_FLAGS ) {
+	public static function needs_attention( array $destinations, array $flags = self::DEFAULT_FLAGS, $tracking_due = true ) {
 		$weather_on = self::weather_on( $flags );
 		$out        = array();
 
@@ -664,7 +668,7 @@ class Model {
 			}
 
 			$tracking = $destination['tracking'] ?? null;
-			if ( is_array( $tracking ) && empty( $tracking['done'] ) ) {
+			if ( $tracking_due && is_array( $tracking ) && empty( $tracking['done'] ) ) {
 				$reasons['tracking'] = 'no tracking';
 			}
 

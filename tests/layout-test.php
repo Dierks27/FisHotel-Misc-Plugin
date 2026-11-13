@@ -46,8 +46,8 @@ echo "The menu\n";
 $fh_order = Layout::menu_order( $fh_folders );
 check( 'every section is in the menu order once, none added', count( $fh_order ) === count( $fh_folders ) && array() === array_diff( $fh_folders, $fh_order ) && count( $fh_order ) === count( array_unique( $fh_order ) ) );
 check(
-	'Today, then Fish room, Customers, Shipping, Site (Health, Snippets, Shop App), then the rest',
-	array( 'today', 'clean-room', 'invoices', 'requests', 'lost-fish', 'packing', 'foam-cuts', 'weather', 'health', 'site-snippets', 'shop-app' ) === array_slice( $fh_order, 0, 11 ),
+	'Today, then Fish room, Customers (Sticker Giveaway with them), Shipping, Site (Health, Snippets, Shop App), then the rest',
+	array( 'today', 'clean-room', 'invoices', 'requests', 'lost-fish', 'sticker-giveaway', 'packing', 'foam-cuts', 'weather', 'health', 'site-snippets', 'shop-app' ) === array_slice( $fh_order, 0, 12 ),
 	implode( ', ', $fh_order )
 );
 check( 'the sections live today keep their order among themselves', $fh_live === array_values( array_intersect( $fh_order, $fh_live ) ) );
@@ -62,7 +62,7 @@ echo "\nThe Dashboard\n";
 $fh_sections = array_fill_keys( $fh_folders, array( 'name' => 'x' ) );
 $fh_groups   = Layout::grouped( $fh_sections );
 check( 'Today on its own at the top, then the four headings', array( '', 'Fish room', 'Customers', 'Shipping', 'Site' ) === array_column( $fh_groups, 'title' ) );
-check( 'Customers: Invoices, Requests, Lost Fish; Shipping: Packing, Foam Cuts, Weather', array( 'invoices', 'requests', 'lost-fish' ) === array_keys( $fh_groups[2]['sections'] ) && array( 'packing', 'foam-cuts', 'weather' ) === array_keys( $fh_groups[3]['sections'] ) );
+check( 'Customers: Invoices, Requests, Lost Fish, Sticker Giveaway; Shipping: Packing, Foam Cuts, Weather', array( 'invoices', 'requests', 'lost-fish', 'sticker-giveaway' ) === array_keys( $fh_groups[2]['sections'] ) && array( 'packing', 'foam-cuts', 'weather' ) === array_keys( $fh_groups[3]['sections'] ) );
 check( 'Site: Health, Snippets, Shop App, then the rest — every card once', 'health' === array_keys( $fh_groups[4]['sections'] )[0] && count( $fh_folders ) === array_sum( array_map( 'count', array_column( $fh_groups, 'sections' ) ) ) );
 check( 'a heading with no section is not shown', array( 'Customers' ) === array_column( Layout::grouped( array( 'requests' => 1 ) ), 'title' ) );
 
