@@ -2456,6 +2456,8 @@
 		function change(fields) {
 			fields.act = 'setup_steps';
 			fields.tank = tk.number;
+			fields.setup_id = su.id; // This setup, as this page shows it — not whatever stands in the slot by now.
+			fields.seen = su.seen || '';
 			fields.via = 'qr';
 			sideAct(fields, function () {
 				state.view = 'schedule';
@@ -2522,7 +2524,7 @@
 			bar([
 				button(t('cancel', 'Cancel'), 'fh-fd-btn--quiet', function () { go('tank'); }),
 				button(t('takeDown', 'Take down'), 'fh-fd-btn--danger', function () {
-					sideAct({ act: 'takedown', tank: tk.number, via: 'qr' }, function () {
+					sideAct({ act: 'takedown', tank: tk.number, setup_id: tk.temp.setup.id, via: 'qr' }, function () {
 						state.view = 'tank';
 						render();
 					});

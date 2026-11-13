@@ -1159,7 +1159,8 @@ class Store {
 				} else {
 					$steps = $protocol;
 				}
-				$tank['todo'] = $steps ? Protocol::todo( $steps, $tank['occupants'], $today, (string) $tank['building']['area'], $mine ) : array();
+				// A step naming several medications is not done by one of them (Todo::settle_combos()).
+				$tank['todo'] = $steps ? Todo::settle_combos( Protocol::todo( $steps, $tank['occupants'], $today, (string) $tank['building']['area'], $mine ), $mine ) : array();
 			}
 			$out[] = $tank;
 		}
@@ -1631,9 +1632,24 @@ class Store {
 		// stands there now; and nothing lands in a slot with no setup.
 		$from   = ! empty( $event['from_tank_id'] ) ? (int) $event['from_tank_id'] : 0;
 		$to     = ! empty( $event['to_tank_id'] ) ? (int) $event['to_tank_id'] : 0;
-		$setups = self::event_setups( $type, $from, $to, ( $from > 0 || $to > 0 ) ? $this->slot_setups() : array() );
+		$slots  = $this->slot_setups();
+		$setups = self::event_setups( $type, $from, $to, ( $from > 0 || $to > 0 ) ? $slots : array() );
 		if ( false === $setups ) {
 			return false;
+		}
+
+		// And no group comes back to life in a slot whose setup is gone: a
+		// closed group still filed under a slot is that setup's history.
+		if ( $slots && in_array( $type, self::RAISING_TYPES, true ) ) {
+			try {
+				$filed = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT tank_id FROM ' . self::table( 'stays' ) . ' WHERE id = %d', (int) $stay_id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			} catch ( \Throwable $e ) {
+				$filed = 0;
+			}
+			$stay = isset( $slots[ $filed ] ) ? $this->stay( (int) $stay_id, $today, $settings ) : null;
+			if ( $stay && self::slot_revival( $stay, self::event_with_setups( $event, $setups ), $slots, $today, $this->replay_opts( $settings ) ) ) {
+				return false;
+			}
 		}
 
 		$data = array(
@@ -1703,10 +1719,119 @@ class Store {
 	}
 
 	/**
+	 * The event types that can raise a group's live count: the only ones
+	 * slot_revival() has to look at.
+	 *
+	 * @var string[]
+	 */
+	const RAISING_TYPES = array( 'arrival', 'loss', 'sold', 'count', 'move' );
+
+	/**
+	 * The setup a group in a slot went into (pure): what its last arrival
+	 * or move into that tank says. 0 when no event says.
+	 *
+	 * @param array $stay    Stay with its events.
+	 * @param int   $tank_id The slot's tank.
+	 * @return int
+	 */
+	public static function stay_setup( array $stay, $tank_id ) {
+		$setup = 0;
+		foreach ( Replay::sort_events( (array) ( $stay['events'] ?? array() ) ) as $event ) {
+			if ( (int) ( $event['to_tank_id'] ?? 0 ) === (int) $tank_id && ! empty( $event['to_setup_id'] ) ) {
+				$setup = (int) $event['to_setup_id'];
+			}
+		}
+		return $setup;
+	}
+
+	/**
+	 * Whether an event would bring fish back to life in a slot whose
+	 * setup is gone (pure): the group is filed under a slot, the setup it
+	 * went into no longer stands there (the slot is free, or the next
+	 * setup has it), and after the event more of the group would be alive
+	 * in that slot than before — the undo of a loss, a count going up. A
+	 * setup that was taken down was empty, and stays as it was; the next
+	 * one starts with nothing in it. An event that lowers the count, or
+	 * moves the group out, is always taken.
+	 *
+	 * @param array           $stay  Stay with its events (tank_id, qty_live).
+	 * @param array           $event The event about to be written, with the setups it is tied to
+	 *                               (event_with_setups()): an arrival or a move into the slot
+	 *                               under the setup that stands there is that setup's own.
+	 * @param array<int, int> $slots slot_setups().
+	 * @param string          $today Site date.
+	 * @param array           $opts  replay_opts().
+	 * @return bool
+	 */
+	public static function slot_revival( array $stay, array $event, array $slots, $today, array $opts ) {
+		$tank = (int) ( $stay['tank_id'] ?? 0 );
+		if ( $tank <= 0 || ! isset( $slots[ $tank ] ) ) {
+			return false;
+		}
+		$events   = (array) ( $stay['events'] ?? array() );
+		$events[] = array_merge(
+			$event,
+			array(
+				'id'       => PHP_INT_MAX,
+				'event_at' => self::utc_datetime( $event['event_at'] ?? '' ),
+			)
+		);
+		if ( (int) $slots[ $tank ] > 0 && (int) $slots[ $tank ] === self::stay_setup( array( 'events' => $events ), $tank ) ) {
+			return false; // The setup the group went into still stands.
+		}
+		$after = Replay::state( $stay, $events, $today, $opts );
+
+		return (int) $after['tank_id'] === $tank && (int) $after['qty_live'] > max( 0, (int) ( $stay['qty_live'] ?? 0 ) );
+	}
+
+	/**
+	 * An event with the tanks and the setups it will be written with
+	 * (pure): what slot_revival() reads.
+	 *
+	 * @param array                             $event  The event as handed to record_event().
+	 * @param array{from: int|null, to: int|null} $setups event_setups().
+	 * @return array
+	 */
+	public static function event_with_setups( array $event, array $setups ) {
+		return array_merge(
+			$event,
+			array(
+				'from_tank_id'  => ! empty( $event['from_tank_id'] ) ? (int) $event['from_tank_id'] : null,
+				'to_tank_id'    => ! empty( $event['to_tank_id'] ) ? (int) $event['to_tank_id'] : null,
+				'from_setup_id' => $setups['from'] ?? null,
+				'to_setup_id'   => $setups['to'] ?? null,
+			)
+		);
+	}
+
+	/**
+	 * Whether an event belongs to a setup that no longer stands (pure):
+	 * it came out of, or went into, a slot under a setup that has since
+	 * been taken down — or replaced by the next one. Such an event is
+	 * history and is not undone: its undo would put the group into
+	 * whatever is set up in that slot now.
+	 *
+	 * @param array           $event The event (from_tank_id, from_setup_id, to_tank_id, to_setup_id).
+	 * @param array<int, int> $slots slot_setups().
+	 * @return bool
+	 */
+	public static function setup_gone( array $event, array $slots ) {
+		foreach ( array( 'from', 'to' ) as $side ) {
+			$setup = (int) ( $event[ $side . '_setup_id' ] ?? 0 );
+			$tank  = (int) ( $event[ $side . '_tank_id' ] ?? 0 );
+			if ( $setup > 0 && ( ! isset( $slots[ $tank ] ) || (int) $slots[ $tank ] !== $setup ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * Undo one event of a stay: its compensating event (Replay), unless
 	 * one was already written — the same ids posted twice write nothing
-	 * the second time. Who may undo what (the phone's actor and age
-	 * guards) is the caller's business.
+	 * the second time. An event of a setup that was taken down is not
+	 * undone (setup_gone()): false. Who may undo what (the phone's actor
+	 * and age guards) is the caller's business.
 	 *
 	 * @param array  $stay     The stay with its events (stay()).
 	 * @param array  $event    The event to undo (event()).
@@ -1719,6 +1844,9 @@ class Store {
 		$events = isset( $stay['events'] ) && is_array( $stay['events'] ) ? $stay['events'] : $this->events( (int) $stay['id'] );
 		if ( Replay::is_undone( $events, (int) $event['id'] ) ) {
 			return null;
+		}
+		if ( ( ! empty( $event['from_setup_id'] ) || ! empty( $event['to_setup_id'] ) ) && self::setup_gone( $event, $this->slot_setups() ) ) {
+			return false;
 		}
 
 		$before = $this->state_before( array_merge( $stay, array( 'events' => $events ) ), (int) $event['id'], $today, $settings );

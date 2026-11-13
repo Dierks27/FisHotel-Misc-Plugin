@@ -278,7 +278,7 @@ check( 'the blocks: the quarantine systems, then the temporary tank, then a Clea
 $temp = block( $list, 901 );
 check( 'the temporary tank is marked: its slot, name, kind, purpose, gallons, schedule and its own day', 'temp' === $temp['type'] && 'TEMP 1 · 901' === $temp['label'] && 'TEMP 1 · 901 · Hospital A' === $temp['title'] && 'quarantine' === $temp['kind'] && 'Quarantine' === $temp['kind_label'] && 'bacterial infection' === $temp['purpose'] && 10 === $temp['gallons'] && 'Trifecta' === $temp['schedule'] && array( 1 ) === $temp['days'] && 'day 1' === $temp['day_text'] && 1 === $temp['fish'] );
 check( 'its lines are its own schedule on its own clock — day 1, whatever day the fish is on', array( 'Feed', 'Metronidazole + Kanamycin + Furan-2' ) === array_column( $temp['items'], 'label' ) && array( 'tank', 'tank' ) === array_column( $temp['items'], 'scope' ) && array( 901, 901 ) === array_column( $temp['items'], 'tank' ) );
-check( 'the dose is worked out for the tank\'s own gallons', 'Metronidazole' === $temp['items'][1]['medication'] && 'suggested 0.25 g for 10 gal' === $temp['items'][1]['dose'] );
+check( 'the dose is worked out for the tank\'s own gallons — and, in a step naming several medications, says whose it is', '' === $temp['items'][1]['medication'] && 'Metronidazole: suggested 0.25 g for 10 gal' === $temp['items'][1]['dose'] );
 check( 'the count takes it in', 2 === $temp['left'] && 4 + 2 + 1 === $list['left'], $list['left'] );
 
 $item = $temp['items'][1];

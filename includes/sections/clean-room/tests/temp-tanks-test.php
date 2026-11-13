@@ -47,8 +47,17 @@ function ctx( Fake_Store $store, $tank_number, $actor = 8 ) {
 	);
 }
 
+/**
+ * One act as the page posts it: an edit, a schedule change and a take
+ * down name the setup the page was showing (its id and its token).
+ */
 function act( Fake_Store $store, $tank_number, $act, array $raw, $actor = 8 ) {
-	return Front_Desk::perform( $act, ctx( $store, $tank_number, $actor ), $raw );
+	$ctx = ctx( $store, $tank_number, $actor );
+	if ( in_array( $act, array( 'setup_edit', 'setup_steps', 'takedown' ), true ) && ! isset( $raw['setup_id'] ) && ! empty( $ctx['tank']['setup'] ) ) {
+		$raw['setup_id'] = (int) $ctx['tank']['setup']['id'];
+		$raw['seen']     = Temp_Tanks::seen( $ctx['tank']['setup'] );
+	}
+	return Front_Desk::perform( $act, $ctx, $raw );
 }
 
 /**

@@ -26,7 +26,9 @@
  *   - a tick of that step: on the system (note = the step's key) or on a
  *     tank's own screen (note = "<key> #<stay>"), or
  *   - for the copper test, a copper reading taken on any tank, or
- *   - for a dose step, a dose naming the same medication.
+ *   - for a dose step, a dose naming the same medication — a step that
+ *     names several ("A + B + C") needs a dose of each, or a tick by
+ *     hand (settle_combos()).
  * overlay() then marks the same step done on every tank of the building,
  * so the Board and each tank's phone screen say what this list says.
  *
@@ -179,11 +181,125 @@ class Todo {
 				'dose'       => '',
 			);
 		}
+		$parts = self::combo( $label );
+		if ( $parts ) {
+			// Several medications in one step: the label already names them;
+			// a suggestion says whose it is.
+			$doses = array();
+			foreach ( $parts as $part ) {
+				$dose = self::dose_text( $part, $gallons );
+				if ( '' !== $dose ) {
+					$name    = self::medication_name( $part );
+					$doses[] = ( '' !== $name ? $name : $part ) . ': ' . $dose;
+				}
+			}
+			return array(
+				'medication' => '',
+				'dose'       => implode( '; ', $doses ),
+			);
+		}
 		$name = self::medication_name( $label );
 		return array(
 			'medication' => '' !== $name && strtolower( $name ) !== strtolower( trim( (string) $label ) ) ? $name : '',
 			'dose'       => self::dose_text( $label, $gallons ),
 		);
+	}
+
+	/* ============================================================== */
+	/*  A step that names several medications                          */
+	/* ============================================================== */
+
+	/**
+	 * The medications a dose step names when it names several — one part
+	 * per "+" ("Metronidazole + Kanamycin + Furan-2"). Empty for a label
+	 * without a "+", or with an empty part: that is no combo.
+	 *
+	 * @param string $label Step label.
+	 * @return string[]
+	 */
+	public static function combo( $label ) {
+		$label = (string) $label;
+		if ( false === strpos( $label, '+' ) ) {
+			return array();
+		}
+		$parts = array_map( 'trim', explode( '+', $label ) );
+		if ( count( $parts ) < 2 || in_array( '', $parts, true ) ) {
+			return array();
+		}
+		return $parts;
+	}
+
+	/**
+	 * Whether one part of a combo was dosed today: a dose entry naming
+	 * the same medication — by the medication list when the part is on
+	 * it, else by its name as typed, as a whole word.
+	 *
+	 * @param string  $part One part of combo().
+	 * @param array[] $rows The day's entries (kind, note).
+	 * @return bool
+	 */
+	public static function part_dosed( $part, array $rows ) {
+		$part = strtolower( trim( (string) $part ) );
+		if ( '' === $part ) {
+			return false;
+		}
+		$key = self::medication_key( $part );
+		foreach ( $rows as $row ) {
+			if ( 'dose' !== (string) ( $row['kind'] ?? '' ) ) {
+				continue;
+			}
+			$note = strtolower( (string) ( $row['note'] ?? '' ) );
+			if ( null !== $key ) {
+				if ( $key === self::medication_key( $note ) ) {
+					return true;
+				}
+			} elseif ( 1 === preg_match( '/(?<![a-z0-9])' . preg_quote( $part, '/' ) . '(?![a-z0-9])/', $note ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * A dose step that names several medications is not done by a dose of
+	 * one of them. Protocol::todo() ticks a dose step when the medication
+	 * its label names FIRST was dosed; for a combo that is one of three.
+	 * Here such a step counts as done only when it was ticked by hand
+	 * (its own key among the notes) or EVERY part has a dose today —
+	 * anything else is left open for a tick. Steps naming one medication,
+	 * and every other kind, pass through as they are.
+	 *
+	 * @param array[] $items Protocol::todo() items (key, label, kind, done).
+	 * @param array[] $rows  The day's entries the items were worked out from.
+	 * @return array[]
+	 */
+	public static function settle_combos( array $items, array $rows ) {
+		foreach ( $items as $index => $item ) {
+			if ( empty( $item['done'] ) || 'dose' !== (string) ( $item['kind'] ?? '' ) ) {
+				continue;
+			}
+			$parts = self::combo( (string) ( $item['label'] ?? '' ) );
+			if ( ! $parts ) {
+				continue;
+			}
+			$by_hand = false;
+			foreach ( $rows as $row ) {
+				if ( Protocol::tick_key( (string) ( $row['note'] ?? '' ) ) === (string) $item['key'] ) {
+					$by_hand = true;
+					break;
+				}
+			}
+			if ( $by_hand ) {
+				continue;
+			}
+			foreach ( $parts as $part ) {
+				if ( ! self::part_dosed( $part, $rows ) ) {
+					$items[ $index ]['done'] = false;
+					break;
+				}
+			}
+		}
+		return $items;
 	}
 
 	/* ============================================================== */
@@ -308,7 +424,7 @@ class Todo {
 		);
 
 		$out = array();
-		foreach ( Protocol::todo( $steps, $clock, $today, '', $rows ) as $item ) {
+		foreach ( self::settle_combos( Protocol::todo( $steps, $clock, $today, '', $rows ), $rows ) as $item ) {
 			if ( 'feed' === (string) $item['kind'] && ! $fish ) {
 				continue;
 			}
@@ -381,7 +497,7 @@ class Todo {
 		}
 
 		$items = array();
-		foreach ( Protocol::todo( $steps, $groups, $today, (string) $area, $pool ) as $raw ) {
+		foreach ( self::settle_combos( Protocol::todo( $steps, $groups, $today, (string) $area, $pool ), $pool ) as $raw ) {
 			if ( 'feed' === (string) $raw['kind'] ) {
 				continue;
 			}
@@ -756,10 +872,10 @@ class Todo {
 		$temporary  = array();
 		$clean      = array();
 		foreach ( Layout::sort_buildings( $buildings ) as $building ) {
-			if ( 'active' !== (string) ( $building['status'] ?? 'active' ) ) {
-				continue; // Coming soon, or offline: nothing lives there.
-			}
-			$mine = isset( $by_building[ (int) $building['id'] ] ) ? $by_building[ (int) $building['id'] ] : array();
+			// Coming soon, or offline: no block of its own — unless something
+			// lives there all the same. Fish are fish, whatever the layout says.
+			$active = 'active' === (string) ( $building['status'] ?? 'active' );
+			$mine   = isset( $by_building[ (int) $building['id'] ] ) ? $by_building[ (int) $building['id'] ] : array();
 
 			if ( Layout::is_own_water( $building ) ) {
 				foreach ( Temp_Tanks::slots( $mine ) as $tank ) {
@@ -771,6 +887,9 @@ class Todo {
 			}
 
 			$block = self::system_block( $building, $mine, $protocols, $rows, $today, $settings );
+			if ( null === $block && ! $active ) {
+				continue;
+			}
 			if ( 'spa' === (string) $building['area'] ) {
 				// Every quarantine system has its block, with fish or without.
 				$quarantine[] = null !== $block ? $block : self::empty_block( $building, $mine, $protocols, $settings );
@@ -879,6 +998,21 @@ class Todo {
 	/* ============================================================== */
 
 	/**
+	 * A tick's key as a page posted it, as the key again: cleaned as any
+	 * posted text is — and a lone "<" given back, because
+	 * sanitize_text_field() returns it as an entity and the step's own
+	 * name ("Keep salinity < 1.015") has it as typed; without this such a
+	 * step could be ticked for ever and never be done.
+	 *
+	 * @param mixed $key Raw posted key.
+	 * @return string Protocol::tick_key() form ('' when there is none).
+	 */
+	public static function posted_key( $key ) {
+		$key = is_scalar( $key ) ? sanitize_text_field( (string) $key ) : '';
+		return Protocol::tick_key( (string) substr( str_replace( '&lt;', '<', $key ), 0, 160 ) );
+	}
+
+	/**
 	 * Tick one line of the list: `scope` system — once for the whole
 	 * building (its key on the building's log; every tank of it then
 	 * shows it done) — or tank — one tank's own line (a temporary tank's
@@ -892,9 +1026,9 @@ class Todo {
 	 * @return array message, event_ids — or error.
 	 */
 	public static function tick( $store, array $raw, array $base ) {
-		$key   = Protocol::tick_key( isset( $raw['key'] ) && is_scalar( $raw['key'] ) ? substr( sanitize_text_field( (string) $raw['key'] ), 0, 160 ) : '' );
+		$key   = self::posted_key( $raw['key'] ?? '' );
 		$kind  = isset( $raw['kind'] ) && is_scalar( $raw['kind'] ) ? sanitize_key( (string) $raw['kind'] ) : '';
-		$label = isset( $raw['label'] ) && is_scalar( $raw['label'] ) ? substr( sanitize_text_field( (string) $raw['label'] ), 0, 80 ) : '';
+		$label = isset( $raw['label'] ) && is_scalar( $raw['label'] ) ? substr( str_replace( '&lt;', '<', sanitize_text_field( (string) $raw['label'] ) ), 0, 80 ) : '';
 		$scope = isset( $raw['scope'] ) && is_scalar( $raw['scope'] ) ? sanitize_key( (string) $raw['scope'] ) : '';
 
 		if ( '' === $key ) {

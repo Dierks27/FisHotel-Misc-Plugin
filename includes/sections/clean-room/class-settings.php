@@ -824,6 +824,11 @@ class Settings {
 		}
 
 		$errors = Layout::validate_building( $building, $taken );
+		// The Temporary building stays active while a tank in it is running.
+		$running = $current && Layout::is_own_water( $current ) && 'active' !== $building['status'] ? Temp_Tanks::building_status_error( $current, $building['status'], $store->open_setups() ) : '';
+		if ( '' !== $running ) {
+			$errors[] = $running;
+		}
 		if ( '' !== $building['schedule'] && ! isset( self::protocols()['templates'][ $building['schedule'] ] ) ) {
 			$errors[] = __( 'that schedule template does not exist', 'fishotel-misc-plugin' );
 		}

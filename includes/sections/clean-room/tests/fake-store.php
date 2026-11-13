@@ -742,6 +742,15 @@ class Fake_Store {
 	}
 
 	public function record_event( $stay_id, array $event, $today, array $settings ) {
+		// As the real record_event(): no group comes back to life in a slot whose setup is gone.
+		$slots  = $this->slot_setups();
+		$setups = Store::event_setups( (string) ( $event['type'] ?? '' ), (int) ( $event['from_tank_id'] ?? 0 ), (int) ( $event['to_tank_id'] ?? 0 ), $slots );
+		if ( false !== $setups && $slots && in_array( (string) ( $event['type'] ?? '' ), Store::RAISING_TYPES, true ) ) {
+			$stay = $this->stay( (int) $stay_id, $today, $settings );
+			if ( $stay && isset( $slots[ (int) $stay['tank_id'] ] ) && Store::slot_revival( $stay, Store::event_with_setups( $event, $setups ), $slots, $today, $this->replay_opts( $settings ) ) ) {
+				return false;
+			}
+		}
 		$id = $this->append_only( $stay_id, $event );
 		if ( ! $id ) {
 			return false;
@@ -796,6 +805,9 @@ class Fake_Store {
 		$events = isset( $stay['events'] ) && is_array( $stay['events'] ) ? $stay['events'] : $this->events( (int) $stay['id'] );
 		if ( Replay::is_undone( $events, (int) $event['id'] ) ) {
 			return null;
+		}
+		if ( ( ! empty( $event['from_setup_id'] ) || ! empty( $event['to_setup_id'] ) ) && Store::setup_gone( $event, $this->slot_setups() ) ) {
+			return false;
 		}
 		$before = $this->state_before( array_merge( $stay, array( 'events' => $events ) ), (int) $event['id'], $today, $settings );
 		$comp   = Replay::compensating( $event, $before );

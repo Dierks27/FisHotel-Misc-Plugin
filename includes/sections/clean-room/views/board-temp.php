@@ -167,7 +167,7 @@ foreach ( $temp['slots'] as $fh_slot ) {
 					}
 				}
 				?>
-				<div class="fh-cr-tank fh-cr-tank--temp fh-cr-tank--<?php echo esc_attr( $fh_setup['kind'] ); ?><?php echo ( '' !== $fh_species && ! $fh_match ) ? ' is-dim' : ''; ?>" data-tank="<?php echo esc_attr( $fh_tank['number'] ); ?>" data-name="<?php echo esc_attr( $fh_what ); ?>">
+				<div class="fh-cr-tank fh-cr-tank--temp fh-cr-tank--<?php echo esc_attr( $fh_setup['kind'] ); ?><?php echo ( '' !== $fh_species && ! $fh_match ) ? ' is-dim' : ''; ?>" data-tank="<?php echo esc_attr( $fh_tank['number'] ); ?>" data-setup="<?php echo esc_attr( (int) $fh_setup['id'] ); ?>" data-seen="<?php echo esc_attr( Temp_Tanks::seen( $fh_setup ) ); ?>" data-name="<?php echo esc_attr( $fh_what ); ?>">
 					<div class="fh-cr-tank__head">
 						<span class="fh-cr-tank__number"><?php echo esc_html( $fh_name ); ?></span>
 						<span class="fh-cr-tank__size"><?php echo esc_html( $fh_tank['number'] ); ?><?php echo (int) $fh_setup['gallons'] > 0 ? ' · ' . esc_html( (int) $fh_setup['gallons'] . ' gal' ) : ''; ?></span>

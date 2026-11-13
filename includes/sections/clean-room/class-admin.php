@@ -805,6 +805,10 @@ class Admin {
 					$ok     = $store->record_event( $stay_id, array_merge( $base, array( 'type' => 'move', 'from_tank_id' => $stay['tank_id'], 'to_tank_id' => (int) $to['id'], 'note' => $reason ) ), $today, $settings );
 					/* translators: %d: tank number */
 					$msg = sprintf( __( 'Moved to Tank %d.', 'fishotel-misc-plugin' ), (int) $to['number'] );
+					if ( $ok && empty( $stay['cleared_date'] ) && ! empty( $ok['state']['cleared_date'] ) ) {
+						// Into a clean tank — the Clean Room or a clean temporary tank: say what the move did.
+						$msg .= ' ' . __( 'The group is cleared today — out of quarantine.', 'fishotel-misc-plugin' );
+					}
 					break;
 				case 'undo':
 					$event = $store->event( isset( $raw['event_id'] ) ? absint( $raw['event_id'] ) : 0 );
@@ -872,6 +876,11 @@ class Admin {
 		}
 
 		if ( ! $ok ) {
+			// A temporary tank that was taken down is history: say so instead of "could not be saved".
+			$why = in_array( $op, array( 'undo', 'count', 'loss', 'sold' ), true ) ? Temp_Tanks::gone_error( $store, $stay, 'undo' === $op && isset( $event ) && is_array( $event ) ? $event : null ) : '';
+			if ( '' !== $why ) {
+				wp_send_json_error( array( 'message' => $why ), 409 );
+			}
 			wp_send_json_error( array( 'message' => __( 'That could not be saved.', 'fishotel-misc-plugin' ) ), 500 );
 		}
 

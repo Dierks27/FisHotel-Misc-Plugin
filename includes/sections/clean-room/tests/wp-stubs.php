@@ -55,7 +55,15 @@ function sanitize_key( $key ) {
 }
 
 function sanitize_text_field( $text ) {
-	return trim( strip_tags( (string) $text ) );
+	// As WordPress: a "<" that opens no tag comes back as an entity, tags are dropped.
+	$text = (string) preg_replace_callback(
+		'%<[^>]*?((?=<)|>|$)%',
+		static function ( $m ) {
+			return false === strpos( $m[0], '>' ) ? htmlspecialchars( $m[0], ENT_QUOTES, 'UTF-8', false ) : $m[0];
+		},
+		(string) $text
+	);
+	return trim( strip_tags( $text ) );
 }
 
 function sanitize_textarea_field( $text ) {

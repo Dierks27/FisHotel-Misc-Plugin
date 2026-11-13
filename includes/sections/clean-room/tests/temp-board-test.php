@@ -42,6 +42,12 @@ $GLOBALS['fh_current_user']                        = 8;
  */
 function board( Fake_Store $store, array $raw, $nonce = null ) {
 	global $today, $settings;
+	// As the card posts it: the setup the page was showing — its id and its token.
+	$tank = isset( $raw['tank'] ) && is_scalar( $raw['tank'] ) ? $store->tank_by_number( (int) $raw['tank'] ) : null;
+	if ( in_array( (string) ( $raw['act'] ?? '' ), array( 'setup_edit', 'setup_steps', 'takedown' ), true ) && ! isset( $raw['setup_id'] ) && ! empty( $tank['setup'] ) ) {
+		$raw['setup_id'] = (int) $tank['setup']['id'];
+		$raw['seen']     = Temp_Tanks::seen( $tank['setup'] );
+	}
 	return Admin_Temp::request( $store, array_merge( array( 'nonce' => null === $nonce ? wp_create_nonce( Admin::NONCE_AJAX ) : $nonce ), $raw ), $today, $settings );
 }
 

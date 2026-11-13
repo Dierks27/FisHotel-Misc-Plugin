@@ -218,6 +218,54 @@ class Temp_Tanks {
 	}
 
 	/**
+	 * Why an event on a group was refused by the store, when a temporary
+	 * tank that is gone is the reason ('' otherwise): the event to undo
+	 * belongs to a setup that was taken down, or the group is filed under
+	 * a slot whose setup no longer stands and would come back to life
+	 * there.
+	 *
+	 * @param object     $store Store (or stand-in) with slot_setups().
+	 * @param array      $stay  The stay with its events.
+	 * @param array|null $event The event that was to be undone, when it was an undo.
+	 * @return string
+	 */
+	public static function gone_error( $store, array $stay, $event = null ) {
+		$slots = $store->slot_setups();
+		if ( is_array( $event ) && Store::setup_gone( $event, $slots ) ) {
+			return __( 'That happened in a temporary tank that has since been taken down: it is history now and cannot be undone. Move the group to where it really is instead.', 'fishotel-misc-plugin' );
+		}
+		$tank = (int) ( $stay['tank_id'] ?? 0 );
+		if ( isset( $slots[ $tank ] ) && ( (int) $slots[ $tank ] <= 0 || (int) $slots[ $tank ] !== Store::stay_setup( $stay, $tank ) ) ) {
+			return __( 'This group was in a temporary tank that has since been taken down, so it cannot come back to life there. Record the fish as a new arrival instead.', 'fishotel-misc-plugin' );
+		}
+		return '';
+	}
+
+	/**
+	 * Why the Temporary building cannot take a status: '' when it can,
+	 * else the sentence — a tank that is running is on the day's list and
+	 * on the phone, so its building stays "active" until every setup is
+	 * taken down. A building with racks is not this rule's business.
+	 *
+	 * @param array   $building The building as it is now.
+	 * @param string  $status   The status asked for.
+	 * @param array[] $open     Store::open_setups().
+	 * @return string
+	 */
+	public static function building_status_error( array $building, $status, array $open ) {
+		if ( ! Layout::is_own_water( $building ) || 'active' === (string) $status || ! $open ) {
+			return '';
+		}
+		$names = array();
+		foreach ( $open as $setup ) {
+			$names[] = Layout::slot_name( (int) ( $setup['slot'] ?? 0 ) );
+		}
+		sort( $names );
+		/* translators: %s: the slots that are set up (TEMP 1, TEMP 3) */
+		return sprintf( __( 'still set up: %s — take every temporary tank down on the Board before this building goes offline or "coming soon"', 'fishotel-misc-plugin' ), implode( ', ', $names ) );
+	}
+
+	/**
 	 * Every tank with its open setup (slots only) and what it behaves as:
 	 * 'setup' (the row, or null) and 'effective_area'.
 	 *
@@ -565,7 +613,7 @@ class Temp_Tanks {
 		if ( '' === $template || ! isset( $protocols['templates'][ $template ] ) ) {
 			return array( Protocol::feed_step() );
 		}
-		return Protocol::normalize( $protocols['templates'][ $template ] );
+		return Protocol::normalize( self::clean_steps( $protocols['templates'][ $template ] ) );
 	}
 
 	/**
@@ -636,6 +684,48 @@ class Temp_Tanks {
 	}
 
 	/**
+	 * A step's name as it is stored: plain text, and the same text again
+	 * when it comes back as a tick's key. The page posts the key through
+	 * sanitize_text_field(), which drops tags and turns a lone "<" into
+	 * an entity — so the name is cleaned the same way here, the "<" kept
+	 * as typed (Todo::posted_key() reads it back), until cleaning it
+	 * again changes nothing. Anything that will not settle loses its
+	 * angle brackets.
+	 *
+	 * @param mixed $text Raw label.
+	 * @param int   $max  Longest.
+	 * @return string
+	 */
+	public static function step_text( $text, $max = 80 ) {
+		$text = is_scalar( $text ) ? (string) $text : '';
+		for ( $round = 0; $round < 3; $round++ ) {
+			$clean = str_replace( '&lt;', '<', sanitize_text_field( $text ) );
+			if ( $clean === $text ) {
+				return (string) substr( $text, 0, (int) $max );
+			}
+			$text = $clean;
+		}
+		return (string) substr( sanitize_text_field( str_replace( array( '<', '>' ), ' ', $text ) ), 0, (int) $max );
+	}
+
+	/**
+	 * Raw steps with their names cleaned (step_text()).
+	 *
+	 * @param mixed $steps Raw steps.
+	 * @return array[]
+	 */
+	public static function clean_steps( $steps ) {
+		$out = array();
+		foreach ( is_array( $steps ) ? $steps : array() as $step ) {
+			if ( is_array( $step ) ) {
+				$step['label'] = self::step_text( $step['label'] ?? '' );
+				$out[]         = $step;
+			}
+		}
+		return $out;
+	}
+
+	/**
 	 * One change to a setup's own steps (pure) — the template is never
 	 * touched: `save` replaces the list (the Board's editor), `add`
 	 * appends a step, `remove` drops one, `move` shifts one by so many
@@ -652,13 +742,13 @@ class Temp_Tanks {
 
 		switch ( (string) $op ) {
 			case 'save':
-				$steps = Protocol::normalize( isset( $raw['steps'] ) && is_array( $raw['steps'] ) ? $raw['steps'] : array() );
+				$steps = Protocol::normalize( self::clean_steps( $raw['steps'] ?? array() ) );
 				/* translators: %d: number of steps */
 				$message = sprintf( __( 'Schedule saved: %d steps, for this tank only.', 'fishotel-misc-plugin' ), count( $steps ) );
 				break;
 
 			case 'add':
-				$added = Protocol::normalize( array( $raw ) );
+				$added = Protocol::normalize( self::clean_steps( array( $raw ) ) );
 				if ( ! $added ) {
 					return array( 'error' => __( 'Name the step.', 'fishotel-misc-plugin' ) );
 				}
@@ -1299,25 +1389,65 @@ class Temp_Tanks {
 	const ACTS = array( 'setup', 'setup_edit', 'setup_steps', 'takedown', 'todo_tick' );
 
 	/**
-	 * The open setup an action is about: the one named by `setup_id`, else
-	 * the one in the page's tank.
+	 * A short token of what a setup is right now — its name, purpose,
+	 * kind, gallons, start date, note and its own steps. A page is handed
+	 * it with the setup and posts it back with an edit (`seen`): when the
+	 * setup has changed on another screen since, the token no longer
+	 * matches and the edit is refused instead of writing the old page's
+	 * picture over it. A hash of the content, not a time: two changes in
+	 * one second are still two tokens.
 	 *
-	 * @param array $ctx store, tank.
-	 * @param array $raw setup_id.
-	 * @return array|null
+	 * @param array $setup Hydrated setup.
+	 * @return string 12 hex characters.
 	 */
-	private static function target( array $ctx, array $raw ) {
+	public static function seen( array $setup ) {
+		$what = array(
+			(int) ( $setup['id'] ?? 0 ),
+			(string) ( $setup['name'] ?? '' ),
+			(string) ( $setup['purpose'] ?? '' ),
+			self::kind( $setup['kind'] ?? '' ),
+			(int) ( $setup['gallons'] ?? 0 ),
+			(string) ( $setup['start_date'] ?? '' ),
+			(string) ( $setup['note'] ?? '' ),
+			Protocol::normalize( isset( $setup['steps'] ) && is_array( $setup['steps'] ) ? $setup['steps'] : array() ),
+		);
+		return substr( md5( (string) wp_json_encode( $what ) ), 0, 12 );
+	}
+
+	/**
+	 * The open setup an edit, a schedule change or a take down is about —
+	 * always the one the page names by `setup_id`, never "whatever stands
+	 * in this slot now": a page loaded before the slot changed hands must
+	 * not write onto the next setup. An edit and a schedule change also
+	 * carry `seen` (seen()): the setup as the page showed it.
+	 *
+	 * @param array  $ctx store, tank.
+	 * @param array  $raw setup_id, seen.
+	 * @param string $act setup_edit|setup_steps|takedown.
+	 * @return array{setup: array}|array{error: string}
+	 */
+	private static function target( array $ctx, array $raw, $act ) {
 		$id = isset( $raw['setup_id'] ) && is_scalar( $raw['setup_id'] ) && is_numeric( $raw['setup_id'] ) ? (int) $raw['setup_id'] : 0;
-		if ( $id > 0 ) {
-			$setup = $ctx['store']->setup( $id );
-			return $setup && ! empty( $setup['open'] ) ? $setup : null;
+		if ( $id <= 0 ) {
+			$tank = isset( $ctx['tank'] ) && is_array( $ctx['tank'] ) ? $ctx['tank'] : null;
+			$open = $tank && Layout::is_slot( $tank ) ? $ctx['store']->open_setups() : array();
+			if ( ! $tank || ! isset( $open[ (int) $tank['id'] ] ) ) {
+				return array( 'error' => __( 'Nothing is set up there (any more). Reload and look.', 'fishotel-misc-plugin' ) );
+			}
+			return array( 'error' => __( 'This page is out of date. Reload it, then try again — nothing was changed.', 'fishotel-misc-plugin' ) );
 		}
-		$tank = isset( $ctx['tank'] ) && is_array( $ctx['tank'] ) ? $ctx['tank'] : null;
-		if ( ! $tank || ! Layout::is_slot( $tank ) ) {
-			return null;
+
+		$setup = $ctx['store']->setup( $id );
+		if ( ! $setup || empty( $setup['open'] ) ) {
+			return array( 'error' => __( 'Nothing is set up there (any more). Reload and look.', 'fishotel-misc-plugin' ) );
 		}
-		$open = $ctx['store']->open_setups();
-		return isset( $open[ (int) $tank['id'] ] ) ? $open[ (int) $tank['id'] ] : null;
+		if ( 'takedown' !== (string) $act ) {
+			$seen = isset( $raw['seen'] ) && is_scalar( $raw['seen'] ) ? (string) $raw['seen'] : '';
+			if ( '' === $seen || ! hash_equals( self::seen( $setup ), $seen ) ) {
+				return array( 'error' => __( 'This tank was changed on another screen since this page was loaded. Reload and look — nothing was changed.', 'fishotel-misc-plugin' ) );
+			}
+		}
+		return array( 'setup' => $setup );
 	}
 
 	/**
@@ -1363,10 +1493,11 @@ class Temp_Tanks {
 			);
 		}
 
-		$setup = self::target( $ctx, $raw );
-		if ( ! $setup ) {
-			return array( 'error' => __( 'Nothing is set up there (any more). Reload and look.', 'fishotel-misc-plugin' ) );
+		$target = self::target( $ctx, $raw, $act );
+		if ( ! empty( $target['error'] ) ) {
+			return array( 'error' => (string) $target['error'] );
 		}
+		$setup = $target['setup'];
 
 		if ( 'setup_edit' === $act ) {
 			$done = self::edit( $store, $setup, $raw, $call );

@@ -49,6 +49,7 @@ php  includes/sections/clean-room/tests/identify-test.php
 php  includes/sections/clean-room/tests/temp-tanks-test.php
 php  includes/sections/clean-room/tests/todo-test.php
 php  includes/sections/clean-room/tests/temp-board-test.php
+php  includes/sections/clean-room/tests/temp-guards-test.php
 node includes/sections/clean-room/tests/front-desk.test.js
 node includes/sections/clean-room/tests/clean-room-admin.test.js
 node includes/sections/clean-room/tests/temp-tanks.test.js
@@ -490,6 +491,28 @@ system temp directory (`FH_TEST_TMP` overrides).
   filter and function (null without the tables, never an exception)
   and the Today section's line (`today_line()`, never twice, none on a
   day with nothing due or for a user without the capability).
+- **temp-guards-test.php** — the guards around the temporary tanks and
+  the list: no group comes back to life in a slot whose setup is gone
+  (the undo of a loss and a Count refused once it was taken down, and
+  in the next setup too; `Store::slot_revival()`, a note still taken,
+  the sentence the Stays tab shows); an undo does not reach into a
+  setup that was taken down (`Store::setup_gone()`; refused with the
+  slot free and with it set up again, the group neither moved nor
+  cleared; fine while the setup stands); a building that is *coming
+  soon* or *offline* but has fish keeps its block, the Temporary
+  building cannot leave *active* under a running tank, and a running
+  tank is listed whatever its building says; a step with "<" in its
+  name is stored as plain text and can be ticked on the list and on the
+  tank (`Temp_Tanks::step_text()`, `Todo::posted_key()`, against a
+  `sanitize_text_field()` stub that turns a lone "<" into an entity as
+  WordPress does); a page loaded before the slot changed hands, or
+  before the same setup changed on another screen, writes nothing
+  (`setup_id` required, `Temp_Tanks::seen()`); a dose step naming
+  several medications is not done by one of them — on a temporary tank,
+  on a building's list and on each of its tanks' screens — while a
+  step naming one still is (`Todo::combo()`, `part_dosed()`,
+  `settle_combos()`); and `fishotel_cleanroom_todo()` answering null
+  with no query while the section is off.
 - **fake-store.php** — not a test (exits 0 when run directly): the
   in-memory store the above drives (tanks and buildings from the seed,
   stays — joined with their batch's order and sale date like the real

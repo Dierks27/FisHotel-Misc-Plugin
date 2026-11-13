@@ -266,18 +266,31 @@
 			});
 		});
 
+		/*
+		 * Which setup a card's write is about: the one the page was showing
+		 * (its id, and for an edit the token of what it was) — never
+		 * "whatever stands in that slot now".
+		 */
+		function setupOf($inside) {
+			var $card = $inside.closest('.fh-cr-tank--temp');
+			return {
+				tank: $card.data('tank'),
+				setup_id: String($card.attr('data-setup') || ''),
+				seen: String($card.attr('data-seen') || '')
+			};
+		}
+
 		$(document).on('submit', '.fh-cr-temp-edit', function (e) {
 			e.preventDefault();
 			var $panel = $(this);
-			post({
+			post($.extend(setupOf($panel), {
 				act: 'setup_edit',
-				tank: $panel.closest('.fh-cr-tank--temp').data('tank'),
 				name: $panel.find('[name="name"]').val() || '',
 				purpose: $panel.find('[name="purpose"]').val() || '',
 				gallons: $panel.find('[name="gallons"]').val() || '',
 				start_date: $panel.find('[name="start_date"]').val() || '',
 				note: $panel.find('[name="note"]').val() || ''
-			}, $status, $panel.find('button'));
+			}), $status, $panel.find('button'));
 			return false;
 		});
 
@@ -310,12 +323,11 @@
 				});
 				return row;
 			}).get();
-			post({
+			post($.extend(setupOf($panel), {
 				act: 'setup_steps',
 				op: 'save',
-				tank: $panel.closest('.fh-cr-tank--temp').data('tank'),
 				steps: stepsFromRows(rows)
-			}, $status, $panel.find('button'));
+			}), $status, $panel.find('button'));
 			return false;
 		});
 
@@ -324,7 +336,7 @@
 			if (!root.confirm((i18n.confirmDown || 'Take %s down?').replace('%s', String($card.data('name') || '')))) {
 				return;
 			}
-			post({ act: 'takedown', tank: $card.data('tank') }, $status, $card.find('button'));
+			post($.extend(setupOf($card), { act: 'takedown' }), $status, $card.find('button'));
 		});
 
 		/* The To do tab: one tick per line — for the whole system, or for one tank. */

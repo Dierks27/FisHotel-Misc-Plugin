@@ -210,7 +210,7 @@ which lists the temporary tanks as a group of their own with "+ Set
 up") asks for the name, *What is it for?*, the kind, the gallons, the
 treatment and its start date and a note — see *Temporary tanks*. The
 tank picker's first entry is **Today**: the day's list by water system
-(see *To do*), also at `/?fh_front_desk=1&list=1`.
+(see *To do*), also at `/?fh_front_desk=1&list=1` (kept through the login when scanned logged out).
 
 **Dose** — medication chips (Copper · Metro · Prazi · Formalin ·
 Chloroquine · Fenben · Salt), the amount with its unit (g / ml / tsp; the
@@ -256,7 +256,9 @@ twice for the same event. The temporary tanks ride on the same action
 with five more acts — `setup`, `setup_edit`, `setup_steps`, `takedown`
 and `todo_tick` (one line of the day's list, for a whole building or
 for one tank) — which need no tank on the page and have no undo: a
-setup is taken down, a schedule changed back, a tick stands. The Board
+setup is taken down, a schedule changed back, a tick stands.
+`setup_edit`, `setup_steps` and `takedown` must name their setup
+(`setup_id`; the first two also `seen` — see *Temporary tanks*). The Board
 posts the very same acts through its own action
 (`fishotel_cleanroom_temp`, the Board's nonce + `manage_woocommerce`).
 
@@ -325,7 +327,9 @@ then keeps the batch's —, else the suggestion; empty = the batch's; the
 date it already has writes nothing) / Move… / Coming Soon / **Identify…** (*Correct fish…* on a named fish: the real fish, its size, or still unknown) / Edit (species, size, product, check-in date, supplier,
 order ref, landed cost, a note — a changed species or size is the same
 correction as Identify…), a *For sale now* and a *Needs identifying* filter, closed stays
-with a toggle, a CSV and an XLSX export with the formula-cell guard.
+with a toggle, a CSV and an XLSX export with the formula-cell guard. A *Move…* that clears the
+group (out of quarantine into a clean tank — the Clean Room or a clean temporary tank) says so in
+its reply; an Undo or a Count that a taken-down temporary tank stands in the way of says why.
 **Arrivals**, **Species** and **Stats** — the workbook replacement, below.
 **Events** — the latest 200 stay events and 100 tank-log entries in plain
 words (a dose row reads like the toast — "Metronidazole 5.1 g · Building
@@ -391,7 +395,19 @@ be changed for this tank alone — on the phone step by step (−1 day /
 +1 day, Remove, Add a step), on the Board as a small table — without
 touching the template, and a later edit of the template never changes a
 tank that is already running. A step's "where" does not apply: the tank
-is its own place.
+is its own place. A step's name is kept as plain text (tags dropped, a
+"<" as typed — "Keep salinity < 1.015" — so the tick the page posts
+finds it again).
+
+**One setup, several screens.** An edit, a schedule change and a take
+down always name the setup they are about (`setup_id`) — never "whatever
+stands in this slot now" — and an edit or a schedule change also carries
+a token of the setup as the page showed it (`seen`, a hash of its
+fields and steps). A page loaded before the slot changed hands, or
+before the same setup was changed on another screen, is told to reload
+and writes nothing: the Board's old Schedule panel cannot land on the
+next tank, and a stale "Remove" cannot take the step that now stands at
+that place.
 
 **Its own clock.** A temporary tank's to-do comes from its own steps and
 counts days from **its treatment start date** (day 1) — not from a
@@ -429,6 +445,17 @@ to). The next setup in that slot starts clean: the old setup's to-do,
 doses and readings never show on the new one — every log entry on a
 slot carries the id of the setup that stood there.
 
+**What was taken down is history.** A setup comes down empty and stays
+that way: a group that closed in it (all lost, all shipped) cannot come
+back to life in that slot afterwards — the undo of the loss, or a Count
+above zero, is refused whether the slot is free or the next setup
+stands in it ("… has since been taken down … record the fish as a new
+arrival instead") — and a move out of (or into) a setup that was taken
+down can no longer be undone: the undo would put the group into
+whatever is set up there now, and could clear it. While the setup
+stands, both work as anywhere. The Temporary building itself cannot be
+set to *offline* or *coming soon* while a tank in it is running.
+
 ## To do — one list for the day, by water system
 
 "There isn't really single tanks except the hospital tanks … Everything
@@ -441,7 +468,10 @@ phone (*Today* on the tank picker).
   or without (an empty system says "nothing is due"); then **one block
   per temporary tank** that is set up, marked *Temporary*, with its
   kind, purpose, gallons, schedule and own day; then any Clean Room
-  building that has something due (the feeding).
+  building that has something due (the feeding). A building that is
+  *coming soon* or *offline* has no block — unless fish are in it all
+  the same: then it is listed like any other, so the list and its
+  tanks' own screens never disagree.
 - In a building's block **every due dose, test and water change appears
   once for the system**, never once per tank: worked out from the groups
   in that building with the same rules as a tank's own to-do, one pass
@@ -455,6 +485,13 @@ phone (*Today* on the tank picker).
   copper reading taken on any tank of the building. Each tank's own
   screen and the Board then show it ticked too: one truth, wherever it
   is ticked. A temporary tank is its own water — its lines are its own.
+- **A step that names several medications** ("Metronidazole + Kanamycin
+  + Furan-2" — one part per "+") is not done by a dose of one of them:
+  it is done when it is ticked by hand, or when each part has a dose
+  logged today (by the medication list, else by its name as typed). Its
+  line names no single medication and says whose a suggestion is
+  ("Metronidazole: suggested 0.25 g for 10 gal"). The same holds on a
+  tank's own screen and for a building running such a schedule.
 - **The feeding really is per tank**, so it collapses to one line —
   "Feed — 7 tanks with fish" (and "· 3 left") — that opens to the tanks
   and can be ticked all at once (*All fed*) or tank by tank.
@@ -483,8 +520,10 @@ if ( function_exists( 'fishotel_cleanroom_todo' ) ) {
 $todo = apply_filters( 'fishotel_cleanroom_todo', null );
 ```
 
-Both answer `null` while the section's tables do not exist (and the
-filter stays null while the section is off); otherwise
+Both answer `null` while the Clean Room section is switched off — the
+function is defined whenever the Misc plugin is active, but answers
+nothing and runs no query then; the filter has no callback — or its
+tables do not exist; otherwise
 `{ left, total, all_done, flags, text, url }` — the lines still open and
 in all, whether something was due and nothing is left, the number of
 copper flags, one sentence ("Tanks: 3 things to do" / "Tanks: all done"

@@ -164,7 +164,9 @@ class Front_Desk {
 		nocache_headers();
 
 		if ( ! is_user_logged_in() ) {
-			wp_safe_redirect( wp_login_url( Clean_Room::front_desk_url( $tank_number ) ) );
+			// After the login: the same screen — the day's list when that was asked for.
+			$back = Clean_Room::front_desk_url( $tank_number ) . ( isset( $_GET['list'] ) && '1' === $_GET['list'] ? '&list=1' : '' ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput -- compared, never used.
+			wp_safe_redirect( wp_login_url( $back ) );
 			exit;
 		}
 
@@ -601,6 +603,7 @@ class Front_Desk {
 			'dayText'   => Temp_Tanks::day_text( $setup, $today ),
 			'note'      => (string) $setup['note'],
 			'steps'     => $steps,
+			'seen'      => Temp_Tanks::seen( $setup ),
 			'empty'     => empty( $tank['occupants'] ),
 		);
 
@@ -1650,7 +1653,7 @@ class Front_Desk {
 	 * the item key (Protocol::todo() reads it back the same day).
 	 */
 	private static function act_tick( array $ctx, array $raw ) {
-		$key  = Protocol::tick_key( self::text( $raw, 'key', 160 ) );
+		$key  = Todo::posted_key( $raw['key'] ?? '' ); // A "<" in a step's name comes back as typed.
 		$kind = isset( $raw['kind'] ) ? sanitize_key( $raw['kind'] ) : 'other';
 		$kind = in_array( $kind, Store::LOG_KINDS, true ) ? $kind : 'other';
 		if ( '' === $key ) {
