@@ -194,7 +194,9 @@ already stored; an unknown slug is refused.
   would redeclare the same functions and take the site down. One prepared
   query on `{prefix}snippets` (only when Code Snippets is loaded and such a
   snippet is switched on); if the table cannot be read, every such snippet
-  waits. The page and an admin notice name what waits and why. A
+  waits. The page names what waits and why; a short admin notice ("N
+  snippets are ready to move over from the Code Snippets plugin") shows
+  only on the Plugins screen, the FisHotel Tools Dashboard and Snippets. A
   `shortcode` snippet is never held (it only renders where placed).
 - **Clashes**: a function or class declared by two snippet files (or twice
   in one where both can run) is listed and **both files are refused**. It

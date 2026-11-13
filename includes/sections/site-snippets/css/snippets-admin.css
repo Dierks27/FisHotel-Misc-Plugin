@@ -575,3 +575,8 @@
 		height: 360px;
 	}
 }
+
+/* "For the developer" folds: closed by default, one plain line above them. */
+.fh-snip-dev { margin: 6px 0 14px; }
+.fh-snip-dev > summary { cursor: pointer; color: #646970; font-size: 13px; }
+.fh-snip-dev[open] > summary { margin-bottom: 6px; }

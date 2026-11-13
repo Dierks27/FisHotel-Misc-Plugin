@@ -327,10 +327,23 @@ ob_start();
 ( new Admin() )->notices();
 check( 'no notice for a user without manage_options', '' === ob_get_clean() );
 $GLOBALS['fh_can'] = true;
+$GLOBALS['pagenow'] = 'post.php';
 ob_start();
 ( new Admin() )->notices();
-$notice = ob_get_clean();
-check( 'an admin notice names the held snippets', false !== strpos( $notice, 'cs-twelve (Code Snippets #12 is still active' ) );
+check( 'on an order screen (any other screen): no notice about waiting snippets', '' === ob_get_clean() );
+foreach ( array( array( 'plugins.php', null ), array( 'admin.php', 'fishotel-misc' ), array( 'admin.php', 'fishotel-misc-snippets' ) ) as $fh_where ) {
+	$GLOBALS['pagenow'] = $fh_where[0];
+	if ( null === $fh_where[1] ) {
+		unset( $_GET['page'] );
+	} else {
+		$_GET['page'] = $fh_where[1];
+	}
+	ob_start();
+	( new Admin() )->notices();
+	$notice = ob_get_clean();
+	check( 'on ' . $fh_where[0] . ( $fh_where[1] ? '?page=' . $fh_where[1] : '' ) . ': one plain notice, counted, with the way out', false !== strpos( $notice, '3 snippets are ready to move over from the Code Snippets plugin. Switch them off there, then on here.' ) && false !== strpos( $notice, 'Open Snippets' ) && false === strpos( $notice, 'redeclare' ), $notice );
+}
+unset( $_GET['page'], $GLOBALS['pagenow'] );
 $GLOBALS['fh_can'] = false;
 $GLOBALS['wpdb']->active[12] = 0;
 fh_request( $guard, false );
