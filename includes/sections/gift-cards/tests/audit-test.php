@@ -157,7 +157,11 @@ $files = glob( FISHOTEL_MISC_PATH . 'includes/sections/gift-cards/*.php' );
 $views = glob( FISHOTEL_MISC_PATH . 'includes/sections/gift-cards/views/*.php' );
 $dirty = array();
 foreach ( array_merge( $files, $views ) as $file ) {
-	if ( 'class-store.php' !== basename( $file ) && preg_match( '/\$wpdb|\bwpdb\b/', file_get_contents( $file ) ) ) {
+	$code = '';
+	foreach ( token_get_all( file_get_contents( $file ) ) as $t ) {
+		$code .= is_array( $t ) ? ( in_array( $t[0], array( T_COMMENT, T_DOC_COMMENT ), true ) ? '' : $t[1] ) : $t;
+	}
+	if ( 'class-store.php' !== basename( $file ) && preg_match( '/\$wpdb|\bwpdb\b/', $code ) ) {
 		$dirty[] = basename( $file );
 	}
 }

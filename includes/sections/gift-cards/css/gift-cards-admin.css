@@ -1,0 +1,54 @@
+/**
+ * Gift Cards admin styles — FisHotel Tools → Gift Cards (dark, built on
+ * admin/css/admin-style.css and its --fh-* tokens).
+ *
+ * @package FisHotel\Misc\Sections\Gift_Cards
+ */
+.fh-gc-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: -14px 0 20px; }
+.fh-gc-tab { padding: 7px 14px; border-radius: 999px; font-size: 13px; font-weight: 600; text-decoration: none; color: var(--fh-text-secondary, #a0a0a0); background: var(--fh-bg-secondary, #2d2d2d); border: 1px solid var(--fh-border, rgba(255, 255, 255, .1)); }
+.fh-gc-tab:hover, .fh-gc-tab:focus { color: var(--fh-text-primary, #e0e0e0); }
+.fh-gc-tab.is-active { color: #fff; background: var(--fh-accent, #00a0d2); border-color: var(--fh-accent, #00a0d2); }
+.fh-gc-mode--shadow, .fh-gc-mode--off { background: rgba(255, 185, 0, .08); color: var(--fh-warning, #ffb900); border-color: rgba(255, 185, 0, .25); }
+.fh-gc-toolbar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; margin: 0 0 14px; padding: 14px 16px; background: var(--fh-bg-secondary, #2d2d2d); border: 1px solid var(--fh-border, rgba(255, 255, 255, .1)); border-radius: var(--fh-radius, 8px); }
+.fh-gc-toolbar label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--fh-text-secondary, #a0a0a0); }
+.fh-gc-filters { display: flex; flex-wrap: wrap; gap: 6px; flex: 1 1 auto; }
+.fh-gc-filter { padding: 5px 12px; border-radius: 999px; text-decoration: none; color: var(--fh-text-secondary, #a0a0a0); border: 1px solid var(--fh-border, rgba(255, 255, 255, .1)); }
+.fh-gc-filter.is-active { color: #fff; background: var(--fh-accent, #00a0d2); border-color: var(--fh-accent, #00a0d2); }
+.fh-gc-count { opacity: .75; font-size: 11px; margin-left: 2px; }
+.fh-gc-search { display: flex; gap: 6px; flex: 1 1 320px; }
+.fh-gc-search input[type="search"] { flex: 1 1 auto; min-width: 0; }
+.fh-gc-scroll { overflow-x: auto; margin-bottom: 16px; }
+.fh-gc-table { min-width: 720px; }
+.fh-gc-table--narrow { min-width: 0; max-width: 720px; }
+.fh-gc-table code { font-size: 12px; }
+.fh-gc-table tr.is-disabled td { opacity: .6; }
+.fh-gc-table tr.is-blocking td { color: var(--fh-error, #dc3232); }
+.fh-gc-num { text-align: right; white-space: nowrap; }
+.fh-gc-badge { display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 9px; font-size: 11px; line-height: 18px; background: rgba(0, 160, 210, .18); color: var(--fh-accent, #00a0d2); }
+.fh-gc-badge--off { background: rgba(220, 50, 50, .15); color: var(--fh-error, #dc3232); }
+.fh-gc-big { display: block; font-size: 28px; font-weight: 700; margin: 6px 0 10px; }
+.fh-gc-big small { font-size: 14px; font-weight: 400; opacity: .75; }
+.fh-gc-sub { display: block; font-size: 12px; color: var(--fh-text-secondary, #a0a0a0); }
+.fh-gc-details { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0 0 14px; }
+.fh-gc-details dt { color: var(--fh-text-secondary, #a0a0a0); }
+.fh-gc-details dd { margin: 0; }
+.fh-gc-forms { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin: 16px 0; }
+.fh-gc-form label { display: flex; flex-direction: column; gap: 4px; margin: 0 0 10px; }
+.fh-gc-form label > span { font-size: 12px; color: var(--fh-text-secondary, #a0a0a0); }
+.fh-gc-form input[type="text"], .fh-gc-form input[type="email"], .fh-gc-form textarea, .fh-gc-form select { width: 100%; max-width: 100%; }
+.fh-gc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 4px 16px; }
+.fh-gc-grid__wide { grid-column: 1 / -1; }
+.fh-gc-radios { border: 0; padding: 0; margin: 0 0 10px; display: flex; flex-wrap: wrap; gap: 8px 18px; }
+.fh-gc-radios label { flex-direction: row; align-items: center; gap: 6px; margin: 0; }
+.fh-gc-radios--stack { flex-direction: column; }
+.fh-gc-radios legend { font-size: 12px; color: var(--fh-text-secondary, #a0a0a0); margin-bottom: 6px; }
+.fh-gc-check { flex-direction: row !important; align-items: flex-start; gap: 8px !important; }
+.fh-gc-inline { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 8px 8px 0; }
+.fh-gc-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin: 16px 0; }
+.fh-gc-tile { display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; background: var(--fh-bg-secondary, #2d2d2d); border: 1px solid var(--fh-border, rgba(255, 255, 255, .1)); border-radius: var(--fh-radius, 8px); }
+.fh-gc-tile__label { font-size: 12px; color: var(--fh-text-secondary, #a0a0a0); }
+.fh-gc-tile__value { font-size: 20px; font-weight: 700; }
+.fh-gc-tile__sub { font-size: 12px; opacity: .8; }
+.fh-gc-list { margin: 8px 0 8px 18px; list-style: disc; }
+.fh-gc-pages { display: flex; gap: 12px; align-items: center; }
+@media (max-width: 600px) { .fh-gc-details { grid-template-columns: 1fr; } .fh-gc-details dd { margin-bottom: 8px; } }

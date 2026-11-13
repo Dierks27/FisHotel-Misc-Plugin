@@ -1,0 +1,16 @@
+/* Gift Cards — checkout and My Account. Plain, so the theme's own styles win. */
+.fh-gcard-checkout { margin: 1em 0; padding: .75em 1em; border: 1px solid rgba(127,127,127,.35); border-radius: 6px; }
+.fh-gcard-checkout__use { display: flex; gap: .5em; align-items: center; cursor: pointer; }
+.fh-gcard-checkout__amount { margin: .6em 0 0; display: flex; flex-wrap: wrap; gap: .4em .6em; align-items: center; }
+.fh-gcard-checkout__amount input { width: 8em; }
+.fh-gcard-checkout__amount small { flex-basis: 100%; opacity: .8; }
+.fh-gcard-code { display: block; margin: 0 0 1em; }
+.fh-gcard-code__row { display: flex; gap: .5em; flex-wrap: wrap; margin-top: .3em; }
+.fh-gcard-code__row input { flex: 1 1 12em; min-width: 0; text-transform: uppercase; }
+.fh-gcard-code__message { display: block; margin-top: .3em; }
+.fh-gcard-account .fh-gcard-account__balance { font-size: 1.6em; font-weight: 600; margin: .2em 0 .8em; }
+.fh-gcard-account table { width: 100%; }
+.fh-gcard-account .fh-gcard-redeem { display: flex; gap: .5em; flex-wrap: wrap; margin: 0 0 1.5em; }
+.fh-gcard-account .fh-gcard-redeem input[type="text"] { flex: 1 1 14em; min-width: 0; text-transform: uppercase; }
+.fh-gcard-account .fh-gcard-pages { display: flex; gap: 1em; margin-top: .8em; }
+@media (max-width: 600px) { .fh-gcard-account table th, .fh-gcard-account table td { padding: .4em .3em; font-size: .92em; } }
