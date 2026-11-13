@@ -443,6 +443,48 @@ class Orders {
 	}
 
 	/**
+	 * The product a line's stay belongs to: the one its species row is
+	 * linked to, else — a line typed from a product suggestion carries the
+	 * product's title and no species row, and the workbook links no species
+	 * to a product — the one fish product named exactly like the line.
+	 *
+	 * @param object $store Store or stand-in.
+	 * @param array  $line  The order line.
+	 * @return int|null
+	 */
+	public static function line_product_id( $store, array $line ) {
+		if ( ! empty( $line['species_product_id'] ) ) {
+			return (int) $line['species_product_id'];
+		}
+		if ( ! is_object( $store ) || ! method_exists( $store, 'fish_product_names' ) ) {
+			return null;
+		}
+		return self::product_named( (string) ( $line['species'] ?? '' ), (array) $store->fish_product_names() );
+	}
+
+	/**
+	 * The id of the ONE product named exactly like a species (case and
+	 * spacing aside); null when none or several are (pure).
+	 *
+	 * @param string $name     Species name.
+	 * @param array  $products product id => title.
+	 * @return int|null
+	 */
+	public static function product_named( $name, array $products ) {
+		$key = Species::key( $name );
+		if ( '' === $key ) {
+			return null;
+		}
+		$found = array();
+		foreach ( $products as $id => $title ) {
+			if ( (int) $id > 0 && Species::key( $title ) === $key ) {
+				$found[] = (int) $id;
+			}
+		}
+		return 1 === count( $found ) ? $found[0] : null;
+	}
+
+	/**
 	 * Check an order's received fish in: one stay per line that received
 	 * fish and has no stay yet (idempotent). Needs the store's tanks(),
 	 * open_stays(), create_stay(), record_event(), set_line_stay(),
@@ -509,7 +551,7 @@ class Orders {
 
 			$stay_id = $store->create_stay(
 				array(
-					'product_id'    => ! empty( $line['species_product_id'] ) ? (int) $line['species_product_id'] : null,
+					'product_id'    => self::line_product_id( $store, $line ),
 					'species'       => (string) $line['species'],
 					'size_slug'     => $line['size_slug'] ?? null,
 					'size_label'    => $line['size_label'] ?? null,

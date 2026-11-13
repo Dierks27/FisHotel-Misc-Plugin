@@ -90,6 +90,7 @@ class Front_Desk {
 		add_filter( 'query_vars', array( $this, 'register_query_var' ) );
 		add_action( 'template_redirect', array( $this, 'maybe_render' ), 1 );
 		add_filter( 'auth_cookie_expiration', array( $this, 'extend_cookie_life' ), 10, 3 );
+		add_action( 'login_form', array( $this, 'remember_label_login' ) );
 
 		add_action( 'wp_ajax_fishotel_cleanroom_act', array( $this, 'ajax_act' ) );
 		add_action( 'wp_ajax_fishotel_cleanroom_parse', array( $this, 'ajax_parse' ) );
@@ -103,6 +104,8 @@ class Front_Desk {
 	 * auth cookie lasts about a year instead of WordPress's two days (the
 	 * default without "remember me"), so a scan does not mean another
 	 * login every other day. Everyone else keeps the normal cookie life.
+	 * remember_label_login() makes that login a remembered one, so the
+	 * browser keeps the cookie that long too.
 	 *
 	 * @param int  $length   Seconds.
 	 * @param int  $user_id  The user logging in.
@@ -112,8 +115,7 @@ class Front_Desk {
 	public function extend_cookie_life( $length, $user_id = 0, $remember = false ) {
 		unset( $remember );
 
-		$redirect = isset( $_REQUEST['redirect_to'] ) && is_scalar( $_REQUEST['redirect_to'] ) ? (string) wp_unslash( $_REQUEST['redirect_to'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- wp-login.php's own field, read only to decide the cookie life.
-		if ( '' === $redirect || false === strpos( $redirect, Clean_Room::QUERY_VAR ) ) {
+		if ( ! self::login_bound_for_front_desk() ) {
 			return $length;
 		}
 		if ( (int) $user_id <= 0 || ! user_can( (int) $user_id, Clean_Room::CAPABILITY ) ) {
@@ -121,6 +123,29 @@ class Front_Desk {
 		}
 
 		return max( (int) $length, self::COOKIE_LIFE );
+	}
+
+	/**
+	 * Is this request's redirect_to the Front Desk?
+	 *
+	 * @return bool
+	 */
+	private static function login_bound_for_front_desk() {
+		$redirect = isset( $_REQUEST['redirect_to'] ) && is_scalar( $_REQUEST['redirect_to'] ) ? (string) wp_unslash( $_REQUEST['redirect_to'] ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- wp-login.php's own field, read only.
+		return '' !== $redirect && false !== strpos( $redirect, Clean_Room::QUERY_VAR );
+	}
+
+	/**
+	 * wp-login.php's form, for a login bound for the Front Desk: send
+	 * "remember me" whether the box is ticked or not. Without it WordPress
+	 * hands out a cookie that ends with the browser session, however long
+	 * extend_cookie_life() says it lives — the phone would ask again the
+	 * next morning.
+	 */
+	public function remember_label_login() {
+		if ( self::login_bound_for_front_desk() ) {
+			echo '<input type="hidden" name="rememberme" value="forever" />';
+		}
 	}
 
 	/**

@@ -159,6 +159,31 @@ $store->save_order_lines( $future, Orders::normalize_lines( array( array( 'speci
 $r = Orders::check_in( $store, $store->order( $future ), $today, $settings, $base );
 check( 'a received date in the future is clamped to today', $today === $r['date'] && $today === $store->stay( $r['created'][0]['stay_id'] )['checkin_date'] );
 
+echo "7b. The product of a checked-in line\n";
+$pstore  = new Fake_Store( array( 12 => 'Blue Test Wrasse', 13 => 'Orange Test Clown', 14 => 'Twin Test Goby', 15 => 'twin  test goby' ) );
+$linked  = $pstore->save_species( Species::normalize( array( 'name' => 'Wrasse (supplier name)', 'product_id' => 13 ) ) );
+$porder  = $pstore->save_order( Orders::normalize_order( array( 'ref' => '2026-9', 'supplier' => 'Test Supplier One' ) ) );
+$pstore->save_order_lines(
+	$porder,
+	Orders::normalize_lines(
+		array(
+			array( 'species' => ' blue  test WRASSE ', 'qty_received' => 6 ),                             // typed from a product suggestion: no species row
+			array( 'species' => 'Wrasse (supplier name)', 'species_id' => $linked, 'qty_received' => 2 ), // its species row is linked to a product
+			array( 'species' => 'Twin Test Goby', 'qty_received' => 1 ),                                  // two products share the name
+			array( 'species' => 'Unknown Test Fish', 'qty_received' => 1 ),                               // no product
+		)
+	)
+);
+$pr    = Orders::check_in( $pstore, $pstore->order( $porder ), $today, $settings, $base );
+$pstay = array();
+foreach ( $pr['created'] as $made ) {
+	$pstay[] = $pstore->stay( $made['stay_id'] )['product_id'];
+}
+check( 'a line named like one fish product gets that product; a linked species row wins; an ambiguous or unknown name gets none', array( 12, 13, null, null ) === $pstay, json_encode( $pstay ) );
+check( 'the product box of that product now lists the group', 1 === count( $pstore->stays_for_product( 12, $today, $settings ) ) );
+check( 'product_named: exact apart from case and spacing, one match only', 12 === Orders::product_named( 'BLUE test  wrasse', array( 12 => 'Blue Test Wrasse', 13 => 'Blue Test Wrasse XL' ) ) && null === Orders::product_named( 'Blue Test', array( 12 => 'Blue Test Wrasse' ) ) && null === Orders::product_named( '', array( 12 => '' ) ) && null === Orders::product_named( 'a', array( 1 => 'A', 2 => 'a' ) ) );
+check( 'a store without the product list (an older stand-in) still checks in', null === Orders::line_product_id( new \stdClass(), array( 'species' => 'Blue Test Wrasse' ) ) && 7 === Orders::line_product_id( new \stdClass(), array( 'species' => 'x', 'species_product_id' => 7 ) ) );
+
 echo "8. Lists, years and refs\n";
 check( 'orders newest first by received / order date; the year filter; the supplier filter', array( '2026-3', '2026-1', '2026-2' ) === array_column( $store->orders(), 'ref' ) && 3 === count( $store->orders( array( 'year' => 2026 ) ) ) && 0 === count( $store->orders( array( 'year' => 2025 ) ) ) && array( '2026-2' ) === array_column( $store->orders( array( 'supplier' => 'Test Supplier Two' ) ), 'ref' ) );
 check( 'order_years, order_refs, pick lists', array( 2026 ) === $store->order_years() && array( '2026-1', '2026-2', '2026-3' ) === $store->order_refs() && array( 'Test Supplier One', 'Test Supplier Two' ) === $store->order_pick_lists()['suppliers'] );

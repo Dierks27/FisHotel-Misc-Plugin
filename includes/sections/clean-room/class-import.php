@@ -56,6 +56,13 @@ class Import {
 	const DEFAULT_STAYS_DAYS = 45;
 
 	/**
+	 * How the notes of an order this importer created begin.
+	 *
+	 * @var string
+	 */
+	const NOTE_MARKER = 'Imported from the workbook sheet';
+
+	/**
 	 * A system of at least this many gallons stands for "the big system"
 	 * when no building has exactly that volume.
 	 *
@@ -294,6 +301,18 @@ class Import {
 			}
 			$recent   = $days > 0 && self::within_days( (string) ( $order['received_date'] ?? '' ), $today, $days );
 			$existing = $store->order_by_ref( $ref );
+			if ( $existing && ! self::is_workbook_order( $existing, $order ) ) {
+				// Another order — made by hand under Arrivals, where the form offers
+				// the next free "2026-N" — holds this ref. It is not this batch:
+				// leave it alone (no check-in, no logs) and say what to do.
+				$result['orders']['skipped']++;
+				$result['errors'][] = sprintf(
+					'Batch %1$s of the workbook was NOT imported: the site already has a different order with that ref (%2$s). Give that order another Ref (Arrivals → the order → Ref → Save), then import the same file again.',
+					$ref,
+					self::describe_order( $existing )
+				);
+				continue;
+			}
 			if ( $existing ) {
 				$order_id = (int) $existing['id'];
 				$result['orders']['skipped']++;
@@ -522,6 +541,47 @@ class Import {
 	/* ============================================================== */
 
 	/**
+	 * Is the order on the site that holds a workbook batch's ref that batch
+	 * (an earlier import), or another order that merely took the same ref
+	 * (typed in by hand)? It is the batch when its notes still carry the
+	 * import's own line, or when supplier and received date both agree
+	 * (pure).
+	 *
+	 * @param array $existing The order on the site (header).
+	 * @param array $order    The batch from the workbook map.
+	 * @return bool
+	 */
+	public static function is_workbook_order( array $existing, array $order ) {
+		if ( false !== stripos( (string) ( $existing['notes'] ?? '' ), self::NOTE_MARKER ) ) {
+			return true;
+		}
+		$received = isset( $order['received_date'] ) && Replay::is_date( $order['received_date'] ) ? (string) $order['received_date'] : '';
+		$theirs   = isset( $existing['received_date'] ) ? substr( (string) $existing['received_date'], 0, 10 ) : '';
+		if ( '' === $received || $received !== $theirs ) {
+			return false;
+		}
+		$supplier = strtolower( trim( preg_replace( '/\s+/', ' ', (string) ( $order['supplier'] ?? '' ) ) ) );
+		return '' !== $supplier && strtolower( trim( preg_replace( '/\s+/', ' ', (string) ( $existing['supplier'] ?? '' ) ) ) ) === $supplier;
+	}
+
+	/**
+	 * An order on the site in a few words, for a message (pure).
+	 *
+	 * @param array $existing The order (header).
+	 * @return string
+	 */
+	public static function describe_order( array $existing ) {
+		$supplier = trim( (string) ( $existing['supplier'] ?? '' ) );
+		$received = isset( $existing['received_date'] ) ? substr( (string) $existing['received_date'], 0, 10 ) : '';
+		return sprintf(
+			'%1$s, %2$s, %3$s',
+			'' !== $supplier ? $supplier : 'no supplier',
+			'' !== $received ? 'received ' . $received : 'not received yet',
+			(string) ( $existing['status'] ?? '' )
+		);
+	}
+
+	/**
 	 * Create one order with its lines; the landed totals are cached through
 	 * the Costing.
 	 *
@@ -551,7 +611,7 @@ class Import {
 				'schedule'        => (string) ( $order['schedule'] ?? '' ),
 				'building_id'     => $building_id,
 				/* translators: %s: sheet name */
-				'notes'           => sprintf( 'Imported from the workbook sheet "%s".', (string) ( $order['sheet'] ?? '' ) ),
+				'notes'           => sprintf( self::NOTE_MARKER . ' "%s".', (string) ( $order['sheet'] ?? '' ) ),
 			)
 		);
 

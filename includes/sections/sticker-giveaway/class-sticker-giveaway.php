@@ -154,6 +154,38 @@ class Sticker_Giveaway {
 	}
 
 	/**
+	 * While the section is switched off: a cart that still holds a sticker
+	 * the picker put there loses it the next time it is loaded. Only
+	 * Cart prices those lines (free, or the add-on price) and keeps them
+	 * out of shipping, and Cart does not run now — left alone, a free
+	 * sticker would turn into a paid line with shipping of its own.
+	 */
+	public static function boot_disabled() {
+		add_action( 'woocommerce_cart_loaded_from_session', array( __CLASS__, 'drop_sticker_lines' ), 20 );
+	}
+
+	/**
+	 * Remove every picker-managed sticker line from a cart.
+	 *
+	 * @param \WC_Cart|object $cart The cart.
+	 * @return int How many lines were removed.
+	 */
+	public static function drop_sticker_lines( $cart ) {
+		if ( ! is_object( $cart ) || ! method_exists( $cart, 'get_cart' ) || ! method_exists( $cart, 'remove_cart_item' ) ) {
+			return 0;
+		}
+
+		$removed = 0;
+		foreach ( (array) $cart->get_cart() as $key => $item ) {
+			if ( is_array( $item ) && isset( $item[ self::ITEM_KEY ] ) ) {
+				$cart->remove_cart_item( $key );
+				$removed++;
+			}
+		}
+		return $removed;
+	}
+
+	/**
 	 * Register an admin submenu for this section.
 	 */
 	public static function register_menu() {
