@@ -246,7 +246,7 @@ class Admin {
 			'case'         => $case,
 			'facts'        => $facts,
 			'numbers'      => $numbers,
-			'rows'         => Email::choice_rows( $case, $numbers, $shown ),
+			'rows'         => Email::choice_rows( $case, $numbers, $shown, array(), $rest ),
 			'rest_left'    => $rest,
 			'preview'      => $preview,
 			'subject'      => $subject,

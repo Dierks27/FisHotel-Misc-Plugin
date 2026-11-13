@@ -163,7 +163,8 @@ class Customer_Page {
 		$numbers = $cases->numbers( $case, $live );
 		$open    = in_array( $state, array( 'confirm', 'shipped' ), true );
 		$links   = $open ? Cases::links( $case, (int) $parsed['expires'], ! empty( $numbers['offer_cancel'] ) ) : array();
-		$rows    = Email::choice_rows( $case, $numbers, $facts, $links );
+		$rest    = $order ? $cases->orders()->rest_left( $order, $case['line_ref'], (int) $case['qty'] ) : true;
+		$rows    = Email::choice_rows( $case, $numbers, $facts, $links, $rest );
 		$choice  = $open ? $parsed['choice'] : $case['choice'];
 		$others  = array();
 		foreach ( $rows as $row ) {
@@ -178,7 +179,7 @@ class Customer_Page {
 		$view['row']    = Email::row_for( $rows, $choice );
 		$view['others'] = $others;
 		$view['token']  = (string) $token;
-		$view['values'] = Email::values( $case, $facts, $order ? $cases->orders()->rest_left( $order, $case['line_ref'], (int) $case['qty'] ) : true );
+		$view['values'] = Email::values( $case, $facts, $rest );
 
 		return $view;
 	}

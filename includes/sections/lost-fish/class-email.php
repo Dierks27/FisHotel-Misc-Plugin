@@ -181,9 +181,12 @@ class Email {
 	 * @param array $numbers Cases::numbers() (fish_paid, ship_diff, refund, credit, cancel, offer_cancel).
 	 * @param array $facts   Orders::facts() (number, symbol).
 	 * @param array $links   choice => URL ('' or missing = no link).
+	 * @param bool  $rest_left Whether anything else is still to ship on the order. When nothing is, a
+	 *                         shipping difference (only a typed one can be there) is taken off without the
+	 *                         sentence about reduced shipping: the message has just said nothing else ships.
 	 * @return array<int, array{choice: string, title: string, amount: int|null, money: string, text: string, url: string, confirm: string}>
 	 */
-	public static function choice_rows( array $case, array $numbers, array $facts, array $links = array() ) {
+	public static function choice_rows( array $case, array $numbers, array $facts, array $links = array(), $rest_left = true ) {
 		$symbol = (string) ( $facts['symbol'] ?? '$' );
 		$money  = static function ( $cents ) use ( $symbol ) {
 			return Money::format( $cents, $symbol );
@@ -195,7 +198,7 @@ class Email {
 		$paid_ship = max( 0, (int) ( $case['ship_charged'] ?? 0 ) );
 
 		$shipping = '';
-		if ( $diff > 0 ) {
+		if ( $diff > 0 && $rest_left ) {
 			$shipping = sprintf(
 				/* translators: 1: the order's shipping without the fish, 2: the shipping paid */
 				__( 'Without this fish your order is no longer over the amount for reduced shipping, so its shipping is %1$s instead of the %2$s you paid.', 'fishotel-misc-plugin' ),
@@ -212,9 +215,9 @@ class Email {
 				return sprintf( $plain, $money( $refund ) );
 			}
 			if ( $refund <= 0 ) {
-				return sprintf( $nothing, $money( $fish ), $money( $diff ) ) . ' ' . $shipping;
+				return trim( sprintf( $nothing, $money( $fish ), $money( $diff ) ) . ' ' . $shipping );
 			}
-			return sprintf( $less, $money( $refund ), $money( $fish ), $money( $diff ) ) . ' ' . $shipping;
+			return trim( sprintf( $less, $money( $refund ), $money( $fish ), $money( $diff ) ) . ' ' . $shipping );
 		};
 
 		$rows = array();
@@ -367,8 +370,9 @@ class Email {
 	 */
 	public static function build( array $case, array $facts, array $numbers, array $links, array $settings, array $opts = array() ) {
 		$template = self::template( $settings );
-		$values   = self::values( $case, $facts, ! array_key_exists( 'rest_left', $opts ) || ! empty( $opts['rest_left'] ) );
-		$rows     = self::choice_rows( $case, $numbers, $facts, $links );
+		$rest     = ! array_key_exists( 'rest_left', $opts ) || ! empty( $opts['rest_left'] );
+		$values   = self::values( $case, $facts, $rest );
+		$rows     = self::choice_rows( $case, $numbers, $facts, $links, $rest );
 
 		$subject = trim( (string) preg_replace( '/\s+/', ' ', self::fill( str_replace( '{choices}', '', $template['subject'] ), $values, false ) ) );
 		$body    = $template['body'];

@@ -107,6 +107,15 @@ check_lacks( '… and no date anywhere', '2026', $message['html'] );
 
 $message = Email::build( $case, $facts, $drop, $links, $settings, array( 'rest_left' => false ) );
 check_contains( 'nothing else left to ship', 'There is nothing else left to ship on this order.', $message['html'] );
+// A shipping difference can only be there because it was typed by hand: nothing is worked out for an order with nothing left to ship.
+check_lacks( '… so the message does not go on to say the order is "no longer over the amount for reduced shipping"', 'reduced shipping', $message['html'] );
+check_lacks( '… nor name a shipping price for an order that ships nothing', 'its shipping is', $message['html'] );
+check_contains( '… the typed difference still comes off, in plain words', 'We refund $35.00 to the way you paid: $60.00 for the fish, less $25.00 shipping.</', $message['html'] );
+$rows = Email::choice_rows( $case, $drop, $facts, $links, false );
+check_same( '… refund and credit end after the sum, with no space left behind', array( 'We refund $35.00 to the way you paid: $60.00 for the fish, less $25.00 shipping.', 'We add $35.00 to your store credit: $60.00 for the fish, less $25.00 shipping.' ), array( $rows[0]['text'], $rows[1]['text'] ) );
+check_same( '… the money is the same as with the rest still to ship', array_column( Email::choice_rows( $case, $drop, $facts, $links ), 'money' ), array_column( $rows, 'money' ) );
+check_same( '… a difference larger than the fish: nothing to refund, again without the sentence', 'There would be nothing to refund: you paid $10.00 for the fish, and the shipping difference is $25.00.', Email::choice_rows( $case, Money::choices( array( 'unit_paid' => 1000, 'qty' => 1, 'ship_diff' => 2500, 'order_total' => 51500 ) ), $facts, $links, false )[0]['text'] );
+check_same( '… without a difference nothing changes', array_column( Email::choice_rows( $case, $stays, $facts, $links ), 'text' ), array_column( Email::choice_rows( $case, $stays, $facts, $links, false ), 'text' ) );
 
 $two     = array_merge( $case, array( 'qty' => 2 ) );
 $message = Email::build( $two, $facts, $drop, $links, $settings );
