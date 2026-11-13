@@ -1,0 +1,462 @@
+/**
+ * Foam Cuts admin styles — the section page under FisHotel Tools (dark,
+ * built on admin/css/admin-style.css and its --fh-* tokens). The drawings
+ * sit on white "paper" so they look on screen as they print.
+ *
+ * @package FisHotel\Misc\Sections\Foam_Cuts
+ */
+
+.fh-fc-header {
+	margin-bottom: 16px;
+}
+
+.fh-fc-tagline {
+	font-size: 13px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+/* Tabs */
+.fh-fc-tabs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	margin: 0 0 18px;
+	border-bottom: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+}
+
+.fh-fc-tab {
+	padding: 9px 16px;
+	font-size: 14px;
+	color: var(--fh-text-secondary, #a0a0a0);
+	text-decoration: none;
+	border: 1px solid transparent;
+	border-bottom: 0;
+	border-radius: 6px 6px 0 0;
+}
+
+.fh-fc-tab:hover,
+.fh-fc-tab:focus {
+	color: var(--fh-text-primary, #e0e0e0);
+	background: var(--fh-bg-hover, #363636);
+}
+
+.fh-fc-tab.is-active {
+	color: var(--fh-text-primary, #e0e0e0);
+	background: var(--fh-bg-secondary, #2d2d2d);
+	border-color: var(--fh-border, rgba(255, 255, 255, 0.1));
+}
+
+/* Notices */
+.fh-fc-notice {
+	margin: 0 0 14px;
+	padding: 10px 14px;
+	font-size: 13px;
+	color: var(--fh-text-primary, #e0e0e0);
+	background: var(--fh-bg-secondary, #2d2d2d);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	border-left: 4px solid var(--fh-accent, #00a0d2);
+	border-radius: 4px;
+}
+
+.fh-fc-notice p {
+	margin: 2px 0;
+}
+
+.fh-fc-notice.is-ok {
+	border-left-color: var(--fh-success, #46b450);
+}
+
+.fh-fc-notice.is-warn {
+	border-left-color: var(--fh-warning, #ffb900);
+}
+
+.fh-fc-notice.is-error {
+	border-left-color: var(--fh-danger, #dc3232);
+}
+
+/* Cards and layout */
+.fh-fc-columns {
+	display: grid;
+	grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+	gap: 18px;
+	align-items: start;
+}
+
+@media (max-width: 1100px) {
+	.fh-fc-columns {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
+
+.fh-fc-card {
+	margin: 0 0 18px;
+	padding: 18px 20px;
+	background: var(--fh-bg-secondary, #2d2d2d);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	border-radius: var(--fh-radius, 8px);
+	box-shadow: var(--fh-shadow, 0 2px 8px rgba(0, 0, 0, 0.3));
+}
+
+.fh-fc-card h2 {
+	margin: 0 0 12px;
+	font-size: 17px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-fc-card h3 {
+	margin: 18px 0 8px;
+	font-size: 15px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-fc-card h4 {
+	margin: 12px 0 6px;
+	font-size: 12px;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-fc-card h2 .fh-fc-muted,
+.fh-fc-card h3 .fh-fc-muted {
+	margin-left: 8px;
+	font-size: 13px;
+	font-weight: 400;
+}
+
+.fh-fc-muted {
+	font-size: 13px;
+	line-height: 1.55;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-fc-warn {
+	font-size: 13px;
+	color: var(--fh-warning, #ffb900);
+}
+
+.fh-fc-link,
+.fh-fc-wrap .widefat a.fh-fc-link {
+	color: var(--fh-accent, #00a0d2);
+	text-decoration: none;
+}
+
+.fh-fc-link:hover {
+	color: var(--fh-accent-hover, #0eb5e8);
+}
+
+.fh-fc-danger,
+.fh-fc-wrap .button-link.fh-fc-danger {
+	color: #ff8a8a;
+	text-decoration: none;
+}
+
+.fh-fc-big {
+	margin: 0 0 12px;
+	font-size: 44px;
+	font-weight: 700;
+	line-height: 1;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-fc-big .fh-fc-muted {
+	margin-left: 8px;
+	font-size: 13px;
+	font-weight: 400;
+}
+
+/* Facts and chips */
+.fh-fc-facts {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	align-items: center;
+	margin: 0 0 14px;
+}
+
+.fh-fc-fact {
+	padding: 4px 12px;
+	font-size: 12px;
+	color: var(--fh-text-primary, #e0e0e0);
+	background: var(--fh-bg-primary, #1a1a1a);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	border-left: 3px solid var(--fh-accent, #00a0d2);
+	border-radius: 999px;
+}
+
+.fh-fc-fact.is-warn {
+	border-left-color: var(--fh-warning, #ffb900);
+}
+
+.fh-fc-chip {
+	display: inline-block;
+	margin-left: 6px;
+	padding: 1px 8px;
+	font-size: 11px;
+	font-weight: 400;
+	color: var(--fh-text-secondary, #a0a0a0);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	border-radius: 999px;
+	white-space: nowrap;
+}
+
+.fh-fc-chip.is-ok {
+	color: var(--fh-success, #46b450);
+	border-color: rgba(70, 180, 80, 0.5);
+}
+
+.fh-fc-chip.is-warn {
+	color: var(--fh-warning, #ffb900);
+	border-color: rgba(255, 185, 0, 0.5);
+}
+
+/* Tables — core's list table assumes a light background; re-tint. */
+.fh-fc-wrap .widefat {
+	margin: 0 0 12px;
+	background: var(--fh-bg-secondary, #2d2d2d);
+	border-color: var(--fh-border, rgba(255, 255, 255, 0.1));
+}
+
+.fh-fc-wrap .widefat th,
+.fh-fc-wrap .widefat td,
+.fh-fc-wrap .widefat thead th {
+	color: var(--fh-text-primary, #e0e0e0);
+	border-color: var(--fh-border, rgba(255, 255, 255, 0.1));
+	vertical-align: middle;
+}
+
+.fh-fc-wrap .widefat.striped > tbody > :nth-child(odd) {
+	background: var(--fh-bg-primary, #1a1a1a);
+}
+
+.fh-fc-wrap .widefat tr.is-open td {
+	box-shadow: inset 3px 0 0 var(--fh-accent, #00a0d2);
+}
+
+.fh-fc-num {
+	text-align: right;
+	white-space: nowrap;
+}
+
+.fh-fc-wrap .widefat th.fh-fc-num {
+	text-align: right;
+}
+
+/* Forms */
+.fh-fc-wrap input[type="text"],
+.fh-fc-wrap input[type="number"],
+.fh-fc-wrap input[type="date"] {
+	color: var(--fh-text-primary, #e0e0e0);
+	background: var(--fh-bg-primary, #1a1a1a);
+	border: 1px solid rgba(255, 255, 255, 0.2);
+	border-radius: 4px;
+}
+
+.fh-fc-wrap input::placeholder {
+	color: #777;
+}
+
+.fh-fc-wrap label,
+.fh-fc-wrap .fh-fc-form th {
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-fc-count {
+	width: 76px;
+	text-align: right;
+}
+
+.fh-fc-size {
+	width: 84px;
+}
+
+.fh-fc-inline {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	align-items: center;
+	margin: 0 0 10px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-fc-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+	align-items: center;
+	margin: 8px 0 4px;
+}
+
+.fh-fc-rows,
+.fh-fc-form {
+	margin: 0 0 6px;
+	border-collapse: collapse;
+}
+
+.fh-fc-rows th,
+.fh-fc-form th {
+	padding: 4px 10px 4px 0;
+	font-size: 12px;
+	font-weight: 600;
+	text-align: left;
+	color: var(--fh-text-secondary, #a0a0a0);
+	vertical-align: top;
+}
+
+.fh-fc-form th {
+	width: 260px;
+	padding-top: 9px;
+	font-size: 13px;
+}
+
+.fh-fc-rows td,
+.fh-fc-form td {
+	padding: 3px 10px 3px 0;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-fc-form td .fh-fc-muted {
+	margin-left: 8px;
+}
+
+/* Today's orders */
+.fh-fc-orders {
+	margin: 0 0 14px;
+	padding: 12px 14px;
+	background: var(--fh-bg-primary, #1a1a1a);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	border-radius: 6px;
+}
+
+.fh-fc-orders p {
+	margin: 4px 0;
+}
+
+.fh-fc-orderlist {
+	font-size: 13px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-fc-orderlist ul {
+	margin: 4px 0 8px 18px;
+	list-style: disc;
+}
+
+/* Boxes */
+.fh-fc-boxes {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(430px, 1fr));
+	gap: 14px;
+}
+
+.fh-fc-box {
+	padding: 12px 14px;
+	background: var(--fh-bg-primary, #1a1a1a);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	border-radius: 6px;
+}
+
+.fh-fc-box h3 {
+	margin-top: 0;
+}
+
+/* The open plan */
+.fh-fc-planhead {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 12px;
+	align-items: center;
+	justify-content: space-between;
+	margin: 0 0 12px;
+}
+
+.fh-fc-planhead h2 {
+	margin: 0;
+}
+
+.fh-fc-plantitle {
+	margin-left: 8px;
+	font-weight: 400;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-fc-buttons {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+	align-items: center;
+}
+
+.fh-fc-buttons form {
+	margin: 0;
+}
+
+.fh-fc-wrap .button.fh-fc-cut {
+	color: #fff;
+	background: var(--fh-success, #46b450);
+	border-color: var(--fh-success, #46b450);
+}
+
+.fh-fc-wrap .button.fh-fc-cut[disabled] {
+	color: #9a9a9a !important;
+	background: #3a3a3a !important;
+	border-color: #4a4a4a !important;
+}
+
+.fh-fc-source {
+	margin: 18px 0 0;
+	padding-top: 14px;
+	border-top: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+}
+
+.fh-fc-source h3 {
+	margin-top: 0;
+}
+
+.fh-fc-paper {
+	padding: 10px;
+	overflow-x: auto;
+	background: #fff;
+	border-radius: 6px;
+}
+
+.fh-fc-paper svg {
+	display: block;
+	max-width: 100%;
+	height: auto;
+}
+
+.fh-fc-lists {
+	display: grid;
+	grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+	gap: 18px;
+	margin-top: 10px;
+}
+
+@media (max-width: 900px) {
+	.fh-fc-lists {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}
+
+.fh-fc-cuts,
+.fh-fc-pieces {
+	margin: 0 0 8px 20px;
+	font-size: 13px;
+	line-height: 1.5;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-fc-pieces {
+	list-style: disc;
+}
+
+.fh-fc-cuts li {
+	margin-bottom: 3px;
+}
+
+.fh-fc-wrap code {
+	font-size: 12px;
+	color: var(--fh-text-primary, #e0e0e0);
+	background: rgba(255, 255, 255, 0.06);
+}
