@@ -18,6 +18,7 @@ use FisHotel\Misc\Sections\Foam_Cuts\Units;
 
 $fh_post = admin_url( 'admin-post.php' );
 $fh_own  = Boxes::SOURCE_OWN === $context['source'];
+$fh_st   = Boxes::SOURCE_SHIPTRACKER === $context['source'];
 $fh_t    = Units::format( $context['settings']['thickness'] );
 ?>
 <section class="fh-fc-card">
@@ -30,6 +31,10 @@ $fh_t    = Units::format( $context['settings']['thickness'] );
 		<?php foreach ( $context['notes'] as $fh_note ) : ?>
 			<?php echo esc_html( $fh_note ); ?>
 		<?php endforeach; ?>
+		<?php if ( $fh_st ) : ?>
+			<?php esc_html_e( 'One list for label costs, packing and foam: add, rename or resize a box there.', 'fishotel-misc-plugin' ); ?>
+			<a class="fh-fc-link" href="<?php echo esc_url( admin_url( 'admin.php?page=fst-settings&tab=boxes' ) ); ?>"><?php esc_html_e( 'Edit the boxes in ShipTracker', 'fishotel-misc-plugin' ); ?> &rarr;</a>
+		<?php endif; ?>
 	</p>
 	<p class="fh-fc-muted">
 		<?php
@@ -122,6 +127,12 @@ $fh_t    = Units::format( $context['settings']['thickness'] );
 	<?php endif; ?>
 </section>
 
+<?php
+// One home per list: while ShipTracker provides the boxes, this section's
+// own list is hidden (never deleted) — it is used again, as it was, when
+// ShipTracker has none.
+if ( ! $fh_st ) :
+	?>
 <section class="fh-fc-card">
 	<h2><?php esc_html_e( 'This section\'s own box list', 'fishotel-misc-plugin' ); ?></h2>
 	<?php if ( $fh_own ) : ?>
@@ -169,3 +180,4 @@ $fh_t    = Units::format( $context['settings']['thickness'] );
 		</p>
 	</form>
 </section>
+<?php endif; ?>

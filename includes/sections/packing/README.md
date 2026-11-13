@@ -223,6 +223,13 @@ yet takes over those of a box that is no longer in the list and has
 exactly the same size, so the move from the own list to ShipTracker's
 (where the boxes are typed again) keeps what was typed.
 
+**One home per list.** While ShipTracker provides the boxes, the Boxes tab
+says so in one line with a link to ShipTracker → Settings → Boxes & label
+costs, and this section's own list is hidden — not deleted: it stays in
+the settings and comes back, as it was, the moment ShipTracker has none.
+The sizes are the Clean Room's (Settings → Sizes): the Sizes tab says so
+with a link there, and only says which bag each size goes in.
+
 ## What is stored
 
 | Where | Key | What |

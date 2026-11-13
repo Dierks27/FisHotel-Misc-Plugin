@@ -21,7 +21,7 @@ $fh_own      = array_values( $settings['boxes'] );
 $fh_from_st  = Boxes::SOURCE_SHIPTRACKER === $current['source'];
 $fh_spare    = $fh_own ? 1 : 3;
 $fh_next     = count( $fh_own ) + $fh_spare;
-$fh_st_url   = admin_url( 'admin.php?page=fst-settings' );
+$fh_st_url   = admin_url( 'admin.php?page=fst-settings&tab=boxes' );
 $fh_adopted  = array();
 foreach ( $boxes as $fh_box ) {
 	if ( '' !== $fh_box['fits_from'] && $fh_box['fits_from'] !== $fh_box['key'] ) {
@@ -31,7 +31,7 @@ foreach ( $boxes as $fh_box ) {
 
 if ( $fh_from_st ) {
 	/* translators: %d: number of boxes */
-	$fh_source = sprintf( _n( 'The boxes come from ShipTracker → Settings → Boxes & label costs (%d box). One list for the label costs and for packing: add, rename or resize a box there.', 'The boxes come from ShipTracker → Settings → Boxes & label costs (%d boxes). One list for the label costs and for packing: add, rename or resize a box there.', count( $current['boxes'] ), 'fishotel-misc-plugin' ), count( $current['boxes'] ) );
+	$fh_source = sprintf( _n( 'The boxes come from ShipTracker → Settings → Boxes & label costs (%d box) — one list for label costs, packing and foam: add, rename or resize a box there.', 'The boxes come from ShipTracker → Settings → Boxes & label costs (%d boxes) — one list for label costs, packing and foam: add, rename or resize a box there.', count( $current['boxes'] ), 'fishotel-misc-plugin' ), count( $current['boxes'] ) );
 } elseif ( Boxes::SHIPTRACKER_EMPTY === $current['shiptracker'] ) {
 	$fh_source = __( 'ShipTracker has a list of standard boxes, but it is still empty — so this section\'s own list below is used. As soon as ShipTracker has a box, its list takes over (numbers typed here follow a box with the same name, or the same size).', 'fishotel-misc-plugin' );
 } else {
@@ -46,7 +46,7 @@ if ( $fh_from_st ) {
 	<p class="fishotel-misc-card-desc"><?php echo esc_html( $fh_source ); ?></p>
 
 	<?php if ( $fh_from_st ) : ?>
-		<p class="fishotel-misc-card-desc"><a href="<?php echo esc_url( $fh_st_url ); ?>"><?php esc_html_e( 'Open the ShipTracker settings', 'fishotel-misc-plugin' ); ?></a></p>
+		<p class="fishotel-misc-card-desc"><a href="<?php echo esc_url( $fh_st_url ); ?>"><?php esc_html_e( 'Edit the boxes in ShipTracker', 'fishotel-misc-plugin' ); ?> &rarr;</a></p>
 	<?php endif; ?>
 
 	<?php if ( $boxes ) : ?>
@@ -74,6 +74,12 @@ if ( $fh_from_st ) {
 	<?php endif; ?>
 </div>
 
+<?php
+// One home per list: while ShipTracker provides the boxes, this section's
+// own list is hidden (never deleted) — it is used again, as it was, the
+// moment ShipTracker has none.
+if ( ! $fh_from_st ) :
+	?>
 <div class="fishotel-misc-card fh-pack-card">
 	<div class="fishotel-misc-card-header">
 		<div class="fishotel-misc-card-icon"><span class="dashicons dashicons-editor-ul"></span></div>
@@ -81,11 +87,7 @@ if ( $fh_from_st ) {
 	</div>
 	<p class="fishotel-misc-card-desc">
 		<?php
-		echo esc_html(
-			$fh_from_st
-				? __( 'Not in use right now: ShipTracker provides the boxes. The list is kept in case ShipTracker is switched off.', 'fishotel-misc-plugin' )
-				: __( 'Name and inside size in inches. Nothing is filled in for you.', 'fishotel-misc-plugin' )
-		);
+		esc_html_e( 'Name and inside size in inches. Nothing is filled in for you.', 'fishotel-misc-plugin' );
 		?>
 	</p>
 
@@ -150,6 +152,7 @@ if ( $fh_from_st ) {
 		</p>
 	</form>
 </div>
+<?php endif; ?>
 
 <div class="fishotel-misc-card fh-pack-card">
 	<div class="fishotel-misc-card-header">

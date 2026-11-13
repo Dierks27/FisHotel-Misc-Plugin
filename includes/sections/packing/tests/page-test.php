@@ -58,6 +58,7 @@ check( 'an unknown tab is the first tab', false !== strpos( fh_page( $admin, 'no
 
 $html = fh_page( $admin, 'sizes' );
 check( 'Sizes → bags without bags and without a list of sizes says both, plainly', false !== strpos( $html, 'No list of sizes is available' ) && false !== strpos( $html, 'There are no bag sizes yet' ) && false === strpos( $html, 'fishotel_packing_map' ) );
+check( '… and, with the Clean Room not giving the sizes, does not send you there', false === strpos( $html, 'The size list lives in the Clean Room' ) );
 check( 'the fill tool says why it cannot run, and offers no button', false !== strpos( $html, 'Add the bag sizes first.' ) && false === strpos( $html, 'fh-pack-fill-run' ) );
 
 $html = fh_page( $admin, 'boxes' );
@@ -84,6 +85,7 @@ check( 'a name with markup in it is escaped (tags never survive a save anyway)',
 
 $html = fh_page( $admin, 'sizes' );
 check( 'the map says where the sizes come from: the Clean Room\'s attribute', false !== strpos( $html, 'the list the Clean Room section uses' ) && false !== strpos( $html, '(pa_size)' ) );
+check( 'one home per list: the map says the sizes are edited in the Clean Room, with a link there', false !== strpos( $html, 'The size list lives in the Clean Room' ) && false !== strpos( $html, 'page=fishotel-misc-clean-room&tab=settings#fishotel-cleanroom-sizes' ) );
 check( 'one row per size, posting its slug and the chosen bag', 6 === preg_match_all( '/name="map\[\d+\]\[size\]" value="(tiny|small|mid|big|show|odd)"/', $html ) && false !== strpos( $html, 'name="action" value="fishotel_packing_map"' ) );
 check( 'the bag of a size is selected; a size without one shows "no bag"', 1 === preg_match( '/name="map\[0\]\[bag\]".*?<option value="1"  selected="selected">Small \(4 × 12 in\)<\/option>/s', $html ) && 1 === preg_match( '/name="map\[4\]\[bag\]"[^>]*>\s*<option value="">— no bag —<\/option>\s*<option value="1" >/s', $html ), substr( $html, (int) strpos( $html, 'name="map[0][bag]"' ), 300 ) );
 check( 'a size that left the list but is still in the map is shown, flagged, so it can be cleared', false !== strpos( $html, 'value="gone"' ) && false !== strpos( $html, 'not in the list of sizes any more' ) );
@@ -119,7 +121,8 @@ if ( ! class_exists( 'FST_Settings' ) ) {
 }
 $html = fh_page( $admin, 'boxes' );
 check( 'the page says the boxes come from ShipTracker and links to its settings', false !== strpos( $html, 'The boxes come from ShipTracker → Settings → Boxes &amp; label costs (2 boxes)' ) && false !== strpos( $html, 'admin.php?page=fst-settings' ) );
-check( 'this section\'s own list is still there, marked as not in use', false !== strpos( $html, 'Not in use right now: ShipTracker provides the boxes.' ) && false !== strpos( $html, 'name="boxes[0][name]" value="Cube 8"' ) );
+check( 'one home per list: this section\'s own list is hidden while ShipTracker provides the boxes', false === strpos( $html, 'This section\'s own list of boxes' ) && false === strpos( $html, 'name="boxes[0][name]"' ) && false !== strpos( $html, 'Edit the boxes in ShipTracker' ) && false !== strpos( $html, 'admin.php?page=fst-settings&tab=boxes' ) );
+check( '… hidden, not deleted: the list is still saved, ready for the day ShipTracker has none', 'Cube 8' === ( Settings::get()['boxes'][0]['name'] ?? '' ) );
 check( 'the matrix is ShipTracker\'s boxes; a box that took its numbers over from one of the same size says so', 2 === preg_match_all( '/name="box_key\[\d+\]" value="[^"]+"/', $html ) && false !== strpos( $html, 'value="shipper l"' ) && false !== strpos( $html, 'Carried over from a box of the same size that is no longer in the list: Shipper L.' ) && false !== strpos( $html, 'name="fits[1][4]" value="2"' ) );
 
 echo "5. Assets\n";

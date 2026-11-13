@@ -485,4 +485,24 @@ check_same( 'the style sheet is not loaded on other screens', array(), $GLOBALS[
 $admin->enqueue_assets( 'fishotel-tools_page_fishotel-misc-foam-cuts' );
 check( '…only on this one', array( 'fishotel-foam-cuts-admin' ) === array_keys( $GLOBALS['fh_styles'] ) && is_file( dirname( __DIR__ ) . '/css/foam-cuts-admin.css' ) );
 
+echo "One home per box list\n";
+$fh_own_before = Settings::get()['boxes'];
+$html          = fh_page( $admin, array( 'tab' => 'boxes' ) );
+check( 'without ShipTracker: this section\'s own list is on the Boxes tab', false !== strpos( $html, 'own box list' ) && false === strpos( $html, 'Edit the boxes in ShipTracker' ) );
+if ( ! class_exists( 'FST_Settings' ) ) {
+	eval( 'class FST_Settings { public static function get_standard_boxes() { return array( array( "name" => "Invented Shipper", "length" => "20", "width" => "14", "height" => "12" ) ); } }' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- a stand-in for another plugin, declared mid-test on purpose.
+}
+$html = fh_page( $admin, array( 'tab' => 'boxes' ) );
+check( 'with ShipTracker\'s boxes: one line says where the list is edited, with a link', false !== strpos( $html, 'One list for label costs, packing and foam' ) && false !== strpos( $html, 'admin.php?page=fst-settings&tab=boxes' ) && false !== strpos( $html, 'Invented Shipper' ) );
+check( '… and this section\'s own list is hidden', false === strpos( $html, 'own box list' ) && false === strpos( $html, 'name="own[0][name]"' ) );
+check_same( '… not deleted: it is still saved as it was', $fh_own_before, Settings::get()['boxes'] );
+
+echo "One home for supplies\n";
+check( 'without ShipTracker\'s supplies: the Stock tab does not send you there', false === strpos( fh_page( $admin, array( 'tab' => 'stock' ) ), 'Open ShipTracker' ) );
+if ( ! class_exists( 'FST_Supplies' ) ) {
+	eval( 'class FST_Supplies {}' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- a stand-in for another plugin, declared mid-test on purpose.
+}
+$html = fh_page( $admin, array( 'tab' => 'stock' ) );
+check( 'with them: one line says supplies are counted and costed in ShipTracker, with a link; the sheet ledger stays', false !== strpos( $html, 'counted and costed per box in ShipTracker' ) && false !== strpos( $html, 'page=fst-settings&tab=boxes#fst-supplies-list' ) && false !== strpos( $html, 'fh-fc-big' ) );
+
 fh_finish();

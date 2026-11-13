@@ -48,6 +48,12 @@ if ( Size_List::SOURCE_CLEAN_ROOM === $standard['source'] && Size_List::KIND_ATT
 		<h2 class="fishotel-misc-card-title"><?php esc_html_e( 'Size → bag', 'fishotel-misc-plugin' ); ?></h2>
 	</div>
 	<p class="fishotel-misc-card-desc"><?php echo esc_html( $fh_source ); ?></p>
+	<?php if ( Size_List::SOURCE_CLEAN_ROOM === $standard['source'] ) : // One home per list: the sizes are the Clean Room's. ?>
+		<p class="fishotel-misc-card-desc">
+			<?php esc_html_e( 'The size list lives in the Clean Room: add or rename a size there. This table only says which bag each size goes in.', 'fishotel-misc-plugin' ); ?>
+			<a href="<?php echo esc_url( admin_url( 'admin.php?page=fishotel-misc-clean-room&tab=settings' ) . '#fishotel-cleanroom-sizes' ); ?>"><?php esc_html_e( 'Open Clean Room → Settings → Sizes', 'fishotel-misc-plugin' ); ?> &rarr;</a>
+		</p>
+	<?php endif; ?>
 	<p class="fishotel-misc-card-desc">
 		<?php esc_html_e( 'A variation with no Bag size of its own is packed in the bag of its size. A Bag size set on the variation itself always wins. The same map answers for fish that are not shop products (an invoice line, an unlisted fish) from the size on the line.', 'fishotel-misc-plugin' ); ?>
 	</p>

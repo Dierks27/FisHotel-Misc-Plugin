@@ -24,6 +24,12 @@ foreach ( $leftovers as $fh_left ) {
 	$fh_area += $fh_left['length'] * $fh_left['width'];
 }
 ?>
+<?php if ( class_exists( 'FST_Supplies' ) ) : // One home per list: supplies, their counts and their cost per box are ShipTracker's. ?>
+	<p class="fh-fc-muted">
+		<?php esc_html_e( 'Supplies — foam, bags, paper — are counted and costed per box in ShipTracker. This tab keeps only the sheets you cut and the leftovers.', 'fishotel-misc-plugin' ); ?>
+		<a class="fh-fc-link" href="<?php echo esc_url( admin_url( 'admin.php?page=fst-settings&tab=boxes' ) . '#fst-supplies-list' ); ?>"><?php esc_html_e( 'Open ShipTracker\'s Supplies', 'fishotel-misc-plugin' ); ?> &rarr;</a>
+	</p>
+<?php endif; ?>
 <div class="fh-fc-columns">
 
 	<section class="fh-fc-card">

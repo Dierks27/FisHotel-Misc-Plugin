@@ -18,6 +18,12 @@ and what to write on what is left over. Under **FisHotel Tools → Foam Cuts**
    use and what was not available. The own list is saved only from a page
    that shows it as it is now: a save from a tab opened before someone
    else changed the list is refused, so it cannot quietly drop a box.
+   While ShipTracker's boxes are in use, the Boxes tab says so in one line
+   with a link to ShipTracker → Settings → Boxes & label costs, and this
+   section's own list is hidden (never deleted — it is used again when
+   ShipTracker has none). Supplies — their counts and cost per box — are
+   ShipTracker's too: the Stock tab links to its Supplies list and keeps
+   only the sheet ledger and the leftovers.
 3. **Cut list per box** — six pieces suggested from the INSIDE dimensions
    L × W × H and the thickness t: top and bottom L × W, two long sides
    L × (H − 2t), two short sides (W − 2t) × (H − 2t) (L is taken as the
