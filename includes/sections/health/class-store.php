@@ -444,36 +444,6 @@ class Store {
 	}
 
 	/**
-	 * The newest error / critical row for a source since a timestamp.
-	 *
-	 * @param string $source   Source.
-	 * @param int    $since_ts UNIX timestamp.
-	 * @return array|null
-	 */
-	public function last_error_for_source( $source, $since_ts ) {
-		if ( ! self::table_exists() ) {
-			return null;
-		}
-
-		global $wpdb;
-
-		try {
-			$row = $wpdb->get_row(
-				$wpdb->prepare(
-					'SELECT id, logged_at, level, source, message, context, fingerprint FROM ' . self::table_name() . " WHERE source = %s AND level IN ('error','critical') AND logged_at >= %s ORDER BY logged_at DESC, id DESC LIMIT 1",
-					(string) $source,
-					gmdate( 'Y-m-d H:i:s', (int) $since_ts )
-				),
-				ARRAY_A
-			);
-		} catch ( \Throwable $e ) {
-			return null;
-		}
-
-		return $row ? self::hydrate( $row ) : null;
-	}
-
-	/**
 	 * Delete rows older than the retention and anything beyond the row cap.
 	 *
 	 * @param int $retention_days Days to keep.
