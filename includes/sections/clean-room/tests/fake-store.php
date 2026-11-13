@@ -1327,6 +1327,9 @@ class Fake_Store {
 		return (string) ( $row['received_date'] ?: ( $row['order_date'] ?: substr( (string) $row['created_at'], 0, 10 ) ) );
 	}
 
+	/** As the real store: a read returns the newest 500 headers at most. */
+	const ORDERS_LIMIT = 500;
+
 	public function orders( array $filters = array() ) {
 		$out = array();
 		foreach ( $this->orders as $row ) {
@@ -1348,7 +1351,7 @@ class Fake_Store {
 				return strcmp( $this->order_sort_date( $b ), $this->order_sort_date( $a ) ) ?: ( $b['id'] <=> $a['id'] );
 			}
 		);
-		return $out;
+		return array_slice( $out, 0, isset( $filters['limit'] ) ? max( 1, min( self::ORDERS_LIMIT, (int) $filters['limit'] ) ) : self::ORDERS_LIMIT );
 	}
 
 	public function order_years() {
@@ -1720,6 +1723,300 @@ class Fake_Store {
 		foreach ( array_unique( array_map( 'intval', $stay_ids ) ) as $id ) {
 			if ( $id > 0 ) {
 				$out[ $id ] = Orders::figures_from_events( $this->events( $id ) );
+			}
+		}
+		return $out;
+	}
+
+	/* ---- aliases as rows ------------------------------------------- */
+
+	public function aliases() {
+		$out = array();
+		$id  = 0;
+		foreach ( $this->aliases as $alias => $row ) {
+			$out[] = array(
+				'id'         => ++$id,
+				'alias'      => (string) $alias,
+				'product_id' => $row['product_id'],
+				'species'    => (string) $row['species'],
+				'created_at' => '2026-01-01 00:00:00',
+			);
+		}
+		return $out;
+	}
+
+	/* ---- WooCommerce's order tables, faked -------------------------- */
+
+	/**
+	 * What the real Store reads from WooCommerce's order tables, seeded by
+	 * a test through sale() / refund():
+	 *
+	 *   $wc_orders  wc_order_stats: order id → parent_id, status ("wc-…"),
+	 *               date_created, net_total
+	 *   $wc_lines   wc_order_product_lookup: rows of order_item_id,
+	 *               order_id, product_id, variation_id, qty, revenue
+	 *   $wc_items   the order items: item id → name, meta (key → value)
+	 *
+	 * sales_rows() joins them the way the real query does (a refund row
+	 * carries its parent's status and date and the line it refunds) but
+	 * hands over the rows of EVERY status, so a test proves that
+	 * Stats_Sales::add_rows() is what keeps the unpaid ones out.
+	 *
+	 * @var array[]
+	 */
+	public $wc_orders = array();
+	public $wc_lines  = array();
+	public $wc_items  = array();
+
+	/**
+	 * Whether WooCommerce's order tables "exist", how often they were
+	 * read, and the current prices by product id (Store::product_prices()
+	 * shape).
+	 */
+	public $wc_tables      = true;
+	public $sales_reads    = 0;
+	/** Make one read fail as a database error does: 'rows:3' (the third sales_rows() call), 'details', 'refunds', 'years'. */
+	public $sales_break    = '';
+	public $product_prices = array();
+
+	private $next_wc_order = 9000;
+	private $next_wc_item  = 100;
+
+	/**
+	 * Seed an order: its status, its date, its lines — each array(
+	 * product_id, variation_id, qty, revenue, name, meta ). Returns the
+	 * order id and the item ids of the lines, in order.
+	 */
+	public function sale( $status, $date, array $lines ) {
+		$order_id = $this->next_wc_order++;
+		$net      = 0.0;
+		$items    = array();
+		foreach ( $lines as $line ) {
+			$item_id                    = $this->next_wc_item++;
+			$this->wc_items[ $item_id ] = array(
+				'name' => (string) ( $line['name'] ?? '' ),
+				'meta' => (array) ( $line['meta'] ?? array() ),
+			);
+			$this->wc_lines[] = array(
+				'order_item_id' => $item_id,
+				'order_id'      => $order_id,
+				'product_id'    => (int) ( $line['product_id'] ?? 0 ),
+				'variation_id'  => (int) ( $line['variation_id'] ?? 0 ),
+				'qty'           => (int) ( $line['qty'] ?? 1 ),
+				'revenue'       => (float) ( $line['revenue'] ?? 0 ),
+			);
+			$net    += (float) ( $line['revenue'] ?? 0 );
+			$items[] = $item_id;
+		}
+		$this->wc_orders[ $order_id ] = array(
+			'parent_id'    => 0,
+			'status'       => 'wc-' . $status,
+			'date_created' => $date,
+			'net_total'    => $net,
+		);
+		return array( $order_id, $items );
+	}
+
+	/**
+	 * Seed a refund of an order: its date, the lines it takes back — item
+	 * id → array( qty, amount ), both given positive — and money refunded
+	 * without a line. Returns the refund's id.
+	 *
+	 * Money taken off a line without a quantity: WooCommerce used to keep
+	 * no lookup row for such a refund line (the default here); newer
+	 * versions keep one with a quantity of 0 ($zero_rows).
+	 */
+	public function refund( $order_id, $date, array $lines = array(), $loose = 0.0, $zero_rows = false ) {
+		$refund_id = $this->next_wc_order++;
+		$net       = -1 * abs( (float) $loose );
+		foreach ( $lines as $refunded_item => $what ) {
+			$source = null;
+			foreach ( $this->wc_lines as $line ) {
+				if ( (int) $line['order_item_id'] === (int) $refunded_item ) {
+					$source = $line;
+				}
+			}
+			$item_id                    = $this->next_wc_item++;
+			$this->wc_items[ $item_id ] = array(
+				'name' => $this->wc_items[ (int) $refunded_item ]['name'],
+				'meta' => array( '_refunded_item_id' => (int) $refunded_item ),
+			);
+			$net -= abs( (float) $what[1] );
+			if ( 0 === (int) $what[0] && ! $zero_rows ) {
+				continue;
+			}
+			$this->wc_lines[] = array(
+				'order_item_id' => $item_id,
+				'order_id'      => $refund_id,
+				'product_id'    => $source ? $source['product_id'] : 0,
+				'variation_id'  => $source ? $source['variation_id'] : 0,
+				'qty'           => -1 * abs( (int) $what[0] ),
+				'revenue'       => -1 * abs( (float) $what[1] ),
+			);
+		}
+		$this->wc_orders[ $refund_id ] = array(
+			'parent_id'    => (int) $order_id,
+			'status'       => $this->wc_orders[ (int) $order_id ]['status'],
+			'date_created' => $date,
+			'net_total'    => $net,
+		);
+		return $refund_id;
+	}
+
+	/**
+	 * Seed the refund WooCommerce books when a whole order is refunded
+	 * without naming a line: it has no order items of its own — its lookup
+	 * rows are stored under the ORDER's line ids, with the refund's order
+	 * id. Returns the refund's id.
+	 */
+	public function full_refund( $order_id, $date ) {
+		$refund_id = $this->next_wc_order++;
+		$net       = 0.0;
+		foreach ( $this->wc_lines as $line ) {
+			if ( (int) $line['order_id'] !== (int) $order_id ) {
+				continue;
+			}
+			$this->wc_lines[] = array_merge(
+				$line,
+				array(
+					'order_id' => $refund_id,
+					'qty'      => -1 * abs( (int) $line['qty'] ),
+					'revenue'  => -1 * abs( (float) $line['revenue'] ),
+				)
+			);
+			$net -= abs( (float) $line['revenue'] );
+		}
+		$this->wc_orders[ $refund_id ] = array(
+			'parent_id'    => (int) $order_id,
+			'status'       => $this->wc_orders[ (int) $order_id ]['status'],
+			'date_created' => $date,
+			'net_total'    => $net,
+		);
+		return $refund_id;
+	}
+
+	public function sales_tables_exist() {
+		return (bool) $this->wc_tables;
+	}
+
+	/**
+	 * The status and the date a row counts under: its parent's for a
+	 * refund (as the real query's COALESCE reads them).
+	 */
+	private function wc_effective( array $order ) {
+		$parent = (int) $order['parent_id'] > 0 && isset( $this->wc_orders[ (int) $order['parent_id'] ] ) ? $this->wc_orders[ (int) $order['parent_id'] ] : null;
+		return array( $parent ? $parent['status'] : $order['status'], $parent ? $parent['date_created'] : $order['date_created'], $parent );
+	}
+
+	public function sales_years( array $statuses ) {
+		if ( 'years' === $this->sales_break ) {
+			return null;
+		}
+		$years = array();
+		foreach ( $this->wc_orders as $order ) {
+			if ( 0 === (int) $order['parent_id'] && in_array( substr( $order['status'], 3 ), $statuses, true ) ) {
+				$years[ (int) substr( $order['date_created'], 0, 4 ) ] = true;
+			}
+		}
+		$years = array_keys( $years );
+		rsort( $years );
+		return $years;
+	}
+
+	public function sales_rows( $year, array $statuses, $after_item = 0, $after_order = 0, $limit = 5000 ) {
+		if ( ! $this->wc_tables ) {
+			return array();
+		}
+		$this->sales_reads++;
+		if ( 'rows:' . $this->sales_reads === $this->sales_break ) {
+			return null;
+		}
+		$out = array();
+		foreach ( $this->wc_lines as $line ) {
+			$order = $this->wc_orders[ (int) $line['order_id'] ];
+			list( , $date, $parent ) = $this->wc_effective( $order );
+			$past                    = (int) $line['order_item_id'] > (int) $after_item || ( (int) $line['order_item_id'] === (int) $after_item && (int) $line['order_id'] > (int) $after_order );
+			if ( ! $past || (int) substr( $date, 0, 4 ) !== (int) $year ) {
+				continue;
+			}
+			$item  = $this->wc_items[ (int) $line['order_item_id'] ];
+			$out[] = array(
+				'row_id'           => (int) $line['order_item_id'],
+				'order_id'         => (int) $line['order_id'],
+				'product_id'       => (int) $line['product_id'],
+				'variation_id'     => (int) $line['variation_id'],
+				'qty'              => (int) $line['qty'],
+				'revenue'          => (float) $line['revenue'],
+				'parent_id'        => (int) $order['parent_id'],
+				'status'           => (string) $order['status'],
+				'date_created'     => (string) $order['date_created'],
+				'parent_status'    => $parent ? (string) $parent['status'] : '',
+				'parent_date'      => $parent ? (string) $parent['date_created'] : '',
+				'refunded_item_id' => isset( $item['meta']['_refunded_item_id'] ) ? (int) $item['meta']['_refunded_item_id'] : 0,
+			);
+		}
+		usort(
+			$out,
+			static function ( $a, $b ) {
+				return ( $a['row_id'] <=> $b['row_id'] ) ?: ( $a['order_id'] <=> $b['order_id'] );
+			}
+		);
+		return array_slice( $out, 0, max( 1, (int) $limit ) );
+	}
+
+	public function sales_item_details( array $item_ids ) {
+		if ( 'details' === $this->sales_break ) {
+			return null;
+		}
+		$out = array();
+		foreach ( array_unique( array_map( 'intval', $item_ids ) ) as $id ) {
+			if ( ! isset( $this->wc_items[ $id ] ) ) {
+				continue;
+			}
+			$meta       = $this->wc_items[ $id ]['meta'];
+			$out[ $id ] = array(
+				'name'               => (string) $this->wc_items[ $id ]['name'],
+				'fish'               => ! empty( $meta['_fh_invoice_fish'] ),
+				'lines'              => isset( $meta['_fh_invoice_lines'] ) && '' !== trim( (string) $meta['_fh_invoice_lines'] ) ? (string) $meta['_fh_invoice_lines'] : null,
+				'invoice_product_id' => isset( $meta['_fh_invoice_product_id'] ) ? max( 0, (int) $meta['_fh_invoice_product_id'] ) : 0,
+			);
+		}
+		return $out;
+	}
+
+	public function sales_refund_rows( $year, array $statuses ) {
+		if ( 'refunds' === $this->sales_break ) {
+			return null;
+		}
+		$out = array();
+		foreach ( $this->wc_orders as $id => $order ) {
+			if ( 0 === (int) $order['parent_id'] ) {
+				continue;
+			}
+			list( $status, $date ) = $this->wc_effective( $order );
+			if ( (int) substr( $date, 0, 4 ) !== (int) $year || ! in_array( substr( $status, 3 ), $statuses, true ) ) {
+				continue;
+			}
+			$on_lines = 0.0;
+			foreach ( $this->wc_lines as $line ) {
+				if ( (int) $line['order_id'] === (int) $id ) {
+					$on_lines += (float) $line['revenue'];
+				}
+			}
+			$out[] = array(
+				'order_id'  => (int) $id,
+				'net_total' => (float) $order['net_total'],
+				'on_lines'  => $on_lines,
+			);
+		}
+		return $out;
+	}
+
+	public function product_prices( array $ids ) {
+		$out = array();
+		foreach ( array_unique( array_map( 'intval', $ids ) ) as $id ) {
+			if ( isset( $this->product_prices[ $id ] ) ) {
+				$out[ $id ] = $this->product_prices[ $id ];
 			}
 		}
 		return $out;

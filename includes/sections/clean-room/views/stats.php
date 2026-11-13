@@ -1,10 +1,12 @@
 <?php
 /**
- * Stats tab — the yearly figures: per-order rows, the weighted totals,
- * the sheet-style averages, by supplier / origin / species group; and,
- * by supplier and by origin, how the labels held up: the mislabeled
+ * Stats tab, "By year" — the yearly figures: per-order rows, the weighted
+ * totals, the sheet-style averages, by supplier / origin / species group;
+ * and, by supplier and by origin, how the labels held up: the mislabeled
  * lines with their rate over the lines that received fish, and the
- * unknown fish not identified yet.
+ * unknown fish not identified yet. The revenue and up / down figures are
+ * ESTIMATES and say so; the tab's other views (views/stats-nav.php) are
+ * Compare years, Species, Prices to raise and Real sales.
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  *
@@ -69,8 +71,8 @@ $fh_group_table = static function ( array $groups, $label, $labels = false ) use
 				<th scope="col" class="fh-cr-num"><?php esc_html_e( 'Survival', 'fishotel-misc-plugin' ); ?></th>
 				<th scope="col" class="fh-cr-num"><?php esc_html_e( 'DOA rate', 'fishotel-misc-plugin' ); ?></th>
 				<th scope="col" class="fh-cr-num"><?php esc_html_e( 'Landed', 'fishotel-misc-plugin' ); ?></th>
-				<th scope="col" class="fh-cr-num"><?php esc_html_e( 'Revenue', 'fishotel-misc-plugin' ); ?></th>
-				<th scope="col" class="fh-cr-num"><?php esc_html_e( 'Up / down', 'fishotel-misc-plugin' ); ?></th>
+				<th scope="col" class="fh-cr-num" title="<?php esc_attr_e( 'Estimate: survivors × the FisHotel price typed on the line.', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'Est. revenue', 'fishotel-misc-plugin' ); ?></th>
+				<th scope="col" class="fh-cr-num" title="<?php esc_attr_e( 'Estimate: est. revenue − what the fish cost to land.', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'Est. up / down', 'fishotel-misc-plugin' ); ?></th>
 				<?php if ( $labels ) : ?>
 					<th scope="col" class="fh-cr-num" title="<?php esc_attr_e( 'Lines that received fish whose label named another fish than the one they turned out to be, over the lines that received fish.', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'Mislabeled', 'fishotel-misc-plugin' ); ?></th>
 					<th scope="col" class="fh-cr-num" title="<?php esc_attr_e( 'Lines that received fish nobody has identified yet (??). Counted apart: they are not mislabeled until they are named.', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'Not identified yet', 'fishotel-misc-plugin' ); ?></th>
@@ -119,6 +121,11 @@ $fh_group_table = static function ( array $groups, $label, $labels = false ) use
 		</div>
 	<?php endif; ?>
 
+	<?php
+	$fh_stats_view = 'year';
+	include Clean_Room::path() . 'views/stats-nav.php';
+	?>
+
 	<div class="fh-cr-toolbar">
 		<form method="get" action="<?php echo esc_url( admin_url( 'admin.php' ) ); ?>" class="fh-cr-filters">
 			<input type="hidden" name="page" value="<?php echo esc_attr( Clean_Room::MENU_SLUG ); ?>">
@@ -139,6 +146,11 @@ $fh_group_table = static function ( array $groups, $label, $labels = false ) use
 			<a class="button" href="<?php echo esc_url( $exports['csv'] ); ?>"><?php esc_html_e( 'Export CSV', 'fishotel-misc-plugin' ); ?></a>
 		</div>
 	</div>
+
+	<p class="fh-cr-legend">
+		<span class="fh-cr-kind fh-cr-kind--est"><?php esc_html_e( 'Estimate', 'fishotel-misc-plugin' ); ?></span>
+		<?php esc_html_e( 'Revenue, up / down and revenue ÷ landed on this page are estimates, as in the spreadsheet: survivors × the FisHotel price typed on each supplier order line. Everything else is counted from the supplier orders. What customers actually paid is under Real sales.', 'fishotel-misc-plugin' ); ?>
+	</p>
 
 	<div class="fh-cr-summary">
 		<span class="fh-cr-chip"><strong><?php echo esc_html( $fh_t['orders'] ); ?></strong> <?php esc_html_e( 'orders', 'fishotel-misc-plugin' ); ?></span>
@@ -166,9 +178,9 @@ $fh_group_table = static function ( array $groups, $label, $labels = false ) use
 				<div><dt><?php esc_html_e( 'Survival rate', 'fishotel-misc-plugin' ); ?></dt><dd><?php echo esc_html( Costing::pct( $fh_t['survival_rate'] ) ); ?></dd></div>
 				<div><dt><?php esc_html_e( 'DOA rate', 'fishotel-misc-plugin' ); ?></dt><dd><?php echo esc_html( Costing::pct( $fh_t['doa_rate'] ) ); ?></dd></div>
 				<div><dt><?php esc_html_e( 'Landed in all', 'fishotel-misc-plugin' ); ?></dt><dd><?php echo esc_html( Costing::money( $fh_t['total'] ) ); ?></dd></div>
-				<div><dt><?php esc_html_e( 'Revenue (survivors at FisHotel prices)', 'fishotel-misc-plugin' ); ?></dt><dd><?php echo esc_html( Costing::money( $fh_t['revenue'] ) ); ?></dd></div>
-				<div><dt><?php esc_html_e( 'Up or down', 'fishotel-misc-plugin' ); ?></dt><dd class="<?php echo $fh_t['up_down'] >= 0 ? 'fh-cr-up' : 'fh-cr-down'; ?>"><?php echo esc_html( ( $fh_t['up_down'] > 0 ? '+' : '' ) . Costing::money( $fh_t['up_down'] ) ); ?></dd></div>
-				<div><dt><?php esc_html_e( 'Revenue ÷ landed', 'fishotel-misc-plugin' ); ?></dt><dd><?php echo esc_html( Costing::num( $fh_t['ratio'] ) ); ?></dd></div>
+				<div><dt><?php esc_html_e( 'Estimated revenue (survivors × FisHotel prices)', 'fishotel-misc-plugin' ); ?></dt><dd><?php echo esc_html( Costing::money( $fh_t['revenue'] ) ); ?></dd></div>
+				<div><dt><?php esc_html_e( 'Estimated up or down', 'fishotel-misc-plugin' ); ?></dt><dd class="<?php echo $fh_t['up_down'] >= 0 ? 'fh-cr-up' : 'fh-cr-down'; ?>"><?php echo esc_html( ( $fh_t['up_down'] > 0 ? '+' : '' ) . Costing::money( $fh_t['up_down'] ) ); ?></dd></div>
+				<div><dt><?php esc_html_e( 'Estimated revenue ÷ landed', 'fishotel-misc-plugin' ); ?></dt><dd><?php echo esc_html( Costing::num( $fh_t['ratio'] ) ); ?></dd></div>
 				<div><dt><?php esc_html_e( 'Mislabeled (of the lines that received fish)', 'fishotel-misc-plugin' ); ?></dt><dd><?php echo esc_html( $fh_mislabeled( $fh_t ) ); ?></dd></div>
 				<div><dt><?php esc_html_e( 'Not identified yet', 'fishotel-misc-plugin' ); ?></dt><dd><?php echo esc_html( (int) ( $fh_t['unidentified'] ?? 0 ) ); ?></dd></div>
 			</dl>
@@ -212,8 +224,8 @@ $fh_group_table = static function ( array $groups, $label, $labels = false ) use
 						<th scope="col" class="fh-cr-num"><?php esc_html_e( 'Survival', 'fishotel-misc-plugin' ); ?></th>
 						<th scope="col" class="fh-cr-num"><?php esc_html_e( 'DOA rate', 'fishotel-misc-plugin' ); ?></th>
 						<th scope="col" class="fh-cr-num"><?php esc_html_e( 'Landed', 'fishotel-misc-plugin' ); ?></th>
-						<th scope="col" class="fh-cr-num"><?php esc_html_e( 'Revenue', 'fishotel-misc-plugin' ); ?></th>
-						<th scope="col" class="fh-cr-num"><?php esc_html_e( 'Up / down', 'fishotel-misc-plugin' ); ?></th>
+						<th scope="col" class="fh-cr-num" title="<?php esc_attr_e( 'Estimate: survivors × the FisHotel price typed on the line.', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'Est. revenue', 'fishotel-misc-plugin' ); ?></th>
+						<th scope="col" class="fh-cr-num" title="<?php esc_attr_e( 'Estimate: est. revenue − what the fish cost to land.', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'Est. up / down', 'fishotel-misc-plugin' ); ?></th>
 					</tr>
 				</thead>
 				<tbody>

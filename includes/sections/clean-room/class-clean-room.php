@@ -58,7 +58,13 @@
  *   - class-box-shares.php  the remembered shares: the percent of a box one
  *                           fish takes per supplier + origin + fish + size.
  *   - class-stats.php       PURE: the yearly figures, weighted and as the
- *                           spreadsheet averaged them.
+ *                           spreadsheet averaged them; years side by side;
+ *                           one row per fish and year.
+ *   - class-stats-prices.php  PURE: the fish priced under what their latest
+ *                           supplier order suggests (read-only).
+ *   - class-stats-sales.php   what customers actually paid per fish and year,
+ *                           from WooCommerce's paid orders (pure maths; the
+ *                           statuses that count and the cache flush).
  *   - class-species.php     PURE: the species master row and its merge into
  *                           the candidate list.
  *   - class-identify.php    unknown ("??") and mislabeled fish: the one
@@ -76,6 +82,9 @@
  *                           treatment logs), idempotent; preview() pure.
  *   - class-admin-workbook.php  the Arrivals / Species / Stats tabs, their
  *                           AJAX and the XLSX / CSV exports.
+ *   - class-admin-stats.php  the Stats tab's further views — Compare years,
+ *                           Species, Prices to raise, Real sales — and their
+ *                           exports.
  *   - class-admin-import.php  Settings → Import workbook: upload to a private
  *                           folder, preview, Import now (manage_options).
  *   - class-medications-admin.php  Settings → Medications' save and the
@@ -193,6 +202,8 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 			require_once self::path() . 'class-sizes.php';
 			require_once self::path() . 'class-box-shares.php';
 			require_once self::path() . 'class-stats.php';
+			require_once self::path() . 'class-stats-prices.php';
+			require_once self::path() . 'class-stats-sales.php';
 			require_once self::path() . 'class-species.php';
 			require_once self::path() . 'class-identify.php';
 			require_once self::path() . 'class-orders.php';
@@ -249,6 +260,15 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 			add_action( 'save_post_product', array( Store::class, 'clear_species_cache' ), 10, 0 );
 			// Cron runs outside wp-admin: the uploaded workbook's cleanup is hooked on every request.
 			add_action( self::IMPORT_CLEANUP_HOOK, array( self::class, 'import_cleanup' ), 10, 0 );
+			// The Stats tab's Real sales keeps what it read from WooCommerce in a transient: drop it when an
+			// order changes status and when WooCommerce updates its order tables (a moment after the order is
+			// saved). Registering costs nothing; the callback runs only then.
+			foreach ( array( 'woocommerce_order_status_changed', 'woocommerce_analytics_update_order_stats', 'woocommerce_analytics_delete_order_stats' ) as $hook ) {
+				add_action( $hook, array( Stats_Sales::class, 'flush' ), 10, 0 );
+			}
+			// The theme's Tools button "Add fish lines to past invoice orders" rewrites order lines without
+			// a status change, and ends its request: drop the cache just before it runs.
+			add_action( 'admin_post_fishotel_invoice_backfill', array( Stats_Sales::class, 'flush' ), 1, 0 );
 
 			$front = new Front_Desk();
 			$front->init();
@@ -256,6 +276,7 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 			if ( is_admin() ) {
 				require_once self::path() . 'class-admin.php';
 				require_once self::path() . 'class-admin-workbook.php';
+				require_once self::path() . 'class-admin-stats.php';
 				require_once self::path() . 'class-admin-import.php';
 				require_once self::path() . 'class-admin-temp.php';
 
@@ -292,6 +313,7 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 			self::load();
 			require_once self::path() . 'class-admin.php';
 			require_once self::path() . 'class-admin-workbook.php';
+			require_once self::path() . 'class-admin-stats.php';
 			require_once self::path() . 'class-admin-import.php';
 			require_once self::path() . 'class-admin-temp.php';
 

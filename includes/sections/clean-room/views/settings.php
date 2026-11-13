@@ -3,7 +3,9 @@
  * Settings tab — the numbers, the protocol template, the layout editor,
  * the box rates, the standard sizes (with the read-only report of the
  * sizes the products' variations carry), the remembered box shares, the
- * workbook import, the learned aliases, the labels button.
+ * workbook import, the order statuses that count as a sale on Stats →
+ * Real sales (views/settings-sales.php), the learned aliases, the labels
+ * button.
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  *
@@ -455,6 +457,9 @@ $fh_from_attr = Sizes::SOURCE_ATTRIBUTE === $fh_standard['source'];
 
 		<?php /* ── Import workbook ───────────────────────────────── */ ?>
 		<?php include Clean_Room::path() . 'views/import.php'; ?>
+
+		<?php /* ── Sales statuses (Stats → Real sales) ───────────── */ ?>
+		<?php include Clean_Room::path() . 'views/settings-sales.php'; ?>
 
 		<?php /* ── Aliases ───────────────────────────────────────── */ ?>
 		<div class="fishotel-misc-card fh-cr-card">

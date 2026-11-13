@@ -4,8 +4,10 @@
  * (the supplier orders list and the order editor with the sheet's
  * costing and the check-in that creates the stays), Species (the species
  * master with inline edit and the product link) and Stats (the yearly
- * figures, weighted and as the spreadsheet averaged them), their AJAX,
- * and the XLSX / CSV exports of orders, species, stats and stays.
+ * figures, weighted and as the spreadsheet averaged them — its further
+ * views, Compare years / Species / Prices to raise / Real sales, are
+ * Admin_Stats'), their AJAX, and the XLSX / CSV exports of orders,
+ * species, stats and stays.
  *
  * The order editor also takes, per line, a size (one of the standard
  * sizes — Sizes), the box the line came out of and the percent of ONE box
@@ -97,6 +99,9 @@ class Admin_Workbook {
 		add_action( 'wp_ajax_fishotel_cleanroom_species', array( $this, 'ajax_species' ) );
 		add_action( 'admin_post_fishotel_cleanroom_export', array( $this, 'download_export' ) );
 		add_action( 'admin_post_' . self::SALE_DATE_ACTION, array( $this, 'handle_sale_date' ) );
+		// The Stats tab's further views (Admin_Stats): Real sales' Refresh and the statuses that count as a sale.
+		add_action( 'admin_post_' . Admin_Stats::REFRESH_ACTION, array( Admin_Stats::class, 'handle_refresh' ) );
+		add_action( 'admin_post_' . Admin_Stats::STATUSES_ACTION, array( Admin_Stats::class, 'handle_statuses' ) );
 	}
 
 	/* ============================================================== */
@@ -116,9 +121,9 @@ class Admin_Workbook {
 	/**
 	 * A nonced export URL.
 	 *
-	 * @param string $what   orders|species|stats|stays.
+	 * @param string $what   orders|species|stats|stays, or one of Admin_Stats::EXPORTS.
 	 * @param string $format xlsx|csv.
-	 * @param array  $extra  year, closed.
+	 * @param array  $extra  year, closed — or that export's own filters.
 	 * @return string
 	 */
 	public static function export_url( $what, $format, array $extra = array() ) {
@@ -199,6 +204,13 @@ class Admin_Workbook {
 		}
 
 		if ( 'stats' === $tab ) {
+			// Compare years, Species, Prices to raise and Real sales are Admin_Stats'; "By year" is the tab as it was.
+			$view = Admin_Stats::view_from_request( wp_unslash( $_GET ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only view switch.
+			if ( 'year' !== $view ) {
+				Admin_Stats::render( $view, $ctx, $flash );
+				return;
+			}
+
 			$years = $store->order_years();
 			$year  = isset( $_GET['year'] ) ? absint( wp_unslash( $_GET['year'] ) ) : ( $years ? (int) $years[0] : (int) substr( $today, 0, 4 ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			$stats = self::stats_for_year( $store, $year );
@@ -1389,8 +1401,11 @@ class Admin_Workbook {
 
 	/**
 	 * admin-post: an XLSX (or CSV) of the orders (+ lines), the species,
-	 * the stats of a year, or the stays. Without the zip extension an
-	 * XLSX request falls back to CSV with a notice on the next page.
+	 * the stats of a year, the stays — or one of the Stats tab's further
+	 * views (Admin_Stats::export(): the comparison of years, the species
+	 * by year, the prices to raise, the real sales). Without the zip
+	 * extension an XLSX request falls back to CSV with a notice on the
+	 * next page.
 	 */
 	public function download_export() {
 		if ( ! current_user_can( Clean_Room::CAPABILITY ) ) {
@@ -1431,7 +1446,13 @@ class Admin_Workbook {
 				$csv    = 'Stays';
 				break;
 			default:
-				wp_die( esc_html__( 'Unknown export.', 'fishotel-misc-plugin' ), '', array( 'response' => 400 ) );
+				// Compare years, Species by year, Prices to raise, Real sales.
+				$more = Admin_Stats::export( $what, $format, $store, wp_unslash( $_GET ), $today );
+				if ( null === $more ) {
+					wp_die( esc_html__( 'Unknown export.', 'fishotel-misc-plugin' ), '', array( 'response' => 400 ) );
+				}
+				$sheets = $more['sheets'];
+				$csv    = $more['csv'];
 		}
 
 		self::send( 'fishotel-' . $what, $format, $sheets, $csv );

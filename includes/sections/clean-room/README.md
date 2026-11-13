@@ -12,7 +12,9 @@ daily to-do, a **dose log** on the whole system or one tank with the
 that saves nothing); the
 **supplier orders** with the workbook's landed-cost maths and a check-in
 that turns an order's lines into stays; a **species master**; the yearly
-**stats**; Excel exports; the **workbook import** that brings the
+**stats** — with years side by side, a row per fish, the prices to
+raise and what customers really paid —; Excel exports; the **workbook
+import** that brings the
 spreadsheet's history onto the site; the **sale dates** — the day each batch (or one
 group) goes on sale, chosen by hand —; the **standard sizes** (the ones
 the product variations use) on order lines and stays; the **percent of a
@@ -27,7 +29,9 @@ for the day, by water system**; and the facts the fish page will read.
 Nothing here needs WooCommerce: a stay may or may not be linked to a
 product, a species may or may not be, and the species search reads the
 `quarantined-fish` / `inverts` products straight from the tables next to
-the species list.
+the species list. The one view that is about WooCommerce — *Stats → Real
+sales* — reads its order tables when they are there and says so plainly
+when they are not.
 
 ## How Jeff runs the room (the rules the code follows)
 
@@ -378,8 +382,9 @@ template's seed), the layout
 editor (each building's schedule and system gallons beside its name and
 status; the Temporary building's slots, with *Add a slot*), the box rates, **Sizes** (the standard list and the sizes in use
 on products), **Box shares** (the remembered rows, each editable and
-forgettable), **Import workbook**, the learned aliases, *Print
-tank labels*.
+forgettable), **Import workbook**, **Sales statuses** (which order
+statuses count as a sale on *Stats → Real sales*), the learned aliases,
+*Print tank labels*.
 
 ## Medications and the dose sum
 
@@ -1076,6 +1081,19 @@ linked, else by name).
 
 ## Stats
 
+Five views under one tab — **By year · Compare years · Species · Prices
+to raise · Real sales** (`?tab=stats&view=compare|species|prices|sales`;
+no `view` is *By year*, the tab as it always was).
+
+**Estimates and actuals.** Everything the first four views call revenue,
+"up or down", profit or margin is an ESTIMATE, as it was in the
+spreadsheet: survivors × the FisHotel price typed on the supplier order
+line (`worth`), less the landed cost. Only *Real sales* shows what
+customers actually paid. Every view says which is which in a line at
+its top, and the estimate columns are headed "Est.".
+
+### By year
+
 Per year (the order's received date, else its order date): the per-order
 rows, then the same figures two ways, both shown and both exported:
 
@@ -1098,12 +1116,236 @@ to be, with the rate over the lines that received fish — and, counted
 separately, **Not identified yet** (the unknown fish still waiting for a
 name).
 
+### Compare years
+
+Two or more years side by side (tick them; the last two that have
+orders by default; at most six): for the totals, each supplier, each
+origin and each species group, a row per year with the weighted figures
+— orders, ordered, received, fill, survived, survival, DOA and its
+rate, landed, est. revenue, est. up / down — and under each year but
+the first its change from the year before (`Stats::compare()`, pure):
+
+- a count and money that cannot be negative: the difference, with the
+  percent where one is defined (never from zero);
+- a rate: in **points** (80.0% → 83.2% is +3.2 pts), never a percent of
+  a percent;
+- up / down, which can cross zero: the difference only.
+
+A supplier, origin or group with **no order in a year shows a dash
+there, never a zero**, and no change is shown into or out of that year
+(a change never jumps over a missing year either). The totals of a year
+without orders are real zeros. Suppliers and origins are one name
+whatever the case; a species group is its exact name, as on *By year*.
+The years offered are every year that has orders
+(`Store::order_years()`), and each year picked is read by itself,
+exactly as *By year* reads it — one read of every order stops at the
+newest 500 (`Store::ORDERS_LIMIT`) and would lose the old years.
+
+### Species
+
+One row per fish and year (`Stats::by_species()`, pure): orders,
+ordered, received, DOA and its rate, survived and the survival rate,
+landed total and per fish, and the estimates — revenue, profit
+(revenue − landed) and margin (profit ÷ landed). A year, or every year;
+a search over the name and the group; every heading sorts (a link, no
+script: most first, then the other way round). A fish is its row of the
+species list — a line typed with the exact lower-cased name of a row
+counts for that row — else its name as typed; the fish nobody has
+identified yet are one row, so **the rows of a year add up to that
+year's totals**. **The rows of a group add up to that group on *By
+year*** too: a row's group is the one *By year* files its lines under —
+the group of the species row a line is linked to, and none for a line
+that was only typed with a species' name (it is not linked, so it is
+"(no group)" there). A fish that has both kinds of line in one year is
+therefore two rows that year, one per group (pick the fish from the list
+on the order line and they are one). A fish with no survivor count on
+any line has no estimate: it shows "survivors not known yet", sorts last
+by those columns, and exports empty cells.
+
+### Prices to raise
+
+**Read-only — nothing here ever changes a price.** One row per fish that
+has a supplier order line which received fish at a price
+(`Stats_Prices`, pure):
+
+- **landed / fish, latest** — Σ landed ÷ Σ received over the fish's
+  lines in the latest order that has it (by the order's date, then its
+  id);
+- **landed / fish, last 3** — the plain average of that figure over the
+  last three such orders;
+- **suggested** — exactly the costing's: landed per fish (latest) × that
+  order's markup, to the nearest 5;
+- **FisHotel's price** — the linked product's current price when the
+  species is linked and the product has one (a product with variations:
+  the variation of the size the latest order's lines carry, when
+  exactly one price answers to it; else its lowest variation price,
+  marked as such), else the species list's price, else "no price on
+  file";
+- **gap** = suggested − price, **margin now** = (price − landed, latest)
+  ÷ landed.
+
+The list shows the fish priced under the suggestion, the biggest gap
+first; *Show all fish* adds the rest (by gap, then those with no price
+on file). Filters: species group, and supplier — which costs every fish
+from that supplier's orders alone. The current prices are read in one
+query straight from the product tables (`Store::product_prices()`: the
+active `_price` of the product and of its enabled variations). A fish's
+group here is the species list's (the row its price comes from). The
+list is built from one read of the orders — the newest 500: it is the
+latest order of a fish and its last three that matter — and once there
+are more orders than that the page says so: a fish last ordered before
+those is not listed.
+
+### Real sales
+
+What customers actually paid, per fish and year, from WooCommerce's own
+order tables: `wc_order_product_lookup` (a row per order line and per
+refund line: quantity and net revenue — after discounts, before tax and
+shipping) joined to `wc_order_stats` (status, date, parent). WooCommerce
+keeps both for every order whatever the order storage (HPOS on or off).
+
+**What counts.** A line counts when its order is in a status of
+Settings → *Sales statuses* — WooCommerce's paid statuses
+(`wc_get_is_paid_statuses()`) plus every registered status whose slug
+contains "ship", until a list is saved by hand. The card marks the
+statuses WooCommerce leaves out of its own reports (its Analytics
+setting and the `woocommerce_analytics_excluded_order_statuses` filter:
+unpaid orders, and an order that only copies the lines of other orders —
+a combined-box wrapper, whose row in WooCommerce's stats keeps its own
+excluded status for life); they are never suggested, and ticking one
+could count fish twice. A sale belongs to the
+year its order was placed. **Refunds are net**: a refund line is taken
+off the line it refunds (`_refunded_item_id`), in the year of the order
+it refunds — a fish sold in December and refunded in January is simply
+not a December sale, which is why a year can differ a little from
+WooCommerce Analytics, where a refund counts on the day it was made. A
+refund also takes the STATUS of the order it refunds, as that order
+stands in WooCommerce's stats now — whatever its own row says —, so a
+refund booked on an order that does not count never counts either.
+Money refunded without naming a line cannot be taken off a fish: it is
+shown apart ("Refunded without naming a line") and is in no row.
+
+**Which fish a line is** — in this order, and by nothing else:
+
+1. its product (every variation included) is a species row's linked
+   product;
+2. it is an invoice fish line the Invoices section knows
+   (`fishotel_invoices_for_order()`, when that section is active) and
+   that line names a species or a linked product;
+3. an **exact lower-cased name**: the species name, the title of a
+   species' linked product, or a learned alias — for a shop product no
+   species is linked to, its title; for an invoice fish line (the
+   theme's `_fh_invoice_fish` lines, or the "Includes" snapshot
+   `_fh_invoice_lines` of an invoice kept as one line), the name typed
+   on the invoice.
+
+An invoice kept as one line is split into its fish only when its lines
+— the Invoices section's, else the snapshot — all carry a price and add
+up to what was paid for it, to the cent; otherwise it stays whole.
+**Everything else is "not matched"** and listed with its units and its
+money, by kind — shop products without a species, invoice names that are
+no species, invoices kept as one line (with why), lines without a
+product, credits inside such invoices — each kind saying what would get
+it matched. Matched + not matched is always every paid line of the year
+(*How it adds up* shows the sum and would say so if it ever were not);
+nothing is guessed. Which fish a sale is gets decided on every view from
+the species list as it is then, so linking a species to its product (or
+giving it the product's exact title) shows at once.
+
+**Per fish:** units sold, actual revenue, the average price paid beside
+today's list price, the estimated revenue of that year's supplier orders
+beside the actual, that year's average landed cost per fish (landed ÷
+received over its supplier order lines of the year), the cost of the
+units sold, and the **actual profit = actual revenue − units sold × that
+landed cost**. A fish that sold in a year in which none landed gets **no
+profit figure**: the cell says "no landed cost in 2026 (last landed:
+4.00 a fish in 2025)" — the earlier cost is shown for reference and
+nothing is computed from it — and the line under the table says how
+much revenue the profit total therefore leaves out. The cost of fish
+that died is not taken off here (the landed totals are on *Species*),
+and neither are shipping, tax, fees or credits charged as their own
+order line.
+
+**Bounded and cached.** Nothing runs outside the Stats tab. A year is
+read in pages of 5 000 lookup rows by the table's own key (line id, then
+order id — a whole-order refund is stored under the order's line ids),
+at most 40 pages (past that the view says the figures are incomplete),
+every query prepared; the Invoices section is asked only about the
+orders that hold invoice lines (at most 1 500 a year). The result is
+kept in ONE transient (`fishotel_cleanroom_sales`: the last eight years
+read, twelve hours) and dropped when an order changes status and when
+WooCommerce updates its order tables — which it does a moment after the
+order is saved, usually in another request — and by the **Refresh**
+button. **A read that fails is never taken for the end of the year**:
+the store's sales readers answer `null` (not an empty list) when a
+query fails, the reading is then marked failed — the page says every
+figure is INCOMPLETE, the export's last row says so too — and it is
+**not cached**, so reopening the page reads the year again. The landed
+cost beside the sales is the whole year's even past the newest 500
+supplier orders (the year shown is then read by itself); the "last
+landed" note about an earlier year rests on those newest orders.
+Without WooCommerce's tables the view says the sales are not
+available and still shows the landed costs and the estimates. The
+numbers come from WooCommerce's Analytics tables: orders from before
+Analytics existed show only after *WooCommerce → Analytics → Settings →
+Import historical data*.
+
+**Old invoice orders.** An invoice order from before the theme itemised
+invoices is one line with no fish recorded: it shows under *Invoices
+kept as one line* as "no fish lines recorded on the order". When the
+theme that has the tool is running, the help there names it — *FisHotel
+Theme → Tools → "Add fish lines to past invoice orders"* — and says to
+press Refresh afterwards; the cache is also dropped just before that
+tool runs (`admin_post_fishotel_invoice_backfill`, priority 1), since it
+rewrites order lines without any status change.
+
+**For the Invoices section (and anyone else).** Before
+`fishotel_invoices_for_order( $order_id )` is called, the filter
+`fishotel_cleanroom_sales_invoice_lines` is asked (`null`, the
+WooCommerce order id); whoever answers hands over the lines of the
+invoices that order paid, in any of these shapes — a list of invoices
+each with `lines` (or `items`), one such invoice, or a plain list of
+lines; arrays, objects or a JSON string (`Stats_Sales::invoice_parts()`
+reads them):
+
+```
+name | species | title   the fish as written on the invoice (matched to the order line by its exact name)
+kind | type              fish · credit (also discount, fee, adjustment) · note — without one, a negative
+                         amount or a name starting "Credit" is a credit, the rest fish
+qty | quantity           units (fish lines)
+price | unit_price       PER FISH
+total | line_total       the line's money (qty × price without one)
+species_id               the species-list row the fish is — what makes the match exact
+product_id, variation_id the shop product, when the line was picked from one
+invoice_product_id       the invoice product the line belongs to (else the invoice's product_id)
+```
+
+A species id that is not in the list is not believed (the line falls
+back to its exact name); an exception over there never breaks the tab.
+
 ## Exports
 
 XLSX everywhere, CSV where it is one table: orders + lines (two sheets;
 the CSV is the lines), species, stats (Orders, Totals — weighted beside
 sheet-style —, By supplier, By origin, By group; the CSV is the orders),
-stays (beside the existing CSV). Columns added since are appended last,
+stays (beside the existing CSV), and the Stats tab's further views —
+**compare** (Totals, By supplier, By origin, By group: per name a row
+per year, then per pair of years a "change" row — absolute, a rate's in
+points — and a "change %" row, a fraction where a percent is defined;
+a year without an order is a row of empty cells; the CSV is all four in
+one table with a leading `section` column), **species-years** (the
+Species view as shown: its year, search and sort), **prices** (the
+Prices view as shown: its filters and "show all") and **sales** (Sales
+by species, and Not matched — the kinds with their biggest items, then
+matched + not matched = every paid line, and the refunds that named no
+line; the CSV is ONE table that carries both, behind a leading `section`
+column and under the species sheet's headings plus `order_lines`: *Sales
+by species*, *Not matched* — one row per kind, the kind under `group` —,
+*Not matched, biggest items* — already counted in their kind — and
+*Sums*; without a search the revenue of the first two sections adds up
+to every paid line). An empty cell is "no figure": never
+a 0 for a fish without a price, a profit without a landed cost or an
+estimate without a survivor count. Columns added since are appended last,
 so a sheet built on the older positions keeps reading them: `size` and
 `needs_id` on the stays; `size`, `box_no`, `box_pct`, `needs_id` and
 `label_name` on the orders' Lines sheet; `received_lines`, `mislabeled`,
@@ -1319,7 +1561,10 @@ about the permanent buildings, tanks, stays, events and logs changes.
 - `{prefix}fh_order_lines` — its lines: order_id, species_id, species, sci_name, needs_id (1.5), label_name (1.5: what the label called a corrected fish — the "??" name of one that arrived unknown —, NULL = never corrected), size_slug + size_label (1.4), qty_ordered, qty_received, per_box, box_no + box_pct (1.4), bags, unit_price, worth, qty_doa, qty_survived, landed_total (a cache of the costing), stay_id, tank_id, share_key (1.4: the remembered share the line counts in), sort, notes (the "part of this line" notes of a split group live here)
 - `{prefix}fh_box_shares` (1.4) — the remembered shares: share_key (unique: location + fish + size), location_key (supplier + origin), supplier, origin, fish_key (`s:<species id>` or `n:<name>`), species_id, species, size_slug, size_label, pct_per_fish, order_count, last_line_id + last_date (the line and the order date the value came from), updated_at
 
-Four options: `fishotel_cleanroom_settings` (with `size_attribute` and `size_list`, the source of the standard sizes, and `medications`, the medication list — absent until it is first edited, which means the seed; no table and no schema change), `fishotel_cleanroom_protocol`
+Five options: `fishotel_cleanroom_sales_statuses` (the order statuses that
+count as a sale on *Stats → Real sales*, slugs without "wc-"; absent —
+and then the suggested list applies — until Settings → Sales statuses is
+saved; not autoloaded), `fishotel_cleanroom_settings` (with `size_attribute` and `size_list`, the source of the standard sizes, and `medications`, the medication list — absent until it is first edited, which means the seed; no table and no schema change), `fishotel_cleanroom_protocol`
 (`{ default: name, templates: { name: steps[] } }` — an older bare steps
 array is read as the "14 Day CM" template next to the other four seeds),
 `fishotel_cleanroom_box_rates` (rows of supplier, origin, per box,
@@ -1328,7 +1573,10 @@ re-ox; empty until typed or imported) and
 words; absent until a word is first saved — until then only Trifecta
 has one, from the code — and not autoloaded). Two per-user transients carry the
 import's pending preview (with the file's path, ten minutes) and its last
-result.
+result; one more, `fishotel_cleanroom_sales`, keeps what *Real sales*
+read from WooCommerce (see *Stats*). Real sales and Prices to raise add
+no table and no column: they only read — WooCommerce's order tables and
+the products' prices.
 
 `Store::record_event()` appends the event and replays the stay
 (`Replay::state()`); the row is only a cache, and the reply says when the
@@ -1355,6 +1603,7 @@ clean-room/
 │                           (append + replay), splits, species search + candidates, aliases, facts,
 │                           the species master, the orders and their lines, stay figures, the box
 │                           shares, the readers of the size attribute and the variations' sizes, the
+│                           read-only readers of WooCommerce's order tables and product prices, the
 │                           slots and their setups, the room (every tank with its to-do + the day's
 │                           list by water system)
 ├── class-layout.php        PURE: numbering rule, seed, shares-water, titles / labels, grouping, the
@@ -1395,7 +1644,14 @@ clean-room/
 │                           rule, the token that keeps a page loaded earlier from undoing a
 │                           correction (takes the store as a parameter)
 ├── class-stats.php         PURE: per-order rows, weighted and sheet-style figures, groupings, the
-│                           mislabeled / not-identified-yet counts
+│                           mislabeled / not-identified-yet counts; years side by side with their
+│                           changes; one row per fish and year; the reports' sort and search
+├── class-stats-prices.php  PURE, read-only: per fish the latest and last-three landed cost, the
+│                           costing's suggested price, FisHotel's price and where it comes from
+├── class-stats-sales.php   what customers actually paid per fish and year: the statuses that count,
+│                           the ledger of a year from WooCommerce's lookup rows (refunds netted),
+│                           invoice lines, the exact-name matching, "not matched", the sales beside
+│                           the landed cost (pure but for the statuses option and the cache flush)
 ├── class-species.php       PURE: a species row normalised, the merge into the candidate list
 ├── class-orders.php        header / lines from a form, live figures of a line, the check-in
 │                           (takes the store as a parameter, like Front_Desk::perform())
@@ -1416,6 +1672,9 @@ clean-room/
 ├── class-admin-workbook.php  the Arrivals / Species / Stats tabs, their AJAX (an order's save, check-in,
 │                           "Correct the fish…"), the Boxes card, the XLSX / CSV exports, the batch's
 │                           "Goes on sale" (admin-post)
+├── class-admin-stats.php   the Stats tab's further views (Compare years, Species, Prices to raise,
+│                           Real sales): their data, the sales cache, Refresh and the Sales statuses
+│                           form (admin-post), their export sheets
 ├── class-admin-import.php  Settings → Import workbook: the private folder, upload → preview → import
 ├── class-admin-temp.php    the To do tab, the Board's Temporary area, the temporary tanks' history,
 │                           and the one AJAX action behind their writes (fishotel_cleanroom_temp)
@@ -1430,6 +1689,9 @@ clean-room/
 │          identify-panel.php (the Identify… panel of the Stays tab and the order page),
 │          medications.php + medication-form.php (Settings → Medications),
 │          board-temp.php (the Board's Temporary area), todo.php (the To do tab),
-│          temp-history.php (the setups taken down, or one in full), settings-temp.php (the slots)
+│          temp-history.php (the setups taken down, or one in full), settings-temp.php (the slots),
+│          stats-nav.php + stats-head.php (the strip of Stats views), stats-compare.php,
+│          stats-species.php, stats-prices.php, stats-sales.php, settings-sales.php (the Sales
+│          statuses card of the Settings tab)
 └── tests/                  headless PHP + node tests (see tests/README.md)
 ```
