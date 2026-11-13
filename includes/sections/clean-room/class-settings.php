@@ -40,7 +40,14 @@
  *
  * The layout (buildings and tanks), the learned aliases and the
  * remembered box shares live in their tables, written through the Store
- * with the numbering rule enforced by Layout::validate_*().
+ * with the numbering rule enforced by Layout::validate_*(). The Temporary
+ * building (each tank its own water) is laid out in slots: Settings →
+ * Layout says how many there are and adds more (add_slot()); a slot can
+ * be retired with its status while nothing is set up in it (save_slot()).
+ *
+ * A fourth option, fishotel_cleanroom_template_tags, holds what each
+ * treatment template is "Used for" (Temp_Tanks) — saved with the
+ * template's steps, renamed and deleted with the template.
  *
  * The two newest saves — sizes_request() and box_share_request() — check
  * the capability and the nonce themselves and answer with a status, so
@@ -705,6 +712,7 @@ class Settings {
 			$store = new Store();
 			$store->rename_schedule( (string) $result['renamed'][0], (string) $result['renamed'][1] );
 		}
+		self::follow_template_tags( $op, $result, $raw, $protocols );
 
 		wp_send_json_success(
 			array(
@@ -717,13 +725,34 @@ class Settings {
 		);
 	}
 
+	/**
+	 * What a template is "Used for" follows the template (the testable
+	 * half of save_protocol()'s tags): a save with a `used_for` field
+	 * stores that template's tags; a rename carries them to the new name;
+	 * a delete drops them.
+	 *
+	 * @param string $op        The protocol operation.
+	 * @param array  $result    apply_protocol_op().
+	 * @param array  $raw       The unslashed payload (used_for).
+	 * @param array  $protocols The schedules as stored after the operation.
+	 */
+	public static function follow_template_tags( $op, array $result, array $raw, array $protocols ) {
+		if ( ! empty( $result['renamed'] ) ) {
+			Temp_Tanks::rename_tags( (string) $result['renamed'][0], (string) $result['renamed'][1] );
+		}
+		if ( 'save' === (string) $op && array_key_exists( 'used_for', $raw ) && ( is_string( $raw['used_for'] ) || is_array( $raw['used_for'] ) ) ) {
+			Temp_Tanks::save_tags( (string) $result['template'], $raw['used_for'], $protocols );
+		}
+	}
+
 	/* ============================================================== */
 	/*  Layout editor                                                  */
 	/* ============================================================== */
 
 	/**
 	 * AJAX: add / save a building or a tank. `op` is one of
-	 * building_add, building_save, tank_add, tank_save. A tank's number is
+	 * building_add, building_save, tank_add, tank_save, slot_add (one more
+	 * slot for the temporary tanks). A tank's number is
 	 * derived from building / level / position — never typed.
 	 */
 	public function ajax_layout() {
@@ -750,6 +779,9 @@ class Settings {
 				case 'tank_add':
 				case 'tank_save':
 					$result = self::save_tank( $store, $raw, 'tank_save' === $op );
+					break;
+				case 'slot_add':
+					$result = self::add_slot( $store );
 					break;
 				default:
 					$result = array( 'errors' => array( __( 'Unknown layout action.', 'fishotel-misc-plugin' ) ) );
@@ -814,6 +846,14 @@ class Settings {
 			'schedule'       => isset( $raw['schedule'] ) ? Protocol::template_name( sanitize_text_field( $raw['schedule'] ) ) : ( $current ? (string) $current['schedule'] : '' ),
 			'system_gallons' => $gallons,
 		);
+		if ( $current && Layout::is_own_water( $current ) ) {
+			// The temporary tanks: each its own water. No schedule and no
+			// system volume of the building's own, and its area stays.
+			$building['own_water']      = 1;
+			$building['area']           = Layout::TEMP_AREA;
+			$building['schedule']       = '';
+			$building['system_gallons'] = null;
+		}
 
 		$taken = array();
 		foreach ( $store->buildings() as $row ) {
@@ -823,6 +863,11 @@ class Settings {
 		}
 
 		$errors = Layout::validate_building( $building, $taken );
+		// The Temporary building stays active while a tank in it is running.
+		$running = $current && Layout::is_own_water( $current ) && 'active' !== $building['status'] ? Temp_Tanks::building_status_error( $current, $building['status'], $store->open_setups() ) : '';
+		if ( '' !== $running ) {
+			$errors[] = $running;
+		}
 		if ( '' !== $building['schedule'] && ! isset( self::protocols()['templates'][ $building['schedule'] ] ) ) {
 			$errors[] = __( 'that schedule template does not exist', 'fishotel-misc-plugin' );
 		}
@@ -866,6 +911,10 @@ class Settings {
 		if ( ! $building ) {
 			return array( 'errors' => array( __( 'Pick a building first.', 'fishotel-misc-plugin' ) ) );
 		}
+		if ( Layout::is_own_water( $building ) ) {
+			// A slot is not a rack tank: it has no level, size or gallons of its own.
+			return $current ? self::save_slot( $store, $current, $raw ) : self::add_slot( $store );
+		}
 
 		$tank = array(
 			'id'              => $id,
@@ -901,6 +950,78 @@ class Settings {
 		return array(
 			/* translators: %d: tank number */
 			'message' => sprintf( $existing ? __( 'Tank %d saved.', 'fishotel-misc-plugin' ) : __( 'Tank %d added.', 'fishotel-misc-plugin' ), $tank['number'] ),
+			'id'      => (int) $saved,
+			'number'  => (int) $tank['number'],
+		);
+	}
+
+	/**
+	 * One more slot for the temporary tanks: the lowest free number of the
+	 * own-water building, up to Layout::MAX_SLOTS (the ones digit is the
+	 * slot).
+	 *
+	 * @param object $store Store (or the tests' stand-in) with temp_building(), add_slot().
+	 * @return array{message?: string, number?: int, errors?: string[]}
+	 */
+	public static function add_slot( $store ) {
+		if ( ! $store->temp_building() ) {
+			return array( 'errors' => array( __( 'The layout has no building for temporary tanks.', 'fishotel-misc-plugin' ) ) );
+		}
+		$number = $store->add_slot();
+		if ( ! $number ) {
+			/* translators: %d: the most slots there can be */
+			return array( 'errors' => array( sprintf( __( 'There can be %d temporary slots at most (the last digit of the number is the slot).', 'fishotel-misc-plugin' ), Layout::MAX_SLOTS ) ) );
+		}
+		$parts = Layout::parse_slot( $number );
+
+		return array(
+			/* translators: %s: slot label (TEMP 7 · 907) */
+			'message' => sprintf( __( '%s added — print its label with "Print tank labels".', 'fishotel-misc-plugin' ), Layout::slot_name( $parts ? $parts['slot'] : 0 ) . ' · ' . (int) $number ),
+			'number'  => (int) $number,
+		);
+	}
+
+	/**
+	 * A slot's one setting: its status. It can be retired (offline) only
+	 * while nothing is set up in it — a setup with its fish stays
+	 * reachable.
+	 *
+	 * @param object $store Store (or the tests' stand-in) with save_tank().
+	 * @param array  $tank  The slot (hydrated, with its 'setup').
+	 * @param array  $raw   Unslashed payload: status.
+	 * @return array{message?: string, id?: int, number?: int, errors?: string[]}
+	 */
+	public static function save_slot( $store, array $tank, array $raw ) {
+		$status = isset( $raw['status'] ) && is_scalar( $raw['status'] ) ? sanitize_key( (string) $raw['status'] ) : (string) $tank['status'];
+		if ( ! in_array( $status, Layout::TANK_STATUSES, true ) ) {
+			return array( 'errors' => array( __( 'unknown tank status', 'fishotel-misc-plugin' ) ) );
+		}
+		$label = Layout::tank_label( $tank );
+		if ( 'offline' === $status && ! empty( $tank['setup'] ) ) {
+			/* translators: %s: slot label */
+			return array( 'errors' => array( sprintf( __( '%s is set up — take it down on the Board before retiring the slot.', 'fishotel-misc-plugin' ), $label ) ) );
+		}
+
+		$saved = $store->save_tank(
+			array(
+				'id'          => (int) $tank['id'],
+				'building_id' => (int) $tank['building_id'],
+				'number'      => (int) $tank['number'],
+				'level'       => 0,
+				'position'    => (int) $tank['position'],
+				'size_label'  => '',
+				'gallons'     => 0,
+				'status'      => $status,
+				'sort'        => (int) $tank['sort'],
+			)
+		);
+		if ( ! $saved ) {
+			return array( 'errors' => array( __( 'The slot could not be saved.', 'fishotel-misc-plugin' ) ) );
+		}
+
+		return array(
+			/* translators: %s: slot label */
+			'message' => sprintf( __( '%s saved.', 'fishotel-misc-plugin' ), $label ),
 			'id'      => (int) $saved,
 			'number'  => (int) $tank['number'],
 		);

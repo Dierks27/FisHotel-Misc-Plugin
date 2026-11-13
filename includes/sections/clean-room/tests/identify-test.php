@@ -147,7 +147,7 @@ foreach ( Store::schema( 'DEFAULT CHARSET=utf8mb4' ) as $statement ) {
 		$tables[ $m[1] ] = $statement;
 	}
 }
-check( 'schema version 1.5: a site that already ran 1.4 gets the new columns', '1.5' === Store::DB_VERSION && 10 === count( Store::TABLES ) );
+check( 'schema version 1.5 or later: a site that already ran 1.4 gets the new columns', version_compare( Store::DB_VERSION, '1.5', '>=' ) && count( Store::TABLES ) >= 10 );
 check( 'fh_order_lines: needs_id (0 by default) and a nullable label_name, each on its own line', 1 === preg_match( "/\n\t+sci_name VARCHAR\(120\) NOT NULL DEFAULT '',\n\t+needs_id TINYINT\(1\) NOT NULL DEFAULT 0,\n\t+label_name VARCHAR\(120\) NULL,\n/", $tables['order_lines'] ) );
 check( 'fh_stays: needs_id, and a key on order_line_id for the stays of a line', 1 === preg_match( "/\n\t+needs_id TINYINT\(1\) NOT NULL DEFAULT 0,\n/", $tables['stays'] ) && false !== strpos( $tables['stays'], "KEY order_line_id (order_line_id)\n" ) );
 check( 'the gate waits for the three new columns', in_array( 'needs_id', Store::REQUIRED_COLUMNS['order_lines'], true ) && in_array( 'label_name', Store::REQUIRED_COLUMNS['order_lines'], true ) && in_array( 'needs_id', Store::REQUIRED_COLUMNS['stays'], true ) );

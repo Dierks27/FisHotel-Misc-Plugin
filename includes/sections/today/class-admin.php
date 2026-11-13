@@ -201,6 +201,22 @@ class Admin {
 		include Today::path() . 'views/page.php';
 	}
 
+	/**
+	 * The lines other sections add under the header line, on the page and
+	 * on the widget: apply_filters( 'fishotel_today_lines', array() ),
+	 * cleaned by Model::extra_lines(). Read on every render (never from
+	 * the cached window), and a callback that throws adds nothing.
+	 *
+	 * @return array[]
+	 */
+	public static function extra_lines() {
+		try {
+			return Model::extra_lines( apply_filters( Model::EXTRA_LINES_FILTER, array() ) );
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+	}
+
 	/* ============================================================== */
 	/*  Dashboard widget                                               */
 	/* ============================================================== */

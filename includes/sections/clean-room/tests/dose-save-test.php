@@ -260,7 +260,8 @@ $i18n = Front_Desk::i18n();
 check( 'the words of the sum, and the new labels', Dose::strings() === $i18n['doseStrings'] && 'Calculator' === $i18n['calculator'] && 'Now' === $i18n['nowLabel'] && 'Bring it to' === $i18n['targetLabel'] && 'A dose cannot be undone — note a correction instead.' === $i18n['noUndoDose'] && isset( $i18n['topupLabel'], $i18n['changedLabel'], $i18n['calcHint'], $i18n['noMeds'], $i18n['alsoReading'] ) );
 $js = (string) file_get_contents( dirname( __DIR__ ) . '/js/front-desk.js' );
 preg_match_all( "/\\bt\\('([A-Za-z]+)'/", $js, $m );
-$missing = array_values( array_diff( array_unique( $m[1] ), array_keys( $i18n ) ) );
+// The page is handed both sets: these, and the temporary tanks' and the day's list's.
+$missing = array_values( array_diff( array_unique( $m[1] ), array_keys( $i18n ), array_keys( Front_Desk::temp_i18n() ) ) );
 check( 'every label the page asks for is one the server sends', array() === $missing, implode( ', ', $missing ) );
 
 fh_finish();

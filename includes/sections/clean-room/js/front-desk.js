@@ -42,11 +42,24 @@
  * inlined before this file; a spoken dose comes back from the server with
  * its sum and is never auto-confirmed — a dose has no undo.
  *
+ * A temporary tank (a slot of the own-water building: "TEMP 1 · 901") has
+ * its own screens: a free slot says "Nothing is set up here" and offers
+ * Set up — what it is for leads to the treatment, shown before anything
+ * is saved —; one that is set up shows its kind, purpose, schedule and
+ * its own day, with Schedule (its own steps, for this tank alone) and
+ * Take down. The tank picker has a "Today" entry: everything due today
+ * as one list by water system, ticked once per system (the server's
+ * Todo). A move of a group still in quarantine into a CLEAN temporary
+ * tank asks first: it clears the group.
+ *
  * The pure helpers (normalizeNumberWords, previewSentence, tankValue,
  * englishValue, fmt, escapeHtml, saleSummary, sizeText, unknownName,
- * doseStart, rateChoices, pickChoice, doseFields) are exported for
- * tests/front-desk.test.js and the file skips the DOM wiring when there is
- * no document / config.
+ * doseStart, rateChoices, pickChoice, doseFields, and the temporary tanks'
+ * and the list's: tankHeading, offerTemplates, previewLines, lineDetail,
+ * feedText, flagText, todoHeadline, moveClears, gridTanks) are exported
+ * for tests/front-desk.test.js, tests/front-desk-dose.test.js and
+ * tests/temp-tanks.test.js, and the file skips the DOM wiring when there
+ * is no document / config.
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  */
@@ -518,6 +531,182 @@
 		return fields;
 	}
 
+	/* ---------------------------------------------------------------- */
+	/*  Pure helpers: temporary tanks and the day's list                 */
+	/* ---------------------------------------------------------------- */
+
+	/**
+	 * What a tank is called at the top of its screen: "TEMP 1 · 901" for a
+	 * temporary slot, "Tank 521" for any other.
+	 *
+	 * @param {Object} tk The screen's tank (number, temp).
+	 * @return {string}
+	 */
+	function tankHeading(tk) {
+		if (tk && tk.temp && tk.temp.label) {
+			return tk.temp.label + ' · ' + tk.number;
+		}
+		return 'Tank ' + (tk ? tk.number : '');
+	}
+
+	/**
+	 * The schedules a "what is it for" offers: the ones carrying that tag
+	 * (whatever its case) first, the rest after. A tag no template carries
+	 * offers none first.
+	 *
+	 * @param {Object[]} templates name, tags[].
+	 * @param {string}   tag       What it is for.
+	 * @return {{matching: string[], others: string[]}}
+	 */
+	function offerTemplates(templates, tag) {
+		var wanted = String(tag === null || typeof tag === 'undefined' ? '' : tag).replace(/\s+/g, ' ').replace(/^ +| +$/g, '').toLowerCase();
+		var out = { matching: [], others: [] };
+		(templates || []).forEach(function (template) {
+			var carries = wanted !== '' && (template.tags || []).some(function (candidate) {
+				return String(candidate).toLowerCase() === wanted;
+			});
+			(carries ? out.matching : out.others).push(String(template.name));
+		});
+		return out;
+	}
+
+	/**
+	 * What a schedule does, one line per step that is not the feeding:
+	 * "Furan-2 — days 2, 4, 6" and, when the step names a medication its
+	 * label does not already spell out, " · Metronidazole".
+	 *
+	 * @param {Object|null} template name, preview[] (label, when, medication).
+	 * @return {string[]}
+	 */
+	function previewLines(template) {
+		if (!template || !template.preview) {
+			return [];
+		}
+		return template.preview.map(function (step) {
+			var line = String(step.label) + ' — ' + String(step.when);
+			var medication = String(step.medication || '');
+			if (medication && String(step.label).toLowerCase().indexOf(medication.toLowerCase()) === -1) {
+				line += ' · ' + medication;
+			}
+			return line;
+		});
+	}
+
+	/**
+	 * What a line of the list says beside its step: the medication and the
+	 * dose it names ("Praziquantel · suggested 1.9 g for 205 gal"), '' when
+	 * it names neither.
+	 *
+	 * @param {Object} item A to-do item (medication, dose).
+	 * @return {string}
+	 */
+	function lineDetail(item) {
+		var bits = [];
+		if (item && item.medication) {
+			bits.push(String(item.medication));
+		}
+		if (item && item.dose) {
+			bits.push(String(item.dose));
+		}
+		return bits.join(' · ');
+	}
+
+	/**
+	 * The feeding of a building as one line: "Feed — 7 tanks with fish",
+	 * and "· 3 left" while some are fed and some are not.
+	 *
+	 * @param {Object} item    A feed line (label, count, left).
+	 * @param {Object} strings feedOne, feedMany, leftN (English fallbacks).
+	 * @return {string}
+	 */
+	function feedText(item, strings) {
+		var s = strings || {};
+		var count = parseInt(item && item.count, 10) || 0;
+		var left = parseInt(item && item.left, 10) || 0;
+		var text = fmt(count === 1 ? (s.feedOne || '%1$s — %2$d tank with fish') : (s.feedMany || '%1$s — %2$d tanks with fish'), item ? item.label : '', count);
+		if (left > 0 && left < count) {
+			text += ' · ' + fmt(s.leftN || '%d left', left);
+		}
+		return text;
+	}
+
+	function plainNumber(value) {
+		return String(parseFloat(Number(value).toFixed(2)));
+	}
+
+	/**
+	 * A copper flag at the top of the list, in words — the server's
+	 * Admin_Temp::flag_text(): "Building 500 · Cu 2.1 — below the floor",
+	 * "… · copper reading due — last one 2.4, 26 h ago", "… · copper
+	 * reading overdue — no reading yet".
+	 *
+	 * @param {Object} flag    where, low, due, overdue, value, ago.
+	 * @param {Object} strings flagLow, flagDue, flagOverdue, flagNone, flagLast.
+	 * @return {string}
+	 */
+	function flagText(flag, strings) {
+		var s = strings || {};
+		var value = (!flag || flag.value === null || typeof flag.value === 'undefined') ? '' : plainNumber(flag.value);
+		var bits = [String(flag ? flag.where : '')];
+		if (flag && flag.low) {
+			bits.push(fmt(s.flagLow || 'Cu %s — below the floor', value));
+		}
+		if (flag && flag.due) {
+			var what = flag.overdue ? (s.flagOverdue || 'copper reading overdue') : (s.flagDue || 'copper reading due');
+			what += ' — ' + (value === '' ? (s.flagNone || 'no reading yet') : fmt(s.flagLast || 'last one %1$s, %2$s ago', value, flag.ago || ''));
+			bits.push(what);
+		}
+		return bits.join(' · ');
+	}
+
+	/**
+	 * The count at the top of the list: "7 things left to do", "All done",
+	 * or "Nothing is due today".
+	 *
+	 * @param {Object|null} list    The day's list (left, total).
+	 * @param {Object}      strings todoLeft, todoLeftOne, todoAllDone, todoNothing.
+	 * @return {string}
+	 */
+	function todoHeadline(list, strings) {
+		var s = strings || {};
+		var left = list ? parseInt(list.left, 10) || 0 : 0;
+		var total = list ? parseInt(list.total, 10) || 0 : 0;
+		if (!total) {
+			return s.todoNothing || 'Nothing is due today';
+		}
+		if (!left) {
+			return s.todoAllDone || 'All done';
+		}
+		return fmt(left === 1 ? (s.todoLeftOne || '%d thing left to do') : (s.todoLeft || '%d things left to do'), left);
+	}
+
+	/**
+	 * Whether moving these groups into a destination clears any of them:
+	 * the destination is a clean tank and a group is still in quarantine.
+	 *
+	 * @param {Object}   dest      A grid tank (clean).
+	 * @param {Object[]} occupants The groups that move (status).
+	 * @return {boolean}
+	 */
+	function moveClears(dest, occupants) {
+		if (!dest || !dest.clean) {
+			return false;
+		}
+		return (occupants || []).some(function (o) { return !!o && o.status === 'in_qt'; });
+	}
+
+	/**
+	 * The tanks of a grid building a screen offers: every rack tank; of the
+	 * temporary slots only the ones that are set up — a slot with nothing
+	 * in it is no tank to pick.
+	 *
+	 * @param {Object} building A grid building (tanks[]).
+	 * @return {Object[]}
+	 */
+	function gridTanks(building) {
+		return ((building && building.tanks) || []).filter(function (tk) { return !tk.free; });
+	}
+
 	var api = {
 		normalizeNumberWords: normalizeNumberWords,
 		previewSentence: previewSentence,
@@ -533,6 +722,17 @@
 		pickChoice: pickChoice,
 		doseFields: doseFields
 	};
+
+	// Temporary tanks and the day's list.
+	api.tankHeading = tankHeading;
+	api.offerTemplates = offerTemplates;
+	api.previewLines = previewLines;
+	api.lineDetail = lineDetail;
+	api.feedText = feedText;
+	api.flagText = flagText;
+	api.todoHeadline = todoHeadline;
+	api.moveClears = moveClears;
+	api.gridTanks = gridTanks;
 
 	root.fhFrontDeskHelpers = api;
 
@@ -563,7 +763,8 @@
 		sure: null,
 		timers: {},
 		toastShownAt: 0,
-		toastSticky: false
+		toastSticky: false,
+		openFeeds: {}
 	};
 
 	var TODAY_KEY = 'fhFrontDeskTodayOpen';
@@ -876,12 +1077,21 @@
 			return;
 		}
 		if (!tank()) {
-			// No tank in the URL: the picker — or the Calculator, which needs none.
+			// No tank on the page: the picker, the Calculator (it needs none), the day's list,
+			// or a setup started from the picker.
 			if (state.view === 'calc') {
 				renderCalc();
+			} else if (state.view === 'today') {
+				renderTodayList();
+			} else if (state.view === 'setup') {
+				renderSetup();
 			} else {
 				renderPicker();
 			}
+			return;
+		}
+		if (tank().temp && tank().temp.free && state.view !== 'setup' && state.view !== 'calc') {
+			renderFreeSlot(); // A slot's label was scanned and nothing is set up in it.
 			return;
 		}
 		switch (state.view) {
@@ -894,8 +1104,12 @@
 			case 'dates': renderDates(); break;
 			case 'note': renderNote(); break;
 			case 'copper': renderCopper(); break;
-			case 'dose': renderDose(); break;
+			case 'dose': renderDose(); ownWaterDose(); break;
 			case 'calc': renderCalc(); break;
+			case 'today': renderTodayList(); break;
+			case 'setup': renderSetup(); break;
+			case 'schedule': renderSchedule(); break;
+			case 'confirm': renderConfirm(); break;
 			case 'voice': renderVoice(); break;
 			case 'species': renderSpecies(); break;
 			default: renderTank();
@@ -912,6 +1126,9 @@
 
 	function tankSub() {
 		var tk = tank();
+		if (tk.temp && tk.temp.setup) {
+			return tempSub(tk);
+		}
 		var bits = [el('strong', { text: tk.areaLabel + ' · ' + tk.building })];
 		if (tk.sizeLabel) {
 			bits.push(' · ' + tk.sizeLabel);
@@ -1004,7 +1221,7 @@
 	function renderTank() {
 		var tk = tank();
 		var occ = tk.occupants || [];
-		app.appendChild(header('Tank ' + tk.number, tankSub()));
+		app.appendChild(header(tankHeading(tk), tankSub()));
 
 		// The fish rows first: "−1 lost" must be the first thing under the title.
 		if (!occ.length) {
@@ -1017,8 +1234,13 @@
 
 		app.appendChild(todayStrip(tk));
 
+		if (tk.temp && tk.temp.setup) {
+			app.appendChild(tempTools(tk));
+		}
+
 		app.appendChild(el('div', { class: 'fh-fd-links' }, [
 			el('a', { href: cfg.baseUrl, text: t('allTanks', 'All tanks') }),
+			el('button', { type: 'button', text: t('todayList', 'Today\'s list'), on: { click: function () { go('today'); } } }),
 			el('a', { href: cfg.boardUrl, text: t('board', 'Room board') }),
 			el('button', { type: 'button', text: t('calculator', 'Calculator'), on: { click: function () { go('calc'); } } }),
 			el('button', { type: 'button', text: t('refresh', 'Refresh'), on: { click: refresh } })
@@ -1123,38 +1345,63 @@
 	/* Tank picker (no tank in the URL) */
 	function renderPicker() {
 		app.appendChild(header(t('pickTank', 'Pick a tank'), null));
-		renderGrid(app, function (tk) { root.location.href = tk.url; }, 0);
+		app.appendChild(todayEntry());
+		renderGrid(app, function (tk) { root.location.href = tk.url; }, 0, { setUp: function () { go('setup', {}); } });
 		app.appendChild(el('div', { class: 'fh-fd-links' }, [
 			el('a', { href: cfg.boardUrl, text: t('board', 'Room board') }),
 			el('button', { type: 'button', text: t('calculator', 'Calculator'), on: { click: function () { go('calc'); } } })
 		]));
 	}
 
-	function renderGrid(host, onPick, currentNumber) {
+	/*
+	 * The tank grid. A temporary slot shows what it is called ("TEMP 1")
+	 * and what is set up in it; one with nothing set up is no tank to pick
+	 * — the picker (opts.setUp) offers "Set up" in their place.
+	 */
+	function renderGrid(host, onPick, currentNumber, opts) {
 		(state.screen.grid || []).forEach(function (area) {
 			var areaNode = el('div', { class: 'fh-fd-area' }, [el('h3', { text: area.label })]);
+			var shown = 0;
 			(area.buildings || []).forEach(function (b) {
 				var coming = b.status === 'coming_soon';
-				var cls = 'fh-fd-building' + (b.inQt > 0 ? ' is-qt' : '') + (coming ? ' is-coming' : '');
+				var list = b.temp ? gridTanks(b) : (b.tanks || []);
+				var canSetUp = !!(b.temp && opts && opts.setUp && b.status === 'active' && state.screen.temp && state.screen.temp.free && state.screen.temp.free.length);
+				if (b.temp && !list.length && !canSetUp) {
+					return;
+				}
+				shown++;
+				var cls = 'fh-fd-building' + (b.inQt > 0 ? ' is-qt' : '') + (coming ? ' is-coming' : '') + (b.temp ? ' is-temp' : '');
 				var head = el('div', { class: 'fh-fd-building__head' }, [
 					el('span', {}, [b.label, coming ? el('small', { text: ' · ' + t('comingSoon', 'coming soon') }) : null]),
 					b.inQt > 0 ? el('span', { class: 'fh-fd-badge fh-fd-badge--qt', text: t('qtHere', 'QT') + ' ' + b.inQt }) : null
 				]);
-				var tanks = el('div', { class: 'fh-fd-tanks' }, (b.tanks || []).map(function (tk) {
+				var tanks = el('div', { class: 'fh-fd-tanks' }, list.map(function (tk) {
 					var isCurrent = tk.number === currentNumber;
+					var small = isCurrent ? t('here', 'here') : (tk.empty ? t('emptyTank', 'empty') : tk.count + ' · ' + (tk.sizeLabel || ''));
+					if (tk.temp && !isCurrent) {
+						small = (tk.sub || '') + (tk.empty ? '' : ' · ' + tk.count);
+					}
 					return el('button', {
 						type: 'button',
-						class: 'fh-fd-tank' + (tk.empty ? ' is-empty' : '') + (isCurrent ? ' is-current' : ''),
+						class: 'fh-fd-tank' + (tk.empty ? ' is-empty' : '') + (isCurrent ? ' is-current' : '') + (tk.temp ? ' is-temp' + (tk.clean ? ' is-clean' : ' is-quarantine') : ''),
 						disabled: isCurrent || coming,
 						on: { click: function () { onPick(tk); } }
 					}, [
-						String(tk.number),
-						el('small', { text: isCurrent ? t('here', 'here') : (tk.empty ? t('emptyTank', 'empty') : tk.count + ' · ' + (tk.sizeLabel || '')) })
+						tk.title || String(tk.number),
+						el('small', { text: small })
 					]);
 				}));
+				if (canSetUp) {
+					tanks.appendChild(el('button', { type: 'button', class: 'fh-fd-tank is-empty is-setup', on: { click: opts.setUp } }, [
+						'+',
+						el('small', { text: t('setUp', 'Set up') })
+					]));
+				}
 				areaNode.appendChild(el('div', { class: cls }, [head, tanks]));
 			});
-			host.appendChild(areaNode);
+			if (shown) {
+				host.appendChild(areaNode);
+			}
 		});
 	}
 
@@ -1166,7 +1413,7 @@
 			return el('button', {
 				type: 'button',
 				class: 'fh-fd-chip fh-fd-chip--tank' + (f.toTank === tk.number ? ' is-on' : ''),
-				text: tk.number + (tk.empty ? ' · ' + t('emptyTank', 'empty') : ' · ' + tk.count),
+				text: (tk.title ? tk.title + ' · ' : '') + tk.number + (tk.empty ? ' · ' + t('emptyTank', 'empty') : ' · ' + tk.count),
 				on: { click: function () { f.toTank = tk.number; onChange(); } }
 			});
 		}));
@@ -1503,8 +1750,8 @@
 	}
 
 	/* Move: how many (a smaller number splits), why (optional chips), then the destination grid */
-	var MOVE_REASONS = ['clear_building', 'bullying', 'pairing', 'other'];
-	var MOVE_REASON_KEYS = { clear_building: 'clearBuilding', bullying: 'bullying', pairing: 'pairing', other: 'other' };
+	var MOVE_REASONS = ['clear_building', 'bullying', 'pairing', 'hospital', 'other'];
+	var MOVE_REASON_KEYS = { clear_building: 'clearBuilding', bullying: 'bullying', pairing: 'pairing', hospital: 'hospital', other: 'other' };
 
 	function renderMove() {
 		var tk = tank();
@@ -1529,6 +1776,11 @@
 			chips.appendChild(chip);
 		});
 		screen.appendChild(el('div', { class: 'fh-fd-field' }, [el('label', { class: 'fh-fd-label', text: t('whyMove', 'Why? (optional)') }), chips]));
+		// Said before the tap: what a move into a clean tank does to a group still in quarantine.
+		var moving = p.all ? (tk.occupants || []) : (o ? [o] : []);
+		if (moveClears({ clean: true }, moving)) {
+			screen.appendChild(el('p', { class: 'fh-fd-muted fh-fd-move-hint', text: t('moveClearsHint', 'Still in quarantine: a move into the Clean Room — or into a clean temporary tank — clears the group today.') }));
+		}
 		app.appendChild(screen);
 		renderGrid(app, function (dest) {
 			var fields = { act: 'move', tank: tk.number, to_tank: dest.number, reason: f.reason || '', via: 'qr' };
@@ -1539,6 +1791,11 @@
 				if (o.qtyLive > 1 && f.qty < o.qtyLive) {
 					fields.qty = f.qty;
 				}
+			}
+			if (dest.temp && moveClears(dest, moving)) {
+				// A clean temporary tank looks like any other slot: ask before clearing.
+				go('confirm', { kind: 'moveClear', fields: fields, dest: dest, moving: moving, back: p });
+				return;
 			}
 			act(fields);
 		}, tk.number);
@@ -2610,8 +2867,577 @@
 	}
 
 	/* ---------------------------------------------------------------- */
+	/*  Temporary tanks and the day's list                               */
+	/* ---------------------------------------------------------------- */
+
+	/*
+	 * A write that chooses its own screen afterwards (act() always goes
+	 * back to the tank): the list stays the list after a tick, a setup
+	 * started from the picker goes to its slot. The form is kept when the
+	 * server refuses.
+	 */
+	function sideAct(fields, after) {
+		busy(true);
+		return post('fishotel_cleanroom_act', fields).then(function (data) {
+			if (data.screen) {
+				state.screen = data.screen;
+			}
+			state.pending = null;
+			state.form = {};
+			after(data);
+			toast(data.message || t('saved', 'Saved'), null);
+			return data;
+		}).catch(failToast).then(function () {
+			busy(false);
+		});
+	}
+
+	function renderKeepingScroll() {
+		var y = root.pageYOffset || 0;
+		render();
+		root.scrollTo(0, y);
+	}
+
+	/* A temporary tank's line under its heading: its name, kind, purpose, its own water, schedule and day. */
+	function tempSub(tk) {
+		var su = tk.temp.setup;
+		var bits = [];
+		if (su.name) {
+			bits.push(el('strong', { text: su.name }));
+			bits.push(' · ');
+		}
+		bits.push(tk.building + ' · ');
+		bits.push(el('span', { class: 'fh-fd-badge fh-fd-badge--' + (su.kind === 'clean' ? 'cleared' : 'in_qt'), text: su.kindLabel }));
+		if (su.purpose) {
+			bits.push(' · ' + su.purpose);
+		}
+		bits.push(' · ' + t('ownWater', 'its own water'));
+		if (su.gallons > 0) {
+			bits.push(' · ' + su.gallons + ' gal');
+		}
+		bits.push(' · ' + t('schedule', 'schedule') + ' ' + su.schedule);
+		if (su.dayText) {
+			bits.push(' · ');
+			bits.push(el('strong', { text: su.dayText }));
+		}
+		return bits;
+	}
+
+	/* Under a temporary tank's to-do: its own schedule, and taking it down. */
+	function tempTools(tk) {
+		var su = tk.temp.setup;
+		return el('div', { class: 'fh-fd-temp-tools' }, [
+			button(t('scheduleEdit', 'Schedule'), 'fh-fd-btn--quiet', function () { go('schedule'); }),
+			button(t('takeDown', 'Take down'), 'fh-fd-btn--quiet', function () {
+				if (!su.empty) {
+					toast(t('takeDownFish', 'Move the fish out first — then it can be taken down.'), null, true);
+					return;
+				}
+				go('confirm', { kind: 'takeDown' });
+			})
+		]);
+	}
+
+	/* A slot's label was scanned and nothing is set up in it. */
+	function renderFreeSlot() {
+		var tk = tank();
+		app.appendChild(header(tankHeading(tk), [el('strong', { text: tk.building }), ' · ' + t('ownWater', 'its own water')]));
+		app.appendChild(el('div', { class: 'fh-fd-empty fh-fd-free' }, [
+			el('p', { text: t('tempNothing', 'Nothing is set up here.') }),
+			button(t('setUp', 'Set up'), 'fh-fd-btn--primary fh-fd-btn--big', function () { go('setup', { slot: tk.number }); })
+		]));
+		app.appendChild(el('div', { class: 'fh-fd-links' }, [
+			el('a', { href: cfg.baseUrl, text: t('allTanks', 'All tanks') }),
+			el('a', { href: cfg.boardUrl, text: t('board', 'Room board') }),
+			el('button', { type: 'button', text: t('refresh', 'Refresh'), on: { click: refresh } })
+		]));
+	}
+
+	function chipRow(items, isOn, onPick, cls) {
+		return el('div', { class: 'fh-fd-chips' }, items.map(function (item) {
+			return el('button', {
+				type: 'button',
+				class: 'fh-fd-chip' + (cls ? ' ' + cls : '') + (isOn(item) ? ' is-on' : ''),
+				text: item.label,
+				on: { click: function () { onPick(item); } }
+			});
+		}));
+	}
+
+	function templateByName(name) {
+		var list = (state.screen.temp && state.screen.temp.templates) || [];
+		for (var i = 0; i < list.length; i++) {
+			if (list[i].name === name) {
+				return list[i];
+			}
+		}
+		return null;
+	}
+
+	/*
+	 * Set up a temporary tank: the slot, a name, what it is for — which
+	 * offers the treatments marked for it —, the kind, the gallons, the
+	 * treatment (shown, step by step, before anything is saved), its start
+	 * date and a note.
+	 */
+	function renderSetup() {
+		var sheet = state.screen.temp || { free: [], tags: [], templates: [] };
+		var free = sheet.free || [];
+		var f = state.form;
+		var p = state.pending || {};
+		var tk = tank();
+		var fixed = tk && tk.temp && tk.temp.free ? tk.number : 0;
+		if (typeof f.slot === 'undefined') {
+			f.slot = fixed || p.slot || (free.length ? free[0].number : 0);
+		}
+		if (!f.start) {
+			f.start = state.screen.today;
+		}
+		if (typeof f.template === 'undefined') {
+			f.template = '';
+		}
+		var slotLabel = '';
+		free.forEach(function (slot) {
+			if (slot.number === f.slot) {
+				slotLabel = slot.label;
+			}
+		});
+
+		app.appendChild(header(t('setUpTitle', 'Set up a temporary tank'), [slotLabel]));
+		var screen = el('div', { class: 'fh-fd-screen' });
+		function leave() {
+			go(tk ? 'tank' : 'picker');
+		}
+
+		if (!free.length) {
+			screen.appendChild(el('p', { class: 'fh-fd-muted', text: t('slotsFull', 'Every temporary slot is in use. Take one down, or add a slot in Settings → Layout.') }));
+			app.appendChild(screen);
+			bar([button(t('back', 'Back'), 'fh-fd-btn--quiet', leave)]);
+			return;
+		}
+
+		if (!fixed && free.length > 1) {
+			screen.appendChild(el('div', { class: 'fh-fd-field' }, [
+				el('label', { class: 'fh-fd-label', text: t('tempSlot', 'Slot') }),
+				chipRow(free.map(function (slot) { return { label: slot.label, number: slot.number }; }), function (item) { return item.number === f.slot; }, function (item) { f.slot = item.number; render(); }, 'fh-fd-chip--tank')
+			]));
+		}
+
+		screen.appendChild(el('div', { class: 'fh-fd-field' }, [
+			el('label', { class: 'fh-fd-label', for: 'fh-fd-tname', text: t('tempName', 'Name') }),
+			el('input', { id: 'fh-fd-tname', class: 'fh-fd-input', type: 'text', maxlength: 60, autocomplete: 'off', placeholder: t('tempNameHint', 'Hospital 1'), value: f.name || '', on: { input: function (e) { f.name = e.target.value; } } })
+		]));
+
+		// What is it for → the treatment.
+		var tags = (sheet.tags || []).map(function (tag) { return { label: tag, tag: tag }; });
+		tags.push({ label: t('somethingElse', 'Something else'), other: true });
+		var forField = el('div', { class: 'fh-fd-field' }, [
+			el('label', { class: 'fh-fd-label', text: t('whatFor', 'What is it for?') }),
+			chipRow(tags, function (item) { return item.other ? !!f.other : (!f.other && f.purpose === item.tag); }, function (item) {
+				f.other = !!item.other;
+				f.purpose = item.other ? '' : item.tag;
+				var offered = offerTemplates(sheet.templates, f.purpose);
+				if (offered.matching.length) {
+					f.template = offered.matching[0];
+				}
+				render();
+			})
+		]);
+		if (f.other) {
+			forField.appendChild(el('input', {
+				class: 'fh-fd-input',
+				type: 'text',
+				maxlength: 120,
+				autocomplete: 'off',
+				placeholder: t('whatForHint', 'in a few words'),
+				value: f.purpose || '',
+				on: {
+					input: function (e) { f.purpose = e.target.value; },
+					// After the typing is done, offer what matches — but never from inside a render
+					// (removing the focused field fires this event).
+					change: function () { root.setTimeout(function () { if (state.view === 'setup') { render(); } }, 0); }
+				}
+			}));
+		}
+		screen.appendChild(forField);
+
+		screen.appendChild(el('div', { class: 'fh-fd-field' }, [
+			el('label', { class: 'fh-fd-label', text: t('tempKind', 'What kind of tank?') }),
+			el('div', { class: 'fh-fd-kinds' }, [
+				el('button', { type: 'button', class: 'fh-fd-kind' + (f.kind === 'quarantine' ? ' is-on' : ''), on: { click: function () { f.kind = 'quarantine'; render(); } } }, [
+					el('strong', { text: t('kindQuarantine', 'Quarantine') }),
+					el('small', { text: t('kindQuarantineHint', 'for fish still in quarantine or under treatment') })
+				]),
+				el('button', { type: 'button', class: 'fh-fd-kind' + (f.kind === 'clean' ? ' is-on' : ''), on: { click: function () { f.kind = 'clean'; render(); } } }, [
+					el('strong', { text: t('kindClean', 'Clean') }),
+					el('small', { text: t('kindCleanHint', 'for fish that are already cleared') })
+				])
+			])
+		]));
+
+		screen.appendChild(el('div', { class: 'fh-fd-field' }, [
+			el('label', { class: 'fh-fd-label', for: 'fh-fd-tgal', text: t('gallons', 'Gallons') }),
+			el('input', { id: 'fh-fd-tgal', class: 'fh-fd-input', type: 'number', inputmode: 'numeric', min: 0, max: 9999, step: 1, placeholder: '10', value: f.gallons || '', on: { input: function (e) { f.gallons = e.target.value; } } })
+		]));
+
+		// The treatment: the schedules marked for this purpose first.
+		var offered = offerTemplates(sheet.templates, f.purpose);
+		var treatField = el('div', { class: 'fh-fd-field' }, [el('label', { class: 'fh-fd-label', text: t('treatment', 'Treatment') })]);
+		function pickTemplate(item) {
+			f.template = item.name;
+			render();
+		}
+		function isTemplate(item) {
+			return f.template === item.name;
+		}
+		if (offered.matching.length) {
+			treatField.appendChild(el('p', { class: 'fh-fd-muted', text: fmt(t('usedForThis', 'Used for %s:'), f.purpose) }));
+			treatField.appendChild(chipRow(offered.matching.map(function (name) { return { label: name, name: name }; }), isTemplate, pickTemplate, 'fh-fd-chip--match'));
+		} else if (f.purpose) {
+			treatField.appendChild(el('p', { class: 'fh-fd-muted', text: fmt(t('noneForTag', 'No schedule is marked "%s" yet — pick any one, or no treatment.'), f.purpose) }));
+		}
+		treatField.appendChild(chipRow(
+			offered.others.map(function (name) { return { label: name, name: name }; }).concat([{ label: t('noTreatment', 'No treatment, just watching'), name: '' }]),
+			isTemplate,
+			pickTemplate
+		));
+		var chosen = templateByName(f.template);
+		var lines = previewLines(chosen);
+		treatField.appendChild(el('div', { class: 'fh-fd-preview' }, [
+			el('p', { class: 'fh-fd-muted', text: chosen ? t('whatItDoes', 'What it does — nothing is saved yet:') : t('justFeeding', 'Only the daily feeding, while fish are in it.') }),
+			chosen ? el('ul', {}, lines.map(function (line) { return el('li', { text: line }); }).concat([el('li', { class: 'fh-fd-muted', text: t('feedingToo', 'plus the daily feeding') })])) : null
+		]));
+		screen.appendChild(treatField);
+
+		screen.appendChild(el('div', { class: 'fh-fd-field' }, [
+			el('label', { class: 'fh-fd-label', for: 'fh-fd-tstart', text: t('startDate', 'Treatment starts (day 1)') }),
+			el('input', { id: 'fh-fd-tstart', class: 'fh-fd-input', type: 'date', value: f.start, min: sheet.startMin || null, max: sheet.startMax || null, on: { change: function (e) { f.start = e.target.value; } } })
+		]));
+		screen.appendChild(el('div', { class: 'fh-fd-field' }, [
+			el('label', { class: 'fh-fd-label', for: 'fh-fd-tnote', text: t('note', 'Note') }),
+			el('textarea', { id: 'fh-fd-tnote', class: 'fh-fd-textarea', text: f.note || '', on: { input: function (e) { f.note = e.target.value; } } })
+		]));
+		app.appendChild(screen);
+
+		bar([
+			button(t('cancel', 'Cancel'), 'fh-fd-btn--quiet', leave),
+			button(t('setItUp', 'Set it up'), 'fh-fd-btn--primary', function () {
+				if (!f.kind) {
+					toast(t('tempKind', 'What kind of tank?'), null, true);
+					return;
+				}
+				sideAct({
+					act: 'setup',
+					tank: tk ? tk.number : 0,
+					slot: f.slot || 0,
+					name: f.name || '',
+					purpose: f.purpose || '',
+					kind: f.kind,
+					gallons: f.gallons || '',
+					template: f.template || '',
+					start_date: f.start || '',
+					note: f.note || '',
+					via: 'qr'
+				}, function (data) {
+					if (!tk && data.screen && data.screen.tank) {
+						root.location.href = data.screen.tank.url; // Started from the picker: go to the slot's own page.
+						return;
+					}
+					state.view = 'tank';
+					render();
+				});
+			})
+		]);
+	}
+
+	/*
+	 * A temporary tank's own schedule: its copy of the steps. Move one a
+	 * day, remove one, add one — for this tank alone; the template stays
+	 * as it is.
+	 */
+	function renderSchedule() {
+		var tk = tank();
+		var su = tk.temp && tk.temp.setup;
+		var f = state.form;
+		if (!su) {
+			go('tank');
+			return;
+		}
+		function change(fields) {
+			fields.act = 'setup_steps';
+			fields.tank = tk.number;
+			fields.setup_id = su.id; // This setup, as this page shows it — not whatever stands in the slot by now.
+			fields.seen = su.seen || '';
+			fields.via = 'qr';
+			sideAct(fields, function () {
+				state.view = 'schedule';
+				renderKeepingScroll();
+			});
+		}
+		app.appendChild(header(t('scheduleEdit', 'Schedule'), [tankHeading(tk) + ' · ' + su.schedule + (su.dayText ? ' · ' + su.dayText : '')]));
+		var screen = el('div', { class: 'fh-fd-screen' });
+		screen.appendChild(el('p', { class: 'fh-fd-muted', text: t('thisTankOnly', 'This tank\'s own schedule: changes here are for this tank only — the template stays as it is. Day 1 is the treatment start.') }));
+		screen.appendChild(el('div', { class: 'fh-fd-steps' }, (su.steps || []).map(function (step) {
+			var feed = step.kind === 'feed';
+			return el('div', { class: 'fh-fd-step' }, [
+				el('div', { class: 'fh-fd-step__what' }, [el('strong', { text: step.label }), el('small', { text: step.when })]),
+				el('div', { class: 'fh-fd-step__tools' }, [
+					feed ? null : el('button', { type: 'button', class: 'fh-fd-chip', text: t('earlier', '−1 day'), disabled: step.day <= 1, on: { click: function () { change({ op: 'move', index: step.index, days: -1 }); } } }),
+					feed ? null : el('button', { type: 'button', class: 'fh-fd-chip', text: t('later', '+1 day'), on: { click: function () { change({ op: 'move', index: step.index, days: 1 }); } } }),
+					el('button', { type: 'button', class: 'fh-fd-chip fh-fd-chip--ghost', text: t('removeStep', 'Remove'), on: { click: function () { change({ op: 'remove', index: step.index }); } } })
+				])
+			]);
+		})));
+
+		if (!f.kind) {
+			f.kind = 'dose';
+		}
+		if (typeof f.day === 'undefined') {
+			f.day = Math.max(1, parseInt(su.day, 10) || 1);
+		}
+		var kinds = [
+			{ label: t('kindDose', 'dose'), kind: 'dose' },
+			{ label: t('kindTest', 'test'), kind: 'test' },
+			{ label: t('kindWater', 'water change'), kind: 'water_change' },
+			{ label: t('kindOther', 'other'), kind: 'other' }
+		];
+		screen.appendChild(el('h3', { text: t('addStep', 'Add a step') }));
+		screen.appendChild(el('div', { class: 'fh-fd-field' }, [
+			el('label', { class: 'fh-fd-label', for: 'fh-fd-sname', text: t('stepName', 'Step') }),
+			el('input', { id: 'fh-fd-sname', class: 'fh-fd-input', type: 'text', maxlength: 80, autocomplete: 'off', value: f.label || '', on: { input: function (e) { f.label = e.target.value; } } })
+		]));
+		screen.appendChild(el('div', { class: 'fh-fd-field' }, [
+			chipRow(kinds, function (item) { return item.kind === f.kind; }, function (item) { f.kind = item.kind; render(); })
+		]));
+		screen.appendChild(stepperField(t('stepDay', 'Day'), f, 'day', 1, 120));
+		screen.appendChild(button(t('addStep', 'Add a step'), 'fh-fd-btn--primary', function () {
+			if (!f.label || !f.label.replace(/\s+/g, '')) {
+				toast(t('stepName', 'Step') + '?', null, true);
+				return;
+			}
+			change({ op: 'add', label: f.label, kind: f.kind, day: f.day });
+		}));
+		app.appendChild(screen);
+		bar([button(t('back', 'Back'), 'fh-fd-btn--quiet', function () { go('tank'); })]);
+	}
+
+	/* Two things are asked before they happen: taking a setup down, and a move that clears. */
+	function renderConfirm() {
+		var tk = tank();
+		var p = state.pending || {};
+		var screen = el('div', { class: 'fh-fd-screen' });
+		if (p.kind === 'takeDown' && tk.temp && tk.temp.setup) {
+			var what = tk.temp.setup.name || tankHeading(tk);
+			app.appendChild(header(t('takeDown', 'Take down'), [tankHeading(tk)]));
+			screen.appendChild(el('p', { class: 'fh-fd-ask', text: fmt(t('takeDownAsk', 'Take %s down? The slot is free again; its history is kept.'), what) }));
+			app.appendChild(screen);
+			bar([
+				button(t('cancel', 'Cancel'), 'fh-fd-btn--quiet', function () { go('tank'); }),
+				button(t('takeDown', 'Take down'), 'fh-fd-btn--danger', function () {
+					sideAct({ act: 'takedown', tank: tk.number, setup_id: tk.temp.setup.id, via: 'qr' }, function () {
+						state.view = 'tank';
+						render();
+					});
+				})
+			]);
+			return;
+		}
+		if (p.kind === 'moveClear' && p.fields && p.dest) {
+			var names = (p.moving || []).filter(function (o) { return o.status === 'in_qt'; }).map(function (o) { return o.species; });
+			app.appendChild(header(t('move', 'Move'), [(p.dest.title || p.dest.number) + ' · ' + (p.dest.sub || '')]));
+			screen.appendChild(el('p', { class: 'fh-fd-ask', text: fmt(t('moveClearAsk', '%1$s is a CLEAN temporary tank. Moving %2$s into it clears it today — out of quarantine.'), (p.dest.title || '') + ' · ' + p.dest.number, names.join(', ')) }));
+			app.appendChild(screen);
+			bar([
+				button(t('back', 'Back'), 'fh-fd-btn--quiet', function () { go('move', p.back || null); }),
+				button(t('moveAndClear', 'Move and clear'), 'fh-fd-btn--primary', function () { act(p.fields); })
+			]);
+			return;
+		}
+		go('tank');
+	}
+
+	/* The Dose sheet on a tank that is its own water: there is no "whole system" to dose. */
+	function ownWaterDose() {
+		var tk = tank();
+		if (!tk || !tk.ownWater) {
+			return;
+		}
+		var prefix = String(t('wholeSystem', 'Whole system — %s')).split('%')[0];
+		Array.prototype.forEach.call(app.querySelectorAll('.fh-fd-chip'), function (chip) {
+			if (prefix && String(chip.textContent || '').indexOf(prefix) === 0) {
+				chip.hidden = true;
+				chip.style.display = 'none';
+			}
+		});
+	}
+
+	/* The picker's first entry: the day's list. */
+	function todayEntry() {
+		var list = state.screen.todoList;
+		var left = list ? parseInt(list.left, 10) || 0 : 0;
+		var flags = list && list.flags ? list.flags.length : 0;
+		return el('button', {
+			type: 'button',
+			class: 'fh-fd-today-entry' + (list && list.all_done ? ' is-done' : (left > 0 ? ' is-open' : '')),
+			on: { click: function () { go('today'); } }
+		}, [
+			el('span', { class: 'fh-fd-today-entry__title', text: t('today', 'Today') }),
+			el('span', { class: 'fh-fd-today-entry__count', text: todoHeadline(list, i18n) + (flags ? ' · ' + fmt(t('flagsN', '%d copper flags'), flags) : '') }),
+			el('span', { class: 'fh-fd-today__caret', text: '▸' })
+		]);
+	}
+
+	/*
+	 * Everything due today as one list, by water system: a block per
+	 * building (a due step once for the whole system, the feeding as one
+	 * line that opens to the tanks) and a block per temporary tank.
+	 */
+	function renderTodayList() {
+		var list = state.screen.todoList;
+		var tk = tank();
+		app.appendChild(header(t('today', 'Today'), [todoHeadline(list, i18n) + (list && list.date ? ' · ' + list.date : '')]));
+		function tick(fields) {
+			fields.act = 'todo_tick';
+			fields.tank = tk ? tk.number : 0;
+			fields.via = 'qr';
+			sideAct(fields, function () {
+				state.view = 'today';
+				renderKeepingScroll();
+			});
+		}
+
+		if (!list) {
+			app.appendChild(el('div', { class: 'fh-fd-empty', text: t('todoNothing', 'Nothing is due today') }));
+		} else {
+			if (list.flags && list.flags.length) {
+				app.appendChild(el('div', { class: 'fh-fd-flags' }, list.flags.map(function (flag) {
+					return el('span', { class: 'fh-fd-flag' + (flag.low || flag.overdue ? ' is-bad' : ''), text: flagText(flag, i18n) });
+				})));
+			}
+			(list.blocks || []).forEach(function (block) {
+				app.appendChild(todoBlock(block, tick));
+			});
+			if (!(list.blocks || []).length) {
+				app.appendChild(el('div', { class: 'fh-fd-empty', text: t('todoNothing', 'Nothing is due today') }));
+			}
+		}
+
+		app.appendChild(el('div', { class: 'fh-fd-links' }, [
+			tk ? el('button', { type: 'button', text: tankHeading(tk), on: { click: function () { go('tank'); } } }) : null,
+			tk ? el('a', { href: cfg.baseUrl, text: t('allTanks', 'All tanks') }) : el('button', { type: 'button', text: t('allTanks', 'All tanks'), on: { click: function () { go('picker'); } } }),
+			el('a', { href: cfg.boardUrl, text: t('board', 'Room board') }),
+			el('button', { type: 'button', text: t('refresh', 'Refresh'), on: { click: function () {
+				busy(true);
+				post('fishotel_cleanroom_screen', { tank: tk ? tk.number : 0 }).then(function (data) {
+					if (data.screen) {
+						state.screen = data.screen;
+					}
+					renderKeepingScroll();
+				}).catch(failToast).then(function () { busy(false); });
+			} } })
+		]));
+	}
+
+	function todoBlock(block, tick) {
+		var temp = block.type === 'temp';
+		var meta = [];
+		if (temp) {
+			meta.push(block.kind_label);
+			if (block.purpose) {
+				meta.push(block.purpose);
+			}
+			meta.push(t('ownWater', 'its own water') + (block.gallons > 0 ? ' · ' + block.gallons + ' gal' : ''));
+		} else if (block.gallons > 0) {
+			meta.push(block.gallons + ' gal system');
+		}
+		if (block.schedule) {
+			meta.push(block.schedule);
+		}
+		if (block.day_text) {
+			meta.push(block.day_text);
+		}
+		if (temp) {
+			meta.push(block.fish > 0 ? fmt(t('fishN', '%d fish'), block.fish) : t('noFish', 'no fish in it'));
+		} else if (block.tanks > 0) {
+			meta.push(fmt(block.tanks === 1 ? t('tanksOne', '%d tank with fish') : t('tanksMany', '%d tanks with fish'), block.tanks));
+		}
+		var copper = block.copper || {};
+		var cu = '';
+		if (copper.value !== null && typeof copper.value !== 'undefined') {
+			cu = 'Cu ' + plainNumber(copper.value) + (copper.tank ? ' · ' + fmt(t('tankN', 'tank %d'), copper.tank) : '') + (copper.ago ? ' · ' + fmt(t('ago', '%s ago'), copper.ago) : '');
+		}
+		var items = block.items || [];
+		var node = el('div', { class: 'fh-fd-todo-block' + (temp ? ' is-temp' : '') + (items.length && !block.left ? ' is-done' : '') + (!items.length ? ' is-idle' : '') }, [
+			el('div', { class: 'fh-fd-todo-block__head' }, [
+				temp ? el('span', { class: 'fh-fd-badge fh-fd-badge--temp', text: t('temporary', 'Temporary') }) : null,
+				temp && block.url ? el('a', { class: 'fh-fd-todo-block__title', href: block.url, text: block.title }) : el('span', { class: 'fh-fd-todo-block__title', text: block.title }),
+				el('small', { text: meta.join(' · ') }),
+				cu ? el('span', { class: 'fh-fd-copper' + (copper.state ? ' is-' + copper.state : ''), text: cu }) : null
+			])
+		]);
+		if (!items.length) {
+			node.appendChild(el('p', { class: 'fh-fd-muted', text: temp ? t('nothingDueHere', 'Nothing is due on this tank today.') : t('noFishSystem', 'No fish in this system — nothing is due.') }));
+			return node;
+		}
+		items.forEach(function (item) {
+			node.appendChild(todoLine(block, item, tick));
+		});
+		return node;
+	}
+
+	function todoLine(block, item, tick) {
+		var feed = item.scope === 'feed';
+		var detail = lineDetail(item);
+		var body = [
+			el('span', { class: 'fh-fd-todo-line__step', text: (item.done ? '✓ ' : '') + (feed ? feedText(item, i18n) : item.label) }),
+			detail ? el('span', { class: 'fh-fd-todo-line__dose', text: detail }) : null,
+			item.for ? el('span', { class: 'fh-fd-todo-line__for', text: fmt(t('forThe', 'for the %s'), item.for) }) : null,
+			item.note ? el('span', { class: 'fh-fd-todo-line__note', text: item.note }) : null
+		];
+		var line = el('div', { class: 'fh-fd-todo-line' + (item.done ? ' is-done' : '') }, [
+			el('button', {
+				type: 'button',
+				class: 'fh-fd-todo-line__tick',
+				disabled: !!item.done,
+				on: {
+					click: function () {
+						if (item.scope === 'tank') {
+							tick({ scope: 'tank', tick_tank: item.tank, key: item.key, kind: item.kind, label: item.label });
+						} else {
+							tick({ scope: 'system', building: item.building_id, key: item.key, kind: item.kind, label: item.label });
+						}
+					}
+				}
+			}, body)
+		]);
+		if (feed && (item.tanks || []).length > 1) {
+			// The line opens to the tanks: one fed at a time, or all at once with the line itself.
+			var id = block.building_id + ':' + item.key;
+			var open = !!state.openFeeds[id] || (item.left > 0 && item.left < item.count);
+			line.appendChild(el('button', { type: 'button', class: 'fh-fd-todo-line__more', 'aria-expanded': open ? 'true' : 'false', text: t('theTanks', 'the tanks') + ' ' + (open ? '▾' : '▸'), on: { click: function () { state.openFeeds[id] = !open; renderKeepingScroll(); } } }));
+			if (open) {
+				line.appendChild(el('div', { class: 'fh-fd-chips' }, item.tanks.map(function (fed) {
+					return el('button', {
+						type: 'button',
+						class: 'fh-fd-chip fh-fd-chip--todo' + (fed.done ? ' is-done' : ''),
+						disabled: !!fed.done,
+						text: (fed.done ? '✓ ' : '') + fed.number,
+						on: { click: function () { tick({ scope: 'tank', tick_tank: fed.number, key: item.key, kind: 'feed', label: item.label }); } }
+					});
+				})));
+			}
+		}
+		return line;
+	}
+
+	/* ---------------------------------------------------------------- */
 	/*  Boot                                                             */
 	/* ---------------------------------------------------------------- */
+
+	// "?list=1" opens the day's list straight away (the Board's "On the phone" link).
+	if (/[?&]list=1(&|$)/.test(String(root.location && root.location.search || ''))) {
+		state.view = 'today';
+	}
 
 	render();
 })(typeof window !== 'undefined' ? window : globalThis);

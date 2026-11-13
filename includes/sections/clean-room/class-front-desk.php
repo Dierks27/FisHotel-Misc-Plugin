@@ -24,6 +24,15 @@
  *   one write without an undo; with the sheet's sum it carries the working
  *   as its note and, for the copper product, logs the "Now" reading too —
  *   Dose), tick (a to-do item done), undo, alias.
+ * Temporary tanks (Temp_Tanks) ride on the same action: setup (a slot is
+ * set up — from the picker, or from a free slot's own label),
+ * setup_edit, setup_steps (its own schedule, for this tank alone),
+ * takedown, and todo_tick (one line of the day's list by water system —
+ * Todo — ticked for a whole building or for one tank); those need no tank
+ * on the page. An arrival goes into a Spa tank or a QUARANTINE temporary
+ * tank; a move never lands in a slot with nothing set up; a dose on a
+ * temporary tank is that tank's own water whatever the sheet posted.
+ *
  * The reply carries the refreshed tank screen so the page re-renders
  * without a reload, and the ids of the stay events just written so the
  * toast (kept until the next action, at least Settings::UNDO_SECONDS) can
@@ -89,7 +98,7 @@ class Front_Desk {
 	 *
 	 * @var string[]
 	 */
-	const MOVE_REASONS = array( 'clear_building', 'bullying', 'pairing', 'other' );
+	const MOVE_REASONS = array( 'clear_building', 'bullying', 'pairing', 'hospital', 'other' );
 
 	/**
 	 * Register hooks. The AJAX hooks are registered on every request
@@ -190,7 +199,9 @@ class Front_Desk {
 		nocache_headers();
 
 		if ( ! is_user_logged_in() ) {
-			wp_safe_redirect( wp_login_url( Clean_Room::front_desk_url( $tank_number ) ) );
+			// After the login: the same screen — the day's list when that was asked for.
+			$back = Clean_Room::front_desk_url( $tank_number ) . ( isset( $_GET['list'] ) && '1' === $_GET['list'] ? '&list=1' : '' ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput -- compared, never used.
+			wp_safe_redirect( wp_login_url( $back ) );
 			exit;
 		}
 
@@ -215,12 +226,13 @@ class Front_Desk {
 			'baseUrl'  => Clean_Room::front_desk_url( 0 ),
 			'boardUrl' => admin_url( 'admin.php?page=' . Clean_Room::MENU_SLUG ),
 			'view'     => isset( $_GET['calc'] ) && '1' === $_GET['calc'] ? 'calc' : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended,WordPress.Security.ValidatedSanitizedInput -- a read-only page switch, compared with a literal.
-			'i18n'     => self::i18n(),
+			'i18n'     => array_merge( self::i18n(), self::temp_i18n() ),
 		);
 
-		$css = (string) file_get_contents( Clean_Room::path() . 'css/front-desk.css' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- our own file, inlined so the page makes no further requests.
+		$css  = (string) file_get_contents( Clean_Room::path() . 'css/front-desk.css' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- our own file, inlined so the page makes no further requests.
+		$css .= "\n" . (string) file_get_contents( Clean_Room::path() . 'css/front-desk-temp.css' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- the temporary tanks and the day's list, inlined the same way.
 		// The dose maths first: front-desk.js reads it from the global.
-		$js = (string) file_get_contents( Clean_Room::path() . 'js/dose-math.js' ) . "\n" . (string) file_get_contents( Clean_Room::path() . 'js/front-desk.js' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+		$js  = (string) file_get_contents( Clean_Room::path() . 'js/dose-math.js' ) . "\n" . (string) file_get_contents( Clean_Room::path() . 'js/front-desk.js' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
 
 		include Clean_Room::path() . 'views/front-desk.php';
 		exit;
@@ -373,6 +385,102 @@ class Front_Desk {
 		);
 	}
 
+	/**
+	 * The strings of the temporary tanks' screens and of the day's list
+	 * (merged into i18n() for the page).
+	 *
+	 * @return array<string, string>
+	 */
+	public static function temp_i18n() {
+		return array(
+			'tempNothing'        => __( 'Nothing is set up here.', 'fishotel-misc-plugin' ),
+			'setUp'              => __( 'Set up', 'fishotel-misc-plugin' ),
+			'setUpTitle'         => __( 'Set up a temporary tank', 'fishotel-misc-plugin' ),
+			'setItUp'            => __( 'Set it up', 'fishotel-misc-plugin' ),
+			'slotsFull'          => __( 'Every temporary slot is in use. Take one down, or add a slot in Settings → Layout.', 'fishotel-misc-plugin' ),
+			'tempSlot'           => __( 'Slot', 'fishotel-misc-plugin' ),
+			'tempName'           => __( 'Name', 'fishotel-misc-plugin' ),
+			'tempNameHint'       => __( 'Hospital 1', 'fishotel-misc-plugin' ),
+			'whatFor'            => __( 'What is it for?', 'fishotel-misc-plugin' ),
+			'somethingElse'      => __( 'Something else', 'fishotel-misc-plugin' ),
+			'whatForHint'        => __( 'in a few words', 'fishotel-misc-plugin' ),
+			'tempKind'           => __( 'What kind of tank?', 'fishotel-misc-plugin' ),
+			'kindQuarantine'     => __( 'Quarantine', 'fishotel-misc-plugin' ),
+			'kindQuarantineHint' => __( 'for fish still in quarantine or under treatment', 'fishotel-misc-plugin' ),
+			'kindClean'          => __( 'Clean', 'fishotel-misc-plugin' ),
+			'kindCleanHint'      => __( 'for fish that are already cleared', 'fishotel-misc-plugin' ),
+			'gallons'            => __( 'Gallons', 'fishotel-misc-plugin' ),
+			'treatment'          => __( 'Treatment', 'fishotel-misc-plugin' ),
+			'noTreatment'        => __( 'No treatment, just watching', 'fishotel-misc-plugin' ),
+			/* translators: %s: what the tank is for */
+			'usedForThis'        => __( 'Used for %s:', 'fishotel-misc-plugin' ),
+			/* translators: %s: what the tank is for */
+			'noneForTag'         => __( 'No schedule is marked "%s" yet — pick any one, or no treatment.', 'fishotel-misc-plugin' ),
+			'whatItDoes'         => __( 'What it does — nothing is saved yet:', 'fishotel-misc-plugin' ),
+			'justFeeding'        => __( 'Only the daily feeding, while fish are in it.', 'fishotel-misc-plugin' ),
+			'feedingToo'         => __( 'plus the daily feeding', 'fishotel-misc-plugin' ),
+			'startDate'          => __( 'Treatment starts (day 1)', 'fishotel-misc-plugin' ),
+			'takeDown'           => __( 'Take down', 'fishotel-misc-plugin' ),
+			/* translators: %s: what is set up (its name, or the slot) */
+			'takeDownAsk'        => __( 'Take %s down? The slot is free again; its history is kept.', 'fishotel-misc-plugin' ),
+			'takeDownFish'       => __( 'Move the fish out first — then it can be taken down.', 'fishotel-misc-plugin' ),
+			'scheduleEdit'       => __( 'Schedule', 'fishotel-misc-plugin' ),
+			'thisTankOnly'       => __( 'This tank\'s own schedule: changes here are for this tank only — the template stays as it is. Day 1 is the treatment start.', 'fishotel-misc-plugin' ),
+			'addStep'            => __( 'Add a step', 'fishotel-misc-plugin' ),
+			'stepName'           => __( 'Step', 'fishotel-misc-plugin' ),
+			'stepDay'            => __( 'Day', 'fishotel-misc-plugin' ),
+			'removeStep'         => __( 'Remove', 'fishotel-misc-plugin' ),
+			'earlier'            => __( '−1 day', 'fishotel-misc-plugin' ),
+			'later'              => __( '+1 day', 'fishotel-misc-plugin' ),
+			'kindDose'           => __( 'dose', 'fishotel-misc-plugin' ),
+			'kindTest'           => __( 'test', 'fishotel-misc-plugin' ),
+			'kindWater'          => __( 'water change', 'fishotel-misc-plugin' ),
+			'kindOther'          => __( 'other', 'fishotel-misc-plugin' ),
+			'hospital'           => __( 'Hospital', 'fishotel-misc-plugin' ),
+			'moveClearsHint'     => __( 'Still in quarantine: a move into the Clean Room — or into a clean temporary tank — clears the group today.', 'fishotel-misc-plugin' ),
+			/* translators: 1: the temporary tank, 2: the group(s) */
+			'moveClearAsk'       => __( '%1$s is a CLEAN temporary tank. Moving %2$s into it clears it today — out of quarantine.', 'fishotel-misc-plugin' ),
+			'moveAndClear'       => __( 'Move and clear', 'fishotel-misc-plugin' ),
+			'todayList'          => __( 'Today\'s list', 'fishotel-misc-plugin' ),
+			/* translators: %d: things left */
+			'todoLeft'           => __( '%d things left to do', 'fishotel-misc-plugin' ),
+			/* translators: %d: things left (one) */
+			'todoLeftOne'        => __( '%d thing left to do', 'fishotel-misc-plugin' ),
+			'todoAllDone'        => __( 'All done', 'fishotel-misc-plugin' ),
+			'todoNothing'        => __( 'Nothing is due today', 'fishotel-misc-plugin' ),
+			/* translators: 1: the feeding step, 2: number of tanks (one) */
+			'feedOne'            => __( '%1$s — %2$d tank with fish', 'fishotel-misc-plugin' ),
+			/* translators: 1: the feeding step, 2: number of tanks */
+			'feedMany'           => __( '%1$s — %2$d tanks with fish', 'fishotel-misc-plugin' ),
+			/* translators: %d: tanks still to feed */
+			'leftN'              => __( '%d left', 'fishotel-misc-plugin' ),
+			'theTanks'           => __( 'the tanks', 'fishotel-misc-plugin' ),
+			/* translators: %s: "day 2 group" */
+			'forThe'             => __( 'for the %s', 'fishotel-misc-plugin' ),
+			/* translators: %s: reading */
+			'flagLow'            => __( 'Cu %s — below the floor', 'fishotel-misc-plugin' ),
+			'flagDue'            => __( 'copper reading due', 'fishotel-misc-plugin' ),
+			'flagOverdue'        => __( 'copper reading overdue', 'fishotel-misc-plugin' ),
+			'flagNone'           => __( 'no reading yet', 'fishotel-misc-plugin' ),
+			/* translators: 1: reading, 2: age */
+			'flagLast'           => __( 'last one %1$s, %2$s ago', 'fishotel-misc-plugin' ),
+			/* translators: %d: copper flags */
+			'flagsN'             => __( '%d copper flags', 'fishotel-misc-plugin' ),
+			'temporary'          => __( 'Temporary', 'fishotel-misc-plugin' ),
+			/* translators: %d: fish */
+			'fishN'              => __( '%d fish', 'fishotel-misc-plugin' ),
+			'noFish'             => __( 'no fish in it', 'fishotel-misc-plugin' ),
+			/* translators: %d: tanks (one) */
+			'tanksOne'           => __( '%d tank with fish', 'fishotel-misc-plugin' ),
+			/* translators: %d: tanks */
+			'tanksMany'          => __( '%d tanks with fish', 'fishotel-misc-plugin' ),
+			/* translators: %d: tank number */
+			'tankN'              => __( 'tank %d', 'fishotel-misc-plugin' ),
+			'nothingDueHere'     => __( 'Nothing is due on this tank today.', 'fishotel-misc-plugin' ),
+			'noFishSystem'       => __( 'No fish in this system — nothing is due.', 'fishotel-misc-plugin' ),
+		);
+	}
+
 	/* ============================================================== */
 	/*  Screen data                                                    */
 	/* ============================================================== */
@@ -380,33 +488,48 @@ class Front_Desk {
 	/**
 	 * Everything the page needs for one tank (or, without a tank, for the
 	 * tank picker): the tank with its occupants, its to-do and its last
-	 * copper reading, the destination grid, the Spa tanks for a check-in,
-	 * the recent species, the standard sizes (the Arrival sheet's dropdown),
-	 * the medications offered (the Dose sheet's and the Calculator's — they
-	 * need no tank), the settings the JS honours. The tank carries `dose`:
-	 * what the Dose sheet starts with for the whole system and for this tank
-	 * alone (Dose::sheet_data()).
+	 * copper reading, the destination grid, the tanks a check-in may go
+	 * into, the recent species, the standard sizes (the Arrival sheet's
+	 * dropdown), the medications offered (the Dose sheet's and the
+	 * Calculator's — they need no tank), the day's list by water system
+	 * (todoList), what the "Set up a temporary tank" sheet offers (temp),
+	 * the settings the JS honours. The tank carries `dose`: what the Dose
+	 * sheet starts with for the whole system and for this tank alone
+	 * (Dose::sheet_data()) — a temporary tank has its own water only.
 	 *
 	 * @param int $tank_number Tank number (0 = picker).
 	 * @return array
 	 */
 	public static function screen_data( $tank_number ) {
-		$store       = new Store();
-		$settings    = Settings::get();
-		$today       = Clean_Room::today();
+		return self::screen_from( new Store(), (int) $tank_number, Settings::get(), Clean_Room::today(), Store::tables_exist() );
+	}
+
+	/**
+	 * screen_data() against a given store (the tests' stand-in runs it too).
+	 *
+	 * @param object $store       Store or stand-in.
+	 * @param int    $tank_number Tank number (0 = picker).
+	 * @param array  $settings    Settings.
+	 * @param string $today       Site date.
+	 * @param bool   $tables_ok   Whether the tables exist.
+	 * @return array
+	 */
+	public static function screen_from( $store, $tank_number, array $settings, $today, $tables_ok = true ) {
 		$medications = Medications::from_settings( $settings );
 
 		$data = array(
 			'today'       => $today,
 			'saleDateMin' => Replay::SALE_DATE_MIN,
 			'saleDateMax' => Replay::sale_date_max( $today ),
-			'tablesOk'    => Store::tables_exist(),
+			'tablesOk'    => (bool) $tables_ok,
 			'tank'        => null,
 			'grid'        => array(),
 			'spaTanks'    => array(),
 			'recent'      => array(),
 			'sizes'       => array(),
 			'medications' => self::medications( $medications ),
+			'todoList'    => null,
+			'temp'        => null,
 			'settings'    => array(
 				'autoConfirmSeconds' => (int) $settings['auto_confirm_seconds'],
 				'voiceEnabled'       => ! empty( $settings['voice_enabled'] ),
@@ -422,7 +545,8 @@ class Front_Desk {
 		}
 
 		$protocols = Settings::protocols();
-		$tanks     = $store->tanks_with_occupants( $today, $settings, $protocols );
+		$room      = $store->room( $today, $settings, $protocols );
+		$tanks     = $room['tanks'];
 		$buildings = $store->buildings();
 		$current   = null;
 		foreach ( $tanks as $tank ) {
@@ -436,6 +560,8 @@ class Front_Desk {
 		$data['spaTanks'] = self::spa_tanks( $tanks );
 		$data['recent']   = $store->recent_species( 10 );
 		$data['sizes']    = Sizes::standard( $store, $settings )['sizes'];
+		$data['todoList'] = is_array( $room['todo'] ) ? self::todo_screen( $room['todo'] ) : null;
+		$data['temp']     = self::temp_sheet( $tanks, $protocols, $today );
 
 		if ( ! $current ) {
 			return $data;
@@ -466,32 +592,155 @@ class Front_Desk {
 		}
 		$gallons = Layout::system_gallons( $building_row ? $building_row : $current['building'], $tanks );
 
+		// A temporary tank is its own water: no system, the setup's own
+		// gallons and schedule — and it behaves as what it was set up as.
+		$slot         = Layout::is_slot( $current );
+		$setup        = $slot && ! empty( $current['setup'] ) ? (array) $current['setup'] : null;
+		$tank_gallons = $slot ? (int) ( $setup['gallons'] ?? 0 ) : (int) $current['gallons'];
+
 		$data['tank'] = array(
 			'id'          => (int) $current['id'],
 			'number'      => (int) $current['number'],
-			'title'       => Layout::tank_title( $current, $current['building'], $current['shares_with'] ),
+			'title'       => $slot ? Temp_Tanks::title( $current, $today ) : Layout::tank_title( $current, $current['building'], $current['shares_with'] ),
 			'path'        => $current['path'],
 			'sizeLabel'   => (string) $current['size_label'],
-			'gallons'     => (int) $current['gallons'],
-			'area'        => (string) $current['building']['area'],
+			'gallons'     => $tank_gallons,
+			'area'        => Temp_Tanks::effective_area( $current ),
 			'areaLabel'   => Layout::area_label( $current['building']['area'] ),
 			'building'    => Layout::building_label( $current['building'] ),
 			'buildingId'  => (int) $current['building_id'],
-			'isSpa'       => 'spa' === (string) $current['building']['area'],
+			'isSpa'       => 'spa' === Temp_Tanks::effective_area( $current ),
+			'ownWater'    => $slot,
 			'sharesWith'  => $current['shares_with'],
 			'system'      => array(
 				'gallons'  => $gallons,
 				'label'    => Layout::system_label( $gallons ),
-				'schedule' => Protocol::template_for( $building_row ? $building_row : array(), $protocols ),
+				'schedule' => $slot ? ( $setup ? Temp_Tanks::schedule_label( $setup ) : '' ) : Protocol::template_for( $building_row ? $building_row : array(), $protocols ),
 			),
 			'dose'        => Dose::sheet_data( Medications::active( $medications ), Dose::waters( $store, $current, $today, $settings, $protocols ), $settings, $medications ),
 			'occupants'   => $occupants,
 			'todo'        => array_values( (array) $current['todo'] ),
 			'copper'      => $copper,
 			'url'         => Clean_Room::front_desk_url( (int) $current['number'] ),
+			'temp'        => $slot ? self::slot_screen( $current, $today ) : null,
 		);
 
 		return $data;
+	}
+
+	/**
+	 * What the page knows about a slot: its name ("TEMP 1"), whether it is
+	 * free, and — when something is set up in it — the setup with its own
+	 * steps, each with the days it falls on.
+	 *
+	 * @param array  $tank  Hydrated slot with its occupants.
+	 * @param string $today Site date.
+	 * @return array
+	 */
+	public static function slot_screen( array $tank, $today ) {
+		$setup = ! empty( $tank['setup'] ) ? (array) $tank['setup'] : null;
+		$out   = array(
+			'slot'  => Layout::slot_of( $tank ),
+			'label' => Layout::slot_name( Layout::slot_of( $tank ) ),
+			'free'  => null === $setup,
+			'setup' => null,
+		);
+		if ( ! $setup ) {
+			return $out;
+		}
+
+		$steps = array();
+		foreach ( (array) $setup['steps'] as $index => $step ) {
+			$steps[] = array(
+				'index' => (int) $index,
+				'label' => (string) $step['label'],
+				'kind'  => (string) $step['kind'],
+				'day'   => (int) $step['day'],
+				'when'  => 'feed' === (string) $step['kind'] ? __( 'daily', 'fishotel-misc-plugin' ) : Temp_Tanks::when_text( $step ),
+				'note'  => (string) $step['note'],
+			);
+		}
+
+		$out['setup'] = array(
+			'id'        => (int) $setup['id'],
+			'name'      => (string) $setup['name'],
+			'purpose'   => (string) $setup['purpose'],
+			'kind'      => (string) $setup['kind'],
+			'kindLabel' => Temp_Tanks::kind_label( $setup['kind'] ),
+			'gallons'   => (int) $setup['gallons'],
+			'schedule'  => Temp_Tanks::schedule_label( $setup ),
+			'startDate' => (string) $setup['start_date'],
+			'day'       => Temp_Tanks::day( $setup, $today ),
+			'dayText'   => Temp_Tanks::day_text( $setup, $today ),
+			'note'      => (string) $setup['note'],
+			'steps'     => $steps,
+			'seen'      => Temp_Tanks::seen( $setup ),
+			'empty'     => empty( $tank['occupants'] ),
+		);
+
+		return $out;
+	}
+
+	/**
+	 * What the "Set up a temporary tank" sheet offers: the free slots, the
+	 * "what is it for" tags that exist, and every treatment template with
+	 * the tags it carries and what it does (which medications, on which
+	 * days) — shown before anything is saved.
+	 *
+	 * @param array[] $tanks     Hydrated tanks.
+	 * @param array   $protocols Settings::protocols().
+	 * @param string  $today     Site date.
+	 * @return array
+	 */
+	public static function temp_sheet( array $tanks, array $protocols, $today ) {
+		$map  = Temp_Tanks::tags( $protocols );
+		$free = array();
+		foreach ( Temp_Tanks::free_slots( $tanks ) as $tank ) {
+			$free[] = array(
+				'number' => (int) $tank['number'],
+				'label'  => Layout::tank_label( $tank ),
+				'url'    => Clean_Room::front_desk_url( (int) $tank['number'] ),
+			);
+		}
+		$templates = array();
+		foreach ( (array) $protocols['templates'] as $name => $steps ) {
+			$templates[] = array(
+				'name'    => (string) $name,
+				'tags'    => isset( $map[ (string) $name ] ) ? $map[ (string) $name ] : array(),
+				'preview' => Temp_Tanks::preview( (array) $steps ),
+			);
+		}
+
+		return array(
+			'slots'     => count( Temp_Tanks::slots( $tanks ) ),
+			'free'      => $free,
+			'tags'      => Temp_Tanks::all_tags( $map ),
+			'templates' => $templates,
+			'startMin'  => Replay::add_days( $today, -Temp_Tanks::START_BACK ),
+			'startMax'  => Replay::add_days( $today, Temp_Tanks::START_AHEAD ),
+		);
+	}
+
+	/**
+	 * The day's list as the page shows it: Todo::build() with the age of
+	 * every copper reading in words.
+	 *
+	 * @param array $list Todo::build().
+	 * @return array
+	 */
+	public static function todo_screen( array $list ) {
+		$ago = static function ( $logged_at ) {
+			return '' !== (string) $logged_at ? self::relative_age( max( 0, time() - (int) strtotime( $logged_at . ' UTC' ) ) ) : '';
+		};
+		foreach ( $list['blocks'] as $b => $block ) {
+			$list['blocks'][ $b ]['copper']['ago'] = $ago( $block['copper']['logged_at'] );
+			$list['blocks'][ $b ]['url']           = 'temp' === $block['type'] ? Clean_Room::front_desk_url( (int) $block['number'] ) : '';
+		}
+		foreach ( $list['flags'] as $f => $flag ) {
+			$list['flags'][ $f ]['ago'] = $ago( $flag['logged_at'] );
+		}
+		$list['text'] = Todo::headline( $list );
+		return $list;
 	}
 
 	/**
@@ -581,7 +830,11 @@ class Front_Desk {
 
 	/**
 	 * The destination grid: area → buildings → tanks, empty tanks first,
-	 * the current tank flagged, buildings with a stay in QT flagged.
+	 * the current tank flagged, buildings with a stay in QT flagged. The
+	 * temporary tanks are a group of their own: each slot says what it is
+	 * called ('title'), what is set up in it ('sub'), whether it is free
+	 * and whether it is a clean tank — a move of a quarantine group into
+	 * a clean one clears it.
 	 *
 	 * @param array[] $buildings Buildings.
 	 * @param array[] $tanks     Tanks with occupants.
@@ -607,6 +860,8 @@ class Front_Desk {
 						continue;
 					}
 					$in_qt += (int) ( $tank['in_qt'] ?? 0 );
+					$slot   = Layout::is_slot( $tank );
+					$setup  = $slot && ! empty( $tank['setup'] ) ? (array) $tank['setup'] : null;
 					$list[] = array(
 						'id'        => (int) $tank['id'],
 						'number'    => (int) $tank['number'],
@@ -616,6 +871,11 @@ class Front_Desk {
 						'count'     => count( (array) ( $tank['occupants'] ?? array() ) ),
 						'current'   => (int) $tank['number'] === (int) $current,
 						'url'       => Clean_Room::front_desk_url( (int) $tank['number'] ),
+						'temp'      => $slot,
+						'free'      => $slot && null === $setup,
+						'clean'     => 'clean' === Temp_Tanks::effective_area( $tank ),
+						'title'     => $slot ? Layout::slot_name( Layout::slot_of( $tank ) ) : '',
+						'sub'       => $setup ? trim( ( '' !== trim( (string) $setup['name'] ) ? trim( (string) $setup['name'] ) . ' · ' : '' ) . strtolower( Temp_Tanks::kind_label( $setup['kind'] ) ) ) : '',
 					);
 				}
 				usort(
@@ -633,6 +893,7 @@ class Front_Desk {
 					'label'  => $entry['label'],
 					'status' => (string) $building['status'],
 					'inQt'   => $in_qt,
+					'temp'   => Layout::is_own_water( $building ),
 					'tanks'  => $list,
 				);
 			}
@@ -643,7 +904,8 @@ class Front_Desk {
 	}
 
 	/**
-	 * The Spa tanks a check-in may go into, empty ones first.
+	 * The tanks a check-in may go into — the Spa tanks and any QUARANTINE
+	 * temporary tank ('title' names it: "TEMP 1") —, empty ones first.
 	 *
 	 * @param array[] $tanks Tanks with occupants.
 	 * @return array[]
@@ -651,16 +913,20 @@ class Front_Desk {
 	public static function spa_tanks( array $tanks ) {
 		$out = array();
 		foreach ( $tanks as $tank ) {
-			if ( 'spa' !== (string) $tank['building']['area'] || 'offline' === $tank['status'] || 'offline' === (string) $tank['building']['status'] ) {
+			if ( ! Temp_Tanks::takes_arrivals( $tank ) ) {
 				continue;
 			}
-			$out[] = array(
+			$entry = array(
 				'number'    => (int) $tank['number'],
 				'label'     => Layout::building_label( $tank['building'] ),
 				'sizeLabel' => (string) $tank['size_label'],
 				'empty'     => empty( $tank['occupants'] ),
 				'count'     => count( (array) $tank['occupants'] ),
 			);
+			if ( Layout::is_slot( $tank ) ) {
+				$entry['title'] = Layout::slot_name( Layout::slot_of( $tank ) );
+			}
+			$out[] = $entry;
 		}
 		usort(
 			$out,
@@ -745,7 +1011,7 @@ class Front_Desk {
 		$today    = Clean_Room::today();
 		$tank     = $tankn > 0 ? $store->tank_by_number( $tankn ) : null;
 
-		if ( ! in_array( $act, array( 'undo', 'alias' ), true ) && ( ! $tank || 'offline' === $tank['status'] ) ) {
+		if ( ! in_array( $act, array( 'undo', 'alias' ), true ) && ! in_array( $act, Temp_Tanks::ACTS, true ) && ( ! $tank || 'offline' === $tank['status'] ) ) {
 			wp_send_json_error( array( 'message' => __( 'That tank is not in the layout.', 'fishotel-misc-plugin' ) ), 400 );
 		}
 
@@ -798,6 +1064,12 @@ class Front_Desk {
 	 * @return array message, event_ids, tank (optional) — or error.
 	 */
 	public static function perform( $act, array $ctx, array $raw ) {
+		// A slot with nothing set up is a place, not a tank: nothing is logged on it.
+		$refused = Temp_Tanks::free_slot_error( (string) $act, $ctx['tank'] ?? null );
+		if ( '' !== $refused ) {
+			return array( 'error' => $refused );
+		}
+
 		try {
 			switch ( (string) $act ) {
 				case 'arrival':
@@ -832,7 +1104,8 @@ class Front_Desk {
 					$result = self::act_copper( $ctx, $raw );
 					break;
 				case 'dose':
-					$result = self::act_dose( $ctx, $raw );
+					// A temporary tank is its own water: never "the whole system".
+					$result = self::act_dose( $ctx, Temp_Tanks::own_water_dose( $ctx['tank'] ?? null, $raw ) );
 					break;
 				case 'tick':
 					$result = self::act_tick( $ctx, $raw );
@@ -844,7 +1117,11 @@ class Front_Desk {
 					$result = self::act_alias( $ctx, $raw );
 					break;
 				default:
-					$result = array( 'error' => __( 'Unknown action.', 'fishotel-misc-plugin' ) );
+					// Temporary tanks and the day's list (Temp_Tanks::ACTS).
+					$result = Temp_Tanks::perform( (string) $act, $ctx, $raw );
+					if ( null === $result ) {
+						$result = array( 'error' => __( 'Unknown action.', 'fishotel-misc-plugin' ) );
+					}
 			}
 		} catch ( \Throwable $e ) {
 			$result = array( 'error' => $e->getMessage() );
@@ -884,7 +1161,9 @@ class Front_Desk {
 	}
 
 	/**
-	 * Arrival — always into a Spa tank. The payload may name a Spa tank
+	 * Arrival — always into a Spa tank, or a QUARANTINE temporary tank
+	 * (never a clean one, never a slot with nothing set up). The payload
+	 * may name such a tank
 	 * (`to_tank`) when the page's tank is not one, a `size` (the slug of a
 	 * standard size; one that is not in the list is refused), and
 	 * `unknown` — the "Unknown fish (??)" choice: the group is checked in
@@ -898,7 +1177,7 @@ class Front_Desk {
 		if ( $into > 0 && $into !== (int) $tank['number'] ) {
 			$tank = $store->tank_by_number( $into );
 		}
-		if ( ! $tank || 'offline' === $tank['status'] || 'spa' !== (string) $tank['building']['area'] ) {
+		if ( ! Temp_Tanks::takes_arrivals( $tank ) ) {
 			return array( 'error' => __( 'Arrivals go into a Spa tank. Pick one.', 'fishotel-misc-plugin' ) );
 		}
 
@@ -1088,7 +1367,10 @@ class Front_Desk {
 	 * Move: one stay or all, to a tank, with an optional reason (clear
 	 * building / bullying / pairing / other, kept in the event's note); a
 	 * quantity smaller than the group splits it. A move from the Spa into
-	 * a Clean Room tank clears the stay (Replay).
+	 * a Clean Room tank clears the stay (Replay) — and so does a move from
+	 * the Spa or a quarantine temporary tank into a CLEAN temporary tank,
+	 * or out of a quarantine temporary tank into the Clean Room. A slot
+	 * with nothing set up takes no fish.
 	 */
 	private static function act_move( array $ctx, array $raw ) {
 		$store = $ctx['store'];
@@ -1099,6 +1381,10 @@ class Front_Desk {
 		}
 		if ( (int) $to['id'] === (int) $tank['id'] ) {
 			return array( 'error' => __( 'That is this tank.', 'fishotel-misc-plugin' ) );
+		}
+		$refused = Temp_Tanks::destination_error( $to );
+		if ( '' !== $refused ) {
+			return array( 'error' => $refused );
 		}
 
 		$stays = self::targets( $ctx, $raw, true );
@@ -1553,7 +1839,7 @@ class Front_Desk {
 	 * the item key (Protocol::todo() reads it back the same day).
 	 */
 	private static function act_tick( array $ctx, array $raw ) {
-		$key  = Protocol::tick_key( self::text( $raw, 'key', 160 ) );
+		$key  = Todo::posted_key( $raw['key'] ?? '' ); // A "<" in a step's name comes back as typed.
 		$kind = isset( $raw['kind'] ) ? sanitize_key( $raw['kind'] ) : 'other';
 		$kind = in_array( $kind, Store::LOG_KINDS, true ) ? $kind : 'other';
 		if ( '' === $key ) {
@@ -1676,14 +1962,15 @@ class Front_Desk {
 	private static function parser_tanks( Store $store ) {
 		$tanks = array();
 		foreach ( $store->tanks( false ) as $tank ) {
-			if ( 'offline' === (string) $tank['building']['status'] ) {
-				continue;
+			if ( 'offline' === (string) $tank['building']['status'] || Temp_Tanks::is_free( $tank ) ) {
+				continue; // A slot with nothing set up is no tank to speak of.
 			}
 			$tanks[] = array(
 				'id'       => (int) $tank['id'],
 				'number'   => (int) $tank['number'],
 				'building' => (int) $tank['building']['number'],
-				'area'     => (string) $tank['building']['area'],
+				// What it behaves as: a quarantine temporary tank takes arrivals like the Spa.
+				'area'     => Temp_Tanks::effective_area( $tank ),
 				'level'    => (int) $tank['level'],
 				'position' => (int) $tank['position'],
 				'status'   => (string) $tank['status'],
@@ -1817,8 +2104,8 @@ class Front_Desk {
 			$number = (int) ( $preview['tank'] ?? 0 );
 		}
 		$tank = $number > 0 ? $store->tank_by_number( $number ) : null;
-		if ( ! $tank || 'offline' === (string) $tank['status'] ) {
-			return $preview;
+		if ( ! $tank || 'offline' === (string) $tank['status'] || Temp_Tanks::is_free( $tank ) ) {
+			return $preview; // No such tank, a dry one, or a slot with nothing set up: no water to dose.
 		}
 		if ( (int) $forced_tank > 0 ) {
 			$preview['tank']       = $number;

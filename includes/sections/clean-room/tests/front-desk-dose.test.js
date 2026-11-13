@@ -90,6 +90,11 @@ El.prototype.addEventListener = function ( type, fn ) {
 	( this.listeners[ type ] = this.listeners[ type ] || [] ).push( fn );
 };
 El.prototype.focus = function () {};
+/* '.one-class' only — what the page asks for. */
+El.prototype.querySelectorAll = function ( selector ) {
+	var cls = String( selector ).replace( /^\./, '' );
+	return find( this, function ( n ) { return -1 !== ( ' ' + n.className + ' ' ).indexOf( ' ' + cls + ' ' ); } );
+};
 
 function find( node, test, out ) {
 	out = out || [];
@@ -659,6 +664,44 @@ async function run() {
 	page.tap( 'Save' );
 	await later( function () {} );
 	check( '…another medication dosed to a level has no reading to log: nothing is promised and nothing posted', 0 === result( page ).indexOf( 'Nothing to add' ) && -1 === page.text().indexOf( 'copper reading' ) && 0 === page.posts.length && -1 !== shown( page.toast ).indexOf( 'Nothing to add' ) );
+
+	console.log( '10. A temporary tank: its own water only; the picker with the day\'s list and the Calculator' );
+	// TEMP 1 · 901: 10 gallons, its own schedule on day 2 ("Copper Power to 2.4"), 2.16 read today.
+	var temp = screen( true );
+	temp.todoList = { date: '2026-11-12', left: 0, total: 0, blocks: [], flags: [], text: 'Tanks: nothing is due today' };
+	temp.temp = { slots: 6, free: [], tags: [], templates: [], startMin: '2025-11-12', startMax: '2027-01-11' };
+	temp.tank.number = 901;
+	temp.tank.title = 'TEMP 1 · 901 · Hospital';
+	temp.tank.building = 'Temporary';
+	temp.tank.gallons = 10;
+	temp.tank.ownWater = true;
+	temp.tank.isSpa = true;
+	temp.tank.sharesWith = [];
+	temp.tank.system = { gallons: 0, label: '', schedule: '14 Day CM' };
+	temp.tank.temp = { slot: 1, label: 'TEMP 1', free: false, setup: { id: 3, name: 'Hospital', purpose: '', kind: 'quarantine', kindLabel: 'Quarantine', gallons: 10, schedule: '14 Day CM', startDate: '2026-11-11', day: 2, dayText: 'day 2', note: '', steps: [], seen: 'x', empty: false } };
+	temp.tank.dose = {
+		system: water( 0, null, { now: null, nowAt: '', target: 2.5, targetFrom: 'settings', rate: null, rateFrom: '', options: [] }, { now: null, nowAt: '', target: null, targetFrom: '', rate: 10, rateFrom: '', options: [] } ),
+		tank: water( 10, { value: 2.16, at: '09:14' }, { now: 2.16, nowAt: '09:14', target: 2.4, targetFrom: 'schedule', rate: null, rateFrom: '', options: [ { value: 2.4, label: 'Copper Power to 2.4', day: 2 } ] }, { now: null, nowAt: '', target: null, targetFrom: '', rate: 10, rateFrom: '', options: [] } )
+	};
+	page = start( { screen: temp } );
+	check( 'a temporary tank\'s screen is named by its slot and still offers the Dose entry', -1 !== page.text().indexOf( 'TEMP 1 · 901' ) && !! page.button( 'Dose +' ), page.text().slice( 0, 300 ) );
+	page.tap( 'Dose +' );
+	check( 'the Dose sheet offers this tank only — "Whole system" is not shown — with the setup\'s gallons', '' === shown( page.button( 'Whole system' ) ) && -1 !== page.button( 'This tank only' ).className.indexOf( 'is-on' ) && -1 !== shown( page.button( 'This tank only' ) ).indexOf( '901 · 10 gal' ), page.text() );
+	page.tap( 'Copper' );
+	check( 'the sum runs on its own water: today\'s reading there, its own schedule\'s level, 10 gallons — and the chip stays hidden', '2.16' === page.input( 'fh-fd-now' ).value && '2.4' === page.input( 'fh-fd-target' ).value && 'Add 1.7 ml Copper Power 10 gal × 0.24 ppm × 0.692' === result( page ) && '' === shown( page.button( 'Whole system' ) ), result( page ) );
+	page.tap( 'Save' );
+	await later( function () {} );
+	check( 'Save posts the dose for this tank, not the system', 1 === page.posts.length && 'dose' === page.posts[0].act && '901' === page.posts[0].tank && '0' === page.posts[0].whole && '1.7' === page.posts[0].amount && '1' === page.posts[0].calc, JSON.stringify( page.posts ) );
+
+	var pick = screen( false );
+	pick.todoList = temp.todoList;
+	pick.temp = temp.temp;
+	page = start( { screen: pick } );
+	check( 'the tank picker has the day\'s list first and the Calculator among its links', -1 !== page.text().indexOf( 'Today' ) && !! page.button( 'Calculator' ), page.text().slice( 0, 300 ) );
+	page.tap( 'Calculator' );
+	check( 'the Calculator opens without a tank, beside the day\'s list and the setup sheet', -1 !== page.text().indexOf( 'Gallons' ) && 0 === page.posts.length, page.text().slice( 0, 300 ) );
+	page = start( { screen: pick, view: 'calc' } );
+	check( '…and straight from its own address', -1 !== page.text().indexOf( 'Gallons' ) );
 
 	console.log( '\n' + ( failures ? failures + ' of ' + checks + ' checks FAILED' : 'All ' + checks + ' checks passed' ) );
 	process.exit( failures ? 1 : 0 );

@@ -132,7 +132,25 @@ ship-day counts would shrink during the run and the header would say
 fish counts (the theme's `_fishotel_line_status = shipped` is only written
 by hand) and simply leave the attention strip when everything is done.
 
+## Lines from other sections
+
+Under the header line — on the page and on the widget — other sections
+may add a one-line summary of their own day through the
+`fishotel_today_lines` filter: an array of lines, each
+`{ key, text, detail?, url?, tone? }` (`tone` is `todo`, `done` or
+`bad`; a line with a `url` is a link). The Clean Room adds **"Tanks: 3
+things to do"** — what is left on its To do list by water system, with
+the number of copper flags beside it and a link to that list ("Tanks:
+all done" once everything is ticked; no line on a day with nothing due
+or while that section is off). The lines are read on every render, never
+from the cached window, so a tick shows at once; `Model::extra_lines()`
+cleans whatever comes back (text only, one line, at most eight lines)
+and a callback that throws adds nothing.
+
 ## Filters
+
+- `fishotel_today_lines( array[] $lines )` — the one-liners under the
+  header (see *Lines from other sections*).
 
 - `fishotel_today_invoice_meta_keys( string[] $keys )` — the order meta keys
   that mean "invoice PDF exists" (default `_wcpdf_invoice_date`,

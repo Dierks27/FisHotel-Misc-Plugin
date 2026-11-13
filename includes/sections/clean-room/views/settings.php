@@ -11,6 +11,7 @@
  * @var array   $protocols     Settings::protocols() — { default, templates }.
  * @var string  $template_name The template the editor shows.
  * @var array[] $protocol      Its steps.
+ * @var string[] $used_for     What that template is used for (its tags).
  * @var array[] $buildings     Buildings.
  * @var array[] $tanks        Tanks.
  * @var array   $groups       Layout::group().
@@ -34,6 +35,7 @@ use FisHotel\Misc\Sections\Clean_Room\Layout;
 use FisHotel\Misc\Sections\Clean_Room\Protocol;
 use FisHotel\Misc\Sections\Clean_Room\Settings;
 use FisHotel\Misc\Sections\Clean_Room\Sizes;
+use FisHotel\Misc\Sections\Clean_Room\Temp_Tanks;
 
 $tab          = 'settings';
 $fh_standard  = $sizes['standard'];
@@ -126,6 +128,12 @@ $fh_from_attr = Sizes::SOURCE_ATTRIBUTE === $fh_standard['source'];
 				<button type="button" class="button button-small fh-cr-template-delete" <?php disabled( count( $protocols['templates'] ) <= 1 ); ?>><?php esc_html_e( 'Delete', 'fishotel-misc-plugin' ); ?></button>
 			</div>
 
+			<div class="fh-cr-field fh-cr-used-for">
+				<label class="fh-cr-label" for="fh-cr-used-for"><?php esc_html_e( 'Used for', 'fishotel-misc-plugin' ); ?></label>
+				<input type="text" id="fh-cr-used-for" class="fh-cr-input" name="used_for" value="<?php echo esc_attr( implode( ', ', (array) $used_for ) ); ?>" maxlength="<?php echo esc_attr( ( Temp_Tanks::MAX_TAG + 2 ) * Temp_Tanks::MAX_TAGS ); ?>" placeholder="<?php esc_attr_e( 'what this schedule treats — a few words, commas between (e.g. bacterial infection)', 'fishotel-misc-plugin' ); ?>">
+				<p class="fh-cr-sub"><?php esc_html_e( 'Setting up a temporary tank asks "What is it for?" and offers these words; choosing one offers the schedules that carry it. Saved with the template. Only Trifecta comes with one (bacterial infection) — the rest are yours to fill.', 'fishotel-misc-plugin' ); ?></p>
+			</div>
+
 			<table class="widefat fh-cr-table fh-cr-protocol" id="fh-cr-protocol-table">
 				<thead>
 					<tr>
@@ -187,6 +195,11 @@ $fh_from_attr = Sizes::SOURCE_ATTRIBUTE === $fh_standard['source'];
 					<?php
 					$fh_b       = $fh_entry['building'];
 					$fh_gallons = Layout::system_gallons( $fh_b, $fh_entry['tanks'] );
+					if ( Layout::is_own_water( $fh_b ) ) {
+						// The temporary tanks: slots, each its own water.
+						include Clean_Room::path() . 'views/settings-temp.php';
+						continue;
+					}
 					?>
 					<div class="fh-cr-layout-building">
 						<form class="fh-cr-layout-form" data-op="building_save">

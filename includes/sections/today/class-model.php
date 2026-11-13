@@ -36,6 +36,14 @@ class Model {
 	const LOOKAHEAD_MAX = 60;
 
 	/**
+	 * The lines other sections add under the header (extra_lines()).
+	 */
+	const EXTRA_LINES_FILTER = 'fishotel_today_lines';
+	const EXTRA_LINES_MAX    = 8;
+	const EXTRA_LINE_LENGTH  = 160;
+	const EXTRA_LINE_TONES   = array( 'todo', 'done', 'bad' );
+
+	/**
 	 * Badge keys, most serious first. The index is the sort rank of a
 	 * destination (holds first, "nothing needed" last).
 	 *
@@ -808,6 +816,42 @@ class Model {
 	 */
 	public static function place( $city, $state ) {
 		return Note::place( $city, $state );
+	}
+
+	/**
+	 * The lines other sections add under the header through the
+	 * `fishotel_today_lines` filter, cleaned (pure): each is one short
+	 * sentence with an optional link — e.g. the Clean Room's "Tanks: 3
+	 * things to do". Anything that is not a line with text is dropped;
+	 * the tone is '' / 'todo' / 'done' / 'bad'; at most EXTRA_LINES_MAX.
+	 *
+	 * @param mixed $raw What the filter returned.
+	 * @return array<int, array{key: string, text: string, detail: string, url: string, tone: string}>
+	 */
+	public static function extra_lines( $raw ) {
+		$out = array();
+		foreach ( is_array( $raw ) ? $raw : array() as $line ) {
+			if ( ! is_array( $line ) || ! isset( $line['text'] ) || ! is_scalar( $line['text'] ) ) {
+				continue;
+			}
+			$text = trim( (string) preg_replace( '/\s+/', ' ', strip_tags( (string) $line['text'] ) ) );
+			if ( '' === $text ) {
+				continue;
+			}
+			$detail = isset( $line['detail'] ) && is_scalar( $line['detail'] ) ? trim( (string) preg_replace( '/\s+/', ' ', strip_tags( (string) $line['detail'] ) ) ) : '';
+			$tone   = isset( $line['tone'] ) && is_scalar( $line['tone'] ) ? (string) $line['tone'] : '';
+			$out[]  = array(
+				'key'    => isset( $line['key'] ) && is_scalar( $line['key'] ) ? (string) preg_replace( '/[^a-z0-9_-]/', '', strtolower( (string) $line['key'] ) ) : '',
+				'text'   => (string) substr( $text, 0, self::EXTRA_LINE_LENGTH ),
+				'detail' => (string) substr( $detail, 0, self::EXTRA_LINE_LENGTH ),
+				'url'    => isset( $line['url'] ) && is_string( $line['url'] ) ? trim( $line['url'] ) : '',
+				'tone'   => in_array( $tone, self::EXTRA_LINE_TONES, true ) ? $tone : '',
+			);
+			if ( count( $out ) >= self::EXTRA_LINES_MAX ) {
+				break;
+			}
+		}
+		return $out;
 	}
 
 	/**

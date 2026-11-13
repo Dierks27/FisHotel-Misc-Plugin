@@ -292,4 +292,24 @@ update_option( 'fishotel_today_settings', 'garbage' );
 check( 'a corrupt option reads as defaults', 21 === Settings::get()['lookahead_days'] );
 update_option( 'fishotel_today_settings', array() );
 
+echo "11. Lines from other sections (fishotel_today_lines)\n";
+check( 'nothing hooked: no lines', array() === Model::extra_lines( array() ) && array() === Model::extra_lines( null ) && array() === Model::extra_lines( 'x' ) );
+$lines = Model::extra_lines(
+	array(
+		array( 'key' => 'Clean-Room Todo!', 'text' => "Tanks:  3 things\n to do", 'detail' => '1 copper flag', 'url' => ' https://example.test/wp-admin/admin.php?page=x&tab=todo ', 'tone' => 'todo', 'count' => 3 ),
+		array( 'text' => '<b>Plain</b> line' ),
+		array( 'text' => '   ' ),
+		array( 'url' => 'https://example.test/' ),
+		'not a line',
+		array( 'text' => array( 'x' ) ),
+		array( 'text' => 'Odd tone', 'tone' => 'purple', 'url' => array( 'x' ) ),
+	)
+);
+check( 'a line keeps its text (one line, no markup), detail, link and tone', array( 'key' => 'clean-roomtodo', 'text' => 'Tanks: 3 things to do', 'detail' => '1 copper flag', 'url' => 'https://example.test/wp-admin/admin.php?page=x&tab=todo', 'tone' => 'todo' ) === $lines[0] );
+check( 'a line needs text; anything else is dropped', 3 === count( $lines ) && 'Plain line' === $lines[1]['text'] && '' === $lines[1]['url'] && '' === $lines[1]['tone'] && '' === $lines[1]['key'] );
+check( 'an unknown tone and a link that is not a string are left out', 'Odd tone' === $lines[2]['text'] && '' === $lines[2]['tone'] && '' === $lines[2]['url'] );
+check( 'the tones', array( 'todo', 'done', 'bad' ) === Model::EXTRA_LINE_TONES && 'bad' === Model::extra_lines( array( array( 'text' => 'x', 'tone' => 'bad' ) ) )[0]['tone'] );
+check( 'a long text is cut, and there are at most eight lines', Model::EXTRA_LINE_LENGTH === strlen( Model::extra_lines( array( array( 'text' => str_repeat( 'a', 400 ) ) ) )[0]['text'] ) && Model::EXTRA_LINES_MAX === count( Model::extra_lines( array_fill( 0, 20, array( 'text' => 'line' ) ) ) ) );
+check( 'the filter name other sections hook', 'fishotel_today_lines' === Model::EXTRA_LINES_FILTER );
+
 fh_finish();

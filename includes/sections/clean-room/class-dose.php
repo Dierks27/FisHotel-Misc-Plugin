@@ -775,13 +775,22 @@ class Dose {
 	 * reads the system's water; a tank's own water is read by its own
 	 * readings and the building's.
 	 *
+	 * A temporary tank (a slot of the own-water building) is its own water:
+	 * `own_water` is true and there is no system — no gallons, nothing read,
+	 * dosed or due in it. The tank's water is what is set up in the slot:
+	 * the setup's gallons, the dose steps of the setup's OWN schedule on
+	 * its OWN clock (day 1 = its start date, fish or no fish — as its
+	 * to-do, Todo::temp_todo()), and only the entries written while this
+	 * setup stood there (logs_on_date() leaves an earlier setup's out). A
+	 * slot with nothing set up has no water at all.
+	 *
 	 * @param object     $store     Store (or the tests' stand-in): building(), tanks(), logs_on_date(), open_stays().
-	 * @param array      $tank      The tank row (with its building).
+	 * @param array      $tank      The tank row (with its building; a slot with its 'setup').
 	 * @param string     $today     Site date.
 	 * @param array      $settings  Settings.
 	 * @param array|null $protocols Settings::protocols() (null = read them).
-	 * @return array{system: array, tank: array, building_id: int} Each water: gallons (float), reading
-	 *               (array|null), doses (doses_today()), items (array[]).
+	 * @return array{system: array, tank: array, building_id: int, own_water: bool} Each water: gallons
+	 *               (float), reading (array|null), doses (doses_today()), items (array[]).
 	 */
 	public static function waters( $store, array $tank, $today, array $settings, $protocols = null ) {
 		$tank_id     = (int) ( $tank['id'] ?? 0 );
@@ -790,6 +799,37 @@ class Dose {
 		$building    = $building_id > 0 ? $store->building( $building_id ) : null;
 		$tanks       = (array) $store->tanks();
 		$logs        = (array) $store->logs_on_date( $today );
+
+		if ( Layout::is_slot( $tank ) ) {
+			$setup = ! empty( $tank['setup'] ) && is_array( $tank['setup'] ) ? $tank['setup'] : array();
+			$day   = $setup ? Replay::day_number( (string) ( $setup['start_date'] ?? '' ), (string) $today ) : null;
+			$rows  = $setup && isset( $logs[ $tank_id ] ) ? (array) $logs[ $tank_id ] : array();
+			$list  = Medications::from_settings( $settings );
+			// One stand-in "group" on the setup's own day, as its to-do has.
+			$clock = null === $day ? array() : array(
+				array(
+					'qty_live' => 1,
+					'day'      => $day,
+				),
+			);
+
+			return array(
+				'building_id' => $building_id,
+				'own_water'   => true,
+				'system'      => array(
+					'gallons' => 0.0,
+					'reading' => null,
+					'doses'   => array(),
+					'items'   => array(),
+				),
+				'tank'        => array(
+					'gallons' => (float) max( 0, (int) ( $setup['gallons'] ?? 0 ) ),
+					'reading' => self::reading_today( $rows, $today ),
+					'doses'   => self::doses_today( $rows, $today, $list ),
+					'items'   => self::due_items( $clock, isset( $setup['steps'] ) && is_array( $setup['steps'] ) ? $setup['steps'] : array(), $today ),
+				),
+			);
+		}
 
 		$system_rows = array();
 		foreach ( $tanks as $other ) {
@@ -815,6 +855,7 @@ class Dose {
 
 		return array(
 			'building_id' => $building_id,
+			'own_water'   => false,
 			'system'      => array(
 				'gallons' => (float) Layout::system_gallons( is_array( $building ) ? $building : (array) ( $tank['building'] ?? array() ), $tanks ),
 				'reading' => self::reading_today( $system_rows, $today ),
@@ -1140,8 +1181,8 @@ class Dose {
 		$waters = self::waters( $store, $tank, $today, $settings, $protocols );
 		$scope  = (string) ( $dose['scope'] ?? '' );
 		$whole  = 'system' === $scope || ( 'tank' !== $scope && $waters['system']['gallons'] > 0 );
-		if ( $whole && $waters['building_id'] <= 0 ) {
-			$whole = false;
+		if ( $whole && ( $waters['building_id'] <= 0 || ! empty( $waters['own_water'] ) ) ) {
+			$whole = false; // No building, or a temporary tank: its own water whatever was said.
 		}
 		$water    = $waters[ $whole ? 'system' : 'tank' ];
 		$defaults = self::defaults( $medication, $water, $settings, $list );

@@ -23,8 +23,10 @@ and box numbers, the per-box summary, the remembered shares, "How full"),
 `fixtures/unknown-names.json` (the "??" name of an unknown fish),
 `fixtures/dose-maths.json` (the dose sums: the rounding, the unit of a
 weight, the words, and every sum with its amount, result line, working
-and note) and `fixtures/dose-phrases.json` (a dose phrase in plain
-words).
+and note), `fixtures/dose-phrases.json` (a dose phrase in plain words)
+and `fixtures/todo-lines.json` (the day's to-do list in words — a line's
+medication and dose, the feeding of a whole building, a copper flag —
+and "what is it for" → the schedules carrying that word).
 
 ```
 php  includes/sections/clean-room/tests/layout-test.php
@@ -52,11 +54,17 @@ php  includes/sections/clean-room/tests/dose-test.php
 php  includes/sections/clean-room/tests/dose-save-test.php
 php  includes/sections/clean-room/tests/dose-phrases-test.php
 php  includes/sections/clean-room/tests/medications-admin-test.php
+php  includes/sections/clean-room/tests/temp-tanks-test.php
+php  includes/sections/clean-room/tests/todo-test.php
+php  includes/sections/clean-room/tests/temp-board-test.php
+php  includes/sections/clean-room/tests/temp-guards-test.php
+php  includes/sections/clean-room/tests/dose-temp-test.php
 node includes/sections/clean-room/tests/front-desk.test.js
 node includes/sections/clean-room/tests/clean-room-admin.test.js
 node includes/sections/clean-room/tests/dose-math.test.js
 node includes/sections/clean-room/tests/front-desk-dose.test.js
 node includes/sections/clean-room/tests/medications-admin.test.js
+node includes/sections/clean-room/tests/temp-tanks.test.js
 ```
 
 Every species, price, supplier and figure in these tests is invented
@@ -442,6 +450,82 @@ system temp directory (`FH_TEST_TMP` overrides).
   corrected in another tab, and the Stays tab's Edit
   (the other fields saved and the fish left; refused with 409 when the
   fish was changed on the stale row).
+- **temp-tanks-test.php** — temporary tanks: the slot numbering
+  (`slot_number()` / `parse_slot()`, 901–909, a rack number never a
+  slot) and the labels ("TEMP 1" large, "901 · Temporary · …" small,
+  the same Front Desk URL, the path, the title of a free slot); setup
+  validation (the kind asked and never assumed, the first free slot or
+  a named one, a slot in use or retired, gallons, an unknown template,
+  the start date and its range, every slot in use, a tenth slot); what
+  it is for → the templates carrying that word (only Trifecta seeded,
+  any case, two templates for one word, nothing for a word nobody
+  carries, saved / removed / renamed words) and the preview before
+  anything is saved; the copied schedule independent of its template in
+  both directions (the template edited afterwards, the tank's own steps
+  moved / added / removed / replaced); the tank's own clock (day 1 = the
+  treatment start, "starts <date>", a fish's own day and dates
+  untouched); quarantine versus clean for arrivals,
+  moves and clearing — into a clean temporary tank, out of a quarantine
+  one into the Clean Room, a split, the same slot clean this month and
+  quarantine the next; readings and doses as the tank's own water; take
+  down (refused with fish, the history kept — the treatment as it was
+  run, doses, readings, the groups that passed through — and the next
+  setup in the slot starting clean); the 1.6 schema and its gate from
+  1.3, 1.4 and 1.5 (each missing column, a failed ALTER, the `temp`
+  ENUM value); a layout that never sets one up reading exactly as one
+  without the building.
+- **todo-test.php** — the day's list by water system: one line per step
+  per building however many tanks have fish; each line's medication,
+  dose and note; groups on different days ("for the day 2 group"); one
+  truth — ticked on the list, on one tank's own screen, by a copper
+  reading on any tank of the building, by a dose on the system or into
+  one tank — and every tank of the building then showing it; the
+  feeding as one line, tank by tank or all at once; the count at the
+  top, "all done", an empty room; the copper flags (low, due, overdue,
+  none for a tank without a copper test); a temporary tank beside the
+  buildings (its own lines, marked, not ticked by a building's dose);
+  the guards of a tick; the pool, the overlay, `spread_logs()` and
+  `merge_copper()` for a slot; the list on the phone's screens.
+- **temp-board-test.php** — the Board's side and the seams: the one
+  AJAX write (`Admin_Temp::request()`: 403 without the capability or
+  with a stale nonce, 400 for an act that is not a temporary-tank or
+  to-do act or one that is refused, set up / edit / schedule / take
+  down / tick by the posting user); the Temporary area as data (slots,
+  the set-up form's free slots, words and previews, a setup's own last
+  dose, a layout without the building); a slot with nothing set up
+  taking no reading, dose, tick or note; Settings → Layout's slots (one
+  more, nine at most, retiring a free one, never one that is set up);
+  "Used for" saved, renamed and deleted with its template; the list's
+  lines in words against `fixtures/todo-lines.json`; a temporary tank
+  spoken of by its number (an arrival into a quarantine one taken as
+  said, a clean one or a free slot asking for a quarantine tank, a move,
+  a reading); the count other
+  screens read — `Todo::summary()`, the `fishotel_cleanroom_todo`
+  filter and function (null without the tables, never an exception)
+  and the Today section's line (`today_line()`, never twice, none on a
+  day with nothing due or for a user without the capability).
+- **temp-guards-test.php** — the guards around the temporary tanks and
+  the list: no group comes back to life in a slot whose setup is gone
+  (the undo of a loss and a Count refused once it was taken down, and
+  in the next setup too; `Store::slot_revival()`, a note still taken,
+  the sentence the Stays tab shows); an undo does not reach into a
+  setup that was taken down (`Store::setup_gone()`; refused with the
+  slot free and with it set up again, the group neither moved nor
+  cleared; fine while the setup stands); a building that is *coming
+  soon* or *offline* but has fish keeps its block, the Temporary
+  building cannot leave *active* under a running tank, and a running
+  tank is listed whatever its building says; a step with "<" in its
+  name is stored as plain text and can be ticked on the list and on the
+  tank (`Temp_Tanks::step_text()`, `Todo::posted_key()`, against a
+  `sanitize_text_field()` stub that turns a lone "<" into an entity as
+  WordPress does); a page loaded before the slot changed hands, or
+  before the same setup changed on another screen, writes nothing
+  (`setup_id` required, `Temp_Tanks::seen()`); a dose step naming
+  several medications is not done by one of them — on a temporary tank,
+  on a building's list and on each of its tanks' screens — while a
+  step naming one still is (`Todo::combo()`, `part_dosed()`,
+  `settle_combos()`); and `fishotel_cleanroom_todo()` answering null
+  with no query while the section is off.
 - **fake-store.php** — not a test (exits 0 when run directly): the
   in-memory store the above drives (tanks and buildings from the seed,
   stays — joined with their batch's order and sale date like the real
@@ -472,6 +556,14 @@ system temp directory (`FH_TEST_TMP` overrides).
   text, "How full"); `unknownName()` /
   `knownName()` (the "??" box of an order line) against
   `fixtures/unknown-names.json`.
+- **temp-tanks.test.js** — the phone's and the Board's pure helpers for
+  the temporary tanks and the day's list, both scripts loaded without a
+  DOM: `tankHeading()`, `offerTemplates()` / `offer()` and
+  `lineDetail()`, `feedText()`, `flagText()` against
+  `fixtures/todo-lines.json` (the file the server's temp-board-test.php
+  reads), `previewLines()` on the phone and on the Board,
+  `todoHeadline()`, `moveClears()`, `gridTanks()` (a free slot is no
+  tank to pick), `stepsFromRows()` (the Board's schedule editor).
 
 - **medications-test.php** — the editable medication list: the seed IS
   the old fixed list (the same keys in the same order, names, chips, the
@@ -625,7 +717,26 @@ system temp directory (`FH_TEST_TMP` overrides).
   time, "Bring it to" 24 is asked about and posted with `sure` only when
   saved again as it stands, and at or above the target Save posts the
   levels with no amount (the reading alone) — never for another
-  medication.
+  medication; and on a temporary tank: the sheet shows this tank only
+  ("Whole system" hidden) with the setup's gallons, the sum runs on its
+  own reading and its own schedule's level, Save posts `whole` 0; the
+  tank picker carries the day's list and the Calculator side by side,
+  and the Calculator opens without a tank and from its own address.
+- **dose-temp-test.php** — the dose calculator on a temporary tank,
+  through `Dose::waters()`, `Front_Desk::screen_from()` and
+  `Front_Desk::perform()` on the `Fake_Store`: a slot's waters are its
+  own (`own_water`; no system gallons, readings, doses or due steps; the
+  setup's gallons; the dose steps of the setup's OWN schedule on its OWN
+  day, with no fish in it), a rack tank's are unchanged; the screen
+  carries the `dose` block, the medication list, the day's list and the
+  setup sheet together; a free slot has no water; a Save posted as
+  "whole system" is filed on the tank with the working from the setup's
+  gallons and the copper reading, both stamped with the setup; the
+  stale-sheet refusal works there; the dose and the reading tick the
+  tank's own to-do and no rack tank sees them; a spoken "whole system"
+  is that tank; the Temporary area's "last dose" carries the working;
+  and a new setup in the same slot starts with nothing read, dosed or
+  due.
 - **medications-admin.test.js** — the pure parts of
   `js/medications-admin.js`: what 100 gallons take at a rate (the
   editor's hint), the rates the Board's Calculator offers, its sum.
@@ -821,3 +932,38 @@ system temp directory (`FH_TEST_TMP` overrides).
     retire one: the phone's chips follow, the result reads in scoops,
     the retired one is gone from the chips and its old log rows still
     read.
+24. Temporary tanks. The Board has a **Temporary** area with six free
+    slots (TEMP 1 · 901 … TEMP 6 · 906); Settings → Layout shows them
+    with *Add a slot (TEMP 7 · 907)*; *Print tank labels* prints one
+    label per slot. Scan (or open) a free slot's label: "Nothing is set
+    up here — Set up". Set one up from the Board: *What is it for?* →
+    "bacterial infection" picks Trifecta and lists its steps with their
+    days before anything is saved; without a kind the save is refused;
+    as Quarantine with 10 gallons it appears on the Board with its
+    kind, purpose and "day 1", and on the phone's tank picker under
+    Temporary. Its label now opens its screen. Settings → Treatment
+    schedules → Trifecta: change a step's day — the tank's schedule does
+    not change; on the tank, *Schedule* → +1 day on a step — the
+    template does not change.
+25. Fish in a temporary tank. Arrival sheet: the quarantine temporary
+    tank is offered beside the Spa tanks, a clean one is not. Move a
+    Spa group into the quarantine one with the *hospital* chip: not
+    cleared, its QT day unchanged, the tank's own day beside it. Set up
+    a second slot as Clean; move a quarantine group into it: the sheet
+    says it clears and asks ("Move and clear"); the group is cleared
+    today. Dose on a temporary tank: no "whole system", the sum
+    runs on its gallons and its own schedule's steps. *Take down* with fish in it is refused ("move
+    the fish out first"); empty, it is taken down, the slot is free,
+    Board → Temporary → History shows it with its treatment as it was
+    run, its doses, readings and the groups that passed through; a new
+    setup in that slot shows none of the old ticks or readings.
+26. To do. The **To do** tab (and *Today* on the phone's tank picker):
+    one block per Spa building and per temporary tank; with fish in
+    three tanks of one building each due dose and test is listed once;
+    *Done* on a line — every tank of that building then shows it ticked
+    on the Board and on its phone screen; "521 copper 2.4" on the phone
+    ticks the building's copper test; a whole-system dose ticks its
+    step; *All fed* ticks the feeding of every tank; the count at the
+    top goes down and reads "All done" at the end. With the Today
+    section on, its page and the dashboard widget say "Tanks: N things
+    to do" with a link to the tab.

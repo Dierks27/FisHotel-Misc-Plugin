@@ -2,21 +2,33 @@
 /**
  * Clean Room store — the ONLY file in the section that touches $wpdb.
  *
- * Ten tables, created with dbDelta on first boot (gated by the autoloaded
+ * Eleven tables, created with dbDelta on first boot (gated by the autoloaded
  * fishotel_cleanroom_db_version option, so a booted site pays no query)
  * and on plugin activation, the layout seeded in the same step:
  *
- *   {prefix}fh_buildings    area, number, name, status, sort, notes, schedule, system_gallons
+ *   {prefix}fh_buildings    area, number, name, status, sort, notes, schedule, system_gallons,
+ *                           own_water (1 = each tank its own water: the Temporary
+ *                           building, area 'temp', whose tanks are numbered slots)
  *   {prefix}fh_tanks        building_id, number, level, position, size, gallons, status, sort
+ *   {prefix}fh_tank_setups  what is set up in a slot for now (Temp_Tanks): name, purpose,
+ *                           kind (quarantine / clean), gallons, the treatment's start
+ *                           date and its steps COPIED from a template (JSON), a note,
+ *                           who and when; open_tank_id = the slot while it stands
+ *                           there (unique: one open setup per slot), NULL once taken
+ *                           down — the row stays as the setup's history
  *   {prefix}fh_stays        the cached state of one group of one species
  *                           (+ supplier, order_ref, landed_cost, order_line_id —
  *                           the seam a supplier order's check-in fills; its size
  *                           as a slug + a label snapshot; needs_id, set while
  *                           nobody knows what the fish is)
  *   {prefix}fh_stay_events  the history: every change to a stay is an event
+ *                           (+ from_setup_id / to_setup_id: the setup a move came
+ *                           out of or went into, so the Replay knows whether that
+ *                           slot was quarantine or clean at the time)
  *   {prefix}fh_tank_logs    per-tank entries: copper readings, dose / test
  *                           tick-offs, water changes, feeding, tank notes
- *                           (+ building_id for a system-level dose)
+ *                           (+ building_id for a system-level dose; + setup_id for an
+ *                           entry on a slot: it belongs to the setup that stood there)
  *   {prefix}fh_aliases      spoken words → product / species, learned on the phone
  *   {prefix}fh_species      the species master (the workbook's Fishlist): name,
  *                           scientific name, group, per box, prices, product link
@@ -82,10 +94,13 @@ class Store {
 	 * table. 1.5 adds needs_id on a line and on a stay (a fish that still
 	 * has to be identified), a line's label_name (what the supplier's label
 	 * called a fish that was corrected) and the stays' order_line_id key.
+	 * 1.6 adds the temporary tanks: the buildings' own_water and the 'temp'
+	 * area, the tank_setups table, the tank logs' setup_id and the stay
+	 * events' from_setup_id / to_setup_id.
 	 *
 	 * @var string
 	 */
-	const DB_VERSION = '1.5';
+	const DB_VERSION = '1.6';
 
 	/**
 	 * The columns added after a table's first version. The version option
@@ -99,6 +114,20 @@ class Store {
 		'orders'      => array( 'sale_date' ),
 		'order_lines' => array( 'size_slug', 'size_label', 'box_no', 'box_pct', 'share_key', 'needs_id', 'label_name' ),
 		'stays'       => array( 'size_slug', 'size_label', 'needs_id' ),
+		'buildings'   => array( 'own_water' ),
+		'tank_logs'   => array( 'setup_id' ),
+		'stay_events' => array( 'from_setup_id', 'to_setup_id' ),
+	);
+
+	/**
+	 * The ENUM values added after a column's first version, as "table.column"
+	 * => values. The gate waits for these too: a building with the area
+	 * 'temp' must never be written into a column that cannot hold it.
+	 *
+	 * @var array<string, string[]>
+	 */
+	const REQUIRED_ENUM_VALUES = array(
+		'buildings.area' => array( 'temp' ),
 	);
 
 	/**
@@ -139,7 +168,7 @@ class Store {
 
 	const SOURCES   = array( 'manual', 'voice', 'qr', 'import', 'order' );
 	const LOG_KINDS = array( 'copper', 'dose', 'test', 'water_change', 'feed', 'note', 'other' );
-	const TABLES    = array( 'buildings', 'tanks', 'stays', 'stay_events', 'tank_logs', 'aliases', 'species', 'orders', 'order_lines', 'box_shares' );
+	const TABLES    = array( 'buildings', 'tanks', 'stays', 'stay_events', 'tank_logs', 'aliases', 'species', 'orders', 'order_lines', 'box_shares', 'tank_setups' );
 
 	/**
 	 * Row caps for the list queries.
@@ -148,6 +177,8 @@ class Store {
 	const ORDERS_LIMIT  = 500;
 	const SHARES_LIMIT  = 2000;
 	const SIZES_LIMIT   = 200;
+	const SETUPS_LIMIT  = 200;
+	const HISTORY_LIMIT = 3000;
 
 	/**
 	 * Whether the tables exist, memoised per request (null = not checked).
@@ -162,6 +193,21 @@ class Store {
 	 * @var array|null
 	 */
 	private $areas = null;
+
+	/**
+	 * The open setups by the tank they stand in, memoised per instance.
+	 *
+	 * @var array[]|null
+	 */
+	private $open_setups = null;
+
+	/**
+	 * Every slot (a tank of an own-water building) → the id of its open
+	 * setup (0 = free), memoised per instance.
+	 *
+	 * @var array<int, int>|null
+	 */
+	private $slot_setups = null;
 
 	/**
 	 * Fully-prefixed table name.
@@ -211,13 +257,58 @@ class Store {
 		// only once every table AND every added column is really there, so
 		// an ALTER that failed is retried on the next boot like a failed
 		// CREATE.
-		if ( self::tables_exist() && self::schema_ready( self::present_columns() ) ) {
+		if ( self::tables_exist() && self::schema_ready( self::present_columns(), self::present_enums() ) ) {
 			update_option( self::DB_VERSION_OPTION, self::DB_VERSION, true );
 			self::seed_if_empty();
 			self::backfill_system_gallons();
+			self::ensure_temp_building();
 		}
 
 		return true;
+	}
+
+	/**
+	 * The types of the columns REQUIRED_ENUM_VALUES names, as the tables
+	 * really have them (install only). A column that cannot be read gives
+	 * an empty type.
+	 *
+	 * @return array<string, string> "table.column" → its type, e.g. "enum('clean','spa','temp')".
+	 */
+	private static function present_enums() {
+		global $wpdb;
+
+		$out = array();
+		foreach ( array_keys( self::REQUIRED_ENUM_VALUES ) as $key ) {
+			list( $table, $column ) = explode( '.', $key, 2 );
+			try {
+				$row = $wpdb->get_row( $wpdb->prepare( 'SHOW COLUMNS FROM ' . self::table( $table ) . ' LIKE %s', $column ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			} catch ( \Throwable $e ) {
+				$row = null;
+			}
+			$out[ $key ] = is_array( $row ) && isset( $row['Type'] ) ? (string) $row['Type'] : '';
+		}
+
+		return $out;
+	}
+
+	/**
+	 * The added ENUM values that are still missing (pure):
+	 * REQUIRED_ENUM_VALUES minus what the columns really accept.
+	 *
+	 * @param array<string, string> $types "table.column" → its type.
+	 * @return string[] "table.column=value".
+	 */
+	public static function missing_enum_values( array $types ) {
+		$missing = array();
+		foreach ( self::REQUIRED_ENUM_VALUES as $key => $values ) {
+			$type = isset( $types[ $key ] ) ? strtolower( (string) $types[ $key ] ) : '';
+			foreach ( $values as $value ) {
+				if ( false === strpos( $type, "'" . strtolower( $value ) . "'" ) ) {
+					$missing[] = $key . '=' . $value;
+				}
+			}
+		}
+		return $missing;
 	}
 
 	/**
@@ -264,13 +355,18 @@ class Store {
 	}
 
 	/**
-	 * Whether the version gate may open (pure): no added column is missing.
+	 * Whether the version gate may open (pure): no added column is missing
+	 * — and, when the column types are given, no added ENUM value either.
 	 *
-	 * @param array<string, string[]> $present Table name without the prefix → its columns.
+	 * @param array<string, string[]>    $present Table name without the prefix → its columns.
+	 * @param array<string, string>|null $types   "table.column" → its type (null = not looked at).
 	 * @return bool
 	 */
-	public static function schema_ready( array $present ) {
-		return ! self::missing_columns( $present );
+	public static function schema_ready( array $present, $types = null ) {
+		if ( self::missing_columns( $present ) ) {
+			return false;
+		}
+		return null === $types || ! self::missing_enum_values( (array) $types );
 	}
 
 	/**
@@ -291,13 +387,14 @@ class Store {
 		$orders    = self::table( 'orders' );
 		$lines     = self::table( 'order_lines' );
 		$shares    = self::table( 'box_shares' );
+		$setups    = self::table( 'tank_setups' );
 
 		// dbDelta is whitespace-sensitive: each column on its own line,
 		// two spaces after PRIMARY KEY, KEY (not INDEX) with a name.
 		return array(
 			"CREATE TABLE {$buildings} (
 				id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
-				area ENUM('clean','spa') NOT NULL DEFAULT 'clean',
+				area ENUM('clean','spa','temp') NOT NULL DEFAULT 'clean',
 				number INT NOT NULL,
 				name VARCHAR(60) NOT NULL DEFAULT '',
 				status ENUM('active','coming_soon','offline') NOT NULL DEFAULT 'active',
@@ -305,6 +402,7 @@ class Store {
 				notes TEXT NULL,
 				schedule VARCHAR(40) NOT NULL DEFAULT '',
 				system_gallons SMALLINT NULL,
+				own_water TINYINT(1) NOT NULL DEFAULT 0,
 				PRIMARY KEY  (id),
 				UNIQUE KEY number (number)
 			) {$charset_collate};",
@@ -364,9 +462,12 @@ class Store {
 				actor_id BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
 				source ENUM('manual','voice','qr','import','order') NOT NULL DEFAULT 'manual',
 				created_at DATETIME NOT NULL,
+				from_setup_id BIGINT(20) UNSIGNED NULL,
+				to_setup_id BIGINT(20) UNSIGNED NULL,
 				PRIMARY KEY  (id),
 				KEY stay_id (stay_id),
-				KEY event_at (event_at)
+				KEY event_at (event_at),
+				KEY to_setup_id (to_setup_id)
 			) {$charset_collate};",
 			"CREATE TABLE {$logs} (
 				id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -379,10 +480,12 @@ class Store {
 				source ENUM('manual','voice','qr','import','order') NOT NULL DEFAULT 'manual',
 				created_at DATETIME NOT NULL,
 				building_id BIGINT(20) UNSIGNED NULL,
+				setup_id BIGINT(20) UNSIGNED NULL,
 				PRIMARY KEY  (id),
 				KEY tank_id (tank_id),
 				KEY logged_at (logged_at),
-				KEY building_id (building_id)
+				KEY building_id (building_id),
+				KEY setup_id (setup_id)
 			) {$charset_collate};",
 			"CREATE TABLE {$aliases} (
 				id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -490,7 +593,84 @@ class Store {
 				UNIQUE KEY share_key (share_key),
 				KEY location_key (location_key)
 			) {$charset_collate};",
+			"CREATE TABLE {$setups} (
+				id BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,
+				tank_id BIGINT(20) UNSIGNED NOT NULL,
+				open_tank_id BIGINT(20) UNSIGNED NULL,
+				slot TINYINT NOT NULL DEFAULT 0,
+				name VARCHAR(60) NOT NULL DEFAULT '',
+				purpose VARCHAR(120) NOT NULL DEFAULT '',
+				kind ENUM('quarantine','clean') NOT NULL DEFAULT 'quarantine',
+				gallons SMALLINT NOT NULL DEFAULT 0,
+				template VARCHAR(40) NOT NULL DEFAULT '',
+				start_date DATE NOT NULL,
+				steps LONGTEXT NULL,
+				note TEXT NULL,
+				created_by BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
+				created_at DATETIME NOT NULL,
+				updated_at DATETIME NOT NULL,
+				closed_by BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
+				closed_at DATETIME NULL,
+				PRIMARY KEY  (id),
+				UNIQUE KEY open_tank_id (open_tank_id),
+				KEY tank_id (tank_id)
+			) {$charset_collate};",
 		);
+	}
+
+	/**
+	 * The 1.6 upgrade (and a fresh install): the Temporary building — the
+	 * one whose tanks are each their own water — with its first slots,
+	 * inserted ONLY while the layout has no own-water building. It takes
+	 * number 900, or the highest round hundred no building uses. Runs from
+	 * install() when the version gate opens, never on an ordinary boot.
+	 *
+	 * @return bool Whether it was added.
+	 */
+	public static function ensure_temp_building() {
+		if ( ! self::tables_exist() ) {
+			return false;
+		}
+
+		global $wpdb;
+
+		try {
+			$rows = $wpdb->get_results( 'SELECT number, sort, own_water FROM ' . self::table( 'buildings' ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+		if ( ! is_array( $rows ) || ! $rows ) {
+			return false; // No layout at all: nothing to add a building to.
+		}
+
+		$taken = array();
+		$sort  = 0;
+		foreach ( $rows as $row ) {
+			if ( ! empty( $row['own_water'] ) ) {
+				return false;
+			}
+			$taken[] = (int) $row['number'];
+			$sort    = max( $sort, (int) $row['sort'] );
+		}
+
+		$number = Layout::temp_building_number( $taken );
+		if ( $number <= 0 ) {
+			return false;
+		}
+
+		$store       = new self();
+		$building    = Layout::temp_seed( $number, Layout::TEMP_SLOTS, $sort + 1 );
+		$tanks       = $building['tanks'];
+		$building_id = $store->save_building( $building );
+		if ( ! $building_id ) {
+			return false;
+		}
+		foreach ( $tanks as $tank ) {
+			$tank['building_id'] = $building_id;
+			$store->save_tank( $tank );
+		}
+
+		return true;
 	}
 
 	/**
@@ -673,9 +853,12 @@ class Store {
 
 	/**
 	 * Insert or update a building. Validation is the caller's job
-	 * (Layout::validate_building()).
+	 * (Layout::validate_building()). own_water is written only when the
+	 * key is given, so a caller that knows nothing about it never resets
+	 * it; the area 'temp' is kept for an own-water building only.
 	 *
-	 * @param array $building id (0 = insert), area, number, name, status, sort, notes.
+	 * @param array $building id (0 = insert), area, number, name, status, sort, notes, schedule,
+	 *                        system_gallons, own_water (optional).
 	 * @return int|false Row id.
 	 */
 	public function save_building( array $building ) {
@@ -686,8 +869,9 @@ class Store {
 		global $wpdb;
 
 		$gallons = isset( $building['system_gallons'] ) && null !== $building['system_gallons'] && '' !== $building['system_gallons'] && is_numeric( $building['system_gallons'] ) ? max( 0, (int) $building['system_gallons'] ) : null;
+		$area    = (string) ( $building['area'] ?? '' );
 		$data    = array(
-			'area'           => in_array( (string) ( $building['area'] ?? '' ), array_keys( Layout::AREAS ), true ) ? (string) $building['area'] : 'clean',
+			'area'           => isset( Layout::AREAS[ $area ] ) || Layout::TEMP_AREA === $area ? $area : 'clean',
 			'number'         => (int) ( $building['number'] ?? 0 ),
 			'name'           => substr( (string) ( $building['name'] ?? '' ), 0, 60 ),
 			'status'         => in_array( (string) ( $building['status'] ?? '' ), Layout::BUILDING_STATUSES, true ) ? (string) $building['status'] : 'active',
@@ -697,8 +881,12 @@ class Store {
 			'system_gallons' => $gallons, // A null is written as NULL whatever the format.
 		);
 		$format  = array( '%s', '%d', '%s', '%s', '%d', '%s', '%s', '%d' );
+		if ( array_key_exists( 'own_water', $building ) ) {
+			$data['own_water'] = ! empty( $building['own_water'] ) ? 1 : 0;
+			$format[]          = '%d';
+		}
 
-		$this->areas = null;
+		$this->forget_layout();
 
 		try {
 			$id = (int) ( $building['id'] ?? 0 );
@@ -714,7 +902,11 @@ class Store {
 	}
 
 	/**
-	 * Every tank, with its building's number and area, in rack order.
+	 * Every tank, with its building's number and area, in rack order. A
+	 * slot (a tank of the own-water building) also carries what is set up
+	 * in it ('setup', null while it is free) and every tank what it
+	 * behaves as today ('effective_area' — a slot is 'spa' or 'clean' by
+	 * its setup's kind, 'temp' while free).
 	 *
 	 * @param bool $include_offline Whether offline tanks are included.
 	 * @return array[]
@@ -728,23 +920,36 @@ class Store {
 
 		try {
 			$rows = $wpdb->get_results(
-				'SELECT t.*, b.number AS building_number, b.area AS building_area, b.name AS building_name, b.status AS building_status FROM ' . self::table( 'tanks' ) . ' t LEFT JOIN ' . self::table( 'buildings' ) . ' b ON b.id = t.building_id ORDER BY b.sort ASC, b.number ASC, t.level DESC, t.sort ASC, t.number ASC', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				'SELECT t.*, b.number AS building_number, b.area AS building_area, b.name AS building_name, b.status AS building_status, b.own_water AS building_own_water FROM ' . self::table( 'tanks' ) . ' t LEFT JOIN ' . self::table( 'buildings' ) . ' b ON b.id = t.building_id ORDER BY b.sort ASC, b.number ASC, t.level DESC, t.sort ASC, t.number ASC', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 				ARRAY_A
 			);
 		} catch ( \Throwable $e ) {
 			return array();
 		}
 
-		$out = array();
+		$out   = array();
+		$slots = false;
 		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
 			$tank = self::hydrate_tank( $row );
 			if ( ! $include_offline && 'offline' === $tank['status'] ) {
 				continue;
 			}
+			$slots = $slots || $tank['own_water'];
 			$out[] = $tank;
 		}
 
-		return $out;
+		// The setups are read only when the layout has slots at all.
+		return $slots ? Temp_Tanks::attach( $out, $this->open_setups() ) : $out;
+	}
+
+	/**
+	 * Drop what this instance remembers about the layout and the setups
+	 * (a building, a tank or a setup was written).
+	 */
+	private function forget_layout() {
+		$this->areas       = null;
+		$this->open_setups = null;
+		$this->slot_setups = null;
 	}
 
 	/**
@@ -794,7 +999,11 @@ class Store {
 	}
 
 	/**
-	 * tank id → area ('clean' / 'spa'), for the Replay.
+	 * tank id → area ('clean' / 'spa'), for the Replay. A slot of the
+	 * own-water building is 'temp' here — neither; what it was at the time
+	 * of a move rides on the move event itself (its setup's kind, see
+	 * hydrate_event()), because the same slot can be quarantine this
+	 * month and clean the next.
 	 *
 	 * @return array<int, string>
 	 */
@@ -834,7 +1043,7 @@ class Store {
 		);
 		$format = array( '%d', '%d', '%d', '%d', '%s', '%d', '%s', '%d' );
 
-		$this->areas = null;
+		$this->forget_layout();
 
 		try {
 			$id = (int) ( $tank['id'] ?? 0 );
@@ -854,7 +1063,7 @@ class Store {
 	 * day / state), the numbers it shares water with, its last copper
 	 * reading and its to-do for today — from the building's own schedule
 	 * when the protocols option is given, from one list of steps when only
-	 * that is.
+	 * that is. See room(): this is its 'tanks'.
 	 *
 	 * @param string $today    Site date.
 	 * @param array  $settings Settings.
@@ -863,26 +1072,70 @@ class Store {
 	 * @return array[]
 	 */
 	public function tanks_with_occupants( $today, array $settings, array $protocol = array() ) {
+		$room = $this->room( $today, $settings, $protocol );
+		return $room['tanks'];
+	}
+
+	/**
+	 * The room today: every tank with its occupants and its own to-do
+	 * ('tanks'), and everything due as ONE list by water system ('todo',
+	 * Todo::build() — null when only a bare list of steps was given). The
+	 * two agree: a step the system has done is done on each of its tanks.
+	 *
+	 * @param string $today    Site date.
+	 * @param array  $settings Settings.
+	 * @param array  $protocol Settings::protocols() ({ default, templates }), or one steps list.
+	 * @return array{tanks: array[], todo: array|null}
+	 */
+	public function room( $today, array $settings, array $protocol = array() ) {
 		$tanks = $this->tanks();
 		if ( ! $tanks ) {
-			return array();
+			return self::assemble_room( array(), array(), array(), array(), array(), $today, $settings, $protocol );
 		}
 
-		$stays   = $this->open_stays( array(), $today, $settings );
+		return self::assemble_room(
+			$tanks,
+			isset( $protocol['templates'] ) ? $this->buildings() : array(),
+			$this->open_stays( array(), $today, $settings ),
+			$this->latest_copper( $tanks ),
+			$this->day_logs( $today ),
+			$today,
+			$settings,
+			$protocol
+		);
+	}
+
+	/**
+	 * room() from plain arrays (pure — the tests' stand-in store runs the
+	 * same code): each tank gets its occupants, the tanks it shares water
+	 * with, its last copper reading and its own to-do — a rack tank's from
+	 * its building's schedule and its groups' days, a temporary tank's
+	 * from its setup's own steps and own clock —, then the list by water
+	 * system is built and laid over the tanks (Todo::overlay()).
+	 *
+	 * @param array[] $tanks     tanks() — slots with their 'setup'.
+	 * @param array[] $buildings buildings() (needed for the per-building schedules and the list).
+	 * @param array[] $stays     Every open stay, hydrated.
+	 * @param array   $copper    latest_copper(): tank id => { value, logged_at }.
+	 * @param array[] $rows      day_logs(): the day's log rows.
+	 * @param string  $today     Site date.
+	 * @param array   $settings  Settings.
+	 * @param array   $protocol  Settings::protocols(), or one steps list.
+	 * @return array{tanks: array[], todo: array|null}
+	 */
+	public static function assemble_room( array $tanks, array $buildings, array $stays, array $copper, array $rows, $today, array $settings, array $protocol ) {
+		$per_building = isset( $protocol['templates'] );
+
 		$by_tank = array();
 		foreach ( $stays as $stay ) {
 			$by_tank[ (int) $stay['tank_id'] ][] = $stay;
 		}
 
-		$copper = $this->latest_copper();
-		$done   = $this->logs_on_date( $today );
+		$done = self::spread_logs( $rows, $tanks );
 
-		$per_building = isset( $protocol['templates'] );
-		$buildings    = array();
-		if ( $per_building ) {
-			foreach ( $this->buildings() as $building ) {
-				$buildings[ (int) $building['id'] ] = $building;
-			}
+		$by_id = array();
+		foreach ( $buildings as $building ) {
+			$by_id[ (int) $building['id'] ] = $building;
 		}
 
 		$out = array();
@@ -901,17 +1154,37 @@ class Store {
 				}
 			}
 			$tank['copper'] = isset( $copper[ $id ] ) ? $copper[ $id ] : null;
-			if ( $per_building ) {
-				$building = isset( $buildings[ (int) $tank['building_id'] ] ) ? $buildings[ (int) $tank['building_id'] ] : array();
-				$steps    = Protocol::steps_for( $building, $protocol );
+			$mine           = isset( $done[ $id ] ) ? $done[ $id ] : array();
+
+			if ( Layout::is_slot( $tank ) ) {
+				// Its own schedule, its own clock — and nothing at all while it is free.
+				$tank['todo'] = ! empty( $tank['setup'] ) && $protocol ? Todo::temp_todo( (array) $tank['setup'], $tank['occupants'], $today, $mine ) : array();
 			} else {
-				$steps = $protocol;
+				if ( $per_building ) {
+					$building = isset( $by_id[ (int) $tank['building_id'] ] ) ? $by_id[ (int) $tank['building_id'] ] : array();
+					$steps    = Protocol::steps_for( $building, $protocol );
+				} else {
+					$steps = $protocol;
+				}
+				// A step naming several medications is not done by one of them (Todo::settle_combos()).
+				$tank['todo'] = $steps ? Todo::settle_combos( Protocol::todo( $steps, $tank['occupants'], $today, (string) $tank['building']['area'], $mine ), $mine ) : array();
 			}
-			$tank['todo'] = $steps ? Protocol::todo( $steps, $tank['occupants'], $today, (string) $tank['building']['area'], isset( $done[ $id ] ) ? $done[ $id ] : array() ) : array();
-			$out[]        = $tank;
+			$out[] = $tank;
 		}
 
-		return $out;
+		if ( ! $per_building ) {
+			return array(
+				'tanks' => $out,
+				'todo'  => null,
+			);
+		}
+
+		$list = Todo::build( $buildings, $out, $protocol, $rows, $today, $settings );
+
+		return array(
+			'tanks' => Todo::overlay( $out, $list ),
+			'todo'  => $list,
+		);
 	}
 
 	/* ============================================================== */
@@ -927,7 +1200,7 @@ class Store {
 	 * @return string
 	 */
 	private static function stay_select() {
-		return 'SELECT s.*, t.number AS tank_number, t.size_label AS tank_size, b.id AS building_id, b.number AS building_number, b.area AS building_area, b.name AS building_name, o.id AS batch_order_id, o.ref AS batch_order_ref, o.sale_date AS batch_sale_date FROM ' . self::table( 'stays' ) . ' s LEFT JOIN ' . self::table( 'tanks' ) . ' t ON t.id = s.tank_id LEFT JOIN ' . self::table( 'buildings' ) . ' b ON b.id = t.building_id LEFT JOIN ' . self::table( 'order_lines' ) . ' ol ON ol.id = s.order_line_id LEFT JOIN ' . self::table( 'orders' ) . ' o ON o.id = ol.order_id';
+		return 'SELECT s.*, t.number AS tank_number, t.size_label AS tank_size, b.id AS building_id, b.number AS building_number, b.area AS building_area, b.name AS building_name, b.own_water AS building_own_water, o.id AS batch_order_id, o.ref AS batch_order_ref, o.sale_date AS batch_sale_date FROM ' . self::table( 'stays' ) . ' s LEFT JOIN ' . self::table( 'tanks' ) . ' t ON t.id = s.tank_id LEFT JOIN ' . self::table( 'buildings' ) . ' b ON b.id = t.building_id LEFT JOIN ' . self::table( 'order_lines' ) . ' ol ON ol.id = s.order_line_id LEFT JOIN ' . self::table( 'orders' ) . ' o ON o.id = ol.order_id';
 	}
 
 	/**
@@ -1250,8 +1523,15 @@ class Store {
 	/*  Events                                                         */
 	/* ============================================================== */
 
+	/**
+	 * The base SELECT for events: the stay's species, the tank numbers,
+	 * the actor — and, for a move that touched a slot, the kind of the
+	 * setup that stood there (every join on a primary key).
+	 *
+	 * @return string
+	 */
 	private static function event_select() {
-		return 'SELECT e.*, s.species AS stay_species, s.product_id AS stay_product_id, f.number AS from_tank_number, t.number AS to_tank_number, u.display_name AS actor_name FROM ' . self::table( 'stay_events' ) . ' e LEFT JOIN ' . self::table( 'stays' ) . ' s ON s.id = e.stay_id LEFT JOIN ' . self::table( 'tanks' ) . ' f ON f.id = e.from_tank_id LEFT JOIN ' . self::table( 'tanks' ) . ' t ON t.id = e.to_tank_id LEFT JOIN ' . self::users_table() . ' u ON u.ID = e.actor_id';
+		return 'SELECT e.*, s.species AS stay_species, s.product_id AS stay_product_id, f.number AS from_tank_number, t.number AS to_tank_number, u.display_name AS actor_name, fs.kind AS from_setup_kind, ts.kind AS to_setup_kind FROM ' . self::table( 'stay_events' ) . ' e LEFT JOIN ' . self::table( 'stays' ) . ' s ON s.id = e.stay_id LEFT JOIN ' . self::table( 'tanks' ) . ' f ON f.id = e.from_tank_id LEFT JOIN ' . self::table( 'tanks' ) . ' t ON t.id = e.to_tank_id LEFT JOIN ' . self::users_table() . ' u ON u.ID = e.actor_id LEFT JOIN ' . self::table( 'tank_setups' ) . ' fs ON fs.id = e.from_setup_id LEFT JOIN ' . self::table( 'tank_setups' ) . ' ts ON ts.id = e.to_setup_id';
 	}
 
 	private static function users_table() {
@@ -1355,17 +1635,43 @@ class Store {
 
 		global $wpdb;
 
+		// A move or an arrival that touches a slot remembers the setup that
+		// stands there now; and nothing lands in a slot with no setup.
+		$from   = ! empty( $event['from_tank_id'] ) ? (int) $event['from_tank_id'] : 0;
+		$to     = ! empty( $event['to_tank_id'] ) ? (int) $event['to_tank_id'] : 0;
+		$slots  = $this->slot_setups();
+		$setups = self::event_setups( $type, $from, $to, ( $from > 0 || $to > 0 ) ? $slots : array() );
+		if ( false === $setups ) {
+			return false;
+		}
+
+		// And no group comes back to life in a slot whose setup is gone: a
+		// closed group still filed under a slot is that setup's history.
+		if ( $slots && in_array( $type, self::RAISING_TYPES, true ) ) {
+			try {
+				$filed = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT tank_id FROM ' . self::table( 'stays' ) . ' WHERE id = %d', (int) $stay_id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			} catch ( \Throwable $e ) {
+				$filed = 0;
+			}
+			$stay = isset( $slots[ $filed ] ) ? $this->stay( (int) $stay_id, $today, $settings ) : null;
+			if ( $stay && self::slot_revival( $stay, self::event_with_setups( $event, $setups ), $slots, $today, $this->replay_opts( $settings ) ) ) {
+				return false;
+			}
+		}
+
 		$data = array(
-			'stay_id'      => (int) $stay_id,
-			'type'         => $type,
-			'qty'          => isset( $event['qty'] ) && null !== $event['qty'] ? (int) $event['qty'] : null,
-			'from_tank_id' => ! empty( $event['from_tank_id'] ) ? (int) $event['from_tank_id'] : null,
-			'to_tank_id'   => ! empty( $event['to_tank_id'] ) ? (int) $event['to_tank_id'] : null,
-			'note'         => (string) ( $event['note'] ?? '' ),
-			'event_at'     => self::utc_datetime( $event['event_at'] ?? '' ),
-			'actor_id'     => (int) ( $event['actor_id'] ?? 0 ),
-			'source'       => in_array( (string) ( $event['source'] ?? '' ), self::SOURCES, true ) ? (string) $event['source'] : 'manual',
-			'created_at'   => gmdate( 'Y-m-d H:i:s' ),
+			'stay_id'       => (int) $stay_id,
+			'type'          => $type,
+			'qty'           => isset( $event['qty'] ) && null !== $event['qty'] ? (int) $event['qty'] : null,
+			'from_tank_id'  => $from > 0 ? $from : null,
+			'to_tank_id'    => $to > 0 ? $to : null,
+			'note'          => (string) ( $event['note'] ?? '' ),
+			'event_at'      => self::utc_datetime( $event['event_at'] ?? '' ),
+			'actor_id'      => (int) ( $event['actor_id'] ?? 0 ),
+			'source'        => in_array( (string) ( $event['source'] ?? '' ), self::SOURCES, true ) ? (string) $event['source'] : 'manual',
+			'created_at'    => gmdate( 'Y-m-d H:i:s' ),
+			'from_setup_id' => $setups['from'],
+			'to_setup_id'   => $setups['to'],
 		);
 
 		try {
@@ -1388,10 +1694,151 @@ class Store {
 	}
 
 	/**
+	 * The setups an event's tanks are tied to (pure): the open setup of
+	 * the slot it came out of and of the slot it went into (null for a
+	 * rack tank). False when an arrival or a move would land in a slot
+	 * with nothing set up — a free slot holds no fish, whoever asks.
+	 *
+	 * @param string          $type  Event type.
+	 * @param int             $from  From tank id (0 = none).
+	 * @param int             $to    To tank id (0 = none).
+	 * @param array<int, int> $slots slot_setups(): every slot's tank id → its open setup id (0 = free).
+	 * @return array{from: int|null, to: int|null}|false
+	 */
+	public static function event_setups( $type, $from, $to, array $slots ) {
+		$out = array(
+			'from' => null,
+			'to'   => null,
+		);
+		if ( (int) $to > 0 && isset( $slots[ (int) $to ] ) ) {
+			if ( (int) $slots[ (int) $to ] <= 0 ) {
+				if ( in_array( (string) $type, array( 'arrival', 'move' ), true ) ) {
+					return false;
+				}
+			} else {
+				$out['to'] = (int) $slots[ (int) $to ];
+			}
+		}
+		if ( (int) $from > 0 && isset( $slots[ (int) $from ] ) && (int) $slots[ (int) $from ] > 0 ) {
+			$out['from'] = (int) $slots[ (int) $from ];
+		}
+		return $out;
+	}
+
+	/**
+	 * The event types that can raise a group's live count: the only ones
+	 * slot_revival() has to look at.
+	 *
+	 * @var string[]
+	 */
+	const RAISING_TYPES = array( 'arrival', 'loss', 'sold', 'count', 'move' );
+
+	/**
+	 * The setup a group in a slot went into (pure): what its last arrival
+	 * or move into that tank says. 0 when no event says.
+	 *
+	 * @param array $stay    Stay with its events.
+	 * @param int   $tank_id The slot's tank.
+	 * @return int
+	 */
+	public static function stay_setup( array $stay, $tank_id ) {
+		$setup = 0;
+		foreach ( Replay::sort_events( (array) ( $stay['events'] ?? array() ) ) as $event ) {
+			if ( (int) ( $event['to_tank_id'] ?? 0 ) === (int) $tank_id && ! empty( $event['to_setup_id'] ) ) {
+				$setup = (int) $event['to_setup_id'];
+			}
+		}
+		return $setup;
+	}
+
+	/**
+	 * Whether an event would bring fish back to life in a slot whose
+	 * setup is gone (pure): the group is filed under a slot, the setup it
+	 * went into no longer stands there (the slot is free, or the next
+	 * setup has it), and after the event more of the group would be alive
+	 * in that slot than before — the undo of a loss, a count going up. A
+	 * setup that was taken down was empty, and stays as it was; the next
+	 * one starts with nothing in it. An event that lowers the count, or
+	 * moves the group out, is always taken.
+	 *
+	 * @param array           $stay  Stay with its events (tank_id, qty_live).
+	 * @param array           $event The event about to be written, with the setups it is tied to
+	 *                               (event_with_setups()): an arrival or a move into the slot
+	 *                               under the setup that stands there is that setup's own.
+	 * @param array<int, int> $slots slot_setups().
+	 * @param string          $today Site date.
+	 * @param array           $opts  replay_opts().
+	 * @return bool
+	 */
+	public static function slot_revival( array $stay, array $event, array $slots, $today, array $opts ) {
+		$tank = (int) ( $stay['tank_id'] ?? 0 );
+		if ( $tank <= 0 || ! isset( $slots[ $tank ] ) ) {
+			return false;
+		}
+		$events   = (array) ( $stay['events'] ?? array() );
+		$events[] = array_merge(
+			$event,
+			array(
+				'id'       => PHP_INT_MAX,
+				'event_at' => self::utc_datetime( $event['event_at'] ?? '' ),
+			)
+		);
+		if ( (int) $slots[ $tank ] > 0 && (int) $slots[ $tank ] === self::stay_setup( array( 'events' => $events ), $tank ) ) {
+			return false; // The setup the group went into still stands.
+		}
+		$after = Replay::state( $stay, $events, $today, $opts );
+
+		return (int) $after['tank_id'] === $tank && (int) $after['qty_live'] > max( 0, (int) ( $stay['qty_live'] ?? 0 ) );
+	}
+
+	/**
+	 * An event with the tanks and the setups it will be written with
+	 * (pure): what slot_revival() reads.
+	 *
+	 * @param array                             $event  The event as handed to record_event().
+	 * @param array{from: int|null, to: int|null} $setups event_setups().
+	 * @return array
+	 */
+	public static function event_with_setups( array $event, array $setups ) {
+		return array_merge(
+			$event,
+			array(
+				'from_tank_id'  => ! empty( $event['from_tank_id'] ) ? (int) $event['from_tank_id'] : null,
+				'to_tank_id'    => ! empty( $event['to_tank_id'] ) ? (int) $event['to_tank_id'] : null,
+				'from_setup_id' => $setups['from'] ?? null,
+				'to_setup_id'   => $setups['to'] ?? null,
+			)
+		);
+	}
+
+	/**
+	 * Whether an event belongs to a setup that no longer stands (pure):
+	 * it came out of, or went into, a slot under a setup that has since
+	 * been taken down — or replaced by the next one. Such an event is
+	 * history and is not undone: its undo would put the group into
+	 * whatever is set up in that slot now.
+	 *
+	 * @param array           $event The event (from_tank_id, from_setup_id, to_tank_id, to_setup_id).
+	 * @param array<int, int> $slots slot_setups().
+	 * @return bool
+	 */
+	public static function setup_gone( array $event, array $slots ) {
+		foreach ( array( 'from', 'to' ) as $side ) {
+			$setup = (int) ( $event[ $side . '_setup_id' ] ?? 0 );
+			$tank  = (int) ( $event[ $side . '_tank_id' ] ?? 0 );
+			if ( $setup > 0 && ( ! isset( $slots[ $tank ] ) || (int) $slots[ $tank ] !== $setup ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * Undo one event of a stay: its compensating event (Replay), unless
 	 * one was already written — the same ids posted twice write nothing
-	 * the second time. Who may undo what (the phone's actor and age
-	 * guards) is the caller's business.
+	 * the second time. An event of a setup that was taken down is not
+	 * undone (setup_gone()): false. Who may undo what (the phone's actor
+	 * and age guards) is the caller's business.
 	 *
 	 * @param array  $stay     The stay with its events (stay()).
 	 * @param array  $event    The event to undo (event()).
@@ -1404,6 +1851,9 @@ class Store {
 		$events = isset( $stay['events'] ) && is_array( $stay['events'] ) ? $stay['events'] : $this->events( (int) $stay['id'] );
 		if ( Replay::is_undone( $events, (int) $event['id'] ) ) {
 			return null;
+		}
+		if ( ( ! empty( $event['from_setup_id'] ) || ! empty( $event['to_setup_id'] ) ) && self::setup_gone( $event, $this->slot_setups() ) ) {
+			return false;
 		}
 
 		$before = $this->state_before( array_merge( $stay, array( 'events' => $events ) ), (int) $event['id'], $today, $settings );
@@ -1684,9 +2134,17 @@ class Store {
 
 		global $wpdb;
 
+		// An entry on a slot belongs to the setup that stands there now.
+		$setup_id = null;
+		if ( (int) $tank_id > 0 ) {
+			$slots    = $this->slot_setups();
+			$setup_id = isset( $slots[ (int) $tank_id ] ) && $slots[ (int) $tank_id ] > 0 ? (int) $slots[ (int) $tank_id ] : null;
+		}
+
 		$data = array(
 			'tank_id'     => (int) $tank_id,
 			'building_id' => (int) $building_id > 0 ? (int) $building_id : null,
+			'setup_id'    => $setup_id,
 			'kind'        => in_array( (string) ( $log['kind'] ?? '' ), self::LOG_KINDS, true ) ? (string) $log['kind'] : 'note',
 			'value'       => isset( $log['value'] ) && null !== $log['value'] && is_numeric( $log['value'] ) ? round( (float) $log['value'], 3 ) : null,
 			'note'        => substr( (string) ( $log['note'] ?? '' ), 0, 2000 ),
@@ -1741,13 +2199,17 @@ class Store {
 	}
 
 	/**
-	 * The last copper reading per tank. A building-level reading (the
-	 * whole system tested — the Spa is one water) counts for every tank of
-	 * that building when it is newer than the tank's own.
+	 * The last copper reading per tank. A building is one water: the
+	 * newest reading taken anywhere in it — on the building itself or on
+	 * any of its tanks — is the reading of every tank of that building. A
+	 * slot of the own-water building has only its own, and only those
+	 * taken while its present setup stands there. Each reading says where
+	 * it was taken (tank_id, 0 = on the building itself).
 	 *
-	 * @return array<int, array{value: float, logged_at: string}>
+	 * @param array[]|null $tanks tanks(), when the caller already has them.
+	 * @return array<int, array{value: float, logged_at: string, tank_id: int}>
 	 */
-	public function latest_copper() {
+	public function latest_copper( $tanks = null ) {
 		if ( ! self::tables_exist() ) {
 			return array();
 		}
@@ -1755,41 +2217,79 @@ class Store {
 		global $wpdb;
 
 		try {
-			// The newest reading per tank / building by its logged time, not by
-			// id: an import writes old readings with new ids, and they must not
-			// replace a reading taken on the phone today.
+			// The newest reading per tank / building / setup by its logged time,
+			// not by id: an import writes old readings with new ids, and they
+			// must not replace a reading taken on the phone today.
 			$rows = $wpdb->get_results(
-				'SELECT l.tank_id, l.building_id, l.value, l.logged_at FROM ' . self::table( 'tank_logs' ) . " l WHERE l.kind = 'copper' AND l.value IS NOT NULL AND NOT EXISTS (SELECT 1 FROM " . self::table( 'tank_logs' ) . " n WHERE n.kind = 'copper' AND n.value IS NOT NULL AND n.tank_id = l.tank_id AND n.building_id <=> l.building_id AND ( n.logged_at > l.logged_at OR ( n.logged_at = l.logged_at AND n.id > l.id ) ))", // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				'SELECT l.tank_id, l.building_id, l.setup_id, l.value, l.logged_at FROM ' . self::table( 'tank_logs' ) . " l WHERE l.kind = 'copper' AND l.value IS NOT NULL AND NOT EXISTS (SELECT 1 FROM " . self::table( 'tank_logs' ) . " n WHERE n.kind = 'copper' AND n.value IS NOT NULL AND n.tank_id = l.tank_id AND n.building_id <=> l.building_id AND n.setup_id <=> l.setup_id AND ( n.logged_at > l.logged_at OR ( n.logged_at = l.logged_at AND n.id > l.id ) ))", // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 				ARRAY_A
 			);
 		} catch ( \Throwable $e ) {
 			return array();
 		}
+		if ( ! is_array( $rows ) || ! $rows ) {
+			return array();
+		}
 
-		$out          = array();
-		$per_building = array();
-		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
-			$entry = array(
-				'value'     => (float) $row['value'],
-				'logged_at' => (string) $row['logged_at'],
-			);
-			if ( (int) $row['tank_id'] > 0 ) {
-				$out[ (int) $row['tank_id'] ] = $entry;
-			} elseif ( ! empty( $row['building_id'] ) ) {
-				$per_building[ (int) $row['building_id'] ] = $entry;
+		return self::merge_copper( $rows, is_array( $tanks ) ? $tanks : $this->tanks() );
+	}
+
+	/**
+	 * latest_copper() from plain rows (pure): the newest reading of each
+	 * shared building — taken on the building or on any tank of it — for
+	 * every tank of that building; for a slot, the newest reading of its
+	 * open setup only.
+	 *
+	 * @param array[] $rows  tank_id, building_id, setup_id, value, logged_at.
+	 * @param array[] $tanks Every tank (id, building_id; a slot with its 'setup').
+	 * @return array<int, array{value: float, logged_at: string, tank_id: int}>
+	 */
+	public static function merge_copper( array $rows, array $tanks ) {
+		$building_of = array();
+		$setup_of    = array();
+		foreach ( $tanks as $tank ) {
+			$id = (int) $tank['id'];
+			if ( Layout::is_slot( $tank ) ) {
+				$setup_of[ $id ] = isset( $tank['setup']['id'] ) ? (int) $tank['setup']['id'] : 0;
+			} else {
+				$building_of[ $id ] = (int) ( $tank['building_id'] ?? 0 );
 			}
 		}
 
-		if ( $per_building ) {
-			foreach ( $this->tanks() as $tank ) {
-				$id       = (int) $tank['id'];
-				$building = (int) $tank['building_id'];
-				if ( ! isset( $per_building[ $building ] ) ) {
-					continue;
+		$newer = static function ( $entry, $than ) {
+			return null === $than || strcmp( $entry['logged_at'], $than['logged_at'] ) > 0;
+		};
+
+		$own    = array(); // Slot tank id => its setup's newest reading.
+		$system = array(); // Building id => the system's newest reading.
+		foreach ( $rows as $row ) {
+			if ( ! isset( $row['value'] ) || null === $row['value'] ) {
+				continue;
+			}
+			$tank_id = (int) ( $row['tank_id'] ?? 0 );
+			$entry   = array(
+				'value'     => (float) $row['value'],
+				'logged_at' => (string) $row['logged_at'],
+				'tank_id'   => $tank_id, // Where it was taken (0 = on the building).
+			);
+
+			if ( $tank_id > 0 && isset( $setup_of[ $tank_id ] ) ) {
+				if ( $setup_of[ $tank_id ] > 0 && (int) ( $row['setup_id'] ?? 0 ) === $setup_of[ $tank_id ] && $newer( $entry, isset( $own[ $tank_id ] ) ? $own[ $tank_id ] : null ) ) {
+					$own[ $tank_id ] = $entry;
 				}
-				if ( ! isset( $out[ $id ] ) || strcmp( $per_building[ $building ]['logged_at'], $out[ $id ]['logged_at'] ) > 0 ) {
-					$out[ $id ] = $per_building[ $building ];
-				}
+				continue;
+			}
+
+			$building = $tank_id > 0 ? ( isset( $building_of[ $tank_id ] ) ? $building_of[ $tank_id ] : 0 ) : (int) ( $row['building_id'] ?? 0 );
+			if ( $building > 0 && $newer( $entry, isset( $system[ $building ] ) ? $system[ $building ] : null ) ) {
+				$system[ $building ] = $entry;
+			}
+		}
+
+		$out = $own;
+		foreach ( $building_of as $id => $building ) {
+			if ( isset( $system[ $building ] ) ) {
+				$out[ $id ] = $system[ $building ];
 			}
 		}
 
@@ -1846,7 +2346,8 @@ class Store {
 	/**
 	 * The last dose per medication per building, from the dose logs
 	 * (building-level ones and those on a tank of the building alike):
-	 * building id => medication key => { label, note, logged_at }.
+	 * building id => medication key => { label, note, logged_at }. A dose
+	 * on a slot is that setup's own (setup_doses()) and is left out here.
 	 *
 	 * @param int $limit How many of the latest dose logs to read.
 	 * @return array<int, array<string, array{label: string, note: string, logged_at: string}>>
@@ -1860,7 +2361,7 @@ class Store {
 
 		try {
 			$rows = $wpdb->get_results(
-				$wpdb->prepare( 'SELECT l.building_id, l.note, l.logged_at, t.building_id AS tank_building_id FROM ' . self::table( 'tank_logs' ) . ' l LEFT JOIN ' . self::table( 'tanks' ) . " t ON t.id = l.tank_id WHERE l.kind = 'dose' ORDER BY l.logged_at DESC, l.id DESC LIMIT %d", max( 1, min( 5000, (int) $limit ) ) ), // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				$wpdb->prepare( 'SELECT l.building_id, l.note, l.logged_at, t.building_id AS tank_building_id FROM ' . self::table( 'tank_logs' ) . ' l LEFT JOIN ' . self::table( 'tanks' ) . " t ON t.id = l.tank_id WHERE l.kind = 'dose' AND l.setup_id IS NULL ORDER BY l.logged_at DESC, l.id DESC LIMIT %d", max( 1, min( 5000, (int) $limit ) ) ), // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 				ARRAY_A
 			);
 		} catch ( \Throwable $e ) {
@@ -1893,6 +2394,18 @@ class Store {
 	 * @return array<int, array[]>
 	 */
 	public function logs_on_date( $date ) {
+		$rows = $this->day_logs( $date );
+		return $rows ? self::spread_logs( $rows, $this->tanks() ) : array();
+	}
+
+	/**
+	 * Every log entry of a site date as it was written, oldest first —
+	 * the day's pool the to-do by water system is worked out from.
+	 *
+	 * @param string $date Site date.
+	 * @return array[] id, tank_id, building_id, setup_id, kind, value, note, logged_at.
+	 */
+	public function day_logs( $date ) {
 		if ( ! self::tables_exist() || ! Replay::is_date( $date ) ) {
 			return array();
 		}
@@ -1902,14 +2415,14 @@ class Store {
 		try {
 			list( $start, $end ) = self::site_day_bounds( $date );
 			$rows                = $wpdb->get_results(
-				$wpdb->prepare( 'SELECT tank_id, building_id, kind, value, note, logged_at FROM ' . self::table( 'tank_logs' ) . ' WHERE logged_at BETWEEN %s AND %s ORDER BY id ASC', $start, $end ), // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				$wpdb->prepare( 'SELECT id, tank_id, building_id, setup_id, kind, value, note, logged_at FROM ' . self::table( 'tank_logs' ) . ' WHERE logged_at BETWEEN %s AND %s ORDER BY id ASC', $start, $end ), // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 				ARRAY_A
 			);
 		} catch ( \Throwable $e ) {
 			return array();
 		}
 
-		return self::spread_logs( is_array( $rows ) ? $rows : array(), $this->tanks() );
+		return is_array( $rows ) ? $rows : array();
 	}
 
 	/**
@@ -1929,21 +2442,35 @@ class Store {
 
 	/**
 	 * Group log rows by tank (pure): a row on a tank under that tank, a
-	 * building-level row under every tank of its building.
+	 * building-level row under every tank of its building. A slot of the
+	 * own-water building shares nothing: it gets only the rows written on
+	 * it while its present setup stood there (setup_id) — never a
+	 * building-level row, never what an earlier setup in that slot logged.
 	 *
-	 * @param array[] $rows  tank_id, building_id, kind, value, note, logged_at.
-	 * @param array[] $tanks Every tank (id, building_id).
+	 * @param array[] $rows  tank_id, building_id, setup_id, kind, value, note, logged_at.
+	 * @param array[] $tanks Every tank (id, building_id; a slot with its 'setup').
 	 * @return array<int, array[]>
 	 */
 	public static function spread_logs( array $rows, array $tanks ) {
 		$by_building = array();
+		$slots       = array();
 		foreach ( $tanks as $tank ) {
+			if ( Layout::is_slot( $tank ) ) {
+				$slots[ (int) $tank['id'] ] = isset( $tank['setup']['id'] ) ? (int) $tank['setup']['id'] : 0;
+				continue;
+			}
 			$by_building[ (int) ( $tank['building_id'] ?? 0 ) ][] = (int) $tank['id'];
 		}
 
 		$out = array();
 		foreach ( $rows as $row ) {
 			$tank_id = (int) ( $row['tank_id'] ?? 0 );
+			if ( $tank_id > 0 && isset( $slots[ $tank_id ] ) ) {
+				if ( $slots[ $tank_id ] > 0 && (int) ( $row['setup_id'] ?? 0 ) === $slots[ $tank_id ] ) {
+					$out[ $tank_id ][] = $row;
+				}
+				continue;
+			}
 			if ( $tank_id > 0 ) {
 				$out[ $tank_id ][] = $row;
 				continue;
@@ -1954,6 +2481,412 @@ class Store {
 			}
 		}
 
+		return $out;
+	}
+
+	/* ============================================================== */
+	/*  Temporary tanks: the slots and what is set up in them          */
+	/* ============================================================== */
+
+	/**
+	 * The own-water building (the temporary tanks), or null when the
+	 * layout has none.
+	 *
+	 * @return array|null
+	 */
+	public function temp_building() {
+		foreach ( $this->buildings() as $building ) {
+			if ( Layout::is_own_water( $building ) ) {
+				return $building;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Add the next slot to the own-water building (up to Layout::MAX_SLOTS).
+	 *
+	 * @return int|false The new slot's tank number.
+	 */
+	public function add_slot() {
+		$building = $this->temp_building();
+		if ( ! $building ) {
+			return false;
+		}
+		$numbers = array();
+		foreach ( $this->tanks_in_building( (int) $building['id'] ) as $tank ) {
+			$numbers[] = (int) $tank['number'];
+		}
+		$slot = Layout::next_slot( (int) $building['number'], $numbers );
+		if ( $slot <= 0 ) {
+			return false;
+		}
+		$row                = Layout::slot_row( (int) $building['number'], $slot );
+		$row['building_id'] = (int) $building['id'];
+
+		return $this->save_tank( $row ) ? (int) $row['number'] : false;
+	}
+
+	/**
+	 * The base SELECT for setups, with the slot's tank number and who set
+	 * it up / took it down.
+	 *
+	 * @return string
+	 */
+	private static function setup_select() {
+		return 'SELECT s.*, t.number AS tank_number, cu.display_name AS created_name, xu.display_name AS closed_name FROM ' . self::table( 'tank_setups' ) . ' s LEFT JOIN ' . self::table( 'tanks' ) . ' t ON t.id = s.tank_id LEFT JOIN ' . self::users_table() . ' cu ON cu.ID = s.created_by LEFT JOIN ' . self::users_table() . ' xu ON xu.ID = s.closed_by';
+	}
+
+	/**
+	 * The setups that stand in a slot now, by that slot's tank id
+	 * (memoised per instance).
+	 *
+	 * @return array<int, array>
+	 */
+	public function open_setups() {
+		if ( null !== $this->open_setups ) {
+			return $this->open_setups;
+		}
+		$this->open_setups = array();
+		if ( ! self::tables_exist() ) {
+			return $this->open_setups;
+		}
+
+		global $wpdb;
+
+		try {
+			$rows = $wpdb->get_results( self::setup_select() . ' WHERE s.open_tank_id IS NOT NULL ORDER BY s.slot ASC, s.id ASC', ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		} catch ( \Throwable $e ) {
+			$rows = array();
+		}
+		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
+			$setup                                         = self::hydrate_setup( $row );
+			$this->open_setups[ (int) $setup['tank_id'] ] = $setup;
+		}
+
+		return $this->open_setups;
+	}
+
+	/**
+	 * Every slot — a tank of the own-water building — with the id of the
+	 * setup that stands in it (0 = free). A rack tank is not in the list.
+	 * One small query, memoised per instance: what record_event() and the
+	 * log writers look a tank up in.
+	 *
+	 * @return array<int, int>
+	 */
+	public function slot_setups() {
+		if ( null !== $this->slot_setups ) {
+			return $this->slot_setups;
+		}
+		$this->slot_setups = array();
+		if ( ! self::tables_exist() ) {
+			return $this->slot_setups;
+		}
+
+		global $wpdb;
+
+		try {
+			$rows = $wpdb->get_results(
+				'SELECT t.id AS tank_id, s.id AS setup_id FROM ' . self::table( 'tanks' ) . ' t INNER JOIN ' . self::table( 'buildings' ) . ' b ON b.id = t.building_id AND b.own_water = 1 LEFT JOIN ' . self::table( 'tank_setups' ) . ' s ON s.open_tank_id = t.id', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				ARRAY_A
+			);
+		} catch ( \Throwable $e ) {
+			$rows = array();
+		}
+		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
+			$this->slot_setups[ (int) $row['tank_id'] ] = ! empty( $row['setup_id'] ) ? (int) $row['setup_id'] : 0;
+		}
+
+		return $this->slot_setups;
+	}
+
+	/**
+	 * One setup, open or taken down.
+	 *
+	 * @param int $id Setup id.
+	 * @return array|null
+	 */
+	public function setup( $id ) {
+		if ( ! self::tables_exist() || (int) $id <= 0 ) {
+			return null;
+		}
+
+		global $wpdb;
+
+		try {
+			$row = $wpdb->get_row( $wpdb->prepare( self::setup_select() . ' WHERE s.id = %d', (int) $id ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		} catch ( \Throwable $e ) {
+			return null;
+		}
+
+		return $row ? self::hydrate_setup( $row ) : null;
+	}
+
+	/**
+	 * The setups that were taken down — the history —, the latest first.
+	 *
+	 * @param int $limit Row cap.
+	 * @return array[]
+	 */
+	public function closed_setups( $limit = self::SETUPS_LIMIT ) {
+		if ( ! self::tables_exist() ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		try {
+			$rows = $wpdb->get_results(
+				$wpdb->prepare( self::setup_select() . ' WHERE s.open_tank_id IS NULL ORDER BY s.closed_at DESC, s.id DESC LIMIT %d', max( 1, min( 1000, (int) $limit ) ) ), // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				ARRAY_A
+			);
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+
+		return array_map( array( self::class, 'hydrate_setup' ), is_array( $rows ) ? $rows : array() );
+	}
+
+	/**
+	 * Write a new setup into a slot. The slot's unique open_tank_id key is
+	 * the last word: when a setup already stands there (another phone was
+	 * faster), nothing is written.
+	 *
+	 * @param array $setup tank_id, slot, name, purpose, kind, gallons, template, start_date, steps, note, created_by.
+	 * @return int|false Setup id.
+	 */
+	public function insert_setup( array $setup ) {
+		$tank_id = (int) ( $setup['tank_id'] ?? 0 );
+		if ( ! self::tables_exist() || $tank_id <= 0 ) {
+			return false;
+		}
+		$slots = $this->slot_setups();
+		if ( ! isset( $slots[ $tank_id ] ) || $slots[ $tank_id ] > 0 ) {
+			return false; // Not a slot, or one that is already set up.
+		}
+
+		global $wpdb;
+
+		$now  = gmdate( 'Y-m-d H:i:s' );
+		$data = array(
+			'tank_id'      => $tank_id,
+			'open_tank_id' => $tank_id,
+			'slot'         => (int) ( $setup['slot'] ?? 0 ),
+			'name'         => substr( (string) ( $setup['name'] ?? '' ), 0, 60 ),
+			'purpose'      => substr( (string) ( $setup['purpose'] ?? '' ), 0, 120 ),
+			'kind'         => Temp_Tanks::kind( $setup['kind'] ?? '' ),
+			'gallons'      => max( 0, min( Layout::MAX_GALLONS, (int) ( $setup['gallons'] ?? 0 ) ) ),
+			'template'     => substr( (string) ( $setup['template'] ?? '' ), 0, 40 ),
+			'start_date'   => Replay::is_date( $setup['start_date'] ?? null ) ? (string) $setup['start_date'] : gmdate( 'Y-m-d' ),
+			'steps'        => (string) wp_json_encode( Protocol::normalize( $setup['steps'] ?? array() ) ),
+			'note'         => substr( (string) ( $setup['note'] ?? '' ), 0, 2000 ),
+			'created_by'   => (int) ( $setup['created_by'] ?? 0 ),
+			'created_at'   => $now,
+			'updated_at'   => $now,
+		);
+
+		$this->forget_layout();
+
+		try {
+			$quiet = $wpdb->suppress_errors( true ); // A duplicate open_tank_id is an answer, not an error to print.
+			$ok    = $wpdb->insert( self::table( 'tank_setups' ), $data );
+			$wpdb->suppress_errors( $quiet );
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+
+		return $ok ? (int) $wpdb->insert_id : false;
+	}
+
+	/**
+	 * Change a setup that still stands: its name, what it is for, the
+	 * gallons, the treatment start date, the note, its own steps. The
+	 * slot and the kind never change.
+	 *
+	 * @param int   $id     Setup id.
+	 * @param array $fields Any of name, purpose, gallons, start_date, note, steps.
+	 * @return bool
+	 */
+	public function update_setup( $id, array $fields ) {
+		if ( ! self::tables_exist() || (int) $id <= 0 ) {
+			return false;
+		}
+
+		$data = array();
+		if ( array_key_exists( 'name', $fields ) ) {
+			$data['name'] = substr( (string) $fields['name'], 0, 60 );
+		}
+		if ( array_key_exists( 'purpose', $fields ) ) {
+			$data['purpose'] = substr( (string) $fields['purpose'], 0, 120 );
+		}
+		if ( array_key_exists( 'gallons', $fields ) ) {
+			$data['gallons'] = max( 0, min( Layout::MAX_GALLONS, (int) $fields['gallons'] ) );
+		}
+		if ( array_key_exists( 'start_date', $fields ) && Replay::is_date( $fields['start_date'] ) ) {
+			$data['start_date'] = (string) $fields['start_date'];
+		}
+		if ( array_key_exists( 'note', $fields ) ) {
+			$data['note'] = substr( (string) $fields['note'], 0, 2000 );
+		}
+		if ( array_key_exists( 'steps', $fields ) && is_array( $fields['steps'] ) ) {
+			$data['steps'] = (string) wp_json_encode( Protocol::normalize( $fields['steps'] ) );
+		}
+		if ( ! $data ) {
+			return false;
+		}
+		$data['updated_at'] = gmdate( 'Y-m-d H:i:s' );
+
+		global $wpdb;
+
+		$this->forget_layout();
+
+		try {
+			// Only a setup that still stands: one taken down is history.
+			$ok = $wpdb->query(
+				$wpdb->prepare(
+					'UPDATE ' . self::table( 'tank_setups' ) . ' SET ' . implode( ', ', array_map( static function ( $column ) { return $column . ' = ' . ( 'gallons' === $column ? '%d' : '%s' ); }, array_keys( $data ) ) ) . ' WHERE id = %d AND open_tank_id IS NOT NULL', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+					array_merge( array_values( $data ), array( (int) $id ) )
+				)
+			);
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+
+		return false !== $ok;
+	}
+
+	/**
+	 * Take a setup down: it leaves its slot (open_tank_id NULL — the slot
+	 * is free) and keeps everything else as its history. Whether the tank
+	 * is empty is the caller's check (Temp_Tanks::take_down()).
+	 *
+	 * @param int $id       Setup id.
+	 * @param int $actor_id Who took it down.
+	 * @return bool Whether a standing setup was closed.
+	 */
+	public function close_setup( $id, $actor_id = 0 ) {
+		if ( ! self::tables_exist() || (int) $id <= 0 ) {
+			return false;
+		}
+
+		global $wpdb;
+
+		$this->forget_layout();
+
+		try {
+			$now = gmdate( 'Y-m-d H:i:s' );
+			$ok  = $wpdb->query( $wpdb->prepare( 'UPDATE ' . self::table( 'tank_setups' ) . ' SET open_tank_id = NULL, closed_at = %s, closed_by = %d, updated_at = %s WHERE id = %d AND open_tank_id IS NOT NULL', $now, (int) $actor_id, $now, (int) $id ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+
+		return (int) $ok > 0;
+	}
+
+	/**
+	 * Every log entry written on a slot while one setup stood there —
+	 * its ticks, doses, readings and notes —, oldest first.
+	 *
+	 * @param int $setup_id Setup id.
+	 * @param int $limit    Row cap.
+	 * @return array[]
+	 */
+	public function setup_logs( $setup_id, $limit = self::HISTORY_LIMIT ) {
+		if ( ! self::tables_exist() || (int) $setup_id <= 0 ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		try {
+			$rows = $wpdb->get_results(
+				$wpdb->prepare( self::log_select() . ' WHERE l.setup_id = %d ORDER BY l.logged_at ASC, l.id ASC LIMIT %d', (int) $setup_id, max( 1, min( 10000, (int) $limit ) ) ), // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				ARRAY_A
+			);
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+
+		return array_map( array( self::class, 'hydrate_log' ), is_array( $rows ) ? $rows : array() );
+	}
+
+	/**
+	 * Every stay event that went into or came out of one setup — the
+	 * groups that passed through —, oldest first.
+	 *
+	 * @param int $setup_id Setup id.
+	 * @param int $limit    Row cap.
+	 * @return array[]
+	 */
+	public function setup_events( $setup_id, $limit = self::HISTORY_LIMIT ) {
+		if ( ! self::tables_exist() || (int) $setup_id <= 0 ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		try {
+			$rows = $wpdb->get_results(
+				$wpdb->prepare( self::event_select() . ' WHERE e.to_setup_id = %d OR e.from_setup_id = %d ORDER BY e.event_at ASC, e.id ASC LIMIT %d', (int) $setup_id, (int) $setup_id, max( 1, min( 10000, (int) $limit ) ) ), // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				ARRAY_A
+			);
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+
+		return array_map( array( self::class, 'hydrate_event' ), is_array( $rows ) ? $rows : array() );
+	}
+
+	/**
+	 * The last dose per medication of each setup that stands — a slot's
+	 * own water: setup id => medication key => { label, note, logged_at }.
+	 *
+	 * @param int[] $setup_ids Setup ids.
+	 * @return array<int, array<string, array{label: string, note: string, logged_at: string}>>
+	 */
+	public function setup_doses( array $setup_ids ) {
+		$setup_ids = array_values( array_unique( array_filter( array_map( 'intval', $setup_ids ) ) ) );
+		if ( ! self::tables_exist() || ! $setup_ids ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		try {
+			$rows = $wpdb->get_results(
+				'SELECT setup_id, value, note, logged_at FROM ' . self::table( 'tank_logs' ) . " WHERE kind = 'dose' AND setup_id IN (" . implode( ',', $setup_ids ) . ') ORDER BY logged_at DESC, id DESC LIMIT 2000', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- integers only.
+				ARRAY_A
+			);
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+
+		return self::last_doses( is_array( $rows ) ? $rows : array(), 'setup_id' );
+	}
+
+	/**
+	 * The last dose per medication per owner (pure): rows newest first,
+	 * the first one naming each medication wins.
+	 *
+	 * @param array[] $rows  note, logged_at and the owner column, newest first.
+	 * @param string  $owner The column that says whose dose it is.
+	 * @return array<int, array<string, array{label: string, note: string, logged_at: string}>>
+	 */
+	public static function last_doses( array $rows, $owner ) {
+		$out = array();
+		foreach ( $rows as $row ) {
+			$id  = (int) ( $row[ $owner ] ?? 0 );
+			$key = Todo::medication_key( (string) ( $row['note'] ?? '' ) );
+			if ( $id <= 0 || null === $key || isset( $out[ $id ][ $key ] ) ) {
+				continue;
+			}
+			$out[ $id ][ $key ] = array(
+				'label'     => Todo::medication_name( (string) $row['note'] ),
+				'note'      => (string) $row['note'],
+				'logged_at' => (string) $row['logged_at'],
+			);
+		}
 		return $out;
 	}
 
@@ -4004,16 +4937,27 @@ class Store {
 			'notes'          => (string) ( $row['notes'] ?? '' ),
 			'schedule'       => (string) ( $row['schedule'] ?? '' ),
 			'system_gallons' => isset( $row['system_gallons'] ) && null !== $row['system_gallons'] && '' !== $row['system_gallons'] ? (int) $row['system_gallons'] : null,
+			'own_water'      => ! empty( $row['own_water'] ),
 		);
 	}
 
+	/**
+	 * A tank row with ints and its building part. A slot (a tank of the
+	 * own-water building) says so ('own_water', 'slot'); 'setup' and
+	 * 'effective_area' are filled by tanks() (Temp_Tanks::attach()) — here
+	 * they stand at "nothing set up" and the building's own area.
+	 *
+	 * @param array $row Raw row (joined with its building).
+	 * @return array
+	 */
 	public static function hydrate_tank( array $row ) {
 		$building = array(
-			'id'     => (int) ( $row['building_id'] ?? 0 ),
-			'area'   => (string) ( $row['building_area'] ?? 'clean' ),
-			'number' => (int) ( $row['building_number'] ?? 0 ),
-			'name'   => (string) ( $row['building_name'] ?? '' ),
-			'status' => (string) ( $row['building_status'] ?? 'active' ),
+			'id'        => (int) ( $row['building_id'] ?? 0 ),
+			'area'      => (string) ( $row['building_area'] ?? 'clean' ),
+			'number'    => (int) ( $row['building_number'] ?? 0 ),
+			'name'      => (string) ( $row['building_name'] ?? '' ),
+			'status'    => (string) ( $row['building_status'] ?? 'active' ),
+			'own_water' => ! empty( $row['building_own_water'] ),
 		);
 		$tank     = array(
 			'id'          => (int) ( $row['id'] ?? 0 ),
@@ -4026,8 +4970,12 @@ class Store {
 			'status'      => (string) ( $row['status'] ?? 'active' ),
 			'sort'        => (int) ( $row['sort'] ?? 0 ),
 			'building'    => $building,
+			'own_water'   => $building['own_water'],
 		);
-		$tank['path'] = Layout::tank_path( $tank, $building );
+		$tank['slot']           = Layout::slot_of( $tank );
+		$tank['setup']          = null;
+		$tank['effective_area'] = $building['area'];
+		$tank['path']           = Layout::tank_path( $tank, $building );
 
 		return $tank;
 	}
@@ -4048,10 +4996,11 @@ class Store {
 	 */
 	public static function hydrate_stay( array $row, $today = '', array $settings = array() ) {
 		$building = array(
-			'id'     => (int) ( $row['building_id'] ?? 0 ),
-			'area'   => (string) ( $row['building_area'] ?? '' ),
-			'number' => (int) ( $row['building_number'] ?? 0 ),
-			'name'   => (string) ( $row['building_name'] ?? '' ),
+			'id'        => (int) ( $row['building_id'] ?? 0 ),
+			'area'      => (string) ( $row['building_area'] ?? '' ),
+			'number'    => (int) ( $row['building_number'] ?? 0 ),
+			'name'      => (string) ( $row['building_name'] ?? '' ),
+			'own_water' => ! empty( $row['building_own_water'] ),
 		);
 		$tank     = array(
 			'id'         => (int) ( $row['tank_id'] ?? 0 ),
@@ -4081,6 +5030,7 @@ class Store {
 			'tank_path'           => $tank['number'] > 0 ? Layout::tank_path( $tank, $building ) : '',
 			'building_id'         => $building['id'] > 0 ? $building['id'] : null,
 			'area'                => $building['area'],
+			'own_water'           => $building['own_water'],
 			'source'              => (string) ( $row['source'] ?? 'manual' ),
 			'order_line_id'       => ! empty( $row['order_line_id'] ) ? (int) $row['order_line_id'] : null,
 			'supplier'            => isset( $row['supplier'] ) && null !== $row['supplier'] ? (string) $row['supplier'] : null,
@@ -4109,7 +5059,20 @@ class Store {
 		return array_merge( $stay, $effective );
 	}
 
+	/**
+	 * An event row with ints. A move that touched a slot carries the area
+	 * that slot behaved as AT THE TIME — 'spa' for a quarantine setup,
+	 * 'clean' for a clean one (from_area / to_area, null for a rack tank)
+	 * — which the Replay reads before the layout's own area.
+	 *
+	 * @param array $row Raw row (joined).
+	 * @return array
+	 */
 	public static function hydrate_event( array $row ) {
+		$area = static function ( $kind ) {
+			return isset( $kind ) && null !== $kind && '' !== (string) $kind ? Temp_Tanks::kind_area( (string) $kind ) : null;
+		};
+
 		return array(
 			'id'               => (int) ( $row['id'] ?? 0 ),
 			'stay_id'          => (int) ( $row['stay_id'] ?? 0 ),
@@ -4127,6 +5090,10 @@ class Store {
 			'created_at'       => (string) ( $row['created_at'] ?? '' ),
 			'species'          => (string) ( $row['stay_species'] ?? '' ),
 			'product_id'       => ! empty( $row['stay_product_id'] ) ? (int) $row['stay_product_id'] : null,
+			'from_setup_id'    => ! empty( $row['from_setup_id'] ) ? (int) $row['from_setup_id'] : null,
+			'to_setup_id'      => ! empty( $row['to_setup_id'] ) ? (int) $row['to_setup_id'] : null,
+			'from_area'        => $area( $row['from_setup_kind'] ?? null ),
+			'to_area'          => $area( $row['to_setup_kind'] ?? null ),
 		);
 	}
 
@@ -4144,6 +5111,42 @@ class Store {
 			'actor_id'        => (int) ( $row['actor_id'] ?? 0 ),
 			'actor_name'      => (string) ( $row['actor_name'] ?? '' ),
 			'source'          => (string) ( $row['source'] ?? 'manual' ),
+			'setup_id'        => ! empty( $row['setup_id'] ) ? (int) $row['setup_id'] : null,
+		);
+	}
+
+	/**
+	 * A setup row with ints, its steps as a list (Protocol's shape) and
+	 * whether it still stands in its slot ('open').
+	 *
+	 * @param array $row Raw row (joined with its tank and the two users).
+	 * @return array
+	 */
+	public static function hydrate_setup( array $row ) {
+		$steps = isset( $row['steps'] ) && is_string( $row['steps'] ) && '' !== $row['steps'] ? json_decode( $row['steps'], true ) : ( isset( $row['steps'] ) && is_array( $row['steps'] ) ? $row['steps'] : array() );
+		$slot  = (int) ( $row['slot'] ?? 0 );
+
+		return array(
+			'id'           => (int) ( $row['id'] ?? 0 ),
+			'tank_id'      => (int) ( $row['tank_id'] ?? 0 ),
+			'tank_number'  => ! empty( $row['tank_number'] ) ? (int) $row['tank_number'] : 0,
+			'slot'         => $slot,
+			'name'         => (string) ( $row['name'] ?? '' ),
+			'purpose'      => (string) ( $row['purpose'] ?? '' ),
+			'kind'         => Temp_Tanks::kind( $row['kind'] ?? '' ),
+			'gallons'      => (int) ( $row['gallons'] ?? 0 ),
+			'template'     => (string) ( $row['template'] ?? '' ),
+			'start_date'   => (string) ( $row['start_date'] ?? '' ),
+			'steps'        => Protocol::normalize( is_array( $steps ) ? $steps : array() ),
+			'note'         => (string) ( $row['note'] ?? '' ),
+			'created_by'   => (int) ( $row['created_by'] ?? 0 ),
+			'created_name' => (string) ( $row['created_name'] ?? '' ),
+			'created_at'   => (string) ( $row['created_at'] ?? '' ),
+			'updated_at'   => (string) ( $row['updated_at'] ?? '' ),
+			'closed_by'    => (int) ( $row['closed_by'] ?? 0 ),
+			'closed_name'  => (string) ( $row['closed_name'] ?? '' ),
+			'closed_at'    => ! empty( $row['closed_at'] ) && '0000-00-00 00:00:00' !== $row['closed_at'] ? (string) $row['closed_at'] : null,
+			'open'         => ! empty( $row['open_tank_id'] ),
 		);
 	}
 

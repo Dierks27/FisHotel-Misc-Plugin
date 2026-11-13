@@ -185,6 +185,8 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 			require_once self::path() . 'class-layout.php';
 			require_once self::path() . 'class-replay.php';
 			require_once self::path() . 'class-protocol.php';
+			require_once self::path() . 'class-temp-tanks.php';
+			require_once self::path() . 'class-todo.php';
 			require_once self::path() . 'class-parser.php';
 			require_once self::path() . 'class-qr.php';
 			require_once self::path() . 'class-costing.php';
@@ -204,6 +206,24 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 		}
 
 		/**
+		 * Whether boot() ran in this request: the section is enabled. The
+		 * file itself is loaded for every section, switched on or not, and
+		 * with it the global functions at its foot.
+		 *
+		 * @var bool
+		 */
+		private static $booted = false;
+
+		/**
+		 * Whether the section is switched on (it booted in this request).
+		 *
+		 * @return bool
+		 */
+		public static function is_booted() {
+			return self::$booted;
+		}
+
+		/**
 		 * Boot the section when it is enabled. The tables install (and the
 		 * layout is seeded) on the first boot only — the version gate is an
 		 * autoloaded option, so every later request pays no query here —
@@ -214,6 +234,7 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 		 */
 		public static function boot() {
 			self::load();
+			self::$booted = true;
 
 			try {
 				Store::install();
@@ -222,6 +243,9 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 			}
 
 			add_filter( self::FACTS_FILTER, array( self::class, 'filter_facts' ), 10, 2 );
+			// The day's to-do count for other screens: two hooks, no query until one is asked.
+			add_filter( Todo::SUMMARY_FILTER, array( self::class, 'filter_todo' ), 10, 1 );
+			add_filter( Todo::TODAY_FILTER, array( self::class, 'filter_today_lines' ), 10, 1 );
 			add_action( 'save_post_product', array( Store::class, 'clear_species_cache' ), 10, 0 );
 			// Cron runs outside wp-admin: the uploaded workbook's cleanup is hooked on every request.
 			add_action( self::IMPORT_CLEANUP_HOOK, array( self::class, 'import_cleanup' ), 10, 0 );
@@ -233,12 +257,16 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 				require_once self::path() . 'class-admin.php';
 				require_once self::path() . 'class-admin-workbook.php';
 				require_once self::path() . 'class-admin-import.php';
+				require_once self::path() . 'class-admin-temp.php';
 
 				$settings = new Settings();
 				$settings->init();
 
 				$admin = new Admin();
 				$admin->init();
+
+				$temp = new Admin_Temp();
+				$temp->init();
 
 				$workbook = new Admin_Workbook();
 				$workbook->init();
@@ -265,6 +293,7 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 			require_once self::path() . 'class-admin.php';
 			require_once self::path() . 'class-admin-workbook.php';
 			require_once self::path() . 'class-admin-import.php';
+			require_once self::path() . 'class-admin-temp.php';
 
 			add_submenu_page(
 				'fishotel-misc',
@@ -351,6 +380,74 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 				$query .= '&tank=' . (int) $tank_number;
 			}
 			return home_url( '/?' . $query );
+		}
+
+		/**
+		 * The Board's To do tab (built without the admin classes, so it is
+		 * there on any request).
+		 *
+		 * @return string
+		 */
+		public static function todo_url() {
+			return admin_url( 'admin.php?page=' . self::MENU_SLUG . '&tab=todo' );
+		}
+
+		/**
+		 * How much is left to do in the tanks today (see
+		 * fishotel_cleanroom_todo()): Todo::summary() of the day's list by
+		 * water system, or null when the section is switched off, the tables
+		 * are not there or anything goes wrong — never an exception for the
+		 * screen that asked, and not one query while the section is off.
+		 *
+		 * @return array{left: int, total: int, all_done: bool, flags: int, text: string, url: string}|null
+		 */
+		public static function todo_summary() {
+			if ( ! self::$booted ) {
+				return null; // Switched off: the room is nobody's business.
+			}
+			try {
+				self::load();
+				if ( ! Store::tables_exist() ) {
+					return null;
+				}
+				$store = new Store();
+				$room  = $store->room( self::today(), Settings::get(), Settings::protocols() );
+			} catch ( \Throwable $e ) {
+				return null;
+			}
+
+			return is_array( $room['todo'] ?? null ) ? Todo::summary( $room['todo'], self::todo_url() ) : null;
+		}
+
+		/**
+		 * Filter callback: apply_filters( 'fishotel_cleanroom_todo', null ).
+		 *
+		 * @param mixed $value Incoming value (null unless something answered first).
+		 * @return array|null|mixed
+		 */
+		public static function filter_todo( $value = null ) {
+			if ( null !== $value ) {
+				return $value;
+			}
+			return self::todo_summary();
+		}
+
+		/**
+		 * Filter callback: the Today section's lines
+		 * (apply_filters( 'fishotel_today_lines', array() )) gain "Tanks: N
+		 * things to do" with a link to the To do tab — for a user who may
+		 * open it, on a day with something due.
+		 *
+		 * @param mixed $lines The lines so far.
+		 * @return array[]
+		 */
+		public static function filter_today_lines( $lines = array() ) {
+			$lines = is_array( $lines ) ? $lines : array();
+			if ( ! function_exists( 'current_user_can' ) || ! current_user_can( self::CAPABILITY ) ) {
+				return $lines;
+			}
+			$summary = self::todo_summary();
+			return is_array( $summary ) ? Todo::with_today_line( $lines, Todo::today_line( $summary ) ) : $lines;
 		}
 
 		/**
@@ -442,6 +539,31 @@ namespace {
 		 */
 		function fishotel_cleanroom_product_facts( $product_id ) {
 			return \FisHotel\Misc\Sections\Clean_Room\Clean_Room::product_facts( (int) $product_id );
+		}
+	}
+
+	if ( ! function_exists( 'fishotel_cleanroom_todo' ) ) {
+		/**
+		 * How much is left to do in the tanks today — the count at the top
+		 * of the Clean Room's "To do" list (everything due today, by water
+		 * system: each building once, each temporary tank on its own).
+		 *
+		 * This function exists only while the Misc plugin is active: guard
+		 * it with function_exists(), or read
+		 * apply_filters( 'fishotel_cleanroom_todo', null ), which is always
+		 * safe and stays null when nobody answers. While the Clean Room
+		 * section is switched off it answers null and runs no query. It
+		 * reads the room (a handful of queries), so call it where the
+		 * answer is shown, not on every request.
+		 *
+		 * @return array{left: int, total: int, all_done: bool, flags: int, text: string, url: string}|null
+		 *         left / total: lines still open / in all; all_done: something was due and nothing is left;
+		 *         flags: copper flags (a reading below the floor, or one that is due / overdue);
+		 *         text: "Tanks: 3 things to do" / "Tanks: all done" / "Tanks: nothing due today";
+		 *         url: the To do tab. Null when the section is switched off or its tables do not exist.
+		 */
+		function fishotel_cleanroom_todo() {
+			return \FisHotel\Misc\Sections\Clean_Room\Clean_Room::todo_summary();
 		}
 	}
 }
