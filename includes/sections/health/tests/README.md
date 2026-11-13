@@ -12,6 +12,7 @@ php  includes/sections/health/tests/logger-test.php
 php  includes/sections/health/tests/checks-test.php
 php  includes/sections/health/tests/capture-test.php
 php  includes/sections/health/tests/csv-test.php
+php  includes/sections/health/tests/section-switches-test.php
 node includes/sections/health/tests/admin.test.js
 ```
 
@@ -76,6 +77,16 @@ node includes/sections/health/tests/admin.test.js
 - **admin.test.js** — `filterRows()` (level, source, ANDed search terms,
   case-insensitivity, null rows, no mutation), `escapeHtml()`,
   `levelClass()`.
+- **section-switches-test.php** — not Health's own code: the plugin's
+  section switches (`includes/class-section-manager.php`), kept here
+  because CI runs the tests of the section folders. It brings its own stubs
+  and three throw-away sections. Several requests that each read the list
+  of enabled sections before any of them saved: two switched on, two
+  switched off, one switched off by a request that started before it was
+  on — every click is kept; the list is read again under a database lock
+  and the lock is given back; a click that changes nothing is answered as
+  saved and writes nothing; a section that does not exist is refused; a
+  lock that is not granted, or no database object, still saves.
 
 ## By hand, once, on a real site
 
