@@ -41,6 +41,11 @@
  *                                    or one of core's __return_* helpers
  *   closures, arrow functions      → fine as they are
  * A method is found on the class or on a parent class of this plugin.
+ * It must be public (WordPress calls it from outside the class), and
+ * static when the callback names the class rather than an object
+ * (self::class, static::class, __CLASS__, Name::class, 'Class::method');
+ * either mistake is a fatal Error on PHP 8 when the hook fires. A parent
+ * from WordPress that is loaded is asked through ReflectionMethod.
  * Anything the reader cannot work out is a failure too, unless listed in
  * $fh_allowed with the reason — so the check cannot quietly go blind.
  *
@@ -250,7 +255,16 @@ function fh_read_file( $src ) {
 			}
 			if ( isset( $tk[ $j ] ) && T_STRING === $tk[ $j ][0] ) {
 				if ( null !== $class && $depth === $class[1] ) {
-					$classes[ strtolower( $class[0] ) ]['methods'][ strtolower( $tk[ $j ][1] ) ] = true;
+					// Its modifiers, read backwards: public (also when none
+					// is written) and static, which a callback depends on.
+					$mods = array();
+					for ( $k = $i - 1; $k >= 0 && in_array( $tk[ $k ][0], array( T_PUBLIC, T_PROTECTED, T_PRIVATE, T_STATIC, T_ABSTRACT, T_FINAL ), true ); $k-- ) {
+						$mods[] = $tk[ $k ][0];
+					}
+					$classes[ strtolower( $class[0] ) ]['methods'][ strtolower( $tk[ $j ][1] ) ] = array(
+						'public' => ! in_array( T_PROTECTED, $mods, true ) && ! in_array( T_PRIVATE, $mods, true ),
+						'static' => in_array( T_STATIC, $mods, true ),
+					);
 				} elseif ( null === $class ) {
 					$functions[ strtolower( ( '' !== $ns ? $ns . '\\' : '' ) . $tk[ $j ][1] ) ] = true;
 				}
@@ -378,14 +392,15 @@ function fh_rest_callbacks( array $args ) {
 }
 
 /**
- * Whether a class (or a parent this plugin defines) has a method.
+ * Find a method on a class (or on a parent this plugin defines).
  *
  * @param string $fqcn    Class.
  * @param string $method  Method.
  * @param array  $classes Index.
- * @return bool|null Null when the class itself is unknown.
+ * @return array{public: bool, static: bool}|false|null False when the
+ *         method is missing, null when the class itself is unknown.
  */
-function fh_has_method( $fqcn, $method, array $classes ) {
+function fh_find_method( $fqcn, $method, array $classes ) {
 	$seen = 0;
 	$key  = strtolower( ltrim( $fqcn, '\\' ) );
 	if ( ! isset( $classes[ $key ] ) ) {
@@ -393,7 +408,7 @@ function fh_has_method( $fqcn, $method, array $classes ) {
 	}
 	while ( isset( $classes[ $key ] ) && $seen++ < 10 ) {
 		if ( isset( $classes[ $key ]['methods'][ strtolower( $method ) ] ) ) {
-			return true;
+			return $classes[ $key ]['methods'][ strtolower( $method ) ];
 		}
 		$parent = $classes[ $key ]['parent'];
 		if ( null === $parent ) {
@@ -403,10 +418,44 @@ function fh_has_method( $fqcn, $method, array $classes ) {
 		if ( ! isset( $classes[ $key ] ) ) {
 			// A parent from WordPress (WP_Widget, WP_List_Table …): ask PHP
 			// only if it is loaded, else trust the parent.
-			return class_exists( $parent ) ? method_exists( $parent, $method ) : true;
+			if ( ! class_exists( $parent ) ) {
+				return array( 'public' => true, 'static' => true, 'trusted' => true );
+			}
+			if ( ! method_exists( $parent, $method ) ) {
+				return false;
+			}
+			$r = new ReflectionMethod( $parent, $method );
+			return array( 'public' => $r->isPublic(), 'static' => $r->isStatic() );
 		}
 	}
 	return false;
+}
+
+/**
+ * Whether WordPress can call a method found by fh_find_method(): it calls
+ * from outside the class, so the method must be public; a callback that
+ * names the class (not an object) calls it statically, so it must be
+ * static too. Either mistake is a fatal Error on PHP 8 when the hook fires.
+ *
+ * @param array|false|null $found     fh_find_method() result.
+ * @param bool             $by_class  The callback names the class, not an object.
+ * @param string           $what      Class::method for the message.
+ * @return array{ok: bool, what: string}
+ */
+function fh_callable_verdict( $found, $by_class, $what ) {
+	if ( null === $found ) {
+		return array( 'ok' => false, 'what' => "$what(), whose class this plugin does not define" );
+	}
+	if ( false === $found ) {
+		return array( 'ok' => false, 'what' => "$what(), which does not exist" );
+	}
+	if ( ! $found['public'] ) {
+		return array( 'ok' => false, 'what' => "$what(), which is not public (WordPress cannot call it)" );
+	}
+	if ( $by_class && ! $found['static'] ) {
+		return array( 'ok' => false, 'what' => "$what(), which is not static but the callback names the class, not an object" );
+	}
+	return array( 'ok' => true, 'what' => $what );
 }
 
 /**
@@ -491,13 +540,19 @@ function fh_judge( array $call, array $file, array $classes, array $function ) {
 		return array( 'kind' => 'unknown', 'ok' => false, 'what' => fh_text( $e ) . ' — cannot tell which method' );
 	}
 
+	// $this, new Name() and $var are objects; everything else (self::class,
+	// static::class, __CLASS__, Name::class, 'Name') names the class.
+	$obj_text = fh_text( $obj );
+	$by_class = ! ( '$this' === $obj_text || T_NEW === $obj[0][0] || T_VARIABLE === $obj[0][0] );
+
 	foreach ( $names as $name ) {
-		$has = fh_has_method( $target, $name, $classes );
-		if ( null === $has ) {
+		$found = fh_find_method( $target, $name, $classes );
+		if ( null === $found ) {
 			return array( 'kind' => 'method', 'ok' => false, 'what' => "class $target, which this plugin does not define (for $name())" );
 		}
-		if ( ! $has ) {
-			return array( 'kind' => 'method', 'ok' => false, 'what' => "$target::$name(), which does not exist" );
+		$verdict = fh_callable_verdict( $found, $by_class, "$target::$name" );
+		if ( ! $verdict['ok'] ) {
+			return array( 'kind' => 'method', 'ok' => false, 'what' => $verdict['what'] );
 		}
 	}
 
@@ -516,8 +571,8 @@ function fh_judge_string( $s, array $classes, array $function ) {
 	$s = ltrim( $s, '\\' );
 	if ( false !== strpos( $s, '::' ) ) {
 		list( $c, $meth ) = explode( '::', $s, 2 );
-		$has              = fh_has_method( $c, $meth, $classes );
-		return array( 'kind' => 'method', 'ok' => true === $has, 'what' => "$c::$meth()" . ( true === $has ? '' : ', which does not exist' ) );
+		$verdict          = fh_callable_verdict( fh_find_method( $c, $meth, $classes ), true, "$c::$meth" );
+		return array( 'kind' => 'method', 'ok' => $verdict['ok'], 'what' => $verdict['ok'] ? "$c::$meth()" : $verdict['what'] );
 	}
 	$ok = isset( $function[ strtolower( $s ) ] ) || in_array( strtolower( $s ), FH_CORE_FUNCTIONS, true ) || ( false === strpos( $s, '\\' ) && function_exists( $s ) );
 	return array( 'kind' => 'function', 'ok' => $ok, 'what' => "$s()" . ( $ok ? '' : ', which no file defines' ) );
@@ -725,8 +780,11 @@ class Demo extends Base {
 		add_action( 'wp_dashboard_setup', array( $widget, 'footer' ) );
 		register_rest_route( 'demo/v1', '/x', array( 'callback' => array( $this, 'boot' ), 'permission_callback' => '__return_true' ) );
 		add_submenu_page( 'p', 't', 'm', 'cap', 'slug', array( new Helper(), 'footer' ) );
+		add_filter( 'the_excerpt', array( $this, 'title' ) );
+		add_action( 'shutdown', array( $this, 'no_word' ) );
 	}
 
+	function no_word() {}
 	public function boot() {}
 	public static function title( $t ) { return $t; }
 	public function ajax_save() {}
@@ -760,8 +818,16 @@ class Broken {
 		}
 		register_rest_route( 'demo/v1', '/y', array( 'callback' => array( $this, 'rest_gone' ) ) );
 		add_action( 'init', array( $this->who_knows(), 'run' ) );
+		add_action( 'woocommerce_order_status_failed', array( self::class, 'soon' ) );
+		add_action( 'woocommerce_order_status_failed', array( __CLASS__, 'later' ) );
+		add_action( 'init', __NAMESPACE__ . '\\Broken::later' );
+		add_action( 'init', array( $this, 'inside' ) );
+		add_action( 'init', array( $this, 'soon' ) );
 	}
 
+	private static function soon() {}
+	public function later() {}
+	protected function inside() {}
 	public function ajax_save() {}
 	public function who_knows() { return $this; }
 }
@@ -770,7 +836,7 @@ PHP;
 file_put_contents( $fh_tmp . '/includes/sections/demo/class-demo.php', $fh_good );
 $fh_res = fh_scan( $fh_tmp );
 check( 'a file where every callback exists passes', array() === $fh_res['failures'], implode( "\n       ", $fh_res['failures'] ) );
-check( 'it read all twelve callbacks there (methods, closure, functions, the REST keys, the foreach list)', 12 === array_sum( $fh_res['counts'] ), json_encode( $fh_res['counts'] ) );
+check( 'it read all fourteen callbacks there (methods, closure, functions, the REST keys, the foreach list, a static method through $this, a method with no visibility word)', 14 === array_sum( $fh_res['counts'] ), json_encode( $fh_res['counts'] ) );
 
 file_put_contents( $fh_tmp . '/includes/sections/demo/class-broken.php', $fh_bad );
 $fh_res  = fh_scan( $fh_tmp );
@@ -784,10 +850,15 @@ check( 'a global function nobody defines fails', false !== strpos( $fh_text, 'fh
 check( 'one missing name in a foreach list fails (ajax_gone)', false !== strpos( $fh_text, 'ajax_gone()' ) && false === strpos( $fh_text, 'ajax_save()' ) );
 check( 'a REST callback that does not exist fails', false !== strpos( $fh_text, 'rest_gone()' ) );
 check( 'a callback the reader cannot work out fails instead of passing quietly', false !== strpos( $fh_text, 'cannot tell which class' ) );
-check( 'exactly those nine fail, the good file still passes', 9 === count( $fh_res['failures'] ), $fh_text );
+check( 'a private static method named through self::class fails (WordPress cannot call it)', false !== strpos( $fh_text, 'class-broken.php:19 add_action() — callback names FisHotel\\Misc\\Sections\\Demo\\Broken::soon(), which is not public' ), $fh_text );
+check( 'a public method that is not static, named through __CLASS__, fails', false !== strpos( $fh_text, 'class-broken.php:20 add_action() — callback names FisHotel\\Misc\\Sections\\Demo\\Broken::later(), which is not static' ), $fh_text );
+check( '… and through a \'Class::method\' string', false !== strpos( $fh_text, 'class-broken.php:21 add_action() — callback names FisHotel\\Misc\\Sections\\Demo\\Broken::later(), which is not static' ), $fh_text );
+check( 'a protected method through $this fails', false !== strpos( $fh_text, 'class-broken.php:22 add_action() — callback names FisHotel\\Misc\\Sections\\Demo\\Broken::inside(), which is not public' ), $fh_text );
+check( 'a private method through $this fails too', false !== strpos( $fh_text, 'class-broken.php:23 add_action() — callback names FisHotel\\Misc\\Sections\\Demo\\Broken::soon(), which is not public' ), $fh_text );
+check( 'exactly those fourteen fail, the good file still passes', 14 === count( $fh_res['failures'] ), $fh_text );
 
 $fh_res = fh_scan( $fh_tmp, array(), array( 'includes/sections/demo/class-broken.php:18' => 'test' ) );
-check( 'a line on the allowed list is not a failure', 8 === count( $fh_res['failures'] ) && 1 === ( $fh_res['counts']['allowed'] ?? 0 ) );
+check( 'a line on the allowed list is not a failure', 13 === count( $fh_res['failures'] ) && 1 === ( $fh_res['counts']['allowed'] ?? 0 ) );
 
 foreach ( array( 'class-demo.php', 'class-broken.php' ) as $fh_f ) {
 	unlink( $fh_tmp . '/includes/sections/demo/' . $fh_f );
