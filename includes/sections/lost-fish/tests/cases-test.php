@@ -661,7 +661,9 @@ check( '… the owner can still send it with the click', $cases->send( 1, 5 )['o
 
 list( $cases, $store, $rooms ) = fh_world();
 Settings::save( array( 'auto_send' => '1' ) );
-$GLOBALS['fh_orders'][502]->meta['_fishotel_shipping_date'] = gmdate( 'Y-m-d', time() + 86400 ); // Delivered tomorrow: it ships today.
+// Delivered tomorrow, so it ships today — "today" being the SITE's date (Lost_Fish::today()), which
+// is a day behind UTC's for the hours between UTC midnight and the site's.
+$GLOBALS['fh_orders'][502]->meta['_fishotel_shipping_date'] = gmdate( 'Y-m-d', (int) strtotime( Lost_Fish::today() . ' 00:00:00 UTC' ) + 86400 );
 fh_loss( $rooms, 1, 9001 );
 fh_loss( $rooms, 1, 9002 );
 $case = $store->get_case( 1 );
