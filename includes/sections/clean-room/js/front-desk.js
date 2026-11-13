@@ -18,9 +18,21 @@
  * own, else its batch's — or "Sale date not set" with the suggestion, and
  * warns "still in the Spa" when the date has come before it was cleared.
  *
+ * A group's size (one of the standard sizes the server sends in
+ * screen.sizes) shows beside its name (sizeText); the Arrival sheet
+ * has a Size dropdown of them — optional.
+ *
+ * A fish nobody knows yet is checked in with "Unknown fish (??)" beside
+ * "use as an unlisted fish": it reads "??" and what was typed
+ * (unknownName) and its row says "needs identifying". A group's sheet has
+ * Identify / Correct the fish: the same species search and the Size
+ * dropdown, one post — the server corrects the stay and its supplier
+ * order line together.
+ *
  * The pure helpers (normalizeNumberWords, previewSentence, tankValue,
- * englishValue, fmt, escapeHtml, saleSummary) are exported for tests/front-desk.test.js
- * and the file skips the DOM wiring when there is no document / config.
+ * englishValue, fmt, escapeHtml, saleSummary, sizeText, unknownName) are
+ * exported for tests/front-desk.test.js and the file skips the DOM wiring
+ * when there is no document / config.
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  */
@@ -307,6 +319,38 @@
 		return out;
 	}
 
+	/**
+	 * A group's size beside its name: '' without one, its label, and
+	 * " (not a standard size)" when it is no longer in the list.
+	 *
+	 * @param {Object} o       Occupant (size, sizeStandard).
+	 * @param {Object} strings notStandard (English fallback).
+	 * @return {string}
+	 */
+	function sizeText(o, strings) {
+		if (!o || !o.size) {
+			return '';
+		}
+		if (o.sizeStandard === false) {
+			return String(o.size) + ' (' + ((strings && strings.notStandard) || 'not a standard size') + ')';
+		}
+		return String(o.size);
+	}
+
+	/**
+	 * The name of an unknown fish: "??", or "?? " + what it looks like; a
+	 * mark that is already there is not doubled (the server's
+	 * Identify::unknown_name()).
+	 *
+	 * @param {*} description What was typed.
+	 * @return {string}
+	 */
+	function unknownName(description) {
+		var text = description === null || typeof description === 'undefined' || typeof description === 'boolean' || typeof description === 'object' ? '' : String(description);
+		text = text.replace(/\s+/g, ' ').replace(/^ +| +$/g, '').replace(/^[? ]+/, '').replace(/^ +| +$/g, '');
+		return (text === '' ? '??' : '?? ' + text).substring(0, 120);
+	}
+
 	var api = {
 		normalizeNumberWords: normalizeNumberWords,
 		previewSentence: previewSentence,
@@ -314,7 +358,9 @@
 		englishValue: englishValue,
 		fmt: fmt,
 		escapeHtml: escapeHtml,
-		saleSummary: saleSummary
+		saleSummary: saleSummary,
+		sizeText: sizeText,
+		unknownName: unknownName
 	};
 
 	root.fhFrontDeskHelpers = api;
@@ -629,6 +675,7 @@
 			case 'arrival': renderArrival(); break;
 			case 'pick': renderPick(); break;
 			case 'occupant': renderOccupant(); break;
+			case 'identify': renderIdentify(); break;
 			case 'qty': renderQty(); break;
 			case 'move': renderMove(); break;
 			case 'dates': renderDates(); break;
@@ -681,6 +728,7 @@
 		var meta = [
 			el('span', { class: 'fh-fd-badge fh-fd-badge--' + (o.saleReady ? 'ready' : o.status), text: o.stateLabel }),
 			sale.warning ? el('span', { class: 'fh-fd-warn', text: sale.warning }) : null,
+			o.needsId ? el('span', { class: 'fh-fd-warn', text: t('needsId', 'needs identifying') }) : null,
 			dayText(o.day) ? el('span', { text: dayText(o.day) }) : null,
 			o.status === 'in_qt' && o.checkinDate ? el('span', { text: fmt(t('inSince', 'in since %s'), o.checkinDate) }) : null,
 			!o.saleReady ? el('span', { text: sale.short }) : null,
@@ -689,7 +737,7 @@
 		var node = el(tag, attrs, [
 			el('span', { class: 'fh-fd-occ__qty' }, [String(o.qtyLive), el('small', { text: t('live', 'live') })]),
 			el('span', { class: 'fh-fd-occ__body' }, [
-				el('span', { class: 'fh-fd-occ__name', text: o.species }),
+				el('span', { class: 'fh-fd-occ__name' }, [o.species, sizeText(o, i18n) ? el('small', { class: 'fh-fd-occ__size' + (o.sizeStandard === false ? ' is-stale' : ''), text: sizeText(o, i18n) }) : null]),
 				el('span', { class: 'fh-fd-occ__meta' }, meta)
 			])
 		]);
@@ -941,8 +989,12 @@
 		app.appendChild(header(t('arrival', 'Arrival'), [t('notSpa', 'Arrivals go into a Spa tank')]));
 
 		var screen = el('div', { class: 'fh-fd-screen' });
-		screen.appendChild(speciesField(f, function () { render(); }));
+		screen.appendChild(speciesField(f, function () { render(); }, { unknown: true }));
 		screen.appendChild(stepperField(t('howMany', 'How many?'), f, 'qty', 1, 999));
+		var sizes = sizeChooser(f);
+		if (sizes) {
+			screen.appendChild(sizes);
+		}
 		screen.appendChild(spaChooser(f, render));
 		screen.appendChild(el('div', { class: 'fh-fd-field' }, [
 			el('label', { class: 'fh-fd-label', for: 'fh-fd-date', text: t('date', 'Date') }),
@@ -961,18 +1013,48 @@
 					toast(t('notSpa', 'Arrivals go into a Spa tank'), null, true);
 					return;
 				}
-				act({ act: 'arrival', tank: tk.number, to_tank: f.toTank, species: f.species, product_id: f.productId || 0, qty: f.qty, date: f.date, via: 'qr' });
+				act({ act: 'arrival', tank: tk.number, to_tank: f.toTank, species: f.species, product_id: f.productId || 0, unknown: f.unknown ? 1 : 0, qty: f.qty, size: f.size || '', date: f.date, via: 'qr' });
 			})
 		]);
 	}
 
-	/* The species search field (chosen chip, search box, suggestions, recent chips). */
-	function speciesField(f, onChange) {
+	/*
+	 * The Size dropdown: the standard sizes, optional ("—" = none). Nothing
+	 * when the list is empty. `own` is the size a group already has ({slug,
+	 * label}): when it is no longer in the list it is one more option, so
+	 * correcting the fish does not drop it.
+	 */
+	function sizeChooser(f, own) {
+		var list = (state.screen.sizes || []).slice();
+		var stale = own && own.slug && !list.some(function (size) { return size.slug === own.slug; });
+		if (stale) {
+			list.push({ slug: own.slug, label: (own.label || own.slug) + ' (' + t('notStandard', 'not a standard size') + ')' });
+		}
+		if (!list.length) {
+			return null;
+		}
+		var options = [el('option', { value: '', text: '—' })].concat(list.map(function (size) {
+			var option = el('option', { value: size.slug, text: size.label });
+			option.selected = f.size === size.slug;
+			return option;
+		}));
+		return el('div', { class: 'fh-fd-field' }, [
+			el('label', { class: 'fh-fd-label', for: 'fh-fd-size', text: t('size', 'Size') + ' · ' + t('sizeHint', 'optional') }),
+			el('select', { id: 'fh-fd-size', class: 'fh-fd-input', on: { change: function (e) { f.size = e.target.value; } } }, options)
+		]);
+	}
+
+	/*
+	 * The species search field (chosen chip, search box, suggestions, recent
+	 * chips). With opts.unknown it also offers "Unknown fish (??)" beside
+	 * "use as an unlisted fish": the group is "??" and what was typed.
+	 */
+	function speciesField(f, onChange, opts) {
 		var wrap = el('div', { class: 'fh-fd-field' }, [el('label', { class: 'fh-fd-label', text: t('species', 'Species') })]);
 		if (f.species) {
 			wrap.appendChild(el('div', { class: 'fh-fd-chosen' }, [
 				el('span', { text: f.species }),
-				el('button', { type: 'button', text: t('cancel', 'Cancel'), on: { click: function () { f.species = ''; f.productId = 0; onChange(); } } })
+				el('button', { type: 'button', text: t('cancel', 'Cancel'), on: { click: function () { f.species = ''; f.productId = 0; f.unknown = false; onChange(); } } })
 			]));
 			return wrap;
 		}
@@ -993,12 +1075,22 @@
 		function choose(item) {
 			f.species = item.name;
 			f.productId = item.product_id || 0;
+			f.unknown = !!item.unknown;
 			onChange();
 		}
 		wrap.appendChild(input);
 		wrap.appendChild(list);
 		if (f.typed && f.typed.trim()) {
 			wrap.appendChild(el('button', { type: 'button', class: 'fh-fd-chip fh-fd-chip--ghost', text: t('unlisted', 'Use as an unlisted fish') + ': ' + f.typed.trim(), on: { click: function () { choose({ name: f.typed.trim(), product_id: 0 }); } } }));
+		}
+		if (opts && opts.unknown) {
+			// What is typed is what the fish looks like: the chip follows the box.
+			var unknownLabel = function () {
+				return t('unknownFish', 'Unknown fish (??)') + (input.value.trim() ? ': ' + input.value.trim() : '');
+			};
+			var unknownChip = el('button', { type: 'button', class: 'fh-fd-chip fh-fd-chip--ghost fh-fd-chip--unknown', text: unknownLabel(), on: { click: function () { choose({ name: unknownName(input.value), product_id: 0, unknown: true }); } } });
+			input.addEventListener('input', function () { unknownChip.textContent = unknownLabel(); });
+			wrap.appendChild(unknownChip);
 		}
 		var recent = state.screen.recent || [];
 		if (recent.length) {
@@ -1090,7 +1182,7 @@
 			go('tank');
 			return;
 		}
-		app.appendChild(header(o.species, ['Tank ' + tk.number + ' · ' + o.qtyLive + ' ' + t('live', 'live') + ' / ' + o.qtyArrived]));
+		app.appendChild(header(o.species, [(sizeText(o, i18n) ? sizeText(o, i18n) + ' · ' : '') + 'Tank ' + tk.number + ' · ' + o.qtyLive + ' ' + t('live', 'live') + ' / ' + o.qtyArrived]));
 		var screen = el('div', { class: 'fh-fd-screen' });
 		var sale = saleSummary(o, i18n);
 		screen.appendChild(el('div', { class: 'fh-fd-facts' }, [
@@ -1108,10 +1200,49 @@
 			button(t('move', 'Move'), '', function () { go('move', { act: 'move', stay: o, single: true }); }),
 			button(t('headCount', 'Full recount'), '', function () { go('qty', { act: 'count', stay: o }); }),
 			button(t('note', 'Note'), '', function () { go('note', { stay: o }); }),
-			button(t('dates', 'Dates'), '', function () { go('dates', { stay: o }); })
+			button(t('dates', 'Dates'), '', function () { go('dates', { stay: o }); }),
+			button(o.needsId ? t('identify', 'Identify') : t('correctFish', 'Correct the fish'), o.needsId ? 'fh-fd-btn--primary' : '', function () { go('identify', { stay: o }); })
 		]));
 		app.appendChild(screen);
 		bar([button(t('back', 'Back'), 'fh-fd-btn--quiet', function () { go('tank'); })]);
+	}
+
+	/*
+	 * Identify / Correct the fish: the real fish from the same search the
+	 * Arrival sheet uses (or still unknown, with what it looks like) and
+	 * its size. The server corrects the stay and its supplier order line
+	 * together and words the toast; there is no Undo — correct it again.
+	 */
+	function renderIdentify() {
+		var tk = tank();
+		var o = (state.pending || {}).stay;
+		var f = state.form;
+		if (!o) {
+			go('tank');
+			return;
+		}
+		if (typeof f.size === 'undefined') {
+			f.size = o.sizeSlug || '';
+		}
+		app.appendChild(header(o.needsId ? t('identify', 'Identify') : t('correctFish', 'Correct the fish'), [o.species + (sizeText(o, i18n) ? ' · ' + sizeText(o, i18n) : '') + ' · Tank ' + tk.number]));
+		var screen = el('div', { class: 'fh-fd-screen' });
+		screen.appendChild(speciesField(f, function () { render(); }, { unknown: true }));
+		var sizes = sizeChooser(f, { slug: o.sizeSlug, label: o.size });
+		if (sizes) {
+			screen.appendChild(sizes);
+		}
+		screen.appendChild(el('p', { class: 'fh-fd-muted', text: t('identifyHint', 'Pick the real fish and its size: the tank row, its supplier order line and the remembered box share follow.') }));
+		app.appendChild(screen);
+		bar([
+			button(t('cancel', 'Cancel'), 'fh-fd-btn--quiet', function () { go('occupant', { stay: o }); }),
+			button(t('save', 'Save'), 'fh-fd-btn--primary', function () {
+				if (!f.species) {
+					toast(t('whichFish', 'Which fish?'), null, true);
+					return;
+				}
+				act({ act: 'identify', tank: tk.number, stay_id: o.stayId, species: f.species, product_id: f.productId || 0, unknown: f.unknown ? 1 : 0, size: f.size || '', via: 'qr' });
+			})
+		]);
 	}
 
 	/* Quantity (+ reason) for loss / sold / count */
@@ -1544,6 +1675,10 @@
 			if (p.intent === 'arrival' && p.species && p.species.text) {
 				chips.appendChild(el('button', { type: 'button', class: 'fh-fd-chip fh-fd-chip--ghost', text: t('unlisted', 'Use as an unlisted fish') + ': ' + p.species.text, on: { click: function () { chooseForPreview({ name: titleCase(p.species.text), product_id: 0 }, false); } } }));
 			}
+			if (p.intent === 'arrival') {
+				var spoken = p.species && p.species.text ? p.species.text : '';
+				chips.appendChild(el('button', { type: 'button', class: 'fh-fd-chip fh-fd-chip--ghost fh-fd-chip--unknown', text: t('unknownFish', 'Unknown fish (??)') + (spoken ? ': ' + spoken : ''), on: { click: function () { chooseForPreview({ name: unknownName(spoken), product_id: 0, unknown: true }, false); } } }));
+			}
 			chips.appendChild(el('button', { type: 'button', class: 'fh-fd-chip fh-fd-chip--ghost', text: t('notThatFish', 'Not that fish'), on: { click: openSpeciesPicker } }));
 			box.appendChild(chips);
 		} else if (['note', 'copper'].indexOf(p.intent) === -1 && !p.all) {
@@ -1640,6 +1775,7 @@
 		p.species.name = item.name;
 		p.species.product_id = item.product_id || item.productId || null;
 		p.species.stay_id = item.stay_id || item.stayId || null;
+		p.species.unknown = !!item.unknown;
 		p.species.confidence = 1;
 		p.needs = (p.needs || []).filter(function (n) { return n !== 'species'; });
 		if (learn && spoken && !p.species.stay_id) {
@@ -1657,8 +1793,9 @@
 		state.pending = {
 			act: 'species',
 			occupants: p && p.intent !== 'arrival' ? (tank().occupants || []) : [],
+			unknown: !!(p && p.intent === 'arrival'), // Only an arrival can be a fish nobody knows yet.
 			onChoose: function (item) {
-				chooseForPreview(item, true);
+				chooseForPreview(item, !item.unknown);
 			}
 		};
 		state.view = 'species';
@@ -1679,11 +1816,11 @@
 		}
 		screen.appendChild(speciesField(f, function () {
 			if (f.species) {
-				p.onChoose({ name: f.species, product_id: f.productId || 0 });
+				p.onChoose({ name: f.species, product_id: f.productId || 0, unknown: !!f.unknown });
 			} else {
 				render();
 			}
-		}));
+		}, { unknown: !!p.unknown }));
 		app.appendChild(screen);
 		bar([button(t('back', 'Back'), 'fh-fd-btn--quiet', function () { state.view = 'voice'; render(); })]);
 	}
@@ -1704,6 +1841,7 @@
 				fields.to_tank = p.tank || defaultSpaTank();
 				fields.species = sp.name || '';
 				fields.product_id = sp.product_id || 0;
+				fields.unknown = sp.unknown ? 1 : 0;
 				fields.qty = p.qty || 1;
 				fields.date = state.screen.today;
 				break;

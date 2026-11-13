@@ -2,7 +2,9 @@
 /**
  * Just enough WordPress to load the Clean Room section's classes headless
  * (and to drive the admin-post / save_post handlers: capabilities per
- * user, nonces that match wp_create_nonce(), the current user).
+ * user, nonces that match wp_create_nonce(), the current user; and the
+ * wp_ajax handlers up to their reply: wp_send_json_*() and a failed
+ * check_ajax_referer() throw Fh_Test_Json).
  *
  * Layout, Replay, Parser, Qr, Costing, Stats, Species, Xlsx, Workbook and
  * Import_Map touch no WordPress function at all; Settings needs the
@@ -201,6 +203,46 @@ function wp_verify_nonce( $nonce, $action = -1 ) {
 	return is_string( $nonce ) && '' !== $nonce && hash_equals( wp_create_nonce( $action ), $nonce ) ? 1 : false;
 }
 
+/**
+ * The AJAX replies and the AJAX nonce check: wp_send_json_*() ends the
+ * request in WordPress; here it throws, so a test can call a real
+ * wp_ajax handler and read what it would have answered —
+ * catch ( Fh_Test_Json $reply ): ->success, ->status, ->data.
+ */
+class Fh_Test_Json extends \RuntimeException {
+
+	public $success = false;
+	public $status  = 200;
+	public $data    = null;
+
+	public function __construct( $success, $data, $status ) {
+		parent::__construct( is_array( $data ) && isset( $data['message'] ) ? (string) $data['message'] : '' );
+		$this->success = (bool) $success;
+		$this->data    = $data;
+		$this->status  = (int) $status;
+	}
+}
+
+function wp_send_json_error( $data = null, $status_code = null ) {
+	throw new Fh_Test_Json( false, $data, null === $status_code ? 200 : (int) $status_code );
+}
+
+function wp_send_json_success( $data = null, $status_code = null ) {
+	throw new Fh_Test_Json( true, $data, null === $status_code ? 200 : (int) $status_code );
+}
+
+/**
+ * As WordPress: the nonce is read from $_REQUEST[ $query_arg ], and a wrong one ends the request with 403.
+ */
+function check_ajax_referer( $action = -1, $query_arg = false, $stop = true ) {
+	$nonce = $query_arg && isset( $_REQUEST[ $query_arg ] ) && is_scalar( $_REQUEST[ $query_arg ] ) ? (string) $_REQUEST[ $query_arg ] : '';
+	$valid = wp_verify_nonce( $nonce, $action );
+	if ( ! $valid && $stop ) {
+		throw new Fh_Test_Json( false, array( 'message' => 'bad nonce' ), 403 );
+	}
+	return $valid;
+}
+
 function get_edit_post_link( $id = 0, $context = 'display' ) {
 	return admin_url( 'post.php?post=' . (int) $id . '&action=edit' );
 }
@@ -245,8 +287,11 @@ require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-protocol.p
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-parser.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-qr.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-costing.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-sizes.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-box-shares.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-stats.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-species.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-identify.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-orders.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-xlsx.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-workbook.php';
@@ -314,6 +359,59 @@ function check_contains( $label, $needle, $haystack ) {
 		}
 	}
 	check( $label, false, '"' . $needle . '" not found in ' . fh_test_export( $list ) );
+}
+
+/**
+ * Whether two decoded-JSON values are the same: numbers within a hair
+ * (95.5 and 95.50, 2 and 2.0), everything else strictly — null is not 0,
+ * a list is not a map, the keys must match.
+ *
+ * @param mixed $a One value.
+ * @param mixed $b The other.
+ * @return bool
+ */
+function fh_json_same( $a, $b ) {
+	if ( ( is_int( $a ) || is_float( $a ) ) && ( is_int( $b ) || is_float( $b ) ) ) {
+		return abs( (float) $a - (float) $b ) < 1e-9;
+	}
+	if ( ! is_array( $a ) || ! is_array( $b ) ) {
+		return $a === $b;
+	}
+	if ( count( $a ) !== count( $b ) ) {
+		return false;
+	}
+	foreach ( $a as $key => $value ) {
+		if ( ! array_key_exists( $key, $b ) || ! fh_json_same( $value, $b[ $key ] ) ) {
+			return false;
+		}
+	}
+	return true;
+}
+
+/**
+ * fh_json_same() as a check, with both sides in the failure detail.
+ *
+ * @param string $label    Label.
+ * @param mixed  $expected Expected (decoded JSON).
+ * @param mixed  $actual   Actual.
+ */
+function check_json( $label, $expected, $actual ) {
+	check( $label, fh_json_same( $expected, $actual ), 'expected ' . fh_test_export( $expected ) . ', got ' . fh_test_export( $actual ) );
+}
+
+/**
+ * The percent-of-a-box fixture the PHP tests and the node test both read
+ * (tests/fixtures/box-maths.json): invented lines, shares and numbers.
+ *
+ * @return array
+ */
+function fh_box_fixture() {
+	$data = json_decode( (string) file_get_contents( __DIR__ . '/fixtures/box-maths.json' ), true );
+	if ( ! is_array( $data ) ) {
+		fwrite( STDERR, "Cannot read fixtures/box-maths.json\n" );
+		exit( 1 );
+	}
+	return $data;
 }
 
 /**

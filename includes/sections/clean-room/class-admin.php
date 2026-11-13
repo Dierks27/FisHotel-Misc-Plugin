@@ -11,6 +11,19 @@
  * nothing on autosave, quick / bulk edit or REST; never in the way of
  * the product save).
  *
+ * A stay's size (one of the standard sizes — Sizes) shows beside its
+ * species on the Board and the Stays tab and is set in the Stays tab's
+ * Edit (edit_stay_fields(), the testable half of that save); the Settings
+ * tab gets the Sizes panel (sizes_panel()) and the remembered box shares.
+ *
+ * A stay whose fish nobody knows yet (needs_id — its name starts with
+ * "??") is counted on the Board ("need identifying", linked to the Stays
+ * tab filtered to them) and marked on the Stays tab, where "Identify…" /
+ * "Correct fish…" (identify_stay()) names the real fish and its size: the
+ * stay, its supplier order line and the remembered box share follow in
+ * one go (Identify). Changing the species or the size in the Stays tab's
+ * Edit is the same correction.
+ *
  * Every write path checks manage_woocommerce (settings: manage_options)
  * and a nonce. The CSV guards every cell that starts with = + - @ or a
  * tab with a leading apostrophe so a species name can never become a
@@ -177,6 +190,8 @@ class Admin {
 			$box_rates = Settings::box_rates();
 			$import    = Admin_Import::panel_data( $store );
 			$flash     = Admin_Workbook::take_flash();
+			$sizes     = self::sizes_panel( $store, $settings );
+			$shares    = $store->box_shares();
 
 			include Clean_Room::path() . 'views/settings.php';
 			return;
@@ -190,6 +205,7 @@ class Admin {
 			$csv_url      = self::csv_url( $show_closed );
 			$xlsx_url     = Admin_Workbook::export_url( 'stays', 'xlsx', $show_closed ? array( 'closed' => '1' ) : array() );
 			$flash        = Admin_Workbook::take_flash();
+			$sizes        = Sizes::standard( $store, $settings )['sizes'];
 
 			include Clean_Room::path() . 'views/stays.php';
 			return;
@@ -210,15 +226,17 @@ class Admin {
 		$groups    = Layout::group( $store->buildings(), $tanks );
 		$totals    = self::totals( $tanks );
 		$doses     = $store->latest_doses();
+		$sizes     = Sizes::standard( $store, $settings )['sizes'];
 
 		include Clean_Room::path() . 'views/board.php';
 	}
 
 	/**
-	 * area / species / ready (for sale today) from a request array.
+	 * area / species / ready (for sale today) / needs_id (the fish still to
+	 * identify) from a request array.
 	 *
 	 * @param array $request $_GET-like.
-	 * @return array{area: string, species: string, ready: bool}
+	 * @return array{area: string, species: string, ready: bool, needs_id: bool}
 	 */
 	public static function filters_from_request( $request ) {
 		$request = is_array( $request ) ? $request : array();
@@ -230,20 +248,22 @@ class Admin {
 		$species = isset( $request['s'] ) ? sanitize_text_field( wp_unslash( $request['s'] ) ) : '';
 
 		return array(
-			'area'    => $area,
-			'species' => substr( $species, 0, 120 ),
-			'ready'   => isset( $request['ready'] ) && '1' === (string) wp_unslash( $request['ready'] ),
+			'area'     => $area,
+			'species'  => substr( $species, 0, 120 ),
+			'ready'    => isset( $request['ready'] ) && is_scalar( $request['ready'] ) && '1' === (string) wp_unslash( $request['ready'] ),
+			'needs_id' => isset( $request['needs_id'] ) && is_scalar( $request['needs_id'] ) && '1' === (string) wp_unslash( $request['needs_id'] ),
 		);
 	}
 
 	/**
 	 * Counts across the room (pure): groups in QT / cleared / for sale
 	 * (a group for sale counts as ready, wherever it is), fish alive,
-	 * tanks; and the two warnings — groups for sale while still in the
-	 * Spa, and groups without a sale date.
+	 * tanks; and the warnings — groups for sale while still in the Spa,
+	 * groups without a sale date, and groups whose fish still has to be
+	 * identified.
 	 *
 	 * @param array[] $tanks Tanks with occupants.
-	 * @return array{in_qt: int, cleared: int, ready: int, live: int, tanks: int, empty: int, ready_in_spa: int, no_sale_date: int}
+	 * @return array{in_qt: int, cleared: int, ready: int, live: int, tanks: int, empty: int, ready_in_spa: int, no_sale_date: int, needs_id: int}
 	 */
 	public static function totals( array $tanks ) {
 		$out = array(
@@ -255,6 +275,7 @@ class Admin {
 			'empty'        => 0,
 			'ready_in_spa' => 0,
 			'no_sale_date' => 0,
+			'needs_id'     => 0,
 		);
 		foreach ( $tanks as $tank ) {
 			if ( 'offline' === (string) ( $tank['status'] ?? '' ) ) {
@@ -280,9 +301,35 @@ class Admin {
 				if ( empty( $stay['sale_ready_date'] ) ) {
 					$out['no_sale_date']++;
 				}
+				if ( ! empty( $stay['needs_id'] ) ) {
+					$out['needs_id']++;
+				}
 			}
 		}
 		return $out;
+	}
+
+	/**
+	 * What Settings → Sizes shows: the standard list and where it comes
+	 * from, the plain list as the textarea holds it, the read-only "Sizes
+	 * in use on products" report, and the links to Products → Attributes.
+	 * Reads only; no product and no term is changed.
+	 *
+	 * @param object $store    Store (or the tests' stand-in).
+	 * @param array  $settings Settings.
+	 * @return array{standard: array, report: array[], list_text: string, attributes_url: string, terms_url: string}
+	 */
+	public static function sizes_panel( $store, array $settings ) {
+		$standard = Sizes::standard( $store, $settings );
+		$values   = is_object( $store ) && method_exists( $store, 'variation_size_values' ) ? (array) $store->variation_size_values() : array();
+
+		return array(
+			'standard'       => $standard,
+			'report'         => Sizes::report( $values, $standard ),
+			'list_text'      => implode( "\n", Sizes::labels( $settings['size_list'] ?? array() ) ),
+			'attributes_url' => admin_url( 'edit.php?post_type=product&page=product_attributes' ),
+			'terms_url'      => '' !== $standard['attribute'] ? admin_url( 'edit-tags.php?taxonomy=' . rawurlencode( $standard['attribute'] ) . '&post_type=product' ) : '',
+		);
 	}
 
 	/**
@@ -626,6 +673,12 @@ class Admin {
 					'linked'         => __( 'Linked', 'fishotel-misc-plugin' ),
 					'yes'            => __( 'Yes', 'fishotel-misc-plugin' ),
 					'no'             => __( 'No', 'fishotel-misc-plugin' ),
+					'confirmShare'   => __( 'Forget this remembered share? It comes back the next time an order with that fish and size is saved with a percent.', 'fishotel-misc-plugin' ),
+					'whichFish'      => __( 'Which fish? Type or pick one — or tick "Still unknown (??)".', 'fishotel-misc-plugin' ),
+					'fishHint'       => __( 'the real fish: type for products and the species list, or a name of your own', 'fishotel-misc-plugin' ),
+					'unknownHint'    => __( 'what it looks like (optional)', 'fishotel-misc-plugin' ),
+					'notStandard'    => __( 'not a standard size', 'fishotel-misc-plugin' ),
+					'box'            => Admin_Workbook::box_strings(),
 				),
 			)
 		);
@@ -640,9 +693,10 @@ class Admin {
 	 * ready (the stay's own sale date; empty = the batch's), note, move (whole group, optional reason), undo
 	 * (one event, by id: a compensating event with the same idempotence
 	 * guard as the phone, without its actor / age guard — the admin may
-	 * fix anyone's mistake), or the seam fields (plus the check-in date).
-	 * Per-stay counts stay editable at any time: Jeff loses fish after an
-	 * order exists.
+	 * fix anyone's mistake), the seam fields (plus the check-in date), or
+	 * identify (the real fish and its size — the stay and its order line
+	 * together). Per-stay counts stay editable at any time: Jeff loses
+	 * fish after an order exists.
 	 */
 	public function ajax_stay() {
 		if ( ! current_user_can( Clean_Room::CAPABILITY ) ) {
@@ -761,31 +815,23 @@ class Admin {
 					$msg = __( 'Note saved.', 'fishotel-misc-plugin' );
 					break;
 				case 'fields':
-					$fields = array(
-						'supplier'    => isset( $raw['supplier'] ) ? sanitize_text_field( (string) $raw['supplier'] ) : '',
-						'order_ref'   => isset( $raw['order_ref'] ) ? sanitize_text_field( (string) $raw['order_ref'] ) : '',
-						'landed_cost' => isset( $raw['landed_cost'] ) && '' !== trim( (string) $raw['landed_cost'] ) ? (float) $raw['landed_cost'] : null,
-						'product_id'  => isset( $raw['product_id'] ) ? absint( $raw['product_id'] ) : 0,
-					);
-					if ( $fields['product_id'] > 0 && '' === $store->product_title( $fields['product_id'] ) ) {
-						wp_send_json_error( array( 'message' => __( 'No product has that ID.', 'fishotel-misc-plugin' ) ), 400 );
+					$outcome = self::edit_stay_fields( $store, $stay, $raw, $base, $today, $settings );
+					if ( ! $outcome['ok'] && $outcome['status'] < 500 ) {
+						wp_send_json_error( array( 'message' => $outcome['message'] ), $outcome['status'] );
 					}
-					if ( isset( $raw['species'] ) && '' !== trim( (string) $raw['species'] ) ) {
-						$fields['species'] = sanitize_text_field( (string) $raw['species'] );
+					if ( ! empty( $outcome['kept'] ) ) {
+						Admin_Workbook::flash( $outcome['message'] ); // The tab reloads on the stay as it is: say why there.
 					}
-					$checkin = isset( $raw['checkin_date'] ) ? sanitize_text_field( (string) $raw['checkin_date'] ) : '';
-					if ( '' !== $checkin && ! Replay::is_date( $checkin ) ) {
-						wp_send_json_error( array( 'message' => __( 'The check-in date is not a date.', 'fishotel-misc-plugin' ) ), 400 );
+					$ok  = $outcome['ok'];
+					$msg = $outcome['message'];
+					break;
+				case 'identify':
+					$outcome = self::identify_stay( $store, $stay, $raw, $base, $today, $settings );
+					if ( ! $outcome['ok'] && $outcome['status'] < 500 ) {
+						wp_send_json_error( array( 'message' => $outcome['message'] ), $outcome['status'] );
 					}
-					if ( '' !== $checkin && strcmp( $checkin, $today ) > 0 ) {
-						wp_send_json_error( array( 'message' => __( 'A check-in cannot be in the future.', 'fishotel-misc-plugin' ) ), 400 );
-					}
-					$ok = $store->update_stay_fields( $stay_id, $fields );
-					if ( '' !== $checkin && $checkin !== (string) $stay['checkin_date'] ) {
-						// The check-in date is history, not identity: a note event the Replay honours.
-						$ok = $store->record_event( $stay_id, array_merge( $base, array( 'type' => 'note', 'note' => Replay::NOTE_CHECKIN . $checkin ) ), $today, $settings ) && $ok;
-					}
-					$msg = __( 'Stay saved.', 'fishotel-misc-plugin' );
+					$ok  = $outcome['ok'];
+					$msg = $outcome['message'];
 					break;
 				default:
 					wp_send_json_error( array( 'message' => __( 'Unknown action.', 'fishotel-misc-plugin' ) ), 400 );
@@ -799,6 +845,208 @@ class Admin {
 		}
 
 		wp_send_json_success( array( 'message' => $msg ) );
+	}
+
+	/**
+	 * The Stays tab's Edit — the testable half of ajax_stay()'s "fields":
+	 * the supplier, the order ref, the landed cost, the product link (which
+	 * must exist), the species, the size (size_slug: one of the standard
+	 * sizes, the stay's own stored size, or empty for none — anything else
+	 * is refused) and the check-in date (a "checkin:" note event, never in
+	 * the future). Nothing is written when anything is refused.
+	 *
+	 * A changed species or size is a correction of the fish and goes the
+	 * way "Identify…" does (Identify::stay()): the stay's order line
+	 * follows, keeps what the label said, and a renamed fish gets its note
+	 * event; a name typed with a leading "??" marks the fish unknown. The
+	 * product link is exactly the Product ID typed here.
+	 *
+	 * A Stays tab loaded before the fish was corrected elsewhere (the
+	 * phone, the order page, another tab) still holds the old fish: the
+	 * row posts the token it was rendered with (seen, Identify::seen()),
+	 * and when the stay is no longer that, its species, size and product
+	 * are not the form's to write back — they stay as corrected and the
+	 * other fields are saved. When the fish was also changed on that stale
+	 * row, nothing is saved and the reply asks for a reload.
+	 *
+	 * @param object $store    Store (or the tests' stand-in).
+	 * @param array  $stay     The hydrated stay.
+	 * @param array  $raw      Unslashed payload: supplier, order_ref, landed_cost, product_id, species,
+	 *                         size_slug, checkin_date, seen.
+	 * @param array  $base     actor_id, source, event_at.
+	 * @param string $today    Site date.
+	 * @param array  $settings Settings.
+	 * @return array{ok: bool, status: int, message: string, kept?: bool} kept: the fish was left as
+	 *                         corrected elsewhere.
+	 */
+	public static function edit_stay_fields( $store, array $stay, array $raw, array $base, $today, array $settings ) {
+		$stay_id = (int) ( $stay['id'] ?? 0 );
+		$refuse  = static function ( $message, $status = 400 ) {
+			return array(
+				'ok'      => false,
+				'status'  => (int) $status,
+				'message' => (string) $message,
+			);
+		};
+
+		$fields = array(
+			'supplier'    => isset( $raw['supplier'] ) ? sanitize_text_field( (string) $raw['supplier'] ) : '',
+			'order_ref'   => isset( $raw['order_ref'] ) ? sanitize_text_field( (string) $raw['order_ref'] ) : '',
+			'landed_cost' => isset( $raw['landed_cost'] ) && '' !== trim( (string) $raw['landed_cost'] ) ? (float) $raw['landed_cost'] : null,
+			'product_id'  => isset( $raw['product_id'] ) ? absint( $raw['product_id'] ) : 0,
+		);
+
+		// The fish was corrected elsewhere after this row was rendered: what the form holds of it is old.
+		$stale = Identify::is_stale( $raw['seen'] ?? null, $stay );
+		if ( $stale ) {
+			$typed = isset( $raw['species'] ) && is_scalar( $raw['species'] ) && '' !== trim( (string) $raw['species'] ) ? sanitize_text_field( (string) $raw['species'] ) : (string) $stay['species'];
+			$form  = array(
+				'species'    => $typed,
+				'needs_id'   => Identify::is_unknown_name( $typed ),
+				'size_slug'  => isset( $raw['size_slug'] ) && is_scalar( $raw['size_slug'] ) ? trim( (string) $raw['size_slug'] ) : '',
+				'product_id' => $fields['product_id'],
+			);
+			if ( Identify::seen( $form ) !== (string) $raw['seen'] ) {
+				/* translators: %s: the fish the stay is now */
+				return $refuse( sprintf( __( 'This fish was corrected after this page was loaded (it is now %s). Nothing was saved: reload the page, then make your change.', 'fishotel-misc-plugin' ), (string) $stay['species'] ), 409 );
+			}
+			unset( $raw['species'], $raw['size_slug'], $fields['product_id'] );
+		}
+
+		if ( ! $stale && $fields['product_id'] > 0 && '' === $store->product_title( $fields['product_id'] ) ) {
+			return $refuse( __( 'No product has that ID.', 'fishotel-misc-plugin' ) );
+		}
+		if ( isset( $raw['species'] ) && '' !== trim( (string) $raw['species'] ) ) {
+			$fields['species'] = sanitize_text_field( (string) $raw['species'] );
+		}
+		if ( array_key_exists( 'size_slug', $raw ) ) {
+			$slug   = is_scalar( $raw['size_slug'] ) && ! is_bool( $raw['size_slug'] ) ? trim( (string) $raw['size_slug'] ) : '';
+			$picked = Sizes::pick( $slug, '' !== $slug ? Sizes::standard( $store, $settings )['sizes'] : array(), $stay );
+			if ( ! $picked['ok'] ) {
+				return $refuse( __( 'That size is not in the list of sizes (Settings → Sizes).', 'fishotel-misc-plugin' ) );
+			}
+			$fields['size_slug']  = $picked['slug'];
+			$fields['size_label'] = $picked['label'];
+		}
+		$checkin = isset( $raw['checkin_date'] ) ? sanitize_text_field( (string) $raw['checkin_date'] ) : '';
+		if ( '' !== $checkin && ! Replay::is_date( $checkin ) ) {
+			return $refuse( __( 'The check-in date is not a date.', 'fishotel-misc-plugin' ) );
+		}
+		if ( '' !== $checkin && strcmp( $checkin, (string) $today ) > 0 ) {
+			return $refuse( __( 'A check-in cannot be in the future.', 'fishotel-misc-plugin' ) );
+		}
+
+		// Who the fish is: a changed name or size is one correction — the order line follows.
+		$extra   = '';
+		$name    = isset( $fields['species'] ) ? (string) $fields['species'] : (string) $stay['species'];
+		$resized = array_key_exists( 'size_slug', $fields ) && (string) $fields['size_slug'] !== (string) ( $stay['size_slug'] ?? '' );
+		if ( $name !== (string) $stay['species'] || $resized ) {
+			$fish = Identify::fish_from( $store, array( 'species' => $name ), $settings, $stay );
+			if ( ! empty( $fish['error'] ) ) {
+				return $refuse( (string) $fish['error'] );
+			}
+			if ( ! $fish['unknown'] ) {
+				// Edit is exact: the name as typed, the product as typed.
+				$fish['name']       = $name;
+				$fish['product_id'] = $fields['product_id'] > 0 ? (int) $fields['product_id'] : null;
+			}
+			if ( array_key_exists( 'size_slug', $fields ) ) {
+				$fish['size_slug']  = $fields['size_slug'];
+				$fish['size_label'] = $fields['size_label'];
+			}
+			$done = Identify::stay(
+				$store,
+				$stay,
+				$fish,
+				array(
+					'today'    => $today,
+					'settings' => $settings,
+					'actor_id' => (int) ( $base['actor_id'] ?? 0 ),
+					'source'   => (string) ( $base['source'] ?? 'manual' ),
+				)
+			);
+			if ( ! $done['ok'] ) {
+				return $refuse( (string) $done['error'], 500 );
+			}
+			$extra = (string) $done['message'];
+			unset( $fields['species'], $fields['size_slug'], $fields['size_label'], $fields['product_id'] );
+		}
+
+		$ok = $store->update_stay_fields( $stay_id, $fields );
+		if ( '' !== $checkin && $checkin !== (string) $stay['checkin_date'] ) {
+			// The check-in date is history, not identity: a note event the Replay honours.
+			$ok = $store->record_event( $stay_id, array_merge( $base, array( 'type' => 'note', 'note' => Replay::NOTE_CHECKIN . $checkin ) ), $today, $settings ) && $ok;
+		}
+		if ( ! $ok ) {
+			return $refuse( __( 'That could not be saved.', 'fishotel-misc-plugin' ), 500 );
+		}
+
+		if ( $stale ) {
+			/* translators: %s: the fish the stay is now */
+			$extra = sprintf( __( 'Its fish was corrected after this page was loaded and stays %s', 'fishotel-misc-plugin' ), (string) $stay['species'] );
+		}
+
+		return array(
+			'ok'      => true,
+			'status'  => 200,
+			'message' => __( 'Stay saved.', 'fishotel-misc-plugin' ) . ( '' !== $extra ? ' ' . $extra . '.' : '' ),
+			'kept'    => $stale,
+		);
+	}
+
+	/**
+	 * The Stays tab's "Identify…" / "Correct fish…" — the testable half of
+	 * ajax_stay()'s "identify": the real fish (a product, a species-list
+	 * fish, a typed name, or still unknown with a description) and its
+	 * size, read by Identify::fish_from(); the stay and its supplier order
+	 * line are corrected together (Identify::stay()). Nothing is written
+	 * when the fish or the size is refused.
+	 *
+	 * @param object $store    Store (or the tests' stand-in).
+	 * @param array  $stay     The hydrated stay.
+	 * @param array  $raw      Unslashed payload: species, product_id, unknown, size.
+	 * @param array  $base     actor_id, source.
+	 * @param string $today    Site date.
+	 * @param array  $settings Settings.
+	 * @return array{ok: bool, status: int, message: string, result: array}
+	 */
+	public static function identify_stay( $store, array $stay, array $raw, array $base, $today, array $settings ) {
+		$fish = Identify::fish_from( $store, $raw, $settings, $stay );
+		if ( ! empty( $fish['error'] ) ) {
+			return array(
+				'ok'      => false,
+				'status'  => 400,
+				'message' => (string) $fish['error'],
+				'result'  => array(),
+			);
+		}
+
+		$done = Identify::stay(
+			$store,
+			$stay,
+			$fish,
+			array(
+				'today'    => $today,
+				'settings' => $settings,
+				'actor_id' => (int) ( $base['actor_id'] ?? 0 ),
+				'source'   => (string) ( $base['source'] ?? 'manual' ),
+			)
+		);
+		if ( ! $done['ok'] ) {
+			return array(
+				'ok'      => false,
+				'status'  => 500,
+				'message' => (string) $done['error'],
+				'result'  => $done,
+			);
+		}
+
+		return array(
+			'ok'      => true,
+			'status'  => 200,
+			'message' => '' !== $done['message'] ? $done['message'] . '.' : ( $done['changed'] ? __( 'Stay saved.', 'fishotel-misc-plugin' ) : __( 'Nothing changed.', 'fishotel-misc-plugin' ) ),
+			'result'  => $done,
+		);
 	}
 
 	/**
@@ -911,12 +1159,14 @@ class Admin {
 	}
 
 	/**
-	 * The CSV header.
+	 * The CSV header. New columns go at the end (size, the stay's size
+	 * label; needs_id, 1 while the fish still has to be identified), so a
+	 * sheet built on the older columns keeps reading them.
 	 *
 	 * @return string[]
 	 */
 	public static function csv_header() {
-		return array( 'id', 'species', 'product_id', 'qty_arrived', 'qty_live', 'checkin_date', 'day', 'state', 'cleared_date', 'sale_ready_date', 'closed_date', 'tank', 'building', 'area', 'source', 'supplier', 'order_ref', 'landed_cost', 'notes' );
+		return array( 'id', 'species', 'product_id', 'qty_arrived', 'qty_live', 'checkin_date', 'day', 'state', 'cleared_date', 'sale_ready_date', 'closed_date', 'tank', 'building', 'area', 'source', 'supplier', 'order_ref', 'landed_cost', 'notes', 'size', 'needs_id' );
 	}
 
 	/**
@@ -968,6 +1218,8 @@ class Admin {
 			self::csv_cell( (string) ( $stay['order_ref'] ?? '' ) ),
 			self::csv_cell( null !== ( $stay['landed_cost'] ?? null ) ? number_format( (float) $stay['landed_cost'], 2, '.', '' ) : '' ),
 			self::csv_cell( (string) ( $stay['notes'] ?? '' ) ),
+			self::csv_cell( (string) ( $stay['size_label'] ?? '' ) ),
+			self::csv_cell( ! empty( $stay['needs_id'] ) ? '1' : '0' ),
 		);
 	}
 
@@ -1068,6 +1320,41 @@ class Admin {
 			return '';
 		}
 		return Replay::is_date( $stay['sale_ready_suggested'] ?? null ) ? (string) $stay['sale_ready_suggested'] : '';
+	}
+
+	/**
+	 * The size of a stay or an order line beside its species: its label,
+	 * and "not a standard size" when it is no longer in the list ('' for a
+	 * row without a size).
+	 *
+	 * @param array        $row   size_slug, size_label.
+	 * @param array[]|null $sizes The standard list (null = nothing is flagged).
+	 * @return string Escaped HTML.
+	 */
+	public static function size_html( array $row, $sizes = null ) {
+		$size = Sizes::of( $row, $sizes );
+		if ( null === $size ) {
+			return '';
+		}
+		$html = '<span class="fh-cr-size">' . esc_html( $size['label'] ) . '</span>';
+		if ( ! $size['standard'] ) {
+			$html .= ' <span class="fh-cr-warn" title="' . esc_attr__( 'This size is no longer in the list of sizes (Settings → Sizes). Pick a standard one in Edit.', 'fishotel-misc-plugin' ) . '">' . esc_html__( 'not a standard size', 'fishotel-misc-plugin' ) . '</span>';
+		}
+		return $html;
+	}
+
+	/**
+	 * The "needs identifying" marker of a stay or an order line whose fish
+	 * nobody knows yet ('' for any other row).
+	 *
+	 * @param array $row needs_id.
+	 * @return string Escaped HTML.
+	 */
+	public static function unknown_html( array $row ) {
+		if ( empty( $row['needs_id'] ) ) {
+			return '';
+		}
+		return '<span class="fh-cr-warn fh-cr-unknown" title="' . esc_attr__( 'Nobody knows yet what this fish is. Name it with Identify… — its order line and the remembered box share follow.', 'fishotel-misc-plugin' ) . '">' . esc_html__( 'needs identifying', 'fishotel-misc-plugin' ) . '</span>';
 	}
 
 	/**
@@ -1193,6 +1480,9 @@ class Admin {
 				if ( 0 === strpos( $note, Replay::NOTE_CHECKIN ) ) {
 					$date = trim( substr( $note, strlen( Replay::NOTE_CHECKIN ) ) );
 					return '' !== $date ? 'check-in date set to ' . $date : 'check-in date back to the arrival';
+				}
+				if ( Identify::is_note( $note ) ) {
+					return $note; // "identified: ?? small wrasse → Lined Wrasse" reads as it is.
 				}
 				return 'note: ' . $note;
 			default:

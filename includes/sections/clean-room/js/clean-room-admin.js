@@ -4,13 +4,25 @@
  * (counts, dates, a move with an optional reason, the fields incl. the
  * check-in date), the Events-tab Undo, the Coming Soon release button,
  * the order editor (lines, species suggestions, Save with the recomputed
- * figures, Check in, Delete, the import-fees suggestion), the Species
- * tab (inline edit, add, delete, the product link) and the "suggested"
- * fill of the sale-date pickers (order page, product page).
+ * figures, Check in, Delete, the import-fees suggestion; the Boxes card,
+ * which adds the lines' percents of a box up per box number as they are
+ * typed, the "suggested N%" chips from the remembered box shares and the
+ * "How full" line), the Species tab (inline edit, add, delete, the
+ * product link), Settings → Sizes and Box shares, the "suggested" fill of
+ * the sale-date pickers (order page, product page), and the "Identify… /
+ * Correct the fish…" panel under a stay (Stays tab) or an order line (the
+ * real fish from the species search, its size, or still unknown), with
+ * the "??" box of an order line.
  *
  * The server renders every row; this file posts and fills in. The pure
- * helpers (renumber(), suggestImportFees()) are exported for the node
- * test; the rest needs jQuery and the page.
+ * helpers are exported for the node test; the rest needs jQuery and the
+ * page. The box helpers mirror the PHP exactly — boxPct() / boxNo() /
+ * boxState() / boxSummary() are Costing::box_pct_in() / box_no_in() /
+ * box_state() / box_summary(), boxSummaryRows() / boxTotalText() are
+ * Admin_Workbook's, findShare() / suggestPct() / suggestFor() /
+ * howFull() and their texts are Box_Shares' — and both sides are tested
+ * against tests/fixtures/box-maths.json. unknownName() is
+ * Identify::unknown_name(): "??" and what the fish looks like.
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  */
@@ -77,7 +89,455 @@
 		return Math.round(total * 100) / 100;
 	}
 
-	var api = { renumber: renumber, suggestImportFees: suggestImportFees };
+	/* ---------------------------------------------------------------- */
+	/*  Percent of a box (mirrors Costing / Admin_Workbook / Box_Shares)  */
+	/* ---------------------------------------------------------------- */
+
+	var BOX_PCT_MAX = 400;
+	var BOX_NO_MAX = 999;
+	var BOX_FULL_MIN = 90;
+	var BOX_FULL_MAX = 110;
+	var NUMERIC = /^[+-]?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i;
+
+	/* The English templates; the page passes the translated table (cfg.i18n.box). */
+	var BOX_STRINGS = {
+		box: 'Box %1$s · %2$s%% · %3$s',
+		unboxed: 'no box number · %1$s%% · lines: %2$d',
+		under: 'under',
+		full: 'about full',
+		over: 'over',
+		none: 'No line has a percent yet: every line uses its per-box count.',
+		total: 'Boxes by the percents: %1$s · Boxes field: not set',
+		totalField: 'Boxes by the percents: %1$s · Boxes field: %2$s',
+		missing: 'received lines without a %%: %1$d (still on their per-box count)',
+		suggest1: 'suggested %1$s%% (from %2$d order)',
+		suggestN: 'suggested %1$s%% (from %2$d orders)',
+		howNone: 'How full: nothing to add up yet — no line has an ordered count.',
+		howNothing: 'How full: nothing is remembered for this supplier and origin yet · lines with no remembered share yet: %1$d',
+		howFull: 'How full: boxes for the ordered counts: about %1$s · lines with a remembered share or a typed %%: %2$d · lines with no remembered share yet: %3$d'
+	};
+
+	function strings(table) {
+		var out = {};
+		Object.keys(BOX_STRINGS).forEach(function (key) {
+			out[key] = table && typeof table[key] === 'string' && table[key] ? table[key] : BOX_STRINGS[key];
+		});
+		return out;
+	}
+
+	/**
+	 * sprintf for the templates above: %s / %d, %1$s / %2$d, %%.
+	 *
+	 * @param {string} template Template.
+	 * @return {string}
+	 */
+	function fmt(template) {
+		var args = Array.prototype.slice.call(arguments, 1);
+		var next = 0;
+		return String(template || '').replace(/%(?:(\d+)\$)?([sd%])/g, function (match, pos, type) {
+			if (type === '%') {
+				return '%';
+			}
+			var value = args[pos ? parseInt(pos, 10) - 1 : next++];
+			if (typeof value === 'undefined' || value === null) {
+				return '';
+			}
+			return type === 'd' ? String(parseInt(value, 10) || 0) : String(value);
+		});
+	}
+
+	/**
+	 * A number without trailing zeros, to two decimals (Costing::num()).
+	 * Only ever given a whole number of hundredths, so it rounds as PHP does.
+	 *
+	 * @param {number} value Value.
+	 * @return {string}
+	 */
+	function num(value) {
+		var n = Number(value);
+		if (value === null || typeof value === 'undefined' || !isFinite(n)) {
+			return '';
+		}
+		var text = (Math.round(n * 100) / 100).toFixed(2);
+		text = text.replace(/0+$/, '').replace(/\.$/, '');
+		return text === '' || text === '-0' ? '0' : text;
+	}
+
+	/**
+	 * A typed percent of a box: above 0 and at most 400, in whole
+	 * hundredths — else null (Costing::box_pct_in()).
+	 *
+	 * @param {*} value Raw.
+	 * @return {number|null}
+	 */
+	function boxPct(value) {
+		if (value === null || typeof value === 'undefined' || typeof value === 'boolean') {
+			return null;
+		}
+		var text = String(value).replace(/[% ]/g, '').replace(/^\s+|\s+$/g, '');
+		if (text === '' || !NUMERIC.test(text)) {
+			return null;
+		}
+		var n = parseFloat(text);
+		if (!isFinite(n) || n <= 0 || n > BOX_PCT_MAX + 1) {
+			return null;
+		}
+		var hundredths = Math.round(n * 100);
+		if (hundredths < 1 || hundredths > BOX_PCT_MAX * 100) {
+			return null;
+		}
+		return hundredths / 100;
+	}
+
+	/**
+	 * A typed box number: a whole number from 1 to 999, else null
+	 * (Costing::box_no_in()).
+	 *
+	 * @param {*} value Raw.
+	 * @return {number|null}
+	 */
+	function boxNo(value) {
+		if (value === null || typeof value === 'undefined' || typeof value === 'boolean') {
+			return null;
+		}
+		var text = String(value).replace(/^\s+|\s+$/g, '');
+		if (!/^\d{1,4}$/.test(text)) {
+			return null;
+		}
+		var n = parseInt(text, 10);
+		return n < 1 || n > BOX_NO_MAX ? null : n;
+	}
+
+	/**
+	 * under / full (about full: 90 to 110) / over (Costing::box_state()).
+	 *
+	 * @param {number} pct The sum of a box's percents.
+	 * @return {string}
+	 */
+	function boxState(pct) {
+		var hundredths = Math.round(Number(pct) * 100);
+		if (hundredths < BOX_FULL_MIN * 100) {
+			return 'under';
+		}
+		return hundredths > BOX_FULL_MAX * 100 ? 'over' : 'full';
+	}
+
+	/**
+	 * The percents added up per box number, the lines without a box
+	 * number together, the boxes they add up to beside the order's Boxes
+	 * field, and how many received lines still have no percent
+	 * (Costing::box_summary()).
+	 *
+	 * @param {Object[]} lines {box_no, box_pct, qty_received}.
+	 * @param {*}        boxes The order's Boxes field.
+	 * @return {Object}
+	 */
+	function boxSummary(lines, boxes) {
+		var byBox = {};
+		var unboxed = 0;
+		var unboxedN = 0;
+		var total = 0;
+		var count = 0;
+		var missing = 0;
+		(lines || []).forEach(function (line) {
+			var pct = line && typeof line === 'object' ? boxPct(line.box_pct) : null;
+			if (pct === null) {
+				var received = line && typeof line === 'object' ? line.qty_received : null;
+				if ((typeof received === 'number' || typeof received === 'string') && (parseInt(received, 10) || 0) >= 1) {
+					missing++;
+				}
+				return;
+			}
+			var hundredths = Math.round(pct * 100);
+			total += hundredths;
+			count++;
+			var number = boxNo(line.box_no);
+			if (number === null) {
+				unboxed += hundredths;
+				unboxedN++;
+				return;
+			}
+			if (!byBox[number]) {
+				byBox[number] = [0, 0];
+			}
+			byBox[number][0] += hundredths;
+			byBox[number][1]++;
+		});
+
+		var out = Object.keys(byBox).map(function (key) { return parseInt(key, 10); }).sort(function (a, b) { return a - b; }).map(function (number) {
+			return { box_no: number, pct: byBox[number][0] / 100, lines: byBox[number][1], state: boxState(byBox[number][0] / 100) };
+		});
+
+		var orderBoxes = null;
+		if (boxes !== null && typeof boxes !== 'undefined' && typeof boxes !== 'boolean' && typeof boxes !== 'object') {
+			var text = String(boxes).replace(/^\s+|\s+$/g, '');
+			if (text !== '' && NUMERIC.test(text)) {
+				orderBoxes = Math.max(0, Math.trunc(parseFloat(text)));
+			}
+		}
+
+		return {
+			boxes: out,
+			unboxed: { pct: unboxed / 100, lines: unboxedN },
+			lines: count,
+			pct_total: total / 100,
+			boxes_total: total / 10000,
+			order_boxes: orderBoxes,
+			missing: count > 0 ? missing : 0
+		};
+	}
+
+	/**
+	 * The Boxes card's chips (Admin_Workbook::box_summary_rows()).
+	 *
+	 * @param {Object} summary boxSummary().
+	 * @param {Object} table   The translated strings (optional).
+	 * @return {Object[]} {state, text}.
+	 */
+	function boxSummaryRows(summary, table) {
+		var s = strings(table);
+		var rows = ((summary && summary.boxes) || []).map(function (box) {
+			var state = ['under', 'full', 'over'].indexOf(box.state) !== -1 ? box.state : 'under';
+			return { state: state, text: fmt(s.box, String(parseInt(box.box_no, 10) || 0), num(box.pct), s[state]) };
+		});
+		if (summary && summary.unboxed && summary.unboxed.lines > 0) {
+			rows.push({ state: 'unboxed', text: fmt(s.unboxed, num(summary.unboxed.pct), summary.unboxed.lines) });
+		}
+		return rows;
+	}
+
+	/**
+	 * The Boxes card's total (Admin_Workbook::box_total_text()).
+	 *
+	 * @param {Object} summary boxSummary().
+	 * @param {Object} table   The translated strings (optional).
+	 * @return {string}
+	 */
+	function boxTotalText(summary, table) {
+		var s = strings(table);
+		if (!summary || !(summary.lines > 0)) {
+			return s.none;
+		}
+		var boxes = num(Math.round(summary.pct_total) / 100);
+		var text = summary.order_boxes === null || typeof summary.order_boxes === 'undefined' ? fmt(s.total, boxes) : fmt(s.totalField, boxes, String(summary.order_boxes));
+		var missing = parseInt(summary.missing, 10) || 0;
+		return missing > 0 ? text + ' · ' + fmt(s.missing, missing) : text;
+	}
+
+	/* A name as the PHP keys it (Species::key()): spaces collapsed, trimmed, ASCII lower-cased. */
+	function nameKeyOf(name) {
+		var text = String(name === null || typeof name === 'undefined' ? '' : name).replace(/[ \t\n\r\f\v]+/g, ' ').replace(/^[ \t\n\r\0\x0B]+|[ \t\n\r\0\x0B]+$/g, '');
+		text = text.replace(/[A-Z]/g, function (c) { return c.toLowerCase(); });
+		return text === '' ? '' : 'n:' + text.substring(0, 120);
+	}
+
+	function fishKeyOf(line) {
+		var id = parseInt(line && line.species_id, 10) || 0;
+		return id > 0 ? 's:' + id : nameKeyOf(line && line.species);
+	}
+
+	function sizeKeyOf(line) {
+		var size = line && line.size_slug;
+		return size === null || typeof size === 'undefined' ? '' : String(size).replace(/^\s+|\s+$/g, '');
+	}
+
+	function qty(value) {
+		return Math.max(0, parseInt(value, 10) || 0);
+	}
+
+	/**
+	 * The remembered share of a line among its location's shares: the fish
+	 * by its species list id first, then by its name, then the share kept
+	 * under an id for a fish of that name (picked from the species list
+	 * then, typed now) — with the same size (Box_Shares::find()).
+	 *
+	 * @param {Object[]} shares {fish_key, name_key, size_slug, pct_per_fish, order_count}.
+	 * @param {Object}   line   {species_id, species, size_slug}.
+	 * @return {Object|null}
+	 */
+	function findShare(shares, line) {
+		var size = sizeKeyOf(line);
+		var name = nameKeyOf(line && line.species);
+		var keys = [fishKeyOf(line), name].filter(function (key, i, all) { return key !== '' && all.indexOf(key) === i; });
+		var share;
+		var i;
+		for (var k = 0; k < keys.length; k++) {
+			for (i = 0; i < (shares || []).length; i++) {
+				share = shares[i];
+				if (share && String(share.fish_key || '') === keys[k] && String(share.size_slug || '') === size) {
+					return share;
+				}
+			}
+		}
+		if (name !== '') {
+			for (i = 0; i < (shares || []).length; i++) {
+				share = shares[i];
+				if (share && typeof share.name_key === 'string' && share.name_key === name && String(share.size_slug || '') === size) {
+					return share;
+				}
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * The percent a share suggests for a line: per fish × the received
+	 * count, or × the ordered count while nothing is received
+	 * (Box_Shares::suggest()).
+	 *
+	 * @param {Object|null} share {pct_per_fish, order_count}.
+	 * @param {Object}      line  {qty_received, qty_ordered}.
+	 * @return {{pct: number, orders: number, count: number}|null}
+	 */
+	function suggestPct(share, line) {
+		if (!share || typeof share !== 'object') {
+			return null;
+		}
+		var received = parseInt(line && line.qty_received, 10) || 0;
+		var count = received > 0 ? received : qty(line && line.qty_ordered);
+		var perFish = parseFloat(share.pct_per_fish) || 0;
+		if (count < 1 || perFish <= 0) {
+			return null;
+		}
+		var hundredths = Math.min(BOX_PCT_MAX * 100, Math.round(perFish * count * 100));
+		if (hundredths < 1) {
+			return null;
+		}
+		return { pct: hundredths / 100, orders: Math.max(0, parseInt(share.order_count, 10) || 0), count: count };
+	}
+
+	/**
+	 * The suggestion of a line that has no percent yet
+	 * (Box_Shares::suggest_for()).
+	 *
+	 * @param {Object[]} shares The location's shares.
+	 * @param {Object}   line   The line.
+	 * @return {Object|null}
+	 */
+	function suggestFor(shares, line) {
+		if (boxPct(line && line.box_pct) !== null) {
+			return null;
+		}
+		return suggestPct(findShare(shares, line), line || {});
+	}
+
+	/**
+	 * "suggested 12.5% (from 3 orders)" (Box_Shares::suggest_text()).
+	 *
+	 * @param {Object} suggestion suggestPct().
+	 * @param {Object} table      The translated strings (optional).
+	 * @return {string}
+	 */
+	function suggestText(suggestion, table) {
+		var s = strings(table);
+		var orders = parseInt(suggestion && suggestion.orders, 10) || 0;
+		return fmt(orders === 1 ? s.suggest1 : s.suggestN, num(suggestion ? suggestion.pct : 0) || '0', orders);
+	}
+
+	/**
+	 * How full the boxes of an order that has not arrived would be: the
+	 * typed percents, else the remembered share × the ordered count
+	 * (Box_Shares::how_full()).
+	 *
+	 * @param {Object[]} lines  {qty_ordered, box_pct, species_id, species, size_slug}.
+	 * @param {Object[]} shares The location's shares.
+	 * @return {Object}
+	 */
+	function howFull(lines, shares) {
+		var sum = 0;
+		var known = 0;
+		var typed = 0;
+		var unknown = 0;
+		(lines || []).forEach(function (line) {
+			if (!line || typeof line !== 'object') {
+				return;
+			}
+			var ordered = qty(line.qty_ordered);
+			if (ordered < 1) {
+				return;
+			}
+			var pct = boxPct(line.box_pct);
+			if (pct !== null) {
+				sum += Math.round(pct * 100);
+				typed++;
+				return;
+			}
+			var share = findShare(shares, line);
+			var perFish = share ? parseFloat(share.pct_per_fish) || 0 : 0;
+			if (perFish <= 0) {
+				unknown++;
+				return;
+			}
+			sum += Math.round(perFish * ordered * 100);
+			known++;
+		});
+		return { pct: sum / 100, boxes: sum / 10000, known: known, typed: typed, unknown: unknown, lines: known + typed + unknown };
+	}
+
+	/**
+	 * The "How full" line (Box_Shares::how_full_text()).
+	 *
+	 * @param {Object} full  howFull().
+	 * @param {Object} table The translated strings (optional).
+	 * @return {string}
+	 */
+	function howFullText(full, table) {
+		var s = strings(table);
+		var unknown = parseInt(full && full.unknown, 10) || 0;
+		var withShare = (parseInt(full && full.known, 10) || 0) + (parseInt(full && full.typed, 10) || 0);
+		if (withShare === 0 && unknown === 0) {
+			return s.howNone;
+		}
+		if (withShare === 0) {
+			return fmt(s.howNothing, unknown);
+		}
+		return fmt(s.howFull, num(Math.round(Number(full.pct) || 0) / 100) || '0', withShare, unknown);
+	}
+
+	/**
+	 * The name of an unknown fish: "??", or "?? " + what it looks like; a
+	 * mark that is already there is not doubled (Identify::unknown_name()).
+	 *
+	 * @param {*} description What was typed.
+	 * @return {string}
+	 */
+	function unknownName(description) {
+		var text = description === null || typeof description === 'undefined' || typeof description === 'boolean' || typeof description === 'object' ? '' : String(description);
+		text = text.replace(/\s+/g, ' ').replace(/^ +| +$/g, '').replace(/^[? ]+/, '').replace(/^ +| +$/g, '');
+		return (text === '' ? '??' : '?? ' + text).substring(0, 120);
+	}
+
+	/**
+	 * A name without the mark of an unknown fish ("?? small wrasse" →
+	 * "small wrasse") — what the "??" box leaves when it is unticked.
+	 *
+	 * @param {*} name A name.
+	 * @return {string}
+	 */
+	function knownName(name) {
+		return String(name === null || typeof name === 'undefined' ? '' : name).replace(/^[? ]+/, '').replace(/^ +| +$/g, '');
+	}
+
+	var api = {
+		renumber: renumber,
+		suggestImportFees: suggestImportFees,
+		unknownName: unknownName,
+		knownName: knownName,
+		fmt: fmt,
+		num: num,
+		boxPct: boxPct,
+		boxNo: boxNo,
+		boxState: boxState,
+		boxSummary: boxSummary,
+		boxSummaryRows: boxSummaryRows,
+		boxTotalText: boxTotalText,
+		findShare: findShare,
+		suggestPct: suggestPct,
+		suggestFor: suggestFor,
+		suggestText: suggestText,
+		howFull: howFull,
+		howFullText: howFullText
+	};
 
 	root.fhCleanRoomAdmin = root.fhCleanRoomAdmin || {};
 	root.fhCleanRoomAdmin.helpers = api;
@@ -398,6 +858,61 @@
 			return false;
 		});
 
+		// Settings → Sizes: which attribute is the size, or the plain list.
+		$('#fishotel-cleanroom-sizes').on('submit', function (e) {
+			e.preventDefault();
+			var $form = $(this);
+			var $btn = $form.find('.fh-cr-sizes-save').prop('disabled', true);
+			$.post(ajaxUrl(), $form.serialize())
+				.done(function (res) {
+					if (!res || !res.success) {
+						fail(res);
+						return;
+					}
+					notice('fishotel-misc-notice--success', (res.data && res.data.message) || (i18n.saved || 'Saved.'));
+					root.setTimeout(function () { root.location.reload(); }, 900);
+				})
+				.fail(fail)
+				.always(function () { $btn.prop('disabled', false); });
+			return false;
+		});
+
+		// Settings → Box shares: change one remembered percent per fish, or forget the row.
+		function sharePost($row, fields, done) {
+			fields.action = 'fishotel_cleanroom_box_share';
+			fields._wpnonce = cfg.settingsNonce;
+			fields.id = $row.data('share');
+			var $buttons = $row.find('button').prop('disabled', true);
+			$.post(ajaxUrl(), fields)
+				.done(function (res) {
+					if (!res || !res.success) {
+						fail(res);
+						return;
+					}
+					notice('fishotel-misc-notice--success', (res.data && res.data.message) || (i18n.saved || 'Saved.'));
+					done(res.data || {});
+				})
+				.fail(fail)
+				.always(function () { $buttons.prop('disabled', false); });
+		}
+
+		$(document).on('click', '.fh-cr-share-save', function () {
+			var $row = $(this).closest('tr');
+			sharePost($row, { op: 'save', pct_per_fish: $row.find('.fh-cr-share-value').val() }, function (data) {
+				if (data.value) {
+					$row.find('.fh-cr-share-value').val(data.value);
+				}
+			});
+		});
+
+		$(document).on('click', '.fh-cr-share-delete', function () {
+			var $row = $(this).closest('tr');
+			if (!root.confirm(i18n.confirmShare || 'Forget this remembered share?')) {
+				return;
+			}
+			sharePost($row, { op: 'delete' }, function () { $row.remove(); });
+		});
+
 		// Layout editor (buildings / tanks).
 		$(document).on('submit', '.fh-cr-layout-form', function (e) {
 			e.preventDefault();
@@ -533,7 +1048,7 @@
 			var $tr = $(this).closest('tr');
 			var $status = $('.fh-cr-status').first();
 			var fields = { op: 'fields', stay_id: $tr.data('stay') };
-			$tr.find('input').each(function () { fields[this.name] = this.value; });
+			$tr.find('input, select').each(function () { fields[this.name] = this.value; });
 			var note = $.trim(fields.note || '');
 			delete fields.note;
 			stayPost(fields, $status);
@@ -557,11 +1072,231 @@
 				.fail(fail);
 		});
 
+		/*
+		 * Identify… / Correct the fish…: a panel under the stay (Stays tab)
+		 * or the order line (order page) — the real fish from the species
+		 * search (or a typed name), its size, or "still unknown" with what
+		 * it looks like. One post; the server corrects the stay and its
+		 * order line together, then the page reloads.
+		 */
+		var identifyLine = null; // Set by the order editor: saves the order first.
+
+		function closeIdentify() {
+			$('.fh-cr-identify').remove();
+		}
+
+		$(document).on('click', '.fh-cr-identify-open', function () {
+			var template = root.document.getElementById('fh-cr-identify-template');
+			var $btn = $(this);
+			var $row = $btn.closest('tr');
+			if (!template) {
+				return;
+			}
+			var wasOpen = $row.next('.fh-cr-identify').length > 0;
+			closeIdentify();
+			if (wasOpen) {
+				return; // A second click closes it.
+			}
+			var $panel = $(template.innerHTML);
+			// The row's own size, also when it is no longer in the list.
+			var slug = String($btn.attr('data-size') || '');
+			var $size = $panel.find('.fh-cr-identify-size');
+			var listed = $size.find('option').filter(function () { return this.value === slug; }).length > 0;
+			if (slug && !listed) {
+				$('<option></option>').val(slug).text(String($btn.attr('data-size-label') || slug) + ' (' + (i18n.notStandard || 'not a standard size') + ')').appendTo($size);
+			}
+			$size.val(slug);
+			$panel.data('target', { stay: $btn.attr('data-stay') || '', line: $btn.attr('data-line') || '' });
+			$panel.find('.fh-cr-identify-search').attr('placeholder', i18n.fishHint || '');
+			$row.after($panel);
+			$panel.find('.fh-cr-identify-search').focus();
+		});
+
+		$(document).on('click', '.fh-cr-identify-cancel', closeIdentify);
+
+		// A picked suggestion carries its product; typing after it drops the pick.
+		$(document).on('input', '.fh-cr-identify-search', function () {
+			var $panel = $(this).closest('.fh-cr-identify');
+			var picked = $panel.data('picked');
+			if (picked && picked.name !== this.value) {
+				$panel.removeData('picked');
+			}
+		});
+
+		// Enter saves the panel (on the order page it would otherwise submit the order form).
+		$(document).on('keydown', '.fh-cr-identify-search', function (e) {
+			if (e.key === 'Enter') {
+				e.preventDefault();
+				$(this).closest('.fh-cr-identify').find('.fh-cr-identify-save').trigger('click');
+			}
+		});
+
+		$(document).on('change', '.fh-cr-identify-unknown', function () {
+			$(this).closest('.fh-cr-identify').find('.fh-cr-identify-search').attr('placeholder', this.checked ? (i18n.unknownHint || '') : (i18n.fishHint || ''));
+		});
+
+		attachSuggest($(document), '.fh-cr-identify-search', 'suggest', function ($input, item) {
+			$input.val(item.name || '');
+			$input.closest('.fh-cr-identify').data('picked', { name: item.name || '', product_id: item.product_id || 0 });
+		});
+
+		$(document).on('click', '.fh-cr-identify-save', function () {
+			var $panel = $(this).closest('.fh-cr-identify');
+			var $buttons = $panel.find('button');
+			var target = $panel.data('target') || {};
+			var picked = $panel.data('picked');
+			var text = $.trim($panel.find('.fh-cr-identify-search').val());
+			var unknown = $panel.find('.fh-cr-identify-unknown').prop('checked');
+			if (!text && !unknown) {
+				notice('fishotel-misc-notice--warning', i18n.whichFish || 'Which fish?');
+				return;
+			}
+			var fields = {
+				species: text,
+				product_id: picked && picked.name === text ? picked.product_id : 0,
+				size: $panel.find('.fh-cr-identify-size').val() || '',
+				unknown: unknown ? 1 : 0
+			};
+			function done(res) {
+				if (!res || !res.success) {
+					fail(res);
+					$buttons.prop('disabled', false);
+					return;
+				}
+				notice('fishotel-misc-notice--success', (res.data && res.data.message) || (i18n.saved || 'Saved.'));
+				$('.fh-cr-status').first().removeClass('is-error').addClass('is-ok').text(i18n.reloading || 'Saved. Reloading…');
+				root.setTimeout(function () { root.location.reload(); }, 1200);
+			}
+			function failed(res) {
+				if (res) {
+					fail(res); // null: the order save before it was refused and said why.
+				}
+				$buttons.prop('disabled', false);
+			}
+			$buttons.prop('disabled', true);
+			if (target.line && identifyLine) {
+				fields.line_id = target.line;
+				identifyLine(fields, done, failed);
+				return;
+			}
+			fields.action = 'fishotel_cleanroom_stay';
+			fields.nonce = cfg.nonce;
+			fields.op = 'identify';
+			fields.stay_id = target.stay;
+			$.post(ajaxUrl(), fields).done(done).fail(failed);
+		});
+
 		// The order editor.
 		var $order = $('#fh-cr-order');
 		if ($order.length) {
 			var $lines = $('#fh-cr-lines tbody');
 			var $orderStatus = $order.find('.fh-cr-status').first();
+			var $boxes = $('#fh-cr-boxes');
+			var boxStrings = i18n.box || {};
+			var boxShares = [];
+			try {
+				boxShares = JSON.parse($boxes.attr('data-shares') || '[]') || [];
+			} catch (err) {
+				boxShares = [];
+			}
+
+			/* One row of the grid as the box helpers read it. */
+			function lineOf($row) {
+				var $received = $row.find('input[name$="[qty_received]"]');
+				return {
+					species_id: $row.find('input[name$="[species_id]"]').val(),
+					species: $row.find('.fh-cr-species').val(),
+					size_slug: $row.find('select[name$="[size_slug]"]').val() || '',
+					qty_ordered: $row.find('input[name$="[qty_ordered]"]').val(),
+					qty_received: $received.length ? $received.val() : $row.find('[data-received]').attr('data-received'),
+					box_no: $row.find('input[name$="[box_no]"]').val(),
+					box_pct: $row.find('input[name$="[box_pct]"]').val()
+				};
+			}
+
+			/*
+			 * The Boxes card, the percent total under the column, the "How
+			 * full" line and the "suggested N%" chips — recalculated from the
+			 * form as it stands (the server renders the same on load).
+			 */
+			function refreshBoxes() {
+				if (!$boxes.length) {
+					return;
+				}
+				var $rows = $lines.find('tr.fh-cr-line');
+				var lines = $rows.map(function () { return lineOf($(this)); }).get();
+				var summary = boxSummary(lines, $order.find('[name="boxes"]').val());
+				var bag = $order.attr('data-mode') === 'bag';
+
+				var $list = $boxes.find('[data-box="rows"]').empty();
+				boxSummaryRows(summary, boxStrings).forEach(function (row) {
+					$('<span class="fh-cr-chip"></span>').addClass('fh-cr-chip--box-' + row.state).text(row.text).appendTo($list);
+					$list.append(' ');
+				});
+				$boxes.find('[data-box="total"]').text(boxTotalText(summary, boxStrings));
+				$order.find('[data-box="pct_total"]').text(summary.lines > 0 ? num(summary.pct_total) + '%' : '');
+
+				var status = String($order.find('[name="status"]').val() || '');
+				var $full = $boxes.find('[data-box="how_full"]');
+				if (status === 'draft' || status === 'ordered') {
+					$full.prop('hidden', false).text(howFullText(howFull(lines, boxShares), boxStrings));
+				} else {
+					$full.prop('hidden', true).text('');
+				}
+
+				$rows.each(function (i) {
+					var $hint = $(this).find('.fh-cr-pct-hint').empty();
+					var suggestion = bag ? null : suggestFor(boxShares, lines[i]);
+					if (suggestion) {
+						$('<button type="button" class="button-link fh-cr-suggest-pct"></button>')
+							.attr('data-pct', num(suggestion.pct))
+							.text(suggestText(suggestion, boxStrings))
+							.appendTo($hint);
+					}
+				});
+			}
+
+			/* The remembered shares belong to a supplier + origin: fetch them again when either changes. */
+			function loadShares() {
+				$.post(ajaxUrl(), {
+					action: 'fishotel_cleanroom_order',
+					nonce: cfg.nonce,
+					op: 'shares',
+					supplier: $order.find('[name="supplier"]').val(),
+					origin: $order.find('[name="origin"]').val()
+				}).done(function (res) {
+					if (res && res.success && res.data && Array.isArray(res.data.shares)) {
+						boxShares = res.data.shares;
+						refreshBoxes();
+					}
+				});
+			}
+
+			// A species picked from the list carries its species-list id; a name typed over it is
+			// another fish, so the id goes (picking again sets it again).
+			$order.on('input', '.fh-cr-species', function () {
+				$(this).closest('tr').find('input[name$="[species_id]"]').val('');
+			});
+
+			// The "??" box: an unknown fish reads "??" and what it looks like; unticked, the mark goes.
+			$order.on('change', 'input[name$="[needs_id]"]', function () {
+				var $tr = $(this).closest('tr');
+				var $name = $tr.find('.fh-cr-species');
+				$name.val(this.checked ? unknownName($name.val()) : knownName($name.val()));
+				if (this.checked) {
+					$tr.find('input[name$="[species_id]"]').val('');
+				}
+				$tr.toggleClass('is-unknown', this.checked);
+				refreshBoxes();
+			});
+
+			$order.on('input change', 'input[name$="[box_pct]"], input[name$="[box_no]"], input[name$="[qty_ordered]"], input[name$="[qty_received]"], select[name$="[size_slug]"], .fh-cr-species, [name="boxes"], [name="status"]', refreshBoxes);
+			$order.on('change', '[name="supplier"], [name="origin"]', loadShares);
+
+			// A tap on "suggested N%" fills the percent; nothing is saved until Save.
+			$order.on('click', '.fh-cr-suggest-pct', function () {
+				$(this).closest('tr').find('input[name$="[box_pct]"]').val($(this).attr('data-pct')).trigger('input');
+			});
 
 			function renumberLines() {
 				$lines.find('tr.fh-cr-line').each(function (row) {
@@ -572,7 +1307,7 @@
 				});
 			}
 
-			function fillFigures(fig, ids) {
+			function fillFigures(fig, ids, seen) {
 				if (!fig) {
 					return;
 				}
@@ -581,6 +1316,11 @@
 					var $row = $(this);
 					if (ids && ids[i]) {
 						$row.find('input[name$="[id]"]').val(ids[i]).end().attr('data-line', ids[i]);
+					}
+					if (seen && typeof seen[i] === 'string') {
+						// The token the server hands back: the line as saved (this page's own save does not
+						// make it stale) — or the row's own token when it kept a fish corrected elsewhere.
+						$row.find('input[name$="[seen]"]').val(seen[i]);
 					}
 					if (!f) {
 						return;
@@ -604,7 +1344,8 @@
 			 */
 			function saveOrder(done, failed) {
 				$lines.find('tr.fh-cr-line').not('.is-linked').each(function () {
-					if (!$.trim($(this).find('.fh-cr-species').val())) {
+					// A line without a species goes — unless it is ticked "??": an unknown fish needs no description.
+					if (!$.trim($(this).find('.fh-cr-species').val()) && !$(this).find('input[name$="[needs_id]"]').prop('checked')) {
 						$(this).remove();
 					}
 				});
@@ -630,7 +1371,11 @@
 							root.location.href = d.redirect;
 							return;
 						}
-						fillFigures(d.figures, d.line_ids);
+						fillFigures(d.figures, d.line_ids, d.seen);
+						if (Array.isArray(d.shares)) {
+							boxShares = d.shares; // What this save taught: the chips of the lines still without a percent follow.
+						}
+						refreshBoxes();
 						if (d.status) {
 							$order.find('.fh-cr-order__status').text(d.status).attr('class', 'fh-cr-badge fh-cr-order__status fh-cr-badge--order-' + d.status);
 						}
@@ -641,6 +1386,10 @@
 						$orderStatus.addClass('is-ok').text(d.message || (i18n.saved || 'Saved.'));
 						if (done) {
 							done(d);
+						} else if (d.reload) {
+							// A correction changed stays or what a label said, or a line kept a fish that was
+							// corrected elsewhere after this page was loaded: show the lines as they are now.
+							root.setTimeout(function () { root.location.reload(); }, 1200);
 						}
 					})
 					.fail(function (res) {
@@ -661,6 +1410,7 @@
 
 			$order.on('change', '[name="cost_mode"]', function () {
 				$order.attr('data-mode', this.value);
+				refreshBoxes();
 			});
 
 			$order.on('click', '.fh-cr-line-add', function () {
@@ -677,6 +1427,7 @@
 			$order.on('click', '.fh-cr-line-remove', function () {
 				$(this).closest('tr').remove();
 				renumberLines();
+				refreshBoxes();
 			});
 
 			$order.on('click', '.fh-cr-suggest-fees', function () {
@@ -714,6 +1465,20 @@
 				});
 			});
 
+			// "Correct the fish…" on a line: what is typed on the page is saved first, then the line
+			// (and its stays) are corrected.
+			identifyLine = function (fields, done, failed) {
+				saveOrder(function () {
+					fields.action = 'fishotel_cleanroom_order';
+					fields.nonce = cfg.nonce;
+					fields.op = 'identify';
+					fields.order_id = $order.data('order');
+					$.post(ajaxUrl(), fields).done(done).fail(failed);
+				}, function () {
+					failed(null); // The save was refused (its notice says why): nothing was corrected.
+				});
+			};
+
 			$order.on('click', '.fh-cr-order-delete', function () {
 				if (!root.confirm(i18n.confirmDelete || 'Delete this order?')) {
 					return;
@@ -744,6 +1509,7 @@
 				if (!$.trim($worth.val()) && item.my_price !== null && item.my_price !== undefined) {
 					$worth.val(Number(item.my_price).toFixed(2));
 				}
+				refreshBoxes(); // The line has its fish: its remembered share, if any, is offered.
 			});
 		}
 

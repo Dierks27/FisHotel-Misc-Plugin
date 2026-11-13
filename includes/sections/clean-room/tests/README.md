@@ -5,15 +5,22 @@ supplies the handful of WordPress functions the classes touch (the
 translation helpers, `sanitize_*`, options, transients, `current_time`,
 `wp_timezone` = America/Chicago, `user_can` / `current_user_can`,
 `wp_verify_nonce` matching `wp_create_nonce`, `wp_get_current_user`, the
-action and filter registries — all in-memory), the `check()` / `check_same()` /
-`check_contains()` / `fh_finish()` harness and the temp-dir helpers, and
+action and filter registries — all in-memory; `wp_send_json_error()` /
+`wp_send_json_success()` and a failed `check_ajax_referer()` throw
+`Fh_Test_Json`, so a real `wp_ajax_` handler can be called up to its
+reply), the `check()` / `check_same()` /
+`check_contains()` / `check_json()` / `fh_finish()` harness and the temp-dir helpers, and
 loads the section's classes; the Store
 class (the only `$wpdb` file) is loaded for its constants and pure
 statics only and stands replaced by `fake-store.php` — an in-memory
 store that runs the same Replay and hydration code — so no `$wpdb`
 method is ever called. `fixtures/qr-front-desk-521.txt` is the module
 matrix python-qrcode produces for the Front Desk URL of tank 521 (byte
-mode, level M, mask 2).
+mode, level M, mask 2). Two fixtures are read by the PHP tests AND the
+node tests, so the server and the page cannot drift apart:
+`fixtures/box-maths.json` (the percent-of-a-box maths: typed percents
+and box numbers, the per-box summary, the remembered shares, "How full")
+and `fixtures/unknown-names.json` (the "??" name of an unknown fish).
 
 ```
 php  includes/sections/clean-room/tests/layout-test.php
@@ -33,6 +40,9 @@ php  includes/sections/clean-room/tests/workbook-test.php
 php  includes/sections/clean-room/tests/import-map-test.php
 php  includes/sections/clean-room/tests/import-test.php
 php  includes/sections/clean-room/tests/sale-dates-test.php
+php  includes/sections/clean-room/tests/sizes-test.php
+php  includes/sections/clean-room/tests/box-shares-test.php
+php  includes/sections/clean-room/tests/identify-test.php
 node includes/sections/clean-room/tests/front-desk.test.js
 node includes/sections/clean-room/tests/clean-room-admin.test.js
 ```
@@ -149,10 +159,12 @@ system temp directory (`FH_TEST_TMP` overrides).
   for the tank 521 URL, and the SVG (size, quiet zone, rect count, no
   escaping needed, too long → empty).
 - **csv-test.php** — the formula guard on `= + - @ \t \r`, numbers,
-  arrays; the 19-column row with guarded species / supplier / order ref
+  arrays; the 21-column row (the size and the "needs identifying" flag
+  last) with guarded species / supplier / order ref
   and the building derived from the tank; `write_csv()`; the Board /
-  Stays filters (the *For sale now* flag) and totals (for sale, for sale
-  but still in the Spa, without a sale date); the Events-tab wording for every event type
+  Stays filters (the *For sale now* and *Needs identifying* flags) and
+  totals (for sale, for sale but still in the Spa, without a sale date,
+  to identify); the Events-tab wording for every event type
   (move reasons, split markers, the `cleared:`, `checkin:` and
   `sale_ready:` notes) and
   tank log kind, `move_reason()`; the Coming Soon release moment (09:00
@@ -196,7 +208,14 @@ system temp directory (`FH_TEST_TMP` overrides).
   example, every zero / blank guard (no lines, nothing received, no
   units, everything DOA, survivors not typed → survival undefined,
   junk inputs), `round_to()` (MROUND halves away from zero), the money
-  reader and the display helpers.
+  reader and the display helpers; a line's percent of a box (alone,
+  mixed with per-box lines, zero / empty, a line that spans boxes, bag
+  mode untouched, an order without percents unchanged — and every guess
+  scaled alike giving the same costs), what a typed percent and box
+  number read as, and the per-box summary with its states (under / about
+  full 90–110 / over, the lines without a box number apart, the
+  received lines still without a percent counted once some line has
+  one) against `fixtures/box-maths.json`.
 - **stats-test.php** — the year of an order; per-order rows over four
   invented orders (a bag-mode one dated by its order date, one that
   received nothing, one whose survivors are unknown); the weighted Σ/Σ
@@ -336,13 +355,89 @@ system temp directory (`FH_TEST_TMP` overrides).
   when the batch has a date), "ready (still in the Spa)" in the CSV and
   XLSX state column, the order card's Spa count and own-date flag, and
   the Board's building line counting as its summary does.
+- **sizes-test.php** — the one list of fish sizes: what counts as a
+  size (an attribute key matching "size"), slugs and a typed list, an
+  attribute's terms in the order the attribute is set to (custom, name,
+  numeric name, id), where the list comes from (one attribute, several
+  with and without a pick, a pick that no longer exists, none + the
+  plain list, an attribute without terms), a picked size and a stored
+  size that left the list (still shown, flagged, selectable on its own
+  row; any other unknown slug refused), the read-only "Sizes in use on
+  products" report, the settings keys and the Settings → Sizes save
+  (capability, nonce, invalid input, the Numbers form never wiping
+  them), the size carried line → stay → sister stay, the Stays tab's
+  Edit, the Front Desk arrival and rows, a term slug with
+  percent-encoded characters kept whole, the voice parser still ignoring
+  size words, the exports, hydration and the schema.
+- **box-shares-test.php** — the percent of a box on the order page and
+  what the site remembers of it: the schema (the lines' columns, the
+  `fh_box_shares` table, the version gate that stays shut while an added
+  column is missing), a line's box number and percent from a form and
+  the save refused on a mistyped one (nothing written), the Boxes card
+  (chips, total, against the fixture — and the received lines still
+  without a percent counted, with the half-filled order worked by hand
+  that shows why), what is remembered (percent ÷
+  received per supplier + origin + fish + size; only box-mode lines with
+  received fish and an identified fish), the count going up once per
+  order line, the latest order winning (an older order never overwrites
+  a newer guess), the releases (a line that changes fish / size, loses
+  its percent, is removed, or whose order is deleted; a share at zero
+  deleted), the suggestion (per fish × received, else × ordered; never
+  for a line with a percent) and "How full", a fish picked from the
+  species list on one order and typed on the next (one share, one count
+  per line, a suggestion either way round), the Settings → Box shares
+  handler (capability, nonce, invalid input, change, forget — and a
+  typed value that yields only to an order dated after it, not to that
+  day's order saved again), the exports.
+- **identify-test.php** — unknown and mislabeled fish and the one
+  correction: the "??" name against `fixtures/unknown-names.json`, the
+  schema (needs_id on lines and stays, label_name, version 1.5, the
+  gate), an unknown fish on the order form (flagged, named, costed
+  exactly like a known fish with the same numbers, never remembered as
+  a box share), check-in and a split (as unknown as the line), the fish
+  a correction names (a product, a species-list fish typed any which
+  way, a typed name, still unknown, a product that does not exist, a
+  size refused; the fish the row already is, typed again, keeping its
+  product link), the correction itself (stay + line together, the note
+  event, the share written after, the same again changing nothing), the
+  label (set once, never overwritten, kept through "marked unknown",
+  not mislabeled when corrected back; a fish that arrived unknown
+  keeping its "??" name in the label's place, so a second correction is
+  no mislabel — shown and counted nowhere),
+  the split rule (only the stay changes and the line gets its "part of
+  this line" note; the last sister agreeing makes the line follow; a
+  correction from the order line leaves a sister that is something
+  else), the order page's "Correct the fish…" (a line not on the order,
+  nothing arrived, no fish, a bad size; a received line not checked in)
+  and its grid (a checked-in line's species / size / "??" box follow to
+  the stay, a line without a stay records no label unless it is ticked
+  "??" after fish arrived, notes kept), the Stays tab (Identify…
+  refusing bad input, Edit following the same rules, a size alone
+  writing no event), the Front Desk (an unknown arrival, identify on a
+  group's sheet with no Undo, a group of another tank refused), flags
+  and filters, the mislabel stats (by supplier, by origin, totals, an
+  undefined rate), the exports, the importer flagging nothing, the
+  capability and the nonce in front of the three AJAX endpoints the new
+  action rides on (called for real, up to their reply) — and the page
+  loaded before a correction: the token a row is rendered with, an order
+  page saved after the phone identified its fish (the lines, stays,
+  events, label, shares and mislabel count stand; the price typed is
+  saved; the reply counts the lines and hands a kept line its stale
+  token back, so Save pressed twice keeps the correction twice), a fish
+  typed on a stale row named as not saved, an up-to-date page still
+  correcting — twice in a row, with the tokens of its own save —, a line
+  corrected in another tab, and the Stays tab's Edit
+  (the other fields saved and the fish left; refused with 409 when the
+  fish was changed on the stale row).
 - **fake-store.php** — not a test (exits 0 when run directly): the
   in-memory store the above drives (tanks and buildings from the seed,
   stays — joined with their batch's order and sale date like the real
-  `stay_select()`, `stays_for_product()`, `product_facts()`,
-  `batch_sale_counts()` —, events, logs — per tank or per building, with
-  `logs_on_date()`, `latest_doses()`, `imported_log_keys()` —, aliases,
-  species rows, orders and lines).
+  `stay_select()`, `stays_for_product()`, `stays_for_line()`,
+  `product_facts()`, `batch_sale_counts()` —, events, logs — per tank or
+  per building, with `logs_on_date()`, `latest_doses()`,
+  `imported_log_keys()` —, aliases, species rows, orders and lines with
+  `update_line_fields()`, the remembered box shares, and what the real
+  Store reads from WooCommerce for the sizes, seeded by a test).
 - **xlsx-builder.php**, **fixture-builder.php** — not tests (exit 0 when
   run directly): the tiny .xlsx writer and the synthetic FisHotel-style
   workbook the reader, mapper and import tests use.
@@ -352,10 +447,18 @@ system temp directory (`FH_TEST_TMP` overrides).
   server), `previewSentence()` for every intent including the Spa-tank
   ask and the "Which fish?" prefix, `fmt()`, `escapeHtml()`,
   `saleSummary()` (a batch date, an own date, none with the suggestion,
-  the "still in the Spa" warning, the page's strings).
+  the "still in the Spa" warning, the page's strings), `sizeText()`,
+  `unknownName()` against `fixtures/unknown-names.json`.
 - **clean-room-admin.test.js** — `renumber()` with a prefix and a
   template row's `__i__`, `suggestImportFees()` (the exact pair, the
-  origin-less fallback, nulls, cents).
+  origin-less fallback, nulls, cents); the order page's box helpers
+  against `fixtures/box-maths.json` (a typed percent and box number, the
+  per-box summary with the received lines still without a percent, its
+  chips and total, the remembered share of a line — by its id, its name,
+  or the name of a share kept under an id —, its suggestion and its
+  text, "How full"); `unknownName()` /
+  `knownName()` (the "??" box of an order line) against
+  `fixtures/unknown-names.json`.
 
 ## By hand, once, on a real site
 
@@ -484,3 +587,45 @@ system temp directory (`FH_TEST_TMP` overrides).
     "own sale date removed (the batch date applies)". Quick Edit the
     product from the list: no event. The shop page of the product does
     not change by itself (stock and visibility stay as they were).
+19. Sizes. Settings → Sizes: the standard list is the terms of the
+    product attribute that matches "size", in the attribute's own order,
+    with a link to Products → Attributes (or, without such an attribute,
+    a plain list to type); "Sizes in use on products" lists every size
+    value the fish products' variations carry, with how many products
+    use each, the ones that are not standard first. No product changes.
+    Order page: a Size dropdown per line; check in — the stay shows the
+    size beside its species on the Board, the Stays tab and the phone.
+20. Percent of a box. On a received order type Box # and "% of box" on
+    two lines of box 1 (60 and 35): the Boxes card reads "Box 1 · 95% ·
+    about full" and "Boxes by the percents: 0.95 · Boxes field: …" as
+    you type; Save — the landed totals split the flight and import fees
+    60 : 35. Type 600 in a percent: the save is refused, nothing saved.
+    Start a new order for the same supplier and origin with the same
+    fish and size: "suggested N% (from 1 order)" under the empty
+    percent — a tap fills it, nothing is saved until Save; a draft shows
+    the "How full" line. Settings → Box shares lists the rows; change
+    one, forget one.
+21. Unknown and mislabeled fish. Order page: tick ?? on a new line and
+    type "small wrasse" — it reads "?? small wrasse"; give it a
+    received count, a size and a percent, Save, Check in: the stay is on
+    the Board as "?? small wrasse", the Board's summary has "1 needs
+    identifying" (a click opens the Stays tab filtered to it), the
+    Arrivals list and the order title say "?? 1 to identify", and
+    Settings → Box shares has no row for it. Phone, on its tank: the
+    row says "needs identifying"; tap it → Identify → type the real
+    fish, pick it, a size, Save: the toast "Identified: ?? small wrasse
+    → … · the order line follows", no Undo; the Events tab has
+    "identified: ?? small wrasse → …" with your name; the order line
+    has the fish, its scientific name and size; Settings → Box shares
+    now has its row. On another checked-in line, Stays tab → Correct
+    fish… → another fish: the order line shows "arrived labeled: <the
+    old name>"; correct it again — the label does not change. Move 1 of
+    a group of 3 to another tank (a split), then Identify the 1 as
+    another fish: the order line keeps its name and shows "[part of this
+    line is … — stay #N]"; identify the other 2 as that same fish: the
+    line follows and the note is gone. Phone → Arrival → "Unknown fish
+    (??)": a "??" group with no product.
+22. Stats: By supplier and By origin show "Mislabeled" (N of M · rate)
+    and "Not identified yet"; the XLSX has the four columns on Orders,
+    By supplier and By origin, the stays export a needs_id column, the
+    orders export needs_id and label_name on Lines.

@@ -44,14 +44,14 @@ $stay = array(
 	'tank_number'         => 121,
 	'area'                => 'clean',
 	'source'              => 'voice',
-	'supplier'            => '-Golden Ina',
+	'supplier'            => '-Test Supplier Two',
 	'order_ref'           => '@PO-7',
 	'landed_cost'         => 12.5,
 	'notes'               => '',
 );
 $row = Admin::csv_row( $stay );
-check( 'nineteen columns, matching the header', 19 === count( $row ) && 19 === count( Admin::csv_header() ) );
-check( 'species, supplier and order ref are guarded', "'=HYPERLINK(\"http://x\",\"click\")" === $row[1] && "'-Golden Ina" === $row[15] && "'@PO-7" === $row[16] );
+check( 'twenty-one columns, matching the header; the size and the "needs identifying" flag come last — empty and 0 for a stay without a size that is a known fish', 21 === count( $row ) && 21 === count( Admin::csv_header() ) && 'size' === Admin::csv_header()[19] && '' === $row[19] && 'needs_id' === Admin::csv_header()[20] && '0' === $row[20] );
+check( 'species, supplier and order ref are guarded', "'=HYPERLINK(\"http://x\",\"click\")" === $row[1] && "'-Test Supplier Two" === $row[15] && "'@PO-7" === $row[16] );
 check( 'numbers and dates pass through as text', array( '7', '12', '5', '3', '2026-04-01', '14' ) === array( $row[0], $row[2], $row[3], $row[4], $row[5], $row[6] ) );
 check( 'state, cleared, sale-ready, closed', array( 'cleared', '2026-04-14', '2026-04-28', '' ) === array( $row[7], $row[8], $row[9], $row[10] ) );
 check( 'tank and its building (the hundreds)', '121' === $row[11] && '100' === $row[12] && 'clean' === $row[13] );
@@ -75,7 +75,7 @@ echo "4. Filters and totals\n";
 $filters = Admin::filters_from_request( array( 'area' => 'SPA', 's' => ' <b>cardinal</b> ' ) );
 check( 'area is validated (lower-cased), species sanitised', 'spa' === $filters['area'] && 'cardinal' === $filters['species'] );
 check( 'unknown area → both', '' === Admin::filters_from_request( array( 'area' => 'lab' ) )['area'] );
-check( 'nothing → empty filters', array( 'area' => '', 'species' => '', 'ready' => false ) === Admin::filters_from_request( null ) );
+check( 'nothing → empty filters', array( 'area' => '', 'species' => '', 'ready' => false, 'needs_id' => false ) === Admin::filters_from_request( null ) );
 check( 'ready=1 → only the groups for sale today', true === Admin::filters_from_request( array( 'ready' => '1' ) )['ready'] && false === Admin::filters_from_request( array( 'ready' => 'yes' ) )['ready'] );
 $tanks = array(
 	array( 'status' => 'active', 'occupants' => array( array( 'qty_live' => 4, 'status' => 'in_qt', 'sale_ready' => false, 'sale_ready_date' => null ), array( 'qty_live' => 2, 'status' => 'cleared', 'sale_ready' => false, 'sale_ready_date' => '2026-05-01' ) ) ),
@@ -85,7 +85,7 @@ $tanks = array(
 	array( 'status' => 'offline', 'occupants' => array() ),
 );
 $totals = Admin::totals( $tanks );
-check( 'totals: 1 in QT, 1 cleared, 2 for sale (one still in the Spa), 10 alive, 1 of 4 tanks empty (offline skipped), 1 group without a sale date', array( 'in_qt' => 1, 'cleared' => 1, 'ready' => 2, 'live' => 10, 'tanks' => 4, 'empty' => 1, 'ready_in_spa' => 1, 'no_sale_date' => 1 ) === $totals, json_encode( $totals ) );
+check( 'totals: 1 in QT, 1 cleared, 2 for sale (one still in the Spa), 10 alive, 1 of 4 tanks empty (offline skipped), 1 group without a sale date', array( 'in_qt' => 1, 'cleared' => 1, 'ready' => 2, 'live' => 10, 'tanks' => 4, 'empty' => 1, 'ready_in_spa' => 1, 'no_sale_date' => 1, 'needs_id' => 0 ) === $totals, json_encode( $totals ) );
 check( 'matches_species is case-insensitive and empty matches all', Admin::matches_species( array( 'species' => 'Pajama Cardinalfish' ), 'CARDINAL' ) && Admin::matches_species( array( 'species' => 'x' ), '' ) && ! Admin::matches_species( array( 'species' => 'Yellow Tang' ), 'cardinal' ) );
 
 echo "5. Plain words for the Events tab\n";

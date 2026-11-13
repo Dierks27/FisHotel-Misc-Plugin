@@ -7,6 +7,24 @@
  * figures, weighted and as the spreadsheet averaged them), their AJAX,
  * and the XLSX / CSV exports of orders, species, stats and stays.
  *
+ * The order editor also takes, per line, a size (one of the standard
+ * sizes — Sizes), the box the line came out of and the percent of ONE box
+ * it took; under the lines the percents are added up per box (under /
+ * about full / over) and against the order's Boxes field
+ * (Costing::box_summary(), which the page's JS recalculates as the
+ * numbers are typed). Saving an order remembers each line's percent per
+ * fish for its supplier + origin + fish + size (Box_Shares), which the
+ * next order from the same place offers back as a "suggested N%" chip and,
+ * while it is a draft or ordered, adds up into a "How full" line.
+ *
+ * A line can be an unknown fish (the "??" box), and a line that received
+ * fish can be corrected — "Correct the fish…" (identify_line()), or, once
+ * it became a stay, simply by changing its species, its "??" box or its
+ * size in the grid: the stays follow, the line keeps what the label said
+ * (Identify). The Arrivals list marks the orders with fish still to
+ * identify; the Stats tab counts the mislabeled lines per supplier and
+ * per origin.
+ *
  * Every write checks manage_woocommerce and the admin nonce; every
  * download is an admin-post action with its own nonce. The XLSX writer
  * never writes a formula; the CSV guards every cell (Admin::csv_cell).
@@ -217,6 +235,9 @@ class Admin_Workbook {
 			}
 			$box_rates   = Settings::box_rates();
 			$pick        = self::pick_lists( $store, $box_rates );
+			$sizes       = Sizes::standard( $store, $settings )['sizes'];
+			$shares      = $store->box_shares( array( 'location_key' => Box_Shares::location_key( $order['supplier'], $order['origin'] ) ) );
+			$boxes       = self::boxes_panel( $order, $shares );
 			$can_checkin = self::can_check_in( $order );
 			$is_new      = 0 === (int) $order['id'];
 			$list_url    = Admin::page_url( 'arrivals' );
@@ -238,8 +259,9 @@ class Admin_Workbook {
 			$rows[] = array_merge(
 				$order,
 				array(
-					'summary' => Orders::summary( $order ),
-					'on_sale' => self::on_sale_cell( $order, isset( $counts[ (int) $order['id'] ] ) ? $counts[ (int) $order['id'] ] : array() ),
+					'summary'     => Orders::summary( $order ),
+					'on_sale'     => self::on_sale_cell( $order, isset( $counts[ (int) $order['id'] ] ) ? $counts[ (int) $order['id'] ] : array() ),
+					'to_identify' => self::unknown_lines( $order ),
 				)
 			);
 		}
@@ -374,6 +396,23 @@ class Admin_Workbook {
 	public static function product_titles( $store, array $ids ) {
 		$ids = array_values( array_unique( array_filter( array_map( 'intval', $ids ) ) ) );
 		return $ids ? (array) $store->product_titles( $ids ) : array();
+	}
+
+	/**
+	 * How many lines of an order are fish that still have to be identified
+	 * (pure) — the marker on the Arrivals list and on the order page.
+	 *
+	 * @param array $order The order with its lines.
+	 * @return int
+	 */
+	public static function unknown_lines( array $order ) {
+		$n = 0;
+		foreach ( (array) ( $order['lines'] ?? array() ) as $line ) {
+			if ( is_array( $line ) && ! empty( $line['needs_id'] ) ) {
+				$n++;
+			}
+		}
+		return $n;
 	}
 
 	/**
@@ -594,6 +633,113 @@ class Admin_Workbook {
 	}
 
 	/* ============================================================== */
+	/*  Percent of a box                                               */
+	/* ============================================================== */
+
+	/**
+	 * The sentences of the Boxes card, the suggestion chip and the "How
+	 * full" line — one table for the page and for its JS (which fills the
+	 * same templates as the numbers are typed).
+	 *
+	 * @return array<string, string>
+	 */
+	public static function box_strings() {
+		return array_merge(
+			array(
+				/* translators: 1: box number, 2: percent, 3: under / about full / over */
+				'box'        => __( 'Box %1$s · %2$s%% · %3$s', 'fishotel-misc-plugin' ),
+				/* translators: 1: percent, 2: lines */
+				'unboxed'    => __( 'no box number · %1$s%% · lines: %2$d', 'fishotel-misc-plugin' ),
+				'under'      => __( 'under', 'fishotel-misc-plugin' ),
+				'full'       => __( 'about full', 'fishotel-misc-plugin' ),
+				'over'       => __( 'over', 'fishotel-misc-plugin' ),
+				'none'       => __( 'No line has a percent yet: every line uses its per-box count.', 'fishotel-misc-plugin' ),
+				/* translators: %1$s: boxes */
+				'total'      => __( 'Boxes by the percents: %1$s · Boxes field: not set', 'fishotel-misc-plugin' ),
+				/* translators: 1: boxes, 2: the order's Boxes field */
+				'totalField' => __( 'Boxes by the percents: %1$s · Boxes field: %2$s', 'fishotel-misc-plugin' ),
+				/* translators: %1$d: order lines */
+				'missing'    => __( 'received lines without a %%: %1$d (still on their per-box count)', 'fishotel-misc-plugin' ),
+			),
+			Box_Shares::strings()
+		);
+	}
+
+	/**
+	 * The Boxes card's chips (pure): one per box number — "Box 1 · 95% ·
+	 * about full" — then the lines with a percent but no box number.
+	 *
+	 * @param array      $summary Costing::box_summary().
+	 * @param array|null $strings box_strings() (null = the site's).
+	 * @return array[] state (under|full|over|unboxed), text.
+	 */
+	public static function box_summary_rows( array $summary, $strings = null ) {
+		$s    = is_array( $strings ) ? $strings : self::box_strings();
+		$rows = array();
+		foreach ( (array) ( $summary['boxes'] ?? array() ) as $box ) {
+			$state  = in_array( (string) ( $box['state'] ?? '' ), Costing::BOX_STATES, true ) ? (string) $box['state'] : 'under';
+			$rows[] = array(
+				'state' => $state,
+				'text'  => sprintf( $s['box'], (string) (int) $box['box_no'], Costing::num( $box['pct'], '0', 2 ), $s[ $state ] ),
+			);
+		}
+		if ( (int) ( $summary['unboxed']['lines'] ?? 0 ) > 0 ) {
+			$rows[] = array(
+				'state' => 'unboxed',
+				'text'  => sprintf( $s['unboxed'], Costing::num( $summary['unboxed']['pct'], '0', 2 ), (int) $summary['unboxed']['lines'] ),
+			);
+		}
+		return $rows;
+	}
+
+	/**
+	 * The Boxes card's total (pure): the boxes the percents add up to (the
+	 * sum ÷ 100, to two decimals) beside the order's Boxes field — and,
+	 * while some received lines have a percent and others none, how many
+	 * have none: those still take their share by their per-box count, so
+	 * the percents are only right "compared to each other" once every
+	 * received line has one.
+	 *
+	 * @param array      $summary Costing::box_summary().
+	 * @param array|null $strings box_strings() (null = the site's).
+	 * @return string
+	 */
+	public static function box_total_text( array $summary, $strings = null ) {
+		$s = is_array( $strings ) ? $strings : self::box_strings();
+		if ( (int) ( $summary['lines'] ?? 0 ) < 1 ) {
+			return $s['none'];
+		}
+		// The sum is a whole number of hundredths, so this rounds the same in PHP and in JS.
+		$boxes   = Costing::num( round( (float) ( $summary['pct_total'] ?? 0 ) ) / 100, '0', 2 );
+		$text    = null === ( $summary['order_boxes'] ?? null ) ? sprintf( $s['total'], $boxes ) : sprintf( $s['totalField'], $boxes, (string) (int) $summary['order_boxes'] );
+		$missing = (int) ( $summary['missing'] ?? 0 );
+		return $missing > 0 ? $text . ' · ' . sprintf( $s['missing'], $missing ) : $text;
+	}
+
+	/**
+	 * What the order page's Boxes card shows (pure): the chips, the total,
+	 * the "How full" line while the order is a draft or ordered ('' once
+	 * the fish are in), and the location's remembered shares as the page's
+	 * JS reads them.
+	 *
+	 * @param array   $order  The order with its lines (boxes, status, cost_mode).
+	 * @param array[] $shares The remembered shares of its supplier + origin.
+	 * @return array{summary: array, rows: array[], total: string, how_full: string, shares: array[]}
+	 */
+	public static function boxes_panel( array $order, array $shares ) {
+		$lines   = (array) ( $order['lines'] ?? array() );
+		$summary = Costing::box_summary( $lines, $order['boxes'] ?? null );
+
+		return array(
+			'summary'  => $summary,
+			'rows'     => self::box_summary_rows( $summary ),
+			'total'    => self::box_total_text( $summary ),
+			'how_full' => in_array( (string) ( $order['status'] ?? '' ), Box_Shares::HOW_FULL_STATUSES, true ) ? Box_Shares::how_full_text( Box_Shares::how_full( $lines, $shares ) ) : '',
+			'shares'   => Box_Shares::for_js( $shares ),
+		);
+	}
+
+	/* ============================================================== */
 	/*  AJAX: orders                                                   */
 	/* ============================================================== */
 
@@ -612,7 +758,10 @@ class Admin_Workbook {
 
 	/**
 	 * AJAX: save (header + lines, the recomputed figures back), checkin
-	 * (the stays), delete (a draft without stays).
+	 * (the stays), delete (a draft without stays), identify (correct the
+	 * fish of one line that received fish — and its stays), shares (the
+	 * remembered box shares of a supplier + origin — read only, for the
+	 * suggestion chips when either field changes on the page).
 	 */
 	public function ajax_order() {
 		self::guard();
@@ -633,6 +782,9 @@ class Admin_Workbook {
 			switch ( $op ) {
 				case 'save':
 					$result = self::save_order( $store, $raw, $id, $today );
+					if ( ! empty( $result['kept'] ) ) {
+						self::flash( (string) $result['message'] ); // The page reloads on those lines as they are: say why there.
+					}
 					break;
 				case 'checkin':
 					if ( ! $current ) {
@@ -657,10 +809,20 @@ class Admin_Workbook {
 					if ( ! $deleted ) {
 						wp_send_json_error( array( 'message' => __( 'The order could not be deleted.', 'fishotel-misc-plugin' ) ), 500 );
 					}
+					Box_Shares::release_lines( $store, (array) ( $current['lines'] ?? array() ) ); // Its percents are no longer remembered.
 					$result = array(
 						'message'  => __( 'Order deleted.', 'fishotel-misc-plugin' ),
 						'redirect' => Admin::page_url( 'arrivals' ),
 					);
+					break;
+				case 'identify':
+					if ( ! $current ) {
+						wp_send_json_error( array( 'message' => __( 'Save the order first.', 'fishotel-misc-plugin' ) ), 400 );
+					}
+					$result = self::identify_line( $store, $current, $raw, $today, $settings, (int) get_current_user_id() );
+					break;
+				case 'shares':
+					$result = array( 'shares' => self::shares_for( $store, $raw ) );
 					break;
 				default:
 					wp_send_json_error( array( 'message' => __( 'Unknown action.', 'fishotel-misc-plugin' ) ), 400 );
@@ -677,14 +839,128 @@ class Admin_Workbook {
 	}
 
 	/**
+	 * The remembered box shares of a posted supplier + origin, as the
+	 * page's JS reads them (Box_Shares::for_js()).
+	 *
+	 * @param object $store Store (or the tests' stand-in).
+	 * @param array  $raw   Unslashed payload: supplier, origin.
+	 * @return array[]
+	 */
+	public static function shares_for( $store, array $raw ) {
+		$text = static function ( $key ) use ( $raw ) {
+			return isset( $raw[ $key ] ) && is_scalar( $raw[ $key ] ) ? substr( sanitize_text_field( (string) $raw[ $key ] ), 0, 80 ) : '';
+		};
+		return Box_Shares::for_js( (array) $store->box_shares( array( 'location_key' => Box_Shares::location_key( $text( 'supplier' ), $text( 'origin' ) ) ) ) );
+	}
+
+	/**
+	 * Correct the fish of one order line — the order page's "Correct the
+	 * fish…" (the testable half of the "identify" op): the line must have
+	 * received fish or have become a stay (before that, its species is
+	 * simply retyped); the fish is what Identify::fish_from() reads from
+	 * the payload. The line, and every stay of it that still carried its
+	 * old name, are corrected together (Identify::line()).
+	 *
+	 * @param object $store    Store (or the tests' stand-in).
+	 * @param array  $order    The order with its lines (Store::order()).
+	 * @param array  $raw      Unslashed payload: line_id, species, product_id, unknown, size.
+	 * @param string $today    Site date.
+	 * @param array  $settings Settings.
+	 * @param int    $actor_id User.
+	 * @return array message, line_id, stays, label — or error.
+	 */
+	public static function identify_line( $store, array $order, array $raw, $today, array $settings, $actor_id = 0 ) {
+		$line_id = isset( $raw['line_id'] ) && is_scalar( $raw['line_id'] ) ? absint( $raw['line_id'] ) : 0;
+		$line    = null;
+		foreach ( (array) ( $order['lines'] ?? array() ) as $candidate ) {
+			if ( $line_id > 0 && (int) $candidate['id'] === $line_id ) {
+				$line = $candidate;
+				break;
+			}
+		}
+		if ( ! $line ) {
+			return array( 'error' => __( 'That line is not on this order any more. Reload the order.', 'fishotel-misc-plugin' ) );
+		}
+		if ( empty( $line['stay_id'] ) && (int) ( $line['qty_received'] ?? 0 ) < 1 ) {
+			return array( 'error' => __( 'Nothing has arrived on that line yet: retype its species and save the order.', 'fishotel-misc-plugin' ) );
+		}
+
+		$fish = Identify::fish_from( $store, $raw, $settings, $line );
+		if ( ! empty( $fish['error'] ) ) {
+			return array( 'error' => (string) $fish['error'] );
+		}
+
+		$done = Identify::line(
+			$store,
+			$order,
+			$line,
+			$fish,
+			array(
+				'today'    => $today,
+				'settings' => $settings,
+				'actor_id' => (int) $actor_id,
+				'source'   => 'manual',
+			)
+		);
+		if ( ! $done['ok'] ) {
+			return array( 'error' => (string) $done['error'] );
+		}
+
+		// The landed totals do not move (a fish is costed by its counts and its percent), but the
+		// cache follows the line as it is stored now.
+		$fresh = $store->order( (int) $order['id'] );
+		if ( $fresh ) {
+			self::cache_landed_totals( $store, self::resolve_order( $store, $fresh ) );
+		}
+
+		return array(
+			'message' => '' !== $done['message'] ? $done['message'] . '.' : ( $done['changed'] ? __( 'Line saved.', 'fishotel-misc-plugin' ) : __( 'Nothing changed.', 'fishotel-misc-plugin' ) ),
+			'changed' => (bool) $done['changed'],
+			'line_id' => (int) $line['id'],
+			'stays'   => array_values( array_map( 'intval', (array) $done['stays'] ) ),
+			'label'   => $done['label'],
+		);
+	}
+
+	/**
 	 * Save an order from the editor's payload: the header, then the lines
-	 * (upsert + delete), then the landed-total cache, then the figures.
+	 * (upsert + delete), then the corrections, then the landed-total
+	 * cache, then the remembered box shares, then the figures. A box
+	 * number or a percent of a box that was typed wrong refuses the save
+	 * before anything is written (Orders::line_errors()); a size that is no
+	 * longer in the list leaves that line without one and is named in the
+	 * message. A line typed with a leading "??" is an unknown fish
+	 * (Identify::flag_lines()); a line's notes are kept as stored (the
+	 * grid has no field for them). On a line that already became a stay, a
+	 * changed species, "??" box or size is a correction: its stays follow
+	 * and the line keeps what the label said (Identify::line()). A line
+	 * without a stay is the order as typed: retyping its species records
+	 * no label ("Correct the fish…" does) — but ticking "??" on a named
+	 * line that received fish keeps the name as what the label said, so a
+	 * fish marked unknown while unloading still counts as mislabeled once
+	 * it is identified as something else; unticking it on a line that
+	 * arrived unknown keeps the "??" name in the label's place, so no later
+	 * correction reads as a mislabel.
+	 *
+	 * A page loaded before a fish was corrected elsewhere must not undo
+	 * the correction: every row posts the token it was rendered with
+	 * (lines[n][seen], Identify::seen()), and a line whose stored fish is
+	 * no longer that keeps its stored fish (Identify::keep_corrected()) —
+	 * the rest of the row is saved, the reply says so and asks for a
+	 * reload. The reply carries the tokens of the lines as saved, so the
+	 * page that stays open is not stale after its own save — except for a
+	 * line that kept such a fish: the page still shows the old one, so it
+	 * gets its stale token back and a second Save before the reload keeps
+	 * the correction again.
 	 *
 	 * @param Store  $store Store.
 	 * @param array  $raw   Unslashed payload.
 	 * @param int    $id    Order id (0 = new).
 	 * @param string $today Site date.
-	 * @return array message, order_id, is_new, redirect (new), line_ids, figures, can_checkin — or error.
+	 * @return array message, order_id, is_new, redirect (new), line_ids, seen (their tokens), figures,
+	 *               can_checkin, shares, warnings, followed (stays corrected with their lines), kept
+	 *               (lines that kept a fish corrected elsewhere), reload (the page shows labels,
+	 *               stays or fish that changed) — or error.
 	 */
 	public static function save_order( $store, array $raw, $id, $today ) {
 		$header = Orders::normalize_order( array_merge( $raw, array( 'id' => $id ) ) );
@@ -704,30 +980,142 @@ class Admin_Workbook {
 			}
 		}
 
+		$raw_lines = isset( $raw['lines'] ) && is_array( $raw['lines'] ) ? $raw['lines'] : array();
+		$mistakes  = Orders::line_errors( $raw_lines );
+		if ( $mistakes ) {
+			return array( 'error' => implode( ' ', $mistakes ) . ' ' . __( 'Nothing was saved.', 'fishotel-misc-plugin' ) );
+		}
+
+		// The lines as stored before this save: a stale size stays selectable on its
+		// own line, and a line the save removes gives its remembered share back.
+		$before  = array();
+		$current = $id > 0 ? $store->order( $id ) : null;
+		foreach ( (array) ( $current['lines'] ?? array() ) as $line ) {
+			$before[ (int) $line['id'] ] = $line;
+		}
+
+		$lines = Identify::flag_lines( Orders::normalize_lines( $raw_lines ) );
+		foreach ( $lines as $index => $line ) {
+			if ( '' === $line['notes'] && isset( $before[ (int) $line['id'] ] ) ) {
+				$lines[ $index ]['notes'] = (string) $before[ (int) $line['id'] ]['notes'];
+			}
+		}
+
+		// A page loaded before a fish was corrected elsewhere (the phone, the Stays tab, another
+		// tab) still holds the old fish: such a line keeps the fish as stored, never the page's copy.
+		$seen = array();
+		foreach ( $raw_lines as $row ) {
+			if ( is_array( $row ) && isset( $row['id'], $row['seen'] ) && is_scalar( $row['id'] ) && is_string( $row['seen'] ) && (int) $row['id'] > 0 ) {
+				$seen[ (int) $row['id'] ] = $row['seen'];
+			}
+		}
+		$kept  = array();
+		$lines = Identify::keep_corrected( $lines, $seen, $before, $kept );
+
+		$sized = array_filter(
+			$lines,
+			static function ( $line ) {
+				return null !== $line['size_slug'];
+			}
+		);
+		$warnings = array();
+		$lines    = Sizes::apply_to_lines( $lines, $sized ? Sizes::standard( $store, Settings::get() )['sizes'] : array(), $before, $warnings );
+
 		$saved_id = $store->save_order( $header );
 		if ( ! $saved_id ) {
 			return array( 'error' => __( 'The order could not be saved.', 'fishotel-misc-plugin' ) );
 		}
 
-		$lines = Orders::normalize_lines( isset( $raw['lines'] ) && is_array( $raw['lines'] ) ? $raw['lines'] : array() );
 		$saved = $store->save_order_lines( $saved_id, $lines );
 		if ( false === $saved ) {
 			return array( 'error' => __( 'The lines could not be saved.', 'fishotel-misc-plugin' ) );
 		}
 
+		// A line that became a stay and whose fish or size was changed in the grid: one
+		// correction — its stays follow, the line keeps what the label said.
+		$followed = 0;
+		$labeled  = 0;
+		$stored   = $store->order( $saved_id );
+		foreach ( (array) ( $stored['lines'] ?? array() ) as $line ) {
+			$line_id = (int) $line['id'];
+			if ( ! isset( $before[ $line_id ] ) || ! Identify::line_differs( $before[ $line_id ], $line ) ) {
+				continue;
+			}
+			if ( empty( $line['stay_id'] ) ) {
+				// Not a stay yet: the grid is the order as typed. Only the "??" box says something
+				// about the label — ticked, the fish that arrived is not known to be what the line
+				// said; unticked, a fish that arrived unknown had no label to be wrong.
+				$flagged = ! empty( $line['needs_id'] ) !== ! empty( $before[ $line_id ]['needs_id'] );
+				$label   = $flagged && (int) ( $line['qty_received'] ?? 0 ) > 0 ? Identify::label_for( $before[ $line_id ], (string) $line['species'] ) : null;
+				if ( null !== $label && $store->update_line_fields( $line_id, array( 'label_name' => $label ) ) && ! Identify::is_unknown_name( $label ) ) {
+					$labeled++;
+				}
+				continue;
+			}
+			$done = Identify::line(
+				$store,
+				$stored,
+				$before[ $line_id ],
+				Identify::fish_of_line( $store, $line ),
+				array(
+					'today'    => $today,
+					'settings' => Settings::get(),
+					'actor_id' => (int) get_current_user_id(),
+					'source'   => 'manual',
+				)
+			);
+
+			$followed += count( (array) $done['stays'] );
+			$labeled  += null !== $done['label'] ? 1 : 0;
+		}
+
 		$order = self::resolve_order( $store, $store->order( $saved_id ) );
 		self::cache_landed_totals( $store, $order );
+		Box_Shares::remember( $store, $order, array_values( $before ), $today );
+
+		$message = __( 'Order saved.', 'fishotel-misc-plugin' );
+		if ( $followed > 0 ) {
+			/* translators: %d: stays */
+			$message .= ' ' . sprintf( _n( '%d stay follows its corrected line.', '%d stays follow their corrected lines.', $followed, 'fishotel-misc-plugin' ), $followed );
+		}
+		if ( $kept ) {
+			/* translators: %d: order lines */
+			$message .= ' ' . sprintf( _n( '%d line was corrected after this page was loaded and keeps that fish.', '%d lines were corrected after this page was loaded and keep that fish.', count( $kept ), 'fishotel-misc-plugin' ), count( $kept ) );
+			foreach ( $kept as $was ) {
+				if ( $was['typed'] ) {
+					/* translators: %s: the fish the line was corrected to */
+					$warnings[] = sprintf( __( 'the fish typed over %s (corrected after this page was loaded — change it on the reloaded page)', 'fishotel-misc-plugin' ), $was['species'] );
+				}
+			}
+		}
+		if ( $warnings ) {
+			/* translators: %s: what was not saved */
+			$message .= ' ' . sprintf( __( 'Not saved: %s.', 'fishotel-misc-plugin' ), implode( '; ', $warnings ) );
+		}
+
+		// The tokens the page goes on with: the lines as saved — but a line that kept a fish corrected
+		// elsewhere still shows the old one on that page, so it stays stale there until the reload.
+		$tokens = array();
+		foreach ( $order['lines'] as $line ) {
+			$tokens[] = isset( $kept[ (int) $line['id'] ] ) ? $seen[ (int) $line['id'] ] : Identify::seen( $line );
+		}
 
 		return array(
-			'message'  => __( 'Order saved.', 'fishotel-misc-plugin' ),
+			'message'  => $message,
 			'order_id' => (int) $saved_id,
 			'is_new'   => 0 === (int) $id,
 			'redirect' => 0 === (int) $id ? self::order_url( $saved_id ) : '',
 			'ref'      => (string) $order['ref'],
 			'status'   => (string) $order['status'],
 			'line_ids'    => array_values( array_map( 'intval', array_column( $order['lines'], 'id' ) ) ),
+			'seen'        => $tokens,
 			'figures'     => self::figures( $order ),
 			'can_checkin' => self::can_check_in( $order ),
+			'shares'      => self::shares_for( $store, $order ),
+			'warnings'    => $warnings,
+			'followed'    => $followed,
+			'kept'        => count( $kept ),
+			'reload'      => $followed > 0 || $labeled > 0 || count( $kept ) > 0,
 		);
 	}
 
@@ -1134,14 +1522,18 @@ class Admin_Workbook {
 
 	/**
 	 * The orders workbook: an "Orders" sheet (one row per order with its
-	 * figures) and a "Lines" sheet (one row per line) — pure.
+	 * figures) and a "Lines" sheet (one row per line; its size label, box
+	 * number and percent of a box, then needs_id — the fish still has to
+	 * be identified — and label_name — what the supplier's label called a
+	 * corrected fish — are the last columns, added after the older ones) —
+	 * pure.
 	 *
 	 * @param array[] $orders Resolved orders.
 	 * @return array{Orders: array[], Lines: array[]}
 	 */
 	public static function orders_sheets( array $orders ) {
 		$head  = array( 'id', 'ref', 'supplier', 'origin', 'order_date', 'received_date', 'sale_date', 'status', 'cost_mode', 'boxes', 'tariffs', 'domestic_flight', 'import_fees', 'credit', 'markup', 'worth_threshold', 'schedule', 'building', 'lines', 'ordered', 'received', 'survived', 'doa', 'fill_rate', 'survival_rate', 'doa_rate', 'fee_rate', 'total', 'grand_total', 'revenue', 'up_down', 'ratio', 'doa_cost_sheet', 'doa_cost_per_fish', 'notes' );
-		$lhead = array( 'order_ref', 'line_id', 'species', 'sci_name', 'species_id', 'group', 'ordered', 'received', 'per_box', 'bags', 'units', 'unit_price', 'landed_total', 'landed_per_fish', 'suggested_price', 'worth', 'profit', 'margin', 'worth_it', 'survived', 'doa', 'revenue', 'doa_cost', 'live', 'sold', 'stay_id', 'tank', 'notes' );
+		$lhead = array( 'order_ref', 'line_id', 'species', 'sci_name', 'species_id', 'group', 'ordered', 'received', 'per_box', 'bags', 'units', 'unit_price', 'landed_total', 'landed_per_fish', 'suggested_price', 'worth', 'profit', 'margin', 'worth_it', 'survived', 'doa', 'revenue', 'doa_cost', 'live', 'sold', 'stay_id', 'tank', 'notes', 'size', 'box_no', 'box_pct', 'needs_id', 'label_name' );
 		$rows  = array( $head );
 		$lines = array( $lhead );
 
@@ -1214,6 +1606,11 @@ class Admin_Workbook {
 					$line['stay_id'],
 					$line['tank_number'],
 					(string) $line['notes'],
+					isset( $line['size_label'] ) ? $line['size_label'] : null,
+					isset( $line['box_no'] ) ? $line['box_no'] : null,
+					self::rate( $line['box_pct'] ?? null ),
+					! empty( $line['needs_id'] ),
+					isset( $line['label_name'] ) ? $line['label_name'] : null,
 				);
 			}
 		}
@@ -1274,14 +1671,17 @@ class Admin_Workbook {
 
 	/**
 	 * The stats workbook (pure): Orders, Totals (weighted and sheet-style),
-	 * By supplier, By origin, By group.
+	 * By supplier, By origin, By group. How the labels held up — the lines
+	 * that received fish, the mislabeled ones, their rate, the unknown fish
+	 * not identified yet — are the last columns of Orders (so the CSV has
+	 * them), By supplier and By origin, and the last rows of Totals.
 	 *
 	 * @param array $stats Stats::build().
 	 * @param int   $year  The year (0 = all).
 	 * @return array<string, array[]>
 	 */
 	public static function stats_sheets( array $stats, $year = 0 ) {
-		$orders = array( array( 'ref', 'supplier', 'origin', 'year', 'order_date', 'received_date', 'status', 'cost_mode', 'lines', 'ordered', 'received', 'survived', 'doa', 'fill_rate', 'survival_rate', 'doa_rate', 'total', 'grand_total', 'revenue', 'up_down', 'ratio' ) );
+		$orders = array( array( 'ref', 'supplier', 'origin', 'year', 'order_date', 'received_date', 'status', 'cost_mode', 'lines', 'ordered', 'received', 'survived', 'doa', 'fill_rate', 'survival_rate', 'doa_rate', 'total', 'grand_total', 'revenue', 'up_down', 'ratio', 'received_lines', 'mislabeled', 'mislabeled_rate', 'not_identified' ) );
 		foreach ( (array) $stats['orders'] as $row ) {
 			$orders[] = array(
 				(string) $row['ref'],
@@ -1305,6 +1705,10 @@ class Admin_Workbook {
 				(float) $row['revenue'],
 				(float) $row['up_down'],
 				self::rate( $row['ratio'] ),
+				(int) ( $row['received_lines'] ?? 0 ),
+				(int) ( $row['mislabeled'] ?? 0 ),
+				self::rate( $row['mislabeled_rate'] ?? null ),
+				(int) ( $row['unidentified'] ?? 0 ),
 			);
 		}
 
@@ -1325,12 +1729,16 @@ class Admin_Workbook {
 			array( 'revenue', (float) $t['revenue'], null ),
 			array( 'up_down', (float) $t['up_down'], null ),
 			array( 'ratio', self::rate( $t['ratio'] ), null ),
+			array( 'received_lines', (int) ( $t['received_lines'] ?? 0 ), null ),
+			array( 'mislabeled', (int) ( $t['mislabeled'] ?? 0 ), null ),
+			array( 'mislabeled_rate', self::rate( $t['mislabeled_rate'] ?? null ), null ),
+			array( 'not_identified', (int) ( $t['unidentified'] ?? 0 ), null ),
 		);
 
-		$group_sheet = static function ( array $groups, $label ) {
-			$rows = array( array( $label, 'orders', 'lines', 'ordered', 'received', 'survived', 'doa', 'fill_rate', 'survival_rate', 'doa_rate', 'total', 'revenue', 'up_down', 'ratio' ) );
+		$group_sheet = static function ( array $groups, $label, $labels = false ) {
+			$rows = array( array_merge( array( $label, 'orders', 'lines', 'ordered', 'received', 'survived', 'doa', 'fill_rate', 'survival_rate', 'doa_rate', 'total', 'revenue', 'up_down', 'ratio' ), $labels ? array( 'received_lines', 'mislabeled', 'mislabeled_rate', 'not_identified' ) : array() ) );
 			foreach ( $groups as $g ) {
-				$rows[] = array(
+				$cells = array(
 					(string) $g['name'],
 					(int) $g['orders'],
 					(int) $g['lines'],
@@ -1346,6 +1754,13 @@ class Admin_Workbook {
 					(float) $g['up_down'],
 					self::rate( $g['ratio'] ),
 				);
+				if ( $labels ) {
+					$cells[] = (int) ( $g['received_lines'] ?? 0 );
+					$cells[] = (int) ( $g['mislabeled'] ?? 0 );
+					$cells[] = self::rate( $g['mislabeled_rate'] ?? null );
+					$cells[] = (int) ( $g['unidentified'] ?? 0 );
+				}
+				$rows[] = $cells;
 			}
 			return $rows;
 		};
@@ -1353,8 +1768,8 @@ class Admin_Workbook {
 		return array(
 			'Orders'      => $orders,
 			'Totals'      => $totals,
-			'By supplier' => $group_sheet( (array) $stats['by_supplier'], 'supplier' ),
-			'By origin'   => $group_sheet( (array) $stats['by_origin'], 'origin' ),
+			'By supplier' => $group_sheet( (array) $stats['by_supplier'], 'supplier', true ),
+			'By origin'   => $group_sheet( (array) $stats['by_origin'], 'origin', true ),
 			'By group'    => $group_sheet( (array) $stats['by_group'], 'species_group' ),
 		);
 	}
@@ -1362,7 +1777,8 @@ class Admin_Workbook {
 	/**
 	 * The stays sheet (pure): the CSV's columns, typed; sale_ready_date is
 	 * the effective sale date (the stay's own, else its batch's), empty
-	 * when none is set.
+	 * when none is set; needs_id is 1 while the fish still has to be
+	 * identified.
 	 *
 	 * @param array[] $stays Hydrated stays.
 	 * @return array[]
@@ -1391,6 +1807,8 @@ class Admin_Workbook {
 				isset( $stay['order_ref'] ) ? $stay['order_ref'] : null,
 				isset( $stay['landed_cost'] ) && null !== $stay['landed_cost'] ? (float) $stay['landed_cost'] : null,
 				(string) ( $stay['notes'] ?? '' ),
+				isset( $stay['size_label'] ) ? $stay['size_label'] : null,
+				! empty( $stay['needs_id'] ) ? 1 : 0,
 			);
 		}
 		return $out;

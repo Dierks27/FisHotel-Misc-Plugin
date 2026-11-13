@@ -894,6 +894,199 @@ a.fh-cr-chip--muted {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Sizes, percent of a box, remembered shares                         */
+/* ------------------------------------------------------------------ */
+
+/* A stay's or a line's size beside its species. */
+.fh-cr-size {
+	display: inline-block;
+	margin-left: 4px;
+	padding: 0 6px;
+	border-radius: 999px;
+	font-size: 11px;
+	line-height: 18px;
+	color: var(--fh-text-primary, #e0e0e0);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.18));
+	white-space: nowrap;
+}
+
+.fh-cr-grid .fh-cr-input--size {
+	min-width: 92px;
+}
+
+/* The "suggested N%" chip under an empty percent. */
+.fh-cr-pct-hint {
+	display: block;
+	min-height: 0;
+	text-align: right;
+}
+
+.fh-cr-wrap .fh-cr-suggest-pct {
+	color: var(--fh-accent, #00a0d2);
+	font-size: 11px;
+	white-space: nowrap;
+}
+
+/* The Boxes card under the lines of an order. */
+.fh-cr-boxes {
+	margin-top: 14px;
+}
+
+.fh-cr-boxes__list {
+	margin-bottom: 10px;
+}
+
+.fh-cr-boxes__list:empty {
+	display: none;
+}
+
+.fh-cr-chip--box-full {
+	border-left-color: var(--fh-success, #46b450);
+}
+
+.fh-cr-chip--box-over {
+	color: var(--fh-warning, #ffb900);
+	border-left-color: var(--fh-warning, #ffb900);
+}
+
+.fh-cr-chip--box-unboxed {
+	color: var(--fh-text-secondary, #a0a0a0);
+	border-left-color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-boxes__total,
+.fh-cr-boxes__full {
+	margin: 4px 0;
+	font-size: 13px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-boxes__full {
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+/* Bag mode has no boxes to guess. */
+.fh-cr-order[data-mode="bag"] .fh-cr-boxes {
+	display: none;
+}
+
+.fh-cr-wrap .fh-cr-sizes__text {
+	max-width: 320px;
+	font-family: inherit;
+}
+
+.fh-cr-sizes__list {
+	margin-bottom: 12px;
+}
+
+.fh-cr-sizes__report,
+.fh-cr-shares {
+	margin-top: 6px;
+}
+
+.fh-cr-shares .fh-cr-input--num {
+	max-width: 110px;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Unknown and mislabeled fish, the Identify panel                    */
+/* ------------------------------------------------------------------ */
+
+/* The "N need identifying" chip on the Board links to the Stays tab. */
+a.fh-cr-chip--warn {
+	text-decoration: none;
+}
+
+/* "needs identifying" beside a species; "?? N to identify" on an order. */
+.fh-cr-unknown {
+	margin-left: 4px;
+	white-space: nowrap;
+}
+
+a.fh-cr-unknown {
+	margin-left: 0;
+	text-decoration: none;
+}
+
+.fh-cr-order__title .fh-cr-unknown {
+	margin-left: 8px;
+	vertical-align: middle;
+}
+
+.fh-cr-tank__list li.is-unknown .fh-cr-tank__species {
+	color: var(--fh-warning, #ffb900);
+}
+
+/* An order line: the species with its "??" box, then what is known about the fish. */
+.fh-cr-line__name {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.fh-cr-unknown-box {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	font-size: 12px;
+	font-weight: 700;
+	color: var(--fh-text-secondary, #a0a0a0);
+	white-space: nowrap;
+	cursor: pointer;
+}
+
+.fh-cr-grid tr.is-unknown .fh-cr-unknown-box,
+.fh-cr-grid tr.is-unknown .fh-cr-species {
+	color: var(--fh-warning, #ffb900);
+}
+
+.fh-cr-line__fish .fh-cr-sub {
+	white-space: normal;
+}
+
+.fh-cr-label-name {
+	font-style: italic;
+}
+
+.fh-cr-wrap .fh-cr-line__fish .fh-cr-identify-open {
+	color: var(--fh-accent, #00a0d2);
+	font-size: 11px;
+	white-space: nowrap;
+}
+
+/* The panel the "Identify… / Correct the fish…" button opens under a row. */
+.fh-cr-identify td {
+	background: var(--fh-bg-primary, #1a1a1a) !important;
+	white-space: normal;
+}
+
+.fh-cr-identify__fish {
+	flex: 1 1 260px;
+	max-width: 420px;
+}
+
+.fh-cr-identify__fish .fh-cr-suggest-wrap {
+	display: block;
+}
+
+.fh-cr-identify__fish .fh-cr-input {
+	width: 100%;
+}
+
+.fh-cr-fields__row .fh-cr-identify__unknown {
+	flex-direction: row;
+	align-items: center;
+	min-width: 0;
+	min-height: 30px;
+	gap: 6px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-identify__hint {
+	margin: 8px 0 0;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Product meta box (light WP styling)                                */
 /* ------------------------------------------------------------------ */
 .fh-cr-metabox__facts {

@@ -174,6 +174,19 @@ button.fh-fd-occ:active {
 	overflow-wrap: anywhere;
 }
 
+/* A group's size beside its name. */
+.fh-fd-occ__size {
+	margin-left: 8px;
+	font-size: 14px;
+	font-weight: 600;
+	color: var(--fd-muted);
+	white-space: nowrap;
+}
+
+.fh-fd-occ__size.is-stale {
+	color: var(--fd-warn, #ffb900);
+}
+
 .fh-fd-occ__meta {
 	display: flex;
 	flex-wrap: wrap;
@@ -858,6 +871,12 @@ button.fh-fd-occ:active {
 .fh-fd-warn {
 	color: var(--fd-warn);
 	font-weight: 700;
+}
+
+/* "Unknown fish (??)" beside "use as an unlisted fish". */
+.fh-fd-chip--unknown {
+	color: var(--fd-warn);
+	border-color: var(--fd-warn);
 }
 
 .fh-fd-facts {

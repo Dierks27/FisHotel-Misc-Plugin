@@ -4,7 +4,8 @@
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  *
- * @var array[] $rows         Resolved orders, each with 'summary' and 'on_sale' (Admin_Workbook::on_sale_cell()).
+ * @var array[] $rows         Resolved orders, each with 'summary', 'on_sale' (Admin_Workbook::on_sale_cell())
+ *                            and 'to_identify' (its lines that are fish still to identify).
  * @var int[]   $years        Years with orders.
  * @var int     $year         The year shown (0 = all).
  * @var array   $exports      xlsx / csv URLs.
@@ -93,7 +94,12 @@ $tab = 'arrivals';
 							<td><?php echo esc_html( '' !== $fh_order['origin'] ? $fh_order['origin'] : '—' ); ?></td>
 							<td><?php echo esc_html( $fh_order['order_date'] ? $fh_order['order_date'] : '—' ); ?></td>
 							<td><?php echo esc_html( $fh_order['received_date'] ? $fh_order['received_date'] : '—' ); ?></td>
-							<td><span class="fh-cr-badge fh-cr-badge--order-<?php echo esc_attr( $fh_order['status'] ); ?>"><?php echo esc_html( $fh_order['status'] ); ?></span></td>
+							<td>
+								<span class="fh-cr-badge fh-cr-badge--order-<?php echo esc_attr( $fh_order['status'] ); ?>"><?php echo esc_html( $fh_order['status'] ); ?></span>
+								<?php if ( $fh_order['to_identify'] > 0 ) : ?>
+									<a class="fh-cr-sub fh-cr-warn fh-cr-unknown" href="<?php echo esc_url( Admin_Workbook::order_url( (int) $fh_order['id'] ) ); ?>"><?php echo esc_html( sprintf( /* translators: %d: order lines */ __( '?? %d to identify', 'fishotel-misc-plugin' ), (int) $fh_order['to_identify'] ) ); ?></a>
+								<?php endif; ?>
+							</td>
 							<td>
 								<a href="<?php echo esc_url( Admin_Workbook::order_url( (int) $fh_order['id'] ) ); ?>" class="<?php echo '' === $fh_order['on_sale']['date'] ? 'fh-cr-muted' : ''; ?>"><?php echo esc_html( $fh_order['on_sale']['text'] ); ?></a>
 								<?php if ( '' !== $fh_order['on_sale']['note'] ) : ?>
@@ -116,6 +122,6 @@ $tab = 'arrivals';
 	<?php endif; ?>
 
 	<p class="fh-cr-footnote">
-		<?php esc_html_e( 'On sale = the batch\'s "Goes on sale" date (set on the order): every group checked in from it goes on sale that day, unless it has its own date on its product page. Landed = what the fish cost once tariffs, the domestic flight and the import & re-ox fees are spread over them (the workbook\'s order sheet, in box or bag mode). Revenue = every survivor at FisHotel\'s price; up / down = revenue minus the grand total. Survival is counted over the fish that did not arrive dead; a line that became a stay reads its survivors live from the stay.', 'fishotel-misc-plugin' ); ?>
+		<?php esc_html_e( '"?? N to identify" = lines of that order whose fish nobody knows yet (identify them on the order, the Stays tab or the phone). On sale = the batch\'s "Goes on sale" date (set on the order): every group checked in from it goes on sale that day, unless it has its own date on its product page. Landed = what the fish cost once tariffs, the domestic flight and the import & re-ox fees are spread over them (the workbook\'s order sheet, in box or bag mode). Revenue = every survivor at FisHotel\'s price; up / down = revenue minus the grand total. Survival is counted over the fish that did not arrive dead; a line that became a stay reads its survivors live from the stay.', 'fishotel-misc-plugin' ); ?>
 	</p>
 </div>

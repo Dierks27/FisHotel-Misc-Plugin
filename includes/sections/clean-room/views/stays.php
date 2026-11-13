@@ -1,14 +1,18 @@
 <?php
 /**
  * Stays tab — every open stay, closed ones with a toggle, CSV export,
- * and the per-row edits (counts stay editable at any time).
+ * and the per-row edits (counts stay editable at any time). A stay whose
+ * fish still has to be identified is marked and has its own filter;
+ * "Identify…" / "Correct fish…" opens the panel of views/identify-panel.php
+ * under the row.
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  *
  * @var array[] $stays        Open stays.
  * @var bool    $show_closed  Whether closed stays are listed.
  * @var array[] $closed_stays Closed stays (when shown).
- * @var array   $filters      area, species, ready.
+ * @var array   $filters      area, species, ready, needs_id.
+ * @var array[] $sizes        The standard sizes (slug, label).
  * @var string  $csv_url      Nonced CSV URL.
  * @var array   $settings     Settings.
  * @var string  $today        Site date.
@@ -21,8 +25,10 @@ defined( 'ABSPATH' ) || exit;
 use FisHotel\Misc\Sections\Clean_Room\Admin;
 use FisHotel\Misc\Sections\Clean_Room\Admin_Workbook;
 use FisHotel\Misc\Sections\Clean_Room\Clean_Room;
+use FisHotel\Misc\Sections\Clean_Room\Identify;
 use FisHotel\Misc\Sections\Clean_Room\Layout;
 use FisHotel\Misc\Sections\Clean_Room\Replay;
+use FisHotel\Misc\Sections\Clean_Room\Sizes;
 
 $tab = 'stays';
 
@@ -32,7 +38,7 @@ $tab = 'stays';
  * @param array[] $rows  Stays.
  * @param bool    $open  Whether these are open stays (edits offered).
  */
-$fh_table = static function ( array $rows, $open ) use ( $today ) {
+$fh_table = static function ( array $rows, $open ) use ( $today, $sizes ) {
 	if ( ! $rows ) {
 		echo '<div class="fishotel-misc-empty"><span class="dashicons dashicons-location-alt"></span><p>' . esc_html__( 'Nothing here.', 'fishotel-misc-plugin' ) . '</p></div>';
 		return;
@@ -59,6 +65,8 @@ $fh_table = static function ( array $rows, $open ) use ( $today ) {
 				<tr data-stay="<?php echo esc_attr( $fh_stay['id'] ); ?>" data-live="<?php echo esc_attr( $fh_stay['qty_live'] ); ?>">
 					<td>
 						<strong><?php echo esc_html( $fh_stay['species'] ); ?></strong>
+						<?php echo Admin::size_html( $fh_stay, $sizes ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by size_html(). ?>
+						<?php echo Admin::unknown_html( $fh_stay ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by unknown_html(). ?>
 						<?php if ( $fh_stay['product_id'] ) : ?>
 							<span class="fh-cr-sub"><a href="<?php echo esc_url( get_edit_post_link( (int) $fh_stay['product_id'] ) ?: '#' ); ?>"><?php echo esc_html( sprintf( /* translators: %d: product id */ __( 'product #%d', 'fishotel-misc-plugin' ), (int) $fh_stay['product_id'] ) ); ?></a></span>
 						<?php else : ?>
@@ -114,6 +122,7 @@ $fh_table = static function ( array $rows, $open ) use ( $today ) {
 							<?php if ( $fh_stay['product_id'] && Replay::is_date( $fh_stay['sale_ready_date'] ) ) : ?>
 								<button type="button" class="button button-small fh-cr-release" title="<?php esc_attr_e( 'Set the product\'s Coming Soon countdown to this sale date', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'Coming Soon', 'fishotel-misc-plugin' ); ?></button>
 							<?php endif; ?>
+							<button type="button" class="button button-small fh-cr-identify-open<?php echo ! empty( $fh_stay['needs_id'] ) ? ' button-primary' : ''; ?>" data-stay="<?php echo esc_attr( $fh_stay['id'] ); ?>" data-size="<?php echo esc_attr( (string) $fh_stay['size_slug'] ); ?>" data-size-label="<?php echo esc_attr( (string) $fh_stay['size_label'] ); ?>" title="<?php esc_attr_e( 'Name the real fish and its size: the stay and its supplier order line are corrected together.', 'fishotel-misc-plugin' ); ?>"><?php echo esc_html( ! empty( $fh_stay['needs_id'] ) ? __( 'Identify…', 'fishotel-misc-plugin' ) : __( 'Correct fish…', 'fishotel-misc-plugin' ) ); ?></button>
 							<button type="button" class="button button-small fh-cr-fields-toggle"><?php esc_html_e( 'Edit', 'fishotel-misc-plugin' ); ?></button>
 						<?php endif; ?>
 					</td>
@@ -122,7 +131,16 @@ $fh_table = static function ( array $rows, $open ) use ( $today ) {
 					<tr class="fh-cr-fields" hidden data-stay="<?php echo esc_attr( $fh_stay['id'] ); ?>">
 						<td colspan="10">
 							<div class="fh-cr-fields__row">
+								<input type="hidden" name="seen" value="<?php echo esc_attr( Identify::seen( $fh_stay ) ); ?>">
 								<label><?php esc_html_e( 'Species', 'fishotel-misc-plugin' ); ?> <input type="text" class="fh-cr-input" name="species" value="<?php echo esc_attr( $fh_stay['species'] ); ?>"></label>
+								<label><?php esc_html_e( 'Size', 'fishotel-misc-plugin' ); ?>
+									<select class="fh-cr-input" name="size_slug">
+										<option value=""><?php esc_html_e( 'none', 'fishotel-misc-plugin' ); ?></option>
+										<?php foreach ( Sizes::options( $sizes, $fh_stay ) as $fh_o ) : ?>
+											<option value="<?php echo esc_attr( $fh_o['value'] ); ?>" <?php selected( $fh_o['selected'] ); ?>><?php echo esc_html( $fh_o['label'] ); ?></option>
+										<?php endforeach; ?>
+									</select>
+								</label>
 								<label><?php esc_html_e( 'Product ID', 'fishotel-misc-plugin' ); ?> <input type="number" class="fh-cr-input fh-cr-input--num" name="product_id" value="<?php echo esc_attr( (string) $fh_stay['product_id'] ); ?>" min="0"></label>
 								<label><?php esc_html_e( 'Check-in', 'fishotel-misc-plugin' ); ?> <input type="date" class="fh-cr-input" name="checkin_date" value="<?php echo esc_attr( $fh_stay['checkin_date'] ); ?>" max="<?php echo esc_attr( $today ); ?>"></label>
 								<label><?php esc_html_e( 'Supplier', 'fishotel-misc-plugin' ); ?> <input type="text" class="fh-cr-input" name="supplier" value="<?php echo esc_attr( (string) $fh_stay['supplier'] ); ?>"></label>
@@ -177,6 +195,10 @@ $fh_table = static function ( array $rows, $open ) use ( $today ) {
 				<span><?php esc_html_e( 'For sale now', 'fishotel-misc-plugin' ); ?></span>
 			</label>
 			<label class="fh-cr-filter fh-cr-filter--check">
+				<input type="checkbox" name="needs_id" value="1" <?php checked( ! empty( $filters['needs_id'] ) ); ?>>
+				<span><?php esc_html_e( 'Needs identifying', 'fishotel-misc-plugin' ); ?></span>
+			</label>
+			<label class="fh-cr-filter fh-cr-filter--check">
 				<input type="checkbox" name="closed" value="1" <?php checked( $show_closed ); ?>>
 				<span><?php esc_html_e( 'Show closed', 'fishotel-misc-plugin' ); ?></span>
 			</label>
@@ -191,8 +213,24 @@ $fh_table = static function ( array $rows, $open ) use ( $today ) {
 		</div>
 	</div>
 
-	<p class="fh-cr-count"><?php echo esc_html( sprintf( /* translators: %d: open stays */ ! empty( $filters['ready'] ) ? __( '%d open stays for sale today · oldest check-in first', 'fishotel-misc-plugin' ) : __( '%d open stays · oldest check-in first', 'fishotel-misc-plugin' ), count( $stays ) ) ); ?></p>
+	<?php
+	if ( ! empty( $filters['needs_id'] ) ) {
+		/* translators: %d: open stays */
+		$fh_count = __( '%d open stays that need identifying · oldest check-in first', 'fishotel-misc-plugin' );
+	} elseif ( ! empty( $filters['ready'] ) ) {
+		/* translators: %d: open stays */
+		$fh_count = __( '%d open stays for sale today · oldest check-in first', 'fishotel-misc-plugin' );
+	} else {
+		/* translators: %d: open stays */
+		$fh_count = __( '%d open stays · oldest check-in first', 'fishotel-misc-plugin' );
+	}
+	?>
+	<p class="fh-cr-count"><?php echo esc_html( sprintf( $fh_count, count( $stays ) ) ); ?></p>
 	<?php $fh_table( $stays, true ); ?>
+	<?php
+	$fh_identify_colspan = 10;
+	include Clean_Room::path() . 'views/identify-panel.php';
+	?>
 
 	<?php if ( $show_closed ) : ?>
 		<h2 class="fh-cr-h2"><?php esc_html_e( 'Closed stays', 'fishotel-misc-plugin' ); ?></h2>
@@ -200,6 +238,6 @@ $fh_table = static function ( array $rows, $open ) use ( $today ) {
 	<?php endif; ?>
 
 	<p class="fh-cr-footnote">
-		<?php esc_html_e( 'Lost / Shipped / Count / Move… write events (the counts stay editable at any time — the order itself is edited in WooCommerce). Cleared… sets the cleared date by hand (empty removes it). A group is on sale from its own date (Sale date…, the product page, or Dates on the phone) or else its batch\'s date (Goes on sale, on the supplier order); Sale date… with nothing typed goes back to the batch\'s. Edit corrects the check-in date and the supplier fields. Coming Soon sets the product\'s release countdown to the sale date at 09:00. A mistake is undone from the Events tab. The CSV guards every cell against spreadsheet formulas.', 'fishotel-misc-plugin' ); ?>
+		<?php esc_html_e( 'Lost / Shipped / Count / Move… write events (the counts stay editable at any time — the order itself is edited in WooCommerce). Cleared… sets the cleared date by hand (empty removes it). A group is on sale from its own date (Sale date…, the product page, or Dates on the phone) or else its batch\'s date (Goes on sale, on the supplier order); Sale date… with nothing typed goes back to the batch\'s. Identify… / Correct fish… names the real fish and its size — the stay, its supplier order line (which keeps what the label said, for the mislabel stats) and the remembered box share follow; a fish nobody knows yet reads "??" and is marked "needs identifying". Edit corrects the species and the size the same way (one of the standard sizes, Settings → Sizes), and the check-in date and the supplier fields. Coming Soon sets the product\'s release countdown to the sale date at 09:00. A mistake is undone from the Events tab. The CSV guards every cell against spreadsheet formulas.', 'fishotel-misc-plugin' ); ?>
 	</p>
 </div>

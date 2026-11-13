@@ -15,7 +15,12 @@
  *                 "total fish through QT" = Σ survived.
  *
  * Plus the same weighted figures grouped by supplier, by origin and by
- * species group (the species row's group; "(no group)" otherwise). Every
+ * species group (the species row's group; "(no group)" otherwise) — and,
+ * with them, how the labels held up (label_counts()): of the lines that
+ * received fish, how many were MISLABELED (the label named another fish
+ * than the one the line turned out to be — Identify::is_mislabeled()),
+ * the rate over those received lines, and, counted apart, how many are
+ * unknown fish NOT IDENTIFIED YET. Every
  * input order carries its lines with the survived / DOA figures already
  * resolved (typed for imported history, live from the stay once a line
  * is checked in); the costing runs here.
@@ -72,7 +77,7 @@ class Stats {
 		foreach ( $orders as $n => $order ) {
 			$lines     = isset( $order['lines'] ) && is_array( $order['lines'] ) ? $order['lines'] : array();
 			$costing   = Costing::compute( $order, $lines, $default_per_box );
-			$row       = self::row( $order, $costing['order'] );
+			$row       = self::row( $order, $costing['order'], self::label_counts( $lines ) );
 			$rows[]    = $row;
 			$order_key = $row['id'] > 0 ? 'id:' . $row['id'] : 'n:' . $n;
 			if ( null !== $row['year'] ) {
@@ -91,16 +96,19 @@ class Stats {
 				$survived                             = null === $costed['qty_survived'] ? null : (int) $costed['qty_survived'];
 				self::add_to_bucket(
 					$groups[ $group ],
-					array(
-						'ordered'       => (int) $costed['qty_ordered'],
-						'received'      => (int) $costed['qty_received'],
-						'doa'           => (int) $costed['qty_doa'],
-						'survived'      => $survived,
-						'total'         => (float) $costed['landed_total'],
-						'revenue'       => (float) $costed['revenue'],
-						'lines'         => 1,
-						'orders'        => 0,
-						'survival_rate' => null === $survived ? null : 0.0,
+					array_merge(
+						array(
+							'ordered'       => (int) $costed['qty_ordered'],
+							'received'      => (int) $costed['qty_received'],
+							'doa'           => (int) $costed['qty_doa'],
+							'survived'      => $survived,
+							'total'         => (float) $costed['landed_total'],
+							'revenue'       => (float) $costed['revenue'],
+							'lines'         => 1,
+							'orders'        => 0,
+							'survival_rate' => null === $survived ? null : 0.0,
+						),
+						self::label_counts( array( $line ) )
 					)
 				);
 			}
@@ -125,37 +133,73 @@ class Stats {
 	}
 
 	/**
+	 * How the labels of a set of order lines held up (pure). Only a line
+	 * that received fish counts: it is "not identified yet" while it is an
+	 * unknown fish (needs_id), else "mislabeled" when its label_name names
+	 * another fish than the one it turned out to be.
+	 *
+	 * @param array[] $lines qty_received, species, needs_id, label_name.
+	 * @return array{received_lines: int, mislabeled: int, unidentified: int}
+	 */
+	public static function label_counts( array $lines ) {
+		$out = array(
+			'received_lines' => 0,
+			'mislabeled'     => 0,
+			'unidentified'   => 0,
+		);
+		foreach ( $lines as $line ) {
+			if ( ! is_array( $line ) || (int) ( $line['qty_received'] ?? 0 ) < 1 ) {
+				continue;
+			}
+			$out['received_lines']++;
+			if ( ! empty( $line['needs_id'] ) ) {
+				$out['unidentified']++;
+			} elseif ( Identify::is_mislabeled( $line ) ) {
+				$out['mislabeled']++;
+			}
+		}
+		return $out;
+	}
+
+	/**
 	 * One order as a Stats row.
 	 *
 	 * @param array $order   The order.
 	 * @param array $costing Costing::compute()['order'].
+	 * @param array $labels  label_counts() of its lines.
 	 * @return array
 	 */
-	public static function row( array $order, array $costing ) {
+	public static function row( array $order, array $costing, array $labels = array() ) {
+		$received_lines = (int) ( $labels['received_lines'] ?? 0 );
+		$mislabeled     = (int) ( $labels['mislabeled'] ?? 0 );
 		return array(
-			'id'             => (int) ( $order['id'] ?? 0 ),
-			'ref'            => (string) ( $order['ref'] ?? '' ),
-			'supplier'       => trim( (string) ( $order['supplier'] ?? '' ) ),
-			'origin'         => trim( (string) ( $order['origin'] ?? '' ) ),
-			'year'           => self::order_year( $order ),
-			'order_date'     => isset( $order['order_date'] ) ? $order['order_date'] : null,
-			'received_date'  => isset( $order['received_date'] ) ? $order['received_date'] : null,
-			'status'         => (string) ( $order['status'] ?? '' ),
-			'mode'           => (string) $costing['mode'],
-			'lines'          => (int) $costing['lines'],
-			'ordered'        => (int) $costing['ordered'],
-			'received'       => (int) $costing['received'],
-			'survived'       => (int) $costing['survived'],
-			'survived_known' => ! empty( $costing['survived_known'] ),
-			'doa'            => (int) $costing['doa'],
-			'fill_rate'      => $costing['fill_rate'],
-			'survival_rate'  => $costing['survival_rate'],
-			'doa_rate'       => $costing['doa_rate'],
-			'total'          => (float) $costing['total'],
-			'grand_total'    => (float) $costing['grand_total'],
-			'revenue'        => (float) $costing['revenue'],
-			'up_down'        => (float) $costing['up_down'],
-			'ratio'          => $costing['ratio'],
+			'id'              => (int) ( $order['id'] ?? 0 ),
+			'ref'             => (string) ( $order['ref'] ?? '' ),
+			'supplier'        => trim( (string) ( $order['supplier'] ?? '' ) ),
+			'origin'          => trim( (string) ( $order['origin'] ?? '' ) ),
+			'year'            => self::order_year( $order ),
+			'order_date'      => isset( $order['order_date'] ) ? $order['order_date'] : null,
+			'received_date'   => isset( $order['received_date'] ) ? $order['received_date'] : null,
+			'status'          => (string) ( $order['status'] ?? '' ),
+			'mode'            => (string) $costing['mode'],
+			'lines'           => (int) $costing['lines'],
+			'ordered'         => (int) $costing['ordered'],
+			'received'        => (int) $costing['received'],
+			'survived'        => (int) $costing['survived'],
+			'survived_known'  => ! empty( $costing['survived_known'] ),
+			'doa'             => (int) $costing['doa'],
+			'fill_rate'       => $costing['fill_rate'],
+			'survival_rate'   => $costing['survival_rate'],
+			'doa_rate'        => $costing['doa_rate'],
+			'total'           => (float) $costing['total'],
+			'grand_total'     => (float) $costing['grand_total'],
+			'revenue'         => (float) $costing['revenue'],
+			'up_down'         => (float) $costing['up_down'],
+			'ratio'           => $costing['ratio'],
+			'received_lines'  => $received_lines,
+			'mislabeled'      => $mislabeled,
+			'mislabeled_rate' => $received_lines > 0 ? $mislabeled / $received_lines : null,
+			'unidentified'    => (int) ( $labels['unidentified'] ?? 0 ),
 		);
 	}
 
@@ -179,9 +223,12 @@ class Stats {
 					'survived'      => ! empty( $row['survived_known'] ) ? (int) $row['survived'] : null,
 					'total'         => (float) $row['total'],
 					'revenue'       => (float) $row['revenue'],
-					'lines'         => (int) $row['lines'],
-					'orders'        => 1,
-					'survival_rate' => ! empty( $row['survived_known'] ) ? 0.0 : null,
+					'lines'          => (int) $row['lines'],
+					'orders'         => 1,
+					'survival_rate'  => ! empty( $row['survived_known'] ) ? 0.0 : null,
+					'received_lines' => (int) ( $row['received_lines'] ?? 0 ),
+					'mislabeled'     => (int) ( $row['mislabeled'] ?? 0 ),
+					'unidentified'   => (int) ( $row['unidentified'] ?? 0 ),
 				)
 			);
 		}
@@ -262,9 +309,12 @@ class Stats {
 					'survived'      => ! empty( $row['survived_known'] ) ? (int) $row['survived'] : null,
 					'total'         => (float) $row['total'],
 					'revenue'       => (float) $row['revenue'],
-					'lines'         => (int) $row['lines'],
-					'orders'        => 1,
-					'survival_rate' => ! empty( $row['survived_known'] ) ? 0.0 : null,
+					'lines'          => (int) $row['lines'],
+					'orders'         => 1,
+					'survival_rate'  => ! empty( $row['survived_known'] ) ? 0.0 : null,
+					'received_lines' => (int) ( $row['received_lines'] ?? 0 ),
+					'mislabeled'     => (int) ( $row['mislabeled'] ?? 0 ),
+					'unidentified'   => (int) ( $row['unidentified'] ?? 0 ),
 				)
 			);
 		}
@@ -291,6 +341,9 @@ class Stats {
 			'surv_received'  => 0,
 			'surv_doa'       => 0,
 			'survived_known' => false,
+			'received_lines' => 0,
+			'mislabeled'     => 0,
+			'unidentified'   => 0,
 		);
 	}
 
@@ -298,7 +351,8 @@ class Stats {
 	 * Add one row's figures to an accumulator.
 	 *
 	 * @param array $bucket Accumulator (by reference).
-	 * @param array $add    ordered, received, doa, survived (null = unknown), total, revenue, lines, orders.
+	 * @param array $add    ordered, received, doa, survived (null = unknown), total, revenue, lines, orders
+	 *                      (+ received_lines, mislabeled, unidentified).
 	 */
 	private static function add_to_bucket( array &$bucket, array $add ) {
 		$bucket['orders']   += (int) $add['orders'];
@@ -308,6 +362,9 @@ class Stats {
 		$bucket['doa']      += (int) $add['doa'];
 		$bucket['total']    += (float) $add['total'];
 		$bucket['revenue']  += (float) $add['revenue'];
+		foreach ( array( 'received_lines', 'mislabeled', 'unidentified' ) as $key ) {
+			$bucket[ $key ] += (int) ( $add[ $key ] ?? 0 );
+		}
 		if ( null !== $add['survived'] ) {
 			$bucket['survived']      += (int) $add['survived'];
 			$bucket['surv_received'] += (int) $add['received'];
@@ -325,21 +382,25 @@ class Stats {
 	private static function finish_bucket( array $bucket ) {
 		$denominator = $bucket['surv_received'] - $bucket['surv_doa'];
 		return array(
-			'name'           => $bucket['name'],
-			'orders'         => $bucket['orders'],
-			'lines'          => $bucket['lines'],
-			'ordered'        => $bucket['ordered'],
-			'received'       => $bucket['received'],
-			'survived'       => $bucket['survived'],
-			'survived_known' => $bucket['survived_known'],
-			'doa'            => $bucket['doa'],
-			'fill_rate'      => $bucket['ordered'] > 0 ? $bucket['received'] / $bucket['ordered'] : null,
-			'survival_rate'  => $bucket['survived_known'] && $denominator > 0 ? $bucket['survived'] / $denominator : null,
-			'doa_rate'       => $bucket['received'] > 0 ? $bucket['doa'] / $bucket['received'] : null,
-			'total'          => $bucket['total'],
-			'revenue'        => $bucket['revenue'],
-			'up_down'        => $bucket['revenue'] - $bucket['total'],
-			'ratio'          => abs( $bucket['total'] ) > 1e-9 ? $bucket['revenue'] / $bucket['total'] : null,
+			'name'            => $bucket['name'],
+			'orders'          => $bucket['orders'],
+			'lines'           => $bucket['lines'],
+			'ordered'         => $bucket['ordered'],
+			'received'        => $bucket['received'],
+			'survived'        => $bucket['survived'],
+			'survived_known'  => $bucket['survived_known'],
+			'doa'             => $bucket['doa'],
+			'fill_rate'       => $bucket['ordered'] > 0 ? $bucket['received'] / $bucket['ordered'] : null,
+			'survival_rate'   => $bucket['survived_known'] && $denominator > 0 ? $bucket['survived'] / $denominator : null,
+			'doa_rate'        => $bucket['received'] > 0 ? $bucket['doa'] / $bucket['received'] : null,
+			'total'           => $bucket['total'],
+			'revenue'         => $bucket['revenue'],
+			'up_down'         => $bucket['revenue'] - $bucket['total'],
+			'ratio'           => abs( $bucket['total'] ) > 1e-9 ? $bucket['revenue'] / $bucket['total'] : null,
+			'received_lines'  => $bucket['received_lines'],
+			'mislabeled'      => $bucket['mislabeled'],
+			'mislabeled_rate' => $bucket['received_lines'] > 0 ? $bucket['mislabeled'] / $bucket['received_lines'] : null,
+			'unidentified'    => $bucket['unidentified'],
 		);
 	}
 

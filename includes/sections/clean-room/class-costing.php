@@ -6,8 +6,12 @@
  *
  * Two modes, as the sheet had two generations of the layout:
  *
- *   box mode   fraction_i = received_i ÷ (per box of the line, else of the
- *              species, else 24) — 0 when nothing was received;
+ *   box mode   fraction_i = the line's percent of a box ÷ 100 when one was
+ *              typed (box_pct: what the whole line took up in ONE box, guessed
+ *              while unloading — 25 = a quarter of a box, above 100 = the line
+ *              spans boxes), else received_i ÷ (per box of the line, else of
+ *              the species, else 24) — the rule every older and imported
+ *              order keeps; 0 when nothing was received, either way;
  *              fees per box = (domestic flight + import & re-ox fees) ÷ Σ fraction;
  *              landed_i = received_i × price_i × (1 + tariffs ÷ Σ(received × price))
  *                       + fraction_i × fees per box
@@ -30,6 +34,14 @@
  * cost = Σ (DOA × price) + Σ DOA × fee rate — in box mode the fee rate is
  * a WHOLE box's fees, a carry-over from the bag version, so the per-fish
  * figure (fees per box ÷ per box) is given beside it.
+ *
+ * The fees are split by each line's SHARE of Σ fraction, so the percents
+ * only need to be right compared to each other: every guess a little
+ * high gives the same costs — once every line that received fish has a
+ * percent (a line without one still weighs in by its per-box count).
+ * box_summary() adds the percents up per box number (under / about full /
+ * over) and counts the received lines still without one, for the order
+ * page — a check on the guesses, never an input of the costing.
  *
  * Every division is guarded: an undefined ratio is null (never a
  * warning), a sum stays 0. Full float precision is kept throughout —
@@ -79,12 +91,39 @@ class Costing {
 	const PRICE_STEP = 5;
 
 	/**
+	 * The most one line may take of a box, in percent: four boxes (a line
+	 * may span boxes). A percent must be above 0.
+	 *
+	 * @var float
+	 */
+	const BOX_PCT_MAX = 400.0;
+
+	/**
+	 * The highest box number a line may name.
+	 *
+	 * @var int
+	 */
+	const BOX_NO_MAX = 999;
+
+	/**
+	 * A box is "about full" when the percents of its lines add up to
+	 * between these two (both included); below is under, above is over.
+	 *
+	 * @var float
+	 */
+	const BOX_FULL_MIN = 90.0;
+	const BOX_FULL_MAX = 110.0;
+
+	const BOX_STATES = array( 'under', 'full', 'over' );
+
+	/**
 	 * Cost an order.
 	 *
 	 * @param array   $order           cost_mode (box|bag), tariffs, domestic_flight, import_fees, credit,
 	 *                                 markup, worth_threshold.
-	 * @param array[] $lines           qty_ordered, qty_received, per_box, bags, unit_price, worth,
-	 *                                 qty_survived (null = unknown), qty_doa, species_per_box.
+	 * @param array[] $lines           qty_ordered, qty_received, per_box, box_pct (null = use per box),
+	 *                                 bags, unit_price, worth, qty_survived (null = unknown), qty_doa,
+	 *                                 species_per_box.
 	 * @param int     $default_per_box Fish per box when nothing says.
 	 * @return array{mode: string, lines: array[], order: array}
 	 */
@@ -123,8 +162,15 @@ class Costing {
 				$per_box = $fallback;
 			}
 
+			// The percent of a box counts in box mode, for a line that received fish.
+			$box_pct = 'box' === $mode && $received > 0 ? self::box_pct_in( $line['box_pct'] ?? null ) : null;
+
 			if ( 'box' === $mode ) {
-				$units = $received > 0 ? $received / $per_box : 0.0;
+				if ( null !== $box_pct ) {
+					$units = $box_pct / 100;
+				} else {
+					$units = $received > 0 ? $received / $per_box : 0.0;
+				}
 			} else {
 				$units = $bags > 0 ? (float) $bags : (float) $received;
 			}
@@ -137,6 +183,7 @@ class Costing {
 				'unit_price'   => $price,
 				'worth'        => $worth,
 				'per_box'      => $per_box,
+				'box_pct'      => $box_pct,
 				'bags'         => $bags,
 				'units'        => $units,
 			);
@@ -185,13 +232,20 @@ class Costing {
 			$survived  = null === $row['qty_survived'] ? 0 : $row['qty_survived'];
 			$line_rev  = $row['worth'] * $survived;
 			$doa_cost  = $row['qty_doa'] * $price;
-			$fee_share = 'bag' === $mode ? $fee_rate : $fee_rate / $row['per_box'];
-			$doa_fish  = $row['qty_doa'] * ( $price + $fee_share );
+			if ( 'bag' === $mode ) {
+				$fee_share = $fee_rate;
+			} elseif ( null !== $row['box_pct'] ) {
+				$fee_share = $units * $fee_rate / $received; // The line's fees over its fish (received > 0 here).
+			} else {
+				$fee_share = $fee_rate / $row['per_box'];
+			}
+			$doa_fish = $row['qty_doa'] * ( $price + $fee_share );
 
 			$out_lines[] = array_merge(
 				$row,
 				array(
 					'fraction'          => 'box' === $mode ? $units : null,
+					'fraction_from'     => 'box' !== $mode ? null : ( null !== $row['box_pct'] ? 'pct' : 'per_box' ),
 					'landed_total'      => $landed,
 					'landed_per_fish'   => $per_fish,
 					'suggested_price'   => $suggested,
@@ -283,6 +337,150 @@ class Costing {
 			return (float) $default;
 		}
 		return (float) $value;
+	}
+
+	/* ============================================================== */
+	/*  Percent of a box                                               */
+	/* ============================================================== */
+
+	/**
+	 * A typed percent of a box: above 0 and at most BOX_PCT_MAX, to two
+	 * decimals — else null (blank, junk, 0 or out of range: the line then
+	 * falls back to its per-box count). Counted in whole hundredths so the
+	 * order page's JS (boxPct()) reads the same number.
+	 *
+	 * @param mixed $value Raw.
+	 * @return float|null
+	 */
+	public static function box_pct_in( $value ) {
+		if ( is_bool( $value ) || null === $value || ! is_scalar( $value ) ) {
+			return null;
+		}
+		$text = trim( str_replace( array( '%', ' ' ), '', (string) $value ) );
+		if ( '' === $text || ! is_numeric( $text ) ) {
+			return null;
+		}
+		$number = (float) $text;
+		if ( is_nan( $number ) || is_infinite( $number ) || $number <= 0 || $number > self::BOX_PCT_MAX + 1 ) {
+			return null; // Also keeps a number too large for an integer away from the cast below.
+		}
+		$hundredths = (int) round( $number * 100 );
+		if ( $hundredths < 1 || $hundredths > (int) round( self::BOX_PCT_MAX * 100 ) ) {
+			return null;
+		}
+		return (float) ( $hundredths / 100 );
+	}
+
+	/**
+	 * A typed box number: a whole number from 1 to BOX_NO_MAX, else null.
+	 *
+	 * @param mixed $value Raw.
+	 * @return int|null
+	 */
+	public static function box_no_in( $value ) {
+		if ( is_bool( $value ) || null === $value || ! is_scalar( $value ) ) {
+			return null;
+		}
+		$text = trim( (string) $value );
+		if ( 1 !== preg_match( '/^\d{1,4}$/', $text ) ) {
+			return null;
+		}
+		$number = (int) $text;
+		return ( $number < 1 || $number > self::BOX_NO_MAX ) ? null : $number;
+	}
+
+	/**
+	 * How full a box is from the percents typed on its lines: 'under'
+	 * (below BOX_FULL_MIN), 'full' (about full: BOX_FULL_MIN to
+	 * BOX_FULL_MAX, both included) or 'over'.
+	 *
+	 * @param float $pct The sum of the percents.
+	 * @return string under|full|over
+	 */
+	public static function box_state( $pct ) {
+		$hundredths = (int) round( (float) $pct * 100 );
+		if ( $hundredths < (int) round( self::BOX_FULL_MIN * 100 ) ) {
+			return 'under';
+		}
+		if ( $hundredths > (int) round( self::BOX_FULL_MAX * 100 ) ) {
+			return 'over';
+		}
+		return 'full';
+	}
+
+	/**
+	 * The percents of an order's lines added up per box — the check under
+	 * the lines of the order page (the JS's boxSummary() gives the same):
+	 * per box number the sum with its state, the lines with a percent but
+	 * no box number together, and the boxes the percents add up to (the
+	 * sum ÷ 100) beside the order's Boxes field. Lines without a percent
+	 * are left out (they use their per-box count) — the ones that received
+	 * fish are counted as 'missing': while some lines have a percent and
+	 * others none, the fees are split between a guess and a per-box count,
+	 * and the percents are not yet only "compared to each other". Sums
+	 * are counted in whole hundredths, so 33.33 + 33.33 + 33.34 is exactly
+	 * 100.
+	 *
+	 * @param array[]  $lines box_no, box_pct, qty_received.
+	 * @param int|null $boxes The order's Boxes field.
+	 * @return array{boxes: array[], unboxed: array{pct: float, lines: int}, lines: int, pct_total: float, boxes_total: float, order_boxes: int|null, missing: int}
+	 */
+	public static function box_summary( array $lines, $boxes = null ) {
+		$by_box    = array();
+		$unboxed   = 0;
+		$unboxed_n = 0;
+		$total     = 0;
+		$count     = 0;
+		$missing   = 0;
+
+		foreach ( $lines as $line ) {
+			$pct = is_array( $line ) ? self::box_pct_in( $line['box_pct'] ?? null ) : null;
+			if ( null === $pct ) {
+				$missing += is_array( $line ) && isset( $line['qty_received'] ) && is_scalar( $line['qty_received'] ) && ! is_bool( $line['qty_received'] ) && (int) $line['qty_received'] >= 1 ? 1 : 0;
+				continue;
+			}
+			$hundredths = (int) round( $pct * 100 );
+			$total     += $hundredths;
+			$count++;
+
+			$number = self::box_no_in( $line['box_no'] ?? null );
+			if ( null === $number ) {
+				$unboxed += $hundredths;
+				$unboxed_n++;
+				continue;
+			}
+			if ( ! isset( $by_box[ $number ] ) ) {
+				$by_box[ $number ] = array( 0, 0 );
+			}
+			$by_box[ $number ][0] += $hundredths;
+			$by_box[ $number ][1]++;
+		}
+		ksort( $by_box );
+
+		$out = array();
+		foreach ( $by_box as $number => $sum ) {
+			$out[] = array(
+				'box_no' => (int) $number,
+				'pct'    => (float) ( $sum[0] / 100 ),
+				'lines'  => $sum[1],
+				'state'  => self::box_state( $sum[0] / 100 ),
+			);
+		}
+
+		$order_boxes = null !== $boxes && is_scalar( $boxes ) && '' !== trim( (string) $boxes ) && is_numeric( trim( (string) $boxes ) ) ? max( 0, (int) $boxes ) : null;
+
+		return array(
+			'boxes'       => $out,
+			'unboxed'     => array(
+				'pct'   => (float) ( $unboxed / 100 ),
+				'lines' => $unboxed_n,
+			),
+			'lines'       => $count,
+			'pct_total'   => (float) ( $total / 100 ),
+			'boxes_total' => (float) ( $total / 10000 ),
+			'order_boxes' => $order_boxes,
+			'missing'     => $count > 0 ? $missing : 0,
+		);
 	}
 
 	/* ============================================================== */

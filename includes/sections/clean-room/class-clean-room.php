@@ -15,9 +15,10 @@
  * event; the product page can then say "3 in QT · day 12 · next cleared …".
  *
  * Architecture:
- *   - class-store.php       the ONLY file that touches $wpdb: six tables
+ *   - class-store.php       the ONLY file that touches $wpdb: ten tables
  *                           (buildings, tanks, stays, stay_events, tank_logs,
- *                           aliases) via dbDelta gated by
+ *                           aliases, species, orders, order_lines,
+ *                           box_shares) via dbDelta gated by
  *                           fishotel_cleanroom_db_version, the seed,
  *                           record_event() = append + replay, species
  *                           suggestions, product facts.
@@ -44,11 +45,19 @@
  *                           Settings), CSV, the label print page, the
  *                           product meta box.
  *   - class-costing.php     PURE: the supplier order's landed-cost maths,
- *                           replicating the workbook's order sheet.
+ *                           replicating the workbook's order sheet; a line's
+ *                           percent of a box, and the per-box summary.
+ *   - class-sizes.php       PURE: the standard fish sizes (the product
+ *                           variations' "size" attribute, else a typed list).
+ *   - class-box-shares.php  the remembered shares: the percent of a box one
+ *                           fish takes per supplier + origin + fish + size.
  *   - class-stats.php       PURE: the yearly figures, weighted and as the
  *                           spreadsheet averaged them.
  *   - class-species.php     PURE: the species master row and its merge into
  *                           the candidate list.
+ *   - class-identify.php    unknown ("??") and mislabeled fish: the one
+ *                           correction of a stay and its order line together,
+ *                           what the label said, the split rule.
  *   - class-orders.php      the order from a form, the live figures of a
  *                           checked-in line, the check-in that creates stays.
  *   - class-xlsx.php        a dependency-free .xlsx writer.
@@ -171,8 +180,11 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 			require_once self::path() . 'class-parser.php';
 			require_once self::path() . 'class-qr.php';
 			require_once self::path() . 'class-costing.php';
+			require_once self::path() . 'class-sizes.php';
+			require_once self::path() . 'class-box-shares.php';
 			require_once self::path() . 'class-stats.php';
 			require_once self::path() . 'class-species.php';
+			require_once self::path() . 'class-identify.php';
 			require_once self::path() . 'class-orders.php';
 			require_once self::path() . 'class-xlsx.php';
 			require_once self::path() . 'class-workbook.php';
