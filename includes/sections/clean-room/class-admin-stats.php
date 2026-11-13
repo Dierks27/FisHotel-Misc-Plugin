@@ -1135,7 +1135,7 @@ class Admin_Stats {
 			'names'    => array( __( 'Invoice fish whose name is no species', 'fishotel-misc-plugin' ), __( 'A name typed on an invoice counts only when it is exactly a species name, the title of a species\' linked product, or a learned alias.', 'fishotel-misc-plugin' ) ),
 			'invoices' => array( __( 'Invoices kept as one line', 'fishotel-misc-plugin' ), __( 'An invoice that was not itemised into its fish is split only when its lines carry prices that add up to what was paid for it, to the cent.', 'fishotel-misc-plugin' ) . self::backfill_hint() ),
 			'other'    => array( __( 'Lines without a product', 'fishotel-misc-plugin' ), __( 'Order lines that name no product and are not invoice fish.', 'fishotel-misc-plugin' ) ),
-			'credits'  => array( __( 'Credits inside invoices kept as one line', 'fishotel-misc-plugin' ), __( 'A credit that was part of such an invoice: money off, no fish.', 'fishotel-misc-plugin' ) ),
+			'credits'  => array( __( 'Credits and adjustments of invoices', 'fishotel-misc-plugin' ), __( 'Money that was part of an invoice and is no fish: a credit inside an invoice kept as one line (money off), and the "Adjustment" that brings an invoice up to a stated price (money added).', 'fishotel-misc-plugin' ) ),
 		);
 	}
 
