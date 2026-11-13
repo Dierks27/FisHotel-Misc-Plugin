@@ -344,7 +344,7 @@ class Fees {
 			if ( (int) $request['user_id'] > 0 && (int) $request['user_id'] !== (int) $user_id ) {
 				return array(
 					'do'      => 'message',
-					'message' => __( 'This invoice belongs to another account. Please log out and log in with the account the request was made with.', 'fishotel-misc-plugin' ),
+					'message' => __( 'This bill belongs to another account. Please log out and log in with the account the request was made with.', 'fishotel-misc-plugin' ),
 				);
 			}
 		}

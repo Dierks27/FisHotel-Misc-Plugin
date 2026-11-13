@@ -748,9 +748,9 @@ class Admin {
 				$joined  = $added && 'awaiting_payment' === $added['state'] && (int) $added['fee_ref'] !== (int) $added['id'];
 				if ( $joined ) {
 					/* translators: %d: request id */
-					$message .= ' ' . sprintf( __( 'It is on the invoice of request #%d — no second invoice, no second e-mail.', 'fishotel-misc-plugin' ), (int) $added['fee_ref'] );
+					$message .= ' ' . sprintf( __( 'It is on the bill of request #%d — no second bill, no second e-mail.', 'fishotel-misc-plugin' ), (int) $added['fee_ref'] );
 				} elseif ( $added && 'awaiting_payment' === $added['state'] ) {
-					$message .= ' ' . Service::mail_words( $service->last_mail, __( 'The invoice', 'fishotel-misc-plugin' ), true );
+					$message .= ' ' . Service::mail_words( $service->last_mail, __( 'The bill', 'fishotel-misc-plugin' ), true );
 				}
 
 				// "Save, and add another fish for this person": the person stays in the

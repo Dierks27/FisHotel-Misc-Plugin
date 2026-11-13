@@ -123,10 +123,10 @@ use FisHotel\Misc\Sections\Health\Settings;
 			<div class="fishotel-misc-card fh-health-card">
 				<div class="fishotel-misc-card-header">
 					<div class="fishotel-misc-card-icon"><span class="dashicons dashicons-email-alt"></span></div>
-					<h2 class="fishotel-misc-card-title"><?php esc_html_e( 'Alert email', 'fishotel-misc-plugin' ); ?></h2>
+					<h2 class="fishotel-misc-card-title"><?php esc_html_e( 'Alert e-mail', 'fishotel-misc-plugin' ); ?></h2>
 				</div>
 				<p class="fishotel-misc-card-desc">
-					<?php esc_html_e( 'When an address is set, a new error or critical row from PHP, mail or the updater sends one plain-text email per cooldown window. The email never repeats within the window and can never loop on its own failure.', 'fishotel-misc-plugin' ); ?>
+					<?php esc_html_e( 'When an address is set, a new error or critical row from PHP, mail or the updater sends one plain-text e-mail per cooldown window. The email never repeats within the window and can never loop on its own failure.', 'fishotel-misc-plugin' ); ?>
 				</p>
 
 				<div class="fh-health-field">

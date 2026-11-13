@@ -41,7 +41,7 @@ $fh_invoice = (int) $fh_value( 'invoice_of', 0 );
 			<div class="fishotel-misc-card-icon"><span class="dashicons dashicons-plus-alt2"></span></div>
 			<h2 class="fishotel-misc-card-title"><?php esc_html_e( 'Add a request by hand', 'fishotel-misc-plugin' ); ?></h2>
 		</div>
-		<p class="fishotel-misc-card-desc"><?php esc_html_e( 'For the requests that reach you by e-mail, by phone, in person or on the forum. It is approved as you save it and goes straight on the list. Nobody is e-mailed — unless you set a fee (the invoice), and later when the fish is ready.', 'fishotel-misc-plugin' ); ?></p>
+		<p class="fishotel-misc-card-desc"><?php esc_html_e( 'For the requests that reach you by e-mail, by phone, in person or on the forum. It is approved as you save it and goes straight on the list. Nobody is e-mailed — unless you set a fee (the bill), and later when the fish is ready.', 'fishotel-misc-plugin' ); ?></p>
 
 		<h3 class="fh-rq-card__sub"><?php esc_html_e( 'Who', 'fishotel-misc-plugin' ); ?></h3>
 		<?php if ( $fh_again ) : ?>
@@ -99,7 +99,7 @@ $fh_invoice = (int) $fh_value( 'invoice_of', 0 );
 					<?php
 					echo esc_html(
 						$ctx['fees']['available']
-							? __( 'With a fee the request waits for the payment: the invoice is e-mailed with a pay link, and the money goes into the customer\'s wallet.', 'fishotel-misc-plugin' )
+							? __( 'With a fee the request waits for the payment: the bill is e-mailed with a pay link, and the money goes into the customer\'s wallet.', 'fishotel-misc-plugin' )
 							/* translators: %s: why */
 							: sprintf( __( 'Unavailable: %s.', 'fishotel-misc-plugin' ), $ctx['fees']['reason'] )
 					);
@@ -114,7 +114,7 @@ $fh_invoice = (int) $fh_value( 'invoice_of', 0 );
 					echo esc_html(
 						sprintf(
 							/* translators: 1: request id, 2: amount */
-							__( 'Put this fish on the same invoice as request #%1$d (%2$s, not paid yet): one fee for all of this person\'s fish — no second invoice, no second e-mail, and the fee field above is ignored. Untick it to give this fish an invoice of its own, or none.', 'fishotel-misc-plugin' ),
+							__( 'Put this fish on the same bill as request #%1$d (%2$s, not paid yet): one fee for all of this person\'s fish — no second bill, no second e-mail, and the fee field above is ignored. Untick it to give this fish a bill of its own, or none.', 'fishotel-misc-plugin' ),
 							$fh_invoice,
 							$fh_value( 'invoice_fee' )
 						)
@@ -131,7 +131,7 @@ $fh_invoice = (int) $fh_value( 'invoice_of', 0 );
 		<p>
 			<button type="submit" class="button button-primary"><?php esc_html_e( 'Save the request', 'fishotel-misc-plugin' ); ?></button>
 			<button type="submit" class="button" name="again" value="1"><?php esc_html_e( 'Save, and add another fish for this person', 'fishotel-misc-plugin' ); ?></button>
-			<span class="fh-rq-sub fh-rq-sub--inline"><?php esc_html_e( 'Several fish for one person: the second button keeps the person in the form, and with a fee all of them go on ONE invoice.', 'fishotel-misc-plugin' ); ?></span>
+			<span class="fh-rq-sub fh-rq-sub--inline"><?php esc_html_e( 'Several fish for one person: the second button keeps the person in the form, and with a fee all of them go on ONE bill.', 'fishotel-misc-plugin' ); ?></span>
 		</p>
 		<datalist id="fh-rq-names"></datalist>
 	</form>

@@ -6,6 +6,45 @@ A modular container plugin for WordPress with a dark theme admin interface.
 
 FisHotel Misc Plugin provides a framework for managing independent feature "sections" through a unified dark-themed dashboard. Each section is a self-contained module that can be enabled or disabled independently.
 
+## Where things are
+
+**FisHotel Tools** in wp-admin lists the sections that are switched on,
+related screens together: **Dashboard**, **Today** (the one to-do page),
+then **Fish room** — Clean Room; **Customers** — Invoices, Requests,
+Lost Fish; **Shipping** — Packing, Foam Cuts, Weather; **Site** — Health,
+Snippets, Shop App and every other section. The Dashboard shows the
+section cards under the same headings, each saying in one sentence what
+the section is for and what switching it on starts by itself. Every
+section arrives switched off. The order and the sentences live in
+`includes/class-layout.php`; no page address changed.
+
+One home per list:
+
+| List | Its home | Elsewhere it is only read, with a link there |
+|---|---|---|
+| Boxes | ShipTracker → Settings → Boxes & label costs | Packing → Boxes, Foam Cuts → Boxes & cut lists (their own lists are hidden while ShipTracker's is in use, and come back if it has none) |
+| Sizes | Clean Room → Settings → Sizes | Packing → Sizes (which bag each size goes in) |
+| Medications | Clean Room → Settings → Medications | — |
+| Supplies (foam, bags, paper): counts and cost per box | ShipTracker → Settings → Boxes & label costs → Supplies | Foam Cuts → Stock keeps only its sheet ledger and leftovers |
+
+## Words used on the screens
+
+One word for one thing, on every screen of these sections:
+
+| Word | Means | Not |
+|---|---|---|
+| **tank** | one tank, numbered by the rule *hundreds = building, tens = level, ones = position* (tank 521 is in building 500). A temporary tank is a numbered **slot** in building 900. | aquarium |
+| **building** | a numbered group of tanks that share one water — 100, 200, … (Clean Room README, *The numbering rule*) | rack, room |
+| **system** | the water a building's tanks share (sump included): "whole system" doses and readings, "system gallons" | building (the place), tank |
+| **tank group** | the fish of one species that arrived and live together — a *stay* on the Clean Room's Stays tab | batch (a supplier order) |
+| **bag** | the bag one fish is packed in; its standard sizes are Packing → Bags | pouch |
+| **box** | the shipping box an order goes out in (its list is ShipTracker's); a supplier's box only in the Clean Room's *Box rates* | carton, shipper |
+| **case** | Lost Fish: one paid-for fish (or several) that was lost, and what the customer is offered | claim, ticket |
+| **request** | Requests: a fish somebody asked for; its fee is sent as a **bill** with a pay link | wish, order |
+| **invoice** | Invoices: the hidden product a customer adds to the cart to pay for the fish picked for them | bill (that is a request's fee) |
+| **e-mail** | written with a hyphen everywhere | email |
+| **fish room** | the room the tanks are in, and the screens the Shop App opens there | wet room, shop floor |
+
 ## Requirements
 
 - WordPress 5.8+
@@ -25,6 +64,7 @@ fishotel-misc-plugin/
 ├── includes/
 │   ├── class-plugin.php            # Main plugin orchestrator
 │   ├── class-section-manager.php   # Section discovery & toggling
+│   ├── class-layout.php            # Menu order, Dashboard headings, one sentence per card
 │   │                               # (the main file also includes sections/site-snippets/early-loader.php at load time)
 │   └── sections/
 │       ├── announcer/              # Announcement bars
@@ -39,12 +79,13 @@ fishotel-misc-plugin/
 │       ├── invoices/               # Invoices: a customer's invoice built from a pick list (tank groups, shop products, the species list, typed), pre-checked against what the customer already has, published as the hidden product
 │       ├── packing/                # Packing: the standard bags, a bag size per fish, how many bags fit each box, the box suggested for an order and the one confirmed
 │       ├── foam-cuts/              # Foam Cuts: a cut sheet for the foam that lines a box — sheets and labelled leftovers in stock, a plan for the boxes of the day, straight edge-to-edge cuts
-│       ├── shop-app/               # Shop App: "FisHotel Shop", an installable web app for the wet room — enrolled devices, a PIN per person, the Front Desk's tank screens without a WordPress login
+│       ├── shop-app/               # Shop App: "FisHotel Shop", an installable web app for the fish room — enrolled devices, a PIN per person, the Front Desk's tank screens without a WordPress login
 │       └── site-snippets/          # Snippets: the site's own code as files in GitHub (was Code Snippets), switched on/off, run at plugins_loaded:1; plus an editor for snippets written in wp-admin (named editors only, history, audit log, export to GitHub)
 ├── admin/
 │   ├── css/admin-style.css         # Dark theme styles
 │   ├── js/admin-script.js          # Toggle & AJAX handling
 │   └── views/dashboard.php         # Dashboard template
+├── tests/layout-test.php           # The menu order and the Dashboard's headings
 └── README.md
 ```
 

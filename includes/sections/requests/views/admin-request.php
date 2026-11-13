@@ -191,7 +191,7 @@ $fh_open_states = Rules::is_open( $fh_state );
 							<input type="text" class="fh-rq-input fh-rq-input--money" name="fee" value="<?php echo esc_attr( (float) $request['fee_amount'] > 0 && $fh_fees['available'] && empty( $request['owed'] ) ? number_format( (float) $request['fee_amount'], 2, '.', '' ) : '' ); ?>" placeholder="0.00" inputmode="decimal" <?php disabled( ! $fh_fees['available'] || ! empty( $request['owed'] ) ); ?>>
 						</label>
 						<button type="submit" class="button button-primary"><?php esc_html_e( 'Approve', 'fishotel-misc-plugin' ); ?></button>
-						<span class="fh-rq-sub"><?php esc_html_e( 'Without a fee it goes on the list. With a fee the invoice is e-mailed and it goes on the list when that is paid. To put several requests of one person on ONE invoice, approve them together on the list page.', 'fishotel-misc-plugin' ); ?></span>
+						<span class="fh-rq-sub"><?php esc_html_e( 'Without a fee it goes on the list. With a fee the bill is e-mailed and it goes on the list when that is paid. To put several requests of one person on ONE bill, approve them together on the list page.', 'fishotel-misc-plugin' ); ?></span>
 					</form>
 					<?php $fh_open( 'decline' ); ?>
 						<label><?php esc_html_e( 'Decline — a note (optional; it is in the e-mail when one is sent)', 'fishotel-misc-plugin' ); ?>
@@ -209,7 +209,7 @@ $fh_open_states = Rules::is_open( $fh_state );
 							echo esc_html(
 								sprintf(
 									/* translators: 1: amount, 2: when invoiced, 3: days left */
-									_n( 'It waits for a fee of %1$s, invoiced %2$s. Unpaid, it closes by itself in %3$d day.', 'It waits for a fee of %1$s, invoiced %2$s. Unpaid, it closes by itself in %3$d days.', Rules::fee_days_left( $request, $fh_now, (int) $ctx['settings']['expire_days'] ), 'fishotel-misc-plugin' ),
+									_n( 'It waits for a fee of %1$s, billed %2$s. Unpaid, it closes by itself in %3$d day.', 'It waits for a fee of %1$s, billed %2$s. Unpaid, it closes by itself in %3$d days.', Rules::fee_days_left( $request, $fh_now, (int) $ctx['settings']['expire_days'] ), 'fishotel-misc-plugin' ),
 									Rules::money( $fh_carrier['fee_amount'], $fh_symbol ),
 									Admin::when( $request['approved_at'] ),
 									Rules::fee_days_left( $request, $fh_now, (int) $ctx['settings']['expire_days'] )
@@ -220,14 +220,14 @@ $fh_open_states = Rules::is_open( $fh_state );
 					</p>
 					<?php if ( count( $detail['members'] ) > 1 ) : ?>
 						<p class="fh-rq-sub">
-							<?php esc_html_e( 'One invoice covers:', 'fishotel-misc-plugin' ); ?>
+							<?php esc_html_e( 'One bill covers:', 'fishotel-misc-plugin' ); ?>
 							<?php foreach ( $detail['members'] as $fh_member ) : ?>
 								<a href="<?php echo esc_url( Admin::request_url( $fh_member['id'] ) ); ?>">#<?php echo esc_html( (string) $fh_member['id'] ); ?> <?php echo esc_html( Rules::fish_line( $fh_member ) ); ?></a><?php echo esc_html( (int) $fh_member['id'] === (int) $request['fee_ref'] ? ' ' . __( '(carries the amount)', 'fishotel-misc-plugin' ) : '' ); ?>;
 							<?php endforeach; ?>
 						</p>
 					<?php endif; ?>
 					<?php if ( '' !== $detail['pay_url'] ) : ?>
-						<label class="fh-rq-copy"><span><?php esc_html_e( 'The pay link (it is in the invoice e-mail; copy it to send it yourself)', 'fishotel-misc-plugin' ); ?></span>
+						<label class="fh-rq-copy"><span><?php esc_html_e( 'The pay link (it is in the bill e-mail; copy it to send it yourself)', 'fishotel-misc-plugin' ); ?></span>
 							<span class="fh-rq-copy__row"><input type="text" class="fh-rq-input" readonly value="<?php echo esc_attr( $detail['pay_url'] ); ?>" onfocus="this.select()"><button type="button" class="button" data-copy="<?php echo esc_attr( $detail['pay_url'] ); ?>"><?php esc_html_e( 'Copy', 'fishotel-misc-plugin' ); ?></button></span>
 						</label>
 					<?php endif; ?>
@@ -236,14 +236,14 @@ $fh_open_states = Rules::is_open( $fh_state );
 					<?php endif; ?>
 					<div class="fh-rq-buttons">
 						<?php $fh_open( 'resend', 'fh-rq-inline' ); ?>
-							<button type="submit" class="button" <?php disabled( '' === $request['email'] ); ?>><?php esc_html_e( 'E-mail the invoice again', 'fishotel-misc-plugin' ); ?></button>
+							<button type="submit" class="button" <?php disabled( '' === $request['email'] ); ?>><?php esc_html_e( 'E-mail the bill again', 'fishotel-misc-plugin' ); ?></button>
 						</form>
 						<?php $fh_open( 'mark_paid', 'fh-rq-inline' ); ?>
 							<button type="submit" class="button" data-confirm="<?php esc_attr_e( 'Record the fee as paid by hand? Nothing is added to the customer\'s wallet from here — do that in Batch Manager if it is due.', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'Paid some other way', 'fishotel-misc-plugin' ); ?></button>
 						</form>
 					</div>
 					<?php $fh_open( 'set_fee' ); ?>
-						<label><?php esc_html_e( 'Change the fee (0 removes it; the invoice goes out again and the old link stops working)', 'fishotel-misc-plugin' ); ?>
+						<label><?php esc_html_e( 'Change the fee (0 removes it; the bill goes out again and the old link stops working)', 'fishotel-misc-plugin' ); ?>
 							<input type="text" class="fh-rq-input fh-rq-input--money" name="fee" value="<?php echo esc_attr( $fh_carrier ? number_format( (float) $fh_carrier['fee_amount'], 2, '.', '' ) : '' ); ?>" inputmode="decimal">
 						</label>
 						<button type="submit" class="button"><?php esc_html_e( 'Change the fee', 'fishotel-misc-plugin' ); ?></button>

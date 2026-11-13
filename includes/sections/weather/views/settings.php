@@ -90,10 +90,10 @@ $fh_threshold = array(
 				</div>
 
 				<div class="fh-weather-field">
-					<label class="fh-weather-label" for="fh-weather-contact"><?php esc_html_e( 'Contact email for the NWS User-Agent', 'fishotel-misc-plugin' ); ?></label>
+					<label class="fh-weather-label" for="fh-weather-contact"><?php esc_html_e( 'Contact e-mail for the National Weather Service', 'fishotel-misc-plugin' ); ?></label>
 					<input type="email" id="fh-weather-contact" class="fh-weather-input" name="contact_email" value="<?php echo esc_attr( $settings['contact_email'] ); ?>" placeholder="<?php echo esc_attr( get_option( 'admin_email' ) ); ?>">
 					<p class="fishotel-misc-card-desc" style="margin: 6px 0 0;">
-						<?php esc_html_e( 'The National Weather Service asks every API client to identify itself with a contact. Blank = the site admin email.', 'fishotel-misc-plugin' ); ?>
+						<?php esc_html_e( 'The National Weather Service asks every API client to identify itself with a contact. Blank = the site admin e-mail.', 'fishotel-misc-plugin' ); ?>
 					</p>
 				</div>
 
@@ -130,7 +130,7 @@ $fh_threshold = array(
 					<h2 class="fishotel-misc-card-title"><?php esc_html_e( 'Temperature bands (°F)', 'fishotel-misc-plugin' ); ?></h2>
 				</div>
 				<p class="fishotel-misc-card-desc">
-					<?php esc_html_e( 'Every band goes by the delivery-day HIGH at the destination, cold side included. Each line must be higher than the one above it. A high exactly on a line is flagged "AT THE LINE" for Jeff to decide and stored as the more cautious of the two bands.', 'fishotel-misc-plugin' ); ?>
+					<?php esc_html_e( 'Every band goes by the delivery-day HIGH at the destination, cold side included. Each line must be higher than the one above it. A high exactly on a line is flagged "AT THE LINE" for you to decide and stored as the more cautious of the two bands.', 'fishotel-misc-plugin' ); ?>
 				</p>
 
 				<?php foreach ( $fh_threshold as $fh_key => $fh_label ) : ?>

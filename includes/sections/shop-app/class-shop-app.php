@@ -155,7 +155,7 @@ namespace FisHotel\Misc\Sections\Shop_App {
 		public static function get_section_info() {
 			return array(
 				'name'        => __( 'Shop App', 'fishotel-misc-plugin' ),
-				'description' => __( 'FisHotel Shop — an installable web app for the wet room: enrolled phones and tablets open on a keypad with very large buttons, a PIN starts a two-hour shop session for that person, and the Clean Room tank screens open inside it. A shop session is not a WordPress login: it reaches the shop-floor screens and nothing else. Devices, people and PINs, lockouts and an access log under FisHotel Tools → Shop App.', 'fishotel-misc-plugin' ),
+				'description' => __( 'FisHotel Shop — an installable web app for the fish room: enrolled phones and tablets open on a keypad with very large buttons, a PIN starts a two-hour shop session for that person, and the Clean Room tank screens open inside it. A shop session is not a WordPress login: it reaches the shop-floor screens and nothing else. Devices, people and PINs, lockouts and an access log under FisHotel Tools → Shop App.', 'fishotel-misc-plugin' ),
 				'icon'        => 'dashicons-smartphone',
 			);
 		}

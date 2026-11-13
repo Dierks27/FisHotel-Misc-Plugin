@@ -107,7 +107,7 @@ check_same( 'ticked "a replacement for a lost fish": owed, never a fee, on the l
 $result = Admin::perform( 'add', array( 'name' => 'Lee Local', 'email' => 'lee@example.test', 'fish' => 'Red Test Goby', 'fee' => '12.50' ), fh_ctx( $service ) );
 $paid   = $store->find( array( 'search' => 'Red Test Goby' ) )[0];
 check_same( 'with a fee it waits for its payment and the invoice goes out', array( true, 'awaiting_payment', 1 ), array( $result['ok'], $paid['state'], count( fh_take_mails() ) ) );
-check_contains( 'and the notice says the invoice was e-mailed', 'The invoice was e-mailed', $result['message'] );
+check_contains( 'and the notice says the bill was e-mailed', 'The bill was e-mailed', $result['message'] );
 
 $sized  = fh_ctx( $service, array( 'sizes' => array( array( 'slug' => '1-2', 'label' => '1 - 2"' ) ) ) );
 $result = Admin::perform( 'add', array( 'name' => '', 'fish' => '', 'size_slug' => 'huge', 'note' => 'keep me' ), $sized );
@@ -131,7 +131,7 @@ check_contains( 'the person is filled in', 'value="pat@example.test"', $html );
 $result = Admin::perform( 'add', array_merge( $result['keep'], array( 'fish' => 'Spotted Test Hawkfish', 'fee' => '25', 'same_invoice' => '1', 'again' => '1' ) ), fh_ctx( $service ) );
 $second = $store->find( array( 'search' => 'Spotted Test Hawkfish' ) )[0];
 check_same( 'the second fish is on the first one\'s invoice: no second invoice, no second e-mail', array( true, 'awaiting_payment', $first['id'], 0.0, 0 ), array( $result['ok'], $second['state'], $second['fee_ref'], $second['fee_amount'], count( fh_take_mails() ) ) );
-check_contains( 'the notice says so', 'no second invoice', $result['message'] );
+check_contains( 'the notice says so', 'no second bill', $result['message'] );
 check_same( 'and the invoice is offered again for a third', $first['id'], $result['keep']['invoice_of'] );
 $result = Admin::perform( 'add', array_merge( $result['keep'], array( 'fish' => 'Banded Test Pipefish', 'fee' => '8' ) ), fh_ctx( $service ) );
 $third  = $store->find( array( 'search' => 'Banded Test Pipefish' ) )[0];

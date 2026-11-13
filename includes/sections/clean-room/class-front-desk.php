@@ -210,7 +210,7 @@ class Front_Desk {
 			header( 'Content-Type: text/html; charset=utf-8' );
 			echo '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>' . esc_html__( 'Not allowed', 'fishotel-misc-plugin' ) . '</title></head>'
 				. '<body style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#111;color:#eee;padding:40px 20px;text-align:center"><h1 style="font-size:28px">' . esc_html__( 'Not allowed', 'fishotel-misc-plugin' ) . '</h1>'
-				. '<p>' . esc_html__( 'This screen is for the shop crew. Ask Jeff for access.', 'fishotel-misc-plugin' ) . '</p>'
+				. '<p>' . esc_html__( 'This screen is for the shop crew. Ask the owner for access.', 'fishotel-misc-plugin' ) . '</p>'
 				. '<p><a style="color:#7cc7ff" href="' . esc_url( wp_logout_url( Clean_Room::front_desk_url( $tank_number ) ) ) . '">' . esc_html__( 'Log in as someone else', 'fishotel-misc-plugin' ) . '</a></p></body></html>';
 			exit;
 		}

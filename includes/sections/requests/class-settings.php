@@ -125,7 +125,7 @@ class Settings {
 	public static function mail_labels() {
 		return array(
 			'invoice'    => array(
-				'label' => __( 'Invoice for the fee', 'fishotel-misc-plugin' ),
+				'label' => __( 'Bill for the fee', 'fishotel-misc-plugin' ),
 				'when'  => __( 'Sent when a request is approved with a fee (and when the fee is changed).', 'fishotel-misc-plugin' ),
 			),
 			'reminder'   => array(

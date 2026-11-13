@@ -82,7 +82,7 @@ $fh_has_pin = $editing && ! empty( $editing['active'] ) && '' !== (string) $edit
 					<?php endforeach; ?>
 				</select>
 			</label>
-			<p class="fh-sa-help"><?php esc_html_e( 'Pick their own WordPress account when they have one, so the Clean Room shows their name on what they do. Everyone else shares the "Shop staff" account, which cannot log in to WordPress. Either way a PIN opens the shop-floor screens only — never wp-admin, orders or customers.', 'fishotel-misc-plugin' ); ?></p>
+			<p class="fh-sa-help"><?php esc_html_e( 'Pick their own WordPress account when they have one, so the Clean Room shows their name on what they do. Everyone else shares the "Shop staff" account, which cannot log in to WordPress. Either way a PIN opens the fish-room screens only — never wp-admin, orders or customers.', 'fishotel-misc-plugin' ); ?></p>
 
 			<p>
 				<button type="submit" class="button button-primary"><?php echo esc_html( $editing && empty( $editing['active'] ) ? __( 'Save and switch on', 'fishotel-misc-plugin' ) : __( 'Save', 'fishotel-misc-plugin' ) ); ?></button>

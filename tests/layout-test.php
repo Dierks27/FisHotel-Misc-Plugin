@@ -71,7 +71,7 @@ foreach ( $fh_folders as $fh_slug ) {
 	$fh_text = Layout::card_text( $fh_slug );
 	check( "$fh_slug: one plain sentence that says what switching it on starts", '' !== $fh_text && strlen( $fh_text ) < 420 && ( false !== stripos( $fh_text, 'starts' ) ) );
 }
-check( 'the sections that send e-mail or call out by themselves say so', false !== strpos( Layout::card_text( 'requests' ), 'e-mails people by itself' ) && false !== strpos( Layout::card_text( 'lost-fish' ), 'hourly' ) && false !== strpos( Layout::card_text( 'weather' ), 'nightly call' ) && false !== strpos( Layout::card_text( 'health' ), 'Alert email' ) );
+check( 'the sections that send e-mail or call out by themselves say so', false !== strpos( Layout::card_text( 'requests' ), 'e-mails people by itself' ) && false !== strpos( Layout::card_text( 'lost-fish' ), 'hourly' ) && false !== strpos( Layout::card_text( 'weather' ), 'nightly call' ) && false !== strpos( Layout::card_text( 'health' ), 'Alert e-mail' ) );
 check( 'an unknown section: no sentence (the card shows its own description)', '' === Layout::card_text( 'something-new' ) );
 
 echo "\n" . ( $fh_failures ? "$fh_failures of $fh_checks checks FAILED\n" : "All $fh_checks checks passed\n" );

@@ -112,7 +112,7 @@ class Health {
 	public static function get_section_info() {
 		return array(
 			'name'        => __( 'Health', 'fishotel-misc-plugin' ),
-			'description' => __( 'One error log for every FisHotel plugin and the theme (fatals, failed emails, GitHub token errors) plus a dashboard widget with versions, dompdf, kill switches, cron and the last update checks.', 'fishotel-misc-plugin' ),
+			'description' => __( 'One error log for every FisHotel plugin and the theme (fatals, failed e-mails, GitHub token errors) plus a dashboard widget with versions, dompdf, kill switches, cron and the last update checks.', 'fishotel-misc-plugin' ),
 			'icon'        => 'dashicons-heart',
 		);
 	}

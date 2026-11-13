@@ -153,7 +153,7 @@ $fh_tiles    = array(
 						<td data-cell="action" title="<?php echo esc_attr( $fh_row['summary'] ); ?>">
 							<?php echo Admin::badge_html( $fh_row['action'], $fh_row['at_line'] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by badge_html(). ?>
 							<?php if ( $fh_row['has_email'] ) : ?>
-								<span class="fh-weather-sub"><?php esc_html_e( 'email drafted', 'fishotel-misc-plugin' ); ?></span>
+								<span class="fh-weather-sub"><?php esc_html_e( 'e-mail drafted', 'fishotel-misc-plugin' ); ?></span>
 							<?php endif; ?>
 						</td>
 						<td data-cell="note_status" class="fh-weather-note-status fh-weather-note-status--<?php echo esc_attr( $fh_row['note_status'] ); ?>">

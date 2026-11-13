@@ -197,7 +197,7 @@ $fh_head = static function () {
 							</ul>
 							<p class="fh-rq-sheet__actions">
 								<label>
-									<?php esc_html_e( 'Fee for this sheet (one invoice for the ticked requests)', 'fishotel-misc-plugin' ); ?>
+									<?php esc_html_e( 'Fee for this sheet (one bill for the ticked requests)', 'fishotel-misc-plugin' ); ?>
 									<input type="text" class="fh-rq-input fh-rq-input--money" name="fee" value="<?php echo esc_attr( $fh_sheet['fee'] > 0 && $ctx['fees']['available'] ? number_format( $fh_sheet['fee'], 2, '.', '' ) : '' ); ?>" placeholder="0.00" inputmode="decimal" <?php disabled( ! $ctx['fees']['available'] ); ?>>
 								</label>
 								<button type="submit" class="button button-primary"><?php esc_html_e( 'Approve ticked', 'fishotel-misc-plugin' ); ?></button>
@@ -271,7 +271,7 @@ $fh_head = static function () {
 									echo esc_html(
 										sprintf(
 											/* translators: 1: how long ago, 2: days left */
-											_n( 'Invoiced %1$s ago; closes by itself in %2$d day.', 'Invoiced %1$s ago; closes by itself in %2$d days.', Rules::fee_days_left( $fh_r, $fh_now, (int) $ctx['settings']['expire_days'] ), 'fishotel-misc-plugin' ),
+											_n( 'Billed %1$s ago; closes by itself in %2$d day.', 'Billed %1$s ago; closes by itself in %2$d days.', Rules::fee_days_left( $fh_r, $fh_now, (int) $ctx['settings']['expire_days'] ), 'fishotel-misc-plugin' ),
 											Rules::age_words( Rules::ts( $fh_r['approved_at'] ), $fh_now ),
 											Rules::fee_days_left( $fh_r, $fh_now, (int) $ctx['settings']['expire_days'] )
 										)

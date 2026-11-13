@@ -137,7 +137,7 @@ class Settings {
 
 		$email = isset( $raw['contact_email'] ) && is_scalar( $raw['contact_email'] ) ? sanitize_email( (string) $raw['contact_email'] ) : '';
 		if ( isset( $raw['contact_email'] ) && '' !== trim( (string) $raw['contact_email'] ) && '' === $email ) {
-			$dropped[] = __( 'contact email is not a valid address (the site admin email will be used)', 'fishotel-misc-plugin' );
+			$dropped[] = __( 'contact e-mail is not a valid address (the site admin e-mail will be used)', 'fishotel-misc-plugin' );
 		}
 
 		$run_time = isset( $raw['run_time'] ) && is_scalar( $raw['run_time'] ) ? trim( (string) $raw['run_time'] ) : '';

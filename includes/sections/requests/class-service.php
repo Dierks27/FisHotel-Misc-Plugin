@@ -309,9 +309,9 @@ class Service {
 		if ( $hand && ! $owed && ! empty( $args['invoice_of'] ) ) {
 			$invoice = $this->payable( (int) $args['invoice_of'] );
 			if ( ! $invoice['ok'] ) {
-				$errors[] = __( 'That invoice can no longer take another fish (it was paid, removed, or ran out of time). Untick it — and set a fee if this fish needs one.', 'fishotel-misc-plugin' );
+				$errors[] = __( 'That bill can no longer take another fish (it was paid, removed, or ran out of time). Untick it — and set a fee if this fish needs one.', 'fishotel-misc-plugin' );
 			} elseif ( '' === $person['email'] || Rules::email( $invoice['carrier']['email'] ) !== $person['email'] ) {
-				$errors[] = __( 'One invoice goes to one person: this fish is for another e-mail address than that invoice.', 'fishotel-misc-plugin' );
+				$errors[] = __( 'One bill goes to one person: this fish is for another e-mail address than that bill.', 'fishotel-misc-plugin' );
 			} else {
 				$join = $invoice;
 				$fee  = 0.0;
@@ -323,7 +323,7 @@ class Service {
 				/* translators: %s: why */
 				$errors[] = sprintf( __( 'A fee cannot be charged right now: %s.', 'fishotel-misc-plugin' ), $fees['reason'] );
 			} elseif ( '' === $person['email'] ) {
-				$errors[] = __( 'A fee needs an e-mail address to send the invoice to.', 'fishotel-misc-plugin' );
+				$errors[] = __( 'A fee needs an e-mail address to send the bill to.', 'fishotel-misc-plugin' );
 			}
 		}
 
@@ -386,7 +386,7 @@ class Service {
 		}
 		if ( $hand && $join ) {
 			/* translators: 1: request id, 2: amount */
-			$words[] = sprintf( __( 'approved as saved, on the invoice of request #%1$d (%2$s, not paid yet) — no second invoice', 'fishotel-misc-plugin' ), (int) $join['carrier']['id'], Rules::money( (float) $join['carrier']['fee_amount'] ) );
+			$words[] = sprintf( __( 'approved as saved, on the bill of request #%1$d (%2$s, not paid yet) — no second bill', 'fishotel-misc-plugin' ), (int) $join['carrier']['id'], Rules::money( (float) $join['carrier']['fee_amount'] ) );
 		} elseif ( $hand ) {
 			$words[] = $fee > 0
 				/* translators: %s: amount */
@@ -552,7 +552,7 @@ class Service {
 				$emails[ Rules::email( $request['email'] ) ] = true;
 			}
 			if ( 1 !== count( $emails ) || isset( $emails[''] ) ) {
-				return self::fail( __( 'One invoice goes to one person: tick the requests of one e-mail address (each needs one). Nothing was approved.', 'fishotel-misc-plugin' ) );
+				return self::fail( __( 'One bill goes to one person: tick the requests of one e-mail address (each needs one). Nothing was approved.', 'fishotel-misc-plugin' ) );
 			}
 		}
 
@@ -588,7 +588,7 @@ class Service {
 					/* translators: %s: amount */
 					? sprintf( __( 'Approved with a fee of %s — waiting for the payment.', 'fishotel-misc-plugin' ), Rules::money( $fee ) )
 					/* translators: %d: request id */
-					: sprintf( __( 'Approved — on the invoice of request #%d, waiting for the payment.', 'fishotel-misc-plugin' ), $carrier );
+					: sprintf( __( 'Approved — on the bill of request #%d, waiting for the payment.', 'fishotel-misc-plugin' ), $carrier );
 			} else {
 				$note = __( 'Approved without a fee — on the list.', 'fishotel-misc-plugin' );
 			}
@@ -611,7 +611,7 @@ class Service {
 		$this->last_mail = '';
 		if ( $carrier > 0 ) {
 			$this->last_mail = $this->send_invoice( $carrier );
-			$message        .= ' ' . self::mail_words( $this->last_mail, __( 'The invoice', 'fishotel-misc-plugin' ), true );
+			$message        .= ' ' . self::mail_words( $this->last_mail, __( 'The bill', 'fishotel-misc-plugin' ), true );
 		}
 
 		return self::ok(
@@ -703,7 +703,7 @@ class Service {
 		}
 		if ( null !== $amount && abs( (float) $carrier['fee_amount'] - (float) $amount ) >= 0.005 ) {
 			$out['why']     = 'changed';
-			$out['message'] = __( 'This invoice has changed since the link was sent. Please use the link in our latest e-mail.', 'fishotel-misc-plugin' );
+			$out['message'] = __( 'This bill has changed since the link was sent. Please use the link in our latest e-mail.', 'fishotel-misc-plugin' );
 			return $out;
 		}
 
@@ -765,12 +765,12 @@ class Service {
 		if ( ! $request || ! Rules::fee_open( $request ) ) {
 			return self::fail( __( 'That request is not waiting for a payment.', 'fishotel-misc-plugin' ) );
 		}
-		$this->log( $request['fee_ref'], 'note', __( 'Invoice sent again.', 'fishotel-misc-plugin' ), $actor );
+		$this->log( $request['fee_ref'], 'note', __( 'Bill sent again.', 'fishotel-misc-plugin' ), $actor );
 		$this->last_mail = $this->send_invoice( (int) $request['fee_ref'] );
 
 		return 'sent' === $this->last_mail
-			? self::ok( __( 'The invoice was e-mailed again.', 'fishotel-misc-plugin' ) )
-			: self::fail( self::mail_words( $this->last_mail, __( 'The invoice', 'fishotel-misc-plugin' ), true ) );
+			? self::ok( __( 'The bill was e-mailed again.', 'fishotel-misc-plugin' ) )
+			: self::fail( self::mail_words( $this->last_mail, __( 'The bill', 'fishotel-misc-plugin' ), true ) );
 	}
 
 	/**
@@ -849,7 +849,7 @@ class Service {
 		$this->last_mail = $this->send_invoice( $carrier_id );
 
 		/* translators: %s: amount */
-		return self::ok( sprintf( __( 'The fee is now %s.', 'fishotel-misc-plugin' ), Rules::money( $fee ) ) . ' ' . self::mail_words( $this->last_mail, __( 'The invoice', 'fishotel-misc-plugin' ), true ) );
+		return self::ok( sprintf( __( 'The fee is now %s.', 'fishotel-misc-plugin' ), Rules::money( $fee ) ) . ' ' . self::mail_words( $this->last_mail, __( 'The bill', 'fishotel-misc-plugin' ), true ) );
 	}
 
 	/**
@@ -868,7 +868,7 @@ class Service {
 		$carrier_id = (int) $carrier_id;
 		$carrier    = $this->store->get( $carrier_id );
 		if ( ! $carrier || (int) $carrier['fee_ref'] !== $carrier_id ) {
-			return self::fail( __( 'That request carries no invoice.', 'fishotel-misc-plugin' ) );
+			return self::fail( __( 'That request carries no bill.', 'fishotel-misc-plugin' ) );
 		}
 		if ( ! empty( $carrier['fee_paid_at'] ) ) {
 			return self::ok( __( 'That fee was already recorded as paid.', 'fishotel-misc-plugin' ), array( 'ids' => array() ) );
@@ -1025,8 +1025,8 @@ class Service {
 				$fields['kept_at']     = null;
 				$fields['approved_at'] = $invoice['members'][0]['approved_at'];
 				/* translators: %d: request id */
-				$said = sprintf( __( 'Reopened — back on the invoice of request #%d, which is not paid yet: it waits for the payment with the others.', 'fishotel-misc-plugin' ), (int) $request['fee_ref'] );
-				$done = __( 'The request is back, on its invoice: it waits for the payment with the others on it.', 'fishotel-misc-plugin' );
+				$said = sprintf( __( 'Reopened — back on the bill of request #%d, which is not paid yet: it waits for the payment with the others.', 'fishotel-misc-plugin' ), (int) $request['fee_ref'] );
+				$done = __( 'The request is back, on its bill: it waits for the payment with the others on it.', 'fishotel-misc-plugin' );
 			} elseif ( ! $invoice['carrier'] || empty( $invoice['carrier']['fee_paid_at'] ) ) {
 				$fields['fee_ref']    = null;
 				$fields['fee_amount'] = 0.0;

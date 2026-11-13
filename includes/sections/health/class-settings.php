@@ -182,7 +182,7 @@ class Settings {
 		$email_raw = isset( $raw['alert_email'] ) && is_scalar( $raw['alert_email'] ) ? trim( (string) $raw['alert_email'] ) : '';
 		$email     = self::clean_email( $email_raw );
 		if ( '' !== $email_raw && '' === $email ) {
-			$dropped[] = __( 'alert email is not a valid address (alerts off)', 'fishotel-misc-plugin' );
+			$dropped[] = __( 'alert e-mail is not a valid address (alerts off)', 'fishotel-misc-plugin' );
 		}
 
 		$cooldown = isset( $raw['alert_cooldown_minutes'] ) && is_scalar( $raw['alert_cooldown_minutes'] ) ? (int) $raw['alert_cooldown_minutes'] : self::DEFAULTS['alert_cooldown_minutes'];

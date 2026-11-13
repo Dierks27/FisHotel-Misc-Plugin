@@ -32,7 +32,7 @@ Switch the section on in **FisHotel Tools → Dashboard**; it then lives at
    an optional fee — or tick "a replacement for a lost fish" (owed, never
    a fee). It is approved as it is saved. **Save, and add another fish
    for this person** keeps the person in the form; with a fee, the next
-   fish can go on the invoice that just went out (ticked for you) — one
+   fish can go on the bill that just went out (ticked for you) — one
    fee and one e-mail for all of that person's fish.
 3. **Another section**: `fishotel_requests_create( array $args )` — see
    *Contracts* below.
@@ -45,8 +45,8 @@ Switch the section on in **FisHotel Tools → Dashboard**; it then lives at
 - **new** — a sheet from a link waits under *Needs you*: **Approve
   ticked** (with or without a fee) or open a request to **Decline** it
   (an optional note; an e-mail only when ticked).
-- **awaiting_payment** — approved with a fee: one invoice e-mail with a
-  pay link. One reminder per invoice after 3 days, expiry after 7 (both
+- **awaiting_payment** — approved with a fee: one bill e-mail with a
+  pay link. One reminder per bill after 3 days, expiry after 7 (both
   in Settings).
 - **waiting** — on the list.
 - **on_order / in_quarantine / ready** — see *The state follows the
@@ -60,14 +60,15 @@ when, what).
 
 ## The fee
 
-A fee belongs to an *invoice*, and an invoice may cover several requests
+A fee belongs to a *bill* (the word on these screens, so it is never confused
+with the Invoices section's invoices), and a bill may cover several requests
 approved together (one sheet, one fee): the oldest carries the amount,
 the others point at it, all wait for the payment, one e-mail goes out,
 and paying it puts every one of them on the list. When the fish that
-carries the amount is cancelled, the invoice stays payable for the
+carries the amount is cancelled, the bill stays payable for the
 others (and is still reminded once); a cancelled fish that is reopened
-while its invoice is unpaid goes back **on** the invoice and waits for
-the payment with the others. Reopened after the invoice has closed, its
+while its bill is unpaid goes back **on** the bill and waits for
+the payment with the others. Reopened after the bill has closed, its
 fee is dropped.
 
 The money goes through the store's existing custom-order **deposit**, so
@@ -178,7 +179,7 @@ request's customer id) or by personal link (the signed e-mail address).
 
 Five e-mails, all through `wp_mail()` as simple HTML with a plain-text
 part, each with a switch, a subject and a body in Settings, each logged
-on its request: the invoice for the fee, the fee reminder, the fish is
+on its request: the bill for the fee, the fee reminder, the fish is
 ready, still want it?, declined. Nothing is e-mailed for a request added
 by hand unless it has a fee or its fish becomes ready. Only addresses on
 the shop's own site become clickable links: a URL somebody typed into a

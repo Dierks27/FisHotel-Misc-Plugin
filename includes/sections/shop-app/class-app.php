@@ -324,7 +324,7 @@ class App {
 			'id'               => Shop_App::app_url(),
 			'name'             => 'FisHotel Shop',
 			'short_name'       => 'FH Shop',
-			'description'      => __( 'The shop-floor screens of FisHotel: pick or scan a tank, record what happened.', 'fishotel-misc-plugin' ),
+			'description'      => __( 'The fish-room screens of FisHotel: pick or scan a tank, record what happened.', 'fishotel-misc-plugin' ),
 			'start_url'        => Shop_App::app_url(),
 			// A scope is a path: the app's address and the tank labels both
 			// live on the home path, so the scope is the site's home.
