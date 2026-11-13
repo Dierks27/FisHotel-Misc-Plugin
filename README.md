@@ -32,8 +32,13 @@ fishotel-misc-plugin/
 │       ├── lottery-draw/           # Verifiable lottery for group orders
 │       ├── weather/                # Nightly delivery-day weather notes + packing actions
 │       ├── health/                 # Shared error log, failure capture, FisHotel Health widget + page
-│       ├── today/                  # Today at FisHotel: next delivery days, holds / UPS Store, missing weather / invoice / tracking
-│       ├── clean-room/             # Where every fish is: Spa / Clean Room tanks, stays with replayed events, QR + voice Front Desk, protocol to-do, room board, supplier orders, chosen sale dates, standard sizes, percent-of-a-box costing with remembered shares, unknown / mislabeled fish with one correction
+│       ├── today/                  # Today at FisHotel: next delivery days, holds / UPS Store, missing weather / invoice / tracking; one line for the tanks' to-do list when the Clean Room is on
+│       ├── clean-room/             # Where every fish is: Spa / Clean Room tanks, stays with replayed events, QR + voice Front Desk, protocol to-do, room board, supplier orders, chosen sale dates, standard sizes, percent-of-a-box costing with remembered shares, unknown / mislabeled fish with one correction, a dose calculator over an editable medication list, temporary (hospital) tanks with their own schedules, one To do list by water system, Stats views (compare years, species, prices to raise, real sales)
+│       ├── requests/               # Requests: a request sheet for the fish people ask for — private links, added by hand or by another section, an optional fee, a state that follows the fish from the supplier order to "ready"
+│       ├── lost-fish/              # Lost Fish: a paid-for fish that is lost — the tanks checked for a spare, else a case with the numbers for every choice, the e-mail behind one click, the customer's private page
+│       ├── invoices/               # Invoices: a customer's invoice built from a pick list (tank groups, shop products, the species list, typed), pre-checked against what the customer already has, published as the hidden product
+│       ├── packing/                # Packing: the standard bags, a bag size per fish, how many bags fit each box, the box suggested for an order and the one confirmed
+│       ├── foam-cuts/              # Foam Cuts: a cut sheet for the foam that lines a box — sheets and labelled leftovers in stock, a plan for the boxes of the day, straight edge-to-edge cuts
 │       └── site-snippets/          # Snippets: the site's own code as files in GitHub (was Code Snippets), switched on/off, run at plugins_loaded:1; plus an editor for snippets written in wp-admin (named editors only, history, audit log, export to GitHub)
 ├── admin/
 │   ├── css/admin-style.css         # Dark theme styles
@@ -41,6 +46,10 @@ fishotel-misc-plugin/
 │   └── views/dashboard.php         # Dashboard template
 └── README.md
 ```
+
+Each section is switched on and off in **FisHotel Tools → Dashboard** and is described in its own folder: `README.md` (what it does, its screens, its tables and options, its hooks and functions for other code) and, where it has headless tests, `tests/README.md` (how to run them and what each covers, plus what to check by hand on a real site). The sections added in 0.46 — `requests/`, `lost-fish/`, `invoices/`, `packing/`, `foam-cuts/` — each have one; so do `clean-room/` (the dose calculator, the temporary tanks, the To do list and the Stats views are chapters of its README), `today/`, `health/`, `weather/`, `lottery-draw/`, `site-snippets/`, `sticker-giveaway/` and `announcer/`.
+
+What the sections offer each other — each function exists while the plugin is active and answers "nothing" while its section is off (null, an empty list, `available: false`; a `WP_Error` from the one that creates), so guard with `function_exists()` and read the answer: `fishotel_cleanroom_product_facts()` and `fishotel_cleanroom_todo()` (Clean Room; actions `fishotel_cleanroom_order_line` and `fishotel_cleanroom_event_recorded`), `fishotel_requests_create()` and `fishotel_requests_get()` (Requests), `fishotel_invoices_lines_for_product()` and `fishotel_invoices_for_order()` (Invoices; action `fishotel_invoice_paid`), `fishotel_lostfish_cases_for_order()` (Lost Fish), `fishotel_packing_suggest()`, `fishotel_packing_bag_for_item()` / `_for_product()` / `_for_size()` and `fishotel_packing_confirmed_box()` (Packing), `fishotel_foam_cuts_plan()` (Foam Cuts). Each section's README has the shapes.
 
 ## Creating a Section
 
