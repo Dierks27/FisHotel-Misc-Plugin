@@ -225,7 +225,7 @@ class Admin {
 		$tanks     = $store->tanks_with_occupants( $today, $settings, $protocols );
 		$groups    = Layout::group( $store->buildings(), $tanks );
 		$totals    = self::totals( $tanks );
-		$doses     = $store->latest_doses();
+		$doses     = Dose::board_doses( $store->latest_doses() ); // "last dose" with the amount and its working.
 		$sizes     = Sizes::standard( $store, $settings )['sizes'];
 
 		include Clean_Room::path() . 'views/board.php';

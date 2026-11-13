@@ -29,17 +29,34 @@
  * dropdown, one post — the server corrects the stay and its supplier
  * order line together.
  *
+ * The Dose sheet does the sum for any medication of the list the server
+ * sends (screen.medications): the water — the whole system or this tank —,
+ * then per gallon a rate (the medication's own, a named dose, or the rate
+ * of a schedule step due today) or to a level "Now" and "Bring it to"
+ * (for the copper product: today's reading and the due step's level, else
+ * the copper target), a Top-up switch for after a water change, and the
+ * result line with its working. The amount field is filled with the
+ * result and stays editable — what was really added is what is logged.
+ * The Calculator is the same sum for any number of gallons and saves
+ * nothing. The sum itself is js/dose-math.js (the server's Dose::plan()),
+ * inlined before this file; a spoken dose comes back from the server with
+ * its sum and is never auto-confirmed — a dose has no undo.
+ *
  * The pure helpers (normalizeNumberWords, previewSentence, tankValue,
- * englishValue, fmt, escapeHtml, saleSummary, sizeText, unknownName) are
- * exported for tests/front-desk.test.js and the file skips the DOM wiring
- * when there is no document / config.
+ * englishValue, fmt, escapeHtml, saleSummary, sizeText, unknownName,
+ * doseStart, rateChoices, pickChoice, doseFields) are exported for
+ * tests/front-desk.test.js and the file skips the DOM wiring when there is
+ * no document / config.
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  */
 
-/* global module */
+/* global module, require */
 (function (root) {
 	'use strict';
+
+	/* The dose maths: inlined before this file on the page, required in node. */
+	var doseMath = root.fhDoseMath || (typeof require === 'function' ? require('./dose-math.js') : null);
 
 	/* ---------------------------------------------------------------- */
 	/*  Pure helpers                                                     */
@@ -246,7 +263,9 @@
 	 * The preview in plain words — the same sentence the server's
 	 * Parser::summary() builds: "1 × Pajama Cardinalfish lost in Tank 521",
 	 * "Which fish? 2 lost in Tank 513", "Move 2 × Ocellaris Clownfish from
-	 * Tank 521 to Tank 221", "Copper 2.4 in Tank 521".
+	 * Tank 521 to Tank 221", "Copper 2.4 in Tank 521", "Dose: Copper Power,
+	 * 2.16 → 2.40 ppm · Tank 521" (a dose's preview then shows the sum the
+	 * server sent with it).
 	 *
 	 * @param {Object} p A parse result.
 	 * @return {string}
@@ -284,6 +303,27 @@
 				return prefix + 'Count: ' + (qty === null ? 'how many? ' : qty + ' × ') + (ask ? '' : name) + ' in ' + tank;
 			case 'note':
 				return 'Note on ' + tank + ': ' + String(p.note || '');
+			case 'dose':
+				var d = p.dose || {};
+				var text = 'Dose: ' + String(d.label || '');
+				var lu = d.level_unit ? ' ' + String(d.level_unit) : '';
+				if (present(d.amount)) {
+					text += ' ' + doseMath.num(Number(d.amount), 2) + ' ' + String(d.unit || '');
+				} else if (present(d.now) && present(d.target)) {
+					text += ', ' + doseMath.levelText(Number(d.now)) + ' → ' + doseMath.levelText(Number(d.target)) + lu;
+				} else if (present(d.target)) {
+					text += ', to ' + doseMath.levelText(Number(d.target)) + lu;
+				} else if (present(d.now)) {
+					text += ', from ' + doseMath.levelText(Number(d.now)) + lu;
+				} else if (d.dose_label) {
+					text += ' (' + String(d.dose_label) + ')';
+				}
+				if (d.scope === 'system') {
+					text += ' · whole system';
+				} else if (d.scope === 'tank') {
+					text += ' · this tank only';
+				}
+				return text + ' · ' + tank;
 			case 'arrival':
 				var where = needs.indexOf('tank') !== -1 ? 'which Spa tank?' : tank;
 				return prefix + ((qty === null && !ask) ? '1 × ' : '') + what + ' arriving in ' + where + ' today';
@@ -351,6 +391,133 @@
 		return (text === '' ? '??' : '?? ' + text).substring(0, 120);
 	}
 
+	/* Whether a value was given at all (0 counts; '', null and undefined do not). */
+	function present(value) {
+		return value !== null && typeof value !== 'undefined' && value !== '';
+	}
+
+	/**
+	 * What the Dose sheet starts with for a medication in a water: the rate
+	 * (a due schedule step's, else the medication's own), "Now" (today's
+	 * reading — the copper product only) and "Bring it to" (a due step's
+	 * level, else the copper target), as the server worked them out
+	 * (Dose::defaults()); the levels as text for the fields.
+	 *
+	 * @param {Object} med   A medication of screen.medications.
+	 * @param {Object} water tank.dose.system or tank.dose.tank: gallons, reading, meds.
+	 * @return {{rate: number|null, rateFrom: string, now: string, nowAt: string, target: string, targetFrom: string, options: Object[], dosed: Object|null}}
+	 *         dosed = the medication's latest dose in that water today ({text, at, after}), or null.
+	 */
+	function doseStart(med, water) {
+		var start = (med && water && water.meds && water.meds[med.key]) || {};
+		return {
+			rate: present(start.rate) ? Number(start.rate) : (med && present(med.rate) ? Number(med.rate) : null),
+			rateFrom: start.rateFrom || '',
+			now: present(start.now) ? String(start.now) : '',
+			nowAt: start.nowAt || '',
+			target: present(start.target) ? String(start.target) : '',
+			targetFrom: start.targetFrom || '',
+			options: Array.isArray(start.options) ? start.options : [],
+			dosed: start.dosed && typeof start.dosed === 'object' ? start.dosed : null
+		};
+	}
+
+	/**
+	 * The rates a per-gallon medication can be dosed at, as chips: its own,
+	 * its named doses, and the rates of the schedule steps due today — a
+	 * step's rate that is one of the others marks that one "due" instead of
+	 * adding a chip.
+	 *
+	 * @param {Object}   med     Medication (unit, per, rate, doses).
+	 * @param {Object[]} options Due steps: {value, label, day}.
+	 * @param {Object}   strings The words of the sum (optional).
+	 * @return {Object[]} {rate, name, text, due, step}.
+	 */
+	function rateChoices(med, options, strings) {
+		var out = [];
+		if (!med || med.mode !== 'per_gallon') {
+			return out;
+		}
+		function words(rate) {
+			return doseMath.rateText(rate, med.unit, med.per, strings);
+		}
+		out.push({ rate: Number(med.rate), name: '', text: words(med.rate), due: false, step: '' });
+		(med.doses || []).forEach(function (dose) {
+			out.push({ rate: Number(dose.rate), name: String(dose.label), text: String(dose.label) + ' · ' + words(dose.rate), due: false, step: '' });
+		});
+		(options || []).forEach(function (option) {
+			var hit = false;
+			out.forEach(function (choice) {
+				if (Math.abs(choice.rate - Number(option.value)) < 1e-6) {
+					choice.due = true;
+					choice.step = choice.step || String(option.label || '');
+					hit = true;
+				}
+			});
+			if (!hit) {
+				out.push({ rate: Number(option.value), name: '', text: words(option.value), due: true, step: String(option.label || '') });
+			}
+		});
+		return out;
+	}
+
+	/**
+	 * The chip that stands for a rate: the one with that rate and that
+	 * name, else a named dose at that rate, else any at that rate, else the
+	 * first (the medication's own).
+	 *
+	 * @param {Object[]} choices rateChoices().
+	 * @param {number}   rate    The rate chosen.
+	 * @param {string}   name    The named dose chosen ('' = none).
+	 * @return {Object|null}
+	 */
+	function pickChoice(choices, rate, name) {
+		var at = (choices || []).filter(function (choice) { return present(rate) && Math.abs(choice.rate - Number(rate)) < 1e-6; });
+		var exact = at.filter(function (choice) { return choice.name === String(name || ''); });
+		var named = at.filter(function (choice) { return choice.name !== ''; });
+		if (name && exact.length) {
+			return exact[0];
+		}
+		return named[0] || at[0] || (choices && choices[0]) || null;
+	}
+
+	/**
+	 * What Save posts for a dose: the medication, the amount as it stands
+	 * in the field with its unit, the water — and, when the sum stood
+	 * behind it, `calc` with the sum's inputs (the rate and a named dose,
+	 * or now and target), so the server writes the working into the log.
+	 * The readings of a medication dosed to a level go along even when the
+	 * gallons are not known. The top-up goes along whenever it is on.
+	 *
+	 * @param {Object} med  Medication.
+	 * @param {Object} f    The sheet's form: amount, unit, whole, rate, rateLabel, now, target, topup, changed, changedUnit.
+	 * @param {Object} plan The sum (doseMath.plan()), or null.
+	 * @return {Object}
+	 */
+	function doseFields(med, f, plan) {
+		var fields = { medication: med.key, amount: f.amount, unit: f.unit, whole: f.whole ? 1 : 0 };
+		var state = plan ? plan.state : '';
+		if (med.mode === 'to_level' && ['ok', 'nothing', 'no_gallons'].indexOf(state) !== -1) {
+			fields.calc = 1;
+			fields.now = f.now;
+			fields.target = f.target;
+		} else if (med.mode === 'per_gallon' && state === 'ok') {
+			fields.calc = 1;
+			fields.rate = f.rate;
+			if (f.rateLabel) {
+				fields.dose_label = f.rateLabel;
+			}
+		}
+		if (f.topup) {
+			fields.topup = 1;
+			if (present(f.changed)) {
+				fields.changed = f.changed;
+				fields.changed_unit = f.changedUnit === 'gal' ? 'gal' : 'pct';
+			}
+		}
+		return fields;
+	}
+
 	var api = {
 		normalizeNumberWords: normalizeNumberWords,
 		previewSentence: previewSentence,
@@ -360,7 +527,11 @@
 		escapeHtml: escapeHtml,
 		saleSummary: saleSummary,
 		sizeText: sizeText,
-		unknownName: unknownName
+		unknownName: unknownName,
+		doseStart: doseStart,
+		rateChoices: rateChoices,
+		pickChoice: pickChoice,
+		doseFields: doseFields
 	};
 
 	root.fhFrontDeskHelpers = api;
@@ -384,10 +555,12 @@
 
 	var state = {
 		screen: cfg.screen || {},
-		view: 'tank',
+		view: cfg.view === 'calc' ? 'calc' : 'tank',
 		pending: null,
 		voice: null,
 		form: {},
+		sending: false,
+		sure: null,
 		timers: {},
 		toastShownAt: 0,
 		toastSticky: false
@@ -512,16 +685,34 @@
 		}).then(function (json) {
 			if (!json || !json.success) {
 				var msg = json && json.data && json.data.message ? json.data.message : t('error', 'Something went wrong.');
-				throw new Error(msg);
+				var refusal = new Error(msg);
+				refusal.data = json && json.data && typeof json.data === 'object' ? json.data : null;
+				throw refusal;
 			}
 			return json.data;
 		});
 	}
 
+	/*
+	 * One write at a time: while a request is under way a second tap does
+	 * nothing (the Save button sits in the bar outside the app, which
+	 * busy() does not cover — and a dose has no undo).
+	 *
+	 * A refusal may carry more than its message: the screen as it is now
+	 * (a dose sheet or preview that was behind the room — it is redrawn
+	 * with what went in, and saving again goes through), or a level to
+	 * confirm ("Bring it to" far above the copper target — saving the same
+	 * level again says it was meant).
+	 */
 	function act(fields) {
+		if (state.sending) {
+			return Promise.resolve(null);
+		}
+		state.sending = true;
 		busy(true);
 		var before = tank() ? tank().number : 0;
 		return post('fishotel_cleanroom_act', fields).then(function (data) {
+			state.sure = null;
 			if (data.screen) {
 				state.screen = data.screen;
 			}
@@ -543,10 +734,27 @@
 			}
 			return data;
 		}).catch(function (err) {
+			var more = err && err.data ? err.data : null;
+			if (more && typeof more.confirm === 'number') {
+				state.sure = more.confirm;
+			}
+			if (more && more.screen) {
+				state.screen = more.screen;
+				if (state.voice && state.voice.preview && state.voice.preview.dose) {
+					state.voice.preview.dose.dosed = more.dosed || null;
+				}
+				render();
+			}
 			failToast(err);
 		}).then(function () {
+			state.sending = false;
 			busy(false);
 		});
+	}
+
+	/* Whether this "Bring it to" is the one the server asked about and Save was tapped again for. */
+	function sureOf(target) {
+		return typeof state.sure === 'number' && present(target) && Math.abs(Number(target) - state.sure) < 1e-9;
 	}
 
 	function failToast(err) {
@@ -668,7 +876,12 @@
 			return;
 		}
 		if (!tank()) {
-			renderPicker();
+			// No tank in the URL: the picker — or the Calculator, which needs none.
+			if (state.view === 'calc') {
+				renderCalc();
+			} else {
+				renderPicker();
+			}
 			return;
 		}
 		switch (state.view) {
@@ -682,6 +895,7 @@
 			case 'note': renderNote(); break;
 			case 'copper': renderCopper(); break;
 			case 'dose': renderDose(); break;
+			case 'calc': renderCalc(); break;
 			case 'voice': renderVoice(); break;
 			case 'species': renderSpecies(); break;
 			default: renderTank();
@@ -806,6 +1020,7 @@
 		app.appendChild(el('div', { class: 'fh-fd-links' }, [
 			el('a', { href: cfg.baseUrl, text: t('allTanks', 'All tanks') }),
 			el('a', { href: cfg.boardUrl, text: t('board', 'Room board') }),
+			el('button', { type: 'button', text: t('calculator', 'Calculator'), on: { click: function () { go('calc'); } } }),
 			el('button', { type: 'button', text: t('refresh', 'Refresh'), on: { click: refresh } })
 		]));
 
@@ -910,7 +1125,8 @@
 		app.appendChild(header(t('pickTank', 'Pick a tank'), null));
 		renderGrid(app, function (tk) { root.location.href = tk.url; }, 0);
 		app.appendChild(el('div', { class: 'fh-fd-links' }, [
-			el('a', { href: cfg.boardUrl, text: t('board', 'Room board') })
+			el('a', { href: cfg.boardUrl, text: t('board', 'Room board') }),
+			el('button', { type: 'button', text: t('calculator', 'Calculator'), on: { click: function () { go('calc'); } } })
 		]));
 	}
 
@@ -1450,94 +1666,444 @@
 		]);
 	}
 
+	/* ---------------------------------------------------------------- */
+	/*  Dose and Calculator                                              */
+	/* ---------------------------------------------------------------- */
+
+	/* The medications offered (the list from Settings → Medications, the retired ones left out). */
+	function meds() {
+		return state.screen.medications || [];
+	}
+
+	function medByKey(key) {
+		var list = meds();
+		for (var i = 0; i < list.length; i++) {
+			if (list[i].key === key) {
+				return list[i];
+			}
+		}
+		return null;
+	}
+
+	/* The words of the sum, translated (dose-math.js falls back to English). */
+	function doseWords() {
+		return i18n.doseStrings || null;
+	}
+
+	/* One water of this tank's page — the whole system or the tank alone: its gallons, today's reading, each medication's start. */
+	function waterOf(whole) {
+		var tk = tank();
+		var water = tk && tk.dose ? tk.dose[whole ? 'system' : 'tank'] : null;
+		return water || { gallons: 0, reading: null, meds: {} };
+	}
+
+	/* The unit an amount typed by hand starts in: grams for a weight (a system takes grams), else the medication's. */
+	function typedUnit(med) {
+		return med && med.unit === 'mg' ? 'g' : (med ? med.unit : 'g');
+	}
+
+	/* What went into this water today already — and, for copper, that the reading is older than it. */
+	function dosedNote(dosed) {
+		var text = fmt(t('dosedToday', 'Already logged today: %1$s, at %2$s.'), dosed.text, dosed.at);
+		if (dosed.after) {
+			text += ' ' + t('dosedAfter', 'That went in after the reading — read the level again before adding more.');
+		}
+		return el('p', { class: 'fh-fd-dosed' + (dosed.after ? ' is-after' : ''), text: text });
+	}
+
+	/* The medication chips; a tap picks one. */
+	function medField(current, onPick) {
+		var list = meds();
+		if (!list.length) {
+			return el('p', { class: 'fh-fd-muted', text: t('noMeds', 'No medication is offered — add or bring one back in Settings → Medications (Room board).') });
+		}
+		return el('div', { class: 'fh-fd-field' }, [
+			el('label', { class: 'fh-fd-label', text: t('medication', 'Medication') }),
+			el('div', { class: 'fh-fd-chips' }, list.map(function (m) {
+				return el('button', {
+					type: 'button',
+					class: 'fh-fd-chip' + (current === m.key ? ' is-on' : ''),
+					text: m.short || m.label,
+					on: { click: function () { onPick(m); } }
+				});
+			}))
+		]);
+	}
+
+	/* The sum's result: the line, its working small, the measure. set(plan) refreshes it in place, so a field keeps the keyboard. */
+	function resultBox() {
+		var line = el('p', { class: 'fh-fd-result__line' });
+		var work = el('p', { class: 'fh-fd-result__work' });
+		var measure = el('p', { class: 'fh-fd-result__work' });
+		var node = el('div', { class: 'fh-fd-result', 'aria-live': 'polite' }, [line, work, measure]);
+		return {
+			node: node,
+			set: function (plan) {
+				node.className = 'fh-fd-result' + (plan ? ' is-' + plan.state : '');
+				node.hidden = !plan;
+				line.textContent = plan ? plan.line : '';
+				work.textContent = plan ? plan.working : '';
+				work.hidden = !plan || !plan.working;
+				measure.textContent = plan ? plan.measure : '';
+				measure.hidden = !plan || !plan.measure;
+			}
+		};
+	}
+
+	/* Per gallon: the medication's own rate, its named doses and the rates of the schedule steps due today, as chips. */
+	function rateField(med, f, options, onChange) {
+		var choices = rateChoices(med, options, doseWords());
+		var chosen = pickChoice(choices, f.rate, f.rateLabel);
+		if (chosen) {
+			f.rate = chosen.rate;
+			f.rateLabel = chosen.name;
+		}
+		if (choices.length < 2) {
+			return el('p', { class: 'fh-fd-muted', text: choices.length ? choices[0].text : '' });
+		}
+		return el('div', { class: 'fh-fd-field' }, [
+			el('label', { class: 'fh-fd-label', text: t('howMuch', 'How much') }),
+			el('div', { class: 'fh-fd-chips' }, choices.map(function (choice, index) {
+				var text = choice.text;
+				if (index === 0 && !choice.due) {
+					text += ' · ' + t('ownRate', 'usual');
+				}
+				if (choice.due) {
+					text += ' · ' + t('dueToday', 'due today');
+				}
+				return el('button', {
+					type: 'button',
+					class: 'fh-fd-chip' + (choice === chosen ? ' is-on' : '') + (choice.due ? ' fh-fd-chip--due' : ''),
+					title: choice.step || null,
+					text: text,
+					on: { click: function () { f.rate = choice.rate; f.rateLabel = choice.name; f.rateChosen = true; onChange(); } }
+				});
+			}))
+		]);
+	}
+
 	/*
-	 * Dose: medication chips, the amount with its unit, "whole system"
-	 * (default when the building has a volume) or this tank only, and the
-	 * suggested amount as a chip that fills the field. The server words
-	 * the toast; a dose has no undo.
+	 * To a level: "Now" and "Bring it to". Typing runs the sum again
+	 * without redrawing (onInput); a chip — a due step's level, the copper
+	 * target — fills "Bring it to" and redraws (onChange).
+	 */
+	function levelFields(med, f, opts, onInput, onChange) {
+		var unit = med.levelUnit ? ' (' + med.levelUnit + ')' : '';
+		var hint = el('p', { class: 'fh-fd-muted', text: opts.nowHint || '' });
+		var nowInput = el('input', {
+			id: 'fh-fd-now', class: 'fh-fd-input fh-fd-input--level', type: 'number', inputmode: 'decimal', step: '0.01', min: '0', max: '999', placeholder: '?', value: f.now,
+			on: { input: function (e) { f.now = e.target.value; f.nowEdited = true; hint.textContent = opts.typedHint || ''; onInput(); } }
+		});
+		var targetInput = el('input', {
+			id: 'fh-fd-target', class: 'fh-fd-input fh-fd-input--level', type: 'number', inputmode: 'decimal', step: '0.01', min: '0', max: '999', placeholder: '?', value: f.target,
+			on: { input: function (e) { f.target = e.target.value; f.targetEdited = true; onInput(); } }
+		});
+		function fill(value) {
+			return function () { f.target = String(value); f.targetEdited = true; onChange(); };
+		}
+		var chips = (opts.options || []).map(function (option) {
+			return el('button', {
+				type: 'button',
+				class: 'fh-fd-chip fh-fd-chip--ghost',
+				text: doseMath.levelText(Number(option.value)) + ' · ' + option.label + (option.day ? ' · ' + fmt(t('day', 'day %d'), option.day) : ''),
+				on: { click: fill(option.value) }
+			});
+		});
+		if (med.copper && present(settings().copperTarget)) {
+			chips.push(el('button', { type: 'button', class: 'fh-fd-chip fh-fd-chip--ghost', text: fmt(t('copperTargetChip', 'target %s'), settings().copperTarget), on: { click: fill(settings().copperTarget) } }));
+		}
+		return el('div', { class: 'fh-fd-field' }, [
+			el('div', { class: 'fh-fd-row fh-fd-row--levels' }, [
+				el('div', {}, [el('label', { class: 'fh-fd-label', for: 'fh-fd-now', text: t('nowLabel', 'Now') + unit }), nowInput, hint]),
+				el('div', {}, [el('label', { class: 'fh-fd-label', for: 'fh-fd-target', text: t('targetLabel', 'Bring it to') + unit }), targetInput])
+			]),
+			chips.length ? el('div', { class: 'fh-fd-chips' }, chips) : null
+		]);
+	}
+
+	/* The Top-up switch for after a water change: "I changed __ % / gal of the water". */
+	function topupField(f, onInput, onChange) {
+		var wrap = el('div', { class: 'fh-fd-field' }, [
+			el('div', { class: 'fh-fd-chips' }, [
+				el('button', {
+					type: 'button',
+					class: 'fh-fd-chip' + (f.topup ? ' is-on' : ''),
+					'aria-pressed': f.topup ? 'true' : 'false',
+					text: t('topupLabel', 'Top-up after a water change'),
+					on: { click: function () { f.topup = !f.topup; onChange(); } }
+				})
+			])
+		]);
+		if (!f.topup) {
+			return wrap;
+		}
+		function unitChip(unit, label) {
+			return el('button', {
+				type: 'button',
+				class: 'fh-fd-chip' + ((f.changedUnit === 'gal') === (unit === 'gal') ? ' is-on' : ''),
+				text: label,
+				on: { click: function () { f.changedUnit = unit; onChange(); } }
+			});
+		}
+		wrap.appendChild(el('div', { class: 'fh-fd-row fh-fd-row--topup' }, [
+			el('label', { class: 'fh-fd-topup__words', for: 'fh-fd-changed', text: t('changedLabel', 'I changed') }),
+			el('input', {
+				id: 'fh-fd-changed', class: 'fh-fd-input', type: 'number', inputmode: 'decimal', step: 'any', min: '0', placeholder: '?', value: present(f.changed) ? f.changed : '',
+				on: { input: function (e) { f.changed = e.target.value; onInput(); } }
+			}),
+			unitChip('pct', '%'),
+			unitChip('gal', 'gal')
+		]));
+		wrap.appendChild(el('p', { class: 'fh-fd-muted', text: t('ofTheWater', 'of the water') }));
+		return wrap;
+	}
+
+	/*
+	 * Dose: the medication, the water (the whole system by default, or
+	 * this tank only), the sum with its working — per gallon a rate, to a
+	 * level "Now" and "Bring it to", a Top-up switch —, and the amount,
+	 * filled with the result and editable: what was really added is what
+	 * is logged. The server words the toast and writes the working into
+	 * the log; a dose has no undo, and the sheet says so before Save.
 	 */
 	function renderDose() {
 		var tk = tank();
 		var f = state.form;
-		var meds = tk.medications || [];
-		var systemGallons = tk.system ? parseInt(tk.system.gallons, 10) || 0 : 0;
+		var systemGallons = Number(waterOf(true).gallons) || 0;
+		var tankGallons = Number(waterOf(false).gallons) || 0;
 		if (typeof f.whole === 'undefined') {
 			f.whole = systemGallons > 0;
 		}
-		if (!f.unit) {
-			f.unit = 'g';
+		if (typeof f.amount === 'undefined') {
+			f.amount = '';
 		}
-		function med() {
-			for (var i = 0; i < meds.length; i++) {
-				if (meds[i].key === f.medication) {
-					return meds[i];
-				}
+		if (!f.changedUnit) {
+			f.changedUnit = 'pct';
+		}
+		var med = medByKey(f.medication);
+		var water = waterOf(f.whole);
+		var start = doseStart(med, water);
+		if (med) {
+			// What nobody typed follows the water: today's reading, the due step, the medication's own rate.
+			if (!f.nowEdited) {
+				f.now = start.now;
 			}
-			return null;
+			if (!f.targetEdited) {
+				f.target = start.target;
+			}
+			if (!f.rateChosen) {
+				f.rate = start.rate;
+				f.rateLabel = '';
+			}
 		}
+		if (!f.unit) {
+			f.unit = typedUnit(med);
+		}
+
 		app.appendChild(header(t('dose', 'Dose'), ['Tank ' + tk.number + ' · ' + tk.building + (tk.system && tk.system.label ? ' · ' + tk.system.label : '')]));
 		var screen = el('div', { class: 'fh-fd-screen' });
 
-		screen.appendChild(el('div', { class: 'fh-fd-field' }, [
-			el('label', { class: 'fh-fd-label', text: t('medication', 'Medication') }),
-			el('div', { class: 'fh-fd-chips' }, meds.map(function (m) {
-				return el('button', {
-					type: 'button',
-					class: 'fh-fd-chip' + (f.medication === m.key ? ' is-on' : ''),
-					text: m.short || m.label,
-					on: { click: function () { f.medication = m.key; f.unit = m.unit || f.unit; render(); } }
-				});
-			}))
-		]));
-
-		var chosen = med();
-		var suggestion = chosen ? (f.whole ? chosen.system : chosen.tank) : null;
-		var amountInput = el('input', { class: 'fh-fd-input fh-fd-input--big', type: 'number', inputmode: 'decimal', step: '0.01', min: '0', max: '9999', placeholder: suggestion !== null && suggestion !== undefined ? String(suggestion) : '', value: f.amount || '', on: { input: function (e) { f.amount = e.target.value; } } });
-		var unitSelect = el('select', { class: 'fh-fd-input fh-fd-unit', on: { change: function (e) { f.unit = e.target.value; } } }, ['g', 'ml', 'tsp'].map(function (u) {
-			var opt = el('option', { value: u, text: u });
-			if (u === f.unit) {
-				opt.selected = true;
-			}
-			return opt;
+		screen.appendChild(medField(f.medication, function (m) {
+			// Another medication is another sum: only the water and the top-up carry over.
+			state.form = { medication: m.key, whole: f.whole, topup: f.topup, changed: f.changed, changedUnit: f.changedUnit };
+			render();
 		}));
-		var amountField = el('div', { class: 'fh-fd-field' }, [
-			el('label', { class: 'fh-fd-label', text: t('amount', 'Amount') }),
-			el('div', { class: 'fh-fd-row fh-fd-row--amount' }, [amountInput, unitSelect])
-		]);
-		if (chosen) {
-			if (suggestion !== null && suggestion !== undefined) {
-				amountField.appendChild(el('div', { class: 'fh-fd-chips' }, [
-					el('button', { type: 'button', class: 'fh-fd-chip fh-fd-chip--ghost', text: fmt(t('suggested', 'Suggested: %s'), suggestion + ' ' + (chosen.unit || f.unit)), on: { click: function () { f.amount = String(suggestion); f.unit = chosen.unit || f.unit; amountInput.value = f.amount; unitSelect.value = f.unit; } } })
-				]));
-			} else {
-				amountField.appendChild(el('p', { class: 'fh-fd-muted', text: t('noSuggest', 'Dosed to the test reading') }));
-			}
-		}
-		screen.appendChild(amountField);
 
-		var wholeLabel = fmt(t('wholeSystem', 'Whole system — %s'), tk.building + (systemGallons > 0 ? ' · ' + tk.system.label : ''));
 		screen.appendChild(el('div', { class: 'fh-fd-field' }, [
+			el('label', { class: 'fh-fd-label', text: t('water', 'The water') }),
 			el('div', { class: 'fh-fd-chips' }, [
-				el('button', { type: 'button', class: 'fh-fd-chip' + (f.whole ? ' is-on' : ''), text: wholeLabel, on: { click: function () { f.whole = true; render(); } } }),
-				el('button', { type: 'button', class: 'fh-fd-chip' + (!f.whole ? ' is-on' : ''), text: t('thisTank', 'This tank only') + ' · ' + tk.number, on: { click: function () { f.whole = false; render(); } } })
+				el('button', {
+					type: 'button',
+					class: 'fh-fd-chip' + (f.whole ? ' is-on' : ''),
+					text: fmt(t('wholeSystem', 'Whole system — %s'), tk.building + (systemGallons > 0 ? ' · ' + doseMath.gallonsText(systemGallons, doseWords()) : '')),
+					on: { click: function () { f.whole = true; render(); } }
+				}),
+				el('button', {
+					type: 'button',
+					class: 'fh-fd-chip' + (!f.whole ? ' is-on' : ''),
+					text: fmt(t('thisTankGal', 'This tank only · %s'), tk.number + (tankGallons > 0 ? ' · ' + doseMath.gallonsText(tankGallons, doseWords()) : '')),
+					on: { click: function () { f.whole = false; render(); } }
+				})
 			])
 		]));
+
+		if (med && start.dosed) {
+			screen.appendChild(dosedNote(start.dosed));
+		}
+
+		var result = resultBox();
+		var plan = null;
+		var units = ['mg', 'g', 'ml', 'tsp', 'drops', 'each'];
+		var amountInput = el('input', {
+			id: 'fh-fd-amount', class: 'fh-fd-input fh-fd-input--big', type: 'number', inputmode: 'decimal', step: 'any', min: '0', max: '9999', value: f.amount,
+			on: { input: function (e) { f.amount = e.target.value; f.amountEdited = e.target.value !== ''; update(); } }
+		});
+		var unitSelect = el('select', { class: 'fh-fd-input fh-fd-unit', 'aria-label': t('amount', 'Amount'), on: { change: function (e) { f.unit = e.target.value; f.amountEdited = present(f.amount); update(); } } }, units.map(function (u) {
+			var option = el('option', { value: u, text: u });
+			option.selected = u === f.unit;
+			return option;
+		}));
+		var useChip = el('button', { type: 'button', class: 'fh-fd-chip fh-fd-chip--ghost', hidden: true, on: { click: function () { f.amountEdited = false; update(); } } });
+		var readingNote = el('p', { class: 'fh-fd-muted', hidden: true });
+
+		/* The copper product at or above its target, no amount typed: Save logs the reading alone. */
+		function readingOnly() {
+			return !!med && !!med.copper && !!plan && plan.state === 'nothing' && !present(f.amount);
+		}
+
+		/* Run the sum again and show it; the amount follows it until somebody types one. */
+		function update() {
+			plan = med ? doseMath.plan(med, { gallons: water.gallons, rate: f.rate, rateLabel: f.rateLabel, now: f.now, target: f.target, topup: !!f.topup, changed: f.changed, changedUnit: f.changedUnit }, doseWords()) : null;
+			result.set(plan);
+			var ok = !!plan && plan.state === 'ok';
+			if (!f.amountEdited) {
+				f.amount = ok ? String(plan.amount) : '';
+				f.unit = ok ? plan.unit : typedUnit(med);
+				amountInput.value = f.amount;
+				unitSelect.value = f.unit;
+			}
+			var differs = ok && f.amountEdited && (Number(f.amount) !== plan.amount || f.unit !== plan.unit);
+			useChip.hidden = !differs;
+			if (differs) {
+				useChip.textContent = fmt(t('useResult', 'Use the result: %s'), doseMath.amountText(plan.amount, plan.unit));
+			}
+			var reads = !!med && !!med.copper && !!plan && ['ok', 'nothing', 'no_gallons'].indexOf(plan.state) !== -1;
+			readingNote.hidden = !reads;
+			if (reads) {
+				// At or above the target with no amount typed, the reading is all Save logs.
+				readingNote.textContent = fmt(readingOnly() ? t('onlyReading', 'Save logs the copper reading %s (once) — there is nothing to add.') : t('alsoReading', 'Saving also logs the copper reading %s (once).'), doseMath.levelText(doseMath.level(f.now)));
+			}
+		}
+
+		if (med) {
+			if (med.mode === 'per_gallon') {
+				screen.appendChild(rateField(med, f, start.options, render));
+			} else if (med.mode === 'to_level') {
+				screen.appendChild(levelFields(med, f, {
+					options: start.options,
+					nowHint: !med.copper ? t('nowType', 'type the reading') : (start.nowAt && !f.nowEdited ? fmt(t('nowFrom', 'today\'s reading, %s'), start.nowAt) : (f.nowEdited ? '' : (start.dosed && start.dosed.after ? t('nowAgain', 'dosed since the last reading — type a new one') : t('nowNone', 'no reading today — type it')))),
+					typedHint: ''
+				}, update, render));
+			}
+			screen.appendChild(topupField(f, update, render));
+			screen.appendChild(result.node);
+		}
+
+		screen.appendChild(el('div', { class: 'fh-fd-field' }, [
+			el('label', { class: 'fh-fd-label', for: 'fh-fd-amount', text: t('amount', 'Amount') }),
+			el('div', { class: 'fh-fd-row fh-fd-row--amount' }, [amountInput, unitSelect]),
+			el('div', { class: 'fh-fd-chips' }, [useChip])
+		]));
+		screen.appendChild(readingNote);
 		screen.appendChild(el('p', { class: 'fh-fd-muted', text: t('noUndoDose', 'A dose cannot be undone — note a correction instead.') }));
 		app.appendChild(screen);
+		update();
 
 		bar([
 			button(t('cancel', 'Cancel'), 'fh-fd-btn--quiet', function () { go('tank'); }),
 			button(t('save', 'Save'), 'fh-fd-btn--primary', function () {
-				if (!f.medication) {
+				if (!med) {
 					toast(t('medication', 'Medication') + '?', null, true);
 					return;
 				}
-				if (!f.amount || !(parseFloat(f.amount) > 0)) {
-					toast(t('amount', 'Amount') + '?', null, true);
+				if (!readingOnly() && (!f.amount || !(parseFloat(f.amount) > 0))) {
+					toast(plan && plan.state !== 'ok' && plan.line ? plan.line : t('amount', 'Amount') + '?', null, true);
 					return;
 				}
-				act({ act: 'dose', tank: tk.number, medication: f.medication, amount: f.amount, unit: f.unit, whole: f.whole ? 1 : 0, via: 'qr' });
+				var fields = doseFields(med, f, plan);
+				fields.act = 'dose';
+				fields.tank = tk.number;
+				fields.via = 'qr';
+				// What this sheet knew of: the server refuses when that medication went into this water since.
+				fields.seen = start.dosed && start.dosed.logged_at ? start.dosed.logged_at : '';
+				if (fields.calc && sureOf(fields.target)) {
+					fields.sure = 1;
+				}
+				act(fields);
 			})
+		]);
+	}
+
+	/*
+	 * Calculator: a medication and any number of gallons — a bucket, a
+	 * tub, a tank that is not set up — give the same result and working as
+	 * the Dose sheet. Nothing is saved; it works without a tank too.
+	 */
+	function renderCalc() {
+		var tk = tank();
+		var f = state.form;
+		if (typeof f.gallons === 'undefined') {
+			f.gallons = '';
+		}
+		var med = medByKey(f.medication);
+		if (med && med.mode === 'per_gallon' && typeof f.rate === 'undefined') {
+			f.rate = med.rate;
+			f.rateLabel = '';
+		}
+		if (med && med.mode === 'to_level') {
+			if (typeof f.now === 'undefined') {
+				f.now = '';
+			}
+			if (typeof f.target === 'undefined') {
+				f.target = med.copper && present(settings().copperTarget) ? String(settings().copperTarget) : '';
+			}
+		}
+
+		app.appendChild(header(t('calculator', 'Calculator'), [t('calcHint', 'Any water — a bucket, a tub, a tank that is not set up. Nothing is saved.')]));
+		var screen = el('div', { class: 'fh-fd-screen' });
+
+		screen.appendChild(medField(f.medication, function (m) {
+			state.form = { medication: m.key, gallons: f.gallons };
+			render();
+		}));
+
+		var result = resultBox();
+		function update() {
+			var plan = med ? doseMath.plan(med, { gallons: f.gallons, rate: f.rate, rateLabel: f.rateLabel, now: f.now, target: f.target }, doseWords()) : null;
+			if (plan && plan.state === 'no_gallons') {
+				plan.line = t('gallonsAsk', 'Type the gallons.');
+			}
+			result.set(plan);
+		}
+
+		var gallonsInput = el('input', {
+			id: 'fh-fd-gallons', class: 'fh-fd-input fh-fd-input--big', type: 'number', inputmode: 'decimal', step: 'any', min: '0', placeholder: '?', value: f.gallons,
+			on: { input: function (e) { f.gallons = e.target.value; update(); } }
+		});
+		function quick(label, gallons) {
+			return el('button', { type: 'button', class: 'fh-fd-chip fh-fd-chip--ghost', text: label, on: { click: function () { f.gallons = String(gallons); gallonsInput.value = f.gallons; update(); } } });
+		}
+		var chips = [];
+		if (tk) {
+			var systemGallons = Number(waterOf(true).gallons) || 0;
+			var tankGallons = Number(waterOf(false).gallons) || 0;
+			if (systemGallons > 0) {
+				chips.push(quick(fmt(t('systemChip', 'System · %s gal'), doseMath.num(systemGallons, 2)), systemGallons));
+			}
+			if (tankGallons > 0) {
+				chips.push(quick(fmt(t('tankChip', 'Tank %1$d · %2$s gal'), tk.number, doseMath.num(tankGallons, 2)), tankGallons));
+			}
+		}
+		screen.appendChild(el('div', { class: 'fh-fd-field' }, [
+			el('label', { class: 'fh-fd-label', for: 'fh-fd-gallons', text: t('gallons', 'Gallons') }),
+			gallonsInput,
+			chips.length ? el('div', { class: 'fh-fd-chips' }, chips) : null
+		]));
+
+		if (med) {
+			if (med.mode === 'per_gallon') {
+				screen.appendChild(rateField(med, f, [], render));
+			} else if (med.mode === 'to_level') {
+				screen.appendChild(levelFields(med, f, { options: [], nowHint: t('nowType', 'type the reading'), typedHint: t('nowType', 'type the reading') }, update, render));
+			}
+			screen.appendChild(result.node);
+		}
+		app.appendChild(screen);
+		update();
+
+		bar([
+			button(t('back', 'Back'), 'fh-fd-btn--quiet', function () { go('tank'); }),
+			tk ? button(t('dose', 'Dose') + ' …', 'fh-fd-btn--primary', function () { go('dose'); }) : null
 		]);
 	}
 
@@ -1592,10 +2158,15 @@
 		}
 	}
 
-	function parsePhrase(text) {
+	/* doseTank: the tank picked on the page for a dose phrase whose spoken tank is not in the layout. */
+	function parsePhrase(text, doseTank) {
 		state.voice = { heard: text, parsing: true };
 		render();
-		post('fishotel_cleanroom_parse', { text: text, tank: tank().number }).then(function (data) {
+		var fields = { text: text, tank: tank().number };
+		if (doseTank) {
+			fields.dose_tank = doseTank;
+		}
+		post('fishotel_cleanroom_parse', fields).then(function (data) {
 			state.voice = { heard: text, preview: data.preview };
 			render();
 		}).catch(function (err) {
@@ -1661,9 +2232,120 @@
 		state.voice = null;
 	}
 
+	/*
+	 * A dose phrase's preview: the result line with its working, the water
+	 * it goes into, and — when a level was neither said nor known — a field
+	 * for it, after which the sum runs here. Never auto-confirmed: a dose
+	 * has no undo. Confirm posts what the Dose sheet's Save posts.
+	 */
+	function renderDosePreview(box, v) {
+		var p = v.preview;
+		var d = p.dose || {};
+		var needs = p.needs || [];
+		var med = medByKey(d.medication);
+		var plan = d.plan || null;
+		box.appendChild(el('p', { class: 'fh-fd-voice__heard', text: t('heard', 'Heard') + ': ' + normalizeNumberWords(v.heard, knownTankNumbers()) }));
+
+		if (!plan || needs.indexOf('tank') !== -1) {
+			// Which water? Pick a tank and the server works the dose out for it.
+			box.appendChild(el('p', { class: 'fh-fd-voice__sentence', text: previewSentence(p) }));
+			box.appendChild(el('h3', { text: t('pickTank', 'Pick a tank') }));
+			var host = el('div');
+			box.appendChild(host);
+			renderGrid(host, function (dest) { parsePhrase(v.heard, dest.number); }, 0);
+		} else {
+			box.appendChild(el('p', { class: 'fh-fd-voice__sentence', text: plan.line || previewSentence(p) }));
+			box.appendChild(el('p', { class: 'fh-fd-muted', text: String(d.place || '') + (Number(d.gallons) > 0 ? ' · ' + doseMath.gallonsText(Number(d.gallons), doseWords()) : '') }));
+			if (plan.working) {
+				box.appendChild(el('p', { class: 'fh-fd-result__work', text: plan.working }));
+			}
+			if (plan.measure) {
+				box.appendChild(el('p', { class: 'fh-fd-result__work', text: plan.measure }));
+			}
+			if (d.now_at && present(d.now)) {
+				box.appendChild(el('p', { class: 'fh-fd-muted', text: t('nowLabel', 'Now') + ' ' + doseMath.levelText(Number(d.now)) + ' · ' + fmt(t('nowFrom', 'today\'s reading, %s'), d.now_at) }));
+			}
+			if (d.dosed) {
+				box.appendChild(dosedNote(d.dosed));
+			}
+			var missing = needs.indexOf('now') !== -1 ? 'now' : (needs.indexOf('target') !== -1 ? 'target' : '');
+			if (missing && med) {
+				var vf = state.form;
+				var label = missing === 'now' ? t('nowLabel', 'Now') : t('targetLabel', 'Bring it to');
+				box.appendChild(el('div', { class: 'fh-fd-row' }, [
+					el('input', { class: 'fh-fd-input', type: 'number', inputmode: 'decimal', step: '0.01', min: '0', max: '999', placeholder: label, 'aria-label': label, on: { input: function (e) { vf.level = e.target.value; } } }),
+					button(t('go', 'Go'), 'fh-fd-btn--primary', function () {
+						var value = doseMath.level(vf.level);
+						if (value === null) {
+							return;
+						}
+						d[missing] = value;
+						if (missing === 'now') {
+							d.now_at = '';
+						}
+						d.plan = doseMath.plan(med, { gallons: d.gallons, now: d.now, target: d.target }, doseWords());
+						p.needs = needs.filter(function (n) { return n !== 'now' && n !== 'target'; });
+						if (d.plan.state === 'needs_now') {
+							p.needs.push('now');
+						} else if (d.plan.state === 'needs_target') {
+							p.needs.push('target');
+						}
+						state.form = {};
+						render();
+					})
+				]));
+			}
+			box.appendChild(el('p', { class: 'fh-fd-muted', text: t('noUndoDose', 'A dose cannot be undone — note a correction instead.') }));
+		}
+
+		var ready = !!d.plan && (d.plan.state === 'ok' || d.plan.state === 'spoken') && !(p.needs || []).length;
+		var buttons = [button(t('cancel', 'Cancel'), 'fh-fd-btn--quiet', function () { clearTimers(); state.voice = { heard: v.heard }; render(); })];
+		if (plan && med && (p.tank || tank().number) === tank().number) {
+			buttons.push(button(t('openDose', 'Open the Dose sheet'), '', function () { openDoseFromPreview(p); }));
+		}
+		buttons.push(button(t('confirmNow', 'Confirm now'), 'fh-fd-btn--primary', function () { confirmPreview(); }, !ready));
+		box.appendChild(el('div', { class: 'fh-fd-spacer' }));
+		box.appendChild(el('div', { class: 'fh-fd-row' }, buttons));
+	}
+
+	/* The Dose sheet with what a dose phrase said already filled in. */
+	function openDoseFromPreview(p) {
+		var d = p.dose || {};
+		var plan = d.plan || {};
+		var form = { medication: d.medication, whole: !!d.whole };
+		if (plan.state === 'spoken') {
+			form.amount = String(plan.amount);
+			form.unit = plan.unit;
+			form.amountEdited = true;
+		}
+		if (present(d.now)) {
+			form.now = String(d.now);
+			form.nowEdited = true;
+		}
+		if (present(d.target)) {
+			form.target = String(d.target);
+			form.targetEdited = true;
+		}
+		if (present(d.rate)) {
+			form.rate = d.rate;
+			form.rateLabel = d.rate_label || '';
+			form.rateChosen = true;
+		}
+		stopVoice();
+		dismissToast();
+		state.view = 'dose';
+		state.pending = null;
+		state.form = form;
+		render();
+	}
+
 	function renderPreview(box, v) {
 		var p = v.preview;
 		var needs = p.needs || [];
+		if (p.intent === 'dose') {
+			renderDosePreview(box, v);
+			return;
+		}
 		box.appendChild(el('p', { class: 'fh-fd-voice__heard', text: t('heard', 'Heard') + ': ' + normalizeNumberWords(v.heard, knownTankNumbers()) }));
 		box.appendChild(el('p', { class: 'fh-fd-voice__sentence', text: previewSentence(p) }));
 
@@ -1885,6 +2567,36 @@
 			case 'copper':
 				fields.act = 'copper';
 				fields.value = p.value;
+				break;
+			case 'dose':
+				var d = p.dose || {};
+				var plan = d.plan || {};
+				if (plan.state !== 'ok' && plan.state !== 'spoken') {
+					toast(plan.line || t('amount', 'Amount') + '?', null, true);
+					return;
+				}
+				fields.act = 'dose';
+				fields.medication = d.medication;
+				fields.amount = plan.amount;
+				fields.unit = plan.unit;
+				fields.whole = d.whole ? 1 : 0;
+				fields.seen = d.dosed && d.dosed.logged_at ? d.dosed.logged_at : '';
+				if (plan.state === 'ok') {
+					// The sum stood behind it: the server writes the working (and the copper reading).
+					fields.calc = 1;
+					if (d.mode === 'to_level') {
+						fields.now = d.now;
+						fields.target = d.target;
+						if (sureOf(d.target)) {
+							fields.sure = 1;
+						}
+					} else {
+						fields.rate = d.rate;
+						if (d.rate_label) {
+							fields.dose_label = d.rate_label;
+						}
+					}
+				}
 				break;
 			default:
 				toast(t('error', 'Something went wrong.'), null, true);

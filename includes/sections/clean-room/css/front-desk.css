@@ -905,3 +905,115 @@ button.fh-fd-occ:active {
 	min-height: 84px;
 	text-align: center;
 }
+
+/* ------------------------------------------------------------------ */
+/*  Dose sheet and Calculator: the sum                                 */
+/* ------------------------------------------------------------------ */
+
+/* The result of the sum: the line large, its working small under it. */
+.fh-fd-result {
+	margin: 0 0 14px;
+	padding: 14px 16px;
+	border: 1px solid var(--fd-border);
+	border-left: 4px solid var(--fd-muted);
+	border-radius: var(--fd-radius);
+	background: var(--fd-card);
+}
+
+.fh-fd-result.is-ok {
+	border-left-color: var(--fd-ok);
+}
+
+.fh-fd-result.is-nothing {
+	border-left-color: var(--fd-accent);
+}
+
+.fh-fd-result.is-too_much {
+	border-left-color: var(--fd-danger);
+}
+
+.fh-fd-result__line {
+	margin: 0;
+	font-size: 24px;
+	font-weight: 800;
+	line-height: 1.25;
+	overflow-wrap: anywhere;
+}
+
+.fh-fd-result:not(.is-ok):not(.is-nothing) .fh-fd-result__line {
+	font-size: 18px;
+	font-weight: 600;
+	color: var(--fd-muted);
+}
+
+.fh-fd-result__work {
+	margin: 6px 0 0;
+	font-size: 15px;
+	color: var(--fd-muted);
+	overflow-wrap: anywhere;
+}
+
+/* "Now" and "Bring it to" side by side, each under its label. */
+.fh-fd-row--levels {
+	align-items: flex-start;
+	margin: 0 0 8px;
+}
+
+.fh-fd-row--levels .fh-fd-muted {
+	margin: 4px 0 0;
+}
+
+.fh-fd-input--level {
+	font-size: 30px;
+	font-weight: 800;
+	min-height: 72px;
+	text-align: center;
+}
+
+/* "I changed [ 25 ] [%] [gal]" — the words and the two unit chips keep their width, the number takes the rest. */
+.fh-fd-row--topup {
+	align-items: center;
+	margin: 8px 0 0;
+}
+
+.fh-fd-row--topup > * {
+	flex: 0 0 auto;
+}
+
+.fh-fd-row--topup > .fh-fd-input {
+	flex: 1 1 0;
+	min-width: 0;
+	font-size: 24px;
+	font-weight: 700;
+	text-align: center;
+}
+
+.fh-fd-topup__words {
+	font-size: 16px;
+	font-weight: 600;
+}
+
+/* A rate that a schedule step due today names. */
+.fh-fd-chip--due {
+	border-color: var(--fd-warn);
+}
+
+/* The dose preview of a spoken phrase keeps its working readable on the card. */
+.fh-fd-voice .fh-fd-result__work {
+	margin: 0 0 10px;
+}
+
+/* "Already logged today: …" on the Dose sheet and a dose preview. */
+.fh-fd-dosed {
+	margin: 0 0 14px;
+	padding: 10px 14px;
+	border: 1px solid var(--fd-border);
+	border-left: 4px solid var(--fd-warn);
+	border-radius: var(--fd-radius);
+	font-size: 15px;
+	color: var(--fd-text);
+}
+
+.fh-fd-dosed.is-after {
+	border-left-color: var(--fd-danger);
+}

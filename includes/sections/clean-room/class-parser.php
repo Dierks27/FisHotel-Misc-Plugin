@@ -10,6 +10,16 @@
  *   "clear the cardinals"                    → clear, occupant
  *   "note water change done"                 → note
  *   "count five clowns"                      → count, 5
+ *   "copper 2.16 to 2.4"                     → dose, the copper product, now 2.16, target 2.4
+ *   "metro for the system" / "prazi this tank" → dose, that medication, that water
+ *
+ * A DOSE phrase (dose_phrase()) is one that names exactly one medication
+ * of the list and otherwise holds only dose words — a dose verb, a water
+ * ("the system", "this tank", "the 100 gallon system"), levels, an amount
+ * with its unit, a tank. Anything else in it and the phrase is read as
+ * it always was; so is a copper reading ("521 copper 2.16", "copper 2.4",
+ * "copper to 2.4" without a raise verb). The sum is not the parser's: the
+ * Front Desk fills the preview in (Dose::enrich()).
  *
  * Number words become integers ('four', 'a couple' = 2, 'a dozen' = 12,
  * digits). Tank references: 'tank 121', 'one twenty one', 'five
@@ -32,7 +42,35 @@ defined( 'ABSPATH' ) || exit;
  */
 class Parser {
 
-	const INTENTS = array( 'arrival', 'move', 'loss', 'sold', 'clear', 'count', 'copper', 'note' );
+	const INTENTS = array( 'arrival', 'move', 'loss', 'sold', 'clear', 'count', 'copper', 'note', 'dose' );
+
+	/**
+	 * The words of a dose phrase: the verbs that say "a dose", the ones
+	 * that say "to a level", and the units an amount is spoken in.
+	 */
+	const DOSE_VERBS  = array( 'dose', 'dosed', 'dosing', 'doses', 'add', 'added', 'adding', 'treat', 'treated', 'treating' );
+	const RAISE_VERBS = array( 'raise', 'raised', 'raising', 'bring', 'bringing', 'brought', 'bump', 'bumped', 'bumping', 'increase', 'increased', 'increasing' );
+	const DOSE_UNITS  = array(
+		'mg'          => 'mg',
+		'milligram'   => 'mg',
+		'milligrams'  => 'mg',
+		'g'           => 'g',
+		'gram'        => 'g',
+		'grams'       => 'g',
+		'ml'          => 'ml',
+		'mil'         => 'ml',
+		'mils'        => 'ml',
+		'milliliter'  => 'ml',
+		'milliliters' => 'ml',
+		'millilitre'  => 'ml',
+		'millilitres' => 'ml',
+		'cc'          => 'ml',
+		'tsp'         => 'tsp',
+		'teaspoon'    => 'tsp',
+		'teaspoons'   => 'tsp',
+		'drop'        => 'drops',
+		'drops'       => 'drops',
+	);
 
 	/**
 	 * Verb families. Order = precedence (note is checked by position,
@@ -98,6 +136,14 @@ class Parser {
 
 	const SIZE_WORDS = array( 'small', 'medium', 'med', 'large', 'lg', 'sm', 'md', 'xl', 'xs', 'tiny', 'big', 'little', 'juvenile', 'juv', 'adult', 'baby', 'jumbo', 'mini' );
 
+	/**
+	 * Words that say nothing in a dose phrase only ("I need to bring my
+	 * copper up …") — every other phrase reads them as it always did.
+	 *
+	 * @var string[]
+	 */
+	const DOSE_FILLERS = array( 'need', 'needs', 'want', 'wants' );
+
 	const FILLER_WORDS = array( 'the', 'a', 'an', 'some', 'of', 'x', 'times', 'please', 'in', 'into', 'to', 'from', 'at', 'on', 'and', 'with', 'for', 'them', 'these', 'those', 'it', 'this', 'that', 'are', 'is', 'were', 'was', 'there', 'i', 'we', 'just', 'got', 'have', 'has', 'had', 'been', 'up', 'down', 'over', 'here', 'now', 'today', 'tank', 'tanks', 'building', 'more', 'also', 'my', 'our', 'so', 'then', 'okay', 'ok', 'um', 'uh', 'all', 'everything', 'everyone', 'everybody', 'each', 'every', 'fishes', 'row', 'shelf', 'tier' );
 
 	/**
@@ -152,8 +198,14 @@ class Parser {
 	 * @param array  $context tank (int|null, the page's tank number),
 	 *                        tanks (array[] number, building, level, position, status),
 	 *                        species (array[] product_id, name, variants[] {text, kind}),
-	 *                        occupants (array[] stay_id, species, product_id, qty_live).
-	 * @return array See the class doc.
+	 *                        occupants (array[] stay_id, species, product_id, qty_live),
+	 *                        medications (array[] the medications offered — Medications; the
+	 *                        seed when not given),
+	 *                        systems (array[] building, gallons, tank — each building's water
+	 *                        volume and one of its tanks, for "the 100 gallon system").
+	 * @return array See the class doc. `dose` is null unless the intent is 'dose': then medication
+	 *               (key), label, mode, level_unit, scope ('system' | 'tank' | '' = not spoken), now,
+	 *               target, amount, unit (a dose spoken with its amount), dose_label (a named dose).
 	 */
 	public static function parse( $text, array $context = array() ) {
 		$original = trim( (string) $text );
@@ -162,6 +214,8 @@ class Parser {
 		$page     = isset( $context['tank'] ) && is_numeric( $context['tank'] ) ? (int) $context['tank'] : null;
 		$species  = isset( $context['species'] ) && is_array( $context['species'] ) ? array_values( $context['species'] ) : array();
 		$occupants = isset( $context['occupants'] ) && is_array( $context['occupants'] ) ? array_values( $context['occupants'] ) : array();
+		$medications = isset( $context['medications'] ) && is_array( $context['medications'] ) ? array_values( $context['medications'] ) : array_values( Medications::active( Medications::seed() ) );
+		$systems   = isset( $context['systems'] ) && is_array( $context['systems'] ) ? array_values( $context['systems'] ) : array();
 
 		$result = array(
 			'intent'      => 'arrival',
@@ -188,12 +242,56 @@ class Parser {
 			'needs'       => array(),
 			'summary'     => '',
 			'text'        => $original,
+			'dose'        => null,
 		);
 
 		if ( ! $tokens ) {
 			$result['intent'] = 'unknown';
 			$result['needs'][] = 'text';
 			$result['summary'] = 'Say what happened, for example "lost one cardinal in 521".';
+			return $result;
+		}
+
+		// 0. A dose phrase: one medication and nothing but dose words.
+		$dose = self::dose_phrase( $tokens, $medications, $tanks, $page );
+		if ( null !== $dose ) {
+			$result['intent']                = 'dose';
+			$result['dose']                  = $dose['dose'];
+			$result['species']['confidence'] = 1.0;
+			if ( null !== $dose['tank'] ) {
+				$result['tank']        = $dose['tank'];
+				$result['tank_spoken'] = true;
+				$result['tank_known']  = self::tank_known( $dose['tank'], $tanks );
+			}
+			if ( null !== $dose['gallons'] ) {
+				// "the 100 gallon system": the building that holds that much — the page's own first.
+				$result['dose']['scope'] = 'system';
+				$matches                 = array();
+				foreach ( $systems as $system ) {
+					if ( is_array( $system ) && abs( (float) ( $system['gallons'] ?? 0 ) - $dose['gallons'] ) < 0.5 ) {
+						$matches[] = $system;
+					}
+				}
+				$own = null;
+				foreach ( $matches as $system ) {
+					if ( null !== $result['tank'] && (int) ( $system['building'] ?? 0 ) === self::building_of( $result['tank'] ) ) {
+						$own = $system;
+					}
+				}
+				if ( ! $own && 1 === count( $matches ) && null === $dose['tank'] ) {
+					$result['tank']        = (int) $matches[0]['tank'];
+					$result['tank_spoken'] = true;
+					$result['tank_known']  = self::tank_known( $result['tank'], $tanks );
+				} elseif ( ! $own && $systems ) {
+					$result['needs'][] = 'tank'; // No system of that size here, two of them, or not the spoken tank's.
+				}
+			}
+			$result['tank_area'] = self::tank_area( $result['tank'], $tanks );
+			if ( null === $result['tank'] || ! $result['tank_known'] ) {
+				$result['needs'][] = 'tank';
+			}
+			$result['needs']   = array_values( array_unique( $result['needs'] ) );
+			$result['summary'] = self::summary( $result );
 			return $result;
 		}
 
@@ -782,6 +880,316 @@ class Parser {
 		$text = trim( (string) $original );
 		$text = preg_replace( '/^\s*(note|notes|memo)\b\s*[:,\-–]?\s*/iu', '', $text );
 		return trim( (string) $text );
+	}
+
+	/* ============================================================== */
+	/*  Dose phrases                                                   */
+	/* ============================================================== */
+
+	/**
+	 * A dose phrase, or null when the phrase is not one (and is then read
+	 * as it always was).
+	 *
+	 * It names exactly ONE medication (by any of its names, whole words)
+	 * and every other word is a dose word: a dose verb (dose, dosed, add,
+	 * treat …), a raise verb (raise, bring, bump, top up …), a water ("the
+	 * system", "whole", "this tank", "only", "the 100 gallon system"), one
+	 * of the medication's named doses ("loading"), a number, a unit, a
+	 * tank reference or a filler word ("I need to bring my copper up from
+	 * 2.16 to 2.4 in the 100 gallon system"). Then:
+	 *   - an amount with its unit ("metro 5 g", "copper power 55 ml") is a
+	 *     dose spoken with its amount — logged as said, no sum;
+	 *   - a medication dosed to a level: two levels joined by "to" ("copper
+	 *     2.16 to 2.4", "bring copper from 2.16 to 2.4") are now and target;
+	 *     one level after "to" with a raise or dose verb ("raise copper to
+	 *     2.4") is the target, and "… to 2.4 from 2.16" names the target
+	 *     first; none, with a verb or a water, leaves both to
+	 *     the room ("dose copper"). A bare name, a single number without
+	 *     such a verb, or "copper to 2.4" stay what they were — a copper
+	 *     reading;
+	 *   - any other medication: its name alone, or with a verb or a water
+	 *     ("dose metro", "metro for the system", "prazi this tank"); a
+	 *     number without a unit is not understood as a dose.
+	 *
+	 * @param string[] $tokens      Tokens.
+	 * @param array[]  $medications The medications offered.
+	 * @param array[]  $tanks       Tank list.
+	 * @param int|null $page        The page's tank number.
+	 * @return array{dose: array, tank: int|null, gallons: float|null}|null
+	 */
+	public static function dose_phrase( array $tokens, array $medications, array $tanks, $page ) {
+		$n = count( $tokens );
+		if ( 0 === $n || in_array( $tokens[0], array( 'note', 'notes', 'memo' ), true ) ) {
+			return null;
+		}
+
+		// 1. The medication: one of its names as whole words, the longest at each place.
+		$names = array();
+		foreach ( $medications as $medication ) {
+			if ( ! is_array( $medication ) || ! isset( $medication['key'] ) ) {
+				continue;
+			}
+			foreach ( Medications::names( $medication ) as $name ) {
+				$words = self::tokenize( $name );
+				if ( $words ) {
+					$names[] = array( $words, (string) $medication['key'] );
+				}
+			}
+		}
+		$role  = array_fill( 0, $n, '' );
+		$found = array();
+		$i     = 0;
+		while ( $i < $n ) {
+			$best = 0;
+			$key  = '';
+			foreach ( $names as $entry ) {
+				$len = count( $entry[0] );
+				if ( $len > $best && array_slice( $tokens, $i, $len ) === $entry[0] ) {
+					$best = $len;
+					$key  = $entry[1];
+				}
+			}
+			if ( $best > 0 ) {
+				for ( $j = $i; $j < $i + $best; $j++ ) {
+					$role[ $j ] = 'med';
+				}
+				$found[ $key ] = true;
+				$i            += $best;
+				continue;
+			}
+			$i++;
+		}
+		if ( 1 !== count( $found ) ) {
+			return null;
+		}
+		$key        = (string) array_key_first( $found );
+		$medication = null;
+		foreach ( $medications as $candidate ) {
+			if ( is_array( $candidate ) && (string) ( $candidate['key'] ?? '' ) === $key ) {
+				$medication = $candidate;
+				break;
+			}
+		}
+		if ( ! $medication ) {
+			return null;
+		}
+		$mode       = (string) ( $medication['mode'] ?? 'typed' );
+		$level_unit = strtolower( (string) ( $medication['level_unit'] ?? '' ) );
+
+		// One of its named doses ("loading", "top up").
+		$dose_label = '';
+		foreach ( isset( $medication['doses'] ) && is_array( $medication['doses'] ) ? $medication['doses'] : array() as $named ) {
+			$words = self::tokenize( (string) ( $named['label'] ?? '' ) );
+			$len   = count( $words );
+			for ( $i = 0; $len > 0 && $i + $len <= $n; $i++ ) {
+				if ( array_slice( $tokens, $i, $len ) === $words && array_slice( $role, $i, $len ) === array_fill( 0, $len, '' ) ) {
+					for ( $j = $i; $j < $i + $len; $j++ ) {
+						$role[ $j ] = 'named';
+					}
+					$dose_label = (string) $named['label'];
+					break 2;
+				}
+			}
+		}
+
+		// "top up" / "top off" raise a level too — as a pair, for "top" alone is a
+		// row of tanks ("top left"), and "Top-up" may be one of its named doses (above).
+		$raise = false;
+		for ( $i = 0; $i + 1 < $n; $i++ ) {
+			if ( '' === $role[ $i ] && '' === $role[ $i + 1 ] && in_array( $tokens[ $i ], array( 'top', 'topping', 'topped' ), true ) && in_array( $tokens[ $i + 1 ], array( 'up', 'off' ), true ) ) {
+				$role[ $i ]     = 'raise';
+				$role[ $i + 1 ] = 'raise';
+				$raise          = true;
+			}
+		}
+
+		// 2. The numbers: an amount (with a unit word), the gallons of a system, a
+		// level (a plain number) — or a tank number, which is left for step 3.
+		$values  = array();
+		$gallons = null;
+		$i       = 0;
+		while ( $i < $n ) {
+			if ( '' !== $role[ $i ] ) {
+				$i++;
+				continue;
+			}
+			$token = $tokens[ $i ];
+			$value = null;
+			$used  = array();
+			$unit  = '';
+
+			if ( 1 === preg_match( '/^(\d+(?:\.\d+)?)(mg|g|ml|tsp|cc)$/', $token, $m ) ) {
+				$value = (float) $m[1]; // "5g", "55ml".
+				$used  = array( $i );
+				$unit  = self::DOSE_UNITS[ $m[2] ];
+			} elseif ( self::is_decimal_token( $token ) ) {
+				$value = (float) $token;
+				$used  = array( $i );
+			} elseif ( self::is_number_token( $token ) ) {
+				if ( $i + 2 < $n && 'point' === $tokens[ $i + 1 ] && self::is_number_token( $tokens[ $i + 2 ] ) && self::token_value( $tokens[ $i + 2 ] ) <= 9 ) {
+					$frac = ''; // "two point four".
+					$j    = $i + 2;
+					while ( $j < $n && self::is_number_token( $tokens[ $j ] ) && self::token_value( $tokens[ $j ] ) <= 9 ) {
+						$frac .= (string) self::token_value( $tokens[ $j ] );
+						$j++;
+					}
+					$value = (float) ( self::token_value( $token ) . '.' . $frac );
+					$used  = range( $i, $j - 1 );
+				} else {
+					$run    = self::number_run( $tokens, $i );
+					$after  = max( $run ) + 1;
+					$next   = $after < $n ? $tokens[ $after ] : '';
+					$plain  = 1 === count( $run ) ? self::token_value( $token ) : self::english_value( self::values( $tokens, $run ) );
+					$a_unit = isset( self::DOSE_UNITS[ $next ] ) || ( '' !== $level_unit && $next === $level_unit );
+					if ( in_array( $next, array( 'gallon', 'gallons', 'gal' ), true ) && null !== $plain && null === $gallons ) {
+						$gallons = (float) $plain; // "the 100 gallon system".
+						foreach ( array_merge( $run, array( $after ) ) as $j ) {
+							$role[ $j ] = 'gallons';
+						}
+						$i = $after + 1;
+						continue;
+					}
+					if ( ! $a_unit ) {
+						// A tank number: after "tank", after "in" / "into" when it has the shape of one
+						// (known or not — an unknown one is asked about), or a known one standing alone.
+						$prev   = $i > 0 ? $tokens[ $i - 1 ] : '';
+						$number = self::tank_value( self::pick( $tokens, $run ) );
+						$named  = 'tank' === $prev || 'tanks' === $prev || ( null !== $number && in_array( $prev, array( 'in', 'into' ), true ) );
+						if ( $named || ( null !== $number && self::tank_known( $number, $tanks ) && ( count( $run ) >= 2 || strlen( (string) $token ) >= 3 ) ) ) {
+							$i = $after;
+							continue;
+						}
+					}
+					if ( null === $plain ) {
+						return null; // "four six" is not a number.
+					}
+					$value = (float) $plain;
+					$used  = $run;
+				}
+			}
+
+			if ( null === $value ) {
+				$i++;
+				continue;
+			}
+			$after = max( $used ) + 1;
+			if ( '' === $unit && $after < $n && '' === $role[ $after ] ) {
+				if ( isset( self::DOSE_UNITS[ $tokens[ $after ] ] ) ) {
+					$unit   = self::DOSE_UNITS[ $tokens[ $after ] ];
+					$used[] = $after;
+				} elseif ( '' !== $level_unit && $tokens[ $after ] === $level_unit ) {
+					$unit   = 'level';
+					$used[] = $after;
+				}
+			}
+			foreach ( $used as $j ) {
+				$role[ $j ] = 'number';
+			}
+			$values[] = array(
+				'pos'   => min( $used ),
+				'value' => $value,
+				'unit'  => $unit,
+			);
+			$i        = max( $used ) + 1;
+		}
+
+		// 3. Tank references, among the words that are left.
+		$masked   = $tokens;
+		$consumed = array_fill( 0, $n, false );
+		$system   = null !== $gallons;
+		foreach ( $role as $j => $what ) {
+			if ( '' !== $what ) {
+				$masked[ $j ]   = '#';
+				$consumed[ $j ] = true;
+			} elseif ( 'building' === $tokens[ $j ] && ( $j + 1 >= $n || ! self::is_number_token( $tokens[ $j + 1 ] ) ) ) {
+				$system = true; // "for the building": its whole system.
+			}
+		}
+		$refs = self::scan_references( $masked, $consumed, $tanks, $page, 'dose' );
+
+		// 4. Every other word has to be a dose word.
+		$verb  = false;
+		$alone = false;
+		foreach ( $tokens as $j => $token ) {
+			if ( $consumed[ $j ] ) {
+				continue;
+			}
+			if ( in_array( $token, self::DOSE_VERBS, true ) ) {
+				$verb = true;
+			} elseif ( in_array( $token, self::RAISE_VERBS, true ) ) {
+				$raise = true;
+			} elseif ( in_array( $token, array( 'system', 'whole', 'entire' ), true ) ) {
+				$system = true;
+			} elseif ( in_array( $token, array( 'only', 'alone' ), true ) || ( 'this' === $token && $j + 1 < $n && 'tank' === $tokens[ $j + 1 ] ) ) {
+				$alone = true;
+			} elseif ( ! in_array( $token, self::FILLER_WORDS, true ) && ! in_array( $token, self::DOSE_FILLERS, true ) ) {
+				return null;
+			}
+		}
+
+		// 5. What it says.
+		$levels  = array();
+		$amounts = array();
+		foreach ( $values as $entry ) {
+			if ( '' === $entry['unit'] || 'level' === $entry['unit'] ) {
+				$levels[] = $entry;
+			} else {
+				$amounts[] = $entry;
+			}
+		}
+		$out = array(
+			'medication' => $key,
+			'label'      => (string) ( $medication['label'] ?? '' ),
+			'mode'       => $mode,
+			'level_unit' => (string) ( $medication['level_unit'] ?? '' ),
+			'scope'      => $alone ? 'tank' : ( $system ? 'system' : '' ),
+			'now'        => null,
+			'target'     => null,
+			'amount'     => null,
+			'unit'       => '',
+			'dose_label' => $dose_label,
+		);
+		$before = static function ( array $entry ) use ( $tokens ) {
+			return $entry['pos'] > 0 ? $tokens[ $entry['pos'] - 1 ] : '';
+		};
+
+		if ( $amounts ) {
+			if ( 1 !== count( $amounts ) || $levels ) {
+				return null;
+			}
+			$out['amount'] = round( $amounts[0]['value'], 2 );
+			$out['unit']   = $amounts[0]['unit'];
+		} elseif ( 'to_level' === $mode ) {
+			$count = count( $levels );
+			if ( 2 === $count && 'to' === $before( $levels[0] ) && 'from' === $before( $levels[1] ) ) {
+				$out['now']    = $levels[1]['value']; // "raise copper to 2.4 from 2.16": the target first.
+				$out['target'] = $levels[0]['value'];
+			} elseif ( 2 === $count && 'to' === $before( $levels[1] ) ) {
+				$out['now']    = $levels[0]['value'];
+				$out['target'] = $levels[1]['value'];
+			} elseif ( 1 === $count && ( $verb || $raise ) && 'to' === $before( $levels[0] ) ) {
+				$out['target'] = $levels[0]['value'];
+			} elseif ( 1 === $count && ( $verb || $raise ) && 'from' === $before( $levels[0] ) ) {
+				$out['now'] = $levels[0]['value'];
+			} elseif ( 0 !== $count || ! ( $verb || $raise || '' !== $out['scope'] ) ) {
+				return null; // A reading, as it always was.
+			}
+		} elseif ( $levels ) {
+			return null;
+		}
+
+		$tank = null;
+		foreach ( array( 'tank', 'from', 'to' ) as $which ) {
+			if ( null === $tank && null !== $refs[ $which ] ) {
+				$tank = (int) $refs[ $which ];
+			}
+		}
+
+		return array(
+			'dose'    => $out,
+			'tank'    => $tank,
+			'gallons' => $gallons,
+		);
 	}
 
 	/* ============================================================== */
@@ -1506,6 +1914,27 @@ class Parser {
 				return $prefix . 'Count: ' . ( null === $qty ? 'how many? ' : $qty . ' × ' ) . ( $ask ? '' : $name ) . ' in ' . $tank;
 			case 'note':
 				return 'Note on ' . $tank . ': ' . (string) ( $r['note'] ?? '' );
+			case 'dose':
+				$dose = (array) ( $r['dose'] ?? array() );
+				$text = 'Dose: ' . (string) ( $dose['label'] ?? '' );
+				$unit = '' !== (string) ( $dose['level_unit'] ?? '' ) ? ' ' . (string) $dose['level_unit'] : '';
+				if ( isset( $dose['amount'] ) && null !== $dose['amount'] ) {
+					$text .= ' ' . Dose::num( (float) $dose['amount'], 2 ) . ' ' . (string) ( $dose['unit'] ?? '' );
+				} elseif ( isset( $dose['now'], $dose['target'] ) ) {
+					$text .= ', ' . Dose::level_text( (float) $dose['now'] ) . ' → ' . Dose::level_text( (float) $dose['target'] ) . $unit;
+				} elseif ( isset( $dose['target'] ) ) {
+					$text .= ', to ' . Dose::level_text( (float) $dose['target'] ) . $unit;
+				} elseif ( isset( $dose['now'] ) ) {
+					$text .= ', from ' . Dose::level_text( (float) $dose['now'] ) . $unit;
+				} elseif ( '' !== (string) ( $dose['dose_label'] ?? '' ) ) {
+					$text .= ' (' . (string) $dose['dose_label'] . ')';
+				}
+				if ( 'system' === (string) ( $dose['scope'] ?? '' ) ) {
+					$text .= ' · whole system';
+				} elseif ( 'tank' === (string) ( $dose['scope'] ?? '' ) ) {
+					$text .= ' · this tank only';
+				}
+				return $text . ' · ' . $tank;
 			case 'arrival':
 				$where = in_array( 'tank', $needs, true ) ? 'which Spa tank?' : $tank;
 				return $prefix . ( null === $qty && ! $ask ? '1 × ' : '' ) . $what . ' arriving in ' . $where . ' today';

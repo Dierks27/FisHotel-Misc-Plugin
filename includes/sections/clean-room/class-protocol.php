@@ -25,11 +25,15 @@
  * A step is due on day d when d == day, or when it repeats (every > 0)
  * and d >= day, (d − day) % every == 0 and d <= until (when set).
  *
- * Doses: MEDICATIONS names the medications the Front Desk's Dose sheet
- * offers (with the aliases a step label or a log note may use) and
- * DOSE_RATES the amount per gallon a suggestion is computed from. A dose
+ * Doses: the medications are an editable list now (Medications — Settings
+ * → Medications); MEDICATIONS and DOSE_RATES below are the fixed list it
+ * is seeded from, so nothing changes until somebody edits it. The
+ * medication helpers here (medication_key(), medication_label(),
+ * dose_suggestion(), dose_text()) keep their signatures — the Store and
+ * the workbook import call them — and answer from the list in use. A dose
  * logged today whose medication matches a due dose step's label ticks
- * that step, as a copper reading ticks the copper test.
+ * that step, as a copper reading ticks the copper test; the sum behind a
+ * dose is Dose::plan().
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  */
@@ -37,6 +41,12 @@
 namespace FisHotel\Misc\Sections\Clean_Room;
 
 defined( 'ABSPATH' ) || exit;
+
+// The medication list and the dose maths the helpers below answer from:
+// loaded here, so whatever loads the protocol has them (Clean_Room::load()
+// and the tests name this file only).
+require_once __DIR__ . '/class-medications.php';
+require_once __DIR__ . '/class-dose.php';
 
 /**
  * Class Protocol
@@ -73,9 +83,11 @@ class Protocol {
 	const TEMPLATE_NAMES = array( '14 Day CM', '14 Day CF', 'Xtra 14 Day CF', 'CQ', 'Trifecta' );
 
 	/**
-	 * The medications the Dose sheet offers: key => label, short label, the
-	 * unit the amount is usually in, and the aliases a step label or a log
-	 * note may use (matched as whole words, case-insensitively).
+	 * The fixed list the editable one (Medications) is seeded from: key =>
+	 * label, short label, the unit the amount was usually in, and the
+	 * aliases a step label or a log note may use (matched as whole words,
+	 * case-insensitively). Read the list in use through Medications, not
+	 * this constant.
 	 *
 	 * @var array<string, array{label: string, short: string, unit: string, aliases: string[]}>
 	 */
@@ -125,11 +137,12 @@ class Protocol {
 	);
 
 	/**
-	 * Amount per gallon a dose suggestion multiplies the system's gallons
-	 * by (grams or millilitres per gallon, see MEDICATIONS for the unit):
-	 * Metronidazole 25 mg/gal, Praziquantel 9.5 mg/gal, Formalin 1 ml per
-	 * 10 gal, Chloroquine 10 mg/gal, Fenbendazole 1 g per 100 gal. Copper
-	 * has no rate: it is dosed to a test reading.
+	 * The fixed rates the seed's are (Medications::SEED_RATES says the same
+	 * amounts the way the shop does): grams or millilitres per gallon, in
+	 * MEDICATIONS' unit — Metronidazole 25 mg/gal, Praziquantel 9.5 mg/gal,
+	 * Formalin 1 ml per 10 gal, Chloroquine 10 mg/gal, Fenbendazole 1 g per
+	 * 100 gal. Copper is not here: it is dosed to a level (0.692 ml per
+	 * gallon per 1.0 ppm, Medications::COPPER_RATE).
 	 *
 	 * @var array<string, float>
 	 */
@@ -142,11 +155,11 @@ class Protocol {
 	);
 
 	/**
-	 * The units an amount may be typed in.
+	 * The units an amount may be typed in (Medications::UNITS).
 	 *
 	 * @var string[]
 	 */
-	const UNITS = array( 'g', 'ml', 'tsp' );
+	const UNITS = Medications::UNITS;
 
 	/**
 	 * The seed: the workbook's "14 Day CM" schedule, one day later than the
@@ -368,34 +381,17 @@ class Protocol {
 	/* ============================================================== */
 
 	/**
-	 * The medication a label or note names, by alias (whole words, any
+	 * The medication a label or note names, by its names (whole words, any
 	 * case): "Copper Power to 2.0" → copper, "Dosed Metro" → metro,
 	 * "Praziquantel 1" → prazi; the one named FIRST when several are
-	 * ("Metronidazole 5 g — Cu 2.3" is a metro dose, not copper); null when
-	 * none is named.
+	 * ("Metronidazole 5 g — Cu 2.3" is a metro dose, not copper); a retired
+	 * medication is still found; null when none is named.
 	 *
 	 * @param string $text Step label, log note or a typed name.
-	 * @return string|null Key of MEDICATIONS.
+	 * @return string|null Key of the medication (Medications::current()).
 	 */
 	public static function medication_key( $text ) {
-		$text = strtolower( trim( (string) $text ) );
-		if ( '' === $text ) {
-			return null;
-		}
-		if ( isset( self::MEDICATIONS[ $text ] ) ) {
-			return $text;
-		}
-		$found = null;
-		$first = null;
-		foreach ( self::MEDICATIONS as $key => $medication ) {
-			foreach ( $medication['aliases'] as $alias ) {
-				if ( 1 === preg_match( '/(?<![a-z])' . preg_quote( $alias, '/' ) . '(?![a-z])/', $text, $m, PREG_OFFSET_CAPTURE ) && ( null === $first || $m[0][1] < $first ) ) {
-					$first = $m[0][1];
-					$found = $key;
-				}
-			}
-		}
-		return $found;
+		return Medications::key_for( $text, Medications::current() );
 	}
 
 	/**
@@ -405,40 +401,38 @@ class Protocol {
 	 * @return string
 	 */
 	public static function medication_label( $key ) {
-		$key = (string) $key;
-		return isset( self::MEDICATIONS[ $key ] ) ? self::MEDICATIONS[ $key ]['label'] : '';
+		return Medications::label( $key, Medications::current() );
 	}
 
 	/**
-	 * The suggested amount of a medication for a water volume: gallons ×
-	 * the rate, rounded to one decimal (two below 1), in the medication's
-	 * unit. Null for copper (dosed to the test), an unknown medication or
-	 * no volume.
+	 * The amount of a medication dosed per gallon for a water volume, in
+	 * the sensible unit: gallons × the rate, one decimal from 1 up and two
+	 * below, a weight in grams from 0.1 g up and in milligrams below
+	 * (Dose::plan()). Null for a medication dosed to a level (copper) or
+	 * typed, a retired or unknown one, or no volume.
 	 *
 	 * @param string $medication Key.
-	 * @param int    $gallons    System gallons.
+	 * @param float  $gallons    Gallons.
 	 * @return array{amount: float, unit: string}|null
 	 */
 	public static function dose_suggestion( $medication, $gallons ) {
-		$medication = (string) $medication;
-		$gallons    = (float) $gallons;
-		if ( $gallons <= 0 || ! isset( self::DOSE_RATES[ $medication ] ) ) {
+		$row = Medications::get( (string) $medication, Medications::current() );
+		if ( ! $row || ! empty( $row['retired'] ) || 'per_gallon' !== $row['mode'] ) {
 			return null;
 		}
-		$amount = $gallons * self::DOSE_RATES[ $medication ];
-		$amount = round( $amount, $amount >= 1 ? 1 : 2 );
-		if ( $amount <= 0 ) {
+		$plan = Dose::plan( $row, array( 'gallons' => $gallons ) );
+		if ( 'ok' !== $plan['state'] ) {
 			return null;
 		}
 		return array(
-			'amount' => $amount,
-			'unit'   => self::MEDICATIONS[ $medication ]['unit'],
+			'amount' => $plan['amount'],
+			'unit'   => $plan['unit'],
 		);
 	}
 
 	/**
-	 * "Metronidazole 5.1 g" — the note a dose log carries and the toast
-	 * starts with (an unknown medication key is shown as typed).
+	 * "Metronidazole 5.1 g" — what a dose log's note starts with and the
+	 * toast starts with (an unknown medication key is shown as typed).
 	 *
 	 * @param string $medication Key (or a name).
 	 * @param float  $amount     Amount.

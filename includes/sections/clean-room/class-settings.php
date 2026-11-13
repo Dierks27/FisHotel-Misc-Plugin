@@ -21,7 +21,12 @@
  *                                 several match) and size_list (the plain
  *                                 list used while no such attribute exists),
  *                                 saved by Settings → Sizes on their own, so
- *                                 the Numbers form never touches them;
+ *                                 the Numbers form never touches them; and
+ *                                 medications — the editable medication list
+ *                                 (Medications), absent until it is first
+ *                                 edited (= the seed), saved by Settings →
+ *                                 Medications on its own and carried
+ *                                 untouched by every other save;
  *   fishotel_cleanroom_protocol   the treatment schedules (Protocol): the
  *                                 default template's name and the named
  *                                 templates, seeded with the workbook's five
@@ -73,6 +78,7 @@ class Settings {
 		'voice_enabled'        => true,
 		'size_attribute'       => '',
 		'size_list'            => array(),
+		'medications'          => null,
 	);
 
 	const SALE_READY_MIN   = 1;
@@ -108,6 +114,12 @@ class Settings {
 	public function init() {
 		add_action( 'wp_ajax_fishotel_cleanroom_save', array( $this, 'save_settings' ) );
 		add_action( 'wp_ajax_fishotel_cleanroom_protocol', array( $this, 'save_protocol' ) );
+
+		// Settings → Medications (the list's editor) and the Board's Calculator.
+		require_once Clean_Room::path() . 'class-medications-admin.php';
+		$medications = new Medications_Admin();
+		$medications->init();
+
 		add_action( 'wp_ajax_fishotel_cleanroom_layout', array( $this, 'ajax_layout' ) );
 		add_action( 'wp_ajax_fishotel_cleanroom_alias_delete', array( $this, 'ajax_alias_delete' ) );
 		add_action( 'wp_ajax_fishotel_cleanroom_box_rates', array( $this, 'save_box_rates' ) );
@@ -300,13 +312,16 @@ class Settings {
 			'voice_enabled'        => ! empty( $settings['voice_enabled'] ),
 			'size_attribute'       => isset( $settings['size_attribute'] ) && is_scalar( $settings['size_attribute'] ) && ! is_bool( $settings['size_attribute'] ) ? substr( trim( (string) $settings['size_attribute'] ), 0, 60 ) : '',
 			'size_list'            => Sizes::labels( isset( $settings['size_list'] ) && ( is_array( $settings['size_list'] ) || is_string( $settings['size_list'] ) ) ? $settings['size_list'] : array() ),
+			// The medication list as stored (null = never edited = the seed): carried, not
+			// normalised here — Medications reads it — so get() stays as cheap as it was.
+			'medications'          => isset( $settings['medications'] ) && is_array( $settings['medications'] ) && $settings['medications'] ? $settings['medications'] : null,
 		);
 	}
 
 	/**
-	 * Settings with the sizes' source taken from what is stored (pure):
-	 * the Numbers form does not post size_attribute / size_list, so its
-	 * save keeps them.
+	 * Settings with the sizes' source and the medication list taken from
+	 * what is stored (pure): the Numbers form posts neither, so its save
+	 * keeps them.
 	 *
 	 * @param array $settings The settings a form produced.
 	 * @param array $stored   The stored settings.
@@ -319,8 +334,32 @@ class Settings {
 			array(
 				'size_attribute' => $stored['size_attribute'],
 				'size_list'      => $stored['size_list'],
+				'medications'    => $stored['medications'],
 			)
 		);
+	}
+
+	/**
+	 * The medication list in use: what Settings → Medications stored, else
+	 * the seed (Medications::seed() — the fixed list).
+	 *
+	 * @return array<string, array> key => medication.
+	 */
+	public static function medications() {
+		return Medications::current();
+	}
+
+	/**
+	 * Store the medication list (normalised first); every other setting
+	 * stays as it is.
+	 *
+	 * @param array $list key => medication.
+	 * @return array<string, array> The stored list.
+	 */
+	public static function save_medications( array $list ) {
+		$list = Medications::normalize( $list );
+		update_option( Clean_Room::OPTION_KEY, array_merge( self::get(), array( 'medications' => $list ? $list : null ) ) );
+		return $list ? $list : Medications::seed();
 	}
 
 	/**
