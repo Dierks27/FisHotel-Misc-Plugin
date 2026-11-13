@@ -197,7 +197,7 @@ class Admin {
 				'note'  => __( 'The Invoices section is not available: invoice fish are found by the product on their order line, or by name (marked "check").', 'fishotel-misc-plugin' ),
 			),
 			'requests'    => array(
-				'ok'    => function_exists( 'fishotel_requests_create' ),
+				'ok'    => Cases::requests_available(),
 				'label' => __( 'Requests section', 'fishotel-misc-plugin' ),
 				'note'  => __( 'The Requests section is not available: a "try again" shows a reminder to note it yourself.', 'fishotel-misc-plugin' ),
 			),

@@ -38,8 +38,10 @@
  * Everything else is NOT MATCHED and listed with its units and its money
  * — shop products without a species, invoice names that are no species,
  * invoices kept as one line that cannot be split, lines without a
- * product, credits inside such invoices — so matched + not matched is
- * always every paid line, and nothing is guessed. An invoice kept as one
+ * product, credits inside such invoices and an invoice's "Adjustment"
+ * (money that the theme carries as a fish line; told by the Invoices
+ * section's fishotel_invoices_is_adjustment()) — so matched + not
+ * matched is always every paid line, and nothing is guessed. An invoice kept as one
  * line is split into its fish only when its lines carry prices that add
  * up to what was paid for it, to the cent; otherwise it stays whole,
  * under "not matched".
@@ -438,58 +440,39 @@ class Stats_Sales {
 	}
 
 	/**
-	 * The lines of an order's invoices as this class reads them, from
-	 * whatever the Invoices section (or the theme's snapshot) hands over:
-	 * a list of invoices each with its 'lines' (or 'items'), one such
-	 * invoice, or a plain list of lines; arrays, objects or a JSON string.
+	 * The lines of the invoices an order paid, as this class reads them —
+	 * from EXACTLY what fishotel_invoices_for_order() answers (the
+	 * Invoices section, Invoices::for_order()): a list of invoices, each an
+	 * array with `product_id` (the invoice product) and `lines`, each line
+	 * an array with
 	 *
-	 * A line: name (name | species | title), kind (kind | type — fish,
-	 * credit or note; a discount, fee or adjustment is a credit; without
-	 * one, a negative amount or a name starting "Credit" is a credit, the
-	 * rest fish), qty (qty | quantity), price — PER FISH (price |
-	 * unit_price) —, total (total | line_total; qty × price without one;
-	 * for a credit the Invoices section's signed `amount` when it is there,
-	 * so its "Adjustment" up to a stated price stays positive),
-	 * species_id, product_id, variation_id, and the invoice product it
-	 * belongs to (invoice_product_id on the line, else the invoice's
-	 * product_id). A line without a name is dropped.
+	 *   kind        fish | credit | discount | note (a line of any other
+	 *               kind is not one of that section's and is dropped);
+	 *   name        the name it goes by ("Credit: reason", "Discount",
+	 *               "Adjustment", or the fish);
+	 *   qty         how many (a fish);
+	 *   unit_price  the price PER FISH, null when none was typed;
+	 *   amount      what the line adds to its invoice, signed: qty × price
+	 *               for a fish, negative for a credit and a "Discount",
+	 *               positive for an "Adjustment" up to a stated price;
+	 *   species_id, product_id, variation_id   what the line links to.
 	 *
-	 * @param mixed $raw What was handed over.
+	 * Here a credit and a discount are both a credit (money, never a
+	 * fish), carried by that signed amount — so the parts of an invoice
+	 * add up to what was paid for it. Anything that is not this shape is
+	 * no line: nothing is guessed.
+	 *
+	 * @param mixed $invoices What fishotel_invoices_for_order() answered.
 	 * @return array[] kind, name, key, qty, price, total, species_id, product_id, variation_id, invoice_product_id.
 	 */
-	public static function invoice_parts( $raw ) {
-		if ( is_string( $raw ) ) {
-			$raw = '' !== trim( $raw ) ? json_decode( $raw, true ) : null;
-		}
-		$raw = self::plain( $raw );
-		if ( ! is_array( $raw ) || ! $raw ) {
-			return array();
-		}
-
-		$invoices = array();
-		if ( self::lines_of( $raw ) !== null ) {
-			$invoices[] = $raw;
-		} else {
-			$loose = array();
-			foreach ( $raw as $entry ) {
-				if ( ! is_array( $entry ) ) {
-					continue;
-				}
-				if ( null !== self::lines_of( $entry ) ) {
-					$invoices[] = $entry;
-				} else {
-					$loose[] = $entry;
-				}
-			}
-			if ( $loose ) {
-				$invoices[] = array( 'lines' => $loose );
-			}
-		}
-
+	public static function invoice_parts( $invoices ) {
 		$out = array();
-		foreach ( $invoices as $invoice ) {
-			$product = self::first_int( $invoice, array( 'invoice_product_id', 'product_id' ) );
-			foreach ( (array) self::lines_of( $invoice ) as $line ) {
+		foreach ( is_array( $invoices ) ? $invoices : array() as $invoice ) {
+			if ( ! is_array( $invoice ) || ! isset( $invoice['lines'] ) || ! is_array( $invoice['lines'] ) ) {
+				continue;
+			}
+			$product = self::first_int( $invoice, array( 'product_id' ) );
+			foreach ( $invoice['lines'] as $line ) {
 				$part = is_array( $line ) ? self::invoice_part( $line, $product ) : null;
 				if ( null !== $part ) {
 					$out[] = $part;
@@ -500,99 +483,132 @@ class Stats_Sales {
 	}
 
 	/**
-	 * The lines of an invoice-shaped array, or null when it has none.
+	 * One line of the Invoices section as a part, or null when it is not
+	 * one (no name, no kind of that section's).
 	 *
-	 * @param array $invoice Maybe an invoice.
-	 * @return array|null
-	 */
-	private static function lines_of( array $invoice ) {
-		foreach ( array( 'lines', 'items' ) as $key ) {
-			if ( isset( $invoice[ $key ] ) && is_array( $invoice[ $key ] ) ) {
-				return $invoice[ $key ];
-			}
-		}
-		return null;
-	}
-
-	/**
-	 * One handed-over line as a part, or null without a name.
-	 *
-	 * @param array $line    The line.
+	 * @param array $line    The line (Invoices::contract_line()).
 	 * @param int   $invoice The invoice product it came with (0 = unknown).
 	 * @return array|null
 	 */
 	private static function invoice_part( array $line, $invoice ) {
-		$name = '';
-		foreach ( array( 'name', 'species', 'title' ) as $key ) {
-			if ( isset( $line[ $key ] ) && is_scalar( $line[ $key ] ) && '' !== trim( (string) $line[ $key ] ) ) {
-				$name = self::clean_name( $line[ $key ] );
-				break;
-			}
-		}
-		if ( '' === $name ) {
+		$name = isset( $line['name'] ) && is_scalar( $line['name'] ) ? self::clean_name( $line['name'] ) : '';
+		$kind = isset( $line['kind'] ) && is_string( $line['kind'] ) ? $line['kind'] : '';
+		if ( '' === $name || ! in_array( $kind, array( 'fish', 'credit', 'discount', 'note' ), true ) ) {
 			return null;
 		}
 
-		$price = self::first_float( $line, array( 'price', 'unit_price' ) );
-		$total = self::first_float( $line, array( 'total', 'line_total' ) );
-		$kind  = '';
-		foreach ( array( 'kind', 'type' ) as $key ) {
-			if ( isset( $line[ $key ] ) && is_string( $line[ $key ] ) ) {
-				$kind = strtolower( trim( $line[ $key ] ) );
-				break;
-			}
-		}
-		if ( in_array( $kind, array( 'discount', 'fee', 'adjustment' ), true ) ) {
-			$kind = 'credit';
-		}
-		if ( ! in_array( $kind, array( 'fish', 'credit', 'note' ), true ) ) {
-			$negative = ( null !== $price && $price < 0 ) || ( null !== $total && $total < 0 );
-			$kind     = $negative || 1 === preg_match( '/^credit\b/i', $name ) ? 'credit' : 'fish';
-		}
+		$price  = isset( $line['unit_price'] ) && is_numeric( $line['unit_price'] ) ? (float) $line['unit_price'] : null;
+		$amount = isset( $line['amount'] ) && is_numeric( $line['amount'] ) ? (float) $line['amount'] : null;
+		$qty    = 1;
 
-		$qty = 1;
 		if ( 'fish' === $kind ) {
-			foreach ( array( 'qty', 'quantity' ) as $key ) {
-				if ( isset( $line[ $key ] ) && is_numeric( $line[ $key ] ) ) {
-					$qty = max( 1, (int) $line[ $key ] );
-					break;
-				}
-			}
-			if ( null === $total && null !== $price ) {
-				$total = $qty * $price;
-			}
-		} elseif ( 'credit' === $kind ) {
-			// The Invoices section says what a line adds to its invoice (`amount`, signed):
-			// a credit and a "Discount" are negative there, an "Adjustment" up to a stated
-			// price is positive — taken as it is, or the invoice would not add up to what
-			// was paid. Written any other way, a credit is money off.
-			$added = self::first_float( $line, array( 'amount' ) );
-			if ( null !== $added ) {
-				$total = $added;
-			} else {
-				$amount = null !== $total ? $total : $price;
-				$total  = null === $amount ? null : -1 * abs( $amount );
-			}
-			$price = $total;
-		} else {
+			$qty   = isset( $line['qty'] ) && is_numeric( $line['qty'] ) ? max( 1, (int) $line['qty'] ) : 1;
+			$total = null === $price ? null : ( null !== $amount ? $amount : $qty * $price ); // A fish without a price has no total: 0 there is "not typed".
+		} elseif ( 'note' === $kind ) {
 			$price = null;
 			$total = null;
+		} else {
+			// A credit, a "Discount" (both negative) or an "Adjustment" (positive): what it adds, as it is.
+			$kind  = 'credit';
+			$total = $amount;
+			$price = $amount;
 		}
 
-		$species = self::first_int( $line, array( 'species_id' ) );
-		$own     = self::first_int( $line, array( 'invoice_product_id' ) );
+		return self::part( $kind, $name, $qty, $price, $total, self::first_int( $line, array( 'species_id' ) ), 'fish' === $kind ? self::first_int( $line, array( 'product_id' ) ) : 0, 'fish' === $kind ? self::first_int( $line, array( 'variation_id' ) ) : 0, (int) $invoice );
+	}
 
+	/**
+	 * The lines of an invoice kept as ONE order line, from EXACTLY what
+	 * the theme writes beside it (`_fh_invoice_lines`,
+	 * FisHotel_Invoice_Lines::attach_fallback()): a JSON list of
+	 * { name, qty, price, kind, product_id } — price per fish, kind fish /
+	 * credit / note (without one, the theme's own rule: a negative price
+	 * or a name starting "Credit" is a credit, the rest fish), a credit's
+	 * price money off, a note without money.
+	 *
+	 * The theme knows no other kind, so the Invoices section's
+	 * "Adjustment" arrives here as a fish row; it is told by its name
+	 * (is_adjustment()) and counted as what it is — money added, a credit
+	 * with a positive total — never as a fish sold.
+	 *
+	 * @param mixed $json The item meta: the JSON, or the list already decoded.
+	 * @return array[] As invoice_parts(); invoice_product_id is 0 (the order line says which invoice).
+	 */
+	public static function snapshot_parts( $json ) {
+		if ( is_string( $json ) ) {
+			$json = '' !== trim( $json ) ? json_decode( $json, true ) : null;
+		}
+		$out = array();
+		foreach ( is_array( $json ) ? $json : array() as $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+			$name = isset( $row['name'] ) && is_scalar( $row['name'] ) ? self::clean_name( $row['name'] ) : '';
+			if ( '' === $name ) {
+				continue;
+			}
+			$price   = isset( $row['price'] ) && is_numeric( $row['price'] ) ? (float) $row['price'] : null;
+			$kind    = isset( $row['kind'] ) && is_string( $row['kind'] ) ? strtolower( trim( $row['kind'] ) ) : '';
+			$product = self::first_int( $row, array( 'product_id' ) );
+			if ( ! in_array( $kind, array( 'fish', 'credit', 'note' ), true ) ) {
+				$kind = ( null !== $price && $price < 0 ) || 1 === preg_match( '/^credit\b/iu', $name ) ? 'credit' : 'fish';
+			}
+
+			if ( 'fish' === $kind && 0 === $product && self::is_adjustment( $name ) ) {
+				$out[] = self::part( 'credit', $name, 1, $price, $price, 0, 0, 0, 0 );
+			} elseif ( 'fish' === $kind ) {
+				$qty   = isset( $row['qty'] ) && is_numeric( $row['qty'] ) ? max( 1, (int) $row['qty'] ) : 1;
+				$out[] = self::part( 'fish', $name, $qty, $price, null === $price ? null : $qty * $price, 0, $product, 0, 0 );
+			} elseif ( 'credit' === $kind ) {
+				$off   = null === $price ? null : -1 * abs( $price );
+				$out[] = self::part( 'credit', $name, 1, $off, $off, 0, 0, 0, 0 );
+			} else {
+				$out[] = self::part( 'note', $name, 1, null, null, 0, 0, 0, 0 );
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Whether an invoice's fish line is its "Adjustment" — the line that
+	 * brings an invoice up to a stated price, which the theme can only
+	 * carry as a fish line. The Invoices section says which name that is
+	 * (fishotel_invoices_is_adjustment(), declared whenever this plugin
+	 * is active); without it nothing is one.
+	 *
+	 * @param mixed $name The line's name.
+	 * @return bool
+	 */
+	public static function is_adjustment( $name ) {
+		return function_exists( 'fishotel_invoices_is_adjustment' ) && true === \fishotel_invoices_is_adjustment( $name );
+	}
+
+	/**
+	 * One part.
+	 *
+	 * @param string     $kind       fish | credit | note.
+	 * @param string     $name       Its name.
+	 * @param int        $qty        Units (1 for what is not a fish).
+	 * @param float|null $price      Per fish.
+	 * @param float|null $total      What it adds.
+	 * @param int        $species_id Species (0 = none).
+	 * @param int        $product_id Product (0 = none).
+	 * @param int        $variation  Variation (0 = none).
+	 * @param int        $invoice    The invoice product (0 = unknown).
+	 * @return array
+	 */
+	private static function part( $kind, $name, $qty, $price, $total, $species_id, $product_id, $variation, $invoice ) {
 		return array(
 			'kind'               => $kind,
 			'name'               => substr( $name, 0, 200 ),
 			'key'                => Species::key( $name ),
-			'qty'                => $qty,
+			'qty'                => (int) $qty,
 			'price'              => $price,
 			'total'              => $total,
-			'species_id'         => $species > 0 ? $species : null,
-			'product_id'         => 'fish' === $kind ? self::first_int( $line, array( 'product_id' ) ) : 0,
-			'variation_id'       => 'fish' === $kind ? self::first_int( $line, array( 'variation_id' ) ) : 0,
-			'invoice_product_id' => $own > 0 ? $own : (int) $invoice,
+			'species_id'         => (int) $species_id > 0 ? (int) $species_id : null,
+			'product_id'         => (int) $product_id,
+			'variation_id'       => (int) $variation,
+			'invoice_product_id' => (int) $invoice,
 		);
 	}
 
@@ -602,7 +618,9 @@ class Stats_Sales {
 	 *
 	 *   an invoice fish line   a named sale, with the species or product
 	 *                          the Invoices section's line of the same
-	 *                          name (and invoice) gives it;
+	 *                          name (and invoice) gives it — except the
+	 *                          invoice's "Adjustment", which is counted
+	 *                          with the credits (money, not a fish);
 	 *   an invoice kept whole  its fish as named sales when its lines —
 	 *                          the Invoices section's, else the snapshot —
 	 *                          all carry a price and add up to what was
@@ -628,6 +646,13 @@ class Stats_Sales {
 			}
 			$known = isset( $parts[ (int) $item['order_id'] ] ) && is_array( $parts[ (int) $item['order_id'] ] ) ? $parts[ (int) $item['order_id'] ] : array();
 
+			if ( ! empty( $item['fish'] ) && 0 === (int) $item['product_id'] && self::is_adjustment( (string) $item['name'] ) ) {
+				// The invoice's "Adjustment", itemised by the theme as a fish line: money, not a fish sold.
+				$ledger['credits']['lines']++;
+				$ledger['credits']['revenue'] += $revenue;
+				continue;
+			}
+
 			if ( ! empty( $item['fish'] ) ) {
 				$hint = self::hint_for( $known, (string) $item['name'], (int) $item['invoice_product_id'] );
 				self::add_named( $ledger, 'fish', (string) $item['name'], $qty, $revenue, (int) $item['product_id'] > 0 ? (int) $item['product_id'] : $hint['product_id'], (int) $item['product_id'] > 0 ? (int) $item['variation_id'] : $hint['variation_id'], $hint['species_id'] );
@@ -642,7 +667,7 @@ class Stats_Sales {
 			// An invoice kept as one line.
 			$split = self::parts_for( $known, (int) $item['invoice_product_id'] );
 			if ( ! self::has_fish( $split ) ) {
-				$split = self::invoice_parts( $item['lines'] );
+				$split = self::snapshot_parts( $item['lines'] );
 			}
 			$reason = self::split_reason( $split, $qty, $revenue );
 			if ( '' !== $reason ) {
@@ -1259,29 +1284,6 @@ class Stats_Sales {
 	}
 
 	/**
-	 * Objects as arrays, all the way down (what another section hands
-	 * over may be either).
-	 *
-	 * @param mixed $value Anything.
-	 * @param int   $depth Guard.
-	 * @return mixed
-	 */
-	private static function plain( $value, $depth = 0 ) {
-		if ( is_object( $value ) ) {
-			$value = get_object_vars( $value );
-		}
-		if ( ! is_array( $value ) || $depth > 6 ) {
-			return $value;
-		}
-		foreach ( $value as $key => $inner ) {
-			if ( is_array( $inner ) || is_object( $inner ) ) {
-				$value[ $key ] = self::plain( $inner, $depth + 1 );
-			}
-		}
-		return $value;
-	}
-
-	/**
 	 * The first of some keys that holds a whole number above zero, else 0.
 	 *
 	 * @param array    $row  Row.
@@ -1295,24 +1297,5 @@ class Stats_Sales {
 			}
 		}
 		return 0;
-	}
-
-	/**
-	 * The first of some keys that holds a number, else null.
-	 *
-	 * @param array    $row  Row.
-	 * @param string[] $keys Keys, in order.
-	 * @return float|null
-	 */
-	private static function first_float( array $row, array $keys ) {
-		foreach ( $keys as $key ) {
-			if ( isset( $row[ $key ] ) && ! is_bool( $row[ $key ] ) && is_scalar( $row[ $key ] ) ) {
-				$value = str_replace( array( '$', ',', ' ' ), '', (string) $row[ $key ] );
-				if ( '' !== $value && is_numeric( $value ) ) {
-					return (float) $value;
-				}
-			}
-		}
-		return null;
 	}
 }

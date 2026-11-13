@@ -140,12 +140,35 @@ namespace FisHotel\Misc\Sections\Invoices {
 		const LOG_SOURCE = 'invoices';
 
 		/**
+		 * The name of the line that brings the lines UP to a stated price
+		 * (Lines::ADJUSTMENT_NAME — kept here as well because this file is
+		 * the one that is loaded while the section is switched off). The
+		 * theme knows fish, credits and notes only, so that line reaches it
+		 * as a fish line: on the product's lines JSON, on an order's
+		 * "Includes" snapshot and as a line of an order it is
+		 * { name: "Adjustment", qty: 1, kind: "fish" } with no product —
+		 * money, not a fish. Its name is the one thing that says so
+		 * outside this section: see is_adjustment().
+		 *
+		 * @var string
+		 */
+		const ADJUSTMENT_NAME = 'Adjustment';
+
+		/**
 		 * Whether the section is switched on (boot() ran). The contract
 		 * functions answer nothing while it is off.
 		 *
 		 * @var bool
 		 */
 		private static $booted = false;
+
+		/**
+		 * A store and a shop the contract functions use instead of the real
+		 * ones (use_doubles()); null in production.
+		 *
+		 * @var array{0: object, 1: object|null}|null
+		 */
+		private static $doubles = null;
 
 		/**
 		 * Section base path.
@@ -305,7 +328,20 @@ namespace FisHotel\Misc\Sections\Invoices {
 		 * @return bool
 		 */
 		public static function is_on() {
-			return self::$booted;
+			return self::$booted || null !== self::$doubles;
+		}
+
+		/**
+		 * Answer the contract functions from this store and shop from now
+		 * on — the tests hand in their twins, so another section's real
+		 * reader can be run against fishotel_invoices_for_order() itself.
+		 * Null puts the real ones back.
+		 *
+		 * @param object|null $store A store, or null.
+		 * @param object|null $shop  A shop, or null for the real one.
+		 */
+		public static function use_doubles( $store = null, $shop = null ) {
+			self::$doubles = null === $store ? null : array( $store, $shop );
 		}
 
 		/**
@@ -373,8 +409,26 @@ namespace FisHotel\Misc\Sections\Invoices {
 		}
 
 		/**
+		 * Whether a name is the "Adjustment" line's (see ADJUSTMENT_NAME):
+		 * what every reader of an invoice's fish lines asks before it
+		 * counts one — on an order line flagged `_fh_invoice_fish`, on a
+		 * fish row of the `_fh_invoice_lines` JSON. Pure, and answers the
+		 * same whether the section is switched on or off: the orders it
+		 * wrote stay.
+		 *
+		 * @param mixed $name The line's name.
+		 * @return bool
+		 */
+		public static function is_adjustment( $name ) {
+			return is_scalar( $name ) && ! is_bool( $name ) && 0 === strcasecmp( self::ADJUSTMENT_NAME, trim( (string) $name ) );
+		}
+
+		/**
 		 * The lines of a hand-made invoice (read by the theme's grammar)
 		 * in the contract's shape: no ids but a product id the JSON named.
+		 * An "Adjustment" — a fish row to the theme — is handed out as what
+		 * it is, a `discount` line with a positive amount, as it is for an
+		 * invoice built here.
 		 *
 		 * @param array[] $rows Grammar rows.
 		 * @return array[]
@@ -385,6 +439,9 @@ namespace FisHotel\Misc\Sections\Invoices {
 				$kind  = (string) ( isset( $row['kind'] ) ? $row['kind'] : 'note' );
 				$price = isset( $row['price'] ) && null !== $row['price'] ? (float) $row['price'] : null;
 				$qty   = max( 1, (int) ( isset( $row['qty'] ) ? $row['qty'] : 1 ) );
+				if ( 'fish' === $kind && 1 === $qty && empty( $row['product_id'] ) && self::is_adjustment( isset( $row['name'] ) ? $row['name'] : '' ) ) {
+					$kind = 'discount';
+				}
 				$out[] = array(
 					'id'           => 0,
 					'invoice_id'   => 0,
@@ -418,6 +475,9 @@ namespace FisHotel\Misc\Sections\Invoices {
 		 */
 		public static function lines_for_product( $product_id, $store = null, $shop = null ) {
 			$product_id = (int) $product_id;
+			if ( null === $store && null !== self::$doubles ) {
+				list( $store, $shop ) = self::$doubles;
+			}
 			if ( $product_id <= 0 || ( ! self::$booted && null === $store ) ) {
 				return array();
 			}
@@ -452,6 +512,9 @@ namespace FisHotel\Misc\Sections\Invoices {
 		 */
 		public static function for_order( $order_id, $store = null, $shop = null ) {
 			$order_id = (int) $order_id;
+			if ( null === $store && null !== self::$doubles ) {
+				list( $store, $shop ) = self::$doubles;
+			}
 			if ( $order_id <= 0 || ( ! self::$booted && null === $store ) ) {
 				return array();
 			}
@@ -598,6 +661,31 @@ namespace {
 		 */
 		function fishotel_invoices_for_order( $order_id ) {
 			return \FisHotel\Misc\Sections\Invoices\Invoices::for_order( (int) $order_id );
+		}
+	}
+
+	if ( ! function_exists( 'fishotel_invoices_is_adjustment' ) ) {
+		/**
+		 * Whether a name is the one an invoice's "Adjustment" goes by.
+		 *
+		 * An invoice whose stated price is higher than its lines carries
+		 * one line that makes up the difference. The theme knows fish,
+		 * credits and notes only, so that line reaches an order as a FISH
+		 * line — a product-less line flagged `_fh_invoice_fish`, or a
+		 * kind-"fish" row of the `_fh_invoice_lines` JSON — named
+		 * "Adjustment", quantity 1. It is money, not a fish: ask this
+		 * before counting an invoice's fish line as a fish (to bag, to
+		 * replace, to sell). The two functions above already hand it out
+		 * as kind `discount`.
+		 *
+		 * Pure: it answers the same while the Invoices section is switched
+		 * off (the orders it wrote stay). Guard it with function_exists().
+		 *
+		 * @param mixed $name The line's name.
+		 * @return bool
+		 */
+		function fishotel_invoices_is_adjustment( $name ) {
+			return \FisHotel\Misc\Sections\Invoices\Invoices::is_adjustment( $name );
 		}
 	}
 }

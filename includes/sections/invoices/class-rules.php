@@ -565,7 +565,8 @@ class Rules {
 	 * by the Batch plugin's pick list with one grammar (Grammar): a fish
 	 * named "Credit…" would be read as a credit, a note that ends in "x2"
 	 * as a fish, a credit whose reason carries an amount with the wrong
-	 * amount.
+	 * amount — and a fish named "Adjustment" as the line a stated price
+	 * adds (Lines::ADJUSTMENT_NAME), which nobody counts as a fish.
 	 *
 	 * @param array $line Line (normalised).
 	 * @return string
@@ -595,6 +596,10 @@ class Rules {
 				return __( 'The reason of this credit carries an amount of its own, so the credit would be read with the wrong amount. Take the amount out of the reason.', 'fishotel-misc-plugin' );
 			}
 			return '';
+		}
+
+		if ( 'fish' === $kind && 0 === strcasecmp( Lines::ADJUSTMENT_NAME, trim( Lines::public_name( $line ) ) ) ) {
+			return __( 'A fish cannot be named "Adjustment": that is the name of the line a stated price adds, and it is never counted as a fish. Rename it.', 'fishotel-misc-plugin' );
 		}
 
 		// A fish, or an Adjustment (which goes out as a one-off fish line).

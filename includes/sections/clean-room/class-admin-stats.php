@@ -33,11 +33,12 @@
  * their years one at a time, as "By year" does; Prices to raise keeps to
  * that one read and says so when it came back full.
  *
- * The Invoices section, when it is there, is asked for the lines of the
- * invoices an order paid (fishotel_invoices_for_order(), guarded with
- * function_exists(); or the filter fishotel_cleanroom_sales_invoice_lines)
- * — without it invoice fish are matched by their exact name only, and
- * the view says so.
+ * The Invoices section, while it is switched on, is asked for the lines
+ * of the invoices an order paid (fishotel_invoices_for_order() — the
+ * function is declared whenever this plugin is active, so the section
+ * itself is asked whether it is on; or the filter
+ * fishotel_cleanroom_sales_invoice_lines) — without it invoice fish are
+ * matched by their exact name only, and the view says so.
  *
  * Two writes, both admin-post with their own nonce: Refresh
  * (manage_woocommerce) and the list of order statuses that count as a
@@ -85,9 +86,10 @@ class Admin_Stats {
 	const STATUSES_ACTION = 'fishotel_cleanroom_sales_statuses';
 
 	/**
-	 * The filter another section (or a test) answers with the lines of the
-	 * invoices an order paid, before fishotel_invoices_for_order() is
-	 * asked: apply_filters( …, null, $order_id ).
+	 * The filter another section (or a test) answers with the invoices an
+	 * order paid, before fishotel_invoices_for_order() is asked:
+	 * apply_filters( …, null, $order_id ) — in exactly the shape that
+	 * function answers (Stats_Sales::invoice_parts()).
 	 *
 	 * @var string
 	 */
@@ -778,13 +780,23 @@ class Admin_Stats {
 	/* ============================================================== */
 
 	/**
-	 * Whether something can answer for an order's invoices: the Invoices
-	 * section's function, or the filter.
+	 * Whether something can answer for an order's invoices: the filter,
+	 * or the Invoices section — its function is declared whenever this
+	 * plugin is active and answers nothing while the section is switched
+	 * off, so the section is asked whether it is on. (A year read while it
+	 * was off is read again once it is on: ledger().)
 	 *
 	 * @return bool
 	 */
 	public static function invoices_available() {
-		return function_exists( 'fishotel_invoices_for_order' ) || ( function_exists( 'has_filter' ) && false !== has_filter( self::INVOICE_FILTER ) );
+		if ( function_exists( 'has_filter' ) && false !== has_filter( self::INVOICE_FILTER ) ) {
+			return true;
+		}
+		if ( ! function_exists( 'fishotel_invoices_for_order' ) ) {
+			return false;
+		}
+		$section = '\\FisHotel\\Misc\\Sections\\Invoices\\Invoices';
+		return ! class_exists( $section, false ) || ! method_exists( $section, 'is_on' ) || true === $section::is_on();
 	}
 
 	/**
@@ -799,7 +811,7 @@ class Admin_Stats {
 	public static function invoice_lines_for( $order_id ) {
 		try {
 			$lines = apply_filters( self::INVOICE_FILTER, null, (int) $order_id );
-			if ( null === $lines && function_exists( 'fishotel_invoices_for_order' ) ) {
+			if ( null === $lines && self::invoices_available() && function_exists( 'fishotel_invoices_for_order' ) ) {
 				$lines = fishotel_invoices_for_order( (int) $order_id );
 			}
 		} catch ( \Throwable $e ) {

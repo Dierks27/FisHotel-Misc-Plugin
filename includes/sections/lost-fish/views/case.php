@@ -157,7 +157,7 @@ $fh_matches = array(
 					<a class="button" href="<?php echo esc_url( $fh_facts['edit_url'] ); ?>"><?php echo esc_html( sprintf( /* translators: %s: order number */ __( 'Open order #%s', 'fishotel-misc-plugin' ), $fh_facts['number'] ) ); ?></a>
 				<?php endif; ?>
 			</p>
-			<?php if ( 'retry' === $fh_case['choice'] && '' === $fh_case['request_ref'] && function_exists( 'fishotel_requests_create' ) ) : ?>
+			<?php if ( 'retry' === $fh_case['choice'] && '' === $fh_case['request_ref'] && Cases::requests_available() ) : ?>
 				<form method="post" action="<?php echo esc_url( $fh_post ); ?>" class="fh-lf-inline">
 					<?php $fh_form( 'request' ); ?>
 					<button type="submit" class="button"><?php esc_html_e( 'Add to Requests', 'fishotel-misc-plugin' ); ?></button>

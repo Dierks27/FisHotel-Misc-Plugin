@@ -1681,7 +1681,7 @@ class Cases {
 		if ( '' !== $case['request_ref'] ) {
 			return self::result( true, __( 'The request was already created.', 'fishotel-misc-plugin' ), $case );
 		}
-		if ( ! function_exists( 'fishotel_requests_create' ) ) {
+		if ( ! self::requests_available() ) {
 			return self::result( false, __( 'The Requests section is not available — note this fish in your own list.', 'fishotel-misc-plugin' ), $case );
 		}
 
@@ -1736,6 +1736,26 @@ class Cases {
 		$this->log( 'request', $text, (int) $case['id'], (int) $case['order_id'], $actor );
 
 		return self::result( true, __( 'Added to Requests.', 'fishotel-misc-plugin' ), $case );
+	}
+
+	/**
+	 * Whether the Requests section can take a "try again": its function is
+	 * declared — it is whenever this plugin is active — AND the section is
+	 * switched on (switched off, the function answers an error and creates
+	 * nothing).
+	 *
+	 * @return bool
+	 */
+	public static function requests_available() {
+		if ( ! function_exists( 'fishotel_requests_create' ) ) {
+			return false;
+		}
+		$section = '\\FisHotel\\Misc\\Sections\\Requests\\Requests';
+		try {
+			return ! class_exists( $section, false ) || ! method_exists( $section, 'enabled' ) || true === $section::enabled();
+		} catch ( \Throwable $e ) {
+			return false;
+		}
 	}
 
 	/**
@@ -2154,7 +2174,7 @@ class Cases {
 				if ( '' !== $case['request_ref'] ) {
 					/* translators: %s: request reference */
 					$out['note'] = sprintf( __( 'A request was created in Requests (%s): owed, already paid for.', 'fishotel-misc-plugin' ), 'created' === $case['request_ref'] ? __( 'done', 'fishotel-misc-plugin' ) : '#' . $case['request_ref'] );
-				} elseif ( function_exists( 'fishotel_requests_create' ) ) {
+				} elseif ( self::requests_available() ) {
 					$out['note'] = __( 'No request was created yet — use "Add to Requests".', 'fishotel-misc-plugin' );
 				} else {
 					/* translators: 1: 1 × fish, 2: customer */

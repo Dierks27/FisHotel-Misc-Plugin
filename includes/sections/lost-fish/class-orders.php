@@ -160,7 +160,27 @@ class Orders {
 	 * @return bool
 	 */
 	public static function invoices_available() {
-		return function_exists( 'fishotel_invoices_for_order' ) || function_exists( 'fishotel_invoices_lines_for_product' );
+		if ( ! function_exists( 'fishotel_invoices_for_order' ) && ! function_exists( 'fishotel_invoices_lines_for_product' ) ) {
+			return false;
+		}
+		// The functions are declared whenever this plugin is active; they answer only while that section is
+		// switched on.
+		$section = '\\FisHotel\\Misc\\Sections\\Invoices\\Invoices';
+		return ! class_exists( $section, false ) || ! method_exists( $section, 'is_on' ) || true === $section::is_on();
+	}
+
+	/**
+	 * Whether an invoice's fish line is its "Adjustment" — the line that
+	 * brings an invoice up to a stated price, which the theme can only
+	 * carry as a fish line. It is money: never owed, never lost, never
+	 * "still to ship". The Invoices section says which name that is
+	 * (fishotel_invoices_is_adjustment()).
+	 *
+	 * @param mixed $name The line's name.
+	 * @return bool
+	 */
+	public static function is_adjustment( $name ) {
+		return function_exists( 'fishotel_invoices_is_adjustment' ) && true === \fishotel_invoices_is_adjustment( $name );
 	}
 
 	/**
@@ -324,6 +344,9 @@ class Orders {
 			if ( $invoice_id > 0 ) {
 				$invoices[ $invoice_id ] = true;
 			}
+			if ( $is_fish && ( ! method_exists( $item, 'get_product_id' ) || (int) $item->get_product_id() <= 0 ) && self::is_adjustment( method_exists( $item, 'get_name' ) ? $item->get_name() : '' ) ) {
+				continue; // The invoice's "Adjustment": money that travels as a fish line.
+			}
 
 			if ( null !== $sublines ) {
 				// An invoice kept as ONE line: each fish of its snapshot is a line of its own.
@@ -405,7 +428,8 @@ class Orders {
 
 	/**
 	 * The fish lines a kept-whole invoice line carries (the theme's
-	 * _fh_invoice_lines JSON: name, qty, price per fish, kind).
+	 * _fh_invoice_lines JSON: name, qty, price per fish, kind) — without
+	 * the invoice's "Adjustment" (is_adjustment()).
 	 *
 	 * @param mixed $json The item meta.
 	 * @return array<int, array{name: string, qty: int, price: float|null, product_id: int}>|null Null when there is no readable snapshot.
@@ -425,6 +449,9 @@ class Orders {
 			}
 			$name = trim( (string) ( $line['name'] ?? '' ) );
 			if ( '' === $name ) {
+				continue;
+			}
+			if ( empty( $line['product_id'] ) && self::is_adjustment( $name ) ) {
 				continue;
 			}
 			$out[ $index ] = array(

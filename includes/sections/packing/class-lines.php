@@ -9,7 +9,11 @@
  *   - a line that already shipped or never ships (the theme's
  *     `_fishotel_line_status` = shipped / na) and a line that is fully
  *     refunded are skipped; a partly refunded line counts what is left;
- *   - an invoice credit (`_fh_invoice_credit`) is money, not a fish;
+ *   - an invoice credit (`_fh_invoice_credit`) is money, not a fish — and
+ *     so is an invoice's "Adjustment" (the line that brings an invoice up
+ *     to a stated price): the theme can only carry it as a fish line, so
+ *     it is told by its name, through the Invoices section's
+ *     fishotel_invoices_is_adjustment();
  *   - a line flagged `_fh_invoice_fish` (one fish of an itemised invoice)
  *     and a product-less line with `_fishotel_fish_id` (a batch-invoice
  *     fish) are fish — unless the line has a product and that product says
@@ -140,6 +144,9 @@ class Lines {
 			return self::KIND_CREDIT;
 		}
 		if ( self::truthy( $meta[ self::META_INV_FISH ] ?? '' ) ) {
+			if ( ! $has_product && self::is_adjustment( $name ) ) {
+				return self::KIND_CREDIT; // The invoice's "Adjustment": money that travels as a fish line.
+			}
 			// The invoice says it is a fish; a product that says "not bagged" has the last word.
 			return Livestock::NO === $packs ? self::KIND_OTHER : self::KIND_FISH;
 		}
@@ -165,6 +172,18 @@ class Lines {
 		}
 
 		return self::KIND_OTHER;
+	}
+
+	/**
+	 * Whether an invoice's fish line is its "Adjustment" — money, not a
+	 * fish. The Invoices section says which name that is; without its
+	 * function nothing is one.
+	 *
+	 * @param mixed $name The line's name.
+	 * @return bool
+	 */
+	public static function is_adjustment( $name ) {
+		return function_exists( 'fishotel_invoices_is_adjustment' ) && true === \fishotel_invoices_is_adjustment( $name );
 	}
 
 	/**
@@ -228,8 +247,9 @@ class Lines {
 	/**
 	 * The fish of an Invoice line kept whole, from its `_fh_invoice_lines`
 	 * snapshot (pure): a JSON string or an array of { name, qty, kind,
-	 * product_id, size }. Credits and notes are not fish. Null when the
-	 * snapshot is absent or unreadable.
+	 * product_id, size }. Credits and notes are not fish, and neither is
+	 * the "Adjustment" (is_adjustment()). Null when the snapshot is absent
+	 * or unreadable.
 	 *
 	 * @param mixed $json The meta value.
 	 * @return array[]|null name, qty, product_id, size.
@@ -267,6 +287,10 @@ class Lines {
 			if ( 'fish' !== $kind ) {
 				continue;
 			}
+			$product_id = isset( $entry['product_id'] ) && is_numeric( $entry['product_id'] ) ? max( 0, (int) $entry['product_id'] ) : 0;
+			if ( 0 === $product_id && self::is_adjustment( $name ) ) {
+				continue;
+			}
 			$size = '';
 			foreach ( array( 'size_slug', 'size' ) as $key ) {
 				if ( '' === $size && isset( $entry[ $key ] ) && is_scalar( $entry[ $key ] ) && ! is_bool( $entry[ $key ] ) ) {
@@ -276,7 +300,7 @@ class Lines {
 			$out[] = array(
 				'name'       => $name,
 				'qty'        => isset( $entry['qty'] ) && is_numeric( $entry['qty'] ) ? max( 1, (int) $entry['qty'] ) : 1,
-				'product_id' => isset( $entry['product_id'] ) && is_numeric( $entry['product_id'] ) ? max( 0, (int) $entry['product_id'] ) : 0,
+				'product_id' => $product_id,
 				'size'       => $size,
 			);
 		}
@@ -657,10 +681,14 @@ class Lines {
 			if ( '' === $name || 'fish' !== $kind ) {
 				continue;
 			}
+			$product_id = isset( $row['product_id'] ) && is_numeric( $row['product_id'] ) ? max( 0, (int) $row['product_id'] ) : 0;
+			if ( 0 === $product_id && self::is_adjustment( $name ) ) {
+				continue; // The invoice's "Adjustment": money, not a fish.
+			}
 			$out[] = array(
 				'name'       => $name,
 				'qty'        => isset( $row['qty'] ) && is_numeric( $row['qty'] ) ? max( 1, (int) $row['qty'] ) : 1,
-				'product_id' => isset( $row['product_id'] ) && is_numeric( $row['product_id'] ) ? max( 0, (int) $row['product_id'] ) : 0,
+				'product_id' => $product_id,
 				'size'       => '',
 			);
 		}

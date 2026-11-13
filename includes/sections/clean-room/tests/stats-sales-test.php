@@ -286,7 +286,7 @@ check( '… and its credit is counted as a credit (−10.00), not as a fish', 1 
 check( 'kept as one line with lines that say 100 when 90 was paid: NOT split — whole, 1 line, 90.00, "mismatch"', array( 'lines' => 1, 'qty' => 1, 'revenue' => 90.0 ) === $ledger['unsplit']['mismatch'] );
 check( 'kept as one line with a fish that has no price: not split — "unpriced", 50.00', array( 'lines' => 1, 'qty' => 1, 'revenue' => 50.0 ) === $ledger['unsplit']['unpriced'] && array( 'mismatch', 'unpriced' ) === array_keys( $ledger['unsplit'] ) );
 check( 'a line without a product that is no invoice fish is kept apart', isset( $named['other:Gift wrap'] ) && 'other' === $named['other:Gift wrap']['via'] );
-check( 'split_reason: no fish line / bought twice / a fish without a price / the lines do not add up / fine', 'no_lines' === Stats_Sales::split_reason( array(), 1, 10 ) && 'no_lines' === Stats_Sales::split_reason( Stats_Sales::invoice_parts( array( array( 'name' => 'Credit: x', 'price' => -5 ) ) ), 1, -5 ) && 'quantity' === Stats_Sales::split_reason( Stats_Sales::invoice_parts( array( array( 'name' => 'A', 'qty' => 1, 'price' => 10 ) ) ), 2, 20 ) && 'unpriced' === Stats_Sales::split_reason( Stats_Sales::invoice_parts( array( array( 'name' => 'A', 'qty' => 1 ) ) ), 1, 10 ) && 'mismatch' === Stats_Sales::split_reason( Stats_Sales::invoice_parts( array( array( 'name' => 'A', 'qty' => 2, 'price' => 10 ) ) ), 1, 20.02 ) && '' === Stats_Sales::split_reason( Stats_Sales::invoice_parts( array( array( 'name' => 'A', 'qty' => 2, 'price' => 10 ), array( 'name' => 'a note', 'kind' => 'note' ) ) ), 1, 20.005 ) );
+check( 'split_reason: no fish line / bought twice / a fish without a price / the lines do not add up / fine', 'no_lines' === Stats_Sales::split_reason( array(), 1, 10 ) && 'no_lines' === Stats_Sales::split_reason( Stats_Sales::snapshot_parts( array( array( 'name' => 'Credit: x', 'price' => -5 ) ) ), 1, -5 ) && 'quantity' === Stats_Sales::split_reason( Stats_Sales::snapshot_parts( array( array( 'name' => 'A', 'qty' => 1, 'price' => 10 ) ) ), 2, 20 ) && 'unpriced' === Stats_Sales::split_reason( Stats_Sales::snapshot_parts( array( array( 'name' => 'A', 'qty' => 1 ) ) ), 1, 10 ) && 'mismatch' === Stats_Sales::split_reason( Stats_Sales::snapshot_parts( array( array( 'name' => 'A', 'qty' => 2, 'price' => 10 ) ) ), 1, 20.02 ) && '' === Stats_Sales::split_reason( Stats_Sales::snapshot_parts( array( array( 'name' => 'A', 'qty' => 2, 'price' => 10 ), array( 'name' => 'a note', 'kind' => 'note' ) ) ), 1, 20.005 ) );
 check( 'the Invoices section is not there: nobody was asked', false === $ledger['invoices']['provider'] && 0 === $ledger['invoices']['orders'] && false === Admin_Stats::invoices_available() && null === Admin_Stats::invoice_lines_for( $s9 ) );
 
 echo "6. Which fish a line is\n";
@@ -339,20 +339,27 @@ $many_match = Stats_Sales::match( Stats_Sales::finish( $many ), $ctx );
 check( 'a long list shows its biggest items and says how many more there are — the kind\'s total still counts them all', Stats_Sales::LIST_MAX === count( $many_match['unmatched']['names']['items'] ) && 5 === $many_match['unmatched']['names']['more'] && Stats_Sales::LIST_MAX + 5 === $many_match['unmatched']['names']['units'] && 'Nameless Test Fish ' . ( Stats_Sales::LIST_MAX + 5 ) === $many_match['unmatched']['names']['items'][0]['label'] && true === $many_match['totals']['balanced'] );
 
 echo "8. What another section hands over about an order's invoices\n";
-$a = Stats_Sales::invoice_parts( array( array( 'name' => ' Blue  <b>Test</b> Wrasse ', 'qty' => '2', 'price' => '45.50', 'species_id' => '3', 'product_id' => 12, 'variation_id' => 13 ) ) );
-check( 'a plain list of lines: name cleaned, qty, the price PER FISH, the total = qty × price, the species and product it names', 1 === count( $a ) && 'fish' === $a[0]['kind'] && 'Blue Test Wrasse' === $a[0]['name'] && 'blue test wrasse' === $a[0]['key'] && 2 === $a[0]['qty'] && near( $a[0]['price'], 45.5 ) && near( $a[0]['total'], 91 ) && 3 === $a[0]['species_id'] && 12 === $a[0]['product_id'] && 13 === $a[0]['variation_id'] && 0 === $a[0]['invoice_product_id'] );
-$b = Stats_Sales::invoice_parts( array( 'id' => 5, 'product_id' => 50, 'lines' => array( array( 'species' => 'Red Test Goby', 'quantity' => 3, 'unit_price' => 10, 'line_total' => 27 ), array( 'name' => '' ), 'junk' ) ) );
-check( 'one invoice: its product is the invoice product of its lines; quantity / unit_price / line_total are read too (a stated total wins); a nameless line is dropped', 1 === count( $b ) && 50 === $b[0]['invoice_product_id'] && 3 === $b[0]['qty'] && near( $b[0]['total'], 27 ) && 'Red Test Goby' === $b[0]['name'] && null === $b[0]['species_id'] );
-$c = Stats_Sales::invoice_parts( array( array( 'product_id' => 50, 'items' => array( array( 'name' => 'A', 'price' => 5 ) ) ), (object) array( 'invoice_product_id' => 60, 'lines' => array( (object) array( 'title' => 'B', 'price' => 7, 'invoice_product_id' => 61 ) ) ) ) );
-check( 'a list of invoices, arrays or objects, "lines" or "items"; a line may name its own invoice product', array( 50, 61 ) === array_column( $c, 'invoice_product_id' ) && array( 'A', 'B' ) === array_column( $c, 'name' ) );
-$d = Stats_Sales::invoice_parts( array( array( 'name' => 'Credit: lost fish', 'price' => 12 ), array( 'name' => 'Money off', 'kind' => 'discount', 'total' => -8 ), array( 'name' => 'A cheap one', 'price' => -3 ), array( 'name' => 'Ships Tuesday', 'kind' => 'note', 'price' => 9 ), array( 'name' => 'Weird', 'kind' => 'banana', 'qty' => 2, 'price' => 4 ) ) );
-check( 'credits are money off whichever way they are written (−12, −8, −3), never fish; a note has no money; an unknown kind with a positive price is a fish', array( 'credit', 'credit', 'credit', 'note', 'fish' ) === array_column( $d, 'kind' ) && near( $d[0]['total'], -12 ) && near( $d[1]['total'], -8 ) && near( $d[2]['total'], -3 ) && null === $d[3]['total'] && near( $d[4]['total'], 8 ) && 0 === $d[0]['product_id'] );
+// What fishotel_invoices_for_order() answers (Invoices::for_order() / contract_line()): invoices with product_id and lines.
+$a = Stats_Sales::invoice_parts( array( array( 'id' => 5, 'product_id' => 50, 'lines' => array( array( 'kind' => 'fish', 'name' => ' Blue  <b>Test</b> Wrasse ', 'qty' => 2, 'unit_price' => 45.5, 'amount' => 91.0, 'species_id' => 3, 'product_id' => 12, 'variation_id' => 13 ), array( 'kind' => 'fish', 'name' => '' ), 'junk' ) ) ) );
+check( 'an invoice of the Invoices section: its product is the invoice product of its lines; a line\'s name cleaned, its qty, the price PER FISH, the total it adds, the species and product it names; a nameless line is dropped', 1 === count( $a ) && 'fish' === $a[0]['kind'] && 'Blue Test Wrasse' === $a[0]['name'] && 'blue test wrasse' === $a[0]['key'] && 2 === $a[0]['qty'] && near( $a[0]['price'], 45.5 ) && near( $a[0]['total'], 91 ) && 3 === $a[0]['species_id'] && 12 === $a[0]['product_id'] && 13 === $a[0]['variation_id'] && 50 === $a[0]['invoice_product_id'] );
+$b = Stats_Sales::invoice_parts( array( array( 'id' => 5, 'product_id' => 50, 'lines' => array( array( 'kind' => 'fish', 'name' => 'Red Test Goby', 'qty' => 3, 'unit_price' => null, 'amount' => 0.0, 'species_id' => null, 'product_id' => null, 'variation_id' => null ) ) ), array( 'id' => 0, 'product_id' => 60, 'lines' => array( array( 'kind' => 'fish', 'name' => 'B', 'qty' => 1, 'unit_price' => 7.0, 'amount' => 7.0 ) ) ) ) );
+check( 'a fish without a price has no total (its amount of 0 there means "not typed"); a second invoice\'s lines carry their own invoice product', array( 50, 60 ) === array_column( $b, 'invoice_product_id' ) && null === $b[0]['total'] && null === $b[0]['price'] && 3 === $b[0]['qty'] && null === $b[0]['species_id'] && 0 === $b[0]['product_id'] && near( $b[1]['total'], 7 ) );
+$c = Stats_Sales::invoice_parts( array( array( 'product_id' => 50, 'items' => array( array( 'kind' => 'fish', 'name' => 'A', 'unit_price' => 5 ) ) ), (object) array( 'product_id' => 60, 'lines' => array( array( 'kind' => 'fish', 'name' => 'B', 'unit_price' => 7 ) ) ), array( 'kind' => 'fish', 'name' => 'A loose line', 'unit_price' => 5 ), array( 'product_id' => 70, 'lines' => array( array( 'name' => 'No kind', 'qty' => 2, 'price' => 4 ), array( 'kind' => 'banana', 'name' => 'Weird', 'unit_price' => 4 ), (object) array( 'kind' => 'fish', 'name' => 'An object', 'unit_price' => 4 ) ) ) ) );
+check( 'nothing else is read: "items", objects, a loose line, a line without a kind (or with one of nobody\'s) are no lines — nothing is guessed', array() === $c );
+$d = Stats_Sales::invoice_parts( array( array( 'id' => 7, 'product_id' => 900, 'lines' => array( array( 'kind' => 'credit', 'name' => 'Credit: lost fish', 'qty' => 1, 'unit_price' => 12, 'amount' => -12 ), array( 'kind' => 'discount', 'name' => 'Discount', 'qty' => 1, 'unit_price' => -8, 'amount' => -8 ), array( 'kind' => 'note', 'name' => 'Ships Tuesday', 'qty' => 1, 'unit_price' => null, 'amount' => 0.0 ), array( 'kind' => 'credit', 'name' => 'Credit', 'qty' => 1, 'unit_price' => null ) ) ) ) );
+check( 'a credit and a Discount are both a credit here, by their signed amount (−12, −8), never fish, and name no product; a note has no money; a credit without an amount has no total', array( 'credit', 'credit', 'note', 'credit' ) === array_column( $d, 'kind' ) && near( $d[0]['total'], -12 ) && near( $d[1]['total'], -8 ) && null === $d[2]['total'] && null === $d[3]['total'] && 0 === $d[0]['product_id'] );
 // The Invoices section's own lines (Invoices::contract_line()): unit_price and a signed amount.
 $e = Stats_Sales::invoice_parts( array( array( 'id' => 7, 'product_id' => 900, 'lines' => array( array( 'kind' => 'fish', 'name' => 'Red Test Goby', 'qty' => 2, 'unit_price' => 30, 'amount' => 60 ), array( 'kind' => 'credit', 'name' => 'Credit: a lost fish', 'qty' => 1, 'unit_price' => 15, 'amount' => -15 ), array( 'kind' => 'discount', 'name' => 'Discount', 'qty' => 1, 'unit_price' => -5, 'amount' => -5 ) ) ) ) );
 check( 'the Invoices section\'s lines: a fish by its price per fish, a credit and a Discount by their signed amount — it adds up to the 40 paid', array( 'fish', 'credit', 'credit' ) === array_column( $e, 'kind' ) && near( $e[0]['total'], 60 ) && near( $e[1]['total'], -15 ) && near( $e[2]['total'], -5 ) && '' === Stats_Sales::split_reason( $e, 1, 40.0 ) );
 $e = Stats_Sales::invoice_parts( array( array( 'id' => 7, 'product_id' => 900, 'lines' => array( array( 'kind' => 'fish', 'name' => 'Red Test Goby', 'qty' => 2, 'unit_price' => 30, 'amount' => 60 ), array( 'kind' => 'discount', 'name' => 'Adjustment', 'qty' => 1, 'unit_price' => 10, 'amount' => 10 ) ) ) ) );
 check( '…and its "Adjustment" UP to a stated price stays positive: the invoice adds up to the 70 paid and splits', near( $e[1]['total'], 10 ) && 'credit' === $e[1]['kind'] && '' === Stats_Sales::split_reason( $e, 1, 70.0 ) && 'mismatch' === Stats_Sales::split_reason( $e, 1, 50.0 ) );
-check( 'a JSON string (the theme\'s snapshot) reads the same; nothing, junk or an empty answer is no line', 1 === count( Stats_Sales::invoice_parts( '[{"name":"Red Test Goby","qty":2,"price":20,"kind":"fish","product_id":0}]' ) ) && array() === Stats_Sales::invoice_parts( null ) && array() === Stats_Sales::invoice_parts( '' ) && array() === Stats_Sales::invoice_parts( 'not json' ) && array() === Stats_Sales::invoice_parts( array() ) && array() === Stats_Sales::invoice_parts( 42 ) && array() === Stats_Sales::invoice_parts( false ) );
+check( 'nothing, junk or an empty answer is no line', array() === Stats_Sales::invoice_parts( null ) && array() === Stats_Sales::invoice_parts( '' ) && array() === Stats_Sales::invoice_parts( '[{"product_id":1,"lines":[{"kind":"fish","name":"A"}]}]' ) && array() === Stats_Sales::invoice_parts( array() ) && array() === Stats_Sales::invoice_parts( 42 ) && array() === Stats_Sales::invoice_parts( false ) );
+// What the theme writes beside an invoice kept as one line (_fh_invoice_lines): name, qty, price, kind, product_id.
+$f = Stats_Sales::snapshot_parts( '[{"name":"Red Test Goby","qty":2,"price":20,"kind":"fish","product_id":0},{"name":"Blue Test Wrasse","qty":1,"price":70,"kind":"fish","product_id":12},{"name":"Credit: lost fish","qty":1,"price":-10,"kind":"credit","product_id":0},{"name":"Ships Tuesday","qty":1,"price":null,"kind":"note","product_id":0}]' );
+check( 'the theme\'s snapshot, a JSON string: a fish by qty × its price per fish (and the product the row names), a credit as money off, a note without money', array( 'fish', 'fish', 'credit', 'note' ) === array_column( $f, 'kind' ) && near( $f[0]['total'], 40 ) && 2 === $f[0]['qty'] && 12 === $f[1]['product_id'] && near( $f[2]['total'], -10 ) && null === $f[3]['total'] && array( 0, 0, 0, 0 ) === array_column( $f, 'invoice_product_id' ) && '' === Stats_Sales::split_reason( $f, 1, 100.0 ) );
+$g = Stats_Sales::snapshot_parts( array( array( 'name' => 'Credit: lost fish', 'price' => 12 ), array( 'name' => 'A cheap one', 'price' => -3 ), array( 'name' => 'Weird', 'kind' => 'banana', 'qty' => 2, 'price' => 4 ), array( 'name' => '' ), 'junk' ) );
+check( 'decoded already, and a row without a kind the theme knows: the theme\'s own rule — a name starting "Credit" or a negative price is a credit (−12, −3), the rest a fish; a nameless row is dropped', array( 'credit', 'credit', 'fish' ) === array_column( $g, 'kind' ) && near( $g[0]['total'], -12 ) && near( $g[1]['total'], -3 ) && near( $g[2]['total'], 8 ) );
+check( 'nothing, junk or an empty snapshot is no line', array() === Stats_Sales::snapshot_parts( null ) && array() === Stats_Sales::snapshot_parts( '' ) && array() === Stats_Sales::snapshot_parts( 'not json' ) && array() === Stats_Sales::snapshot_parts( array() ) && array() === Stats_Sales::snapshot_parts( 42 ) );
 
 echo "9. The Invoices section present\n";
 $GLOBALS['fh_invoice_calls'] = array();
@@ -363,8 +370,8 @@ $GLOBALS['fh_invoices']      = array(
 			'id'         => 700,
 			'product_id' => 50,
 			'lines'      => array(
-				array( 'kind' => 'fish', 'name' => 'Mystery Test Eel', 'qty' => 1, 'price' => 25, 'species_id' => $eel ),
-				array( 'kind' => 'fish', 'name' => 'red test goby', 'qty' => 2, 'price' => 18, 'species_id' => $goby ),
+				array( 'kind' => 'fish', 'name' => 'Mystery Test Eel', 'qty' => 1, 'unit_price' => 25.0, 'amount' => 25.0, 'species_id' => $eel ),
+				array( 'kind' => 'fish', 'name' => 'red test goby', 'qty' => 2, 'unit_price' => 18.0, 'amount' => 36.0, 'species_id' => $goby ),
 			),
 		),
 	),
@@ -374,8 +381,8 @@ $GLOBALS['fh_invoices']      = array(
 			'id'         => 701,
 			'product_id' => 50,
 			'lines'      => array(
-				array( 'kind' => 'fish', 'name' => 'Wrasse for a friend', 'qty' => 1, 'price' => 50, 'species_id' => $wrasse ),
-				array( 'kind' => 'fish', 'name' => 'Eel', 'qty' => 1, 'price' => 40, 'species_id' => $eel ),
+				array( 'kind' => 'fish', 'name' => 'Wrasse for a friend', 'qty' => 1, 'unit_price' => 50.0, 'amount' => 50.0, 'species_id' => $wrasse ),
+				array( 'kind' => 'fish', 'name' => 'Eel', 'qty' => 1, 'unit_price' => 40.0, 'amount' => 40.0, 'species_id' => $eel ),
 			),
 		),
 	),
@@ -410,7 +417,7 @@ unset( $GLOBALS['fh_invoices'][ $s10 ] );
 add_filter(
 	Admin_Stats::INVOICE_FILTER,
 	static function ( $lines, $order_id ) use ( $s9, $tang ) {
-		return $s9 === (int) $order_id ? array( array( 'name' => 'Mystery Test Eel', 'qty' => 1, 'price' => 25, 'species_id' => $tang ) ) : $lines;
+		return $s9 === (int) $order_id ? array( array( 'id' => 0, 'product_id' => 50, 'lines' => array( array( 'kind' => 'fish', 'name' => 'Mystery Test Eel', 'qty' => 1, 'unit_price' => 25.0, 'amount' => 25.0, 'species_id' => $tang ) ) ) ) : $lines;
 	},
 	10,
 	2
@@ -423,7 +430,7 @@ check( 'a species id that is not in the list is not believed: the line falls bac
 	$l = Stats_Sales::new_ledger( 2026, $statuses );
 	Stats_Sales::add_rows( $l, array( array( 'row_id' => 1, 'order_id' => 10, 'product_id' => 0, 'variation_id' => 0, 'qty' => 1, 'revenue' => 30.0, 'parent_id' => 0, 'status' => 'wc-completed', 'date_created' => '2026-01-02 00:00:00', 'parent_status' => '', 'parent_date' => '', 'refunded_item_id' => 0 ) ), array( 1 => array( 'name' => 'Blue Test Wrasse', 'fish' => true, 'lines' => null, 'invoice_product_id' => 50 ) ) );
 	return $l;
-} )(), array( 10 => Stats_Sales::invoice_parts( array( array( 'name' => 'Blue Test Wrasse', 'qty' => 1, 'price' => 30, 'species_id' => 99999 ) ) ) ) ), $ctx ), 99999 ) );
+} )(), array( 10 => Stats_Sales::invoice_parts( array( array( 'id' => 0, 'product_id' => 50, 'lines' => array( array( 'kind' => 'fish', 'name' => 'Blue Test Wrasse', 'qty' => 1, 'unit_price' => 30.0, 'amount' => 30.0, 'species_id' => 99999 ) ) ) ) ) ) ), $ctx ), 99999 ) );
 
 echo "10. The view: sales beside the supplier orders of the year\n";
 $data = Admin_Stats::sales_data( $store, array( 'year' => 2026 ) );
