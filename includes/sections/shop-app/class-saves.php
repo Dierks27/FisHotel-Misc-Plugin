@@ -28,7 +28,14 @@
  * id. It is also the seam an offline queue will need: queued writes can
  * be replayed without fear.
  *
- * Remembered saves are kept for an hour.
+ * The id names ONE entry: what is remembered is the id together with
+ * what was sent (every field but the id itself). The same id with other
+ * content is another save and is written as such — it is never answered
+ * "saved" from the memory of something else.
+ *
+ * Remembered saves are kept for a week: the NOT SAVED sheet stays open
+ * for as long as the page does (a tablet left on a shelf over a weekend),
+ * and its Retry must still be answered from memory then.
  *
  * @package FisHotel\Misc\Sections\Shop_App
  */
@@ -58,11 +65,12 @@ class Saves {
 	const PENDING_SECONDS = 30;
 
 	/**
-	 * How long a save is remembered (seconds).
+	 * How long a save is remembered (seconds): a week. It has to outlast
+	 * a sheet left open, and the rows are a hash and a short answer.
 	 *
 	 * @var int
 	 */
-	const KEEP_SECONDS = 3600;
+	const KEEP_SECONDS = 604800;
 
 	/**
 	 * The claimed key of this request ('' = none).
@@ -103,15 +111,30 @@ class Saves {
 
 	/**
 	 * The key a save is remembered under: the id is only ever meaningful
-	 * for the device and the account that sent it.
+	 * for the device and the account that sent it, and for the entry it
+	 * was sent with.
 	 *
 	 * @param int    $device_id Device id.
 	 * @param int    $user_id   The session's account.
 	 * @param string $id        The save id.
+	 * @param string $content   content_hash() of what was sent ('' = not bound).
 	 * @return string 64 hex characters.
 	 */
-	public static function key( $device_id, $user_id, $id ) {
-		return hash( 'sha256', (int) $device_id . '|' . (int) $user_id . '|' . (string) $id );
+	public static function key( $device_id, $user_id, $id, $content = '' ) {
+		return hash( 'sha256', (int) $device_id . '|' . (int) $user_id . '|' . (string) $id . '|' . (string) $content );
+	}
+
+	/**
+	 * What was sent, as a hash (pure): every posted field but the save id
+	 * and the nonce (a page that stays open for a day sends the same
+	 * entry under a newer nonce), in the order they came.
+	 *
+	 * @param array $post The posted fields, as PHP holds them.
+	 * @return string 64 hex characters.
+	 */
+	public static function content_hash( array $post ) {
+		unset( $post[ self::FIELD ], $post['nonce'] );
+		return hash( 'sha256', (string) wp_json_encode( $post ) );
 	}
 
 	/**
@@ -205,7 +228,7 @@ class Saves {
 		$access = Access::instance();
 		$store  = $access->store();
 		$now    = $access->now();
-		$key    = self::key( $person['device_id'], $person['user_id'], $id );
+		$key    = self::key( $person['device_id'], $person['user_id'], $id, self::content_hash( $_POST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified just above; only hashed.
 
 		$store->prune_saves( $now - self::KEEP_SECONDS );
 		$claim = $store->claim_save( $key, $person['device_id'], $now, self::PENDING_SECONDS );

@@ -19,9 +19,13 @@
  * UNLOCKING. unlock() takes one try off the device's budget before the
  * PIN is compared with every person; a correct PIN starts a shop session
  * (a fresh id stored on the device row and signed into the session
- * cookie), a wrong one says only "wrong PIN" — never whose it nearly was —
- * and the fifth in a row locks the device (Lockout). lock() ends the
- * session on the server, so a copy of the cookie is worth nothing.
+ * cookie) and gives back the one try it took — never the wrong ones
+ * before it; a wrong one says only "wrong PIN" — never whose it nearly
+ * was —, is logged (never the digits), and the fifth within fifteen
+ * minutes locks the device (Lockout). lock() ends the session on the
+ * server, so a copy of the cookie is worth nothing. end_sessions_of()
+ * ends the sessions of one person everywhere (their PIN or account
+ * changed).
  *
  * context() is what every other class asks: the device of this request
  * (or none), its lockout, and its live session (or none). It costs no
@@ -29,9 +33,9 @@
  *
  * Every event is appended to the access log (and mirrored to the shared
  * Health log through do_action( 'fishotel_log', … ) when that section is
- * on): device enrolled / revoked, a link made, unlocks, locks, lockouts,
- * a lockout cleared, a person added or changed (never the PIN) — with the
- * device, the person and the time.
+ * on): device enrolled / revoked, a link made, unlocks, wrong PINs, locks,
+ * lockouts, a lockout cleared, a person added or changed (never the PIN)
+ * — with the device, the person and the time.
  *
  * The store and the clock are parameters, so the tests run all of this
  * against an in-memory store and a clock they move.
@@ -349,9 +353,19 @@ class Access {
 			);
 		}
 
-		if ( ! $this->store->reserve_attempt( $device['id'], Lockout::MAX_ATTEMPTS, $now ) ) {
+		if ( ! $this->store->reserve_attempt( $device['id'], Lockout::MAX_ATTEMPTS, $now, Lockout::FAIL_MEMORY ) ) {
 			$fresh  = $this->store->device( $device['id'] );
-			$status = $fresh ? Lockout::status( $fresh, $now ) : array( 'seconds' => 0 );
+			$status = $fresh ? Lockout::status( $fresh, $now ) : array(
+				'locked'  => false,
+				'seconds' => 0,
+			);
+			if ( $fresh && ! $status['locked'] && Store::STATUS_ACTIVE === $fresh['status'] && Lockout::count( $fresh, $now ) >= Lockout::MAX_ATTEMPTS ) {
+				// Every try is used up and no lockout stands (the write of
+				// one did not land, or other requests used the tries a
+				// moment ago): write it now. Left like this the device
+				// would refuse every PIN with nothing on the Devices list.
+				return $this->wrong_pin( $device, $now, false );
+			}
 			return array(
 				'ok'      => false,
 				'code'    => 'locked',
@@ -375,14 +389,11 @@ class Access {
 		$session_id = Session::new_id();
 		$stored     = $this->store->update_device(
 			$device['id'],
-			array_merge(
-				Lockout::after_success(),
-				array(
-					'session_id'         => $session_id,
-					'session_person_id'  => (int) $person['id'],
-					'session_started_at' => self::utc( $now ),
-					'last_used_at'       => self::utc( $now ),
-				)
+			array(
+				'session_id'         => $session_id,
+				'session_person_id'  => (int) $person['id'],
+				'session_started_at' => self::utc( $now ),
+				'last_used_at'       => self::utc( $now ),
 			)
 		);
 		if ( ! $stored ) {
@@ -391,6 +402,11 @@ class Access {
 				'code' => 'error',
 			);
 		}
+
+		// The try this PIN took is given back — that one only. The wrong
+		// PINs before it stay counted (Lockout), so a PIN of one's own is
+		// no way to go on guessing somebody else's.
+		$this->store->release_attempt( $device['id'] );
 
 		$this->store->update_person( $person['id'], array( 'last_unlock_at' => self::utc( $now ) ) );
 
@@ -445,19 +461,33 @@ class Access {
 	}
 
 	/**
-	 * A wrong PIN: the same answer whatever was typed, and the lockout
-	 * when it was the fifth.
+	 * A wrong PIN: the same answer whatever was typed, a line in the log
+	 * (the device and how many tries that makes — never what was typed,
+	 * never a person), and the lockout when it was the fifth.
 	 *
-	 * @param array $device The device row as read before the attempt.
-	 * @param int   $now    Timestamp.
+	 * @param array $device   The device row as read before the attempt.
+	 * @param int   $now      Timestamp.
+	 * @param bool  $compared Whether a PIN was compared (false: only the lockout is owed).
 	 * @return array
 	 */
-	private function wrong_pin( array $device, $now ) {
+	private function wrong_pin( array $device, $now, $compared = true ) {
 		$fresh = $this->store->device( $device['id'] );
 		if ( ! $fresh ) {
 			return array(
 				'ok'   => false,
 				'code' => 'not_enrolled',
+			);
+		}
+
+		if ( $compared ) {
+			$this->log(
+				'wrong_pin',
+				array(
+					'device_id'   => (int) $device['id'],
+					'device_name' => $device['name'],
+					/* translators: 1: which wrong PIN this is, 2: how many lock the device */
+					'note'        => sprintf( __( 'Try %1$d of %2$d', 'fishotel-misc-plugin' ), min( Lockout::MAX_ATTEMPTS, max( 1, (int) $fresh['fail_count'] ) ), Lockout::MAX_ATTEMPTS ),
+				)
 			);
 		}
 
@@ -476,8 +506,8 @@ class Access {
 				array(
 					'device_id'   => (int) $device['id'],
 					'device_name' => $device['name'],
-					/* translators: 1: wrong PINs, 2: how long, e.g. "5 minutes" */
-					'note'        => sprintf( __( '%1$d wrong PINs: locked for %2$s', 'fishotel-misc-plugin' ), Lockout::MAX_ATTEMPTS, Lockout::human( $after['seconds'] ) ),
+					/* translators: 1: wrong PINs, 2: within how long, e.g. "15 minutes", 3: locked for how long, e.g. "5 minutes" */
+					'note'        => sprintf( __( '%1$d wrong PINs within %2$s: locked for %3$s', 'fishotel-misc-plugin' ), Lockout::MAX_ATTEMPTS, Lockout::human( Lockout::FAIL_MEMORY ), Lockout::human( $after['seconds'] ) ),
 				)
 			);
 		}
@@ -544,6 +574,20 @@ class Access {
 		);
 
 		return true;
+	}
+
+	/**
+	 * End every shop session a person holds, on whatever device: their
+	 * PIN or their account changed, or they were switched off. A session
+	 * started with the old PIN must not outlive it.
+	 *
+	 * @param int $person_id Person id.
+	 * @return int Devices whose session was ended.
+	 */
+	public function end_sessions_of( $person_id ) {
+		$n = $this->store->end_person_sessions( (int) $person_id );
+		$this->forget();
+		return (int) $n;
 	}
 
 	/* ============================================================== */
@@ -796,6 +840,7 @@ class Access {
 			'device_revoked'  => __( 'Device revoked', 'fishotel-misc-plugin' ),
 			'link_created'    => __( 'Enrolment link made', 'fishotel-misc-plugin' ),
 			'unlock'          => __( 'Unlocked', 'fishotel-misc-plugin' ),
+			'wrong_pin'       => __( 'Wrong PIN', 'fishotel-misc-plugin' ),
 			'lock'            => __( 'Locked', 'fishotel-misc-plugin' ),
 			'lockout'         => __( 'Locked out', 'fishotel-misc-plugin' ),
 			'lockout_cleared' => __( 'Lockout cleared', 'fishotel-misc-plugin' ),

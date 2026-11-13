@@ -2,9 +2,10 @@
 /**
  * Store tests — the schema as dbDelta wants it, the install behind the
  * autoloaded version option (no query once installed; the option written
- * only when every table really exists; a failed install retried in
- * wp-admin at most once an hour), the site secret made with the tables,
- * the access log that can only grow, $wpdb in one file only, the
+ * only when every table and the column a later version added really
+ * exist; a failed install retried in wp-admin at most once an hour), the
+ * site secret made with the tables, names cut by characters and not by
+ * bytes, the access log that can only grow, $wpdb in one file only, the
  * in-memory twin the other tests use keeping pace with the real store,
  * and the section as the Section Manager finds it.
  *
@@ -45,6 +46,7 @@ check( 'two spaces after PRIMARY KEY, KEY (never INDEX), one column per line', 4
 check( 'the device row has a place for the token\'s hash — and none for a token', false !== strpos( $schema[0], 'token_hash char(64)' ) && false !== strpos( $schema[0], 'enrol_hash char(64)' ) && ! preg_match( '/\btoken (var)?char/', $schema[0] ) );
 check( 'the people row has a place for the PIN\'s hash, salt and length — and none for a PIN', false !== strpos( $schema[1], 'pin_hash char(64)' ) && false !== strpos( $schema[1], 'pin_salt char(32)' ) && false !== strpos( $schema[1], 'pin_length' ) && ! preg_match( '/\bpin (var)?char/', $schema[1] ) );
 check( 'a save id can be claimed once: a unique key', false !== strpos( $schema[3], 'UNIQUE KEY save_key (save_key)' ) );
+check( 'the device row says when its count of wrong PINs began (1.1)', false !== strpos( $schema[0], "fail_since datetime NULL,\n" ) && '1.1' === Store::DB_VERSION );
 
 echo "\n2. Install, behind the version option\n";
 check( 'not installed yet', ! Store::installed() );
@@ -74,13 +76,13 @@ $wpdb->deltas   = array();
 $wpdb->delta_ok = false; // dbDelta runs but no table appears.
 Store::maybe_install( false );
 $marker = (string) $GLOBALS['fh_options'][ Store::DB_VERSION_OPTION ];
-check( 'the version is NOT written; a marker with the time is (autoloaded)', 1 === preg_match( '/^failed:1\.0:\d+$/', $marker ) && true === $GLOBALS['fh_autoload'][ Store::DB_VERSION_OPTION ] && ! Store::installed() );
+check( 'the version is NOT written; a marker with the time is (autoloaded)', 1 === preg_match( '/^failed:1\.1:\d+$/', $marker ) && true === $GLOBALS['fh_autoload'][ Store::DB_VERSION_OPTION ] && ! Store::installed() );
 check( '… and no secret is made for tables that are not there', ! isset( $GLOBALS['fh_options'][ Settings::SECRET_OPTION ] ) );
 $wpdb->deltas  = array();
 $wpdb->queries = array();
 check( 'a front-end request does not try again (a visitor never pays a dbDelta)', false === Store::maybe_install( false ) && array() === $wpdb->deltas && array() === $wpdb->queries );
 check( 'wp-admin does not try again within the hour', false === Store::maybe_install( true ) && array() === $wpdb->deltas );
-$GLOBALS['fh_options'][ Store::DB_VERSION_OPTION ] = 'failed:1.0:' . ( time() - Store::RETRY_SECONDS - 5 );
+$GLOBALS['fh_options'][ Store::DB_VERSION_OPTION ] = 'failed:1.1:' . ( time() - Store::RETRY_SECONDS - 5 );
 $wpdb->delta_ok                                    = true;
 check( 'wp-admin tries again after an hour — and this time it works', true === Store::maybe_install( true ) && 4 === count( $wpdb->deltas ) && Store::installed() );
 
@@ -89,10 +91,34 @@ check( 'three of four tables is not "installed"', ! Store::tables_exist() );
 $wpdb->tables[] = 'wp_fh_shopapp_saves';
 check( 'four of four is', Store::tables_exist() );
 
+echo "\n3b. An upgrade from 1.0: the new column must really be there\n";
+$GLOBALS['fh_options'][ Store::DB_VERSION_OPTION ] = '1.0';
+$wpdb->deltas                                      = array();
+$wpdb->no_columns                                  = array( 'fail_since' ); // dbDelta ran, the ALTER did not take.
+check( 'a site on 1.0 is not "installed"; the next boot runs dbDelta', ! Store::installed() && true === Store::maybe_install( false ) && 4 === count( $wpdb->deltas ) );
+check( '… and with the column still missing the version is NOT written (a marker is)', 0 === strpos( (string) $GLOBALS['fh_options'][ Store::DB_VERSION_OPTION ], 'failed:1.1:' ) && ! Store::columns_exist() && Store::tables_exist() );
+$wpdb->no_columns                                  = array();
+$GLOBALS['fh_options'][ Store::DB_VERSION_OPTION ] = '1.0';
+check( 'with the column there the version is written', true === Store::maybe_install( false ) && Store::installed() && Store::columns_exist() );
+
+echo "\n3c. Names are cut by characters, as the columns count them\n";
+$accented = 'a' . str_repeat( 'é', 40 );      // 41 characters, 81 bytes.
+$cjk      = str_repeat( '漁', 27 );            // 27 characters, 81 bytes.
+$long     = str_repeat( 'é', 120 );
+check( 'a name of 41 characters that is 81 bytes long is kept whole (cut by bytes it would end in half a letter, and the row would be refused)', $accented === Store::cut( $accented, 80 ) && $cjk === Store::cut( $cjk, 80 ) );
+check( 'a name that is too long is cut to 80 characters — still valid text', str_repeat( 'é', 80 ) === Store::cut( $long, 80 ) && 1 === preg_match( '//u', Store::cut( $long, 80 ) ) && 1 === preg_match( '//u', Store::cut( 'ab' . $cjk, 3 ) ) && 'ab漁' === Store::cut( 'ab' . $cjk, 3 ) );
+check( 'plain names, an empty one and a number come out as strings', 'Shop tablet' === Store::cut( 'Shop tablet', 80 ) && '' === Store::cut( '', 80 ) && '12' === Store::cut( 12, 80 ) && '' === Store::cut( null, 80 ) );
+$twin = new Fake_Store();
+$pid  = $twin->insert_person( array( 'name' => $accented, 'active' => 1 ) );
+$did  = $twin->create_device( array( 'name' => $cjk, 'status' => Store::STATUS_ACTIVE ) );
+$twin->append_log( array( 'event' => 'x', 'device_name' => $cjk, 'person_name' => $accented, 'note' => str_repeat( 'é', 300 ) ) );
+check( 'the twin keeps such names whole too (person, device, log)', $accented === $twin->people[ $pid ]['name'] && $cjk === $twin->devices[ $did ]['name'] && $accented === $twin->log[0]['person_name'] && str_repeat( 'é', 191 ) === $twin->log[0]['note'] );
+check( 'no write of the store cuts by bytes any more (one substr() is left: the last resort on a server without mbstring and with broken text)', 1 === preg_match_all( '/(?<!mb_)substr\( \$value/', (string) file_get_contents( $dir . 'class-store.php' ) ) && false === strpos( (string) file_get_contents( __DIR__ . '/fake-store.php' ), 'substr(' ) );
+
 echo "\n4. Every method survives a database that answers nothing\n";
 $store = new Store();
 check( 'reads give null or an empty list', null === $store->device_by_token_hash( str_repeat( 'a', 64 ) ) && null === $store->device( 1 ) && array() === $store->devices() && array() === $store->people() && null === $store->person( 1 ) && array() === $store->log_rows() && 0 === $store->log_count() && null === $store->pending_by_enrol_hash( str_repeat( 'a', 64 ), time() ) );
-check( 'writes say they did not happen', false === $store->create_device( array( 'name' => 'x' ) ) && false === $store->insert_person( array( 'name' => 'x' ) ) && false === $store->append_log( array( 'event' => 'x' ) ) && false === $store->revoke_device( 1, 1, time() ) && false === $store->reserve_attempt( 1, 5, time() ) && false === $store->lock_device( 1, array( 'locked_until' => '2030-01-01 00:00:00', 'lock_level' => 1 ), 5 ) && null === $store->claim_enrolment( str_repeat( 'a', 64 ), str_repeat( 'b', 64 ), time() ) );
+check( 'writes say they did not happen', false === $store->create_device( array( 'name' => 'x' ) ) && false === $store->insert_person( array( 'name' => 'x' ) ) && false === $store->append_log( array( 'event' => 'x' ) ) && false === $store->revoke_device( 1, 1, time() ) && false === $store->reserve_attempt( 1, 5, time(), 900 ) && false === $store->lock_device( 1, array( 'locked_until' => '2030-01-01 00:00:00', 'lock_level' => 1 ), 5 ) && null === $store->claim_enrolment( str_repeat( 'a', 64 ), str_repeat( 'b', 64 ), time() ) );
 check( 'a hash of the wrong length is never even looked up', ( function () use ( $store, $wpdb ) {
 	$wpdb->queries = array();
 	$store->device_by_token_hash( 'short' );
@@ -100,6 +126,10 @@ check( 'a hash of the wrong length is never even looked up', ( function () use (
 	$store->claim_enrolment( 'short', 'short', time() );
 	$store->claim_save( 'short', 1, time(), 30 );
 	return array() === $wpdb->queries;
+} )() );
+check( 'ending the sessions of nobody (person 0) is not even asked of the database', ( function () use ( $store, $wpdb ) {
+	$wpdb->queries = array();
+	return 0 === $store->end_person_sessions( 0 ) && array() === $wpdb->queries;
 } )() );
 check( 'update_device() and update_person() write only the columns they know', false === $store->update_device( 1, array( 'status' => 'active', 'token_hash' => 'x', 'enrolled_by' => 9 ) ) && false === $store->update_person( 1, array( 'id' => 5, 'created_by' => 9 ) ) );
 

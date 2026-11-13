@@ -952,14 +952,19 @@ class App {
 			'error'         => __( 'Something went wrong. Try again.', 'fishotel-misc-plugin' ),
 			'noFrontDesk'   => __( 'There are no tank screens to open.', 'fishotel-misc-plugin' ),
 			'noTanks'       => __( 'No buildings or tanks yet. The layout is set under FisHotel Tools → Clean Room → Settings.', 'fishotel-misc-plugin' ),
-			'notSaved'      => __( 'NOT SAVED', 'fishotel-misc-plugin' ),
-			'notSavedWhy'   => __( 'No answer came back — the connection may be down. What you entered is still here.', 'fishotel-misc-plugin' ),
-			'notSavedServer' => __( 'The site had a problem and did not save it. What you entered is still here.', 'fishotel-misc-plugin' ),
-			'notSavedClosed' => __( 'Not saved. Check the connection, then save again.', 'fishotel-misc-plugin' ),
+			'notSaved'      => __( 'MAY NOT BE SAVED', 'fishotel-misc-plugin' ),
+			'notSavedWhy'   => __( 'No answer came back — the connection may be down — so it may not have been saved. What you entered is still here. Retry sends the same entry again; it is written once.', 'fishotel-misc-plugin' ),
+			'notSavedServer' => __( 'The site had a problem and may not have saved it. What you entered is still here. Retry sends the same entry again; it is written once.', 'fishotel-misc-plugin' ),
+			'notSavedClosed' => __( 'Not confirmed as saved. Check the connection, then save again — the same entry is written once.', 'fishotel-misc-plugin' ),
+			'lostTitle'     => __( 'NOT SAVED', 'fishotel-misc-plugin' ),
+			/* translators: %s: the person who unlocked */
+			'lostWhy'       => __( 'The entry that was waiting was made before %s unlocked. It was not saved — enter it again.', 'fishotel-misc-plugin' ),
+			'lostOk'        => __( 'OK — enter it again', 'fishotel-misc-plugin' ),
 			'keepEditing'   => __( 'Back to the entry', 'fishotel-misc-plugin' ),
 			'saving'        => __( 'Saving…', 'fishotel-misc-plugin' ),
 			'sessionEnded'  => __( 'Locked. Enter your PIN to go on.', 'fishotel-misc-plugin' ),
-			'sessionEndedSave' => __( 'Locked before it was saved. Enter your PIN and it is saved.', 'fishotel-misc-plugin' ),
+			/* translators: %s: the person whose entry is waiting */
+			'sessionEndedSave' => __( 'Locked before it was saved. %s: enter your PIN and it is saved.', 'fishotel-misc-plugin' ),
 		);
 	}
 }

@@ -237,7 +237,7 @@ check( '… it is there, escaped', false !== strpos( $pages['devices'], '&lt;scr
 check( 'no PIN hash, no salt, no token hash and no link token on any tab', false === strpos( $all, str_repeat( 'a', 64 ) ) && false === strpos( $all, str_repeat( 'b', 32 ) ) && false === strpos( $all, str_repeat( 'c', 64 ) ) && false === strpos( $all, $link['token'] ) && false === strpos( $all, Settings::secret() ) );
 check( 'Devices: set up this device, a one-time link, the list with the lockout, Clear lockout and Revoke', false !== strpos( $pages['devices'], 'Set up this device' ) && false !== strpos( $pages['devices'], 'Make a one-time link' ) && false !== strpos( $pages['devices'], 'Yes — 4 minutes more' ) && false !== strpos( $pages['devices'], 'fishotel_shop_app_clear_lockout' ) && false !== strpos( $pages['devices'], 'fishotel_shop_app_revoke' ) && false !== strpos( $pages['devices'], 'waiting for its link' ) && false !== strpos( $pages['devices'], 'Cancel the link' ) );
 check( 'Devices: who enrolled each, and the revoked one shown as revoked, by whom', false !== strpos( $pages['devices'], 'Olive Owner' ) && false !== strpos( $pages['devices'], 'revoked ' ) );
-check( 'People: the form (a password field for the PIN, never pre-filled), the accounts, the list with Switch off', false !== strpos( $pages['people'], 'type="password" name="pin"' ) && false === strpos( $pages['people'], 'name="pin" value' ) && false !== strpos( $pages['people'], 'Shop staff (the shared account)' ) && false !== strpos( $pages['people'], 'fishotel_shop_app_person_off' ) && false !== strpos( $pages['people'], 'Set · 4 digits' ) );
+check( 'People: the form (the PIN in plain digits — it is typed once, so it must be seen —, numeric, never pre-filled, not remembered by the browser), the accounts, the list with Switch off', false !== strpos( $pages['people'], '<input type="text" name="pin"' ) && false === strpos( $pages['people'], 'type="password"' ) && 1 === preg_match( '/<input type="text" name="pin"[^>]*inputmode="numeric"[^>]*autocomplete="off"/', $pages['people'] ) && false === strpos( $pages['people'], 'name="pin" value' ) && 0 === preg_match( '/name="pin"[^>]*\svalue=/', $pages['people'] ) && false !== strpos( $pages['people'], 'Shop staff (the shared account)' ) && false !== strpos( $pages['people'], 'fishotel_shop_app_person_off' ) && false !== strpos( $pages['people'], 'Set · 4 digits' ) );
 check( 'People: what a refused save gave back is shown once', false !== strpos( $pages['people'], 'role="alert"' ) && false === get_transient( 'fishotel_shopapp_form_' . $owner ) );
 check( 'Settings: the length, where the count starts, the digits', false !== strpos( $pages['settings'], 'name="session_minutes"' ) && false !== strpos( $pages['settings'], 'name="session_mode"' ) && false !== strpos( $pages['settings'], 'name="pin_length"' ) && false !== strpos( $pages['settings'], "value=\"120\" selected='selected'" ) );
 check( 'Log: every kind of event has its label', false !== strpos( $pages['log'], 'Device enrolled' ) && false !== strpos( $pages['log'], 'Unlocked' ) && false !== strpos( $pages['log'], 'Person added' ) && false !== strpos( $pages['log'], 'Device revoked' ) && false !== strpos( $pages['log'], 'Enrolment link made' ) );
@@ -268,5 +268,58 @@ $GLOBALS['wpdb']->tables = array();
 fh_admin_as( $owner, array(), '/wp-admin/admin.php?page=fishotel-misc-shop-app' );
 $run = fh_run( array( $admin, 'render_page' ) );
 check( 'without its tables: it says to deactivate and reactivate', false !== strpos( $run['output'], 'The Shop App tables do not exist' ) );
+
+echo "\nA new PIN (or another account) ends the session the old one started\n";
+$store = fh_fresh_store();
+fh_admin_as( $owner );
+$sam   = Admin::person_request( array( 'person' => '0', 'name' => 'Sam Shore', 'pin' => '4821', 'user_id' => '0' ) )['id'];
+$olive = Admin::person_request( array( 'person' => '0', 'name' => 'Olive Owner', 'pin' => '9042', 'user_id' => (string) $owner ) )['id'];
+$tablet = Access::instance()->enrol_here( 'Shop tablet', $owner );
+$jar_t  = fh_jar( array() );
+fh_request();
+$phone = Access::instance()->enrol_here( 'Phone', $owner );
+$jar_p = fh_jar( array() );
+$live  = static function ( array $jar ) {
+	fh_request( array( 'cookies' => $jar ) );
+	$session = Access::instance()->context()['session'];
+	return $session ? $session['person']['name'] : '';
+};
+foreach ( array( 'jar_t' => '9042', 'jar_p' => '4821' ) as $which => $pin ) {
+	fh_request( array( 'cookies' => $$which ) );
+	Access::instance()->unlock( $pin );
+	$$which = fh_jar( $$which );
+}
+check( 'Olive is unlocked on the tablet, Sam on the phone', 'Olive Owner' === $live( $jar_t ) && 'Sam Shore' === $live( $jar_p ) );
+
+fh_admin_as( $owner );
+$r = Admin::person_request( array( 'person' => (string) $olive, 'name' => 'Olive O.', 'pin' => '', 'user_id' => (string) $owner ) );
+check( 'a new name alone ends nothing', $r['ok'] && 'Olive O.' === $live( $jar_t ) );
+
+fh_admin_as( $owner );
+$r = Admin::person_request( array( 'person' => (string) $olive, 'name' => 'Olive O.', 'pin' => '7777', 'user_id' => (string) $owner ) );
+check( 'Olive\'s PIN is changed (somebody had learned it)', $r['ok'] );
+check( '… the session the OLD PIN started is over on the device\'s very next request — it does not live on for as long as it is used', '' === $live( $jar_t ) && '' === $store->devices[ $tablet['id'] ]['session_id'] && 0 === $store->devices[ $tablet['id'] ]['session_person_id'] );
+check( '… its cookie was taken back, and a kept copy of it is worth nothing', '' === fh_cookies_set()[ \FisHotel\Misc\Sections\Shop_App\Http::cookie_name( \FisHotel\Misc\Sections\Shop_App\Http::SESSION ) ] && '' === $live( $jar_t ) );
+check( '… Sam\'s session on the phone is untouched', 'Sam Shore' === $live( $jar_p ) );
+check( '… and the log says so, without a PIN', 'person_changed' === end( $store->log )['event'] && 'PIN changed, their session ended' === end( $store->log )['note'] && false === strpos( json_encode( $store->log ), '7777' ) );
+fh_request( array( 'cookies' => $jar_t ) );
+$old = Access::instance()->unlock( '9042' );
+fh_request( array( 'cookies' => $jar_t ) );
+$new   = Access::instance()->unlock( '7777' );
+$jar_t = fh_jar( $jar_t );
+check( 'the old PIN opens nothing; the new one starts a new session', 'wrong_pin' === $old['code'] && $new['ok'] && 'Olive O.' === $live( $jar_t ) );
+
+fh_admin_as( $owner );
+$r = Admin::person_request( array( 'person' => (string) $sam, 'name' => 'Sam Shore', 'pin' => '', 'user_id' => (string) $second ) );
+check( 'Sam is tied to another account: the session recorded under the old one ends too', $r['ok'] && '' === $live( $jar_p ) && false !== strpos( end( $store->log )['note'], 'account changed, their session ended' ) );
+fh_request( array( 'cookies' => $jar_p ) );
+Access::instance()->unlock( '4821' );
+$jar_p = fh_jar( $jar_p );
+fh_admin_as( $owner );
+check( 'switching a person off ends their session on the spot — the Devices list stops saying they are unlocked', 'Sam Shore' === $live( $jar_p ) && Admin::person_off_request( $sam ) && '' === $store->devices[ $phone['id'] ]['session_id'] && '' === $live( $jar_p ) );
+fh_request( array( 'cookies' => $jar_t ) );
+Access::instance()->lock();
+fh_admin_as( $owner );
+check( 'a person who is not unlocked anywhere: a new PIN ends nothing and says nothing of sessions', Admin::person_request( array( 'person' => (string) $olive, 'name' => 'Olive O.', 'pin' => '7778', 'user_id' => (string) $owner ) )['ok'] && 'PIN changed' === end( $store->log )['note'] );
 
 fh_finish();

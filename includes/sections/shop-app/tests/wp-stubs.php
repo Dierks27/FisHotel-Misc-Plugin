@@ -871,6 +871,7 @@ class FH_Fake_WPDB {
 	public $tables     = array(); // Tables that "exist" (SHOW TABLES).
 	public $deltas     = array(); // The statements dbDelta() was handed.
 	public $delta_ok   = true;    // Whether dbDelta() really "creates" its table.
+	public $no_columns = array(); // Columns that are NOT there although their table is (SHOW COLUMNS).
 
 	public function prepare( $sql, ...$args ) {
 		if ( isset( $args[0] ) && is_array( $args[0] ) ) {
@@ -897,6 +898,9 @@ class FH_Fake_WPDB {
 		$this->queries[] = $sql;
 		if ( preg_match( "/^SHOW TABLES LIKE '(.+)'$/", $sql, $m ) ) {
 			return in_array( stripslashes( $m[1] ), $this->tables, true ) ? stripslashes( $m[1] ) : null;
+		}
+		if ( preg_match( "/^SHOW COLUMNS FROM (\S+) LIKE '(.+)'$/", $sql, $m ) ) {
+			return in_array( $m[1], $this->tables, true ) && ! in_array( $m[2], $this->no_columns, true ) ? $m[2] : null;
 		}
 		return null;
 	}

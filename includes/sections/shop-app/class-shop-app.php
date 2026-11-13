@@ -35,7 +35,9 @@
  *   - class-pins.php      PURE: PIN format, hashing (per-person salt + site
  *                         secret), the match that never stops early, the
  *                         uniqueness check, the device / enrolment tokens.
- *   - class-lockout.php   PURE: five wrong PINs, five minutes, doubling.
+ *   - class-lockout.php   PURE: five wrong PINs within fifteen minutes,
+ *                         five minutes, doubling; a correct PIN clears
+ *                         nothing but its own try.
  *   - class-session.php   PURE: the signed session cookie, both ways of
  *                         counting its length, when to renew it.
  *   - class-settings.php  the options (session length and mode, PIN

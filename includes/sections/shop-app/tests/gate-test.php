@@ -16,6 +16,10 @@
  *     the person's work is recorded under, WordPress nonces made on the
  *     page verify on the AJAX call, and the Front Desk's own handlers
  *     accept the call;
+ *   - that an AJAX call is NOBODY'S until its action starts: whatever
+ *     runs on init, wp_loaded or admin_init and acts for "the current
+ *     user" on a field somebody added to the POST (a basket's
+ *     add-to-cart) acts for a visitor, never for the account;
  *   - that the account holds exactly the Front Desk's capability, and
  *     only once the handler starts — an administrator's own account, a
  *     multisite super admin and the shared "Shop staff" account alike;
@@ -296,8 +300,8 @@ fh_boot_hooks(
 );
 
 $r = fh_ajax( $jar, array( 'action' => 'fishotel_cleanroom_screen', 'nonce' => $page_nonce, 'tank' => '521' ) );
-check( 'screen: WordPress takes the logged-in path, as the session\'s account', $r['logged_in'] && $staff === $r['user'] );
-check( '… before the handler: no capability at all (admin_init sees none)', false === $r['can_before'] );
+check( 'screen: until the action starts NOBODY is logged in — init and admin_init see a visitor', false === $r['logged_in'] && 0 === $r['user'] );
+check( '… and no capability at all', false === $r['can_before'] );
 check( '… inside the handler: the Front Desk\'s capability and nothing else', array( 'user' => $staff, 'manage_woocommerce' => true, 'manage_options' => false, 'edit_posts' => false, 'edit_users' => false, 'edit_shop_orders' => false, 'read' => false, 'user_can' => false ) === $GLOBALS['fh_inside'], $GLOBALS['fh_inside'] );
 check( '… the Front Desk\'s own handler answers with its screen (capability and nonce both passed)', 'json' === $r['kind'] && true === $r['data']['success'] && array_key_exists( 'screen', $r['data']['data'] ) && array_key_exists( 'tablesOk', $r['data']['data']['screen'] ), $r['kind'] . ' ' . $r['status'] );
 
@@ -306,7 +310,7 @@ check( 'suggest: answered by the Front Desk', 'json' === $r['kind'] && true === 
 $r = fh_ajax( $jar, array( 'action' => 'fishotel_cleanroom_act', 'nonce' => $page_nonce, 'act' => 'note', 'tank' => '521', 'note' => 'x' ) );
 check( 'act (the one write): past the Front Desk\'s guard — it gets as far as its tables (which this test has none of)', 'json' === $r['kind'] && 500 === $r['status'] && false !== strpos( $r['data']['data']['message'], 'tables are missing' ), $r['kind'] . ' ' . $r['status'] );
 $r = fh_ajax( $jar, array( 'action' => 'fishotel_cleanroom_parse', 'nonce' => $page_nonce, 'text' => 'two dead', 'tank' => '521' ) );
-check( 'parse: past the guard too', $r['logged_in'] && 403 !== $r['status'] && ! ( 'die' === $r['kind'] && '-1' === $r['data'] ) );
+check( 'parse: past the guard too', 403 !== $r['status'] && 400 !== $r['status'] && ! ( 'die' === $r['kind'] && '-1' === $r['data'] ) );
 
 $r = fh_ajax( $jar, array( 'action' => 'fishotel_cleanroom_screen', 'nonce' => 'not-a-nonce', 'tank' => '521' ) );
 check( 'a wrong nonce: refused by the Front Desk as ever (403, -1)', 'die' === $r['kind'] && 403 === $r['status'] && '-1' === $r['data'] );
@@ -355,12 +359,70 @@ fh_request( array( 'cookies' => $jar ) );
 Access::instance()->unlock( '7007' );
 $jar = fh_jar( $jar );
 $r   = fh_ajax( $jar, array( 'action' => 'fishotel_cleanroom_screen', 'nonce' => $page_nonce, 'tank' => '521' ) );
-check( 'somebody with another account unlocks: Sam\'s open page is no longer good (403) — nothing of Sam\'s is saved as Olive', $r['logged_in'] && $owner === $r['user'] && 403 === $r['status'] );
+check( 'somebody with another account unlocks: Sam\'s open page is no longer good (403) — nothing of Sam\'s is saved as Olive', $owner === $GLOBALS['fh_inside']['user'] && 403 === $r['status'] );
+
+echo "\n5b. An AJAX call is nobody's until its action starts\n";
+// A stand-in for every handler that sits on init / wp_loaded / admin_init
+// and acts for the current user when it finds its field in the request —
+// a basket's add-to-cart, a profile form, any plugin's "save my settings".
+$GLOBALS['fh_early'] = array();
+function fh_early_handler() {
+	if ( isset( $_REQUEST['add-to-cart'] ) ) {
+		$GLOBALS['fh_early'][] = array( fh_current_hook(), get_current_user_id(), is_user_logged_in(), current_user_can( 'manage_woocommerce' ), current_user_can( 'read' ) );
+	}
+}
+function fh_current_hook() {
+	return (string) end( $GLOBALS['fh_doing'] );
+}
+fh_boot_hooks(
+	static function () {
+		add_action( 'init', 'fh_early_handler', 10 );
+		add_action( 'init', 'fh_early_handler', PHP_INT_MAX );
+		add_action( 'admin_init', 'fh_early_handler', 10 );
+	}
+);
+foreach ( array( 'the shared account (Sam)' => array( '4821', $staff ), 'an administrator\'s own account (Olive)' => array( '7007', $owner ) ) as $whose => $case ) {
+	fh_request( array( 'cookies' => $jar ) );
+	Access::instance()->lock();
+	$jar = fh_jar( $jar );
+	fh_request( array( 'cookies' => $jar ) );
+	Access::instance()->unlock( $case[0] );
+	$jar = fh_jar( $jar );
+	fh_visit( array( 'uri' => '/?fh_front_desk=1&tank=521', 'cookies' => $jar ) );
+	$nonce               = wp_create_nonce( Front_Desk::NONCE );
+	$GLOBALS['fh_early'] = array();
+	$GLOBALS['fh_inside'] = array();
+	$r                   = fh_ajax( $jar, array( 'action' => 'fishotel_cleanroom_screen', 'nonce' => $nonce, 'tank' => '521', 'add-to-cart' => '11', 'quantity' => '7' ) );
+	check( 'a field added to a Front Desk call (add-to-cart) is seen by the early handlers as a VISITOR\'s — ' . $whose, 3 === count( $GLOBALS['fh_early'] ) && array( array( 0, false, false, false ) ) === array_values( array_unique( array_map( static function ( $seen ) { return array_slice( $seen, 1 ); }, $GLOBALS['fh_early'] ), SORT_REGULAR ) ), json_encode( $GLOBALS['fh_early'] ) );
+	check( '… while the Front Desk\'s own handler still runs as the account and answers', $case[1] === $GLOBALS['fh_inside']['user'] && true === $GLOBALS['fh_inside']['manage_woocommerce'] && 'json' === $r['kind'] && true === $r['data']['success'], $r['kind'] . ' ' . $r['status'] );
+}
+$GLOBALS['fh_early'] = array();
+$r                   = fh_ajax( array_merge( $jar, array( 'wordpress_logged_in_test' => (string) $manager ) ), array( 'action' => 'fishotel_cleanroom_screen', 'nonce' => $nonce, 'tank' => '521', 'add-to-cart' => '11' ) );
+check( 'with a WordPress login beside the session the early handlers see nobody either — not the login, not the session', array( array( 0, false, false, false ) ) === array_values( array_unique( array_map( static function ( $seen ) { return array_slice( $seen, 1 ); }, $GLOBALS['fh_early'] ), SORT_REGULAR ) ) && $owner === $GLOBALS['fh_inside']['user'] );
+$GLOBALS['fh_early'] = array();
+fh_ajax( array( 'wordpress_logged_in_test' => (string) $manager ), array( 'action' => 'fishotel_cleanroom_screen', 'nonce' => 'x', 'add-to-cart' => '11' ) );
+check( 'a WordPress login WITHOUT a shop session is what it always was: the early handlers see the manager', array( array( $manager, true, true, true ) ) === array_values( array_unique( array_map( static function ( $seen ) { return array_slice( $seen, 1 ); }, $GLOBALS['fh_early'] ), SORT_REGULAR ) ) );
+fh_request( array( 'method' => 'POST', 'uri' => '/wp-admin/admin-ajax.php', 'admin' => true, 'ajax' => true, 'post' => array( 'action' => 'fishotel_cleanroom_screen', 'add-to-cart' => '11' ), 'cookies' => $jar ) );
+check( 'asked before init (a plugin on plugins_loaded, a theme\'s setup): nobody there either — the account is never the answer before the action', 0 === get_current_user_id() && ! is_user_logged_in() && ! current_user_can( 'manage_woocommerce' ) );
+fh_request( array( 'method' => 'POST', 'uri' => '/wp-admin/admin-ajax.php', 'admin' => true, 'ajax' => true, 'post' => array( 'action' => 'fishotel_cleanroom_screen' ), 'cookies' => $jar ) );
+do_action( 'init' );
+check( 'WordPress is sent down the visitor\'s path, where the gate waits at priority 0 to hand over to the real action', ! is_user_logged_in() && 0 === has_action( 'wp_ajax_nopriv_fishotel_cleanroom_screen', array( Gate::class, 'enter_ajax' ) ) && 0 === has_action( 'wp_ajax_fishotel_cleanroom_screen', array( Gate::class, 'enter' ) ) );
+check( '… the account\'s saved basket is neither read nor written on a shop-floor request', false === apply_filters( 'woocommerce_persistent_cart_enabled', true ) );
+fh_request( array( 'method' => 'POST', 'uri' => '/wp-admin/admin-ajax.php', 'admin' => true, 'ajax' => true, 'post' => array( 'action' => 'heartbeat' ), 'cookies' => $jar ) );
+do_action( 'init' );
+check( '… and on any other action nothing of this is hooked', false === has_action( 'wp_ajax_nopriv_heartbeat', array( Gate::class, 'enter_ajax' ) ) && true === apply_filters( 'woocommerce_persistent_cart_enabled', true ) );
+fh_boot_hooks(
+	static function () {
+		remove_action( 'init', 'fh_early_handler', 10 );
+		remove_action( 'init', 'fh_early_handler', PHP_INT_MAX );
+		remove_action( 'admin_init', 'fh_early_handler', 10 );
+	}
+);
 
 echo "\n6. An administrator's own account in a shop session is no administrator\n";
 $seen = fh_visit( array( 'uri' => '/?fh_front_desk=1&tank=521', 'cookies' => $jar ) );
-check( 'Olive (an administrator, by PIN): logged in as her own account on the Front Desk', $seen['logged_in'] && $owner === $seen['user'] );
-check( '… with none of her capabilities before the handler', ! current_user_can( 'manage_options' ) && ! current_user_can( 'manage_woocommerce' ) && ! current_user_can( 'edit_users' ) && ! user_can( $owner, 'manage_options' ) );
+check( 'Olive (an administrator, by PIN): logged in as the administrator\'s own account on the Front Desk', $seen['logged_in'] && $owner === $seen['user'] );
+check( '… with none of that account\'s capabilities before the handler', ! current_user_can( 'manage_options' ) && ! current_user_can( 'manage_woocommerce' ) && ! current_user_can( 'edit_users' ) && ! user_can( $owner, 'manage_options' ) );
 $olive_nonce = wp_create_nonce( Front_Desk::NONCE );
 $r           = fh_ajax( $jar, array( 'action' => 'fishotel_cleanroom_screen', 'nonce' => $olive_nonce, 'tank' => '521' ) );
 check( '… and inside it only the Front Desk\'s', array( 'user' => $owner, 'manage_woocommerce' => true, 'manage_options' => false, 'edit_posts' => false, 'edit_users' => false, 'edit_shop_orders' => false, 'read' => false, 'user_can' => false ) === $GLOBALS['fh_inside'], $GLOBALS['fh_inside'] );
@@ -376,7 +438,7 @@ $GLOBALS['fh_multisite']   = false;
 $GLOBALS['fh_super_admin'] = array();
 
 $seen = fh_visit( array( 'uri' => '/wp-admin/index.php', 'admin' => true, 'cookies' => array_merge( $jar, array( 'wordpress_logged_in_test' => (string) $owner ) ) ) );
-check( 'her WordPress login on wp-admin, with the shop session\'s cookies beside it: an administrator, untouched', $seen['logged_in'] && $owner === $seen['user'] && current_user_can( 'manage_options' ) && ! $seen['session'] );
+check( 'the same person\'s WordPress login on wp-admin, with the shop session\'s cookies beside it: an administrator, untouched', $seen['logged_in'] && $owner === $seen['user'] && current_user_can( 'manage_options' ) && ! $seen['session'] );
 
 echo "\n7. A WordPress login and a shop session on one device\n";
 fh_request( array( 'cookies' => $jar ) );
@@ -414,7 +476,9 @@ check( '… and at init the session\'s account is put in place all the same', is
 fh_request( array( 'method' => 'POST', 'uri' => '/wp-admin/admin-ajax.php', 'admin' => true, 'ajax' => true, 'post' => array( 'action' => 'fishotel_cleanroom_screen' ), 'cookies' => $both ) );
 $GLOBALS['current_user'] = new WP_User( $manager ); // Worked out early as the WordPress login.
 do_action( 'init' );
-check( 'the same when the early answer was a WordPress login: at init it is the session\'s account', $staff === get_current_user_id() );
+check( 'on an AJAX call an early answer that was a WordPress login is taken back at init: nobody, until the action', 0 === get_current_user_id() && ! is_user_logged_in() );
+Gate::enter();
+check( '… and when the action starts it is the session\'s account', $staff === get_current_user_id() && Gate::granted() );
 
 $GLOBALS['fh_asked'] = 0;
 function fh_nosy_filter( $rules ) {

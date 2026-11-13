@@ -408,6 +408,14 @@ class Admin {
 			);
 		}
 
+		// A session started with the old PIN, or recorded under the old
+		// account, ends with it — on every device, at its next request.
+		if ( $current && ( $checked['pin_changed'] || (int) $current['user_id'] !== (int) $fields['user_id'] ) ) {
+			if ( $access->end_sessions_of( $id ) > 0 ) {
+				$note[] = __( 'their session ended', 'fishotel-misc-plugin' );
+			}
+		}
+
 		// The shared account is made the moment somebody needs it.
 		if ( 0 === (int) $fields['user_id'] ) {
 			People::staff_user_id( true );
@@ -457,7 +465,7 @@ class Admin {
 
 	/**
 	 * Switch a person off: their PIN is destroyed and a session they hold
-	 * ends at its next request.
+	 * ends here and now, on every device.
 	 *
 	 * @param int $id Person id.
 	 * @return bool
@@ -482,6 +490,8 @@ class Admin {
 		if ( ! $saved ) {
 			return false;
 		}
+
+		$access->end_sessions_of( (int) $person['id'] );
 
 		$access->log(
 			'person_changed',
@@ -576,7 +586,7 @@ class Admin {
 		$store     = $access->store();
 		$now       = $access->now();
 		$settings  = Settings::get();
-		$tables_ok = Store::tables_exist();
+		$tables_ok = Store::tables_exist() && Store::columns_exist();
 		$https_ok  = Shop_App::https_ok();
 		$desk      = Shop_App::front_desk();
 		$app_url   = Shop_App::app_url();

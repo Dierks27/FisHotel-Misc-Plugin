@@ -3,8 +3,10 @@
  * An in-memory Store: the same methods and the same guarantees — a token
  * hash finds only an enrolled device, a one-time link is used up by ONE
  * guarded step, an attempt is taken off the budget only while the device
- * is not locked and has tries left, a lockout is written once, a save id
- * is claimed once, and the log can only grow.
+ * is not locked and has tries left (the count starting over once it began
+ * longer ago than its memory), a correct PIN gives back one try and no
+ * more, a lockout is written once, a save id is claimed once, names are
+ * cut by characters, and the log can only grow.
  *
  * Seams a test may use that the real store has no need for:
  *   - $queries counts every call a real store would answer with a query;
@@ -109,7 +111,7 @@ class Fake_Store {
 		$id                   = $this->next['devices']++;
 		$this->devices[ $id ] = array(
 			'id'                 => $id,
-			'name'               => substr( (string) ( $row['name'] ?? '' ), 0, 80 ),
+			'name'               => Store::cut( $row['name'] ?? '', 80 ),
 			'status'             => Store::STATUS_ACTIVE === ( $row['status'] ?? '' ) ? Store::STATUS_ACTIVE : Store::STATUS_PENDING,
 			'token_hash'         => (string) ( $row['token_hash'] ?? '' ),
 			'enrol_hash'         => (string) ( $row['enrol_hash'] ?? '' ),
@@ -121,6 +123,7 @@ class Fake_Store {
 			'revoked_by'         => 0,
 			'revoked_at'         => null,
 			'fail_count'         => 0,
+			'fail_since'         => null,
 			'lock_level'         => 0,
 			'locked_until'       => null,
 			'session_id'         => '',
@@ -197,7 +200,7 @@ class Fake_Store {
 
 	public function update_device( $id, array $fields ) {
 		$id      = (int) $id;
-		$allowed = array( 'name', 'last_used_at', 'fail_count', 'lock_level', 'locked_until', 'session_id', 'session_person_id', 'session_started_at' );
+		$allowed = array( 'name', 'last_used_at', 'fail_count', 'fail_since', 'lock_level', 'locked_until', 'session_id', 'session_person_id', 'session_started_at' );
 		if ( $this->fails( __FUNCTION__ ) || ! isset( $this->devices[ $id ] ) ) {
 			return false;
 		}
@@ -211,17 +214,49 @@ class Fake_Store {
 		return $any;
 	}
 
-	public function reserve_attempt( $id, $max, $now ) {
+	public function reserve_attempt( $id, $max, $now, $memory ) {
 		$id = (int) $id;
 		if ( $this->fails( __FUNCTION__ ) || ! isset( $this->devices[ $id ] ) ) {
 			return false;
 		}
-		$row = $this->devices[ $id ];
-		if ( Store::STATUS_ACTIVE !== $row['status'] || (int) $row['fail_count'] >= (int) $max || Lockout::ts( $row['locked_until'] ) > (int) $now ) {
+		$row    = $this->devices[ $id ];
+		$since  = Lockout::ts( $row['fail_since'] );
+		$lapsed = 0 === $since || $since <= (int) $now - (int) $memory;
+		if ( Store::STATUS_ACTIVE !== $row['status'] || Lockout::ts( $row['locked_until'] ) > (int) $now || ( (int) $row['fail_count'] >= (int) $max && ! $lapsed ) ) {
 			return false;
 		}
-		++$this->devices[ $id ]['fail_count'];
+		if ( $lapsed ) {
+			$this->devices[ $id ]['fail_count'] = 1;
+			$this->devices[ $id ]['fail_since'] = gmdate( 'Y-m-d H:i:s', (int) $now );
+		} else {
+			++$this->devices[ $id ]['fail_count'];
+		}
 		return true;
+	}
+
+	public function release_attempt( $id ) {
+		$id = (int) $id;
+		if ( $this->fails( __FUNCTION__ ) || ! isset( $this->devices[ $id ] ) ) {
+			return false;
+		}
+		$this->devices[ $id ]['fail_count'] = max( 0, (int) $this->devices[ $id ]['fail_count'] - 1 );
+		return true;
+	}
+
+	public function end_person_sessions( $person_id ) {
+		if ( $this->fails( __FUNCTION__ ) ) {
+			return false;
+		}
+		$n = 0;
+		foreach ( $this->devices as $id => $row ) {
+			if ( (int) $person_id > 0 && (int) $row['session_person_id'] === (int) $person_id ) {
+				$this->devices[ $id ]['session_id']         = '';
+				$this->devices[ $id ]['session_person_id']  = 0;
+				$this->devices[ $id ]['session_started_at'] = null;
+				++$n;
+			}
+		}
+		return $n;
 	}
 
 	public function lock_device( $id, array $fields, $max ) {
@@ -271,7 +306,7 @@ class Fake_Store {
 		$now                 = gmdate( 'Y-m-d H:i:s' );
 		$this->people[ $id ] = array(
 			'id'             => $id,
-			'name'           => substr( (string) ( $row['name'] ?? '' ), 0, 80 ),
+			'name'           => Store::cut( $row['name'] ?? '', 80 ),
 			'pin_hash'       => (string) ( $row['pin_hash'] ?? '' ),
 			'pin_salt'       => (string) ( $row['pin_salt'] ?? '' ),
 			'pin_length'     => (int) ( $row['pin_length'] ?? 0 ),
@@ -312,13 +347,13 @@ class Fake_Store {
 		$id          = $this->next['log']++;
 		$this->log[] = array(
 			'id'          => $id,
-			'event'       => substr( (string) ( $row['event'] ?? '' ), 0, 30 ),
+			'event'       => Store::cut( $row['event'] ?? '', 30 ),
 			'device_id'   => (int) ( $row['device_id'] ?? 0 ),
-			'device_name' => substr( (string) ( $row['device_name'] ?? '' ), 0, 80 ),
+			'device_name' => Store::cut( $row['device_name'] ?? '', 80 ),
 			'person_id'   => (int) ( $row['person_id'] ?? 0 ),
-			'person_name' => substr( (string) ( $row['person_name'] ?? '' ), 0, 80 ),
+			'person_name' => Store::cut( $row['person_name'] ?? '', 80 ),
 			'user_id'     => (int) ( $row['user_id'] ?? 0 ),
-			'note'        => substr( (string) ( $row['note'] ?? '' ), 0, 191 ),
+			'note'        => Store::cut( $row['note'] ?? '', 191 ),
 			'created_at'  => ! empty( $row['created_at'] ) ? (string) $row['created_at'] : gmdate( 'Y-m-d H:i:s' ),
 		);
 		return $id;

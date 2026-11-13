@@ -14,10 +14,14 @@
  *                     is unlocked, Lock), shows the keypad again when the
  *                     session ran out, and stands between the page and the
  *                     network: a save that gets no answer opens a sheet —
- *                     NOT SAVED, what was entered is still there, Retry —
- *                     instead of vanishing. Every save carries a save id,
- *                     the same on every retry, so the server writes it
- *                     once however often it is sent.
+ *                     MAY NOT BE SAVED, what was entered is still there,
+ *                     Retry — instead of vanishing. Every save carries a
+ *                     save id, the same on every retry AND when the same
+ *                     entry is saved again after "Back to the entry", so
+ *                     the server writes it once however often it is sent.
+ *                     An entry that can no longer be saved (somebody with
+ *                     another account unlocked) is said to be lost before
+ *                     the tank is loaded afresh.
  *
  * The keypad is made for wet fingers: twelve very large buttons, no
  * on-screen keyboard, every press lights the key, the PIN is sent the
@@ -36,7 +40,8 @@
  * written again.
  *
  * The pure helpers (clock, fmt, tankFromLabel, newSaveId, withSaveId,
- * bodyAction, classifyReply, padPress, deadlineFrom) are exported for
+ * reuseSaveId, bodyAction, classifyReply, padPress, deadlineFrom,
+ * findBuilding) are exported for
  * tests/app.test.js and the file skips the DOM wiring when there is no
  * document / config.
  *
@@ -173,6 +178,58 @@
 	}
 
 	/**
+	 * How long a save that got no answer keeps its id for the same entry
+	 * saved again (ms).
+	 */
+	var REUSE_MS = 3600000;
+
+	/**
+	 * The save id to send with a body: the id of the last save that got
+	 * no answer when this is the very same entry again (the server may
+	 * have written it, and answers a known id from memory instead of
+	 * writing twice), otherwise ''.
+	 *
+	 * @param {{body: string, id: string, at: number}|null} last The last save that got no answer.
+	 * @param {string} body The body about to be sent (without a save id).
+	 * @param {number} now  Date.now().
+	 * @return {string}
+	 */
+	function reuseSaveId(last, body, now) {
+		if (!last || !last.id || typeof last.body !== 'string' || last.body !== String(body)) {
+			return '';
+		}
+		var age = Number(now) - Number(last.at);
+		return age >= 0 && age < REUSE_MS ? last.id : '';
+	}
+
+	/**
+	 * The building of that name in a (fresh) picker, or null: the picker
+	 * is redrawn from every new state, never from the one a tile was
+	 * tapped in.
+	 *
+	 * @param {Array}  home  state.home.
+	 * @param {{area: string, label: string}|null} open The building that is open.
+	 * @return {Object|null}
+	 */
+	function findBuilding(home, open) {
+		var found = null;
+		if (!open) {
+			return null;
+		}
+		(home || []).forEach(function (area) {
+			if (found || !area || String(area.label) !== String(open.area)) {
+				return;
+			}
+			(area.buildings || []).forEach(function (b) {
+				if (!found && b && String(b.label) === String(open.label)) {
+					found = b;
+				}
+			});
+		});
+		return found;
+	}
+
+	/**
 	 * The "action" of a form-encoded body.
 	 *
 	 * @param {string} body The body.
@@ -271,6 +328,8 @@
 		tankFromLabel: tankFromLabel,
 		newSaveId: newSaveId,
 		withSaveId: withSaveId,
+		reuseSaveId: reuseSaveId,
+		findBuilding: findBuilding,
 		bodyAction: bodyAction,
 		classifyReply: classifyReply,
 		padPress: padPress,
@@ -566,7 +625,8 @@
 		var state = null;
 		var pad = null;
 		var deadline = 0;
-		var building = null;
+		var building = null; // The open building as the CURRENT state has it.
+		var open = null;     // Which one that is: { area, label }.
 		var installEvent = null;
 		var canScan = false;
 		var scanner = null;
@@ -692,7 +752,7 @@
 
 		function lockNow() {
 			server.lock().then(function (reply) {
-				building = null;
+				open = null;
 				accept(reply && reply.state ? reply.state : null);
 			}).catch(function () {
 				// The lock could not reach the server: say so rather than pretend.
@@ -747,7 +807,7 @@
 						type: 'button',
 						class: 'fh-sa-tile' + (b.inQt > 0 ? ' is-qt' : ''),
 						disabled: coming || !(b.tanks || []).length,
-						on: { click: function () { building = b; showHome(); root.scrollTo(0, 0); } }
+						on: { click: function () { open = { area: area.label, label: b.label }; building = b; showHome(); root.scrollTo(0, 0); } }
 					}, [
 						el('span', { class: 'fh-sa-tile__name', text: b.label }),
 						el('span', { class: 'fh-sa-tile__sub', text: coming ? t('comingSoon', 'coming soon') : fmt(t('tankCount', '%d tanks'), (b.tanks || []).length) + (b.inQt > 0 ? ' · ' + fmt(t('inQt', 'QT %d'), b.inQt) : '') })
@@ -762,7 +822,7 @@
 
 		function showTanks() {
 			app.appendChild(el('div', { class: 'fh-sa-crumb' }, [
-				bigButton('‹ ' + t('back', 'Back'), 'fh-sa-btn--quiet fh-sa-btn--back', function () { building = null; showHome(); root.scrollTo(0, 0); }),
+				bigButton('‹ ' + t('back', 'Back'), 'fh-sa-btn--quiet fh-sa-btn--back', function () { open = null; building = null; showHome(); root.scrollTo(0, 0); }),
 				el('h2', { class: 'fh-sa-h', text: building.label })
 			]));
 			app.appendChild(el('p', { class: 'fh-sa-sub', text: t('pickTank', 'Pick a tank') }));
@@ -866,6 +926,12 @@
 
 		function render(next) {
 			state = next;
+			// The open building is looked up again in what just arrived: a
+			// tile must never show what an older state said about a tank.
+			building = state && state.session ? findBuilding(state.home, open) : null;
+			if (!building) {
+				open = null;
+			}
 			closeScanner();
 			if (!state) {
 				showOffline();
@@ -880,7 +946,6 @@
 				return;
 			}
 			if (!state.session) {
-				building = null;
 				showPad();
 				return;
 			}
@@ -994,7 +1059,8 @@
 		var layerPad = null;
 		var sheet = null;
 		var retryNow = null;
-		var waiting = [];
+		var waiting = [];     // What waits for a PIN: { then, write }.
+		var unsure = null;    // The last save that got no answer: { body, id, at }.
 
 		/* The bar. */
 		var bar = el('div', { class: 'fh-sa-bar' }, [
@@ -1070,22 +1136,15 @@
 			document.body.appendChild(layer);
 		}
 
-		/* Ask for the PIN; then(true) once somebody unlocked on the same account. */
-		function askPin(note, then, st) {
+		/* Ask for the PIN; then() once somebody unlocked on the same account. */
+		function askPin(note, then, st, isWrite) {
 			if (then) {
-				waiting.push(then);
+				waiting.push({ then: then, write: !!isWrite });
 			}
 			showPin(note, st);
 		}
 
-		function unlocked(next) {
-			var same = session && next && next.account === session.account;
-			if (!same) {
-				// Another account: this page's nonce is not theirs. Start the tank afresh.
-				root.location.reload();
-				return;
-			}
-			adopt(next);
+		function closePin() {
 			if (layerPad) {
 				layerPad.stop();
 				layerPad = null;
@@ -1094,9 +1153,48 @@
 				layer.parentNode.removeChild(layer);
 			}
 			layer = null;
+		}
+
+		/*
+		 * An entry was waiting for a PIN and somebody with another account
+		 * unlocked: it cannot be saved as theirs, and it is not saved. Say
+		 * so — the tank is loaded afresh only when that was read.
+		 */
+		function lostEntry(next) {
+			closePin();
+			closeSheet();
+			var ok = el('button', { type: 'button', class: 'fh-sa-btn fh-sa-btn--primary', text: t('lostOk', 'OK — enter it again') });
+			ok.addEventListener('click', function () { root.location.reload(); });
+			sheet = el('div', { class: 'fh-sa-sheet fh-sa-sheet--lost', role: 'alertdialog', 'aria-modal': 'true' }, [
+				el('div', { class: 'fh-sa-sheet__box' }, [
+					el('h2', { class: 'fh-sa-sheet__title', text: t('lostTitle', 'NOT SAVED') }),
+					el('p', { class: 'fh-sa-sheet__why', text: fmt(t('lostWhy', 'The entry that was waiting was made before %s unlocked. It was not saved — enter it again.'), next && next.person ? next.person : '') }),
+					ok
+				])
+			]);
+			document.body.appendChild(sheet);
+		}
+
+		function unlocked(next) {
+			var same = session && next && next.account === session.account;
+			if (!same) {
+				// Another account: this page's nonce is not theirs, so nothing
+				// that waits here can be sent as them. Start the tank afresh —
+				// but never drop an entry without a word.
+				var lost = waiting.some(function (w) { return w.write; });
+				waiting = [];
+				if (lost) {
+					lostEntry(next);
+					return;
+				}
+				root.location.reload();
+				return;
+			}
+			adopt(next);
+			closePin();
 			var list = waiting;
 			waiting = [];
-			list.forEach(function (fn) { fn(true); });
+			list.forEach(function (w) { w.then(true); });
 		}
 
 		function checkSession() {
@@ -1132,7 +1230,7 @@
 			}
 		});
 
-		/* The sheet: NOT SAVED · Retry. */
+		/* The sheet: MAY NOT BE SAVED · Retry. */
 		function closeSheet() {
 			if (sheet && sheet.parentNode) {
 				sheet.parentNode.removeChild(sheet);
@@ -1162,8 +1260,8 @@
 			});
 			sheet = el('div', { class: 'fh-sa-sheet', role: 'alertdialog', 'aria-modal': 'true' }, [
 				el('div', { class: 'fh-sa-sheet__box' }, [
-					el('h2', { class: 'fh-sa-sheet__title', text: t('notSaved', 'NOT SAVED') }),
-					el('p', { class: 'fh-sa-sheet__why', text: reason === 'server' ? t('notSavedServer', 'The site had a problem and did not save it.') : t('notSavedWhy', 'No answer came back.') }),
+					el('h2', { class: 'fh-sa-sheet__title', text: t('notSaved', 'MAY NOT BE SAVED') }),
+					el('p', { class: 'fh-sa-sheet__why', text: reason === 'server' ? t('notSavedServer', 'The site had a problem and may not have saved it.') : t('notSavedWhy', 'No answer came back, so it may not have been saved.') }),
 					status,
 					retry,
 					back
@@ -1187,13 +1285,17 @@
 
 		/* Between the page and the network. */
 		function guarded(input, init, isWrite) {
-			var id = isWrite ? newSaveId() : '';
+			// The very entry that got no answer a moment ago keeps its id: the
+			// server may have written it, and then answers instead of writing
+			// it a second time. Anything else is a new save with a new id.
+			var id = isWrite ? (reuseSaveId(unsure, init.body, Date.now()) || newSaveId()) : '';
 			var body = isWrite ? withSaveId(init.body, cfg.saveField || 'fh_save_id', id) : init.body;
 			var waits = 0;
 
 			return new Promise(function (resolve, reject) {
 				function failed(reason) {
 					var detail = { id: id, body: body, reason: reason };
+					unsure = { body: init.body, id: id, at: Date.now() };
 					announce(detail);
 					if (typeof cfg.onSaveFailed === 'function') {
 						var taken = null;
@@ -1212,7 +1314,7 @@
 
 				function show(reason) {
 					openSheet(reason, attempt, function () {
-						reject(new Error(t('notSavedClosed', 'Not saved. Check the connection, then save again.')));
+						reject(new Error(t('notSavedClosed', 'Not confirmed as saved. Check the connection, then save again — the same entry is written once.')));
 					});
 				}
 
@@ -1237,6 +1339,11 @@
 						});
 					}).then(function (out) {
 						if (out.kind === 'ok') {
+							if (isWrite && unsure && unsure.id === id) {
+								// Answered: saved (or refused by the page's own
+								// rules) — either way no longer in doubt.
+								unsure = null;
+							}
 							closeSheet();
 							contact();
 							resolve(out.res);
@@ -1258,9 +1365,9 @@
 									resolve(out.res);
 									return;
 								}
-								askPin(isWrite ? t('sessionEndedSave', 'Locked before it was saved. Enter your PIN and it is saved.') : t('sessionEnded', 'Locked. Enter your PIN to go on.'), function () {
+								askPin(isWrite ? fmt(t('sessionEndedSave', 'Locked before it was saved. %s: enter your PIN and it is saved.'), session ? session.person : '') : t('sessionEnded', 'Locked. Enter your PIN to go on.'), function () {
 									attempt();
-								}, st);
+								}, st, isWrite);
 							}).catch(function () {
 								if (isWrite) {
 									failed('offline');

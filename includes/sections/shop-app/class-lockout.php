@@ -2,16 +2,22 @@
 /**
  * Shop App lockout — PURE: what five wrong PINs do to a device.
  *
- * The rule, as the screens state it: after 5 wrong PINs in a row the
- * device is locked for 5 minutes; every lockout after that doubles (10,
- * 20, 40 … at most 24 hours); a correct PIN clears the count of wrong
- * ones, never the doubling; the doubling starts over once a day has
- * passed since the last lockout ended. While a device is locked no PIN is
- * even looked at, so a lockout cannot be used to try more PINs.
+ * The rule, as the screens state it: after 5 wrong PINs within 15
+ * minutes the device is locked for 5 minutes; every lockout after that
+ * doubles (10, 20, 40 … at most 24 hours); the doubling starts over once
+ * a day has passed since the last lockout ended. While a device is locked
+ * no PIN is even looked at, so a lockout cannot be used to try more PINs.
  *
- * The count lives on the device row (fail_count, lock_level,
- * locked_until, all UTC). The Store takes one attempt off the budget
- * BEFORE the PIN is compared (reserve_attempt(), one guarded UPDATE), so
+ * A CORRECT PIN DOES NOT CLEAR THE WRONG ONES. It gives back only the one
+ * try it used itself; the wrong PINs before it stay counted until the 15
+ * minutes are over. Otherwise anybody with a PIN of their own could try
+ * four others, unlock, try four more, and so walk through every PIN in
+ * the shop without ever locking the device.
+ *
+ * The count lives on the device row (fail_count, fail_since — when the
+ * count began —, lock_level, locked_until, all UTC). The Store takes one
+ * attempt off the budget BEFORE the PIN is compared (reserve_attempt(),
+ * one guarded UPDATE that also starts the count over when it lapsed), so
  * a burst of parallel requests gets five tries like anybody else.
  *
  * @package FisHotel\Misc\Sections\Shop_App
@@ -27,11 +33,19 @@ defined( 'ABSPATH' ) || exit;
 class Lockout {
 
 	/**
-	 * Wrong PINs in a row before a device locks.
+	 * Wrong PINs (within FAIL_MEMORY) before a device locks.
 	 *
 	 * @var int
 	 */
 	const MAX_ATTEMPTS = 5;
+
+	/**
+	 * How long wrong PINs stay counted (seconds): the count starts over
+	 * with the first attempt made this long after it began.
+	 *
+	 * @var int
+	 */
+	const FAIL_MEMORY = 900;
 
 	/**
 	 * The first lockout (seconds).
@@ -119,6 +133,25 @@ class Lockout {
 	}
 
 	/**
+	 * The wrong PINs that still count: the stored count, or none once the
+	 * count began longer ago than FAIL_MEMORY.
+	 *
+	 * @param array $device A device row (fail_count, fail_since).
+	 * @param int   $now    Timestamp.
+	 * @return int
+	 */
+	public static function count( array $device, $now ) {
+		$count = max( 0, (int) ( $device['fail_count'] ?? 0 ) );
+		$since = self::ts( $device['fail_since'] ?? '' );
+
+		if ( $count > 0 && $since > 0 && (int) $now - $since >= self::FAIL_MEMORY ) {
+			return 0;
+		}
+
+		return $count;
+	}
+
+	/**
 	 * How many tries are left before the device locks.
 	 *
 	 * @param array $device A device row (fail_count).
@@ -161,15 +194,6 @@ class Lockout {
 	}
 
 	/**
-	 * What a correct PIN changes: the wrong-PIN count, never the level.
-	 *
-	 * @return array
-	 */
-	public static function after_success() {
-		return array( 'fail_count' => 0 );
-	}
-
-	/**
 	 * What "Clear lockout" on the Devices list changes.
 	 *
 	 * @return array
@@ -177,6 +201,7 @@ class Lockout {
 	public static function cleared() {
 		return array(
 			'fail_count'   => 0,
+			'fail_since'   => null,
 			'lock_level'   => 0,
 			'locked_until' => null,
 		);

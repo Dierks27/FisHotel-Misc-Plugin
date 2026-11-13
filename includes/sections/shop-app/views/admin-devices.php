@@ -205,11 +205,12 @@ foreach ( $devices as $fh_device ) {
 		<?php
 		echo esc_html(
 			sprintf(
-				/* translators: 1: wrong PINs, 2: first lockout, 3: longest lockout */
-				__( 'After %1$d wrong PINs in a row a device is locked for %2$s; every lockout after that doubles, up to %3$s, and starts over once a day has passed. A revoked device stops working at once.', 'fishotel-misc-plugin' ),
+				/* translators: 1: wrong PINs, 2: first lockout, 3: longest lockout, 4: how long wrong PINs stay counted */
+				__( 'After %1$d wrong PINs within %4$s a device is locked for %2$s; every lockout after that doubles, up to %3$s, and starts over once a day has passed. A correct PIN does not clear the wrong ones before it, and every wrong PIN is in the log. A revoked device stops working at once.', 'fishotel-misc-plugin' ),
 				Lockout::MAX_ATTEMPTS,
 				Lockout::human( Lockout::BASE_SECONDS ),
-				Lockout::human( Lockout::CAP_SECONDS )
+				Lockout::human( Lockout::CAP_SECONDS ),
+				Lockout::human( Lockout::FAIL_MEMORY )
 			)
 		);
 		?>

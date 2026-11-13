@@ -1,7 +1,9 @@
 <?php
 /**
  * Shop App → People: a name, a PIN, the account the work is recorded
- * under, on or off. A PIN is typed here and never shown again.
+ * under, on or off. A PIN is typed here in plain digits — it is typed
+ * once, and a slip nobody saw would leave a PIN nobody knows — and never
+ * shown again once saved.
  *
  * @package FisHotel\Misc\Sections\Shop_App
  *
@@ -68,7 +70,7 @@ $fh_has_pin = $editing && ! empty( $editing['active'] ) && '' !== (string) $edit
 					}
 					?>
 				</span>
-				<input type="password" name="pin" inputmode="numeric" pattern="[0-9]{<?php echo esc_attr( (string) $fh_length ); ?>}" minlength="<?php echo esc_attr( (string) $fh_length ); ?>" maxlength="<?php echo esc_attr( (string) $fh_length ); ?>" autocomplete="new-password"<?php echo $fh_has_pin ? '' : ' required'; ?>>
+				<input type="text" name="pin" class="fh-sa-pin" inputmode="numeric" pattern="[0-9]{<?php echo esc_attr( (string) $fh_length ); ?>}" minlength="<?php echo esc_attr( (string) $fh_length ); ?>" maxlength="<?php echo esc_attr( (string) $fh_length ); ?>" autocomplete="off" spellcheck="false"<?php echo $fh_has_pin ? '' : ' required'; ?>>
 			</label>
 
 			<label>
@@ -96,7 +98,8 @@ $fh_has_pin = $editing && ! empty( $editing['active'] ) && '' !== (string) $edit
 		<ul class="fh-sa-list">
 			<li><?php esc_html_e( 'A PIN works only on a device set up under Devices.', 'fishotel-misc-plugin' ); ?></li>
 			<li><?php esc_html_e( 'Every person needs a PIN of their own: it is how the app knows who is working. When a PIN is refused with "Choose a different PIN", pick another.', 'fishotel-misc-plugin' ); ?></li>
-			<li><?php esc_html_e( 'A PIN is never shown again and cannot be looked up — only replaced.', 'fishotel-misc-plugin' ); ?></li>
+			<li><?php esc_html_e( 'The digits show while you type them, so you can see what you set. Once saved a PIN is never shown again and cannot be looked up — only replaced.', 'fishotel-misc-plugin' ); ?></li>
+			<li><?php esc_html_e( 'A new PIN, or another account, ends the session that person has open: they unlock again with the new PIN.', 'fishotel-misc-plugin' ); ?></li>
 			<li><?php esc_html_e( 'Switching a person off destroys their PIN and ends their session. Switching them back on needs a new PIN.', 'fishotel-misc-plugin' ); ?></li>
 			<li><?php esc_html_e( 'One person with one PIN is a complete setup.', 'fishotel-misc-plugin' ); ?></li>
 		</ul>

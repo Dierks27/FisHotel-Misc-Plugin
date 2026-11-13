@@ -6,18 +6,23 @@
  * a small stand-in page — a document that can make elements, a fetch that
  * answers as the test says, timers the test runs by hand — and driven:
  *
- *   inside a tank screen ("frontdesk"): an entry is never lost silently.
- *   A save with no answer opens the NOT SAVED sheet, the page's request
- *   stays open, Retry sends the SAME save id again, "Back to the entry"
- *   hands the page a plain refusal so it keeps what was typed; a save the
- *   server is still writing is asked for again; a session that ran out
- *   brings the keypad up over the page and the save goes through after
- *   the PIN; the page's own "no" is left to the page.
+ *   inside a tank screen ("frontdesk"): an entry is never lost silently
+ *   and never written twice. A save with no answer opens the MAY NOT BE
+ *   SAVED sheet, the page's request stays open, Retry sends the SAME save
+ *   id again, "Back to the entry" hands the page a plain refusal so it
+ *   keeps what was typed — and when that very entry is saved again it
+ *   goes out under the id it had; a save the server is still writing is
+ *   asked for again; a session that ran out brings the keypad up over the
+ *   page and the save goes through after the PIN — or, when somebody with
+ *   another account unlocks, the screen says the entry was NOT saved
+ *   before the tank is loaded afresh; the page's own "no" is left to the
+ *   page.
  *
  *   the app itself ("app"): what a device that is not set up sees (no
  *   keypad), the keypad (twelve keys, the PIN sent with its last digit,
  *   wrong PIN, lockout), the home screen (who is unlocked, Lock,
- *   buildings then tanks), a tank label scanned before the PIN.
+ *   buildings then tanks — drawn from the newest state, never from the
+ *   one a tile was tapped in), a tank label scanned before the PIN.
  *
  * Run from the plugin root:
  *   node includes/sections/shop-app/tests/app.test.js
@@ -87,6 +92,13 @@ check('a save id is 32 hex characters, never twice the same', /^[a-f0-9]{32}$/.t
 check('it is made from the bytes it is given', helpers.newSaveId(() => [0, 1, 15, 16, 255, 171, 0, 0, 0, 0, 0, 0, 0, 0, 0, 9]) === '00010f10ffab00000000000000000009');
 check('the id is added to a form body once', helpers.withSaveId('action=x&act=loss', 'fh_save_id', idA) === 'action=x&act=loss&fh_save_id=' + idA && helpers.withSaveId('action=x&fh_save_id=' + idB, 'fh_save_id', idA) === 'action=x&fh_save_id=' + idB && helpers.withSaveId('', 'fh_save_id', idA) === 'fh_save_id=' + idA && helpers.withSaveId('action=x', 'fh_save_id', '') === 'action=x');
 check('the action of a form body', helpers.bodyAction('action=fishotel_cleanroom_act&nonce=abc') === 'fishotel_cleanroom_act' && helpers.bodyAction('nonce=abc&action=fishotel_cleanroom_screen&tank=5') === 'fishotel_cleanroom_screen' && helpers.bodyAction('nonce=abc&reaction=x') === '' && helpers.bodyAction('') === '' && helpers.bodyAction('action=a%20b') === 'a b');
+const LAST = { body: 'action=x&act=loss&qty=1', id: idA, at: 1000000 };
+check('the very entry that got no answer keeps its id when it is saved again', helpers.reuseSaveId(LAST, 'action=x&act=loss&qty=1', 1000000 + 5000) === idA && helpers.reuseSaveId(LAST, 'action=x&act=loss&qty=1', 1000000 + 3599999) === idA);
+check('… any other entry does not: one more fish, another tank, a note', helpers.reuseSaveId(LAST, 'action=x&act=loss&qty=2', 1000000 + 5000) === '' && helpers.reuseSaveId(LAST, 'action=x&act=loss&qty=1&note=a', 1000000 + 5000) === '' && helpers.reuseSaveId(LAST, '', 1000000 + 5000) === '');
+check('… nor after an hour, nor when nothing is in doubt', helpers.reuseSaveId(LAST, LAST.body, 1000000 + 3600000) === '' && helpers.reuseSaveId(null, LAST.body, 1000000) === '' && helpers.reuseSaveId({ body: LAST.body, id: '', at: 1000000 }, LAST.body, 1000001) === '' && helpers.reuseSaveId(LAST, LAST.body, 999999) === '');
+const PICK = [{ label: 'Clean Room', buildings: [{ label: 'Building 100', tanks: [{ number: 111 }] }, { label: 'Annex', tanks: [] }] }, { label: 'Spa', buildings: [{ label: 'Annex', tanks: [{ number: 911 }] }] }];
+check('a building is found again by its area and name in a fresh picker', helpers.findBuilding(PICK, { area: 'Clean Room', label: 'Building 100' }) === PICK[0].buildings[0] && helpers.findBuilding(PICK, { area: 'Spa', label: 'Annex' }) === PICK[1].buildings[0] && helpers.findBuilding(PICK, { area: 'Clean Room', label: 'Annex' }) === PICK[0].buildings[1]);
+check('… and is nothing when it is gone, or nothing is open', helpers.findBuilding(PICK, { area: 'Spa', label: 'Building 100' }) === null && helpers.findBuilding(PICK, null) === null && helpers.findBuilding(null, { area: 'Spa', label: 'Annex' }) === null && helpers.findBuilding([], { area: 'Spa', label: 'Annex' }) === null);
 check('when a session ends, in this device\'s clock: the time left as the server sees it, added to now', helpers.deadlineFrom({ expires: 1800007200, now: 1800000000 }, 5000) === 5000 + 7200000 && helpers.deadlineFrom({ expires: 10, now: 20 }, 5000) === 5000 && helpers.deadlineFrom(null, 5000) === 0);
 
 console.log('\n3. What an answer means');
@@ -213,9 +225,10 @@ const I18N = {
 	lockedFor: 'This device is locked. Try again in %s.', checking: 'Checking…', lock: 'Lock', tanks: 'Tanks', back: 'Back',
 	pickBuilding: 'Pick a building', pickTank: 'Pick a tank', notEnrolled: 'This device is not set up for the Shop App.', notEnrolledHow: 'A shop manager sets it up.',
 	setUpHere: 'Set up with a manager login', noPeople: 'Nobody has a PIN yet.', offline: 'No connection.', retry: 'Retry', error: 'Something went wrong. Try again.',
-	notSaved: 'NOT SAVED', notSavedWhy: 'No answer came back. What you entered is still here.', notSavedServer: 'The site had a problem. What you entered is still here.',
-	notSavedClosed: 'Not saved. Check the connection, then save again.', keepEditing: 'Back to the entry', saving: 'Saving…',
-	sessionEnded: 'Locked. Enter your PIN to go on.', sessionEndedSave: 'Locked before it was saved. Enter your PIN and it is saved.', needsHttps: 'The Shop App needs HTTPS.',
+	notSaved: 'MAY NOT BE SAVED', notSavedWhy: 'No answer came back — the connection may be down — so it may not have been saved. What you entered is still here. Retry sends the same entry again; it is written once.', notSavedServer: 'The site had a problem and may not have saved it. What you entered is still here. Retry sends the same entry again; it is written once.',
+	notSavedClosed: 'Not confirmed as saved. Check the connection, then save again — the same entry is written once.', keepEditing: 'Back to the entry', saving: 'Saving…',
+	lostTitle: 'NOT SAVED', lostWhy: 'The entry that was waiting was made before %s unlocked. It was not saved — enter it again.', lostOk: 'OK — enter it again',
+	sessionEnded: 'Locked. Enter your PIN to go on.', sessionEndedSave: 'Locked before it was saved. %s: enter your PIN and it is saved.', needsHttps: 'The Shop App needs HTTPS.',
 	empty: 'empty', comingSoon: 'coming soon', tankCount: '%d tanks', inQt: 'QT %d', wpLogin: 'Also logged in to WordPress as %s.', wpLogout: 'Log out of WordPress here',
 	noFrontDesk: 'There are no tank screens to open.', scan: 'Scan a tank label'
 };
@@ -347,14 +360,14 @@ const STATE_LOCKED = Object.assign({}, STATE_LIVE, { session: null });
 	await page.win.fetch(AJAX, SAVE);
 	check('the next save gets an id of its own', idOf(page.calls[1]) !== idOf(page.calls[0]));
 
-	console.log('\n8. No connection: NOT SAVED · Retry');
+	console.log('\n8. No connection: MAY NOT BE SAVED · Retry');
 	page = boot(frontDeskConfig());
 	let done = null;
 	let failed = null;
 	page.answer = () => Promise.reject(new TypeError('Failed to fetch'));
 	page.win.fetch(AJAX, SAVE).then((r) => { done = r; }, (e) => { failed = e; });
 	await settle();
-	check('the sheet opens and says NOT SAVED', page.sheet() !== null && text(find(page.sheet(), 'fh-sa-sheet__title')) === 'NOT SAVED');
+	check('the sheet opens and says what is true: it MAY NOT BE SAVED (no answer came — the server may have written it all the same)', page.sheet() !== null && text(find(page.sheet(), 'fh-sa-sheet__title')) === 'MAY NOT BE SAVED' && /may not have been saved/.test(text(find(page.sheet(), 'fh-sa-sheet__why'))));
 	check('it says that what was entered is still there', /still here/.test(text(find(page.sheet(), 'fh-sa-sheet__why'))));
 	check('it offers Retry', text(find(page.sheet(), 'fh-sa-sheet__retry')) === 'Retry');
 	check('the page is told nothing yet: its request is still open, so it keeps its form as it is', done === null && failed === null);
@@ -379,8 +392,40 @@ const STATE_LOCKED = Object.assign({}, STATE_LIVE, { session: null });
 	const back = findAll(page.sheet(), 'fh-sa-btn').filter((b) => text(b) === 'Back to the entry')[0];
 	click(back);
 	await settle();
-	check('the sheet closes and the page is told plainly: not saved', page.sheet() === null && done === null && failed instanceof Error && failed.message === 'Not saved. Check the connection, then save again.');
+	check('the sheet closes and the page is told plainly: not confirmed as saved — save again', page.sheet() === null && done === null && failed instanceof Error && failed.message === 'Not confirmed as saved. Check the connection, then save again — the same entry is written once.');
 	check('nothing more was sent', page.calls.length === 1);
+
+	// The page does what it was told: the same entry, Save again. The first
+	// request may have reached the server — so it must go out under the
+	// SAME id, or a dead fish is counted twice.
+	page.answer = () => Promise.resolve(reply(200, SAVED));
+	res = await page.win.fetch(AJAX, SAVE);
+	check('Save again with the same entry: it goes out under the id it had — the server writes it once', page.calls.length === 2 && idOf(page.calls[1]) !== '' && idOf(page.calls[1]) === idOf(page.calls[0]) && res.status === 200 && page.sheet() === null);
+	await page.win.fetch(AJAX, SAVE);
+	check('once it was answered nothing is in doubt any more: the same entry entered again on purpose is a new save', page.calls.length === 3 && idOf(page.calls[2]) !== idOf(page.calls[0]));
+
+	page = boot(frontDeskConfig());
+	page.answer = () => Promise.reject(new TypeError('Failed to fetch'));
+	page.win.fetch(AJAX, SAVE).catch(() => {});
+	await settle();
+	click(findAll(page.sheet(), 'fh-sa-btn').filter((b) => text(b) === 'Back to the entry')[0]);
+	await settle();
+	page.answer = () => Promise.resolve(reply(200, SAVED));
+	const CHANGED = Object.assign({}, SAVE, { body: SAVE.body.replace('qty=1', 'qty=2') });
+	await page.win.fetch(AJAX, CHANGED);
+	check('Back, the entry is CHANGED, Save: that is another entry and gets an id of its own', page.calls.length === 2 && idOf(page.calls[1]) !== idOf(page.calls[0]) && /qty=2/.test(page.calls[1].init.body));
+	await page.win.fetch(AJAX, SAVE);
+	check('… while the first one, saved after all, still goes out under its own id', page.calls.length === 3 && idOf(page.calls[2]) === idOf(page.calls[0]));
+
+	page = boot(frontDeskConfig());
+	page.answer = () => Promise.resolve(reply(502, '<html>Bad gateway</html>'));
+	page.win.fetch(AJAX, SAVE).catch(() => {});
+	await settle();
+	click(findAll(page.sheet(), 'fh-sa-btn').filter((b) => text(b) === 'Back to the entry')[0]);
+	await settle();
+	page.answer = () => Promise.resolve(reply(200, SAVED));
+	await page.win.fetch(AJAX, SAVE);
+	check('the same after a site failure (502): Back, Save again — the same id', page.calls.length === 2 && idOf(page.calls[1]) === idOf(page.calls[0]));
 
 	console.log('\n10. The connection comes back by itself');
 	page = boot(frontDeskConfig());
@@ -400,14 +445,14 @@ const STATE_LOCKED = Object.assign({}, STATE_LIVE, { session: null });
 	page.answer = () => Promise.resolve(reply(502, '<html>Bad gateway</html>'));
 	page.win.fetch(AJAX, SAVE).then((r) => { done = r; }, () => {});
 	await settle();
-	check('a 502: NOT SAVED, and it says the site had a problem', page.sheet() !== null && /site had a problem/.test(text(find(page.sheet(), 'fh-sa-sheet__why'))) && done === null && page.doc.events[0].detail.reason === 'server');
+	check('a 502: MAY NOT BE SAVED, and it says the site had a problem', page.sheet() !== null && /site had a problem/.test(text(find(page.sheet(), 'fh-sa-sheet__why'))) && done === null && page.doc.events[0].detail.reason === 'server');
 
 	page = boot(frontDeskConfig());
 	done = null;
 	page.answer = () => Promise.resolve(reply(200, '<html><body>Sign in to this Wi-Fi</body></html>'));
 	page.win.fetch(AJAX, SAVE).then((r) => { done = r; }, () => {});
 	await settle();
-	check('a 200 that is a Wi-Fi login page, not an answer: NOT SAVED — it is never handed to the page as if it were one', page.sheet() !== null && done === null);
+	check('a 200 that is a Wi-Fi login page, not an answer: MAY NOT BE SAVED — it is never handed to the page as if it were one', page.sheet() !== null && done === null);
 
 	page = boot(frontDeskConfig());
 	done = null;
@@ -450,7 +495,7 @@ const STATE_LOCKED = Object.assign({}, STATE_LIVE, { session: null });
 	page.win.fetch(AJAX, SAVE).then((r) => { done = r; }, (e) => { failed = e; });
 	await settle();
 	check('WordPress did not know the device (400, "0"): the app asks its own address whether the session is gone', page.calls.length === 2 && page.calls[1].url === URLS.state && page.calls[1].init.headers['X-FH-Shop-App'] === '1');
-	check('it is: the keypad comes up over the page, saying the entry waits', page.layer() !== null && findAll(page.layer(), 'fh-sa-key').length === 12 && /Locked before it was saved/.test(text(page.layer())));
+	check('it is: the keypad comes up over the page, saying the entry waits — and whose PIN saves it', page.layer() !== null && findAll(page.layer(), 'fh-sa-key').length === 12 && /Locked before it was saved\. Sam: enter your PIN and it is saved\./.test(text(page.layer())));
 	check('the page is told nothing: what was typed stays where it is', done === null && failed === null && page.sheet() === null);
 	const key = (digit) => findAll(page.layer(), 'fh-sa-key').filter((k) => text(k) === digit)[0];
 	['0', '0', '0', '0'].forEach((d) => click(key(d)));
@@ -487,7 +532,29 @@ const STATE_LOCKED = Object.assign({}, STATE_LIVE, { session: null });
 	await settle();
 	page.run(0);
 	await settle();
-	check('somebody with ANOTHER account unlocks: the tank is loaded afresh — Sam\'s entry is not saved as theirs', page.reloads === 1 && done === null && page.calls.filter((c) => c.url === AJAX).length === 1);
+	check('somebody with ANOTHER account unlocks: Sam\'s entry is not saved as theirs — nothing more is sent', done === null && page.calls.filter((c) => c.url === AJAX).length === 1);
+	check('… and it is NOT dropped without a word: the keypad goes and the screen says NOT SAVED, who unlocked, enter it again', page.layer() === null && page.sheet() !== null && text(find(page.sheet(), 'fh-sa-sheet__title')) === 'NOT SAVED' && /made before Robin unlocked\. It was not saved — enter it again\./.test(text(page.sheet())));
+	check('… the tank is NOT loaded afresh until that was read', page.reloads === 0 && findAll(page.sheet(), 'fh-sa-btn').length === 1 && find(page.sheet(), 'fh-sa-sheet__retry') === null);
+	click(findAll(page.sheet(), 'fh-sa-btn')[0]);
+	check('… OK loads the tank afresh for the person who unlocked', page.reloads === 1);
+
+	page = boot(frontDeskConfig());
+	page.answer = (url) => {
+		if (url === URLS.state) {
+			return Promise.resolve(reply(200, STATE_LOCKED));
+		}
+		if (url === URLS.unlock) {
+			return Promise.resolve(reply(200, { ok: true, code: 'ok', state: Object.assign({}, STATE_LIVE, { session: Object.assign({}, STATE_LIVE.session, { person: 'Robin', account: 'bbbb000011112222' }) }) }));
+		}
+		return Promise.resolve(reply(400, '0'));
+	};
+	page.win.fetch(AJAX, { method: 'POST', headers: {}, body: 'action=fishotel_cleanroom_screen&nonce=abc&tank=521' }).catch(() => {});
+	await settle();
+	['1', '3', '7', '9'].forEach((d) => click(findAll(page.layer(), 'fh-sa-key').filter((k) => text(k) === d)[0]));
+	await settle();
+	page.run(0);
+	await settle();
+	check('when only a READ was waiting nothing was lost: the tank is loaded afresh at once, no sheet', page.reloads === 1 && page.sheet() === null);
 
 	page = boot(frontDeskConfig());
 	page.answer = (url) => Promise.resolve(url === URLS.state ? reply(200, { ok: true, https: true, enrolled: false, session: null }) : reply(400, '0'));
@@ -610,8 +677,35 @@ const STATE_LOCKED = Object.assign({}, STATE_LIVE, { session: null });
 	check('then that building\'s tanks', tiles().map((t) => text(find(t, 'fh-sa-tile__name'))).join() === '111,121' && /empty/.test(text(tiles()[0])) && /2 · 20G/.test(text(tiles()[1])));
 	click(tiles()[1]);
 	check('a tank opens at its label address — the Clean Room\'s own page', page.went.join() === SITE + '/?fh_front_desk=1&tank=121');
+	// Somebody saved an arrival in tank 111 (on this tablet or another) and
+	// the app asks the state again — coming back from the tank, the screen
+	// waking up. The open building must show what the NEW state says.
+	const FRESH = JSON.parse(JSON.stringify(APP_LIVE));
+	FRESH.home[0].buildings[0].tanks[0] = { number: 111, size: '40G', empty: false, count: 3 };
+	const before = text(tiles()[0]);
+	page.answer = () => Promise.resolve(reply(200, FRESH));
+	(page.listeners.pageshow || []).forEach((fn) => fn({ persisted: true }));
+	await settle();
+	check('a fresh state while a building is open: its tanks are redrawn from it — the tile no longer says "empty"', /empty/.test(before) && tiles().map((t) => text(find(t, 'fh-sa-tile__name'))).join() === '111,121' && !/empty/.test(text(tiles()[0])) && /3 · 40G/.test(text(tiles()[0])) && !has(tiles()[0], 'is-empty'));
+	const GONE = JSON.parse(JSON.stringify(APP_LIVE));
+	GONE.home[0].buildings.shift();
+	page.answer = () => Promise.resolve(reply(200, GONE));
+	(page.listeners.pageshow || []).forEach((fn) => fn({ persisted: true }));
+	await settle();
+	check('a building that is no longer in the layout is not shown from memory: back to the buildings', /Pick a building/.test(text(home)) && tiles().map((t) => text(find(t, 'fh-sa-tile__name'))).join() === 'Building 400,Building 500');
+	page.answer = () => Promise.resolve(reply(200, APP_LIVE));
+	(page.listeners.pageshow || []).forEach((fn) => fn({ persisted: true }));
+	await settle();
+	click(tiles()[0]);
 	click(findAll(home, 'fh-sa-btn').filter((b) => /Back/.test(text(b)))[0]);
 	check('Back returns to the buildings', tiles().length === 3);
+	page.answer = (url) => {
+		if (url === URLS.lock) {
+			live = false;
+			return Promise.resolve(reply(200, { ok: true, state: APP_LOCKED }));
+		}
+		return Promise.resolve(reply(200, live ? APP_LIVE : APP_LOCKED));
+	};
 	click(find(home, 'fh-sa-btn--lock'));
 	await settle();
 	check('Lock: the app tells the server, then shows the keypad — and nobody\'s name', page.calls.some((c) => c.url === URLS.lock && c.init.method === 'POST') && findAll(home, 'fh-sa-key').length === 12 && !/Sam/.test(text(home)) && tiles().length === 0);

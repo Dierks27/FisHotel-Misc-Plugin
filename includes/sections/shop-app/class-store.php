@@ -6,16 +6,17 @@
  * activated, gated by the autoloaded option fishotel_shopapp_db_version
  * (so a booted site pays no query for it, and an ordinary request never
  * runs SHOW TABLES or dbDelta); the option is written only once every
- * table is really there:
+ * table — and the column a later version added — is really there:
  *
  *   {prefix}fh_shopapp_devices  one row per enrolled (or waiting, or
  *                               revoked) device: name, status, the SHA-256
  *                               of its token — never the token —, the
  *                               SHA-256 and expiry of a one-time enrolment
  *                               link while it waits, who enrolled it and
- *                               when, last used, the wrong-PIN count, the
- *                               lockout level and end, and the shop
- *                               session it holds (id, person, since).
+ *                               when, last used, the wrong-PIN count and
+ *                               when it began, the lockout level and end,
+ *                               and the shop session it holds (id, person,
+ *                               since).
  *   {prefix}fh_shopapp_people   name, the PIN's hash, its salt and its
  *                               length — never the PIN —, the WordPress
  *                               account the work is recorded under (0 =
@@ -26,7 +27,7 @@
  *                               as it was), the WordPress user who acted,
  *                               a short note, the UTC time.
  *   {prefix}fh_shopapp_saves    the Front Desk writes a shop session sent
- *                               with a save id, for an hour: the id's
+ *                               with a save id, for a week: the id's
  *                               hash, whether it finished, and the short
  *                               answer to repeat — so a save that is sent
  *                               twice is written once (Saves).
@@ -62,7 +63,7 @@ class Store {
 	 *
 	 * @var string
 	 */
-	const DB_VERSION = '1.0';
+	const DB_VERSION = '1.1';
 
 	/**
 	 * Autoloaded option holding the installed schema version (or a failure
@@ -180,6 +181,7 @@ class Store {
 				revoked_by bigint(20) unsigned NOT NULL DEFAULT 0,
 				revoked_at datetime NULL,
 				fail_count smallint(5) unsigned NOT NULL DEFAULT 0,
+				fail_since datetime NULL,
 				lock_level smallint(5) unsigned NOT NULL DEFAULT 0,
 				locked_until datetime NULL,
 				session_id char(32) NOT NULL DEFAULT '',
@@ -237,8 +239,8 @@ class Store {
 	/**
 	 * Create / upgrade the tables via dbDelta, write the site secret when
 	 * there is none, then record the version (autoloaded) once every table
-	 * is really there; on failure record a marker so maybe_install()
-	 * waits.
+	 * and column is really there; on failure record a marker so
+	 * maybe_install() waits.
 	 *
 	 * @param bool $force Skip the version gate.
 	 * @return bool Whether the tables are installed.
@@ -258,7 +260,7 @@ class Store {
 				dbDelta( $statement );
 			}
 
-			$ok = self::tables_exist();
+			$ok = self::tables_exist() && self::columns_exist();
 		} catch ( \Throwable $e ) {
 			$ok = false;
 		}
@@ -296,6 +298,24 @@ class Store {
 		}
 
 		return true;
+	}
+
+	/**
+	 * Whether the columns added after 1.0 exist (install and the admin
+	 * page only): devices.fail_since, since 1.1.
+	 *
+	 * @return bool
+	 */
+	public static function columns_exist() {
+		global $wpdb;
+
+		try {
+			$found = $wpdb->get_var( $wpdb->prepare( 'SHOW COLUMNS FROM ' . self::table( 'devices' ) . ' LIKE %s', 'fail_since' ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+
+		return 'fail_since' === $found;
 	}
 
 	/* ============================================================== */
@@ -505,6 +525,7 @@ class Store {
 			'name'               => '%s',
 			'last_used_at'       => '%s',
 			'fail_count'         => '%d',
+			'fail_since'         => '%s',
 			'lock_level'         => '%d',
 			'locked_until'       => '%s',
 			'session_id'         => '%s',
@@ -540,22 +561,35 @@ class Store {
 	 * is enrolled, not locked and has tries left, so parallel requests
 	 * get no more tries than one after the other would.
 	 *
-	 * @param int $id  Device id.
-	 * @param int $max Lockout::MAX_ATTEMPTS.
-	 * @param int $now Timestamp.
+	 * The count is of the attempts since fail_since. Once that is longer
+	 * ago than $memory the count starts over with this attempt — in the
+	 * same statement, so a burst cannot start it over twice.
+	 *
+	 * @param int $id     Device id.
+	 * @param int $max    Lockout::MAX_ATTEMPTS.
+	 * @param int $now    Timestamp.
+	 * @param int $memory Lockout::FAIL_MEMORY.
 	 * @return bool Whether this request may compare a PIN.
 	 */
-	public function reserve_attempt( $id, $max, $now ) {
+	public function reserve_attempt( $id, $max, $now, $memory ) {
 		global $wpdb;
 
+		$when   = gmdate( 'Y-m-d H:i:s', (int) $now );
+		$lapsed = gmdate( 'Y-m-d H:i:s', (int) $now - (int) $memory );
+
 		try {
+			// fail_count is assigned first: both CASEs read the stored fail_since.
 			$n = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
 				$wpdb->prepare(
-					'UPDATE ' . self::table( 'devices' ) . ' SET fail_count = fail_count + 1 WHERE id = %d AND status = %s AND fail_count < %d AND ( locked_until IS NULL OR locked_until <= %s )', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+					'UPDATE ' . self::table( 'devices' ) . ' SET fail_count = CASE WHEN fail_since IS NULL OR fail_since <= %s THEN 1 ELSE fail_count + 1 END, fail_since = CASE WHEN fail_since IS NULL OR fail_since <= %s THEN %s ELSE fail_since END WHERE id = %d AND status = %s AND ( locked_until IS NULL OR locked_until <= %s ) AND ( fail_count < %d OR fail_since IS NULL OR fail_since <= %s )', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+					$lapsed,
+					$lapsed,
+					$when,
 					(int) $id,
 					self::STATUS_ACTIVE,
+					$when,
 					(int) $max,
-					gmdate( 'Y-m-d H:i:s', (int) $now )
+					$lapsed
 				)
 			);
 		} catch ( \Throwable $e ) {
@@ -563,6 +597,60 @@ class Store {
 		}
 
 		return 1 === (int) $n;
+	}
+
+	/**
+	 * Give back the attempt a CORRECT PIN took off the budget. Only that
+	 * one: the wrong ones before it stay counted until they lapse, so a
+	 * person's own PIN is no way to try for somebody else's.
+	 *
+	 * @param int $id Device id.
+	 * @return bool
+	 */
+	public function release_attempt( $id ) {
+		global $wpdb;
+
+		try {
+			$n = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				$wpdb->prepare(
+					'UPDATE ' . self::table( 'devices' ) . ' SET fail_count = CASE WHEN fail_count > 0 THEN fail_count - 1 ELSE 0 END WHERE id = %d', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+					(int) $id
+				)
+			);
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+
+		return false !== $n;
+	}
+
+	/**
+	 * End every shop session a person holds, on whatever device — their
+	 * PIN or their account changed, or they were switched off. The next
+	 * request of such a device finds nobody unlocked.
+	 *
+	 * @param int $person_id Person id.
+	 * @return int|false Devices whose session was ended.
+	 */
+	public function end_person_sessions( $person_id ) {
+		global $wpdb;
+
+		if ( (int) $person_id <= 0 ) {
+			return 0;
+		}
+
+		try {
+			$n = $wpdb->query( // phpcs:ignore WordPress.DB.DirectDatabaseQuery
+				$wpdb->prepare(
+					'UPDATE ' . self::table( 'devices' ) . " SET session_id = '', session_person_id = 0, session_started_at = NULL WHERE session_person_id = %d", // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+					(int) $person_id
+				)
+			);
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+
+		return false === $n ? false : (int) $n;
 	}
 
 	/**
@@ -907,15 +995,24 @@ class Store {
 	/* ============================================================== */
 
 	/**
-	 * A value cut to a column's width — always a string (before PHP 8
-	 * substr() of an empty string is false).
+	 * A value cut to a column's width — in CHARACTERS, as the columns
+	 * count them (cutting bytes would split an accented letter in two,
+	 * and the row would be refused). Always a string: before PHP 8
+	 * substr() of an empty string is false.
 	 *
 	 * @param mixed $value Value.
 	 * @param int   $max   Characters.
 	 * @return string
 	 */
-	private static function cut( $value, $max ) {
-		return (string) substr( (string) $value, 0, (int) $max );
+	public static function cut( $value, $max ) {
+		$value = (string) $value;
+		if ( function_exists( 'mb_substr' ) ) {
+			return (string) mb_substr( $value, 0, (int) $max, 'UTF-8' );
+		}
+		if ( 1 === preg_match( '/^.{0,' . (int) $max . '}/us', $value, $m ) ) {
+			return (string) $m[0];
+		}
+		return (string) substr( $value, 0, (int) $max );
 	}
 
 	/**
@@ -951,7 +1048,7 @@ class Store {
 		foreach ( array( 'name', 'status', 'token_hash', 'enrol_hash', 'session_id' ) as $key ) {
 			$row[ $key ] = isset( $row[ $key ] ) ? (string) $row[ $key ] : '';
 		}
-		foreach ( array( 'enrol_expires', 'enrolled_at', 'created_at', 'last_used_at', 'revoked_at', 'locked_until', 'session_started_at' ) as $key ) {
+		foreach ( array( 'enrol_expires', 'enrolled_at', 'created_at', 'last_used_at', 'revoked_at', 'fail_since', 'locked_until', 'session_started_at' ) as $key ) {
 			$row[ $key ] = isset( $row[ $key ] ) && '' !== (string) $row[ $key ] ? (string) $row[ $key ] : null;
 		}
 		return $row;

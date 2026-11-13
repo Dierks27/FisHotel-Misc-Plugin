@@ -18,10 +18,19 @@
  *
  * On a shop-floor request with a live session:
  *   - WordPress's current user is the account the person's work is
- *     recorded under (a determine_current_user filter, re-asserted at
- *     init in case something asked "who is it?" before this section was
- *     loaded), so the Front Desk records the right actor and WordPress
- *     nonces work as for any logged-in user;
+ *     recorded under, so the Front Desk records the right actor and
+ *     WordPress nonces work as for any logged-in user. On the page that
+ *     holds from the start of the request (a determine_current_user
+ *     filter, re-asserted at init in case something asked "who is it?"
+ *     before this section was loaded): its address can carry nothing but
+ *     the tank number, so nothing else is there to act on. On an AJAX
+ *     call — a POST, whose body anybody may add fields to — the request
+ *     is NOBODY'S until the action itself starts: everything that runs
+ *     on init, wp_loaded and admin_init (a basket's "add-to-cart", any
+ *     plugin's form handler) sees a visitor, not the account, and
+ *     WordPress fires wp_ajax_nopriv_{action}; there, at priority 0,
+ *     enter_ajax() makes the account the current user and hands over to
+ *     the real wp_ajax_{action};
  *   - that account can do NOTHING it could not do without a session —
  *     and nothing it could: every capability is refused (map_meta_cap →
  *     do_not_allow, which holds for a multisite super admin too), an
@@ -31,6 +40,7 @@
  *     (grant(): template_redirect priority 0 for the page, the action's
  *     own hook at priority 0 for AJAX), so nothing that runs earlier in
  *     the request sees a capability at all;
+ *   - WooCommerce neither reads nor writes the account's saved basket;
  *   - WooCommerce neither reads the device's shop-front basket cookies
  *     nor sets any, so the two never meet;
  *   - page-cache plugins are told to keep nothing of the request
@@ -81,6 +91,14 @@ class Gate {
 	private static $granted = false;
 
 	/**
+	 * Whether the screen's own handler has started (enter()). An AJAX
+	 * rule's account is the current user only from then on.
+	 *
+	 * @var bool
+	 */
+	private static $entered = false;
+
+	/**
 	 * The shop-floor capabilities, worked out once per request.
 	 *
 	 * @var string[]|null
@@ -103,6 +121,7 @@ class Gate {
 		self::$state     = null;
 		self::$resolving = false;
 		self::$granted   = false;
+		self::$entered   = false;
 		self::$caps      = null;
 	}
 
@@ -149,9 +168,11 @@ class Gate {
 		 * the mapped WordPress account there, holding only the shop-floor
 		 * capabilities (fishotel_shop_app_capabilities) from the moment
 		 * the screen's handler starts — template_redirect priority 0 for
-		 * a page, the wp_ajax_{action} hook at priority 0 for AJAX. Keep
-		 * a rule as narrow as the screen: it is a way in for a four-digit
-		 * PIN.
+		 * a page, the wp_ajax_{action} hook at priority 0 for AJAX. On an
+		 * AJAX rule nobody is logged in before that moment: register the
+		 * handler on wp_ajax_{action} as for any logged-in user, and do
+		 * not expect the account on init or admin_init. Keep a rule as
+		 * narrow as the screen: it is a way in for a four-digit PIN.
 		 *
 		 * @param array[] $rules The rules (see Gate::rules()).
 		 */
@@ -414,36 +435,96 @@ class Gate {
 			}
 		}
 
+		// The account's saved basket stays where it is: nothing of a
+		// shop-floor request is merged into it or written back to it.
+		add_filter( 'woocommerce_persistent_cart_enabled', '__return_false', PHP_INT_MAX );
+
 		if ( 'ajax' === $rule['type'] ) {
-			add_action( 'wp_ajax_' . $rule['action'], array( self::class, 'grant' ), 0 );
+			// Nobody is logged in until the action: WordPress then fires the
+			// visitor's hook, and enter_ajax() hands over to the real one.
+			add_action( 'wp_ajax_nopriv_' . $rule['action'], array( self::class, 'enter_ajax' ), 0 );
+			add_action( 'wp_ajax_' . $rule['action'], array( self::class, 'enter' ), 0 );
 			Saves::arm( $rule );
 		}
 		// A page rule is granted by App::intercept() at template_redirect priority 0.
 	}
 
 	/**
-	 * determine_current_user: the mapped account on a shop-floor request
-	 * with a live session, whatever came before; otherwise untouched.
+	 * Whether the session's account is WordPress's current user at this
+	 * point of the request: on a page from the start, on an AJAX call
+	 * only once the action's own handler has started.
+	 *
+	 * @param array $state A recognised state.
+	 * @return bool
+	 */
+	private static function holds_user( array $state ) {
+		return self::$entered || ! is_array( $state['rule'] ) || 'ajax' !== $state['rule']['type'];
+	}
+
+	/**
+	 * determine_current_user: on a shop-floor request with a live session
+	 * the mapped account, whatever came before — or, on an AJAX call
+	 * before its action, nobody (not even a WordPress login the device
+	 * also holds: somebody unlocked with their PIN, and until the action
+	 * starts the request is no one's); otherwise untouched.
 	 *
 	 * @param mixed $user_id What WordPress worked out so far.
 	 * @return mixed
 	 */
 	public static function determine_user( $user_id ) {
 		$state = self::resolve();
-		return $state['recognised'] ? $state['user_id'] : $user_id;
+		if ( ! $state['recognised'] ) {
+			return $user_id;
+		}
+		return self::holds_user( $state ) ? $state['user_id'] : 0;
 	}
 
 	/**
 	 * At init, before anything else: settle the answer, and when a shop
-	 * session is recognised make sure WordPress's current user is its
-	 * account even if something asked for the user before this section's
-	 * filter was in place.
+	 * session is recognised make sure WordPress's current user is what it
+	 * must be at this point — the session's account on a page, nobody on
+	 * an AJAX call — even if something asked for the user before this
+	 * section's filter was in place.
 	 */
 	public static function ensure() {
 		$state = self::resolve( true );
-		if ( $state['recognised'] && (int) get_current_user_id() !== $state['user_id'] ) {
-			wp_set_current_user( $state['user_id'] );
+		if ( ! $state['recognised'] ) {
+			return;
 		}
+		$want = self::holds_user( $state ) ? $state['user_id'] : 0;
+		if ( (int) get_current_user_id() !== $want ) {
+			wp_set_current_user( $want );
+		}
+	}
+
+	/**
+	 * wp_ajax_{action}, priority 0 — the action's own handlers are about
+	 * to run: the session's account becomes WordPress's current user (it
+	 * was nobody until here) and holds the shop-floor capabilities.
+	 */
+	public static function enter() {
+		if ( null === self::$state || ! self::$state['recognised'] ) {
+			return;
+		}
+		self::$entered = true;
+		if ( (int) get_current_user_id() !== self::$state['user_id'] ) {
+			wp_set_current_user( self::$state['user_id'] );
+		}
+		self::grant();
+	}
+
+	/**
+	 * wp_ajax_nopriv_{action}, priority 0 — WordPress took the request
+	 * for a visitor's, as it was meant to until now. Hand it to the
+	 * action's real hook (whose priority 0 is enter()) and end the
+	 * request the way admin-ajax.php ends one no handler ended.
+	 */
+	public static function enter_ajax() {
+		if ( null === self::$state || ! self::$state['recognised'] || 'ajax' !== self::$state['rule']['type'] ) {
+			return;
+		}
+		do_action( 'wp_ajax_' . self::$state['rule']['action'] );
+		wp_die( '0' );
 	}
 
 	/**

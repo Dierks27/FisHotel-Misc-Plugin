@@ -48,7 +48,7 @@ $fh_tabs = array(
 
 	<?php if ( ! $tables_ok ) : ?>
 		<div class="fishotel-misc-notice fishotel-misc-notice--error">
-			<?php esc_html_e( 'The Shop App tables do not exist. Deactivate and reactivate the plugin to create them.', 'fishotel-misc-plugin' ); ?>
+			<?php esc_html_e( 'The Shop App tables do not exist or are out of date. Deactivate and reactivate the plugin to create them.', 'fishotel-misc-plugin' ); ?>
 		</div>
 	<?php endif; ?>
 
