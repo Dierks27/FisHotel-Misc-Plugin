@@ -1,6 +1,6 @@
 /**
- * Health admin — settings save, "Clear log", context toggles and the
- * "narrow this page" box on the Log tab.
+ * Health admin — settings save, "Clear log", "Send a test alarm",
+ * context toggles and the "narrow this page" box on the Log tab.
  *
  * The server renders every row; this file only shows/hides them. The pure
  * helpers (filterRows, escapeHtml, levelClass) are exported for
@@ -195,6 +195,33 @@
 				});
 		});
 
+		// Send a test alarm (Overview, Checkout alarm card).
+		$(document).on('click', '.fh-health-test-alarm', function (e) {
+			e.preventDefault();
+			var $btn    = $(this);
+			var $status = $btn.closest('.fh-health-actions').find('.fh-health-status').first();
+
+			$btn.prop('disabled', true);
+			setStatus($status, i18n.testSending || 'Sending…');
+
+			$.post(cfg.ajaxUrl || root.ajaxurl, {
+				action: 'fishotel_health_test_alarm',
+				nonce: cfg.nonce
+			})
+				.done(function (res) {
+					var ok  = res && res.success;
+					var msg = (res && res.data && res.data.message) || (i18n.error || 'Something went wrong.');
+					setStatus($status, msg, ok ? 'is-ok' : 'is-error');
+				})
+				.fail(function (xhr) {
+					var res = xhr && xhr.responseJSON;
+					setStatus($status, (res && res.data && res.data.message) || i18n.error || 'Something went wrong.', 'is-error');
+				})
+				.always(function () {
+					$btn.prop('disabled', false);
+				});
+		});
+
 		// Settings form.
 		var $form = $('#fishotel-health-form');
 		if (!$form.length) {
@@ -226,6 +253,11 @@
 						$form.find('[name="store_debug"]').prop('checked', !!s.store_debug);
 						$form.find('[name="capture_fatals"]').prop('checked', !!s.capture_fatals);
 						$form.find('[name="capture_http"]').prop('checked', !!s.capture_http);
+						$form.find('[name="checkout_alarm"]').prop('checked', !!s.checkout_alarm);
+						$form.find('[name="checkout_alarm_email"]').val(s.checkout_alarm_email || '');
+						$form.find('[name="stall_orders"]').val(s.stall_orders);
+						$form.find('[name="stall_minutes"]').val(s.stall_minutes);
+						$form.find('[name="checkout_page_check"]').prop('checked', !!s.checkout_page_check);
 					}
 				})
 				.fail(function () {

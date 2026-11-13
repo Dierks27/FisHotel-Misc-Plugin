@@ -33,6 +33,10 @@
  *                         email with cooldown and recursion guard.
  *   - class-admin.php     the page (Overview / Log / Settings), the
  *                         dashboard widget, CSV download, clear log.
+ *   - class-alarm.php     the checkout alarm: new fatals, orders stuck
+ *                         at payment, (optional) the checkout page; its
+ *                         own 5-minute event, one e-mail per signal per
+ *                         hour, a line on Today and a card on Overview.
  *
  * Nothing in this section may fatal or throw on a broken site: every Store
  * write is wrapped, a missing table means "log nothing", and every hook
@@ -130,6 +134,7 @@ class Health {
 		require_once self::path() . 'class-settings.php';
 		require_once self::path() . 'class-cron.php';
 		require_once self::path() . 'class-today-line.php';
+		require_once self::path() . 'class-alarm.php';
 	}
 
 	/**
@@ -169,6 +174,10 @@ class Health {
 
 		Cron::init();
 
+		// The checkout alarm: its 5-minute look, and a one-off look after a
+		// failed checkout (the customer's request only schedules it).
+		Alarm::init();
+
 		if ( is_admin() ) {
 			require_once self::path() . 'class-admin.php';
 
@@ -180,7 +189,24 @@ class Health {
 
 			// Its line on the Today page: "Site health: 2 problems found".
 			Today_Line::register();
+
+			// And the checkout alarm's, while one of its signals is active.
+			Alarm::register_today();
 		}
+	}
+
+	/**
+	 * While the section is switched off: drop the checkout alarm's
+	 * 5-minute event if it is still there (one look at the cron list,
+	 * which WordPress already holds in memory).
+	 */
+	public static function boot_disabled() {
+		if ( ! function_exists( 'wp_next_scheduled' ) || ! wp_next_scheduled( 'fishotel_health_checkout_watch' ) ) {
+			return;
+		}
+
+		require_once self::path() . 'class-alarm.php';
+		Alarm::clear();
 	}
 
 	/**
@@ -225,5 +251,6 @@ class Health {
 	public static function deactivate() {
 		self::load();
 		Cron::clear();
+		Alarm::clear();
 	}
 }

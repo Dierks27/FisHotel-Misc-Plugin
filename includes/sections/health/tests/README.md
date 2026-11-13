@@ -13,6 +13,7 @@ php  includes/sections/health/tests/checks-test.php
 php  includes/sections/health/tests/capture-test.php
 php  includes/sections/health/tests/csv-test.php
 php  includes/sections/health/tests/section-switches-test.php
+php  includes/sections/health/tests/alarm-test.php
 node includes/sections/health/tests/admin.test.js
 ```
 
@@ -31,6 +32,22 @@ node includes/sections/health/tests/admin.test.js
   `sum_repeats_since()` counting the folded events; the after-insert
   callback (once per insert, never for a repeat, a throwing callback is
   harmless); a throwing store → `null`, never an exception.
+- **alarm-test.php** — the checkout alarm: its settings (defaults on /
+  3 / 30 / page off, bad values fall back and are said); new fatals from a
+  WooCommerce log file in the real 11.x line format (only lines after the
+  last look, INFO and a cut-off first line ignored, CONTEXT cut, the first
+  look never alarms on an old fatal, other log sources not read), from
+  the database handler (by log_id after the mark, newest first, no table =
+  nothing) and from WordPress's recovery mode (once); stuck orders through
+  `wc_get_orders()` (date and limit on both queries, the second only at the
+  threshold, paid statuses + On hold count as "went through"); the page
+  (5xx only; a blocked loopback is a note, never an e-mail); the hour of
+  silence per signal, a fatal staying an hour, a stall clearing quietly;
+  one e-mail for two signals with its exact wording (what, where to look,
+  how to go back on an upload, plain words, no names); the test alarm;
+  the hooks it looks on and that a failed checkout only schedules; the
+  Today line and the Overview card's text; Settings off and the section
+  off drop the events.
 - **checks-test.php** — a healthy fixture produces only ok/info; then every
   rule one at a time: inactive/missing plugins (Misc → info), theme not
   FisHotel, WooCommerce inactive; update age at 24 h 59 min (ok), exactly

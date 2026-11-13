@@ -140,6 +140,52 @@ use FisHotel\Misc\Sections\Health\Settings;
 				</div>
 			</div>
 
+			<?php /* ── Checkout alarm ─────────────────────────────────── */ ?>
+			<div class="fishotel-misc-card fh-health-card">
+				<div class="fishotel-misc-card-header">
+					<div class="fishotel-misc-card-icon"><span class="dashicons dashicons-cart"></span></div>
+					<h2 class="fishotel-misc-card-title"><?php esc_html_e( 'Checkout alarm', 'fishotel-misc-plugin' ); ?></h2>
+				</div>
+				<p class="fishotel-misc-card-desc">
+					<?php esc_html_e( 'Every 5 minutes, and a minute after a checkout fails, the site looks for a new PHP fatal error and for orders stuck at payment. A problem is e-mailed once, then not again for an hour; it also shows on Today and on the Overview. "All clear" is not e-mailed. Looking only reads: it never slows a checkout.', 'fishotel-misc-plugin' ); ?>
+				</p>
+
+				<div class="fh-health-field fh-health-field--row">
+					<span class="fh-health-label"><?php esc_html_e( 'Checkout alarm on', 'fishotel-misc-plugin' ); ?></span>
+					<label class="fishotel-misc-toggle">
+						<input type="checkbox" name="checkout_alarm" value="1" <?php checked( ! empty( $settings['checkout_alarm'] ) ); ?>>
+						<span class="slider"></span>
+					</label>
+				</div>
+
+				<div class="fh-health-field">
+					<label class="fh-health-label" for="fh-health-alarm-email"><?php esc_html_e( 'Send the alarm to', 'fishotel-misc-plugin' ); ?></label>
+					<input type="email" id="fh-health-alarm-email" class="fh-health-input" name="checkout_alarm_email" value="<?php echo esc_attr( $settings['checkout_alarm_email'] ); ?>" placeholder="<?php echo esc_attr( sprintf( /* translators: %s: address */ __( 'blank = the site\'s admin address (%s)', 'fishotel-misc-plugin' ), (string) get_option( 'admin_email', '' ) ) ); ?>">
+				</div>
+
+				<div class="fh-health-field fh-health-field--row">
+					<label class="fh-health-label" for="fh-health-stall-orders"><?php esc_html_e( 'Stuck orders that count', 'fishotel-misc-plugin' ); ?></label>
+					<input type="number" id="fh-health-stall-orders" class="fh-health-input fh-health-input--num" name="stall_orders" min="<?php echo esc_attr( Settings::STALL_ORDERS_MIN ); ?>" max="<?php echo esc_attr( Settings::STALL_ORDERS_MAX ); ?>" step="1" required value="<?php echo esc_attr( $settings['stall_orders'] ); ?>">
+				</div>
+
+				<div class="fh-health-field fh-health-field--row">
+					<label class="fh-health-label" for="fh-health-stall-minutes"><?php esc_html_e( 'Within (minutes)', 'fishotel-misc-plugin' ); ?></label>
+					<input type="number" id="fh-health-stall-minutes" class="fh-health-input fh-health-input--num" name="stall_minutes" min="<?php echo esc_attr( Settings::STALL_MINUTES_MIN ); ?>" max="<?php echo esc_attr( Settings::STALL_MINUTES_MAX ); ?>" step="5" required value="<?php echo esc_attr( $settings['stall_minutes'] ); ?>">
+				</div>
+				<p class="fishotel-misc-card-desc"><?php esc_html_e( 'An alarm when this many orders from that many minutes are still "Pending payment" or "Failed" and none was paid.', 'fishotel-misc-plugin' ); ?></p>
+
+				<div class="fh-health-field fh-health-field--row">
+					<div>
+						<span class="fh-health-label"><?php esc_html_e( 'Also open the checkout page', 'fishotel-misc-plugin' ); ?></span>
+						<p class="fishotel-misc-card-desc"><?php esc_html_e( 'Off by default. The site opens its own checkout page every 5 minutes and raises the alarm on a server error. Some hosts block a site from calling itself; the Overview says so if yours does.', 'fishotel-misc-plugin' ); ?></p>
+					</div>
+					<label class="fishotel-misc-toggle">
+						<input type="checkbox" name="checkout_page_check" value="1" <?php checked( ! empty( $settings['checkout_page_check'] ) ); ?>>
+						<span class="slider"></span>
+					</label>
+				</div>
+			</div>
+
 		</div><!-- .fh-health-columns -->
 
 		<p class="fh-health-actions-row">

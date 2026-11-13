@@ -157,7 +157,7 @@ class Layout {
 			case 'weather':
 				return __( 'The delivery-day forecast for each order, written on the order as a note with heat pack / cooling / hold. Switching it on starts a nightly call to the National Weather Service for the orders delivering in the next few days (Settings turns the nightly job off); it sends no e-mail.', 'fishotel-misc-plugin' );
 			case 'health':
-				return __( 'One error log for every FisHotel plugin and the theme, with a dashboard widget. Switching it on starts a daily clean-up of old log rows; it e-mails only if you fill in Settings → Alert e-mail.', 'fishotel-misc-plugin' );
+				return __( 'One error log for every FisHotel plugin and the theme, and a checkout alarm. Switching it on starts a daily log clean-up and the checkout alarm: every 5 minutes it looks for new PHP fatal errors and orders stuck at payment, and e-mails the admin address at most once an hour. Other e-mails only if you fill in Settings → Alert e-mail.', 'fishotel-misc-plugin' );
 			case 'site-snippets':
 				return __( 'The site\'s own code snippets, each switched on or off here, plus an editor for the people named in wp-config. Starts nothing by itself: a snippet runs only once you switch it on.', 'fishotel-misc-plugin' );
 			case 'shop-app':
