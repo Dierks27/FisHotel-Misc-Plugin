@@ -447,7 +447,9 @@ class Stats_Sales {
 	 * credit or note; a discount, fee or adjustment is a credit; without
 	 * one, a negative amount or a name starting "Credit" is a credit, the
 	 * rest fish), qty (qty | quantity), price — PER FISH (price |
-	 * unit_price) —, total (total | line_total; qty × price without one),
+	 * unit_price) —, total (total | line_total; qty × price without one;
+	 * for a credit the Invoices section's signed `amount` when it is there,
+	 * so its "Adjustment" up to a stated price stays positive),
 	 * species_id, product_id, variation_id, and the invoice product it
 	 * belongs to (invoice_product_id on the line, else the invoice's
 	 * product_id). A line without a name is dropped.
@@ -560,9 +562,18 @@ class Stats_Sales {
 				$total = $qty * $price;
 			}
 		} elseif ( 'credit' === $kind ) {
-			$amount = null !== $total ? $total : $price;
-			$total  = null === $amount ? null : -1 * abs( $amount );
-			$price  = $total;
+			// The Invoices section says what a line adds to its invoice (`amount`, signed):
+			// a credit and a "Discount" are negative there, an "Adjustment" up to a stated
+			// price is positive — taken as it is, or the invoice would not add up to what
+			// was paid. Written any other way, a credit is money off.
+			$added = self::first_float( $line, array( 'amount' ) );
+			if ( null !== $added ) {
+				$total = $added;
+			} else {
+				$amount = null !== $total ? $total : $price;
+				$total  = null === $amount ? null : -1 * abs( $amount );
+			}
+			$price = $total;
 		} else {
 			$price = null;
 			$total = null;
