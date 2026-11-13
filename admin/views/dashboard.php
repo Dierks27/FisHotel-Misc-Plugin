@@ -1,6 +1,9 @@
 <?php
 /**
- * Dashboard view — lists all registered sections.
+ * Dashboard view — lists all registered sections, under the headings
+ * Layout::grouped() gives (Today on its own at the top, then Fish room,
+ * Customers, Shipping, Site), each card with Layout::card_text(): what
+ * the section is for and what switching it on starts by itself.
  *
  * @package FisHotel\Misc
  * @var array $sections Passed from Plugin::render_dashboard().
@@ -42,42 +45,49 @@ defined( 'ABSPATH' ) || exit;
 			</div>
 		<?php endif; ?>
 
-		<!-- Section Grid -->
-		<div class="fishotel-misc-grid">
-			<?php foreach ( $sections as $slug => $section ) : ?>
-				<div class="fishotel-misc-card">
+		<?php foreach ( \FisHotel\Misc\Layout::grouped( $sections ) as $fh_group ) : ?>
+			<?php if ( '' !== $fh_group['title'] ) : ?>
+				<h2 class="fishotel-misc-group-title"><?php echo esc_html( $fh_group['title'] ); ?></h2>
+			<?php endif; ?>
 
-					<div class="fishotel-misc-card-header">
-						<div class="fishotel-misc-card-icon">
-							<span class="dashicons <?php echo esc_attr( $section['icon'] ); ?>"></span>
+			<!-- Section Grid -->
+			<div class="fishotel-misc-grid">
+				<?php foreach ( $fh_group['sections'] as $slug => $section ) : ?>
+					<?php $fh_text = \FisHotel\Misc\Layout::card_text( $slug ); ?>
+					<div class="fishotel-misc-card">
+
+						<div class="fishotel-misc-card-header">
+							<div class="fishotel-misc-card-icon">
+								<span class="dashicons <?php echo esc_attr( $section['icon'] ); ?>"></span>
+							</div>
+							<h2 class="fishotel-misc-card-title">
+								<?php echo esc_html( $section['name'] ); ?>
+							</h2>
 						</div>
-						<h2 class="fishotel-misc-card-title">
-							<?php echo esc_html( $section['name'] ); ?>
-						</h2>
+
+						<p class="fishotel-misc-card-desc">
+							<?php echo esc_html( '' !== $fh_text ? $fh_text : $section['description'] ); ?>
+						</p>
+
+						<div class="fishotel-misc-card-footer">
+							<span class="fishotel-misc-badge <?php echo $section['enabled'] ? 'fishotel-misc-badge--active' : 'fishotel-misc-badge--inactive'; ?>">
+								<?php echo $section['enabled']
+									? esc_html__( 'Active', 'fishotel-misc-plugin' )
+									: esc_html__( 'Inactive', 'fishotel-misc-plugin' ); ?>
+							</span>
+
+							<label class="fishotel-misc-toggle">
+								<input type="checkbox"
+									data-section="<?php echo esc_attr( $slug ); ?>"
+									<?php checked( $section['enabled'] ); ?>>
+								<span class="slider"></span>
+							</label>
+						</div>
+
 					</div>
-
-					<p class="fishotel-misc-card-desc">
-						<?php echo esc_html( $section['description'] ); ?>
-					</p>
-
-					<div class="fishotel-misc-card-footer">
-						<span class="fishotel-misc-badge <?php echo $section['enabled'] ? 'fishotel-misc-badge--active' : 'fishotel-misc-badge--inactive'; ?>">
-							<?php echo $section['enabled']
-								? esc_html__( 'Active', 'fishotel-misc-plugin' )
-								: esc_html__( 'Inactive', 'fishotel-misc-plugin' ); ?>
-						</span>
-
-						<label class="fishotel-misc-toggle">
-							<input type="checkbox"
-								data-section="<?php echo esc_attr( $slug ); ?>"
-								<?php checked( $section['enabled'] ); ?>>
-							<span class="slider"></span>
-						</label>
-					</div>
-
-				</div>
-			<?php endforeach; ?>
-		</div>
+				<?php endforeach; ?>
+			</div>
+		<?php endforeach; ?>
 
 	<?php endif; ?>
 

@@ -244,10 +244,15 @@ class Section_Manager {
 	}
 
 	/**
-	 * Let enabled sections register their own admin submenus.
+	 * Let enabled sections register their own admin submenus, in the
+	 * order Layout::menu_order() gives: related screens together (Today,
+	 * then the fish room, customers, shipping, site), the sections that
+	 * were live before 0.46 in the order they always had among
+	 * themselves. Only the order changes — every slug stays as it is.
 	 */
 	public function register_section_menus() {
-		foreach ( $this->sections as $slug => $section ) {
+		foreach ( Layout::menu_order( array_keys( $this->sections ) ) as $slug ) {
+			$section = $this->sections[ $slug ];
 			if ( $section['enabled'] && method_exists( $section['class'], 'register_menu' ) ) {
 				$section['class']::register_menu();
 			}

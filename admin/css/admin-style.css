@@ -95,6 +95,15 @@ body[class*="page_fishotel-misc"] .wrap {
 /* ------------------------------------------------------------------ */
 /*  Section Grid                                                       */
 /* ------------------------------------------------------------------ */
+.fishotel-misc-group-title {
+	margin: 32px 0 14px;
+	font-size: 13px;
+	font-weight: 600;
+	letter-spacing: 0.4px;
+	text-transform: uppercase;
+	color: var(--fh-text-secondary);
+}
+
 .fishotel-misc-grid {
 	display: grid;
 	grid-template-columns: repeat(3, 1fr);
