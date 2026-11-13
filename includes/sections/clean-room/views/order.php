@@ -102,6 +102,7 @@ $fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks,
 			<?php if ( '' !== $value( 'notes' ) ) : ?>
 				<span class="fh-cr-sub fh-cr-line__notes"><?php echo esc_html( $value( 'notes' ) ); ?></span>
 			<?php endif; ?>
+			<?php do_action( 'fishotel_cleanroom_order_line', $line ); // Other sections add a line under the fish (Requests: "Requested by: …"). ?>
 			<?php if ( $correct ) : ?>
 				<button type="button" class="button-link fh-cr-identify-open" data-line="<?php echo esc_attr( $value( 'id', 0 ) ); ?>" data-size="<?php echo esc_attr( $value( 'size_slug' ) ); ?>" data-size-label="<?php echo esc_attr( $value( 'size_label' ) ); ?>" title="<?php esc_attr_e( 'Name the real fish and its size. The line keeps what the label said, its stays follow, and the remembered box share is written for the corrected fish.', 'fishotel-misc-plugin' ); ?>"><?php echo esc_html( $unknown ? __( 'Identify…', 'fishotel-misc-plugin' ) : __( 'Correct the fish…', 'fishotel-misc-plugin' ) ); ?></button>
 			<?php endif; ?>

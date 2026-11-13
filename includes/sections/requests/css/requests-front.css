@@ -1,0 +1,271 @@
+/**
+ * Requests — the section's own plain pages (the private request form,
+ * "my requests", keep / cancel, the pay link's messages) and the form of
+ * the [fishotel_request_form] shortcode. Inlined into the page, so there
+ * is no request for it. Everything is scoped to .fh-rq-* classes.
+ *
+ * @package FisHotel\Misc\Sections\Requests
+ */
+
+.fh-rq-body {
+	margin: 0;
+	background: #12161a;
+	color: #e6e8ea;
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+	font-size: 16px;
+	line-height: 1.5;
+}
+
+.fh-rq-main {
+	max-width: 640px;
+	margin: 0 auto;
+	padding: 20px 16px 48px;
+}
+
+.fh-rq-site {
+	margin: 0 0 14px;
+	font-size: 14px;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+
+.fh-rq-site a {
+	color: #c9b77c;
+	text-decoration: none;
+}
+
+.fh-rq-card {
+	background: #1b2026;
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-radius: 10px;
+	padding: 22px 20px;
+}
+
+.fh-rq-card h1 {
+	margin: 0 0 10px;
+	font-size: 24px;
+	line-height: 1.25;
+	color: #fff;
+}
+
+.fh-rq-card a {
+	color: #c9b77c;
+}
+
+.fh-rq-lead {
+	margin: 0 0 14px;
+	color: #c3c8cd;
+}
+
+.fh-rq-small {
+	font-size: 13px;
+	color: #9aa2aa;
+}
+
+.fh-rq-fee,
+.fh-rq-flash {
+	margin: 0 0 16px;
+	padding: 10px 12px;
+	border-left: 3px solid #c9b77c;
+	background: rgba(201, 183, 124, 0.1);
+	border-radius: 0 6px 6px 0;
+}
+
+.fh-rq-errors {
+	margin: 0 0 16px;
+	padding: 10px 12px;
+	border-left: 3px solid #e2574c;
+	background: rgba(226, 87, 76, 0.12);
+	border-radius: 0 6px 6px 0;
+}
+
+.fh-rq-errors p {
+	margin: 0 0 6px;
+	font-weight: 600;
+}
+
+.fh-rq-errors ul {
+	margin: 0;
+	padding-left: 20px;
+}
+
+.fh-rq-form .fh-rq-who {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 12px;
+	margin-bottom: 8px;
+}
+
+.fh-rq-form .fh-rq-who .fh-rq-field:last-child {
+	grid-column: 1 / -1;
+}
+
+.fh-rq-form .fh-rq-field {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	font-size: 14px;
+}
+
+.fh-rq-form .fh-rq-field > span {
+	color: #b4bbc2;
+}
+
+.fh-rq-form input[type="text"],
+.fh-rq-form input[type="email"],
+.fh-rq-form input[type="number"],
+.fh-rq-form select,
+.fh-rq-form textarea {
+	width: 100%;
+	box-sizing: border-box;
+	padding: 10px 12px;
+	font: inherit;
+	color: #f2f3f4;
+	background: #11151a;
+	border: 1px solid rgba(255, 255, 255, 0.18);
+	border-radius: 6px;
+	color-scheme: dark;
+}
+
+.fh-rq-form input[readonly] {
+	color: #9aa2aa;
+}
+
+.fh-rq-form input:focus,
+.fh-rq-form select:focus,
+.fh-rq-form textarea:focus {
+	outline: 2px solid #c9b77c;
+	outline-offset: 1px;
+}
+
+.fh-rq-form .fh-rq-row {
+	margin: 14px 0 0;
+	padding: 12px 12px 14px;
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	border-radius: 8px;
+	display: grid;
+	grid-template-columns: 1fr 150px 110px;
+	gap: 10px 12px;
+	min-width: 0;
+}
+
+.fh-rq-form .fh-rq-row legend {
+	padding: 0 6px;
+	font-size: 13px;
+	color: #9aa2aa;
+}
+
+.fh-rq-form .fh-rq-field--note {
+	grid-column: 1 / -1;
+}
+
+/* The honeypot is off the page, not display:none (some robots skip those). */
+.fh-rq-hp {
+	position: absolute;
+	left: -9999px;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+}
+
+.fh-rq-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+	justify-content: space-between;
+	margin: 18px 0 8px;
+}
+
+.fh-rq-button {
+	display: inline-block;
+	padding: 11px 20px;
+	font: inherit;
+	font-weight: 600;
+	color: #14181c;
+	background: #c9b77c;
+	border: 1px solid #c9b77c;
+	border-radius: 6px;
+	text-decoration: none;
+	cursor: pointer;
+}
+
+.fh-rq-card a.fh-rq-button {
+	color: #14181c;
+}
+
+.fh-rq-button:hover,
+.fh-rq-button:focus {
+	background: #d8c891;
+}
+
+.fh-rq-button--quiet {
+	color: #e6e8ea;
+	background: transparent;
+	border-color: rgba(255, 255, 255, 0.3);
+}
+
+.fh-rq-button--quiet:hover,
+.fh-rq-button--quiet:focus {
+	background: rgba(255, 255, 255, 0.08);
+}
+
+.fh-rq-mine {
+	list-style: none;
+	margin: 12px 0 0;
+	padding: 0;
+}
+
+.fh-rq-mine__item {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	padding: 12px 0;
+	border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.fh-rq-mine__item.is-closed {
+	opacity: 0.6;
+}
+
+.fh-rq-mine__what {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+}
+
+.fh-rq-mine__state {
+	color: #c9b77c;
+}
+
+.fh-rq-mine form {
+	margin: 0;
+}
+
+.fh-rq-mine .fh-rq-button {
+	padding: 7px 14px;
+	font-size: 14px;
+}
+
+/* The shortcode's form sits in the theme's page: no page background of its own. */
+.fh-rq-embed .fh-rq-card {
+	max-width: 640px;
+}
+
+@media (max-width: 560px) {
+	.fh-rq-form .fh-rq-who,
+	.fh-rq-form .fh-rq-row {
+		grid-template-columns: 1fr 1fr;
+	}
+
+	.fh-rq-form .fh-rq-field--fish {
+		grid-column: 1 / -1;
+	}
+
+	.fh-rq-actions .fh-rq-button {
+		flex: 1 1 100%;
+		text-align: center;
+	}
+}
