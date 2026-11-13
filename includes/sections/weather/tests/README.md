@@ -13,6 +13,7 @@ php  includes/sections/weather/tests/note-test.php
 php  includes/sections/weather/tests/forecast-test.php
 php  includes/sections/weather/tests/schedule-test.php
 php  includes/sections/weather/tests/checker-test.php
+php  includes/sections/weather/tests/boot-test.php
 node includes/sections/weather/tests/admin.test.js
 ```
 
@@ -35,6 +36,11 @@ node includes/sections/weather/tests/admin.test.js
   then `Checker::lookup()` end to end through a fake client — the fixture
   note comes out byte-equal (plus the next-day line the fixture's Thursday
   98°F earns), and every failure stage yields `unavailable`, never a band.
+- **boot-test.php** — booting the section (where the plugin loads) does
+  not ask WooCommerce for its order statuses — their names are translated,
+  and that early it logs a notice on every request; the nightly event is
+  armed at `init` instead, left alone once armed, and not armed while the
+  nightly job is switched off in the settings.
 - **schedule-test.php** — `Cron::next_run_timestamp()` in a real timezone
   across both DST changes; the today-through-+3 scan window and the
   two-day refresh rule; time cleaning; `Settings::sanitize()` fallbacks and
