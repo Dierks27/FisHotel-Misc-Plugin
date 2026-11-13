@@ -357,7 +357,21 @@ namespace FisHotel\Misc\Sections\Shop_App {
 				'query_var'  => class_exists( $room, false ) && defined( $room . '::QUERY_VAR' ) ? (string) constant( $room . '::QUERY_VAR' ) : 'fh_front_desk',
 				'capability' => class_exists( $room, false ) && defined( $room . '::CAPABILITY' ) ? (string) constant( $room . '::CAPABILITY' ) : 'manage_woocommerce',
 				'nonce'      => class_exists( $desk, false ) && defined( $desk . '::NONCE' ) ? (string) constant( $desk . '::NONCE' ) : 'fishotel_cleanroom_front',
-				// The tank page's AJAX: one action for every write, three that only read.
+				// What the page's address may carry besides its switch: the tank
+				// (the labels), the day's list (list=1, the Board's "On the
+				// phone" link) and the dose calculator (calc=1) — the last two
+				// only switch the page's first view.
+				'params'     => array(
+					'tank' => '/^\d{1,9}$/D',
+					'list' => '/^1$/D',
+					'calc' => '/^1$/D',
+				),
+				// The tank page's AJAX: one action for every write — readings,
+				// doses, ticks, arrivals, losses, moves and the temporary tanks
+				// (setup, setup_edit, setup_steps, takedown, todo_tick) are all
+				// acts of it —, three that only read. The Board's own writes
+				// (fishotel_cleanroom_temp) and Settings (the medications list,
+				// the layout, the schedules) are not here: they stay wp-admin.
 				'actions'    => array( 'fishotel_cleanroom_act', 'fishotel_cleanroom_parse', 'fishotel_cleanroom_suggest', 'fishotel_cleanroom_screen' ),
 				'write'      => 'fishotel_cleanroom_act',
 			);

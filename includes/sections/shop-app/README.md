@@ -32,6 +32,7 @@ They work with any permalink setting — all are queries on the home address:
 | `…/?fh_shop_app=lock` | POST |
 | `…/?fh_shop_app=enrol&k=…` | the one-time enrolment link |
 | `home_url( '/?fh_front_desk=1&tank=N' )` | the tank labels — unchanged |
+| `…/?fh_front_desk=1&list=1`, `…&calc=1` | the Front Desk's day's list and dose calculator (buttons on the app's home) |
 
 The POSTs carry the header `X-FH-Shop-App: 1`, which a form on another site
 cannot send; the cookies are `SameSite=Lax`, which another site's script
@@ -138,10 +139,24 @@ A shop session is recognised only on the shop-floor requests — by default
 exactly:
 
 - the Front Desk page: a `GET` of the home address whose query holds
-  nothing but `fh_front_desk` and an optional numeric `tank`;
+  nothing but `fh_front_desk`, an optional numeric `tank`, and optionally
+  `list=1` (the day's list) or `calc=1` (the dose calculator) — the last
+  two only pick the page's first view;
 - the Front Desk's AJAX: a `POST` to `wp-admin/admin-ajax.php` with an
   empty query string, for `fishotel_cleanroom_act` (the one write),
   `_parse`, `_suggest` or `_screen`.
+
+So under a PIN the shop floor has everything the Front Desk's phone
+screens do: readings and doses (the calculator and the Dose sheet),
+ticks on a tank's schedule and on the day's list, arrivals, losses and
+sales, moves, counts, notes, undo, and setting up, editing and taking
+down a temporary tank — all of them acts of `fishotel_cleanroom_act`.
+What stays wp-admin only: the Board's own writes (`fishotel_cleanroom_temp`
+— the same acts, from the To do tab), Settings (the medications list,
+the layout, the treatment schedules, sizes, box rates), Stays, Arrivals
+and Species. `tests/front-desk-seam-test.php` reads both lists from the
+Clean Room's source, so a new action there has to be sorted before it
+ships.
 
 Everything else is classified "not ours" from the method, the path and the
 parameter names, before any cookie is believed: wp-admin, every other
@@ -253,7 +268,7 @@ bytes for every visitor, with no name, tank or nonce in it — which asks
 | `fishotel_shop_app_person()` | Who is working on this request through the app: `array{ id, name, user_id, device_id, device }`, or `null` (also while this section is switched off). Exists only while the Misc plugin is active — guard with `function_exists()`. Once the screen's handler runs `get_current_user_id()` is that person's account (on an AJAX call not before — see the gate); this adds their own name (several people may share *Shop staff*). |
 | filter `fishotel_shop_app_allowed_requests` | Add a shop-floor screen: `array( 'type' => 'page', 'query_var' => 'fh_packing', 'params' => array( 'box' => '/^\d{1,4}$/D' ) )` (a GET of the home address with that switch and at most those parameters) or `array( 'type' => 'ajax', 'action' => 'fh_packing_save' )` (a POST to admin-ajax.php, empty query string). The capability arrives when your handler starts: `template_redirect` priority 0, or `wp_ajax_{action}` priority 0. On an AJAX rule nobody is logged in before that — register the handler on `wp_ajax_{action}` as for any logged-in user and do not look for the account on `init` or `admin_init`. Keep a rule as narrow as the screen — it is a way in for a four-digit PIN. |
 | filter `fishotel_shop_app_capabilities` | The primitive capabilities a shop session holds while a shop-floor handler runs. Default: the Front Desk's (`manage_woocommerce`). |
-| filter `fishotel_shop_app_home_links` | Buttons on the app's home screen: `array( 'label' => 'Packing', 'url' => home_url( '/?fh_packing=1' ) )`. An address outside this site is dropped. |
+| filter `fishotel_shop_app_home_links` | Buttons on the app's home screen, after the Front Desk's *Today's list* and *Dose calculator*: `array( 'label' => 'Packing', 'url' => home_url( '/?fh_packing=1' ) )`. An address outside this site is dropped. |
 | filter `fishotel_shop_app_account_roles` | The roles whose accounts a person can be tied to (default `administrator`, `shop_manager`). |
 | filter `fishotel_shop_app_https_ok` | For a development site on localhost. |
 | action `fishotel_shop_app_unlocked` / `fishotel_shop_app_locked` | With `array{ id, name, user_id, device_id, device }`. |
@@ -293,7 +308,9 @@ user meta, no REST route, no cron. Deactivating keeps everything.
    tap *Set up this device*: the keypad appears. Try the link again on
    another phone: "This link no longer works".
 3. Enter the PIN: the home screen with the name and Lock; pick a building,
-   then a tank — the tank screen with the bar. Record a loss.
+   then a tank — the tank screen with the bar. Record a loss. Back on the
+   home screen, *Today's list*: tick a step. *Dose calculator*: work out a
+   dose; on a tank, save one from the Dose sheet.
 4. Switch the tablet to flight mode, record another loss: MAY NOT BE
    SAVED. Switch flight mode off: it saves by itself, once. Do it again,
    tap *Back to the entry*, switch flight mode off, tap Save: one entry.

@@ -10,6 +10,7 @@ php includes/sections/shop-app/tests/device-test.php
 php includes/sections/shop-app/tests/session-test.php
 php includes/sections/shop-app/tests/gate-test.php
 php includes/sections/shop-app/tests/labels-test.php
+php includes/sections/shop-app/tests/front-desk-seam-test.php
 php includes/sections/shop-app/tests/saves-test.php
 php includes/sections/shop-app/tests/store-test.php
 php includes/sections/shop-app/tests/app-test.php
@@ -111,6 +112,19 @@ Each helper exits 0 when CI runs it directly.
   the bar added (take the bar away and it is the page a WordPress login
   gets, but for the nonce); nobody unlocked → the keypad, bound for that
   tank; expiry, Lock, revoke, an address with something added.
+- **front-desk-seam-test.php** — the seam with the Clean Room, both
+  sections real: the AJAX actions and the acts are read from the Clean
+  Room's source, and every action is either one the phone page posts (on
+  the Gate's list) or named as wp-admin only; the day's list (`list=1`)
+  and the calculator (`calc=1`) render under a PIN (each in a process of
+  its own) and nothing else in the address does; all twenty acts of the
+  one write — readings, doses, ticks, arrivals, losses, moves, the
+  temporary tanks' setup and take-down, the day's list's ticks — get past
+  the Front Desk's guard; inside it the session holds the Front Desk's
+  capability, not the Settings one (the medications editor refuses it);
+  every Settings, Board, Stays, Arrivals and Species action sees a
+  visitor; and outside the wp-admin screens nothing on the act path asks
+  for a capability of its own.
 - **saves-test.php** — a save id: the handler runs once however often the
   id arrives, the first answer is repeated with a fresh screen; a refused
   save can be sent again; "still saving" while the first runs, taken over

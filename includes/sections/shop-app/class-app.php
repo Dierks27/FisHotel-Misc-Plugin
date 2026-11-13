@@ -580,11 +580,28 @@ class App {
 	}
 
 	/**
-	 * Further buttons on the app's home screen, from other sections.
+	 * The buttons under the tanks on the app's home screen: the Front
+	 * Desk's day's list and dose calculator, then other sections' screens.
 	 *
 	 * @return array[] label, url.
 	 */
 	public static function home_links() {
+		// The Front Desk's own two screens that belong to no one tank: the
+		// day's list and the dose calculator (their addresses are on the
+		// Gate's list, so they open with the PIN).
+		$links = array();
+		$desk  = Shop_App::front_desk();
+		if ( $desk['available'] ) {
+			$links[] = array(
+				'label' => __( 'Today\'s list', 'fishotel-misc-plugin' ),
+				'url'   => Shop_App::label_url( 0 ) . '&list=1',
+			);
+			$links[] = array(
+				'label' => __( 'Dose calculator', 'fishotel-misc-plugin' ),
+				'url'   => Shop_App::label_url( 0 ) . '&calc=1',
+			);
+		}
+
 		/**
 		 * Filters the extra buttons on the Shop App's home screen: a
 		 * section that adds a shop-floor screen
@@ -592,9 +609,9 @@ class App {
 		 * is array( 'label' => 'Packing', 'url' => home_url( '/?…' ) );
 		 * an address outside this site is dropped.
 		 *
-		 * @param array[] $links The buttons.
+		 * @param array[] $links The buttons (the day's list and the dose calculator first).
 		 */
-		$links = apply_filters( 'fishotel_shop_app_home_links', array() );
+		$links = apply_filters( 'fishotel_shop_app_home_links', $links );
 
 		$out  = array();
 		$home = home_url( '/' );

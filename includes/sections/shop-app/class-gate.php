@@ -5,8 +5,9 @@
  * A shop session is NOT a WordPress login. It is recognised only on the
  * shop-floor requests — by default exactly these:
  *   - the Clean Room's Front Desk page: a GET of the site's home address
- *     whose query holds nothing but fh_front_desk and an optional tank
- *     number (the address the tank labels encode);
+ *     whose query holds nothing but fh_front_desk, an optional tank
+ *     number (the address the tank labels encode) and optionally list=1
+ *     (the day's list) or calc=1 (the dose calculator);
  *   - the Front Desk's AJAX: a POST to wp-admin/admin-ajax.php with no
  *     query string, for one of its four actions (fishotel_cleanroom_act —
  *     the one write —, _parse, _suggest, _screen).
@@ -152,7 +153,7 @@ class Gate {
 			$rules[] = array(
 				'type'      => 'page',
 				'query_var' => $desk['query_var'],
-				'params'    => array( 'tank' => '/^\d{1,9}$/D' ),
+				'params'    => $desk['params'],
 			);
 			foreach ( $desk['actions'] as $action ) {
 				$rules[] = array(

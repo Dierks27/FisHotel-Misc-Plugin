@@ -54,7 +54,7 @@ $wc_cookie = 'wp_woocommerce_session_abc123';
 
 echo "1. Which requests are shop-floor requests (pure)\n";
 $rules = Gate::rules();
-check( 'by default: the Front Desk page and its four AJAX actions, nothing else', 5 === count( $rules ) && 'page' === $rules[0]['type'] && 'fh_front_desk' === $rules[0]['query_var'] && array( 'tank' ) === array_keys( $rules[0]['params'] ) && array( 'fishotel_cleanroom_act', 'fishotel_cleanroom_parse', 'fishotel_cleanroom_suggest', 'fishotel_cleanroom_screen' ) === array_column( array_slice( $rules, 1 ), 'action' ) );
+check( 'by default: the Front Desk page (a tank, the day\'s list, the calculator) and its four AJAX actions, nothing else', 5 === count( $rules ) && 'page' === $rules[0]['type'] && 'fh_front_desk' === $rules[0]['query_var'] && array( 'tank', 'list', 'calc' ) === array_keys( $rules[0]['params'] ) && array( 'fishotel_cleanroom_act', 'fishotel_cleanroom_parse', 'fishotel_cleanroom_suggest', 'fishotel_cleanroom_screen' ) === array_column( array_slice( $rules, 1 ), 'action' ) );
 
 /**
  * The facts of a request, for classify().

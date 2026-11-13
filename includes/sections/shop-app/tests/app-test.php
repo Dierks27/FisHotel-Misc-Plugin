@@ -240,7 +240,7 @@ check( 'the tanks in number order, with just what a tile shows', array( array( '
 check( 'nothing of the Front Desk\'s addresses or ids is passed on: the app builds a tank\'s address itself', false === strpos( json_encode( $home ), 'url' ) && false === strpos( json_encode( $home ), '"id"' ) );
 check( 'an empty layout is an empty list', array() === App::home_from_grid( array() ) );
 
-echo "\n8. Buttons other sections add to the home screen\n";
+echo "\n8. The buttons under the tanks: the day's list, the calculator, other sections'\n";
 function fh_links( $links ) {
 	$links[] = array( 'label' => 'Packing <b>table</b>', 'url' => 'https://shop.example.test/?fh_packing=1' );
 	$links[] = array( 'label' => 'Elsewhere', 'url' => 'https://elsewhere.example/?fh_packing=1' );
@@ -256,7 +256,12 @@ fh_boot_hooks(
 	}
 );
 fh_request();
-check( 'a link of this site is kept, its label as plain text; another site, a script address, an empty label and nonsense are dropped', array( array( 'label' => 'Packing table', 'url' => 'https://shop.example.test/?fh_packing=1' ) ) === App::home_links() );
+$desk_links = array(
+	array( 'label' => 'Today\'s list', 'url' => 'https://shop.example.test/?fh_front_desk=1&list=1' ),
+	array( 'label' => 'Dose calculator', 'url' => 'https://shop.example.test/?fh_front_desk=1&calc=1' ),
+);
+check( 'the Front Desk\'s day\'s list and dose calculator come first', array_slice( App::home_links(), 0, 2 ) === $desk_links, App::home_links() );
+check( 'a link of this site is kept, its label as plain text; another site, a script address, an empty label and nonsense are dropped', array_merge( $desk_links, array( array( 'label' => 'Packing table', 'url' => 'https://shop.example.test/?fh_packing=1' ) ) ) === App::home_links() );
 fh_request( array( 'uri' => '/?fh_shop_app=state', 'cookies' => $jar ) );
 check( '… and it is only ever sent to an unlocked device', ! isset( json_decode( App::respond( 'state', 'GET' )['body'], true )['links'] ) );
 
