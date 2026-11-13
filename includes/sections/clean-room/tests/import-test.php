@@ -169,6 +169,53 @@ $store5->save_order_lines( $hand2, Orders::normalize_lines( array( array( 'speci
 $r6 = Import::run( $map, $store5, $options );
 check( 'the two clashing batches are not imported and are named, the third comes in', array( 'created' => 1, 'skipped' => 2, 'lines' => 1 ) === array( 'created' => $r6['orders']['created'], 'skipped' => $r6['orders']['skipped'], 'lines' => min( 1, $r6['orders']['lines'] ) ) && 2 === count( $r6['errors'] ) && false !== strpos( $r6['errors'][0], 'Batch 2026-1 of the workbook was NOT imported' ) && false !== strpos( $r6['errors'][1], 'Batch 2026-2' ) && false !== strpos( $r6['errors'][1], 'Practice Supplier, not received yet, ordered' ) && false !== strpos( $r6['errors'][1], 'Give that order another Ref' ), json_encode( array( $r6['orders'], $r6['errors'] ) ) );
 check( 'the hand-made orders are left exactly as they were: nothing checked in, no stay, no logs, still "ordered"', 0 === count( $store5->stays ) && 0 === count( $store5->logs ) && array( 'created' => 0, 'skipped' => 0, 'orders' => 0 ) === $r6['stays'] && 'ordered' === $store5->order( $hand2 )['status'] && 'Practice Supplier' === $store5->order( $hand1 )['supplier'] && null === $store5->order( $hand2 )['lines'][0]['stay_id'], json_encode( $r6['stays'] ) );
+if ( ! function_exists( 'esc_html_e' ) ) {
+	function esc_html_e( $text, $domain = null ) {
+		echo esc_html( $text );
+	}
+}
+if ( ! function_exists( 'wp_nonce_field' ) ) {
+	function wp_nonce_field( $action = -1, $name = '_wpnonce' ) {
+		echo '<input type="hidden" name="' . esc_attr( $name ) . '" value="nonce">';
+	}
+}
+if ( ! function_exists( 'disabled' ) ) {
+	function disabled( $disabled, $current = true, $display = true ) {
+		echo $disabled === $current ? ' disabled="disabled"' : '';
+	}
+}
+if ( ! function_exists( 'esc_attr_e' ) ) {
+	function esc_attr_e( $text, $domain = null ) {
+		echo esc_attr( $text );
+	}
+}
+
+// What the Settings tab shows for that run: the counts in the green box,
+// the batches that were NOT imported in a red box of their own.
+$import    = array(
+	'pending'       => null,
+	'result'        => array(
+		'file'   => 'FisHotel-2026.xlsm',
+		'result' => $r6,
+	),
+	'spa_buildings' => array(),
+	'defaults'      => array(),
+	'action_url'    => 'https://example.test/wp-admin/admin-post.php',
+	'max_bytes'     => 20 * 1024 * 1024,
+);
+$tables_ok = true;
+ob_start();
+include FISHOTEL_MISC_PATH . 'includes/sections/clean-room/views/import.php';
+$fh_html    = (string) ob_get_clean();
+$fh_success = (string) substr( $fh_html, (int) strpos( $fh_html, 'fishotel-misc-notice--success' ) );
+$fh_success = (string) substr( $fh_success, 0, (int) strpos( $fh_success, '</div>' ) );
+$fh_problem = (string) substr( $fh_html, (int) strpos( $fh_html, 'fh-cr-import__problems' ) );
+check( 'the screen: a batch NOT imported is a red problem line, outside the green box', false !== strpos( $fh_html, 'fishotel-misc-notice--error fh-cr-import__problems' ) && false !== strpos( $fh_problem, 'Batch 2026-1 of the workbook was NOT imported' ) && false === strpos( $fh_success, 'NOT imported' ) && false !== strpos( $fh_success, 'Imported FisHotel-2026.xlsm.' ) );
+$import['result']['result']['errors'] = array();
+ob_start();
+include FISHOTEL_MISC_PATH . 'includes/sections/clean-room/views/import.php';
+check( '… and no red box when nothing went wrong', false === strpos( (string) ob_get_clean(), 'fh-cr-import__problems' ) );
+
 $renamed = $store5->order( $hand2 );
 $store5->save_order( array_merge( $renamed, array( 'ref' => '2026-90' ) ) );
 $renamed = $store5->order( $hand1 );

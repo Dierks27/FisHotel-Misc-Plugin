@@ -35,14 +35,6 @@ $fh_spa     = $import['spa_buildings'];
 					<li><?php echo esc_html( $fh_line ); ?></li>
 				<?php endforeach; ?>
 			</ul>
-			<?php if ( ! empty( $fh_result['result']['errors'] ) ) : ?>
-				<p><strong><?php esc_html_e( 'Problems:', 'fishotel-misc-plugin' ); ?></strong></p>
-				<ul class="fh-cr-import__lines">
-					<?php foreach ( (array) $fh_result['result']['errors'] as $fh_line ) : ?>
-						<li><?php echo esc_html( $fh_line ); ?></li>
-					<?php endforeach; ?>
-				</ul>
-			<?php endif; ?>
 			<?php if ( ! empty( $fh_result['result']['warnings'] ) ) : ?>
 				<details>
 					<summary><?php echo esc_html( sprintf( /* translators: %d: count */ __( '%d warnings from the reader', 'fishotel-misc-plugin' ), count( (array) $fh_result['result']['warnings'] ) ) ); ?></summary>
@@ -54,6 +46,16 @@ $fh_spa     = $import['spa_buildings'];
 				</details>
 			<?php endif; ?>
 		</div>
+		<?php if ( ! empty( $fh_result['result']['errors'] ) ) : // A batch NOT imported (its ref is taken by a hand-made order) and every other problem: red, outside the green box, with the way out. ?>
+			<div class="fishotel-misc-notice fishotel-misc-notice--error fh-cr-import__problems">
+				<strong><?php esc_html_e( 'Problems:', 'fishotel-misc-plugin' ); ?></strong>
+				<ul class="fh-cr-import__lines">
+					<?php foreach ( (array) $fh_result['result']['errors'] as $fh_line ) : ?>
+						<li><?php echo esc_html( $fh_line ); ?></li>
+					<?php endforeach; ?>
+				</ul>
+			</div>
+		<?php endif; ?>
 	<?php endif; ?>
 
 	<?php if ( $fh_pending ) : ?>
