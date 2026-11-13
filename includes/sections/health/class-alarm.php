@@ -18,8 +18,9 @@
  *            recovery_mode_email_last_sent moves when WordPress pauses a
  *            plugin or the theme after a fatal and e-mails its recovery
  *            link.
- *   stall  at least N orders created in the last M minutes still Pending
- *          payment or Failed, while none created in that window went
+ *   stall  at least N checkout orders (placed by a customer on the
+ *          checkout page — not batch invoices or orders made in wp-admin)
+ *          created in the last M minutes still Pending payment or Failed, while none created in that window went
  *          through (Processing, Completed, any status WooCommerce counts
  *          as paid, or On hold — an offline payment proves the checkout
  *          itself works). Two wc_get_orders() calls with a date and a
@@ -581,9 +582,14 @@ class Alarm {
 			return $out;
 		}
 
+		// Only orders a customer placed through the checkout count, in both
+		// queries: Batch Manager's batch invoices and orders made by hand in
+		// wp-admin start as "Pending payment" too, and would raise a false
+		// alarm on every invoicing day.
 		$after = (int) $now - (int) $settings['stall_minutes'] * 60;
 		$base  = array(
 			'type'         => 'shop_order',
+			'created_via'  => self::checkout_sources(),
 			'date_created' => '>' . $after,
 			'return'       => 'ids',
 		);
@@ -597,6 +603,18 @@ class Alarm {
 		}
 
 		return $out;
+	}
+
+	/**
+	 * Where an order came from when a customer placed it: the classic
+	 * checkout page and the block checkout (WooCommerce's Store API).
+	 * Batch invoices (made with no source) and orders made in wp-admin
+	 * ("admin") are left out.
+	 *
+	 * @return string[]
+	 */
+	public static function checkout_sources() {
+		return array( 'checkout', 'store-api' );
 	}
 
 	/**

@@ -60,6 +60,11 @@ function wc_get_orders( $args ) {
 	$ids                           = array();
 	foreach ( (array) $args['status'] as $status ) {
 		foreach ( $GLOBALS['fh_orders'][ $status ] ?? array() as $order ) {
+			// [ id, created ts, created via (default: the checkout page) ].
+			$via = $order[2] ?? 'checkout';
+			if ( isset( $args['created_via'] ) && ! in_array( $via, (array) $args['created_via'], true ) ) {
+				continue;
+			}
 			if ( $order[1] > $after ) {
 				$ids[] = $order[0];
 			}
@@ -237,6 +242,30 @@ check( '… "went through" is every paid status (a plugin\'s too) and On hold', 
 $GLOBALS['fh_orders']['on-hold'] = array( array( 5, $fh_now - 120 ) );
 $fh_l = Alarm::look_stall( $fh_s, $fh_now );
 check( 'an On hold order in the window means checkout works', 1 === $fh_l['through'] && null === Alarm::stall_finding( $fh_l['stuck'], $fh_l['through'], 3, 30 ) );
+$GLOBALS['fh_orders'] = array();
+
+// Orders the site makes itself start as Pending payment too: they are not checkouts.
+check( '… both queries count only orders placed through the checkout (classic page or block checkout)', array( 'checkout', 'store-api' ) === $GLOBALS['fh_order_queries'][0]['created_via'] && array( 'checkout', 'store-api' ) === $GLOBALS['fh_order_queries'][1]['created_via'] );
+$GLOBALS['fh_orders'] = array(
+	// Batch Manager's invoices: wc_create_order() with no source, one per customer.
+	'pending' => array( array( 11, $fh_now - 60, '' ), array( 12, $fh_now - 60, '' ), array( 13, $fh_now - 60, '' ), array( 14, $fh_now - 60, '' ) ),
+);
+$fh_l = Alarm::look_stall( $fh_s, $fh_now );
+check( 'four batch invoices made at once: not stuck checkouts, no alarm', 0 === $fh_l['stuck'] && null === Alarm::stall_finding( $fh_l['stuck'], $fh_l['through'], 3, 30 ) );
+$GLOBALS['fh_orders'] = array(
+	'pending' => array( array( 21, $fh_now - 60, 'admin' ), array( 22, $fh_now - 90, 'admin' ), array( 23, $fh_now - 120, 'admin' ) ),
+);
+$fh_l = Alarm::look_stall( $fh_s, $fh_now );
+check( 'three orders made by hand in wp-admin: not stuck checkouts, no alarm', 0 === $fh_l['stuck'] && null === Alarm::stall_finding( $fh_l['stuck'], $fh_l['through'], 3, 30 ) );
+$GLOBALS['fh_orders'] = array(
+	'pending' => array( array( 31, $fh_now - 60, '' ), array( 32, $fh_now - 60, 'admin' ), array( 33, $fh_now - 60, 'checkout' ), array( 34, $fh_now - 90, 'store-api' ) ),
+	'failed'  => array( array( 35, $fh_now - 30, 'checkout' ) ),
+);
+$fh_l = Alarm::look_stall( $fh_s, $fh_now );
+check( 'mixed in with invoices, three real checkouts stuck (classic, block, failed) still raise the alarm', 3 === $fh_l['stuck'] && 0 === $fh_l['through'] && is_array( Alarm::stall_finding( $fh_l['stuck'], $fh_l['through'], 3, 30 ) ) );
+$GLOBALS['fh_orders']['processing'] = array( array( 36, $fh_now - 30, 'admin' ) );
+$fh_l = Alarm::look_stall( $fh_s, $fh_now );
+check( '… and a paid order made in wp-admin does not prove the checkout works', 0 === $fh_l['through'] );
 $GLOBALS['fh_orders'] = array();
 
 /* ------------------------------------------------------------------ */

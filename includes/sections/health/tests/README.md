@@ -40,7 +40,9 @@ node includes/sections/health/tests/admin.test.js
   the database handler (by log_id after the mark, newest first, no table =
   nothing) and from WordPress's recovery mode (once); stuck orders through
   `wc_get_orders()` (date and limit on both queries, the second only at the
-  threshold, paid statuses + On hold count as "went through"); the page
+  threshold, paid statuses + On hold count as "went through"; only
+  checkout orders count, so batch invoices and orders made in wp-admin
+  never raise it); the page
   (5xx only; a blocked loopback is a note, never an e-mail); the hour of
   silence per signal, a fatal staying an hour, a stall clearing quietly;
   one e-mail for two signals with its exact wording (what, where to look,
