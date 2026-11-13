@@ -8,8 +8,8 @@
  *
  * The server draws every piece of HTML and writes every sentence; this
  * file posts forms and swaps the answers in. The pure helpers (fmt,
- * rowFromTemplate, fillStep, confirmPayload, afterSave, unsavedElsewhere,
- * livestockFromCategories, drawnAsAfterClick) are exported for
+ * rowFromTemplate, fillStep, nowLine, confirmPayload, afterSave,
+ * unsavedElsewhere, livestockFromCategories, drawnAsAfterClick) are exported for
  * tests/packing-admin.test.js.
  *
  * @package FisHotel\Misc\Sections\Packing
@@ -93,6 +93,18 @@
 		}
 
 		return out;
+	}
+
+	/**
+	 * The "Right now: …" line a run's last step sends back, or '' when the
+	 * reply carries none (a step in the middle, an older server, an error).
+	 *
+	 * @param {Object} reply The AJAX reply ({ success, data: { done, now } }).
+	 * @return {string}
+	 */
+	function nowLine(reply) {
+		var data = reply && reply.success && reply.data ? reply.data : null;
+		return data && data.done && typeof data.now === 'string' ? data.now : '';
 	}
 
 	/**
@@ -215,6 +227,7 @@
 		fmt: fmt,
 		rowFromTemplate: rowFromTemplate,
 		fillStep: fillStep,
+		nowLine: nowLine,
 		confirmPayload: confirmPayload,
 		afterSave: afterSave,
 		unsavedElsewhere: unsavedElsewhere,
@@ -376,6 +389,10 @@
 				$.post(ajaxUrl, { action: 'fishotel_packing_fill_run', _wpnonce: $tool.attr('data-nonce'), after: state.after })
 					.done(function (reply) {
 						state = fillStep(state, reply);
+						if (nowLine(reply) !== '') {
+							// The count above the tool is from before the run.
+							$tool.closest('.fh-pack-card').find('.fh-pack-fill-now').text(nowLine(reply));
+						}
 						if (state.done) {
 							finish(fmt(i18n.done || 'Done: %1$d set (%2$d failed).', state.set, state.failed), state.failed ? 'is-error' : 'is-ok');
 							return;

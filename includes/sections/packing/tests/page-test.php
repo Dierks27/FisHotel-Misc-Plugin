@@ -91,6 +91,7 @@ check( 'a size label is escaped', false !== strpos( $html, 'Odd &lt;b&gt;size&lt
 check( 'saving the map draws the page again: whether the fill tool can run depends on the map (an empty map shows no Preview)', 1 === preg_match( '/<form class="fh-pack-form"[^>]*data-reload="1">\s*<input[^>]*_wpnonce[^>]*>\s*<input type="hidden" name="action" value="fishotel_packing_map">/', $html ), substr( $html, (int) strpos( $html, '<form' ), 300 ) );
 check( 'the fill tool: Preview, a disabled "Set them", its own nonce', false !== strpos( $html, 'fh-pack-fill-preview' ) && 1 === preg_match( '/fh-pack-fill-run" disabled/', $html ) && false !== strpos( $html, 'data-nonce="' . wp_create_nonce( Fill::NONCE_ACTION ) . '"' ) );
 check( 'with no WooCommerce database to count, the counts read 0 — not an error', false !== strpos( $html, 'Right now: 0 variations, 0 with a Bag size of their own.' ) );
+check( 'the count sits in the element the script rewrites when a run ends', false !== strpos( $html, '<p class="fishotel-misc-card-desc fh-pack-fill-now">Right now: 0 variations, 0 with a Bag size of their own.</p>' ) );
 
 $html = fh_page( $admin, 'boxes' );
 check( 'the boxes in use, smallest first, with size and volume', 1 === preg_match( '/Cube 8.*Odd &quot;box&quot;.*Cube 12.*Long 20/s', $html ) && false !== strpos( $html, '8 × 8 × 8 in' ) && false !== strpos( $html, '>3360<' ) );

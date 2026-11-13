@@ -347,6 +347,19 @@ class Fill {
 	}
 
 	/**
+	 * "Right now: 10 variations, 4 with a Bag size of their own." — the
+	 * line above the tool, and what the last step of a run sends back so
+	 * the page does not go on showing the count from before the run.
+	 *
+	 * @param array $counts Store::variation_counts(): total, with_bag.
+	 * @return string
+	 */
+	public static function now_line( array $counts ) {
+		/* translators: 1: variations in all, 2: variations with a bag size */
+		return sprintf( __( 'Right now: %1$d variations, %2$d with a Bag size of their own.', 'fishotel-misc-plugin' ), (int) ( $counts['total'] ?? 0 ), (int) ( $counts['with_bag'] ?? 0 ) );
+	}
+
+	/**
 	 * The preview — the testable half of its AJAX handler. Changes nothing.
 	 *
 	 * @param array       $raw      Unslashed POST: _wpnonce.
@@ -394,7 +407,7 @@ class Fill {
 	 * @param object|null   $store    Store (null = a new one).
 	 * @param array|null    $standard Size_List::standard() (null = resolve it).
 	 * @param callable|null $writer   See run().
-	 * @return array{status: int, ok: bool, message: string, set?: int, skipped?: int, failed?: int, last_id?: int, done?: bool}
+	 * @return array{status: int, ok: bool, message: string, set?: int, skipped?: int, failed?: int, last_id?: int, done?: bool, now?: string}
 	 */
 	public static function run_request( array $raw, $store = null, $standard = null, $writer = null ) {
 		$denied = Settings::guard( $raw, self::NONCE_ACTION );
@@ -424,7 +437,7 @@ class Fill {
 			$message .= ' ' . sprintf( __( '%d could not be saved.', 'fishotel-misc-plugin' ), $batch['failed'] );
 		}
 
-		return array(
+		$out = array(
 			'status'  => 200,
 			'ok'      => true,
 			'message' => $message,
@@ -434,6 +447,13 @@ class Fill {
 			'last_id' => $batch['last_id'],
 			'done'    => $batch['done'],
 		);
+
+		// The run is over: the count as it is now, for the line above the tool.
+		if ( $batch['done'] && method_exists( $store, 'variation_counts' ) ) {
+			$out['now'] = self::now_line( (array) $store->variation_counts() );
+		}
+
+		return $out;
 	}
 
 	/**

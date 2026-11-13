@@ -126,12 +126,8 @@ if ( Size_List::SOURCE_CLEAN_ROOM === $standard['source'] && Size_List::KIND_ATT
 	<p class="fishotel-misc-card-desc">
 		<?php esc_html_e( 'Writes the map\'s bag onto every fish variation that has no Bag size, so each product shows it. It never changes a variation that already has one, it leaves products that are not packed in a bag alone (“Livestock — packed in a bag” on the product; a product nobody ticked or unticked counts when it is in a fish category), and it writes nothing but that one hidden field. Get the map right and save it first, then preview, then set: a variation keeps the bag it was given even when the map changes later (set it back to "Not set" on the variation to make it follow the map again).', 'fishotel-misc-plugin' ); ?>
 	</p>
-	<p class="fishotel-misc-card-desc">
-		<?php
-		/* translators: 1: variations in all, 2: variations with a bag size */
-		echo esc_html( sprintf( __( 'Right now: %1$d variations, %2$d with a Bag size of their own.', 'fishotel-misc-plugin' ), (int) $counts['total'], (int) $counts['with_bag'] ) );
-		?>
-	</p>
+	<?php // Rewritten by the script when a run ends (Fill::run_request()'s `now`). ?>
+	<p class="fishotel-misc-card-desc fh-pack-fill-now"><?php echo esc_html( Fill::now_line( $counts ) ); ?></p>
 
 	<?php if ( '' !== $blocked ) : ?>
 		<div class="fishotel-misc-notice fishotel-misc-notice--error"><?php echo esc_html( $blocked ); ?></div>

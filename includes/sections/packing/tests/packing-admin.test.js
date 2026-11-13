@@ -34,7 +34,7 @@ function same( a, b ) {
 }
 
 console.log( '1. Exports' );
-check( 'the helpers are exported for node', helpers && [ 'fmt', 'rowFromTemplate', 'fillStep', 'confirmPayload', 'afterSave', 'unsavedElsewhere', 'livestockFromCategories', 'drawnAsAfterClick' ].every( function ( name ) {
+check( 'the helpers are exported for node', helpers && [ 'fmt', 'rowFromTemplate', 'fillStep', 'nowLine', 'confirmPayload', 'afterSave', 'unsavedElsewhere', 'livestockFromCategories', 'drawnAsAfterClick' ].every( function ( name ) {
 	return typeof helpers[ name ] === 'function';
 } ) );
 check( 'and hung on the global for the browser', globalThis.fhPacking && globalThis.fhPacking.helpers === helpers );
@@ -67,6 +67,8 @@ check( 'an answer that is not a success stops it and keeps what was set so far',
 check( 'no answer at all stops it', helpers.fillStep( one, null ).stopped === true && helpers.fillStep( one, undefined ).stopped === true && helpers.fillStep( one, {} ).stopped === true );
 check( 'a missing state starts from zero', same( helpers.fillStep( null, { success: true, data: { set: 1, failed: 0, last_id: 9, done: true } } ), { set: 1, failed: 0, after: 9, steps: 1, done: true, stopped: false } ) );
 check( 'numbers that arrive as text are numbers', helpers.fillStep( start, { success: true, data: { set: '4', failed: '1', last_id: '77', done: false } } ).set === 4 && helpers.fillStep( start, { success: true, data: { set: '4', failed: '1', last_id: '77', done: false } } ).after === 77 );
+check( 'nowLine(): the last step of a run carries the count as it is now', helpers.nowLine( { success: true, data: { set: 3, done: true, now: 'Right now: 10 variations, 10 with a Bag size of their own.' } } ) === 'Right now: 10 variations, 10 with a Bag size of their own.' );
+check( 'nowLine(): a step in the middle, a reply without the line, a refusal, no reply: nothing to show', helpers.nowLine( { success: true, data: { done: false, now: 'x' } } ) === '' && helpers.nowLine( { success: true, data: { done: true } } ) === '' && helpers.nowLine( { success: true, data: { done: true, now: 7 } } ) === '' && helpers.nowLine( { success: false, data: { done: true, now: 'x' } } ) === '' && helpers.nowLine( null ) === '' && helpers.nowLine( {} ) === '' );
 var state = { set: 0, failed: 0, after: 0, steps: 1999 };
 check( 'a run that never says done is cut off', helpers.fillStep( state, { success: true, data: { set: 1, failed: 0, last_id: 5, done: false } } ).stopped === true );
 var loops = 0;
