@@ -115,54 +115,37 @@ class Todo {
 	}
 
 	/**
-	 * An amount as text: one decimal from 1 up, two below, no trailing
-	 * zeros — the Dose sheet's rounding.
-	 *
-	 * @param float $amount Amount.
-	 * @return string
-	 */
-	public static function amount_text( $amount ) {
-		$amount = (float) $amount;
-		$text   = number_format( round( $amount, $amount >= 1 ? 1 : 2 ), 2, '.', '' );
-		return rtrim( rtrim( $text, '0' ), '.' );
-	}
-
-	/**
 	 * The dose a step names, for a water volume: a rate in its label
 	 * ("40 mg/gal" → "40 mg/gal = 8.2 g for 205 gal"), else the Dose
 	 * sheet's own suggestion for the medication it names ("suggested
-	 * 5.1 g for 205 gal"), else ''. Never a number the step and the sheet
-	 * do not already give.
+	 * 5.1 g for 205 gal"), else ''. The rate, the amount and its unit are
+	 * Dose::step_dose()'s — the sum the Dose sheet runs for the same step
+	 * in the same water — so this line and the sheet say the same thing:
+	 * never a number the step and the sheet do not already give.
 	 *
 	 * @param string $label   Step label.
 	 * @param int    $gallons The water it goes into (0 = not known).
 	 * @return string
 	 */
 	public static function dose_text( $label, $gallons ) {
-		$label   = (string) $label;
 		$gallons = (int) $gallons;
 
-		if ( 1 === preg_match( '/(\d+(?:\.\d+)?)\s*mg\s*(?:\/|per)\s*gal(?:lon)?\b/i', $label, $m ) ) {
-			$rate = rtrim( rtrim( number_format( (float) $m[1], 2, '.', '' ), '0' ), '.' ) . ' mg/gal';
-			if ( $gallons <= 0 ) {
-				return $rate;
-			}
-			return $rate . ' = ' . self::amount_text( (float) $m[1] * $gallons / 1000 ) . ' g for ' . $gallons . ' gal';
-		}
-
-		$key = self::medication_key( $label );
-		if ( null === $key || $gallons <= 0 ) {
-			return '';
-		}
 		try {
-			$suggestion = Protocol::dose_suggestion( $key, $gallons );
+			$step = Dose::step_dose( (string) $label, $gallons, Medications::current() );
 		} catch ( \Throwable $e ) {
 			return '';
 		}
-		if ( ! is_array( $suggestion ) || ! isset( $suggestion['amount'] ) ) {
+		if ( null === $step['rate'] ) {
 			return '';
 		}
-		return 'suggested ' . self::amount_text( (float) $suggestion['amount'] ) . ' ' . (string) ( $suggestion['unit'] ?? '' ) . ' for ' . $gallons . ' gal';
+
+		$rate = $step['named'] ? Dose::rate_short( $step['rate'], $step['unit'], $step['per'] ) : '';
+		if ( $gallons <= 0 || ! is_array( $step['plan'] ) || 'ok' !== (string) $step['plan']['state'] ) {
+			return $rate; // No water to work it out for: the rate the step names, or nothing.
+		}
+
+		$amount = Dose::amount_text( (float) $step['plan']['amount'], (string) $step['plan']['unit'] );
+		return ( '' !== $rate ? $rate . ' = ' : 'suggested ' ) . $amount . ' for ' . $gallons . ' gal';
 	}
 
 	/**

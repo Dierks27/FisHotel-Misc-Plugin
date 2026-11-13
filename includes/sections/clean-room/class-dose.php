@@ -564,19 +564,126 @@ class Dose {
 	 * @return float|null
 	 */
 	public static function step_rate( $label, array $medication ) {
+		$named = self::label_rate( $label );
+		if ( null === $named ) {
+			return null;
+		}
+		$mine = self::convert( $named['amount'], $named['unit'], (string) ( $medication['unit'] ?? '' ) );
+		if ( null === $mine || $mine <= 0 ) {
+			return null;
+		}
+		$per = isset( $medication['per'] ) && (float) $medication['per'] > 0 ? (float) $medication['per'] : 1.0;
+		return round( $mine / $named['per'] * $per, 4 );
+	}
+
+	/**
+	 * The rate a step label spells out, as it is written: "40 mg/gal" →
+	 * 40 mg for 1 gallon, "1 ml per 10 gal" → 1 ml for 10. Null when the
+	 * label names none.
+	 *
+	 * @param string $label Step label.
+	 * @return array{amount: float, unit: string, per: float}|null
+	 */
+	public static function label_rate( $label ) {
 		if ( 1 !== preg_match( '/(\d+(?:\.\d+)?)\s*(mg|g|ml|tsp|drops?|each)\s*(?:\/|per)\s*(\d+(?:\.\d+)?)?\s*gal(?:lons?)?(?![a-z])/i', (string) $label, $m ) ) {
 			return null;
 		}
 		$unit   = strtolower( $m[2] );
-		$unit   = 'drop' === $unit ? 'drops' : $unit;
 		$amount = (float) $m[1];
 		$for    = isset( $m[3] ) && '' !== $m[3] ? (float) $m[3] : 1.0;
-		$mine   = self::convert( $amount, $unit, (string) ( $medication['unit'] ?? '' ) );
-		if ( null === $mine || $mine <= 0 || $for <= 0 ) {
+		if ( $amount <= 0 || $for <= 0 ) {
 			return null;
 		}
-		$per = isset( $medication['per'] ) && (float) $medication['per'] > 0 ? (float) $medication['per'] : 1.0;
-		return round( $mine / $for * $per, 4 );
+		return array(
+			'amount' => $amount,
+			'unit'   => 'drop' === $unit ? 'drops' : $unit,
+			'per'    => $for,
+		);
+	}
+
+	/**
+	 * What a dose step asks for in a water — the ONE place a step's dose
+	 * is worked out. The To do list words its line from it
+	 * (Todo::dose_text()); the Dose sheet opens on the same rate
+	 * (due_options() reads it with step_rate(), as this does) and runs the
+	 * same sum (plan(), mirrored in js/dose-math.js) — so the list and the
+	 * sheet never differ by a digit or a unit.
+	 *
+	 *   key    the medication the label names (null when none);
+	 *   rate   what goes in for `per` gallons, in `unit`: the rate the
+	 *          label names — in the medication's own unit when it reads
+	 *          it, else as the label writes it — or, when the label names
+	 *          none, the medication's own. Null when there is nothing to
+	 *          work out per gallon: no rate and no medication, a
+	 *          medication dosed to a level or typed, a retired one;
+	 *   named  whether the label named the rate;
+	 *   plan   plan() of that rate in that water (null without a rate).
+	 *
+	 * @param string $label   Step label.
+	 * @param float  $gallons The water it goes into (0 = not known).
+	 * @param array  $list    key => medication.
+	 * @return array{key: string|null, rate: float|null, unit: string, per: float, named: bool, plan: array|null}
+	 */
+	public static function step_dose( $label, $gallons, array $list ) {
+		$label      = (string) $label;
+		$key        = Medications::key_for( $label, $list );
+		$medication = null !== $key ? Medications::get( $key, $list ) : null;
+		$named      = self::label_rate( $label );
+		$out        = array(
+			'key'   => $key,
+			'rate'  => null,
+			'unit'  => '',
+			'per'   => 1.0,
+			'named' => false,
+			'plan'  => null,
+		);
+
+		if ( $medication && 'per_gallon' === (string) ( $medication['mode'] ?? '' ) && empty( $medication['retired'] ) ) {
+			$rate = null !== $named ? self::step_rate( $label, $medication ) : (float) ( $medication['rate'] ?? 0 );
+			if ( null !== $rate && $rate > 0 ) {
+				$out['rate']  = (float) $rate;
+				$out['unit']  = (string) ( $medication['unit'] ?? '' );
+				$out['per']   = isset( $medication['per'] ) && (float) $medication['per'] > 0 ? (float) $medication['per'] : 1.0;
+				$out['named'] = null !== $named;
+				$out['plan']  = self::plan( $medication, array( 'gallons' => $gallons, 'rate' => $rate ) );
+				return $out;
+			}
+		}
+
+		if ( null !== $named ) {
+			// A rate nobody's medication reads (no medication named, or one in another kind of unit): the
+			// label's own words are the rate.
+			$out['rate']  = $named['amount'];
+			$out['unit']  = $named['unit'];
+			$out['per']   = $named['per'];
+			$out['named'] = true;
+			$out['plan']  = self::plan(
+				array(
+					'key'   => '',
+					'label' => '',
+					'unit'  => $named['unit'],
+					'per'   => $named['per'],
+					'mode'  => 'per_gallon',
+					'rate'  => $named['amount'],
+				),
+				array( 'gallons' => $gallons )
+			);
+		}
+
+		return $out;
+	}
+
+	/**
+	 * A rate as a step writes it: "40 mg/gal", "1 ml/10 gal".
+	 *
+	 * @param float  $rate Rate.
+	 * @param string $unit Its unit.
+	 * @param float  $per  The gallons the rate is for.
+	 * @return string
+	 */
+	public static function rate_short( $rate, $unit, $per ) {
+		$text = self::rate_amount( $rate, $unit );
+		return ( 'each' === (string) $unit ? $text . ' ×' : $text ) . '/' . ( abs( (float) $per - 1 ) < 1e-9 ? '' : self::num( $per, 2 ) . ' ' ) . 'gal';
 	}
 
 	/**

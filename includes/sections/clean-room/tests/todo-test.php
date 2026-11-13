@@ -14,7 +14,9 @@
 require_once __DIR__ . '/wp-stubs.php';
 
 use FisHotel\Misc\Sections\Clean_Room\Clean_Room;
+use FisHotel\Misc\Sections\Clean_Room\Dose;
 use FisHotel\Misc\Sections\Clean_Room\Front_Desk;
+use FisHotel\Misc\Sections\Clean_Room\Medications;
 use FisHotel\Misc\Sections\Clean_Room\Protocol;
 use FisHotel\Misc\Sections\Clean_Room\Replay;
 use FisHotel\Misc\Sections\Clean_Room\Settings;
@@ -138,7 +140,32 @@ check( 'the step\'s note rides along', 0 === strpos( $by['Metronidazole']['note'
 check( 'a rate in the label wins over the standard one: 40 mg/gal on 205 gal is 8.2 g', '40 mg/gal = 8.2 g for 205 gal' === Todo::dose_text( 'Chloroquine 40 mg/gal', 205 ) && '12 mg/gal = 1.2 g for 100 gal' === Todo::dose_text( 'Chloroquine 12 mg/gal', 100 ) && '6 mg per gallon' !== Todo::dose_text( 'Chloroquine 6 mg per gallon', 0 ) && '6 mg/gal' === Todo::dose_text( 'Chloroquine 6 mg per gallon', 0 ) );
 check( 'a numbered step names its medication', array( 'medication' => 'Praziquantel', 'dose' => 'suggested 1.9 g for 205 gal' ) === Todo::names( 'Praziquantel 1', 'dose', 205 ) );
 check( 'no gallons, no amount; no medication, nothing', '' === Todo::dose_text( 'Metronidazole', 0 ) && array( 'medication' => '', 'dose' => '' ) === Todo::names( 'Freshwater bath', 'dose', 205 ) && array( 'medication' => '', 'dose' => '' ) === Todo::names( 'Metronidazole', 'other', 205 ) );
-check( 'amounts as the Dose sheet rounds them', '5.1' === Todo::amount_text( 5.125 ) && '0.25' === Todo::amount_text( 0.25 ) && '2' === Todo::amount_text( 2.0 ) && '0.1' === Todo::amount_text( 0.1 ) );
+// One sum for the list and the sheet: what the Dose sheet opens on for a step (defaults() → plan()) is what the line says.
+$fh_list  = Medications::current();
+$fh_sheet = static function ( $label, $gallons ) use ( $fh_list ) {
+	$key        = Medications::key_for( $label, $fh_list );
+	$medication = $fh_list[ $key ];
+	$d          = Dose::defaults( $medication, array( 'gallons' => (float) $gallons, 'reading' => null, 'items' => array( array( 'label' => $label, 'kind' => 'dose', 'day' => 1 ) ), 'doses' => array() ), Settings::get(), $fh_list );
+	$plan       = Dose::plan( $medication, array( 'gallons' => (float) $gallons, 'rate' => $d['rate'] ) );
+	return array( 'amount' => Dose::amount_text( $plan['amount'], $plan['unit'] ), 'from' => $d['rate_from'] );
+};
+$fh_same  = array();
+foreach ( array( array( 'Chloroquine 40 mg/gal', 205 ), array( 'Chloroquine 40 mg/gal', 2 ), array( 'Metronidazole', 205 ), array( 'Metronidazole', 3 ), array( 'Metronidazole 0.02 g/gal', 3 ), array( 'Praziquantel 1', 55 ), array( 'Praziquantel 2.5 mg/gal', 1 ), array( 'Formalin', 55 ), array( 'Formalin 1 ml per 10 gal', 205 ), array( 'Fenbendazole', 40 ) ) as $fh_case ) {
+	$fh_line  = Todo::dose_text( $fh_case[0], $fh_case[1] );
+	$fh_sheet_says = $fh_sheet( $fh_case[0], $fh_case[1] );
+	$fh_tail  = $fh_sheet_says['amount'] . ' for ' . $fh_case[1] . ' gal';
+	if ( substr( $fh_line, -strlen( $fh_tail ) ) !== $fh_tail || ( 'schedule' === $fh_sheet_says['from'] ) !== ( false !== strpos( $fh_line, ' = ' ) ) ) {
+		$fh_same[] = $fh_case[0] . ' @' . $fh_case[1] . ': the list says "' . $fh_line . '", the sheet ' . $fh_sheet_says['amount'];
+	}
+}
+check( 'the line and the Dose sheet give the same amount in the same unit for the same step and water — a named rate or the medication\'s own, grams, milligrams or millilitres, a rate per 10 or per 100 gallons', array() === $fh_same, implode( ' | ', $fh_same ) );
+check( 'below a tenth of a gram both say milligrams (it was "0.08 g" on the list and "80 mg" on the sheet)', '40 mg/gal = 80 mg for 2 gal' === Todo::dose_text( 'Chloroquine 40 mg/gal', 2 ) && 'suggested 75 mg for 3 gal' === Todo::dose_text( 'Metronidazole', 3 ) && '80 mg' === $fh_sheet( 'Chloroquine 40 mg/gal', 2 )['amount'] );
+check( 'a rate the sheet reads in any unit is read here too: per 10 gallons, grams for a medication in milligrams', '1 ml/10 gal = 20.5 ml for 205 gal' === Todo::dose_text( 'Formalin 1 ml per 10 gal', 205 ) && '20 mg/gal = 60 mg for 3 gal' === Todo::dose_text( 'Metronidazole 0.02 g/gal', 3 ) );
+check( 'a rate no medication of the list reads is still worked out, in the label\'s own unit; a medication dosed to a level or typed gets no amount', '2 drops/gal = 20 drops for 10 gal' === Todo::dose_text( 'Mystery 2 drops/gal', 10 ) && '2 drops/gal = 20 drops for 10 gal' === Todo::dose_text( 'Metronidazole 2 drops/gal', 10 ) && '' === Todo::dose_text( 'Copper Power to 2.4', 100 ) && '' === Todo::dose_text( 'Salt', 10 ) );
+$fh_step = Dose::step_dose( 'Chloroquine 40 mg/gal', 205, $fh_list );
+check( 'Dose::step_dose(): the medication, the rate (named by the label, in the medication\'s unit) and the sum', 'chloroquine' === $fh_step['key'] && 40.0 === $fh_step['rate'] && 'mg' === $fh_step['unit'] && 1.0 === $fh_step['per'] && true === $fh_step['named'] && 'ok' === $fh_step['plan']['state'] && 8.2 === $fh_step['plan']['amount'] && 'g' === $fh_step['plan']['unit'] && 40.0 === Dose::step_rate( 'Chloroquine 40 mg/gal', $fh_list['chloroquine'] ) );
+$fh_step = Dose::step_dose( 'Metronidazole', 0, $fh_list );
+check( '… the medication\'s own rate when the label names none, no amount without gallons, nothing for a step that names no dose', 25.0 === $fh_step['rate'] && false === $fh_step['named'] && 'no_gallons' === $fh_step['plan']['state'] && null === Dose::step_dose( 'Freshwater bath', 205, $fh_list )['rate'] && null === Dose::step_dose( 'Copper Power to 2.4', 205, $fh_list )['plan'] );
 
 /* ------------------------------------------------------------------ */
 echo "3. Groups on different days\n";
