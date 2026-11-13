@@ -67,17 +67,20 @@ if ( empty( $fh_columns['tracking'] ) ) {
 		</div>
 	</div>
 
-	<?php foreach ( Admin::extra_lines() as $fh_line ) : // Other sections' one-liners (fishotel_today_lines). ?>
-		<p class="fh-today-line<?php echo '' !== $fh_line['tone'] ? ' is-' . esc_attr( $fh_line['tone'] ) : ''; ?>">
-			<?php if ( '' !== $fh_line['url'] ) : ?>
-				<a href="<?php echo esc_url( $fh_line['url'] ); ?>"><?php echo esc_html( $fh_line['text'] ); ?> &rarr;</a>
-			<?php else : ?>
-				<?php echo esc_html( $fh_line['text'] ); ?>
-			<?php endif; ?>
-			<?php if ( '' !== $fh_line['detail'] ) : ?>
-				<span class="fh-today-line__detail"><?php echo esc_html( $fh_line['detail'] ); ?></span>
-			<?php endif; ?>
-		</p>
+	<?php foreach ( Admin::extra_groups() as $fh_group ) : // Other sections' one-liners (fishotel_today_lines), under their headings. ?>
+		<h2 class="fh-today-linehead"><?php echo esc_html( $fh_group['title'] ); ?></h2>
+		<?php foreach ( $fh_group['lines'] as $fh_line ) : ?>
+			<p class="fh-today-line<?php echo '' !== $fh_line['tone'] ? ' is-' . esc_attr( $fh_line['tone'] ) : ''; ?>">
+				<?php if ( '' !== $fh_line['url'] ) : ?>
+					<a href="<?php echo esc_url( $fh_line['url'] ); ?>"><?php echo esc_html( $fh_line['text'] ); ?> &rarr;</a>
+				<?php else : ?>
+					<?php echo esc_html( $fh_line['text'] ); ?>
+				<?php endif; ?>
+				<?php if ( '' !== $fh_line['detail'] ) : ?>
+					<span class="fh-today-line__detail"><?php echo esc_html( $fh_line['detail'] ); ?></span>
+				<?php endif; ?>
+			</p>
+		<?php endforeach; ?>
 	<?php endforeach; ?>
 
 	<?php foreach ( $fh_notes as $fh_note ) : ?>

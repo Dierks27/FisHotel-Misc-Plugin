@@ -124,6 +124,7 @@ class Today {
 		require_once self::path() . 'class-model.php';
 		require_once self::path() . 'class-settings.php';
 		require_once self::path() . 'class-collector.php';
+		require_once self::path() . 'class-supplies-line.php';
 	}
 
 	/**
@@ -157,6 +158,9 @@ class Today {
 
 			$admin = new Admin();
 			$admin->init();
+
+			// ShipTracker's supplies to reorder, as one of the lines (when its build can say).
+			Supplies_Line::register();
 		}
 	}
 

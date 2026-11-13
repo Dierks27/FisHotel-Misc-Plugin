@@ -232,6 +232,16 @@ the threshold between them. Defaults live in code (category `invoices`,
 classes `premium` / `free`, threshold 400, no image); nothing is written
 to the database until Settings is saved.
 
+## On the Today page
+
+While this section is on, the Today page and its widget show one line
+for it under **Customers** — **"Invoices: 2 published and not paid for 7
+days or more"**, with a link to the published invoices. The number of
+days is **Settings → On the Today page** (default 7, from 1 to 90). No
+line when no invoice has waited that long, and none for a user who may
+not open this section. It is hooked in wp-admin only: one COUNT query,
+once per request (`class-today-line.php`).
+
 ## Tests
 
 Plain PHP with stubs, each file standalone, non-zero exit on failure

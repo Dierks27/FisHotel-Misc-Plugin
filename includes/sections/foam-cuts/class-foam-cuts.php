@@ -132,6 +132,7 @@ namespace FisHotel\Misc\Sections\Foam_Cuts {
 			require_once __DIR__ . '/class-stock.php';
 			require_once __DIR__ . '/class-orders.php';
 			require_once __DIR__ . '/class-planner.php';
+			require_once __DIR__ . '/class-today-line.php';
 		}
 
 		/**
@@ -158,6 +159,9 @@ namespace FisHotel\Misc\Sections\Foam_Cuts {
 
 				$admin = new Admin();
 				$admin->init();
+
+				// Its line on the Today page: a cut plan for today not marked as cut yet.
+				Today_Line::register();
 			}
 		}
 

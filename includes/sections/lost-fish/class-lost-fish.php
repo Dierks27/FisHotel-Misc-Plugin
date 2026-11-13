@@ -162,6 +162,7 @@ namespace FisHotel\Misc\Sections\Lost_Fish {
 			require_once __DIR__ . '/class-email.php';
 			require_once __DIR__ . '/class-cases.php';
 			require_once __DIR__ . '/class-customer-page.php';
+			require_once __DIR__ . '/class-today-line.php';
 		}
 
 		/**
@@ -191,6 +192,9 @@ namespace FisHotel\Misc\Sections\Lost_Fish {
 
 				$admin = new Admin();
 				$admin->init();
+
+				// Its line on the Today page: "Lost fish: 2 cases need you".
+				Today_Line::register();
 
 				self::ensure_tick();
 			}

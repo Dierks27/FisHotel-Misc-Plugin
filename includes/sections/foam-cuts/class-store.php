@@ -669,6 +669,27 @@ class Store {
 	}
 
 	/**
+	 * The plans for a ship day that are not marked as cut yet (the Today
+	 * page's line): id and title only, newest first.
+	 *
+	 * @param string $ship_ymd Y-m-d.
+	 * @return array<int, array{id: int, title: string}>
+	 */
+	public function drafts_for_day( $ship_ymd ) {
+		if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', (string) $ship_ymd ) ) {
+			return array();
+		}
+		$out = array();
+		foreach ( $this->rows( 'foam_plans', 'ship_date = %s AND status = %s ORDER BY id DESC LIMIT %d', array( (string) $ship_ymd, 'draft', 20 ) ) as $row ) {
+			$out[] = array(
+				'id'    => (int) $row['id'],
+				'title' => (string) $row['title'],
+			);
+		}
+		return $out;
+	}
+
+	/**
 	 * Add a plan (a draft).
 	 *
 	 * @param array $row title, origin, ship_date, sheets, label_from, label_count, data (array), created_by.

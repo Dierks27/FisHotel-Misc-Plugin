@@ -561,6 +561,15 @@ and when that read fails every open order is looked at instead.
 
 ---
 
+## On the Today page
+
+While this section is on, the Today page and its widget show one line
+for it under **Customers** — **"Lost fish: 2 cases need you"**, with what
+waits beside it (to send · answers that came in · with no answer) and a
+link to the Cases tab. No line when no case needs you, and none for a
+user who may not open this section. It is hooked in wp-admin only and
+read from the stored counts — no query (`class-today-line.php`).
+
 ## Files
 
 | | |

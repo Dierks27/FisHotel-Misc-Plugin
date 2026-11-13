@@ -651,6 +651,21 @@ class Store {
 	}
 
 	/**
+	 * How many invoices are published and still not paid since before a
+	 * moment (the Today page's line) — and the oldest of them.
+	 *
+	 * @param string $before_utc Y-m-d H:i:s (UTC).
+	 * @return array{count: int, oldest: string} oldest is published_at (UTC), '' when none.
+	 */
+	public function unpaid_since( $before_utc ) {
+		$rows = $this->rows( 'SELECT COUNT(*) AS n, MIN(published_at) AS oldest FROM ' . self::table( 'invoices' ) . " WHERE state = 'published' AND published_at IS NOT NULL AND published_at < %s", array( (string) $before_utc ) );
+		return array(
+			'count'  => $rows ? (int) $rows[0]['n'] : 0,
+			'oldest' => $rows && null !== $rows[0]['oldest'] ? (string) $rows[0]['oldest'] : '',
+		);
+	}
+
+	/**
 	 * Every invoice of one customer: the same handle, or the same site
 	 * customer, or the same e-mail. Newest first.
 	 *

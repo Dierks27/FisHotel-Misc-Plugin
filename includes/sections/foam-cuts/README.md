@@ -159,6 +159,15 @@ rectangle being cut, `of` the cut that made it (0 = the whole source) and
 `side` which side of that cut it lies on (`near` = left / above). Cuts are
 listed in an order in which each can be made.
 
+## On the Today page
+
+While this section is on, the Today page and its widget show one line
+for it under **Shipping** — **"Foam: today's cut plan is not marked as
+cut yet"** while a plan for today's ship day is still a draft, with a
+link to that plan. No line otherwise, and none for a user who may not
+open this section. It is hooked in wp-admin only: one small query, once
+per request (`class-today-line.php`).
+
 ## Files
 
 `class-units.php`, `class-cut-list.php`, `class-packer.php`,

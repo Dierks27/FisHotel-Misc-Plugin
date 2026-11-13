@@ -137,6 +137,15 @@ $fh_options = static function ( array $classes, $current ) {
 			</label>
 		</div>
 
+		<h3 class="fh-inv-h3"><?php esc_html_e( 'On the Today page', 'fishotel-misc-plugin' ); ?></h3>
+		<div class="fh-inv-fields">
+			<label class="fh-inv-field fh-inv-field--small">
+				<span><?php esc_html_e( 'Show an unpaid invoice after (days)', 'fishotel-misc-plugin' ); ?></span>
+				<input type="number" class="fh-inv-input fh-inv-input--num" name="settings[unpaid_days]" min="<?php echo esc_attr( Settings::MIN_UNPAID_DAYS ); ?>" max="<?php echo esc_attr( Settings::MAX_UNPAID_DAYS ); ?>" step="1" value="<?php echo esc_attr( $settings['unpaid_days'] ); ?>">
+				<small><?php esc_html_e( 'An invoice that was published this many days ago and is still not paid is counted on the Today page, under Customers.', 'fishotel-misc-plugin' ); ?></small>
+			</label>
+		</div>
+
 		<div class="fh-inv-actionbar">
 			<button type="submit" class="button button-primary"><?php esc_html_e( 'Save settings', 'fishotel-misc-plugin' ); ?></button>
 			<span class="fh-inv-status" id="fh-inv-settings-status" aria-live="polite"></span>

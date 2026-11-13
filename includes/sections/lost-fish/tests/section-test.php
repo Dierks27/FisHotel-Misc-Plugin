@@ -58,6 +58,7 @@ use FisHotel\Misc\Sections\Lost_Fish\Cases;
 use FisHotel\Misc\Sections\Lost_Fish\Customer_Page;
 use FisHotel\Misc\Sections\Lost_Fish\Lost_Fish;
 use FisHotel\Misc\Sections\Lost_Fish\Store;
+use FisHotel\Misc\Sections\Lost_Fish\Today_Line;
 
 /**
  * A $wpdb that counts what it is asked.
@@ -164,6 +165,7 @@ check_same( 'a page view without the link argument: the hook returns at once —
 $GLOBALS['fh_options'][ Store::COUNTS_OPTION ] = array( 'done' => 4, 'closed' => 1 );
 do_action( 'fishotel_lostfish_tick' );
 check_same( 'the cron tick with no case open or sent: no query either', 0, $GLOBALS['wpdb']->queries );
+check( 'off the front end: no line for the Today page is hooked (that is wp-admin only)', empty( $GLOBALS['fh_filters']['fishotel_today_lines'] ) );
 
 echo "\nIn wp-admin\n";
 $GLOBALS['fh_is_admin'] = true;
@@ -183,6 +185,29 @@ foreach ( array_keys( $GLOBALS['fh_actions'] ) as $hook ) {
 	}
 }
 check_same( 'no handler for visitors who are not logged in, and no REST route — the customer\'s page is the only way in from outside', array(), $public );
+
+echo "\nIts line on the Today page\n";
+$GLOBALS['fh_current_user']                       = 7;
+$GLOBALS['fh_user_caps']['manage_woocommerce']    = array( 7 );
+$GLOBALS['fh_options'][ Store::COUNTS_OPTION ]    = array( 'open' => 1, 'answered' => 2, 'stale' => 0, 'done' => 4 );
+Today_Line::use_source();
+$fh_lines = apply_filters( 'fishotel_today_lines', array( array( 'key' => 'other', 'text' => 'Another section' ) ) );
+check_same( 'on: "Lost fish: 3 cases need you" joins the other lines, under Customers', array( 'other', 'lost-fish', 'Lost fish: 3 cases need you', 'customers', 3 ), array( $fh_lines[0]['key'], $fh_lines[1]['key'], $fh_lines[1]['text'], $fh_lines[1]['group'], $fh_lines[1]['count'] ) );
+check_same( '… with what waits beside it, and a link to the cases', array( '1 to send · 2 answers came in', 'bad', 'http://example.test/wp-admin/admin.php?page=fishotel-misc-lost-fish' ), array( $fh_lines[1]['detail'], $fh_lines[1]['tone'], str_replace( 'https://', 'http://', $fh_lines[1]['url'] ) ) );
+$GLOBALS['wpdb'] = new Fh_Counting_Wpdb();
+apply_filters( 'fishotel_today_lines', array() );
+check_same( '… read from the stored counts (no query), once per request', 0, $GLOBALS['wpdb']->queries );
+Today_Line::use_source( static function () { return array( 'open' => 0, 'answered' => 0, 'stale' => 0, 'sent' => 3, 'done' => 9 ); } );
+check_same( 'empty: nothing needs the owner (cases only sent or done) — no line', array(), apply_filters( 'fishotel_today_lines', array() ) );
+Today_Line::use_source( static function () { return array( 'stale' => 1 ); } );
+check_same( 'one case with no answer after the reminder: one case, "todo"', array( 'Lost fish: 1 case needs you', '1 with no answer', 'todo' ), array_values( array_intersect_key( Today_Line::with_line( array(), Today_Line::line( array( 'stale' => 1 ), '' ) )[0], array_flip( array( 'text', 'detail', 'tone' ) ) ) ) );
+$GLOBALS['fh_user_caps']['manage_woocommerce'] = array();
+check_same( 'a user who may not open the section: no line', array(), apply_filters( 'fishotel_today_lines', array() ) );
+check_same( 'never twice: a line under the same key is replaced', 1, count( Today_Line::with_line( array( array( 'key' => 'lost-fish', 'text' => 'old' ) ), Today_Line::line( array( 'open' => 1 ), '' ) ) ) );
+$GLOBALS['fh_user_caps']['manage_woocommerce'] = array( 7 );
+Today_Line::use_source( static function () { throw new \RuntimeException( 'x' ); } );
+check_same( 'a source that fails adds nothing', array(), apply_filters( 'fishotel_today_lines', array() ) );
+Today_Line::use_source();
 
 echo "\nThe first boot, activation, deactivation\n";
 unset( $GLOBALS['fh_options'][ Store::DB_VERSION_OPTION ] );

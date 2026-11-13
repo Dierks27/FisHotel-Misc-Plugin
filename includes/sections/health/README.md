@@ -167,6 +167,15 @@ its own failure. Blank = off.
   partial site copy), the Overview and Log tabs say so, and deactivating /
   reactivating the plugin really recreates it.
 
+## On the Today page
+
+While this section is on, the Today page and its widget show one line
+for it under **Site** — **"Site health: 2 problems found"**, the errors
+and warnings beside it (the same checks the Health widget runs) and a
+link to the Overview. No line when every check is fine, and none for a
+user without `manage_options`. It is hooked in wp-admin only and worked
+out once per request (`class-today-line.php`).
+
 ## Files
 
 ```

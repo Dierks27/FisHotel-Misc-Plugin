@@ -216,6 +216,7 @@ namespace FisHotel\Misc\Sections\Invoices {
 			require_once __DIR__ . '/class-shop.php';
 			require_once __DIR__ . '/class-sync.php';
 			require_once __DIR__ . '/class-visibility.php';
+			require_once __DIR__ . '/class-today-line.php';
 		}
 
 		/**
@@ -258,6 +259,9 @@ namespace FisHotel\Misc\Sections\Invoices {
 
 				$admin = new Admin();
 				$admin->init();
+
+				// Its line on the Today page: invoices published and not paid for a while.
+				Today_Line::register();
 			}
 		}
 

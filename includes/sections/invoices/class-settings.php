@@ -14,6 +14,8 @@
  *   image_under /    the featured image of an invoice whose total is under
  *   image_over /     the threshold, and of one at or over it. Nothing is
  *   image_threshold  seeded: without an image id an invoice gets no image.
+ *   unpaid_days      after how many days a published invoice that is still
+ *                    not paid shows on the Today page (default 7).
  *
  * sanitize() is pure, so the rules are tested without WordPress.
  *
@@ -37,6 +39,10 @@ class Settings {
 	const DEFAULT_THRESHOLD = 400.0;
 	const MAX_FORMAT        = 120;
 
+	const DEFAULT_UNPAID_DAYS = 7;
+	const MIN_UNPAID_DAYS     = 1;
+	const MAX_UNPAID_DAYS     = 90;
+
 	/**
 	 * The defaults.
 	 *
@@ -54,6 +60,7 @@ class Settings {
 			'image_under'     => 0,
 			'image_over'      => 0,
 			'image_threshold' => self::DEFAULT_THRESHOLD,
+			'unpaid_days'     => self::DEFAULT_UNPAID_DAYS,
 		);
 	}
 
@@ -156,6 +163,17 @@ class Settings {
 				$out['image_threshold'] = $threshold;
 			}
 		}
+
+		if ( isset( $raw['unpaid_days'] ) && is_scalar( $raw['unpaid_days'] ) && '' !== trim( (string) $raw['unpaid_days'] ) ) {
+			$days = trim( (string) $raw['unpaid_days'] );
+			if ( ! ctype_digit( $days ) || (int) $days < self::MIN_UNPAID_DAYS || (int) $days > self::MAX_UNPAID_DAYS ) {
+				/* translators: 1: fewest days, 2: most days */
+				$errors[] = sprintf( __( 'The days before an unpaid invoice shows on the Today page must be a whole number from %1$d to %2$d. The earlier value was kept.', 'fishotel-misc-plugin' ), self::MIN_UNPAID_DAYS, self::MAX_UNPAID_DAYS );
+			} else {
+				$out['unpaid_days'] = (int) $days;
+			}
+		}
+		$out['unpaid_days'] = max( self::MIN_UNPAID_DAYS, min( self::MAX_UNPAID_DAYS, (int) $out['unpaid_days'] ) );
 
 		return array(
 			'settings' => $out,

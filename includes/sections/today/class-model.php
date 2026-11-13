@@ -39,9 +39,19 @@ class Model {
 	 * The lines other sections add under the header (extra_lines()).
 	 */
 	const EXTRA_LINES_FILTER = 'fishotel_today_lines';
-	const EXTRA_LINES_MAX    = 8;
+	const EXTRA_LINES_MAX    = 12;
 	const EXTRA_LINE_LENGTH  = 160;
 	const EXTRA_LINE_TONES   = array( 'todo', 'done', 'bad' );
+
+	/**
+	 * The headings the lines are shown under, in this order (a line's
+	 * `group`). A line with no group, or one not listed, goes under
+	 * EXTRA_LINE_OTHER at the end.
+	 *
+	 * @var string[]
+	 */
+	const EXTRA_LINE_GROUPS = array( 'fish-room', 'customers', 'shipping', 'site' );
+	const EXTRA_LINE_OTHER  = 'other';
 
 	/**
 	 * Badge keys, most serious first. The index is the sort rank of a
@@ -823,10 +833,12 @@ class Model {
 	 * `fishotel_today_lines` filter, cleaned (pure): each is one short
 	 * sentence with an optional link — e.g. the Clean Room's "Tanks: 3
 	 * things to do". Anything that is not a line with text is dropped;
-	 * the tone is '' / 'todo' / 'done' / 'bad'; at most EXTRA_LINES_MAX.
+	 * the tone is '' / 'todo' / 'done' / 'bad'; the group is one of
+	 * EXTRA_LINE_GROUPS or 'other'; the count is a whole number (0 when the
+	 * line gives none); at most EXTRA_LINES_MAX.
 	 *
 	 * @param mixed $raw What the filter returned.
-	 * @return array<int, array{key: string, text: string, detail: string, url: string, tone: string}>
+	 * @return array<int, array{key: string, text: string, detail: string, url: string, tone: string, group: string, count: int}>
 	 */
 	public static function extra_lines( $raw ) {
 		$out = array();
@@ -846,12 +858,63 @@ class Model {
 				'detail' => (string) substr( $detail, 0, self::EXTRA_LINE_LENGTH ),
 				'url'    => isset( $line['url'] ) && is_string( $line['url'] ) ? trim( $line['url'] ) : '',
 				'tone'   => in_array( $tone, self::EXTRA_LINE_TONES, true ) ? $tone : '',
+				'group'  => isset( $line['group'] ) && in_array( $line['group'], self::EXTRA_LINE_GROUPS, true ) ? (string) $line['group'] : self::EXTRA_LINE_OTHER,
+				'count'  => isset( $line['count'] ) && is_numeric( $line['count'] ) ? max( 0, (int) $line['count'] ) : 0,
 			);
 			if ( count( $out ) >= self::EXTRA_LINES_MAX ) {
 				break;
 			}
 		}
 		return $out;
+	}
+
+	/**
+	 * The cleaned lines under their headings (pure): Fish room, Customers,
+	 * Shipping, Site, then Other — a heading only when it has a line, and
+	 * the lines of one heading in the order the sections gave them.
+	 *
+	 * @param array[] $lines extra_lines().
+	 * @return array<int, array{group: string, title: string, lines: array[]}>
+	 */
+	public static function grouped_lines( array $lines ) {
+		$order = array_merge( self::EXTRA_LINE_GROUPS, array( self::EXTRA_LINE_OTHER ) );
+		$by    = array_fill_keys( $order, array() );
+		foreach ( $lines as $line ) {
+			$group          = isset( $line['group'] ) && isset( $by[ $line['group'] ] ) ? $line['group'] : self::EXTRA_LINE_OTHER;
+			$by[ $group ][] = $line;
+		}
+
+		$out = array();
+		foreach ( $order as $group ) {
+			if ( $by[ $group ] ) {
+				$out[] = array(
+					'group' => $group,
+					'title' => self::group_title( $group ),
+					'lines' => $by[ $group ],
+				);
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * A heading in words.
+	 *
+	 * @param string $group One of EXTRA_LINE_GROUPS, or 'other'.
+	 * @return string
+	 */
+	public static function group_title( $group ) {
+		switch ( (string) $group ) {
+			case 'fish-room':
+				return __( 'Fish room', 'fishotel-misc-plugin' );
+			case 'customers':
+				return __( 'Customers', 'fishotel-misc-plugin' );
+			case 'shipping':
+				return __( 'Shipping', 'fishotel-misc-plugin' );
+			case 'site':
+				return __( 'Site', 'fishotel-misc-plugin' );
+		}
+		return __( 'Other', 'fishotel-misc-plugin' );
 	}
 
 	/**

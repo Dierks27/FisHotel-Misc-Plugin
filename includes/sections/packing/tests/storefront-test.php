@@ -63,6 +63,7 @@ sort( $hooks );
 $expected = array(
 	'add_meta_boxes',
 	'admin_enqueue_scripts',
+	'fishotel_today_lines', // Its line on the Today page (read only by that page and its widget).
 	'postbox_classes_product_woocommerce-product-data', // The classes of the product-data box, on the product edit screen.
 	'woocommerce_admin_process_product_object',
 	'woocommerce_product_after_variable_attributes',
@@ -76,7 +77,7 @@ $expected = array(
 	'wp_ajax_fishotel_packing_fits',
 	'wp_ajax_fishotel_packing_map',
 );
-check_same( 'the hooks are exactly: the product editor, the order screen, the page\'s assets and the admin AJAX saves', $expected, $hooks );
+check_same( 'the hooks are exactly: the product editor, the order screen, the page\'s assets, the admin AJAX saves and the Today line', $expected, $hooks );
 check( 'booting in wp-admin reads no option either — only a screen that shows something does', 0 === $GLOBALS['fh_option_reads'] );
 
 // The hooks WooCommerce and WordPress use to show something to a customer.

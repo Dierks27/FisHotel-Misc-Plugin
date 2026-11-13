@@ -121,6 +121,17 @@ namespace FisHotel\Misc\Sections\Packing {
 		const META_BOX_NAME = '_fh_packing_box_name';
 
 		/**
+		 * Order meta other plugins write that the Today page's line reads:
+		 * the delivery date (the Batch plugin, Y-m-d — an order ships the
+		 * day before) and the combined box an order was folded into (the
+		 * theme).
+		 *
+		 * @var string
+		 */
+		const META_DELIVERY_DATE = '_fishotel_shipping_date';
+		const META_FULFILLED_BY  = '_fishotel_fulfilled_by_order';
+
+		/**
 		 * Whether the section booted in this request (it is enabled).
 		 *
 		 * @var bool
@@ -173,6 +184,7 @@ namespace FisHotel\Misc\Sections\Packing {
 			require_once __DIR__ . '/class-order-packing.php';
 			require_once __DIR__ . '/class-store.php';
 			require_once __DIR__ . '/class-fill.php';
+			require_once __DIR__ . '/class-today-line.php';
 		}
 
 		/**
@@ -215,6 +227,9 @@ namespace FisHotel\Misc\Sections\Packing {
 
 			$admin = new Admin();
 			$admin->init();
+
+			// Its line on the Today page: orders shipping today or tomorrow with no box confirmed.
+			Today_Line::register();
 		}
 
 		/**

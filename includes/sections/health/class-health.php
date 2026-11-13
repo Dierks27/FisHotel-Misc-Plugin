@@ -129,6 +129,7 @@ class Health {
 		require_once self::path() . 'class-facts.php';
 		require_once self::path() . 'class-settings.php';
 		require_once self::path() . 'class-cron.php';
+		require_once self::path() . 'class-today-line.php';
 	}
 
 	/**
@@ -176,6 +177,9 @@ class Health {
 
 			$admin = new Admin();
 			$admin->init();
+
+			// Its line on the Today page: "Site health: 2 problems found".
+			Today_Line::register();
 		}
 	}
 

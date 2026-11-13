@@ -228,6 +228,16 @@ $request = fishotel_requests_get( $id ); // array|null
 
 An ordinary front-end request costs no query from this section.
 
+## On the Today page
+
+While this section is on, the Today page and its widget show one line
+for it under **Customers** — **"Requests: 3 need you"**, the "Needs you"
+strip in one line (to approve · payments overdue · people to tell · owed
+fish to send) with a link to the list. No line when nothing needs you,
+and none for a user who may not open this section. It is hooked in
+wp-admin only: one query over the requests in those four states, once
+per request (`class-today-line.php`).
+
 ## Files
 
 | File | What |

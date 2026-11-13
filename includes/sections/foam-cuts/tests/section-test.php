@@ -90,7 +90,7 @@ $GLOBALS['fh_is_admin'] = true;
 $section::boot();
 $hooks = array_keys( $GLOBALS['fh_hooks'] );
 sort( $hooks );
-check_same( 'hooks the write handler, the printable page (a visitor is sent to log in) and the style sheet', array( 'admin_enqueue_scripts', 'admin_post_fishotel_foam_cuts', 'admin_post_fishotel_foam_cuts_print', 'admin_post_nopriv_fishotel_foam_cuts_print', 'rest_api_init' ), $hooks );
+check_same( 'hooks the write handler, the printable page (a visitor is sent to log in), the style sheet and its line on the Today page', array( 'admin_enqueue_scripts', 'admin_post_fishotel_foam_cuts', 'admin_post_fishotel_foam_cuts_print', 'admin_post_nopriv_fishotel_foam_cuts_print', 'fishotel_today_lines', 'rest_api_init' ), $hooks );
 check( 'no write can be reached by a visitor: the only nopriv hook is the print page\'s way to the login screen', array( 'admin_post_nopriv_fishotel_foam_cuts_print' ) === array_values( preg_grep( '/nopriv/', $hooks ) ) && 'login_first' === $GLOBALS['fh_hooks']['admin_post_nopriv_fishotel_foam_cuts_print'][10][0][0][1] );
 check( 'the admin class is loaded now', class_exists( $ns . 'Admin', false ) );
 $section::register_menu();

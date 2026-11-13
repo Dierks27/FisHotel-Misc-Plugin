@@ -1105,6 +1105,7 @@ class Todo {
 		$left  = (int) ( $summary['left'] ?? 0 );
 		return array(
 			'key'    => self::TODAY_LINE_KEY,
+			'group'  => 'fish-room',
 			'text'   => (string) ( $summary['text'] ?? '' ),
 			/* translators: %d: copper flags */
 			'detail' => $flags > 0 ? sprintf( _n( '%d copper flag', '%d copper flags', $flags, 'fishotel-misc-plugin' ), $flags ) : '',

@@ -15,7 +15,10 @@
  *   - packs_flags(): the "Livestock — packed in a bag" value stored on a
  *     list of products, in one go — for the fill tool; variation_bags():
  *     the Bag sizes stored on one product's variations — for the product
- *     editor's checkbox.
+ *     editor's checkbox;
+ *   - unconfirmed_orders(): the open orders delivering on given dates that
+ *     have no confirmed box yet — for the Today page's line (one query,
+ *     on the legacy order tables or WooCommerce's own).
  *
  * The section has no table of its own. Every write goes through the
  * WooCommerce product object (Fill, Product) or the order object
@@ -23,7 +26,8 @@
  *
  * Every method is wrapped: a database error or a missing table means an
  * empty answer, never an exception. None of them runs on a front-end
- * request: they are called from the Packing page and its AJAX only.
+ * request: they are called from the Packing page, its AJAX and the Today
+ * page only.
  *
  * @package FisHotel\Misc\Sections\Packing
  */
@@ -339,5 +343,62 @@ class Store {
 		}
 
 		return $out;
+	}
+
+	/**
+	 * The open orders that deliver on one of the dates and have no
+	 * confirmed box: ids only, oldest first, at most $limit. An order
+	 * folded into a combined box is left out (its wrapper carries the
+	 * box). One query, on the order tables WooCommerce uses on this site.
+	 *
+	 * @param string[] $dates    Delivery dates, Y-m-d.
+	 * @param string[] $statuses Order statuses without `wc-`.
+	 * @param bool     $hpos     WooCommerce's own order tables are in use.
+	 * @param int      $limit    Most ids.
+	 * @return int[]
+	 */
+	public function unconfirmed_orders( array $dates, array $statuses, $hpos, $limit = 50 ) {
+		global $wpdb;
+
+		$dates    = array_values( array_filter( array_map( 'strval', $dates ), static function ( $d ) {
+			return 1 === preg_match( '/^\d{4}-\d{2}-\d{2}$/', $d );
+		} ) );
+		$statuses = array_values( array_filter( array_map( static function ( $st ) {
+			return 'wc-' . preg_replace( '/^wc-/', '', preg_replace( '/[^a-z0-9_-]/', '', strtolower( (string) $st ) ) );
+		}, $statuses ), static function ( $st ) {
+			return 'wc-' !== $st;
+		} ) );
+		if ( ! is_object( $wpdb ) || ! $dates || ! $statuses ) {
+			return array();
+		}
+
+		$in_dates    = implode( ',', array_fill( 0, count( $dates ), '%s' ) );
+		$in_statuses = implode( ',', array_fill( 0, count( $statuses ), '%s' ) );
+
+		if ( $hpos ) {
+			$orders = $wpdb->prefix . 'wc_orders';
+			$meta   = $wpdb->prefix . 'wc_orders_meta';
+			$sql    = 'SELECT o.id FROM ' . $orders . ' o INNER JOIN ' . $meta . ' d ON d.order_id = o.id AND d.meta_key = %s'
+				. " WHERE o.type = 'shop_order' AND o.status IN (" . $in_statuses . ') AND d.meta_value IN (' . $in_dates . ')'
+				. ' AND NOT EXISTS ( SELECT 1 FROM ' . $meta . " b WHERE b.order_id = o.id AND b.meta_key = %s AND b.meta_value <> '' )"
+				. ' AND NOT EXISTS ( SELECT 1 FROM ' . $meta . " f WHERE f.order_id = o.id AND f.meta_key = %s AND f.meta_value <> '' )"
+				. ' ORDER BY o.id ASC LIMIT %d';
+		} else {
+			$sql = 'SELECT p.ID FROM ' . $wpdb->posts . ' p INNER JOIN ' . $wpdb->postmeta . ' d ON d.post_id = p.ID AND d.meta_key = %s'
+				. " WHERE p.post_type = 'shop_order' AND p.post_status IN (" . $in_statuses . ') AND d.meta_value IN (' . $in_dates . ')'
+				. ' AND NOT EXISTS ( SELECT 1 FROM ' . $wpdb->postmeta . " b WHERE b.post_id = p.ID AND b.meta_key = %s AND b.meta_value <> '' )"
+				. ' AND NOT EXISTS ( SELECT 1 FROM ' . $wpdb->postmeta . " f WHERE f.post_id = p.ID AND f.meta_key = %s AND f.meta_value <> '' )"
+				. ' ORDER BY p.ID ASC LIMIT %d';
+		}
+
+		$args = array_merge( array( Packing::META_DELIVERY_DATE ), $statuses, $dates, array( Packing::META_BOX, Packing::META_FULFILLED_BY, max( 1, (int) $limit ) ) );
+
+		try {
+			$ids = $wpdb->get_col( $wpdb->prepare( $sql, $args ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+
+		return array_values( array_filter( array_map( 'intval', is_array( $ids ) ? $ids : array() ) ) );
 	}
 }

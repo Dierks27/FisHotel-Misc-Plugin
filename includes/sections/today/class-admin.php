@@ -217,6 +217,16 @@ class Admin {
 		}
 	}
 
+	/**
+	 * The same lines under their headings (Fish room, Customers,
+	 * Shipping, Site, Other) — Model::grouped_lines().
+	 *
+	 * @return array[]
+	 */
+	public static function extra_groups() {
+		return Model::grouped_lines( self::extra_lines() );
+	}
+
 	/* ============================================================== */
 	/*  Dashboard widget                                               */
 	/* ============================================================== */

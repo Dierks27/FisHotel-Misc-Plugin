@@ -91,7 +91,16 @@
 	color: var(--fh-warning, #ffb900);
 }
 
-/* One-liners other sections add under the header (fishotel_today_lines). */
+/* One-liners other sections add under the header (fishotel_today_lines), under their headings. */
+.fh-today-linehead {
+	margin: 16px 0 8px;
+	font-size: 13px;
+	font-weight: 600;
+	letter-spacing: 0.3px;
+	text-transform: uppercase;
+	color: var(--fh-text-secondary, #b0b0b0);
+}
+
 .fh-today-line {
 	margin: 0 0 12px;
 	padding: 10px 14px;

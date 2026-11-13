@@ -132,20 +132,38 @@ ship-day counts would shrink during the run and the header would say
 fish counts (the theme's `_fishotel_line_status = shipped` is only written
 by hand) and simply leave the attention strip when everything is done.
 
-## Lines from other sections
+## Lines from other sections — one to-do page
 
-Under the header line — on the page and on the widget — other sections
-may add a one-line summary of their own day through the
-`fishotel_today_lines` filter: an array of lines, each
-`{ key, text, detail?, url?, tone? }` (`tone` is `todo`, `done` or
-`bad`; a line with a `url` is a link). The Clean Room adds **"Tanks: 3
-things to do"** — what is left on its To do list by water system, with
-the number of copper flags beside it and a link to that list ("Tanks:
-all done" once everything is ticked; no line on a day with nothing due
-or while that section is off). The lines are read on every render, never
-from the cached window, so a tick shows at once; `Model::extra_lines()`
-cleans whatever comes back (text only, one line, at most eight lines)
-and a callback that throws adds nothing.
+Under the header line — on the page and on the widget — every section
+that has work waiting adds one line through the `fishotel_today_lines`
+filter: an array of lines, each `{ key, text, group, count, detail?,
+url?, tone? }` (`tone` is `todo`, `done` or `bad`; a line with a `url` is
+a link). They are shown under four plain headings, in this order:
+
+| Heading | Line | From |
+|---|---|---|
+| Fish room | **Tanks: 3 things to do** (copper flags beside it) | Clean Room → To do |
+| Customers | **Invoices: 2 published and not paid for 7 days or more** | Invoices (the days are a setting: Invoices → Settings → On the Today page) |
+| Customers | **Requests: 3 need you** (to approve · payments overdue · people to tell · owed fish to send) | Requests → "Needs you" |
+| Customers | **Lost fish: 2 cases need you** (to send · answers that came in · with no answer) | Lost Fish → Cases |
+| Shipping | **Packing: 3 orders ship today or tomorrow with no box confirmed** (the order numbers) | Packing box on each order |
+| Shipping | **Foam: today's cut plan is not marked as cut yet** | Foam Cuts → Plan |
+| Shipping | **Supplies: 2 to reorder** (their names) | ShipTracker → Settings → Boxes & label costs → Supplies |
+| Site | **Site health: 2 problems found** (errors · warnings) | Health → Overview |
+
+A line shows only while its section is switched on, for a user who may
+open that section, and only when its count is above zero (the Clean Room
+also says **"Tanks: all done"** once everything is ticked). Each section
+hooks its line in wp-admin only and works it out once per request, so the
+storefront never pays for it; the Supplies line is this section's own and
+appears only when the ShipTracker build that is active has
+`FST_Supplies::get_low_supplies()`. A line with no `group` (or an unknown
+one) goes under **Other** at the end.
+
+The lines are read on every render, never from the cached window, so a
+tick shows at once; `Model::extra_lines()` cleans whatever comes back
+(text only, one line, at most twelve lines), `Model::grouped_lines()` puts
+them under their headings, and a callback that throws adds nothing.
 
 ## Filters
 
@@ -171,6 +189,7 @@ today/
 │                          plugins; builds the arrays, caches the window
 ├── class-settings.php     option, defaults, sanitised AJAX save
 ├── class-admin.php        page, dashboard widget, Refresh (AJAX + link)
+├── class-supplies-line.php  ShipTracker's "Supplies: N to reorder" line
 ├── views/page.php         the page
 ├── views/widget.php       the dashboard widget (one inline style block)
 ├── views/settings.php     the settings tab

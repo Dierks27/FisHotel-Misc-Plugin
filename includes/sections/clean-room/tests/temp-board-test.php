@@ -313,6 +313,7 @@ check( 'never twice: a line under the same key is replaced', array( $others[0], 
 check( 'no line: the others pass through untouched; junk in the filter is an empty list', $others === Todo::with_today_line( $others, null ) && array( $line ) === Todo::with_today_line( 'junk', $line ) && array() === Todo::with_today_line( null, null ) );
 
 check( 'the filter names', 'fishotel_cleanroom_todo' === Todo::SUMMARY_FILTER && 'fishotel_today_lines' === Todo::TODAY_FILTER );
+check( 'the line sits under the Today page\'s Fish room heading', 'fish-room' === Todo::today_line( array( 'left' => 3, 'total' => 5, 'flags' => 0, 'text' => 'x', 'url' => '' ) )['group'] );
 $answered = array( 'left' => 1 );
 check( 'fishotel_cleanroom_todo: an answer that is already there stands', $answered === Clean_Room::filter_todo( $answered ) );
 check( 'the global function is there while the section is loaded', function_exists( 'fishotel_cleanroom_todo' ) );

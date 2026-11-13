@@ -368,6 +368,19 @@ Each is reached through `class_exists()` / `method_exists()` /
 
 `tests/storefront-test.php` holds the section to all of this.
 
+## On the Today page
+
+While this section is on, the Today page and its widget show one line
+for it under **Shipping** — **"Packing: 3 orders ship today or tomorrow
+with no box confirmed"**, the order numbers beside it, and a link to the
+order (one) or the orders list (several). It counts the orders in
+Processing or Fulfillment that deliver tomorrow or the day after and
+have no confirmed box; an order folded into a combined box is left out.
+No line when every order has its box, and none for a user who may not
+open this section. It is hooked in wp-admin only: one query
+(`Store::unconfirmed_orders()`, on the legacy order tables or
+WooCommerce's own), once per request (`class-today-line.php`).
+
 ## Files
 
 ```

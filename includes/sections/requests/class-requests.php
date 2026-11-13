@@ -141,6 +141,7 @@ namespace FisHotel\Misc\Sections\Requests {
 			require_once __DIR__ . '/class-cron.php';
 			require_once __DIR__ . '/class-listing.php';
 			require_once __DIR__ . '/class-front.php';
+			require_once __DIR__ . '/class-today-line.php';
 		}
 
 		/**
@@ -173,6 +174,9 @@ namespace FisHotel\Misc\Sections\Requests {
 
 				$admin = new Admin();
 				$admin->init();
+
+				// Its line on the Today page: "Requests: 3 need you".
+				Today_Line::register();
 			}
 		}
 
