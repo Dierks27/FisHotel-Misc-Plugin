@@ -27,6 +27,7 @@ php  includes/sections/packing/tests/order-test.php
 php  includes/sections/packing/tests/product-test.php
 php  includes/sections/packing/tests/page-test.php
 php  includes/sections/packing/tests/storefront-test.php
+php  includes/sections/packing/tests/foam-cuts-seam-test.php
 node includes/sections/packing/tests/packing-admin.test.js
 ```
 
@@ -105,6 +106,16 @@ helper files exit cleanly when they are run directly (the CI runs every
   kind, no boxes, no numbers, a bag no box takes, a split that stops at
   the most boxes a suggestion names, no bags defined, no fish); and with stand-ins for the Batch plugin's Ship Day class and the
   theme's invoice reader.
+- **foam-cuts-seam-test.php** — the seam with the Foam Cuts section,
+  both real: Foam Cuts' own readers against this section's real box list
+  and the real `fishotel_packing_suggest()` / `_confirmed_box()` (asked
+  with the order ID). Switched off, the functions exist all the same and
+  Foam Cuts does not take them for the section; switched on, its box
+  list is this section's (read from the classes — there is no
+  `fishotel_packing_boxes()` function, that name is the filter), an
+  order's box is the suggestion, then the confirmed one (two boxes are
+  two, not four), an order with nothing to bag has none, and a box Foam
+  Cuts' list does not have is kept by its size. 16 checks.
 - **order-test.php** — who may confirm; confirming the suggestion (two
   `update_meta_data()` and one `save()` on the order object, nothing
   else: no note, no status change); only the suggestion that was looked at

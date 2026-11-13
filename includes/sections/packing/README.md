@@ -187,7 +187,10 @@ two agree: only product lines; a line that already shipped or never ships
 (`_fishotel_line_status` = `shipped` / `na`) and a fully refunded line are
 left out, a partly refunded line counts what is left; a line flagged
 `_fh_invoice_fish` and a product-less line with `_fishotel_fish_id` are
-fish; an invoice credit is money; an Invoice product kept as one line is
+fish; an invoice credit is money, and so is an invoice's "Adjustment" —
+the line that brings an invoice up to a stated price, which the theme can
+only carry as a fish line; the Invoices section says which name that is
+(`fishotel_invoices_is_adjustment()`); an Invoice product kept as one line is
 opened up (its `_fh_invoice_lines` snapshot, else its description through
 the theme's or the Batch plugin's parser when one is there — and when
 nothing can read it, it is reported as a fish line without a bag, never

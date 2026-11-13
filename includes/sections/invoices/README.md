@@ -145,6 +145,27 @@ an empty array while the section is off — guard with `function_exists()`):
   `forum_user_id`, `customer_id`, `customer_name`, `customer_email`,
   `state`, `title`, `total`, `flat_total`, `shipping`, `shipping_slug`,
   `order_id`, `url`, `lines`).
+- `fishotel_invoices_is_adjustment( $name ): bool` — whether a name is
+  the one an **Adjustment** goes by. The theme knows fish, credits and
+  notes only, so the line that brings an invoice up to a stated price
+  reaches an order as a *fish* line: a product-less line flagged
+  `_fh_invoice_fish`, or a kind-`fish` row of the `_fh_invoice_lines`
+  JSON, named "Adjustment", quantity 1. Its name is the only marker
+  there is (`Invoices::ADJUSTMENT_NAME`; a fish cannot be given that
+  name — Publish refuses it). It is money, not a fish: every reader of
+  an invoice's fish lines asks this first — Packing (nothing to bag),
+  Lost Fish (never owed, never "the rest of the order"), the Clean
+  Room's Real sales (counted with the credits) and Today (nothing to
+  ship). Pure: unlike the two above it answers the same while the
+  section is switched off, because the orders it wrote stay. The two
+  functions above hand the line out as kind `discount` with a positive
+  `amount` — also for a hand-made invoice with an "Adjustment x1" line.
+
+A function that exists is not a section that is switched on: the plugin
+loads every section's file. Ask `Invoices::is_on()` before saying "the
+Invoices section is there" (the Clean Room's Stats and Lost Fish do).
+`Invoices::use_doubles( $store, $shop )` answers the contract functions
+from a test's twins.
 
 Actions:
 
@@ -224,7 +245,11 @@ node includes/sections/invoices/tests/invoices-admin.test.js
 `lines` (amounts and sums), `grammar` (the description as the theme
 reads it), `format`, `rules`, `store`, `settings`, `publish`,
 `edit-trash`, `trash-off`, `precheck`, `sync`, `search`, `tanks`,
-`contracts`, `admin`, `visibility` — 1,063 checks — and
+`contracts`, `admin`, `visibility` — 1,063 checks —, `consumers` (the
+seam: the real readers of the Clean Room's Stats, Lost Fish, Packing and
+Today, loaded together, against the real `fishotel_invoices_for_order()`
+and an invoice with an Adjustment — itemised and kept as one line,
+section off and on; 31 checks) and
 `invoices-admin.test.js` — 114 checks: the picker's sums against the same
 `tests/fixtures/invoice-maths.json` the server test reads. The real
 `Shop` class runs on in-memory WooCommerce stubs (`wc-stubs.php`); the

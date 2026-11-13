@@ -475,12 +475,19 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 		/**
 		 * The per-product facts (see fishotel_cleanroom_product_facts()):
 		 * null when the product has no open stay here — the theme then falls
-		 * back to the product's own meta, exactly as when nobody answers.
+		 * back to the product's own meta, exactly as when nobody answers —
+		 * and null while the section is switched off.
 		 *
 		 * @param int $product_id Product ID.
 		 * @return array{live_total: int, ready_total: int, in_qt: array[], cleared: array[], next: array|null}|null
 		 */
 		public static function product_facts( $product_id ) {
+			if ( ! self::$booted ) {
+				// Switched off: nothing is answered and nothing is loaded — the other sections tell "the Clean
+				// Room is on" by its classes being there, so loading them here would have the Invoices picker,
+				// Lost Fish, Requests and Packing read a room that is switched off.
+				return null;
+			}
 			try {
 				self::load();
 				$store = new Store();
@@ -530,10 +537,12 @@ namespace {
 		 * stays in quarantine (with their day numbers), the cleared stays and
 		 * the next one that can ship. The theme's fish page will read this.
 		 *
-		 * This function exists ONLY while the Misc plugin is active and the
-		 * Clean Room section is enabled, so guard it with function_exists(),
-		 * or read apply_filters( 'fishotel_product_qt_facts', null, $id ),
-		 * which is always safe and simply stays null when nobody answers.
+		 * This function exists only while the Misc plugin is active, so
+		 * guard it with function_exists(), or read
+		 * apply_filters( 'fishotel_product_qt_facts', null, $id ), which is
+		 * always safe and simply stays null when nobody answers. While the
+		 * Clean Room section is switched off it answers null and runs no
+		 * query (the plugin loads every section's file, switched on or not).
 		 *
 		 * A stay may or may not be linked to a product; a product with no
 		 * open stay here gets NULL (the theme falls back to the product's own

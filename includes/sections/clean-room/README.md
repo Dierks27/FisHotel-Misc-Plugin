@@ -667,7 +667,11 @@ phone (*Today* on the tank picker).
   into ("40 mg/gal = 8.2 g for 205 gal"); a medication with a rate on
   the Dose sheet gets that suggestion, worded as one ("suggested 5.1 g
   for 205 gal"); never a number the step and the sheet do not already
-  give — and the step's note.
+  give — and the step's note. The amount and its unit come from the one
+  function the Dose sheet's own sum runs through (`Dose::step_dose()`:
+  `step_rate()` + `plan()`), so the line and the sheet cannot differ: a
+  rate in any unit the sheet reads ("1 ml per 10 gal"), milligrams below
+  a tenth of a gram ("80 mg").
 - **At the top**: how many things are left ("8 things left to do of
   11"), "All done" when it is, and the copper flags, worded as the tank
   screen flags them: a last reading below the floor ("Building 500 · Cu
@@ -1230,7 +1234,8 @@ shown apart ("Refunded without naming a line") and is in no row.
 1. its product (every variation included) is a species row's linked
    product;
 2. it is an invoice fish line the Invoices section knows
-   (`fishotel_invoices_for_order()`, when that section is active) and
+   (`fishotel_invoices_for_order()`, while that section is switched on —
+   the function itself is always declared, so the section is asked) and
    that line names a species or a linked product;
 3. an **exact lower-cased name**: the species name, the title of a
    species' linked product, or a learned alias — for a shop product no
@@ -1245,8 +1250,11 @@ up to what was paid for it, to the cent; otherwise it stays whole.
 **Everything else is "not matched"** and listed with its units and its
 money, by kind — shop products without a species, invoice names that are
 no species, invoices kept as one line (with why), lines without a
-product, credits inside such invoices — each kind saying what would get
-it matched. Matched + not matched is always every paid line of the year
+product, credits inside such invoices and an invoice's "Adjustment" (the
+line that brings it up to a stated price reaches an order as a fish
+line; it is told by the Invoices section's
+`fishotel_invoices_is_adjustment()` and counted with the credits, never
+as a fish sold) — each kind saying what would get it matched. Matched + not matched is always every paid line of the year
 (*How it adds up* shows the sum and would say so if it ever were not);
 nothing is guessed. Which fish a sale is gets decided on every view from
 the species list as it is then, so linking a species to its product (or
@@ -1302,23 +1310,27 @@ rewrites order lines without any status change.
 **For the Invoices section (and anyone else).** Before
 `fishotel_invoices_for_order( $order_id )` is called, the filter
 `fishotel_cleanroom_sales_invoice_lines` is asked (`null`, the
-WooCommerce order id); whoever answers hands over the lines of the
-invoices that order paid, in any of these shapes — a list of invoices
-each with `lines` (or `items`), one such invoice, or a plain list of
-lines; arrays, objects or a JSON string (`Stats_Sales::invoice_parts()`
-reads them):
+WooCommerce order id); whoever answers hands over the invoices that
+order paid in **exactly the shape `fishotel_invoices_for_order()`
+answers** — nothing else is read, nothing is guessed
+(`Stats_Sales::invoice_parts()`): a list of invoices, each an array with
+`product_id` (the invoice product) and `lines`, each line an array with
 
 ```
-name | species | title   the fish as written on the invoice (matched to the order line by its exact name)
-kind | type              fish · credit (also discount, fee, adjustment) · note — without one, a negative
-                         amount or a name starting "Credit" is a credit, the rest fish
-qty | quantity           units (fish lines)
-price | unit_price       PER FISH
-total | line_total       the line's money (qty × price without one)
+kind                     fish · credit · discount · note
+name                     the name it goes by (matched to the order line by its exact name)
+qty                      units (a fish line)
+unit_price               PER FISH; null when none was typed (the fish then has no total)
+amount                   what the line adds to its invoice, signed: negative for a credit and a
+                         "Discount", positive for an "Adjustment" up to a stated price
 species_id               the species-list row the fish is — what makes the match exact
 product_id, variation_id the shop product, when the line was picked from one
-invoice_product_id       the invoice product the line belongs to (else the invoice's product_id)
 ```
+
+The "Includes" snapshot the theme keeps beside an invoice kept as one
+line (`_fh_invoice_lines`: `name`, `qty`, `price` per fish, `kind` fish /
+credit / note, `product_id`) has its own reader,
+`Stats_Sales::snapshot_parts()`.
 
 A species id that is not in the list is not believed (the line falls
 back to its exact name); an exception over there never breaks the tab.

@@ -383,6 +383,7 @@ $GLOBALS['wpdb'] = new class() {
 };
 check( 'the section has not booted in this run', false === Clean_Room::is_booted() );
 check( 'switched off: null from the function and from the callback — and no query at all', null === fishotel_cleanroom_todo() && null === Clean_Room::todo_summary() && null === Clean_Room::filter_todo( null ) && 0 === $GLOBALS['wpdb']->queries );
+check( 'switched off, the product facts are nobody\'s business either: null from fishotel_cleanroom_product_facts(), no query', null === fishotel_cleanroom_product_facts( 501 ) && null === Clean_Room::product_facts( 501 ) && 0 === $GLOBALS['wpdb']->queries );
 $flag = new ReflectionProperty( Clean_Room::class, 'booted' );
 $flag->setAccessible( true );
 $flag->setValue( null, true );

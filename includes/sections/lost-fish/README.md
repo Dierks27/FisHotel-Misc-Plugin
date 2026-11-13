@@ -501,9 +501,10 @@ fishotel_lostfish_cases_for_order( $order_id )
 | | |
 | --- | --- |
 | `fishotel_cleanroom_event_recorded` | `( $stay_id, $event_id, $event, $state )` — fired by the Clean Room's `Store::record_event()`; the one line this section added outside its folder |
-| `fishotel_invoices_for_order( $order_id )` | the invoices of an order, each with `id`, `product_id` (the invoice's product) and `lines` |
+| `fishotel_invoices_for_order( $order_id )` | the invoices of an order, each with `id`, `product_id` (the invoice's product) and `lines`. The function exists whenever the plugin is active; "the Invoices section is there" is `Invoices::is_on()` (`Orders::invoices_available()`) |
+| `fishotel_invoices_is_adjustment( $name )` | an invoice's "Adjustment" travels as a fish line of the order (and as a fish row of a kept invoice's snapshot): it is money — never a line of the order here, so never owed, never lost, never "the rest of the order" (`Orders::is_adjustment()`) |
 | `fishotel_invoices_lines_for_product( $invoice_product_id )` | the lines of one invoice product — asked for an invoice of the order the first function did not answer for. Per line: `id`, `invoice_id`, `kind` (only `fish` counts), `name`, `qty`, `unit_price`, `product_id`, `variation_id`, `stay_id`, `size_slug` |
-| `fishotel_requests_create( $args )` | `source` = `lost_fish`, `owed` = true, `user_id`, `name`, `email`, `fish`, `product_id`, `size_slug`, `size_label`, `qty`, `order_id`, `note` (+ `order_item_id`, `lost_fish_case`). An id (or a row / object with one, or true) means created; a `WP_Error`, false or an exception means not. A size it refuses is tried once more without the size |
+| `fishotel_requests_create( $args )` | `source` = `lost_fish`, `owed` = true, `user_id`, `name`, `email`, `fish`, `product_id`, `size_slug`, `size_label`, `qty`, `order_id`, `note` (+ `order_item_id`, `lost_fish_case`). An id (or a row / object with one, or true) means created; a `WP_Error`, false or an exception means not. A size it refuses is tried once more without the size. The function exists whenever the plugin is active and answers a `WP_Error` while Requests is switched off, so "Add to Requests" and the screen's list ask the section itself (`Cases::requests_available()`); switched off, the case shows the reminder to note it |
 | `fishotel_log` | `( $level, 'lost-fish', $message, $context )` |
 | `fishotel_get_effective_delivery_date()`, `FST_Shipment::get_by_order()`, `FisHotel_Ship_Day::ship_date_for()`, `FisHotel_Batch_Manager` | read only |
 
