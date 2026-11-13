@@ -116,7 +116,7 @@ class Alarm {
 
 	/**
 	 * Register the hooks (boot(), every request while Health is on). The
-	 * failure hooks only schedule.
+	 * failure hooks only schedule; the 5-minute event is armed at `init`.
 	 */
 	public static function init() {
 		add_filter( 'cron_schedules', array( self::class, 'add_schedule' ) );
@@ -126,6 +126,17 @@ class Alarm {
 		add_action( 'woocommerce_checkout_order_exception', array( self::class, 'soon' ), 10, 0 );
 		add_action( 'woocommerce_shutdown_error', array( self::class, 'soon' ), 10, 0 );
 
+		// At `init`, not here: scheduling reads the cron schedules, where WooCommerce
+		// translates its own names — and loading translations this early (sections
+		// boot at plugins_loaded) logs a notice.
+		add_action( 'init', array( self::class, 'arm' ), 10, 0 );
+	}
+
+	/**
+	 * Arm the 5-minute look, or drop it when the alarm is switched off in
+	 * Settings (hooked to `init` by init()).
+	 */
+	public static function arm() {
 		try {
 			if ( Settings::get()['checkout_alarm'] ) {
 				self::ensure_scheduled();

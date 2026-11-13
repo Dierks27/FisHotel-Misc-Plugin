@@ -384,11 +384,26 @@ fh_reset_actions();
 $GLOBALS['fh_cron']    = array();
 $GLOBALS['fh_filters'] = array();
 Alarm::init();
+check( 'at boot (plugins_loaded) nothing is scheduled yet: scheduling reads WooCommerce\'s translated schedule names, too early before init', array() === $GLOBALS['fh_cron'] && in_array( array( array( Alarm::class, 'arm' ), 0 ), $GLOBALS['fh_actions']['init'] ?? array(), true ) );
+do_action( 'init' );
 check( 'its own 5-minute event is armed', 1 === count( array_filter( $GLOBALS['fh_cron'], static function ( $e ) { return Alarm::HOOK === $e[1] && Alarm::SCHEDULE === $e[2]; } ) ) );
 check( '… on a 5-minute schedule it adds', 300 === apply_filters( 'cron_schedules', array() )[ Alarm::SCHEDULE ]['interval'] );
 check( 'it looks on WooCommerce\'s real hooks: an order marked Failed, a checkout that throws, a fatal at shutdown', isset( $GLOBALS['fh_actions']['woocommerce_order_status_failed'], $GLOBALS['fh_actions']['woocommerce_checkout_order_exception'], $GLOBALS['fh_actions']['woocommerce_shutdown_error'] ) );
+fh_reset_actions();
 Alarm::init();
+do_action( 'init' );
 check( 'a second request does not arm it twice', 1 === count( array_filter( $GLOBALS['fh_cron'], static function ( $e ) { return Alarm::HOOK === $e[1]; } ) ) );
+
+fh_reset_actions();
+$fh_cron_before = $GLOBALS['fh_cron'];
+\FisHotel\Misc\Sections\Health\Cron::clear();
+\FisHotel\Misc\Sections\Health\Cron::init();
+check( 'the daily prune, too: nothing scheduled at boot', ! wp_next_scheduled( \FisHotel\Misc\Sections\Health\Cron::HOOK ) );
+do_action( 'init' );
+check( '… armed at init, daily', 1 === count( array_filter( $GLOBALS['fh_cron'], static function ( $e ) { return \FisHotel\Misc\Sections\Health\Cron::HOOK === $e[1] && 'daily' === $e[2]; } ) ) );
+$GLOBALS['fh_cron'] = $fh_cron_before;
+fh_reset_actions();
+Alarm::init();
 
 $GLOBALS['fh_mails']  = array();
 $fh_opts_before       = $GLOBALS['fh_options'];
@@ -401,11 +416,12 @@ $fh_src = (string) file_get_contents( FISHOTEL_MISC_PATH . 'includes/sections/he
 check( 'soon() is wrapped in try / catch', 1 === preg_match( '/public static function soon\(\) \{\s*try \{.*?\} catch \( \\\\Throwable \$e \)/s', $fh_src ) );
 
 $GLOBALS['fh_options'][ Health::OPTION_KEY ] = array( 'checkout_alarm' => false );
-Alarm::init();
+check( '(still armed before that request)', false !== wp_next_scheduled( Alarm::HOOK ) );
+Alarm::arm();
 check( 'switched off in Settings: the next request drops its events', ! wp_next_scheduled( Alarm::HOOK ) );
 $GLOBALS['fh_options'][ Health::OPTION_KEY ] = array();
 
-Alarm::init();
+Alarm::arm();
 $GLOBALS['fh_options'][ Alarm::STATE_OPTION ] = array( 'marks' => array( 'since' => 1 ) );
 Health::boot_disabled();
 check( 'the Health section switched off: the event and the marks go', ! wp_next_scheduled( Alarm::HOOK ) && ! isset( $GLOBALS['fh_options'][ Alarm::STATE_OPTION ] ) );

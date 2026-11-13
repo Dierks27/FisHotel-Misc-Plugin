@@ -196,7 +196,10 @@ namespace FisHotel\Misc\Sections\Lost_Fish {
 				// Its line on the Today page: "Lost fish: 2 cases need you".
 				Today_Line::register();
 
-				self::ensure_tick();
+				// At `init`, not here: scheduling reads the cron schedules, where WooCommerce
+				// translates its own names — and loading translations this early (sections
+				// boot at plugins_loaded) logs a notice.
+				add_action( 'init', array( self::class, 'ensure_tick' ), 10, 0 );
 			}
 		}
 

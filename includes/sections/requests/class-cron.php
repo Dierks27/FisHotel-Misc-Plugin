@@ -55,7 +55,10 @@ class Cron {
 	 */
 	public static function init() {
 		add_action( self::HOOK, array( self::class, 'run' ) );
-		self::ensure_scheduled();
+		// At `init`, not here: scheduling reads the cron schedules, where WooCommerce
+		// translates its own names — and loading translations this early (sections
+		// boot at plugins_loaded) logs a notice.
+		add_action( 'init', array( self::class, 'ensure_scheduled' ), 10, 0 );
 	}
 
 	/**

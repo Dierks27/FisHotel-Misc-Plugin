@@ -172,8 +172,12 @@ $GLOBALS['fh_is_admin'] = true;
 $GLOBALS['fh_actions']  = array();
 Lost_Fish::boot();
 check_same( 'still no query', 0, $GLOBALS['wpdb']->queries );
-check( 'the hourly tick is scheduled', array( 'hourly', Lost_Fish::TICK_HOOK ) === array( $GLOBALS['fh_cron'][0][0], $GLOBALS['fh_cron'][0][2] ) );
+check_same( 'at boot (plugins_loaded) nothing is scheduled yet: scheduling reads WooCommerce\'s translated schedule names, too early before init', array(), $GLOBALS['fh_cron'] );
+do_action( 'init' );
+check( 'at init the hourly tick is scheduled', isset( $GLOBALS['fh_cron'][0] ) && array( 'hourly', Lost_Fish::TICK_HOOK ) === array( $GLOBALS['fh_cron'][0][0], $GLOBALS['fh_cron'][0][2] ) );
+$GLOBALS['fh_actions'] = array();
 Lost_Fish::boot();
+do_action( 'init' );
 check_same( '… once', 1, count( $GLOBALS['fh_cron'] ) );
 foreach ( array( 'admin_post_fishotel_lostfish_case', 'admin_post_fishotel_lostfish_open', 'admin_post_fishotel_lostfish_settings', 'woocommerce_after_order_itemmeta', 'admin_enqueue_scripts' ) as $hook ) {
 	check( 'hooked: ' . $hook, isset( $GLOBALS['fh_actions'][ $hook ] ) );
