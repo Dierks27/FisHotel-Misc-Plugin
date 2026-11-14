@@ -10,7 +10,7 @@
  *
  * @var array  $config   The script's config (mode, urls, header, labelVar, i18n) — nothing personal.
  * @var string $css      css/app.css.
- * @var string $js       js/app.js.
+ * @var string $js       js/scanner.js then js/app.js (App::script()).
  * @var string $manifest The manifest's address.
  * @var string $icon     The 192 px icon's address.
  */

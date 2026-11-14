@@ -15,7 +15,9 @@ php includes/sections/shop-app/tests/saves-test.php
 php includes/sections/shop-app/tests/store-test.php
 php includes/sections/shop-app/tests/app-test.php
 php includes/sections/shop-app/tests/admin-test.php
+php includes/sections/shop-app/tests/scan-codes-test.php
 node includes/sections/shop-app/tests/app.test.js
+node includes/sections/shop-app/tests/scanner.test.js
 node includes/sections/shop-app/tests/sw.test.js
 ```
 
@@ -114,7 +116,10 @@ Each helper exits 0 when CI runs it directly.
   tank; expiry, Lock, revoke, an address with something added; a tank
   screen in the app is told to show what its water needs today with the
   full list's address (the picker, the list and the calculator are not),
-  and with the Shop App off nothing of it is on the page.
+  and with the Shop App off nothing of it is on the page; the scanner is
+  on every screen inside the app (the QR reader only by its address) and
+  on none outside it — Shop App off, a WordPress login, a device that is
+  not enrolled.
 - **front-desk-seam-test.php** — the seam with the Clean Room, both
   sections real: the AJAX actions and the acts are read from the Clean
   Room's source, and every action is either one the phone page posts (on
@@ -161,8 +166,7 @@ Each helper exits 0 when CI runs it directly.
   what the page says without HTTPS, without the Clean Room, without its
   tables; a new PIN, another account or switching off ending that
   person's session on every device at once (and nobody else's).
-- **app.test.js** — the label reader (and what is not a label), the
-  countdown, the save id and when it is used again, finding a building in
+- **app.test.js** — the countdown, the save id and when it is used again, finding a building in
   a fresh picker, what an answer means, one keypad press; then the script
   in a stand-in page: inside a tank screen (the bar, what it leaves alone,
   MAY NOT BE SAVED and Retry with the same save id, Back to the entry and
@@ -177,7 +181,31 @@ Each helper exits 0 when CI runs it directly.
   (`waterToday()`: a building's block, a temporary tank's own, nothing
   due, no tank) and the panel under the bar — its lines, done ones struck,
   the count, the full-list button, following a tick in the page's answer,
-  gone on the picker, absent on the list and the calculator.
+  gone on the picker, absent on the list and the calculator. Scan a tank:
+  on the home screen and a building's tanks (without a camera the number
+  pad opens the tank typed), in the bar of a tank screen (another site's
+  code not opened, a label opening that tank at this site's label address,
+  the camera stopped), the scanner closed when the session runs out under
+  it; app.js itself never reads a code and never loads jsQR.
+- **scanner.test.js** — Scan a tank (`js/scanner.js`): what a tank label
+  is — this site's origin and home address, `fh_front_desk=1`, a tank
+  number the numbering rule allows (every tank the layout gives a label) —
+  and some fifty things that are not (other sites, look-alike hosts, http
+  for https, another port, other paths, `javascript:` and `data:`,
+  anything added, broken numbers); every step of the scanner (open,
+  ready, a code, a label, Cancel, hidden and back, left, refused or no
+  camera → the pad, a typed number, a second code in the same moment);
+  which reader (the browser's own, else jsQR — loaded once, only when
+  needed, tried again after a failed load); then on a stand-in page with a
+  stand-in camera the whole thing, with the browser's reader and with the
+  real jsQR reading QR codes made by the Clean Room's own label encoder —
+  the camera stopped on Cancel, Escape, a label, *Type the tank number*,
+  a hidden or left page, and a camera that answers after Cancel stopped at
+  once.
+- **scan-codes-test.php** — `scan-codes.json`, the codes scanner.test.js
+  reads, is what the Clean Room's label encoder (`Qr::encode()`) and
+  layout make now (`--write` makes it again); the vendored jsQR is 1.4.0
+  as published, its licence is beside it, and only the Shop App names it.
 - **sw.test.js** — the service worker in a stand-in worker: what it looks
   at and what it leaves alone; its own cookie-less request for the shell;
   network first; an answer that may not be kept (no-store, private, varies

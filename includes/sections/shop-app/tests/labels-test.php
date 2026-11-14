@@ -127,6 +127,18 @@ check( 'the dose calculator: no panel', 200 === $calc['result']['status'] && fal
 $off = fh_page( array( 'shop_app' => false, 'native' => 'manager', 'uri' => $label ) );
 check( 'with the Shop App off the label is the Front Desk\'s own page, nothing of the panel in it', false === strpos( $off['page'], 'fh-sa-water' ) && false === strpos( $off['page'], 'waterTitle' ) && false === strpos( $off['page'], 'fhShopApp' ) );
 
+echo "\n3c. Scan a tank — inside the app only\n";
+check( 'the tank screen in the app carries the scanner once (Scan a tank in the bar), with the strings it says', 1 === substr_count( $open['page'], 'root.fhShopScanner = api' ) && 1 === substr_count( $open['page'], 'function readTankCode(' ) && 'Scan a tank' === $app['i18n']['scan'] && 'Type the tank number' === $app['i18n']['typeTitle'] && 'That code is for another website. It was not opened.' === $app['i18n']['scanOtherSite'] );
+check( '… and the address of the QR reader for browsers without one — not the reader itself: it is loaded only when the scanner opens on such a browser', 1 === preg_match( '#^https://shop\.example\.test/wp-content/plugins/fishotel-misc-plugin/includes/sections/shop-app/js/vendor/jsQR\.js\?ver=[^&]+$#', $app['urls']['qrLib'] ) && false === strpos( $open['page'], 'webpackUniversalModuleDefinition' ) && false === strpos( $open['page'], 'jsQR.js"' ) );
+check( '… on the picker, the day\'s list and the calculator too (every screen inside the app)', false !== strpos( $picker['page'], 'root.fhShopScanner = api' ) && false !== strpos( $list['page'], 'root.fhShopScanner = api' ) && false !== strpos( $calc['page'], 'root.fhShopScanner = api' ) );
+foreach ( array(
+	'with the Shop App off (a WordPress login)' => $off,
+	'with the Shop App on, opened with a WordPress login' => $as_manager,
+	'with the Shop App on, a device that is not enrolled' => fh_page( array( 'shop_app' => true, 'native' => 'manager', 'uri' => $label ) ),
+) as $fh_what => $fh_seen ) {
+	check( 'no scanner ' . $fh_what . ': nothing of it on the Front Desk page', false === strpos( $fh_seen['page'], 'fhShopScanner' ) && false === strpos( $fh_seen['page'], 'jsQR' ) && false === strpos( $fh_seen['page'], 'fh-sa-scan' ) && false === strpos( $fh_seen['page'], 'Scan a tank' ) && false === strpos( $fh_seen['page'], 'getUserMedia' ) );
+}
+
 $robin = fh_page( array( 'shop_app' => true, 'enrol' => true, 'unlock' => '1379', 'uri' => $label ) );
 check( 'Robin, who has an account of their own: rendered as that account', $robin['result']['user'] === $robin['result']['users']['manager'] && 'Robin' === fh_page_config( $robin['page'], 'fhShopApp' )['session']['person'] );
 
