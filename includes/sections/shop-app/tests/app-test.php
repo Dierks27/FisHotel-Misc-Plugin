@@ -110,6 +110,7 @@ preg_match( '/window\.fhShopApp = (\{.*?\});<\/script>/s', $anonymous['body'], $
 $config = json_decode( $m[1], true );
 check( 'the script is told where to ask — and nothing about who', 'app' === $config['mode'] && array( 'mode', 'urls', 'header', 'labelVar', 'i18n' ) === array_keys( $config ) && 'https://shop.example.test/?fh_shop_app=state' === $config['urls']['state'] && 'https://shop.example.test/?fh_front_desk=1' === $config['urls']['label'] && 'X-FH-Shop-App' === $config['header'] && 'fh_front_desk' === $config['labelVar'] );
 check( 'the service worker is registered for the app\'s own address only', 'https://shop.example.test/?fh_shop_app=sw' === $config['urls']['sw'] && 'https://shop.example.test/?fh_shop_app=' === $config['urls']['swScope'] && 0 !== strpos( Shop_App::label_url( 5 ), $config['urls']['swScope'] ) && 0 !== strpos( 'https://shop.example.test/', $config['urls']['swScope'] ) && 0 === strpos( Shop_App::app_url( 5 ), $config['urls']['swScope'] ) );
+check( 'the scanner is inlined in front of the app script (it is what Scan a tank opens); the QR reader for browsers without one is NOT in the page — only its address, under this section', 1 === substr_count( $anonymous['body'], 'root.fhShopScanner = api' ) && strpos( $anonymous['body'], 'function readTankCode(' ) < strpos( $anonymous['body'], 'function keypad(' ) && false === strpos( $anonymous['body'], 'webpackUniversalModuleDefinition' ) && FISHOTEL_MISC_URL . 'includes/sections/shop-app/js/vendor/jsQR.js?ver=' . rawurlencode( FISHOTEL_MISC_VERSION ) === $config['urls']['qrLib'] && is_readable( $dir . 'js/vendor/jsQR.js' ) && is_readable( $dir . 'js/vendor/jsQR-LICENSE.txt' ) );
 check( 'an address that is not one of the app\'s routes is the shell too', $anonymous['body'] === App::respond( 'anything', 'GET' )['body'] );
 
 echo "\n3. The service worker's script\n";
@@ -266,12 +267,12 @@ fh_request( array( 'uri' => '/?fh_shop_app=state', 'cookies' => $jar ) );
 check( '… and it is only ever sent to an unlocked device', ! isset( json_decode( App::respond( 'state', 'GET' )['body'], true )['links'] ) );
 
 echo "\n9. Every string the script asks for exists\n";
-$script = (string) file_get_contents( $dir . 'js/app.js' );
+$script = (string) file_get_contents( $dir . 'js/app.js' ) . (string) file_get_contents( $dir . 'js/scanner.js' );
 preg_match_all( "/\\bt\\('([A-Za-z]+)'/", $script, $m );
 $asked   = array_values( array_unique( $m[1] ) );
 $strings = App::i18n();
 $missing = array_values( array_diff( $asked, array_keys( $strings ) ) );
-check( 'app.js asks for ' . count( $asked ) . ' strings and the server has each of them', count( $asked ) > 30 && array() === $missing, implode( ', ', $missing ) );
+check( 'app.js and scanner.js ask for ' . count( $asked ) . ' strings and the server has each of them', count( $asked ) > 30 && array() === $missing, implode( ', ', $missing ) );
 $unused = array_values( array_diff( array_keys( $strings ), $asked ) );
 check( '… and sends none the script never uses', array() === $unused, implode( ', ', $unused ) );
 check( 'none of them is empty', array() === array_filter( $strings, static function ( $s ) { return '' === trim( (string) $s ); } ) );

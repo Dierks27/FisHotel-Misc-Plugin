@@ -483,7 +483,8 @@ body.fh-sa *,
 }
 
 /* ------------------------------------------------------------------ */
-/*  The camera                                                         */
+/*  The scanner: the camera full screen, a square, Cancel; the number  */
+/*  pad when there is no camera                                        */
 /* ------------------------------------------------------------------ */
 .fh-sa-scan {
 	position: fixed;
@@ -493,8 +494,12 @@ body.fh-sa *,
 	flex-direction: column;
 	align-items: center;
 	justify-content: flex-end;
-	padding: 16px 16px calc(20px + env(safe-area-inset-bottom, 0px));
+	overflow: auto;
+	padding: calc(16px + env(safe-area-inset-top, 0px)) 16px calc(20px + env(safe-area-inset-bottom, 0px));
 	background: #000;
+	font-size: 18px;
+	line-height: 1.35;
+	overscroll-behavior: contain;
 }
 
 .fh-sa-scan__video {
@@ -515,10 +520,20 @@ body.fh-sa *,
 	border-radius: 24px;
 	box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.45);
 	transform: translate(-50%, -58%);
+	pointer-events: none;
+}
+
+.fh-sa-scan.is-live .fh-sa-scan__frame {
+	border-color: var(--sa-accent);
+}
+
+.fh-sa-scan__foot {
+	position: relative;
+	width: 100%;
+	max-width: 420px;
 }
 
 .fh-sa-scan__hint {
-	position: relative;
 	margin: 0 0 14px;
 	padding: 10px 14px;
 	border-radius: 12px;
@@ -528,13 +543,68 @@ body.fh-sa *,
 	text-align: center;
 }
 
+.fh-sa-scan__hint.is-bad {
+	background: #4a1515;
+	border: 1px solid rgba(255, 92, 92, 0.6);
+}
+
+.fh-sa-scan__type,
 .fh-sa-scan__cancel {
-	position: relative;
-	max-width: 420px;
-	margin: 0;
+	margin: 0 0 12px;
 	border-color: rgba(255, 255, 255, 0.5);
 	background: rgba(0, 0, 0, 0.7);
 	color: #fff;
+}
+
+.fh-sa-scan__cancel {
+	min-height: 72px;
+	margin: 0;
+}
+
+/* No camera, or the number typed: the pad instead of the picture. */
+.fh-sa-scan.is-typing {
+	justify-content: flex-start;
+	background: var(--sa-bg);
+}
+
+.fh-sa-scan.is-typing .fh-sa-scan__video,
+.fh-sa-scan.is-typing .fh-sa-scan__frame,
+.fh-sa-scan.is-typing .fh-sa-scan__type {
+	display: none;
+}
+
+.fh-sa-scan__pad {
+	position: relative;
+	width: 100%;
+	max-width: 420px;
+	margin: 0 0 14px;
+}
+
+.fh-sa-scan__pad[hidden] {
+	display: none;
+}
+
+.fh-sa-scan__title {
+	margin: 4px 0 8px;
+	font-size: 22px;
+	text-align: center;
+}
+
+.fh-sa-scan__typed {
+	margin: 0 0 12px;
+	font-size: 48px;
+	font-weight: 800;
+	letter-spacing: 0.12em;
+	text-align: center;
+	font-variant-numeric: tabular-nums;
+}
+
+.fh-sa-scan__pad .fh-sa-keys {
+	gap: 10px;
+}
+
+.fh-sa-scan__pad .fh-sa-key {
+	height: clamp(64px, 10.5vh, 104px);
 }
 
 /* ------------------------------------------------------------------ */
@@ -590,6 +660,46 @@ body.fh-sa *,
 .fh-sa-bar__lock:active {
 	background: var(--sa-danger);
 	color: #1a0505;
+}
+
+/* Scan a tank, on every screen inside the app: big enough for a wet thumb. */
+.fh-sa-bar__scan {
+	min-width: 132px;
+	min-height: 56px;
+	padding: 0 16px;
+	border: 0;
+	border-radius: 14px;
+	background: var(--sa-accent);
+	color: #04121c;
+	font: inherit;
+	font-size: 18px;
+	font-weight: 800;
+	cursor: pointer;
+	touch-action: manipulation;
+}
+
+.fh-sa-bar__scan:active {
+	background: #7fd2ff;
+	transform: scale(0.97);
+}
+
+@media (max-width: 400px) {
+	.fh-sa-bar {
+		gap: 6px;
+		padding-left: 8px;
+		padding-right: 8px;
+	}
+
+	.fh-sa-bar__scan {
+		min-width: 104px;
+		padding: 0 10px;
+		font-size: 16px;
+	}
+
+	.fh-sa-bar__lock {
+		min-width: 64px;
+		padding: 0 8px;
+	}
 }
 
 .fh-sa-layer {

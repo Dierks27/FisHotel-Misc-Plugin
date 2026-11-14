@@ -5,27 +5,32 @@
  *                     asks /?fh_shop_app=state what this device is and
  *                     draws: "needs HTTPS", "not set up", the keypad, or —
  *                     with a live shop session — the home screen (who is
- *                     unlocked + Lock, Scan a tank label, buildings then
+ *                     unlocked + Lock, Scan a tank, buildings then
  *                     tanks). Opening a tank goes to the tank's label
  *                     address, which is the Clean Room's own Front Desk.
  *
  *   mode "frontdesk"  pasted into a Front Desk page that was opened with a
- *                     shop session. It adds a bar (back to the tanks, who
- *                     is unlocked, Lock), shows the keypad again when the
- *                     session ran out, and stands between the page and the
- *                     network: a save that gets no answer opens a sheet —
- *                     MAY NOT BE SAVED, what was entered is still there,
- *                     Retry — instead of vanishing. Every save carries a
- *                     save id, the same on every retry AND when the same
- *                     entry is saved again after "Back to the entry", so
- *                     the server writes it once however often it is sent.
- *                     An entry that can no longer be saved (somebody with
- *                     another account unlocked) is said to be lost before
- *                     the tank is loaded afresh. On a tank screen it also
- *                     shows, under the bar, what that tank's water needs
- *                     today (the day's list cut to its building, or to
- *                     the tank for a temporary tank) and a button to the
- *                     full list; it follows every answer the page gets.
+ *                     shop session. It adds a bar (back to the tanks, who is
+ *                     unlocked, Scan a tank, Lock), shows the keypad again
+ *                     when the session ran out, and stands between the page
+ *                     and the network: a save that gets no answer opens a
+ *                     sheet — MAY NOT BE SAVED, what was entered is still
+ *                     there, Retry — instead of vanishing. Every save
+ *                     carries a save id, the same on every retry AND when
+ *                     the same entry is saved again after "Back to the
+ *                     entry", so the server writes it once however often it
+ *                     is sent. An entry that can no longer be saved
+ *                     (somebody with another account unlocked) is said to be
+ *                     lost before the tank is loaded afresh. On a tank
+ *                     screen it also shows, under the bar, what that tank's
+ *                     water needs today (the day's list cut to its building,
+ *                     or to the tank for a temporary tank) and a button to
+ *                     the full list; it follows every answer the page gets.
+ *
+ * "Scan a tank" (on the home screen, a building's tanks and in the bar of
+ * every screen inside the app) opens js/scanner.js — inlined in front of
+ * this file — which reads a tank label with the camera and opens that
+ * tank here, at the address built from this site's own label address.
  *
  * The keypad is made for wet fingers: twelve very large buttons, no
  * on-screen keyboard, every press lights the key, the PIN is sent the
@@ -43,7 +48,7 @@
  * The server half is already there — a repeated save id is answered, not
  * written again.
  *
- * The pure helpers (clock, fmt, tankFromLabel, newSaveId, withSaveId,
+ * The pure helpers (clock, fmt, newSaveId, withSaveId,
  * reuseSaveId, bodyAction, classifyReply, padPress, deadlineFrom,
  * findBuilding, waterToday) are exported for
  * tests/app.test.js and the file skips the DOM wiring when there is no
@@ -84,54 +89,6 @@
 		var r = s % 60;
 		var two = function (n) { return (n < 10 ? '0' : '') + n; };
 		return h > 0 ? h + ':' + two(m) + ':' + two(r) : m + ':' + two(r);
-	}
-
-	function hostKey(host) {
-		return String(host || '').toLowerCase().replace(/:\d+$/, '').replace(/^www\./, '');
-	}
-
-	/**
-	 * The tank number a scanned label names, or 0 when the text is not a
-	 * tank label of this site. Only the number is ever taken from a scan —
-	 * the address itself is never opened.
-	 *
-	 * @param {string} text     What the camera read.
-	 * @param {string} siteHost This site's host.
-	 * @param {string} labelVar The Front Desk's query parameter.
-	 * @return {number}
-	 */
-	function tankFromLabel(text, siteHost, labelVar) {
-		var match = /^https?:\/\/([^\/?#]+)(?:\/[^?#]*)?\?([^#]*)/i.exec(String(text || '').trim());
-		if (!match) {
-			return 0;
-		}
-		var want = hostKey(siteHost);
-		if (!want || hostKey(match[1]) !== want) {
-			return 0;
-		}
-		var params = {};
-		match[2].split('&').forEach(function (pair) {
-			var cut = pair.indexOf('=');
-			var key = cut < 0 ? pair : pair.slice(0, cut);
-			var value = cut < 0 ? '' : pair.slice(cut + 1);
-			try {
-				key = decodeURIComponent(key);
-				value = decodeURIComponent(value);
-			} catch (e) {
-				return;
-			}
-			if (!Object.prototype.hasOwnProperty.call(params, key)) {
-				params[key] = value;
-			}
-		});
-		var flag = params[String(labelVar || 'fh_front_desk')];
-		if (!flag || flag === '0') {
-			return 0;
-		}
-		if (!/^\d{1,9}$/.test(params.tank || '')) {
-			return 0;
-		}
-		return parseInt(params.tank, 10);
 	}
 
 	/**
@@ -372,7 +329,6 @@
 	var api = {
 		fmt: fmt,
 		clock: clock,
-		tankFromLabel: tankFromLabel,
 		newSaveId: newSaveId,
 		withSaveId: withSaveId,
 		reuseSaveId: reuseSaveId,
@@ -476,6 +432,43 @@
 	function tankUrl(number) {
 		var base = String(urls.label || '');
 		return base + (base.indexOf('?') === -1 ? '?' : '&') + 'tank=' + encodeURIComponent(String(number));
+	}
+
+	/* ---------------------------------------------------------------- */
+	/*  Scan a tank (js/scanner.js)                                      */
+	/* ---------------------------------------------------------------- */
+
+	var scanner = null;
+
+	/* The scanner opens the tank it read at THIS site's label address — never at what the camera read. */
+	function openScanner() {
+		var lib = root.fhShopScanner;
+		if (!lib || typeof lib.create !== 'function') {
+			return;
+		}
+		if (!scanner) {
+			scanner = lib.create({
+				win: root,
+				doc: document,
+				t: t,
+				el: el,
+				label: urls.label,
+				labelVar: cfg.labelVar,
+				reader: urls.qrLib,
+				open: function (number) { root.location.href = tankUrl(number); }
+			});
+		}
+		scanner.open();
+	}
+
+	function closeScanner() {
+		if (scanner) {
+			scanner.cancel();
+		}
+	}
+
+	function scanButton(cls) {
+		return el('button', { type: 'button', class: cls, text: t('scan', 'Scan a tank'), on: { click: openScanner } });
 	}
 
 	/* ---------------------------------------------------------------- */
@@ -676,8 +669,6 @@
 		var building = null; // The open building as the CURRENT state has it.
 		var open = null;     // Which one that is: { area, label }.
 		var installEvent = null;
-		var canScan = false;
-		var scanner = null;
 		var wantTank = (function () {
 			var m = /[?&]tank=(\d{1,9})(?:&|$)/.exec(root.location.search || '');
 			return m ? parseInt(m[1], 10) : 0;
@@ -780,20 +771,6 @@
 			app.appendChild(foot);
 		}
 
-		function knownTank(number) {
-			var found = false;
-			((state && state.home) || []).forEach(function (area) {
-				(area.buildings || []).forEach(function (b) {
-					(b.tanks || []).forEach(function (tk) {
-						if (tk.number === number) {
-							found = true;
-						}
-					});
-				});
-			});
-			return found;
-		}
-
 		function openTank(number) {
 			root.location.href = tankUrl(number);
 		}
@@ -837,9 +814,7 @@
 		}
 
 		function showBuildings() {
-			if (canScan) {
-				app.appendChild(bigButton(t('scan', 'Scan a tank label'), 'fh-sa-btn--primary fh-sa-btn--scan', openScanner));
-			}
+			app.appendChild(scanButton('fh-sa-btn fh-sa-btn--primary fh-sa-btn--scan'));
 			app.appendChild(el('h2', { class: 'fh-sa-h', text: t('pickBuilding', 'Pick a building') }));
 			var any = false;
 			(state.home || []).forEach(function (area) {
@@ -873,6 +848,7 @@
 				bigButton('‹ ' + t('back', 'Back'), 'fh-sa-btn--quiet fh-sa-btn--back', function () { open = null; building = null; showHome(); root.scrollTo(0, 0); }),
 				el('h2', { class: 'fh-sa-h', text: building.label })
 			]));
+			app.appendChild(scanButton('fh-sa-btn fh-sa-btn--primary fh-sa-btn--scan'));
 			app.appendChild(el('p', { class: 'fh-sa-sub', text: t('pickTank', 'Pick a tank') }));
 			var grid = el('div', { class: 'fh-sa-grid fh-sa-grid--tanks' });
 			(building.tanks || []).forEach(function (tk) {
@@ -888,90 +864,6 @@
 			app.appendChild(grid);
 		}
 
-		/* The camera, inside the app. Only the tank number is taken from what it reads. */
-		function openScanner() {
-			if (scanner) {
-				return;
-			}
-			var video = el('video', { class: 'fh-sa-scan__video', playsinline: '', muted: '', autoplay: '' });
-			var hint = el('p', { class: 'fh-sa-scan__hint', text: t('scanHint', 'Point the camera at the label on the tank.') });
-			var layer = el('div', { class: 'fh-sa-scan' }, [
-				video,
-				el('div', { class: 'fh-sa-scan__frame' }),
-				hint,
-				bigButton(t('cancel', 'Cancel'), 'fh-sa-btn--quiet fh-sa-scan__cancel', function () { closeScanner(); })
-			]);
-			scanner = { layer: layer, stream: null, timer: null, busy: false };
-			document.body.appendChild(layer);
-
-			var detector;
-			try {
-				detector = new root.BarcodeDetector({ formats: ['qr_code'] });
-			} catch (e) {
-				hint.textContent = t('scanNoCamera', 'The camera could not be opened. Pick the tank instead.');
-				return;
-			}
-
-			root.navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false }).then(function (stream) {
-				if (!scanner) {
-					stream.getTracks().forEach(function (track) { track.stop(); });
-					return;
-				}
-				scanner.stream = stream;
-				video.srcObject = stream;
-				var playing = video.play();
-				if (playing && playing.catch) {
-					playing.catch(function () { /* autoplay refused: the stream still shows */ });
-				}
-				scanner.timer = root.setInterval(function () {
-					if (!scanner || scanner.busy || video.readyState < 2) {
-						return;
-					}
-					scanner.busy = true;
-					detector.detect(video).then(function (codes) {
-						if (!scanner) {
-							return;
-						}
-						scanner.busy = false;
-						for (var i = 0; i < (codes || []).length; i++) {
-							var number = tankFromLabel(codes[i].rawValue, root.location.host, cfg.labelVar);
-							if (!number) {
-								hint.textContent = t('scanNotLabel', 'That is not a FisHotel tank label.');
-								continue;
-							}
-							if (!knownTank(number)) {
-								hint.textContent = fmt(t('scanUnknown', 'Tank %d is not in the layout.'), number);
-								continue;
-							}
-							closeScanner();
-							openTank(number);
-							return;
-						}
-					}).catch(function () {
-						if (scanner) {
-							scanner.busy = false;
-						}
-					});
-				}, 250);
-			}).catch(function () {
-				hint.textContent = t('scanNoCamera', 'The camera could not be opened. Pick the tank instead.');
-			});
-		}
-
-		function closeScanner() {
-			if (!scanner) {
-				return;
-			}
-			root.clearInterval(scanner.timer);
-			if (scanner.stream) {
-				scanner.stream.getTracks().forEach(function (track) { track.stop(); });
-			}
-			if (scanner.layer.parentNode) {
-				scanner.layer.parentNode.removeChild(scanner.layer);
-			}
-			scanner = null;
-		}
-
 		function render(next) {
 			state = next;
 			// The open building is looked up again in what just arrived: a
@@ -980,7 +872,10 @@
 			if (!building) {
 				open = null;
 			}
-			closeScanner();
+			if (!state || !state.session) {
+				// Nobody unlocked any more: no camera over the keypad.
+				closeScanner();
+			}
 			if (!state) {
 				showOffline();
 				return;
@@ -1082,16 +977,6 @@
 			root.navigator.serviceWorker.register(urls.sw, { scope: urls.swScope }).catch(function () { /* the app works without it */ });
 		}
 
-		if ('BarcodeDetector' in root && root.navigator.mediaDevices && root.navigator.mediaDevices.getUserMedia) {
-			var formats = root.BarcodeDetector.getSupportedFormats ? root.BarcodeDetector.getSupportedFormats() : Promise.resolve(['qr_code']);
-			formats.then(function (list) {
-				canScan = (list || []).indexOf('qr_code') !== -1;
-				if (canScan && state && state.session) {
-					render(state);
-				}
-			}).catch(function () { canScan = false; });
-		}
-
 		refresh();
 	}
 
@@ -1114,6 +999,7 @@
 		var bar = el('div', { class: 'fh-sa-bar' }, [
 			el('a', { class: 'fh-sa-bar__home', href: urls.app, text: '‹ ' + t('tanks', 'Tanks') }),
 			nameNode,
+			scanButton('fh-sa-bar__scan'),
 			el('button', {
 				type: 'button',
 				class: 'fh-sa-bar__lock',
@@ -1218,6 +1104,7 @@
 			if (layer) {
 				return;
 			}
+			closeScanner();
 			if (!st || !st.enrolled || !st.hasPeople) {
 				// Not a device any more (revoked), or nobody can unlock: the app says which.
 				root.location.href = urls.app;

@@ -230,6 +230,57 @@ screen shows at once. Not on the picker, the full list or the calculator
 the Shop App off, or opened with a WordPress login, the tank page is
 exactly the Front Desk's own, without the panel.
 
+### Scan a tank
+
+So a label opens its tank without leaving the app for a camera app and
+coming back: **Scan a tank** — a big button on the home screen (above the
+buildings, and above a building's tanks) and in the bar of every screen
+opened in the app (a tank, the picker, the day's list, the calculator),
+between who is unlocked and Lock.
+
+It opens the rear camera full screen with a square to hold the label in,
+**Cancel**, and **Type the tank number**. It reads QR codes continuously
+(a frame every 0.2 s):
+
+| What it reads | What happens |
+|---|---|
+| a tank label of **this** site — the same origin (scheme, host, port), the home address (or `index.php`), nothing but `fh_front_desk=1` and `tank=N`, N a number the numbering rule allows (three digits, 101–999, not ending in 0: buildings 100–900, slots 901–909) | the camera stops, a short buzz where the device can, and that tank opens — at `home_url( '/?fh_front_desk=1&tank=N' )` built from this site's own label address, the address the label holds, so the PIN, the shop session and *Today for this water* apply exactly as for a label |
+| another site, a look-alike host (`www.`, a letter changed, a trailing dot, `user@`), `http` for `https`, another port, a `javascript:` or `data:` address | "That code is for another website. It was not opened." — and it keeps scanning |
+| this site, but not a tank label (a product page, another path, the switch missing or off, anything added — a tracking parameter, a second tank, a fragment) or not an address at all | "That is not a FisHotel tank label." — it keeps scanning |
+| a label whose tank number breaks the rule | "That label's tank number is not one the shop uses." — it keeps scanning |
+
+What the camera read is only ever *read* (`readTankCode()` in
+`js/scanner.js`): the scanner hands the page a tank **number**, never an
+address. A tank that is not in the layout opens the Front Desk's picker,
+as its label address would.
+
+**The reader.** The browser's own (`BarcodeDetector`) when it has one that
+reads QR codes (Chrome and Edge on Android); otherwise jsQR 1.4.0
+(`js/vendor/jsQR.js`, unchanged from npm, Apache-2.0 — its licence is
+`js/vendor/jsQR-LICENSE.txt`), loaded from this site by one script tag the
+first time the scanner opens on such a browser (an iPhone or iPad,
+Firefox) and never otherwise; nothing comes from another site. It reads a
+frame drawn at most 640 px wide.
+
+**No camera.** The camera needs HTTPS and permission. Refused ("The camera
+is not allowed for this app …"), missing or failing ("The camera could not
+be opened …"), or the reader not loaded (no connection) — the plain words
+and a number pad: **Type the tank number**, which opens the tank at the
+third digit (a number the rule does not allow is said, not opened). The
+pad is also one tap away while the camera runs, for a label too wet or
+scratched to read.
+
+**The camera is stopped** on Cancel (or Escape), on a label, on *Type the
+tank number*, when the page is hidden — screen off, another app; it starts
+again when the page is back — and when the page is left. A camera that
+answers after any of those is stopped at once, unseen. When the session
+ends under it the scanner closes and the PIN keypad comes up.
+
+Only inside the app: `js/scanner.js` is inlined in front of `js/app.js` in
+the shell and in a tank screen opened with a shop session, nowhere else.
+With the Shop App off, or a tank opened with a WordPress login, the Front
+Desk's page has none of it. The labels and their addresses are unchanged.
+
 ### No connection
 
 Inside the app the script stands between a tank screen and the network. A
@@ -312,6 +363,8 @@ user meta, no REST route, no cron. Deactivating keeps everything.
 | `class-app.php` | the app's address, the label address, the bar |
 | `class-admin.php`, `views/`, `css/admin.css`, `js/admin.js` | the admin page |
 | `js/app.js`, `css/app.css` | the app's script and styles (the shell *and* the bar inside a tank screen) |
+| `js/scanner.js` | Scan a tank: what a label is, the camera, the number pad (inlined in front of `js/app.js`) |
+| `js/vendor/jsQR.js`, `js/vendor/jsQR-LICENSE.txt` | jsQR 1.4.0 (Apache-2.0), the QR reader for browsers without one, loaded only by the scanner |
 | `js/sw.js` | the service worker |
 | `assets/` | the icons; `tools/make-icons.php` draws them (by hand, needs GD) |
 | `tests/` | see `tests/README.md` |
@@ -330,14 +383,21 @@ user meta, no REST route, no cron. Deactivating keeps everything.
 4. Switch the tablet to flight mode, record another loss: MAY NOT BE
    SAVED. Switch flight mode off: it saves by itself, once. Do it again,
    tap *Back to the entry*, switch flight mode off, tap Save: one entry.
-5. Scan a tank label with the tablet's camera: that tank, with *Today for
+5. In the app, *Scan a tank*: the camera full screen; hold a tank label in
+   the square: that tank at once, with a buzz. Scan a product's QR code or
+   another site's: a short message, still scanning. On an iPhone or iPad
+   the same (jsQR). Refuse the camera in the browser's settings, *Scan a
+   tank*: the plain words and the number pad; type 121: tank 121. With the
+   camera open, switch to another app and back: the camera light goes off
+   and comes back; Cancel: it goes off.
+6. Scan a tank label with the tablet's camera: that tank, with *Today for
    this water* under the bar — the same lines as that building's block on
    the full list; tick one on the tank screen and the panel follows; *Full
    list for today ›* opens the list. Tap Lock, scan again: the keypad, then
    that tank.
-6. On the same tablet open `/wp-admin/` and `/my-account/`: a login page.
-7. Enter five wrong PINs: locked for five minutes; Devices shows it, the
+7. On the same tablet open `/wp-admin/` and `/my-account/`: a login page.
+8. Enter five wrong PINs: locked for five minutes; Devices shows it, the
    Log lists each wrong PIN; *Clear lockout*. Change a person's PIN while
    they are unlocked: their tank screen asks for the PIN again. *Revoke*:
    the tablet says it is not set up.
-8. On the tablet's browser menu: *Install app*.
+9. On the tablet's browser menu: *Install app*.
