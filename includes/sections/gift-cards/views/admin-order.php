@@ -5,7 +5,7 @@
  *
  * @package FisHotel\Misc\Sections\Gift_Cards
  *
- * @var array  $data order_id, summary, cards.
+ * @var array  $data order_id, summary, cards, fee (cents the order's "Gift card" fee says).
  * @var array  $ctx  Admin::context().
  * @var string $mode The effective mode.
  */
@@ -55,6 +55,23 @@ $fh_oid = (int) $data['order_id'];
 			</span><input type="text" inputmode="decimal" name="amount" required></label>
 			<label><span><?php esc_html_e( 'Why (required)', 'fishotel-misc-plugin' ); ?></span><input type="text" name="reason" maxlength="500" required minlength="3"></label>
 			<p><button type="submit" class="button button-primary"><?php esc_html_e( 'Put it back', 'fishotel-misc-plugin' ); ?></button></p>
+		</form>
+	<?php elseif ( 0 === $fh_sum['outstanding'] && ! empty( $data['fee'] ) && 'live' === $mode && $ctx['can_edit'] ) : ?>
+		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="fishotel-misc-card fh-gc-form" data-fh-confirm="<?php echo esc_attr__( 'Take this order\'s gift card part from the customer\'s cards again?', 'fishotel-misc-plugin' ); ?>">
+			<?php wp_nonce_field( Admin::NONCE ); ?>
+			<input type="hidden" name="action" value="<?php echo esc_attr( Admin::ACTION ); ?>">
+			<input type="hidden" name="op" value="take_again">
+			<input type="hidden" name="order" value="<?php echo esc_attr( (string) $fh_oid ); ?>">
+			<input type="hidden" name="back" value="<?php echo esc_attr( Admin::page_url( 'order', array( 'order' => $fh_oid ) ) ); ?>">
+			<h3>
+			<?php
+			/* translators: %s: amount */
+			echo esc_html( sprintf( __( 'Take it from the card again (%s)', 'fishotel-misc-plugin' ), Money::words( (int) $data['fee'] ) ) );
+			?>
+			</h3>
+			<p class="fh-gc-sub"><?php esc_html_e( 'All of this order\'s gift card money is back on the card. A status change never takes it again by itself once a refund put it back. If the customer should pay it with the card after all (a refund made by mistake), take it here: from the customer\'s cards, oldest first.', 'fishotel-misc-plugin' ); ?></p>
+			<label><span><?php esc_html_e( 'Why (required)', 'fishotel-misc-plugin' ); ?></span><input type="text" name="reason" maxlength="500" required minlength="3"></label>
+			<p><button type="submit" class="button button-primary"><?php esc_html_e( 'Take it again', 'fishotel-misc-plugin' ); ?></button></p>
 		</form>
 	<?php endif; ?>
 <?php endif; ?>

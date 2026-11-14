@@ -27,6 +27,10 @@
  *               everything still out goes back, exactly once. Any other
  *               refund is put back with the order screen's Gift cards box
  *               (Admin). These hooks stay while Live has fallen back.
+ *               Paid again after failed / cancelled: taken once more. Set
+ *               to a paid status after a REFUND put it back (by itself or
+ *               by hand): never taken again by itself — a note says so,
+ *               and the Gift cards box takes it by hand if that was meant.
  *   Old orders  an imported order's deduction is shown in its totals
  *               (e-mails, My Account, the admin screen), and kept when
  *               Recalculate is pressed (Settings).
@@ -57,6 +61,14 @@ class Checkout {
 	 * @var bool
 	 */
 	private static $busy = false;
+
+	/**
+	 * Orders noted "not taken again" in this request (order id => status),
+	 * so the paid and the processing hooks of one payment note it once.
+	 *
+	 * @var array<int, string>
+	 */
+	private static $noted = array();
 
 	/**
 	 * Register hooks.
@@ -404,9 +416,13 @@ class Checkout {
 	 * taken — only when nothing is out on the order: never taken yet (the
 	 * block checkout and pay-for-order take it here), or all put back by
 	 * itself when the order failed or was cancelled and then paid after
-	 * all. An amount already taken is never changed here, and money put
-	 * back by hand (the order's Gift cards box) is never taken again. If
-	 * the card no longer holds it, the order is put on hold with a note.
+	 * all. An amount already taken is never changed here. Money that went
+	 * back because of a refund — by itself (refunded in full) or by hand
+	 * (the order's Gift cards box) — is never taken again by a status
+	 * change: a note says so and how to take it by hand if that was meant
+	 * (a refunded order set back to Completed would otherwise charge the
+	 * customer twice). If the card no longer holds it, the order is put on
+	 * hold with a note.
 	 *
 	 * @param int $order_id Order id.
 	 */
@@ -421,7 +437,14 @@ class Checkout {
 		}
 		$service = Gift_Cards::service();
 		$cents   = self::fee_cents( $order );
-		if ( $cents <= 0 || ! self::should_take( $service->store->ledger_of_order( (int) $order->get_id() ) ) ) {
+		$rows    = $cents > 0 ? $service->store->ledger_of_order( (int) $order->get_id() ) : array();
+		if ( $cents <= 0 || ! self::should_take( $rows ) ) {
+			$status = (string) $order->get_status();
+			if ( $cents > 0 && self::refund_put_back( $rows ) && ( self::$noted[ (int) $order->get_id() ] ?? '' ) !== $status ) {
+				self::$noted[ (int) $order->get_id() ] = $status;
+				/* translators: 1: amount, 2: order status */
+				$order->add_order_note( sprintf( __( 'The gift card part of this order (%1$s) was NOT taken from the customer\'s gift card again when it was set to %2$s: it went back on the card because of a refund. If the customer should pay it with the card after all, use the Gift cards box on this order (Take it from the card again).', 'fishotel-misc-plugin' ), Money::words( $cents ), $status ) );
+			}
 			return;
 		}
 		$codes  = $order->get_meta( self::CODES_META );
@@ -442,8 +465,9 @@ class Checkout {
 
 	/**
 	 * Whether a paid order's card part is still to be taken (pure): nothing
-	 * is out, and either nothing was ever taken or the newest movement is
-	 * an automatic put-back (failed / cancelled), not one made by hand.
+	 * is out, no refund ever went back on it, and either nothing was ever
+	 * taken or the newest movement is an automatic put-back (failed /
+	 * cancelled).
 	 *
 	 * @param array[] $rows The order's ledger rows, oldest first.
 	 * @return bool
@@ -454,11 +478,45 @@ class Checkout {
 		}
 		$last = null;
 		foreach ( $rows as $row ) {
+			if ( self::by_refund( $row ) ) {
+				return false;
+			}
 			if ( in_array( (string) $row['type'], array( 'used', 'restored' ), true ) ) {
 				$last = $row;
 			}
 		}
 		return null === $last || ( 'restored' === (string) $last['type'] && 0 === strpos( (string) $last['idempotency_key'], 'restore:' ) );
+	}
+
+	/**
+	 * Whether nothing is out on an order because a refund went back on the
+	 * card — the case a status change must not charge again (pure).
+	 *
+	 * @param array[] $rows The order's ledger rows, oldest first.
+	 * @return bool
+	 */
+	public static function refund_put_back( array $rows ) {
+		if ( ! $rows || Money::outstanding( Money::order_cards( $rows ) ) > 0 ) {
+			return false;
+		}
+		foreach ( $rows as $row ) {
+			if ( self::by_refund( $row ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * A ledger row that put money back because of a refund (pure): by hand
+	 * (part:, the Gift cards box) or by itself with its refund's id
+	 * (refunded in full). Failed / cancelled put-backs carry no refund.
+	 *
+	 * @param array $row Ledger row.
+	 * @return bool
+	 */
+	private static function by_refund( array $row ) {
+		return 'restored' === (string) $row['type'] && ( 0 === strpos( (string) $row['idempotency_key'], 'part:' ) || ! empty( $row['refund_id'] ) );
 	}
 
 	/* ============================================================== */
@@ -468,17 +526,18 @@ class Checkout {
 	/**
 	 * Put back what is still out on an order.
 	 *
-	 * @param int    $order_id Order id.
-	 * @param string $why      In words.
-	 * @param string $hook     The hook.
+	 * @param int    $order_id  Order id.
+	 * @param string $why       In words.
+	 * @param string $hook      The hook.
+	 * @param int    $refund_id The refund it is for (0 = none: failed, cancelled, trashed).
 	 * @return int Cents put back.
 	 */
-	private function restore( $order_id, $why, $hook ) {
+	private function restore( $order_id, $why, $hook, $refund_id = 0 ) {
 		$service = Gift_Cards::service();
 		if ( 0 === $service->order_summary( (int) $order_id )['outstanding'] ) {
 			return 0;
 		}
-		$result = $service->restore_order( (int) $order_id, $why, Audit::context( 'order', $hook ) );
+		$result = $service->restore_order( (int) $order_id, $why, Audit::context( 'order', $hook ), $refund_id );
 		$back   = $result['ok'] ? (int) $result['restored'] : 0;
 		$order  = function_exists( 'wc_get_order' ) ? wc_get_order( $order_id ) : null;
 		if ( is_object( $order ) && $back > 0 ) {
@@ -536,7 +595,26 @@ class Checkout {
 			}
 			return;
 		}
-		$this->restore( $order_id, __( 'refunded', 'fishotel-misc-plugin' ), 'woocommerce_order_status_refunded' );
+		$this->restore( $order_id, __( 'refunded', 'fishotel-misc-plugin' ), 'woocommerce_order_status_refunded', self::newest_refund_id( $order ) );
+	}
+
+	/**
+	 * The id of an order's newest refund (0 = none): the put-back is marked
+	 * with it, so a later status change knows a refund took it back.
+	 *
+	 * @param object $order WC_Order.
+	 * @return int
+	 */
+	public static function newest_refund_id( $order ) {
+		$id = 0;
+		if ( is_object( $order ) && method_exists( $order, 'get_refunds' ) ) {
+			foreach ( (array) $order->get_refunds() as $refund ) {
+				if ( is_object( $refund ) && method_exists( $refund, 'get_id' ) ) {
+					$id = max( $id, (int) $refund->get_id() );
+				}
+			}
+		}
+		return $id;
 	}
 
 	/**

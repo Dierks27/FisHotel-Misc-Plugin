@@ -62,6 +62,7 @@ class Admin {
 		'status'       => array( 'edit', array( 'live' ) ),
 		'resend'       => array( 'edit', array( 'live' ) ),
 		'restore_part' => array( 'edit', array( 'live' ) ),
+		'take_again'   => array( 'edit', array( 'live' ) ),
 		'reveal'       => array( 'owner', array( 'shadow', 'live' ) ),
 		'dry_run'      => array( 'owner', array( 'shadow', 'live' ) ),
 		'import'       => array( 'owner', array( 'shadow', 'live' ) ),
@@ -412,6 +413,21 @@ class Admin {
 				}
 				return $keep( $r );
 
+			case 'take_again':
+				$order = absint( $text( 'order' ) );
+				$o     = function_exists( 'wc_get_order' ) ? wc_get_order( $order ) : null;
+				if ( ! is_object( $o ) ) {
+					return $keep( Service::fail( 'form', __( 'The order is not known.', 'fishotel-misc-plugin' ) ) );
+				}
+				$codes = $o->get_meta( Checkout::CODES_META );
+				$cents = Checkout::fee_cents( $o );
+				$r     = $service->take_again( $order, (int) $o->get_customer_id(), is_array( $codes ) ? $codes : array(), $cents, $text( 'reason' ), $audit );
+				if ( $r['ok'] ) {
+					/* translators: 1: amount, 2: reason */
+					$o->add_order_note( sprintf( __( '%1$s was taken from the customer\'s gift card again, by hand: %2$s', 'fishotel-misc-plugin' ), Money::words( $cents ), $text( 'reason' ) ) );
+				}
+				return $keep( $r );
+
 			case 'reveal':
 				$r = $service->reveal( $id, $audit );
 				if ( $r['ok'] ) {
@@ -667,7 +683,20 @@ class Admin {
 		echo '<p>' . esc_html( sprintf( __( 'Paid with gift cards: %1$s. Put back: %2$s. Still on the order: %3$s.', 'fishotel-misc-plugin' ), Money::words( $summary['used'] ), Money::words( $summary['restored'] ), Money::words( $summary['outstanding'] ) ) ) . '</p>';
 		if ( $summary['outstanding'] > 0 && current_user_can( Gift_Cards::edit_capability() ) ) {
 			echo '<p><a class="button" href="' . esc_url( self::page_url( 'order', array( 'order' => $order_id ) ) ) . '">' . esc_html__( 'Put part of it back on the card…', 'fishotel-misc-plugin' ) . '</a></p>';
+		} elseif ( 0 === $summary['outstanding'] && self::order_fee( $order_id ) > 0 && current_user_can( Gift_Cards::edit_capability() ) ) {
+			echo '<p><a class="button" href="' . esc_url( self::page_url( 'order', array( 'order' => $order_id ) ) ) . '">' . esc_html__( 'Take it from the card again…', 'fishotel-misc-plugin' ) . '</a></p>';
 		}
+	}
+
+	/**
+	 * The cents an order's "Gift card" fee says (0 = none, or no such order).
+	 *
+	 * @param int $order_id Order id.
+	 * @return int
+	 */
+	public static function order_fee( $order_id ) {
+		$order = function_exists( 'wc_get_order' ) ? wc_get_order( (int) $order_id ) : null;
+		return is_object( $order ) ? Checkout::fee_cents( $order ) : 0;
 	}
 
 	/* ============================================================== */
@@ -819,6 +848,7 @@ class Admin {
 					'order_id' => $order_id,
 					'summary'  => $service->order_summary( $order_id ),
 					'cards'    => $store->cards_by_ids( array_keys( $service->order_summary( $order_id )['cards'] ) ),
+					'fee'      => $order_id > 0 ? self::order_fee( $order_id ) : 0,
 				);
 				break;
 		}

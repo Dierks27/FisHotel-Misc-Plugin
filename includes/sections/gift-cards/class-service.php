@@ -1167,18 +1167,19 @@ class Service {
 	 * @param int   $order_id Order id.
 	 * @param int   $user_id  The order's customer (0 = guest).
 	 * @param int[] $extra    Cards typed at checkout.
-	 * @param int   $amount   Cents the order's fee says.
-	 * @param array $ctx      Audit::context().
+	 * @param int    $amount   Cents the order's fee says.
+	 * @param array  $ctx      Audit::context().
+	 * @param string $why      Why, when it is done by hand (goes in the audit log).
 	 * @return array ok, taken (card id → cents).
 	 */
-	public function debit_order( $order_id, $user_id, array $extra, $amount, array $ctx ) {
+	public function debit_order( $order_id, $user_id, array $extra, $amount, array $ctx, $why = '' ) {
 		$order_id = (int) $order_id;
 		$amount   = (int) $amount;
 		if ( $order_id <= 0 || $amount < 0 ) {
 			return self::fail( 'form', __( 'The order is not known.', 'fishotel-misc-plugin' ) );
 		}
 		return $this->atomic(
-			function () use ( $order_id, $user_id, $extra, $amount, $ctx ) {
+			function () use ( $order_id, $user_id, $extra, $amount, $ctx, $why ) {
 				$summary = $this->order_summary( $order_id );
 				if ( $summary['outstanding'] === $amount ) {
 					return self::ok( '', array( 'code' => 'already' ) );
@@ -1214,7 +1215,7 @@ class Service {
 						throw new Refusal( 'short', __( 'Your gift card balance changed since this page was opened (perhaps it was used in another window). The amount has been updated — please check your order and place it again.', 'fishotel-misc-plugin' ) );
 					}
 					/* translators: %d: order id */
-					$this->audit( $ctx, $card_id, 'use', 'balance', (int) $card['balance_cents'], (int) $card['balance_cents'] - $cents, -$cents, sprintf( __( 'order #%d', 'fishotel-misc-plugin' ), $order_id ) );
+					$this->audit( $ctx, $card_id, 'use', 'balance', (int) $card['balance_cents'], (int) $card['balance_cents'] - $cents, -$cents, sprintf( __( 'order #%d', 'fishotel-misc-plugin' ), $order_id ) . ( '' !== (string) $why ? ': ' . $why : '' ) );
 				}
 				return self::ok( '', array( 'taken' => $plan ) );
 			}
@@ -1222,18 +1223,56 @@ class Service {
 	}
 
 	/**
-	 * Put back everything still out on an order — exactly once.
+	 * Take an order's gift card part from the customer's cards again, by
+	 * hand (the order's Gift cards box): only when none of it is on the
+	 * order now — after a refund put it back, a status change never takes
+	 * it again by itself.
 	 *
 	 * @param int    $order_id Order id.
-	 * @param string $why      In words (failed, cancelled, …).
+	 * @param int    $user_id  The order's customer (0 = guest).
+	 * @param int[]  $extra    Cards typed at its checkout.
+	 * @param int    $amount   Cents the order's fee says.
+	 * @param mixed  $reason   Why (required).
 	 * @param array  $ctx      Audit::context().
+	 * @return array ok, taken (card id → cents).
+	 */
+	public function take_again( $order_id, $user_id, array $extra, $amount, $reason, array $ctx ) {
+		$reason = self::reason( $reason );
+		if ( null === $reason ) {
+			return self::fail( 'reason', __( 'Say why (a few words) — it goes in the audit log.', 'fishotel-misc-plugin' ) );
+		}
+		if ( (int) $amount <= 0 ) {
+			return self::fail( 'form', __( 'This order has no gift card part to take.', 'fishotel-misc-plugin' ) );
+		}
+		if ( $this->order_summary( (int) $order_id )['outstanding'] > 0 ) {
+			return self::fail( 'already', __( 'The gift card part of this order is already taken from the card, so nothing more was taken.', 'fishotel-misc-plugin' ) );
+		}
+		$result = $this->debit_order( (int) $order_id, (int) $user_id, $extra, (int) $amount, $ctx, $reason );
+		if ( ! $result['ok'] && 'short' === $result['code'] ) {
+			/* translators: %s: amount */
+			return self::fail( 'short', sprintf( __( 'The customer\'s gift cards no longer hold %s, so nothing was taken.', 'fishotel-misc-plugin' ), Money::words( (int) $amount ) ) );
+		}
+		if ( $result['ok'] ) {
+			/* translators: %s: amount */
+			$result['message'] = sprintf( __( '%s was taken from the customer\'s gift card again.', 'fishotel-misc-plugin' ), Money::words( (int) $amount ) );
+		}
+		return $result;
+	}
+
+	/**
+	 * Put back everything still out on an order — exactly once.
+	 *
+	 * @param int    $order_id  Order id.
+	 * @param string $why       In words (failed, cancelled, …).
+	 * @param array  $ctx       Audit::context().
+	 * @param int    $refund_id The refund it is for (0 = none); kept on the ledger rows.
 	 * @return array ok, restored (cents).
 	 */
-	public function restore_order( $order_id, $why, array $ctx ) {
+	public function restore_order( $order_id, $why, array $ctx, $refund_id = 0 ) {
 		return $this->atomic(
-			function () use ( $order_id, $why, $ctx ) {
+			function () use ( $order_id, $why, $ctx, $refund_id ) {
 				$summary = $this->order_summary( (int) $order_id );
-				$back    = $this->restore_inside( (int) $order_id, $summary, (string) $why, $ctx );
+				$back    = $this->restore_inside( (int) $order_id, $summary, (string) $why, $ctx, (int) $refund_id );
 				return self::ok( '', array( 'restored' => $back ) );
 			}
 		);
@@ -1242,13 +1281,14 @@ class Service {
 	/**
 	 * Put back what is still out (inside atomic()).
 	 *
-	 * @param int    $order_id Order id.
-	 * @param array  $summary  order_summary().
-	 * @param string $why      In words.
-	 * @param array  $ctx      Audit::context().
+	 * @param int    $order_id  Order id.
+	 * @param array  $summary   order_summary().
+	 * @param string $why       In words.
+	 * @param array  $ctx       Audit::context().
+	 * @param int    $refund_id The refund it is for (0 = none).
 	 * @return int Cents put back.
 	 */
-	private function restore_inside( $order_id, array $summary, $why, array $ctx ) {
+	private function restore_inside( $order_id, array $summary, $why, array $ctx, $refund_id = 0 ) {
 		$back = 0;
 		foreach ( $summary['cards'] as $card_id => $money ) {
 			$out = (int) $money['outstanding'];
@@ -1264,10 +1304,11 @@ class Service {
 				$card,
 				$out,
 				array(
-					'type'     => 'restored',
-					'key'      => $key,
-					'order_id' => (int) $order_id,
-					'note'     => $why,
+					'type'      => 'restored',
+					'key'       => $key,
+					'order_id'  => (int) $order_id,
+					'refund_id' => (int) $refund_id,
+					'note'      => $why,
 				),
 				false
 			);

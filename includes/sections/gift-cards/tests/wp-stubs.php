@@ -156,6 +156,7 @@ $GLOBALS['fh_options']    = array();
 $GLOBALS['fh_transients'] = array();
 
 function get_option( $key, $default = false ) {
+	$GLOBALS['fh_option_reads'][] = $key;
 	return array_key_exists( $key, $GLOBALS['fh_options'] ) ? $GLOBALS['fh_options'][ $key ] : $default;
 }
 

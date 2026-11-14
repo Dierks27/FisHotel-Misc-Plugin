@@ -630,7 +630,7 @@ class Store {
 	/**
 	 * The WHERE clause of a list (pure apart from the table name).
 	 *
-	 * @param array $spec filter (FILTERS), q (search), order_ids (orders whose number matched).
+	 * @param array $spec filter (FILTERS), q (search: a code, name, e-mail, or an order number — bought on, used on, or the old card number), user_ids (accounts whose name matched).
 	 * @return array{0: string, 1: array}
 	 */
 	public function where( array $spec ) {
@@ -670,6 +670,9 @@ class Store {
 				$or[]    = 'order_id = %d';
 				$extra[] = (int) $m[1];
 				$or[]    = 'legacy_id = %d';
+				$extra[] = (int) $m[1];
+				// An order the card paid for (or got money back from).
+				$or[]    = 'id IN (SELECT card_id FROM ' . $this->table( 'gift_card_ledger' ) . ' WHERE order_id = %d)';
 				$extra[] = (int) $m[1];
 			}
 			$users = isset( $spec['user_ids'] ) ? array_values( array_filter( array_map( 'intval', (array) $spec['user_ids'] ) ) ) : array();

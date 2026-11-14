@@ -196,6 +196,187 @@ $c->on_partial_refund( 2103, 9 );
 check( '…and no second note from the refund hook', false !== strpos( end( $r->notes ), 'NOT put back by itself' ) );
 check( 'all_items_refunded (pure apart from the order): none, part, all', ! Checkout::all_items_refunded( fh_order( 2199 ) ) && ! Checkout::all_items_refunded( $r ) && ( fh_refund_items( $r ) || Checkout::all_items_refunded( $r ) ) );
 
+echo "\nA refunded order set to a paid status again: never charged a second time\n";
+fh_wc_reset();
+$s = fh_gc_use();
+$GLOBALS['fh_current_user'] = 5;
+$a = fh_gc_wallet_card( $s, 5, '100.00' );
+$c = new Checkout();
+$uses = static function ( $order_id ) use ( $s ) {
+	return count( array_filter( $s->store->ledger_of_order( $order_id ), static function ( $row ) {
+		return 'used' === $row['type'];
+	} ) );
+};
+$not_again = static function ( $order ) {
+	return false !== strpos( (string) end( $order->notes ), 'was NOT taken from the customer\'s gift card again' ) && false !== strpos( (string) end( $order->notes ), 'Gift cards box' );
+};
+Checkout::set_choice( array( 'use' => true, 'amount' => 2000 ) );
+$o = fh_checkout( $c, 2201, 5, 50.00 );
+$o->update_status( 'completed' );
+fh_refund_items( $o );
+$o->update_status( 'refunded' );
+$rows = $s->store->ledger_of_order( 2201 );
+check( 'refunded in full: the $20 goes back by itself, marked with its refund', 10000 === (int) $s->store->card( $a )['balance_cents'] && 0 < (int) end( $rows )['refund_id'] );
+$o->update_status( 'completed' );
+check( 'refunded → Completed: nothing taken again ($100 left, one use)', 10000 === (int) $s->store->card( $a )['balance_cents'] && 1 === $uses( 2201 ) && 0 === $s->order_summary( 2201 )['outstanding'] );
+check( '…and a note says so, and how to charge it by hand', $not_again( $o ) );
+$o->update_status( 'processing' );
+$o->update_status( 'on-hold' );
+check( '…then Processing, then On hold: still nothing taken, a note each time', 10000 === (int) $s->store->card( $a )['balance_cents'] && 1 === $uses( 2201 ) && $not_again( $o ) && 3 === count( array_filter( $o->notes, static function ( $n ) {
+	return false !== strpos( $n, 'NOT taken from the customer\'s gift card again' );
+} ) ) );
+$c->ensure_debited( 2201 );
+check( '…the same status firing twice in one request (paid + processing) notes once', 3 === count( array_filter( $o->notes, static function ( $n ) {
+	return false !== strpos( $n, 'NOT taken from the customer\'s gift card again' );
+} ) ) );
+
+Checkout::set_choice( array( 'use' => true, 'amount' => 1500 ) );
+$p = fh_checkout( $c, 2202, 5, 50.00 );
+$p->update_status( 'processing' );
+fh_refund_items( $p );
+$p->update_status( 'refunded' );
+$p->update_status( 'processing' );
+check( 'refunded → Processing: nothing taken again, with the note', 10000 === (int) $s->store->card( $a )['balance_cents'] && 1 === $uses( 2202 ) && $not_again( $p ) );
+
+Checkout::set_choice( array( 'use' => true, 'amount' => 1000 ) );
+$q = fh_checkout( $c, 2203, 5, 50.00 );
+$q->update_status( 'processing' );
+$s->restore_part( 2203, '4.00', 'one fish refunded', 'partkeyd1000001', fh_gc_admin_ctx() );
+$q->update_status( 'completed' );
+check( 'part refunded by hand ($4 of $10), then Completed: the $6 stays taken, nothing more ($94)', 9400 === (int) $s->store->card( $a )['balance_cents'] && 600 === $s->order_summary( 2203 )['outstanding'] && 1 === $uses( 2203 ) && ! $not_again( $q ) );
+$q->update_status( 'failed' );
+$q->update_status( 'processing' );
+check( '…then failed (the $6 back by itself) and paid again: not taken again — a refund went back on this order', 10000 === (int) $s->store->card( $a )['balance_cents'] && 1 === $uses( 2203 ) && $not_again( $q ) );
+
+Checkout::set_choice( array( 'use' => true, 'amount' => 800 ) );
+$h = fh_checkout( $c, 2204, 5, 50.00 );
+$h->update_status( 'processing' );
+$s->restore_part( 2204, '8.00', 'all of it refunded to the card', 'partkeyd1000003', fh_gc_admin_ctx() );
+$h->update_status( 'completed' );
+check( 'all of it put back by hand, then Completed: not taken again, and now the note says so', 10000 === (int) $s->store->card( $a )['balance_cents'] && 1 === $uses( 2204 ) && $not_again( $h ) );
+
+Checkout::set_choice( array( 'use' => true, 'amount' => 1200 ) );
+$k = fh_checkout( $c, 2205, 5, 50.00 );
+$k->update_status( 'processing' );
+$k->update_status( 'cancelled' );
+check( 'paid, then cancelled: the $12 back', 10000 === (int) $s->store->card( $a )['balance_cents'] );
+$k->update_status( 'processing' );
+check( 'cancelled → Processing (paid after all): taken once more, as before', 8800 === (int) $s->store->card( $a )['balance_cents'] && 2 === $uses( 2205 ) && 1200 === $s->order_summary( 2205 )['outstanding'] );
+$k->update_status( 'completed' );
+check( '…then Completed: nothing more, no note', 8800 === (int) $s->store->card( $a )['balance_cents'] && 2 === $uses( 2205 ) && ! $not_again( $k ) );
+Checkout::set_choice( array( 'use' => true, 'amount' => 700 ) );
+$f = fh_checkout( $c, 2206, 5, 50.00 );
+$f->update_status( 'failed' );
+$f->update_status( 'processing' );
+check( 'failed → Processing (paid after all): taken once more', 8100 === (int) $s->store->card( $a )['balance_cents'] && 2 === $uses( 2206 ) );
+check( 'the ledger and the log add up', fh_gc_balanced( $s ) );
+$use     = array( 'card_id' => 1, 'type' => 'used', 'amount_cents' => -500, 'idempotency_key' => 'use:1:1:1' );
+$refund  = array( 'card_id' => 1, 'type' => 'restored', 'amount_cents' => 500, 'idempotency_key' => 'restore:1:1:1', 'refund_id' => 77 );
+$by_hand = array( 'card_id' => 1, 'type' => 'restored', 'amount_cents' => 500, 'idempotency_key' => 'part:1:1:abc', 'refund_id' => null );
+$failed  = array( 'card_id' => 1, 'type' => 'restored', 'amount_cents' => 500, 'idempotency_key' => 'restore:1:1:1', 'refund_id' => null );
+check( 'should_take (pure): put back by a refund → no; by hand → no; when it failed → yes', ! Checkout::should_take( array( $use, $refund ) ) && ! Checkout::should_take( array( $use, $by_hand ) ) && Checkout::should_take( array( $use, $failed ) ) );
+check( 'refund_put_back (pure): by a refund or by hand → yes, and only when nothing is out', Checkout::refund_put_back( array( $use, $refund ) ) && Checkout::refund_put_back( array( $use, $by_hand ) ) && ! Checkout::refund_put_back( array( $use, $failed ) ) && ! Checkout::refund_put_back( array( $use ) ) && ! Checkout::refund_put_back( array() ) );
+
+echo "\nEvery status path (a model, 300 random walks of 12 steps)\n";
+mt_srand( 4711 );
+$steps   = array( 'processing', 'on-hold', 'completed', 'failed', 'cancelled', 'refunded', 'refunded_all', 'hand_part', 'hand_all', 'pending' );
+$walks   = 300;
+$bad     = array();
+$charged = 0;
+$noted   = 0;
+for ( $w = 0; $w < $walks; $w++ ) {
+	fh_wc_reset();
+	$s = fh_gc_use();
+	$GLOBALS['fh_current_user'] = 5;
+	$card = fh_gc_wallet_card( $s, 5, '500.00' );
+	$c    = new Checkout();
+	$fee  = mt_rand( 1, 300 ) * 100;
+	$id   = 5000 + $w;
+	Checkout::set_choice( array( 'use' => true, 'amount' => $fee ) );
+	$o     = fh_checkout( $c, $id, 5, 400.00 );
+	$out   = $fee;   // the model: cents still taken from the card
+	$uses  = 1;      // times it was taken
+	$lock  = false;  // a refund went back on this order
+	$items = false;  // every item refunded
+	$last_noted = '';
+	$trail = array( 'created' );
+	for ( $i = 0; $i < 12; $i++ ) {
+		fh_gc_tick();
+		$step    = $steps[ mt_rand( 0, count( $steps ) - 1 ) ];
+		$trail[] = $step;
+		$before  = count( $o->notes );
+		$expect_note = false;
+		switch ( $step ) {
+			case 'pending':
+				$o->status = 'pending';
+				break;
+			case 'processing':
+			case 'on-hold':
+			case 'completed':
+				$o->update_status( $step );
+				if ( 0 === $out && ! $lock ) {
+					$out = $fee;
+					$uses++;
+				} elseif ( 0 === $out && $lock && $last_noted !== $step ) {
+					$expect_note = true; // once per status in one request (these walks are one request)
+					$last_noted  = $step;
+				}
+				break;
+			case 'failed':
+			case 'cancelled':
+				$o->update_status( $step );
+				$out = 0;
+				break;
+			case 'refunded_all':
+				fh_refund_items( $o );
+				$items = true;
+				// no break: then marked Refunded.
+			case 'refunded':
+				$o->update_status( 'refunded' );
+				if ( $items && $out > 0 ) {
+					$out  = 0;
+					$lock = true;
+				}
+				break;
+			case 'hand_part':
+				if ( $out > 100 ) {
+					$s->restore_part( $id, '1.00', 'one fish refunded', 'walk' . $w . 'x' . $i . 'abcdef', fh_gc_admin_ctx() );
+					$out -= 100;
+					$lock = true;
+				}
+				break;
+			case 'hand_all':
+				if ( $out > 0 ) {
+					$s->restore_part( $id, Money::format( $out ), 'all refunded to the card', 'walk' . $w . 'y' . $i . 'abcdef', fh_gc_admin_ctx() );
+					$out  = 0;
+					$lock = true;
+				}
+				break;
+		}
+		$real_uses = count( array_filter( $s->store->ledger_of_order( $id ), static function ( $row ) {
+			return 'used' === $row['type'];
+		} ) );
+		$note = false;
+		foreach ( array_slice( $o->notes, $before ) as $n ) {
+			$note = $note || false !== strpos( $n, 'NOT taken from the customer\'s gift card again' );
+		}
+		if ( $out !== $s->order_summary( $id )['outstanding'] || 50000 - $out !== (int) $s->store->card( $card )['balance_cents'] || $uses !== $real_uses || $expect_note !== $note ) {
+			$bad[] = implode( ' → ', $trail ) . " (fee $fee: model out $out uses $uses note " . (int) $expect_note . '; real out ' . $s->order_summary( $id )['outstanding'] . " uses $real_uses note " . (int) $note . ')';
+			break;
+		}
+	}
+	if ( $uses > 1 ) {
+		$charged++;
+	}
+	if ( $lock ) {
+		$noted++;
+	}
+	if ( ! fh_gc_balanced( $s ) ) {
+		$bad[] = implode( ' → ', $trail ) . ' (ledger or log does not add up)';
+	}
+}
+check( "every walk matches the model: charged again only after failed / cancelled, never after a refund went back; the note exactly when a refunded order is set to a paid status ($charged walks charged again, $noted with a refund put back)", array() === $bad && $charged > 20 && $noted > 50, implode( "\n       ", array_slice( $bad, 0, 5 ) ) );
+
 echo "\nTax\n";
 $c   = new Checkout();
 $fee = (object) array( 'object' => (object) array( 'id' => 'fh-gift-card' ) );

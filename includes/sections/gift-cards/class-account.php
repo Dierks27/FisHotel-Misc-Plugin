@@ -37,6 +37,7 @@ class Account {
 	const NONCE        = 'fh_gcard_account';
 	const FLASH        = 'fh_gcard_flash_';
 	const FLUSH_OPTION = 'fishotel_gift_cards_flush';
+	const FLUSH_TRIED  = 'fishotel_gift_cards_flush_tried';
 	const PER_PAGE     = 20;
 
 	/**
@@ -98,14 +99,63 @@ class Account {
 	}
 
 	/**
-	 * After Live was switched on: the new address needs the rewrite rules
-	 * rebuilt once (in wp-admin, after WooCommerce added its endpoints).
+	 * The rewrite rules must hold the address. After Live was switched on
+	 * (the flag), they are rebuilt once in wp-admin. And whenever the
+	 * stored rules lack it — they were rebuilt while this section was not
+	 * loaded: Misc rolled back and forward again, Permalinks saved while
+	 * the section was off — the next request rebuilds them once (it runs
+	 * after WooCommerce added its endpoints; WordPress does it at
+	 * wp_loaded, so that very request already finds the page). The check
+	 * reads only the stored rules, which WordPress keeps autoloaded: no
+	 * query on a storefront request. A rebuild that still leaves the
+	 * address out is not repeated for the same rules within the hour.
 	 */
 	public function maybe_flush() {
-		if ( is_admin() && get_option( self::FLUSH_OPTION ) && function_exists( 'flush_rewrite_rules' ) ) {
+		if ( ! function_exists( 'flush_rewrite_rules' ) ) {
+			return;
+		}
+		if ( is_admin() && get_option( self::FLUSH_OPTION ) ) {
 			delete_option( self::FLUSH_OPTION );
 			flush_rewrite_rules( false );
+			return;
 		}
+		$rules = get_option( 'rewrite_rules' );
+		if ( ! self::endpoint_missing( $rules ) ) {
+			return;
+		}
+		$seen  = md5( serialize( $rules ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- a fingerprint only.
+		$tried = get_option( self::FLUSH_TRIED );
+		if ( is_array( $tried ) && ( $tried['rules'] ?? '' ) === $seen && time() - (int) ( $tried['at'] ?? 0 ) < HOUR_IN_SECONDS ) {
+			return;
+		}
+		update_option(
+			self::FLUSH_TRIED,
+			array(
+				'rules' => $seen,
+				'at'    => time(),
+			),
+			true
+		);
+		flush_rewrite_rules( false );
+	}
+
+	/**
+	 * Whether stored rewrite rules lack the address (pure). No rules at
+	 * all (plain permalinks, or not built yet) is not "missing".
+	 *
+	 * @param mixed $rules get_option( 'rewrite_rules' ).
+	 * @return bool
+	 */
+	public static function endpoint_missing( $rules ) {
+		if ( ! is_array( $rules ) || ! $rules ) {
+			return false;
+		}
+		foreach ( $rules as $query ) {
+			if ( is_string( $query ) && ( false !== strpos( $query, '&' . self::ENDPOINT . '=' ) || false !== strpos( $query, '?' . self::ENDPOINT . '=' ) ) ) {
+				return false;
+			}
+		}
+		return true;
 	}
 
 	/**

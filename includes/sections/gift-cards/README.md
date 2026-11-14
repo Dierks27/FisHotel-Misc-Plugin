@@ -45,7 +45,7 @@ to be brought up to date by hand first — the export of this section's cards is
 
 | Tab | Who | What |
 |---|---|---|
-| Cards | shop managers and up | By default the cards **in use** (money on them, not disabled); one click for **used up**, **disabled**, **all**, and **with an old expiry date** when imported cards carry one. Search: the whole code (typed any way) or its last characters, recipient name / e-mail, sender (buyer) name / e-mail, an account holder's or buyer's name / e-mail, an order number, an old card number. Sort: left (balance), issued for (amount), issued, last used. A card's page: details, money history, its audit rows and — Live — the forms. |
+| Cards | shop managers and up | By default the cards **in use** (money on them, not disabled); one click for **used up**, **disabled**, **all**, and **with an old expiry date** when imported cards carry one. Search: the whole code (typed any way) or its last characters, recipient name / e-mail, sender (buyer) name / e-mail, an account holder's or buyer's name / e-mail, an order number (the order that bought the card, or any order it paid for), an old card number. Sort: left (balance), issued for (amount), issued, last used. A card's page: details, money history, its audit rows and — Live — the forms. |
 | Issue a card | who may change balances (Settings), Live | The new card form. |
 | Stats | shop managers and up | **Still owed on all cards — the number for the books** (active and disabled shown apart; Settings decides whether disabled count), sold this month / year, issued by hand this month / year, redeemed this month / year (used on orders less what was put back), never used, the average card, not used in over a year; the health check (every balance against its money history) and a link to the audit chain check. |
 | Audit log | shop managers and up (export: the owner) | Every row, newest first; filters by what, from where, card, dates; "Check the log"; "Export these rows as CSV". |
@@ -87,8 +87,12 @@ All money is **whole cents** (`bigint`), never a float.
   first. When the order is paid / processing / on hold / completed it is checked again, and charged only
   when nothing is out on it: never charged yet (the block checkout, pay-for-order), or all put back by
   itself after it failed or was cancelled and then paid after all. An amount already taken is never changed
-  there, and money put back by hand with the Gift cards box is never taken again. If the cards cannot cover
-  it, the order goes **on hold** with a note.
+  there. Money that went back because of a **refund** — by itself (refunded with every item; the ledger row
+  carries the refund's id) or by hand with the Gift cards box — is never taken again by a status change: a
+  refunded order set back to Completed / Processing / On hold gets a note instead (*"…was NOT taken from the
+  customer's gift card again…"*), and the order's Gift cards box offers **Take it from the card again**
+  (administrators; a reason is required; it takes nothing while any of it is still on the order). If the
+  cards cannot cover it, the order goes **on hold** with a note.
 - **Putting back — exactly once.** Failed, cancelled (a paid one too unless Settings say no), refunded
   **with every item's whole quantity**, or trashed / deleted while unpaid: everything still on the order
   goes back, keyed `restore:<order>:<card>:<n>`, so however often or in whatever order the hooks fire it
@@ -188,7 +192,9 @@ front-end request never installs). Nothing is dropped when the section or the pl
 `fishotel_gift_cards_mode` (autoloaded), `fishotel_gift_cards_settings`, `fishotel_gift_cards_db_version`
 (autoloaded), `fishotel_gift_cards_audit_head`, `fishotel_gift_cards_import_report` (the last dry run or
 import), `fishotel_gift_cards_last_import`, `fishotel_gift_cards_last_run` (the job),
-`fishotel_gift_cards_flush` (rebuild the rewrite rules once after Live). Transients: `fh_gcard_tries_*`
+`fishotel_gift_cards_flush` (rebuild the rewrite rules once after Live), `fishotel_gift_cards_flush_tried`
+(autoloaded; which stored rules lacking the My Account address were last rebuilt, and when — so a rebuild
+that does not bring it back is not repeated for the same rules within the hour). Transients: `fh_gcard_tries_*`
 (wrong codes per hour, per account — for a guest per connecting address, never a forwarded-for header,
 which the sender types), `fh_gcard_flash_*`, `fishotel_gift_cards_flash_*`.
 
@@ -209,6 +215,9 @@ which the sender types), `fh_gcard_flash_*`, `fishotel_gift_cards_flash_*`.
   plugin and would stop the page once that is gone. The theme's own GET names (`fh_gc_action`, `gc_id`,
   `fh_gc_nonce`) and `woocommerce_gc_before_account_giftcards` are not used either: they belong to the old
   plugin's cards, and the theme's handler would take a new card id for an old one while it is still there.
+  In Live, every request checks that the stored rewrite rules hold the address (`rewrite_rules` is
+  autoloaded: no query); when they do not — Misc rolled back and forward again, Permalinks saved while the
+  section was off — the rules are rebuilt once, so the page never needs a Permalinks visit.
 - The theme's `woocommerce_gc_cart_contains_gift_card` filter has no effect on this section; the same
   question is Settings → "may pay for a gift card in the cart".
 - The combined-box **Fulfillment** order (status `fulfillment`, `_fishotel_fulfillment_sources`) is never

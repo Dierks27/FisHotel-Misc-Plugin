@@ -135,6 +135,19 @@ class Fh_Line_Item {
 	}
 }
 
+/**
+ * A refund of an order (only its id is read).
+ */
+class Fh_Refund {
+	public $id;
+	public function __construct( $id ) {
+		$this->id = $id;
+	}
+	public function get_id() {
+		return $this->id;
+	}
+}
+
 class Fh_Order {
 	public $id;
 	public $status      = 'pending';
@@ -159,6 +172,11 @@ class Fh_Order {
 	public $refunded_qty = array();
 	public function get_qty_refunded_for_item( $item_id, $type = 'line_item' ) {
 		return -abs( (int) ( $this->refunded_qty[ $item_id ] ?? 0 ) );
+	}
+	/** Its refunds, newest first (as WooCommerce gives them). */
+	public $refunds = array();
+	public function get_refunds() {
+		return $this->refunds;
 	}
 	public function get_meta( $k ) {
 		return $this->meta[ $k ] ?? '';
@@ -238,6 +256,8 @@ function fh_refund_items( $order, $qty = null ) {
 	foreach ( $order->items as $id => $item ) {
 		$order->refunded_qty[ $id ] = null === $qty ? $item->get_quantity() : (int) ( $qty[ $id ] ?? 0 );
 	}
+	array_unshift( $order->refunds, new Fh_Refund( 7000 + $order->id * 10 + count( $order->refunds ) ) );
+	return false;
 }
 
 function wc_get_order( $id ) {

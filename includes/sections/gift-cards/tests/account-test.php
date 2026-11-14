@@ -81,6 +81,76 @@ check( 'the flash is escaped', false !== strpos( $html, 'Gift card added &lt;b&g
 check( 'a card sent to my address but not added is not on the page, and there is no "Add to my account"', false === strpos( $html, 'Add to my account' ) && false === strpos( $html, '$30.00' ) );
 check( 'the theme\'s classes are used', false !== strpos( $html, 'woocommerce-giftcards-table' ) && false !== strpos( $html, 'fh-giftcard-code' ) );
 
+echo "\nThe address after a way back and forward (the rewrite rules)\n";
+$GLOBALS['fh_flushes']   = 0;
+$GLOBALS['fh_flush_adds'] = true;
+function flush_rewrite_rules( $hard = true ) {
+	$GLOBALS['fh_flushes']++;
+	// WordPress rebuilds the rules from what is registered: WooCommerce's
+	// endpoints, ours with them — unless something else keeps it out (then
+	// the rebuild gives the same rules again).
+	if ( $GLOBALS['fh_flush_adds'] ) {
+		$GLOBALS['fh_options']['rewrite_rules'] = fh_rules( true );
+	}
+}
+function fh_rules( $with_ours ) {
+	$rules = array(
+		'(.?.+?)/orders(/(.*))?/?$'   => 'index.php?pagename=$matches[1]&orders=$matches[3]',
+		'(.?.+?)/edit-account(/(.*))?/?$' => 'index.php?pagename=$matches[1]&edit-account=$matches[3]',
+		'(.?.+?)(?:/([0-9]+))?/?$'    => 'index.php?pagename=$matches[1]&page=$matches[2]',
+	);
+	if ( $with_ours ) {
+		$rules = array( '(.?.+?)/giftcards(/(.*))?/?$' => 'index.php?pagename=$matches[1]&giftcards=$matches[3]' ) + $rules;
+	}
+	return $rules;
+}
+$front = static function () {
+	$GLOBALS['fh_is_admin']     = false;
+	$GLOBALS['fh_option_reads'] = array();
+	( new Account() )->maybe_flush();
+	return $GLOBALS['fh_option_reads'];
+};
+update_option( 'rewrite_rules', fh_rules( true ) );
+$reads = $front();
+check( 'a storefront request with the address in the rules: no flush, and only the rules are read (autoloaded: no query)', 0 === $GLOBALS['fh_flushes'] && array( 'rewrite_rules' ) === array_values( array_unique( $reads ) ) );
+update_option( 'rewrite_rules', fh_rules( false ) ); // Misc 0.46 rebuilt them without it
+$front();
+check( 'after a way back to 0.46 and forward, the address is missing: the next request rebuilds the rules once (no Permalinks visit needed)', 1 === $GLOBALS['fh_flushes'] && isset( get_option( 'rewrite_rules' )['(.?.+?)/giftcards(/(.*))?/?$'] ) );
+$front();
+$front();
+check( '…and never again while the address is there', 1 === $GLOBALS['fh_flushes'] );
+$GLOBALS['fh_flush_adds'] = false; // something else keeps it out
+update_option( 'rewrite_rules', array( 'something/else/?$' => 'index.php?x=1' ) + fh_rules( false ) );
+$front();
+$front();
+$front();
+check( 'if a rebuild does not bring it back, it is not tried on every request (once for those rules)', 2 === $GLOBALS['fh_flushes'] );
+$GLOBALS['fh_flush_adds'] = true;
+update_option( 'rewrite_rules', fh_rules( false ) );
+$front();
+check( '…but the rules rebuilt without it once more (Misc rolled back a second time) are fixed once more', 3 === $GLOBALS['fh_flushes'] && isset( get_option( 'rewrite_rules' )['(.?.+?)/giftcards(/(.*))?/?$'] ) );
+$GLOBALS['fh_flush_adds'] = false;
+update_option( 'rewrite_rules', fh_rules( false ) );
+$front();
+check( '…the very same rules within the hour of trying them: not again', 3 === $GLOBALS['fh_flushes'] );
+$tried       = get_option( Account::FLUSH_TRIED );
+$tried['at'] = time() - 3700;
+update_option( Account::FLUSH_TRIED, $tried );
+$front();
+check( '…an hour later: once more', 4 === $GLOBALS['fh_flushes'] );
+$GLOBALS['fh_flush_adds'] = true;
+update_option( 'rewrite_rules', '' ); // plain permalinks: no rules at all
+$reads = $front();
+check( 'plain permalinks (no rules): nothing to rebuild, nothing more read', 4 === $GLOBALS['fh_flushes'] && array( 'rewrite_rules' ) === array_values( array_unique( $reads ) ) );
+update_option( 'rewrite_rules', fh_rules( true ) );
+update_option( Account::FLUSH_OPTION, 1 );
+$GLOBALS['fh_is_admin'] = true;
+( new Account() )->maybe_flush();
+( new Account() )->maybe_flush();
+$GLOBALS['fh_is_admin'] = false;
+check( 'Live just saved (the flag): wp-admin rebuilds them once, as before', 5 === $GLOBALS['fh_flushes'] && false === get_option( Account::FLUSH_OPTION ) );
+check( 'endpoint_missing (pure): our rule → no; WooCommerce\'s alone → yes; none → no', ! Account::endpoint_missing( fh_rules( true ) ) && Account::endpoint_missing( fh_rules( false ) ) && ! Account::endpoint_missing( array() ) && ! Account::endpoint_missing( '' ) );
+
 check( 'no unexpected database error', empty( $GLOBALS['fh_db_errors'] ), implode( "\n", (array) ( $GLOBALS['fh_db_errors'] ?? array() ) ) );
 
 fh_finish();

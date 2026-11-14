@@ -80,7 +80,7 @@ check( '…may not export, import, change the mode or the settings', 'refused' =
 $s2 = fh_gc_service( $s->store, array( 'editor_capability' => 'manage_woocommerce' ) );
 check( 'with Settings letting shop managers edit, they may issue', Admin::perform( 'issue', fh_issue_post(), fh_ctx( $s2, 2, 'live' ) )['ok'] );
 $owner = fh_ctx( $s, 1, 'shadow' );
-foreach ( array( 'issue', 'adjust', 'details', 'status', 'resend', 'restore_part' ) as $op ) {
+foreach ( array( 'issue', 'adjust', 'details', 'status', 'resend', 'restore_part', 'take_again' ) as $op ) {
 	$r = Admin::perform( $op, fh_issue_post( array( 'card' => 1, 'direction' => 'credit', 'reason' => 'test' ) ), $owner );
 	check( "Shadow refuses \"$op\" — the old plugin is in charge", ! $r['ok'] && false !== strpos( $r['message'], 'Shadow mode' ) );
 }
@@ -110,6 +110,24 @@ $s->debit_order( 8001, 9, array(), 1000, fh_gc_customer_ctx( 9, 'checkout' ) );
 fh_order( 8001, array( 'customer_id' => 9 ) );
 $r = Admin::perform( 'restore_part', array( 'order' => 8001, 'amount' => '4', 'reason' => 'one fish refunded', 'request_key' => Service::new_request_key() ), $o );
 check( 'restore_part: $4 back, with an order note', $r['ok'] && 1400 === (int) $s->store->card( $id )['balance_cents'] && false !== strpos( end( wc_get_order( 8001 )->notes ), '$4.00 was put back' ) );
+$s->debit_order( 8002, 9, array(), 500, fh_gc_customer_ctx( 9, 'checkout' ) );
+$o8002 = fh_order( 8002, array( 'customer_id' => 9, 'status' => 'refunded' ) );
+$o8002->fees[] = new Fh_Fee_Item( 'fh-gift-card', -5.0, array( \FisHotel\Misc\Sections\Gift_Cards\Checkout::FEE_META => 'yes' ) );
+check( 'take_again refuses while the card part is still taken', 'already' === Admin::perform( 'take_again', array( 'order' => 8002, 'reason' => 'refund was a mistake' ), $o )['code'] && 900 === (int) $s->store->card( $id )['balance_cents'] );
+$s->restore_order( 8002, 'refunded', fh_gc_admin_ctx(), 9001 );
+check( '…and without a reason', 'reason' === Admin::perform( 'take_again', array( 'order' => 8002, 'reason' => '' ), $o )['code'] && 1400 === (int) $s->store->card( $id )['balance_cents'] );
+$_GET = array( 'page' => Gift_Cards::MENU_SLUG, 'tab' => 'order', 'order' => '8002' );
+$GLOBALS['fh_current_user'] = 1;
+update_option( Modes::OPTION, 'live' );
+ob_start();
+( new Admin() )->render_page();
+$html = ob_get_clean();
+update_option( Modes::OPTION, 'off' );
+$_GET = array();
+check( 'a refunded order whose card part is all back: its page offers "Take it from the card again ($5.00)"', false !== strpos( $html, 'Take it from the card again ($5.00)' ) && false !== strpos( $html, 'value="take_again"' ) );
+$r = Admin::perform( 'take_again', array( 'order' => 8002, 'reason' => 'refund was a mistake' ), $o );
+check( 'take_again: the $5 taken from the card again, with an order note and the reason in the log', $r['ok'] && 900 === (int) $s->store->card( $id )['balance_cents'] && 500 === $s->order_summary( 8002 )['outstanding'] && false !== strpos( end( $o8002->notes ), 'taken from the customer\'s gift card again, by hand: refund was a mistake' ) && false !== strpos( $s->store->audit_rows( array( 'action' => 'use' ), 1 )[0]['reason'], 'refund was a mistake' ) );
+check( '…a second click takes nothing', 'already' === Admin::perform( 'take_again', array( 'order' => 8002, 'reason' => 'refund was a mistake' ), $o )['code'] && 900 === (int) $s->store->card( $id )['balance_cents'] && fh_gc_balanced( $s ) );
 
 echo "\nShop managers allowed to edit, but not to see codes\n";
 $GLOBALS['fh_mails'] = array();
@@ -167,6 +185,22 @@ check( 'used up (1), disabled (1), all (3)', 1 === $count( 'used_up' ) && 1 === 
 check( 'search by name', 1 === $count( 'all', 'lee sam' ) );
 check( 'search by the last 4 of the code', 1 === $count( 'all', substr( $s->store->card( $a )['code'], -4 ) ) );
 check( 'search by the whole code typed loosely', 1 === $count( 'all', strtolower( $s->store->card( $c )['code'] ) ) );
+$s->redeem( $s->store->card( $a )['code'], 9, fh_gc_customer_ctx( 9 ) );
+$s->debit_order( 34212, 9, array(), 300, fh_gc_customer_ctx( 9, 'checkout' ) );
+check( 'search by the number of an order the card was USED on (not only the one that bought it)', array( $a ) === array_map( 'intval', array_column( $s->store->find( array( 'filter' => 'all', 'q' => '#34212' ) ), 'id' ) ) && 1 === $count( 'in_use', '34212' ) );
+check( '…an order number nothing was bought or paid with finds nothing', 0 === $count( 'all', '34299' ) );
+$GLOBALS['fh_current_user'] = 1;
+update_option( Modes::OPTION, 'live' );
+$empty_list = static function ( $filter ) {
+	$_GET = array( 'page' => Gift_Cards::MENU_SLUG, 'tab' => 'cards', 'filter' => $filter, 'q' => 'nobody-like-this' );
+	ob_start();
+	( new Admin() )->render_page();
+	$_GET = array();
+	return ob_get_clean();
+};
+check( 'nothing found under "In use": the hint says to try "All"', false !== strpos( $empty_list( 'in_use' ), 'Try &quot;All&quot;' ) || false !== strpos( $empty_list( 'in_use' ), 'Try "All"' ) );
+check( 'nothing found under "All": no hint to try "All"', false === strpos( $empty_list( 'all' ), 'Try' ) && false !== strpos( $empty_list( 'all' ), 'No card matches that search.' ) );
+update_option( Modes::OPTION, 'off' );
 $found = $s->store->find( array( 'filter' => 'all', 'sort' => 'balance', 'dir' => 'desc' ) );
 check( 'sort by balance', array( $c, $a, $b ) === array_map( 'intval', array_column( $found, 'id' ) ) );
 check( 'sort by amount, ascending', array( $a, $b, $c ) === array_map( 'intval', array_column( $s->store->find( array( 'filter' => 'all', 'sort' => 'amount', 'dir' => 'asc' ) ), 'id' ) ) );

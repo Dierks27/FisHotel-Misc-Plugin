@@ -66,7 +66,17 @@ $fh_date  = static function ( $utc ) {
 </div>
 
 <?php if ( ! $data['cards'] ) : ?>
-	<div class="fishotel-misc-empty"><span class="dashicons dashicons-tickets-alt"></span><p><?php echo '' !== $fh_spec['q'] ? esc_html__( 'No card matches that search here. Try "All".', 'fishotel-misc-plugin' ) : esc_html__( 'No card here.', 'fishotel-misc-plugin' ); ?></p></div>
+	<div class="fishotel-misc-empty"><span class="dashicons dashicons-tickets-alt"></span><p>
+	<?php
+	if ( '' === $fh_spec['q'] ) {
+		esc_html_e( 'No card here.', 'fishotel-misc-plugin' );
+	} elseif ( 'all' === $fh_spec['filter'] ) {
+		esc_html_e( 'No card matches that search.', 'fishotel-misc-plugin' );
+	} else {
+		esc_html_e( 'No card matches that search here. Try "All".', 'fishotel-misc-plugin' );
+	}
+	?>
+	</p></div>
 <?php else : ?>
 	<div class="fh-gc-scroll">
 	<table class="widefat fh-gc-table">
