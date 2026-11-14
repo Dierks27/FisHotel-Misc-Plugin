@@ -105,7 +105,7 @@ $fh_notes = (array) ( $columns['notes'] ?? array() );
 				<div class="fh-today-field fh-today-field--row">
 					<div>
 						<span class="fh-today-label"><?php esc_html_e( 'Invoice', 'fishotel-misc-plugin' ); ?></span>
-						<p class="fishotel-misc-card-desc" style="margin: 4px 0 0;"><?php esc_html_e( 'Done when the PDF Invoices plugin has generated the invoice PDF (its _wcpdf_invoice_date meta; other keys via the fishotel_today_invoice_meta_keys filter). A combined box counts when the wrapper or every source order has it.', 'fishotel-misc-plugin' ); ?></p>
+						<p class="fishotel-misc-card-desc" style="margin: 4px 0 0;"><?php esc_html_e( 'Done when the PDF Invoices plugin has made the invoice. A combined box counts when the box or every order in it has one.', 'fishotel-misc-plugin' ); ?></p>
 						<?php if ( ! empty( $fh_notes['invoice'] ) ) : ?>
 							<p class="fh-today-colnote" style="margin: 4px 0 0;"><?php echo esc_html( $fh_notes['invoice'] ); ?></p>
 						<?php endif; ?>

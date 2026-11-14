@@ -2,7 +2,9 @@
 /**
  * Clean Room admin — the Room Board page under FisHotel Tools (Board /
  * Stays / Events / Settings; the Arrivals / Species / Stats tabs are
- * handed to Admin_Workbook), the stays CSV, the printable QR labels, the
+ * handed to Admin_Workbook, the To do tab, the Board's Temporary area and
+ * the temporary tanks' history to Admin_Temp), the stays CSV, the
+ * printable QR labels (a temporary slot prints "TEMP 1" and its number), the
  * stay edits from the Stays tab (counts, dates, a move, the seam fields),
  * the per-row Undo on the Events tab, the Coming Soon release button and
  * the product meta box — which also edits the sale date of each open
@@ -101,7 +103,7 @@ class Admin {
 	/**
 	 * URL of a tab.
 	 *
-	 * @param string $tab   board|stays|arrivals|species|stats|events|settings.
+	 * @param string $tab   board|todo|stays|arrivals|species|stats|events|settings.
 	 * @param array  $extra Extra query args.
 	 * @return string
 	 */
@@ -150,7 +152,7 @@ class Admin {
 		}
 
 		$tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'board'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only tab switch.
-		if ( ! in_array( $tab, array( 'board', 'stays', 'arrivals', 'species', 'stats', 'events', 'settings' ), true ) ) {
+		if ( ! in_array( $tab, array( 'board', Admin_Temp::TAB, 'stays', 'arrivals', 'species', 'stats', 'events', 'settings' ), true ) ) {
 			$tab = 'board';
 		}
 
@@ -176,6 +178,23 @@ class Admin {
 			return;
 		}
 
+		// The day's list by water system, and the temporary tanks' history.
+		$temp_ctx = array(
+			'store'        => $store,
+			'settings'     => $settings,
+			'today'        => $today,
+			'tables_ok'    => $tables_ok,
+			'can_settings' => $can_settings,
+		);
+		if ( Admin_Temp::TAB === $tab ) {
+			Admin_Temp::render_todo( $temp_ctx );
+			return;
+		}
+		if ( 'board' === $tab && ( isset( $_GET['setup'] ) || isset( $_GET['temp_history'] ) ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only view switch.
+			Admin_Temp::render_history( $temp_ctx, isset( $_GET['setup'] ) ? absint( wp_unslash( $_GET['setup'] ) ) : 0 ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return;
+		}
+
 		if ( 'settings' === $tab && $can_settings ) {
 			$protocols     = Settings::protocols();
 			$template_name = isset( $_GET['template'] ) ? Protocol::template_name( sanitize_text_field( wp_unslash( $_GET['template'] ) ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only picker.
@@ -183,6 +202,7 @@ class Admin {
 				$template_name = $protocols['default'];
 			}
 			$protocol  = $protocols['templates'][ $template_name ];
+			$used_for  = Temp_Tanks::tags( $protocols )[ $template_name ] ?? array();
 			$buildings = $store->buildings();
 			$tanks     = $store->tanks();
 			$groups    = Layout::group( $buildings, $tanks );
@@ -222,11 +242,14 @@ class Admin {
 
 		$filters   = self::filters_from_request( $_GET ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$protocols = Settings::protocols();
-		$tanks     = $store->tanks_with_occupants( $today, $settings, $protocols );
+		$room      = $store->room( $today, $settings, $protocols );
+		$tanks     = $room['tanks'];
+		$todo      = is_array( $room['todo'] ) ? $room['todo'] : array( 'left' => 0, 'total' => 0 );
 		$groups    = Layout::group( $store->buildings(), $tanks );
 		$totals    = self::totals( $tanks );
-		$doses     = $store->latest_doses();
+		$doses     = Dose::board_doses( $store->latest_doses() ); // "last dose" with the amount and its working.
 		$sizes     = Sizes::standard( $store, $settings )['sizes'];
+		$temp      = Admin_Temp::board( $store, $tanks, $protocols, $today );
 
 		include Clean_Room::path() . 'views/board.php';
 	}
@@ -260,7 +283,8 @@ class Admin {
 	 * (a group for sale counts as ready, wherever it is), fish alive,
 	 * tanks; and the warnings — groups for sale while still in the Spa,
 	 * groups without a sale date, and groups whose fish still has to be
-	 * identified.
+	 * identified. A temporary slot counts as a tank only while something
+	 * is set up in it.
 	 *
 	 * @param array[] $tanks Tanks with occupants.
 	 * @return array{in_qt: int, cleared: int, ready: int, live: int, tanks: int, empty: int, ready_in_spa: int, no_sale_date: int, needs_id: int}
@@ -280,6 +304,9 @@ class Admin {
 		foreach ( $tanks as $tank ) {
 			if ( 'offline' === (string) ( $tank['status'] ?? '' ) ) {
 				continue;
+			}
+			if ( Temp_Tanks::is_free( $tank ) ) {
+				continue; // A slot with nothing set up is a place, not a tank.
 			}
 			$out['tanks']++;
 			$occupants = (array) ( $tank['occupants'] ?? array() );
@@ -663,7 +690,7 @@ class Admin {
 					'whichSaleBatch' => __( 'This group\'s own sale date (YYYY-MM-DD)? Leave empty to use the batch date (%s).', 'fishotel-misc-plugin' ),
 					'whichSale'      => __( 'This group\'s own sale date (YYYY-MM-DD)? Leave empty for none — the batch has no date yet.', 'fishotel-misc-plugin' ),
 					'whichTank'      => __( 'Move to which tank number?', 'fishotel-misc-plugin' ),
-					'whyMove'        => __( 'Why? (optional: clear building / bullying / pairing / other)', 'fishotel-misc-plugin' ),
+					'whyMove'        => __( 'Why? (optional: clear building / bullying / pairing / hospital / other)', 'fishotel-misc-plugin' ),
 					'confirmCheckin' => __( 'Check the received fish in? One stay per line with fish (lines already checked in are skipped). The order becomes "received".', 'fishotel-misc-plugin' ),
 					'confirmDelete'  => __( 'Delete this order and its lines?', 'fishotel-misc-plugin' ),
 					'confirmSpecies' => __( 'Remove this species from the list?', 'fishotel-misc-plugin' ),
@@ -766,6 +793,10 @@ class Admin {
 					if ( (int) $to['id'] === (int) $stay['tank_id'] ) {
 						wp_send_json_error( array( 'message' => __( 'The group is already in that tank.', 'fishotel-misc-plugin' ) ), 400 );
 					}
+					$refused = Temp_Tanks::destination_error( $to );
+					if ( '' !== $refused ) {
+						wp_send_json_error( array( 'message' => $refused ), 400 ); // A slot with nothing set up takes no fish.
+					}
 					if ( 'closed' === (string) $stay['status'] ) {
 						wp_send_json_error( array( 'message' => __( 'That group is closed.', 'fishotel-misc-plugin' ) ), 400 );
 					}
@@ -774,6 +805,10 @@ class Admin {
 					$ok     = $store->record_event( $stay_id, array_merge( $base, array( 'type' => 'move', 'from_tank_id' => $stay['tank_id'], 'to_tank_id' => (int) $to['id'], 'note' => $reason ) ), $today, $settings );
 					/* translators: %d: tank number */
 					$msg = sprintf( __( 'Moved to Tank %d.', 'fishotel-misc-plugin' ), (int) $to['number'] );
+					if ( $ok && empty( $stay['cleared_date'] ) && ! empty( $ok['state']['cleared_date'] ) ) {
+						// Into a clean tank — the Clean Room or a clean temporary tank: say what the move did.
+						$msg .= ' ' . __( 'The group is cleared today — out of quarantine.', 'fishotel-misc-plugin' );
+					}
 					break;
 				case 'undo':
 					$event = $store->event( isset( $raw['event_id'] ) ? absint( $raw['event_id'] ) : 0 );
@@ -841,6 +876,11 @@ class Admin {
 		}
 
 		if ( ! $ok ) {
+			// A temporary tank that was taken down is history: say so instead of "could not be saved".
+			$why = in_array( $op, array( 'undo', 'count', 'loss', 'sold' ), true ) ? Temp_Tanks::gone_error( $store, $stay, 'undo' === $op && isset( $event ) && is_array( $event ) ? $event : null ) : '';
+			if ( '' !== $why ) {
+				wp_send_json_error( array( 'message' => $why ), 409 );
+			}
 			wp_send_json_error( array( 'message' => __( 'That could not be saved.', 'fishotel-misc-plugin' ) ), 500 );
 		}
 
@@ -1072,7 +1112,7 @@ class Admin {
 			wp_send_json_error( array( 'message' => __( 'This stay is not linked to a product.', 'fishotel-misc-plugin' ) ), 400 );
 		}
 		if ( ! Replay::is_date( $stay['sale_ready_date'] ?? null ) ) {
-			wp_send_json_error( array( 'message' => __( 'This stay has no sale date yet — set one on its supplier order (Arrivals) or on the product page.', 'fishotel-misc-plugin' ) ), 400 );
+			wp_send_json_error( array( 'message' => __( 'This stay has no sale date yet — set one on its supplier order (Clean Room → Supplier orders) or on the product page.', 'fishotel-misc-plugin' ) ), 400 );
 		}
 
 		$product_id = (int) $stay['product_id'];
@@ -1269,7 +1309,9 @@ class Admin {
 	/**
 	 * admin-post: the printable labels page — one label per active tank
 	 * (in a building that is not offline) with the number large, the
-	 * area / building / size small and a QR of the Front Desk URL.
+	 * area / building / size small and a QR of the Front Desk URL. A
+	 * temporary slot gets one too ("TEMP 1 · 901"): laminated once and
+	 * reused, it always opens whatever is set up in that slot.
 	 */
 	public function print_labels() {
 		if ( ! current_user_can( Clean_Room::CAPABILITY ) ) {

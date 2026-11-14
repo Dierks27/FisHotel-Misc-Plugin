@@ -64,6 +64,11 @@ class Settings {
 		'extra_hosts'            => array(),
 		'alert_email'            => '',
 		'alert_cooldown_minutes' => 60,
+		'checkout_alarm'         => true,
+		'checkout_alarm_email'   => '',
+		'stall_orders'           => 3,
+		'stall_minutes'          => 30,
+		'checkout_page_check'    => false,
 	);
 
 	const RETENTION_MIN = 1;
@@ -72,6 +77,10 @@ class Settings {
 	const MAX_ROWS_MAX  = 100000;
 	const COOLDOWN_MIN  = 5;
 	const COOLDOWN_MAX  = 1440;
+	const STALL_ORDERS_MIN  = 1;
+	const STALL_ORDERS_MAX  = 50;
+	const STALL_MINUTES_MIN = 5;
+	const STALL_MINUTES_MAX = 1440;
 
 	/**
 	 * True while an alert is being sent.
@@ -118,6 +127,11 @@ class Settings {
 			'extra_hosts'            => self::clean_hosts( $settings['extra_hosts'] ?? array() ),
 			'alert_email'            => self::clean_email( $settings['alert_email'] ?? '' ),
 			'alert_cooldown_minutes' => self::clamp( $settings['alert_cooldown_minutes'] ?? self::DEFAULTS['alert_cooldown_minutes'], self::COOLDOWN_MIN, self::COOLDOWN_MAX, self::DEFAULTS['alert_cooldown_minutes'] ),
+			'checkout_alarm'         => ! empty( $settings['checkout_alarm'] ),
+			'checkout_alarm_email'   => self::clean_email( $settings['checkout_alarm_email'] ?? '' ),
+			'stall_orders'           => self::clamp( $settings['stall_orders'] ?? self::DEFAULTS['stall_orders'], self::STALL_ORDERS_MIN, self::STALL_ORDERS_MAX, self::DEFAULTS['stall_orders'] ),
+			'stall_minutes'          => self::clamp( $settings['stall_minutes'] ?? self::DEFAULTS['stall_minutes'], self::STALL_MINUTES_MIN, self::STALL_MINUTES_MAX, self::DEFAULTS['stall_minutes'] ),
+			'checkout_page_check'    => ! empty( $settings['checkout_page_check'] ),
 		);
 	}
 
@@ -137,6 +151,14 @@ class Settings {
 		update_option( Health::OPTION_KEY, $settings );
 
 		Cron::schedule();
+
+		// The checkout alarm: armed while on; switched off, its events and
+		// marks go, so switching it back on starts from "now".
+		if ( $settings['checkout_alarm'] ) {
+			Alarm::ensure_scheduled();
+		} else {
+			Alarm::clear();
+		}
 
 		$message = __( 'Settings saved.', 'fishotel-misc-plugin' );
 		if ( $dropped ) {
@@ -182,13 +204,31 @@ class Settings {
 		$email_raw = isset( $raw['alert_email'] ) && is_scalar( $raw['alert_email'] ) ? trim( (string) $raw['alert_email'] ) : '';
 		$email     = self::clean_email( $email_raw );
 		if ( '' !== $email_raw && '' === $email ) {
-			$dropped[] = __( 'alert email is not a valid address (alerts off)', 'fishotel-misc-plugin' );
+			$dropped[] = __( 'alert e-mail is not a valid address (alerts off)', 'fishotel-misc-plugin' );
 		}
 
 		$cooldown = isset( $raw['alert_cooldown_minutes'] ) && is_scalar( $raw['alert_cooldown_minutes'] ) ? (int) $raw['alert_cooldown_minutes'] : self::DEFAULTS['alert_cooldown_minutes'];
 		if ( $cooldown < self::COOLDOWN_MIN || $cooldown > self::COOLDOWN_MAX ) {
 			$dropped[] = __( 'alert cooldown must be 5–1440 minutes (default 60 used)', 'fishotel-misc-plugin' );
 			$cooldown  = self::DEFAULTS['alert_cooldown_minutes'];
+		}
+
+		$alarm_raw   = isset( $raw['checkout_alarm_email'] ) && is_scalar( $raw['checkout_alarm_email'] ) ? trim( (string) $raw['checkout_alarm_email'] ) : '';
+		$alarm_email = self::clean_email( $alarm_raw );
+		if ( '' !== $alarm_raw && '' === $alarm_email ) {
+			$dropped[] = __( 'checkout alarm e-mail is not a valid address (the site\'s admin address is used)', 'fishotel-misc-plugin' );
+		}
+
+		$stall_orders = isset( $raw['stall_orders'] ) && is_scalar( $raw['stall_orders'] ) ? (int) $raw['stall_orders'] : self::DEFAULTS['stall_orders'];
+		if ( $stall_orders < self::STALL_ORDERS_MIN || $stall_orders > self::STALL_ORDERS_MAX ) {
+			$dropped[] = __( 'stuck orders must be 1–50 (default 3 used)', 'fishotel-misc-plugin' );
+			$stall_orders = self::DEFAULTS['stall_orders'];
+		}
+
+		$stall_minutes = isset( $raw['stall_minutes'] ) && is_scalar( $raw['stall_minutes'] ) ? (int) $raw['stall_minutes'] : self::DEFAULTS['stall_minutes'];
+		if ( $stall_minutes < self::STALL_MINUTES_MIN || $stall_minutes > self::STALL_MINUTES_MAX ) {
+			$dropped[] = __( 'the stuck-order window must be 5–1440 minutes (default 30 used)', 'fishotel-misc-plugin' );
+			$stall_minutes = self::DEFAULTS['stall_minutes'];
 		}
 
 		$hosts_raw = $raw['extra_hosts'] ?? array();
@@ -207,6 +247,11 @@ class Settings {
 				'extra_hosts'            => $hosts,
 				'alert_email'            => $email,
 				'alert_cooldown_minutes' => $cooldown,
+				'checkout_alarm'         => ! empty( $raw['checkout_alarm'] ),
+				'checkout_alarm_email'   => $alarm_email,
+				'stall_orders'           => $stall_orders,
+				'stall_minutes'          => $stall_minutes,
+				'checkout_page_check'    => ! empty( $raw['checkout_page_check'] ),
 			)
 		);
 	}

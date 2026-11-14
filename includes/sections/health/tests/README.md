@@ -12,6 +12,8 @@ php  includes/sections/health/tests/logger-test.php
 php  includes/sections/health/tests/checks-test.php
 php  includes/sections/health/tests/capture-test.php
 php  includes/sections/health/tests/csv-test.php
+php  includes/sections/health/tests/section-switches-test.php
+php  includes/sections/health/tests/alarm-test.php
 node includes/sections/health/tests/admin.test.js
 ```
 
@@ -30,6 +32,24 @@ node includes/sections/health/tests/admin.test.js
   `sum_repeats_since()` counting the folded events; the after-insert
   callback (once per insert, never for a repeat, a throwing callback is
   harmless); a throwing store → `null`, never an exception.
+- **alarm-test.php** — the checkout alarm: its settings (defaults on /
+  3 / 30 / page off, bad values fall back and are said); new fatals from a
+  WooCommerce log file in the real 11.x line format (only lines after the
+  last look, INFO and a cut-off first line ignored, CONTEXT cut, the first
+  look never alarms on an old fatal, other log sources not read), from
+  the database handler (by log_id after the mark, newest first, no table =
+  nothing) and from WordPress's recovery mode (once); stuck orders through
+  `wc_get_orders()` (date and limit on both queries, the second only at the
+  threshold, paid statuses + On hold count as "went through"; only
+  checkout orders count, so batch invoices and orders made in wp-admin
+  never raise it); the page
+  (5xx only; a blocked loopback is a note, never an e-mail); the hour of
+  silence per signal, a fatal staying an hour, a stall clearing quietly;
+  one e-mail for two signals with its exact wording (what, where to look,
+  how to go back on an upload, plain words, no names); the test alarm;
+  the hooks it looks on and that a failed checkout only schedules; the
+  Today line and the Overview card's text; Settings off and the section
+  off drop the events.
 - **checks-test.php** — a healthy fixture produces only ok/info; then every
   rule one at a time: inactive/missing plugins (Misc → info), theme not
   FisHotel, WooCommerce inactive; update age at 24 h 59 min (ok), exactly
@@ -76,6 +96,16 @@ node includes/sections/health/tests/admin.test.js
 - **admin.test.js** — `filterRows()` (level, source, ANDed search terms,
   case-insensitivity, null rows, no mutation), `escapeHtml()`,
   `levelClass()`.
+- **section-switches-test.php** — not Health's own code: the plugin's
+  section switches (`includes/class-section-manager.php`), kept here
+  because CI runs the tests of the section folders. It brings its own stubs
+  and three throw-away sections. Several requests that each read the list
+  of enabled sections before any of them saved: two switched on, two
+  switched off, one switched off by a request that started before it was
+  on — every click is kept; the list is read again under a database lock
+  and the lock is given back; a click that changes nothing is answered as
+  saved and writes nothing; a section that does not exist is refused; a
+  lock that is not granted, or no database object, still saves.
 
 ## By hand, once, on a real site
 

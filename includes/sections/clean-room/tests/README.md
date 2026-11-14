@@ -16,11 +16,17 @@ statics only and stands replaced by `fake-store.php` — an in-memory
 store that runs the same Replay and hydration code — so no `$wpdb`
 method is ever called. `fixtures/qr-front-desk-521.txt` is the module
 matrix python-qrcode produces for the Front Desk URL of tank 521 (byte
-mode, level M, mask 2). Two fixtures are read by the PHP tests AND the
+mode, level M, mask 2). Four fixtures are read by the PHP tests AND the
 node tests, so the server and the page cannot drift apart:
 `fixtures/box-maths.json` (the percent-of-a-box maths: typed percents
-and box numbers, the per-box summary, the remembered shares, "How full")
-and `fixtures/unknown-names.json` (the "??" name of an unknown fish).
+and box numbers, the per-box summary, the remembered shares, "How full"),
+`fixtures/unknown-names.json` (the "??" name of an unknown fish),
+`fixtures/dose-maths.json` (the dose sums: the rounding, the unit of a
+weight, the words, and every sum with its amount, result line, working
+and note), `fixtures/dose-phrases.json` (a dose phrase in plain words)
+and `fixtures/todo-lines.json` (the day's to-do list in words — a line's
+medication and dose, the feeding of a whole building, a copper flag —
+and "what is it for" → the schedules carrying that word).
 
 ```
 php  includes/sections/clean-room/tests/layout-test.php
@@ -32,6 +38,9 @@ php  includes/sections/clean-room/tests/csv-test.php
 php  includes/sections/clean-room/tests/front-desk-test.php
 php  includes/sections/clean-room/tests/costing-test.php
 php  includes/sections/clean-room/tests/stats-test.php
+php  includes/sections/clean-room/tests/stats-prices-test.php
+php  includes/sections/clean-room/tests/stats-sales-test.php
+php  includes/sections/clean-room/tests/stats-admin-test.php
 php  includes/sections/clean-room/tests/species-test.php
 php  includes/sections/clean-room/tests/orders-test.php
 php  includes/sections/clean-room/tests/xlsx-test.php
@@ -43,8 +52,23 @@ php  includes/sections/clean-room/tests/sale-dates-test.php
 php  includes/sections/clean-room/tests/sizes-test.php
 php  includes/sections/clean-room/tests/box-shares-test.php
 php  includes/sections/clean-room/tests/identify-test.php
+php  includes/sections/clean-room/tests/medications-test.php
+php  includes/sections/clean-room/tests/dose-test.php
+php  includes/sections/clean-room/tests/dose-save-test.php
+php  includes/sections/clean-room/tests/dose-phrases-test.php
+php  includes/sections/clean-room/tests/medications-admin-test.php
+php  includes/sections/clean-room/tests/temp-tanks-test.php
+php  includes/sections/clean-room/tests/todo-test.php
+php  includes/sections/clean-room/tests/temp-board-test.php
+php  includes/sections/clean-room/tests/temp-guards-test.php
+php  includes/sections/clean-room/tests/dose-temp-test.php
+php  includes/sections/clean-room/tests/order-view-test.php
 node includes/sections/clean-room/tests/front-desk.test.js
 node includes/sections/clean-room/tests/clean-room-admin.test.js
+node includes/sections/clean-room/tests/dose-math.test.js
+node includes/sections/clean-room/tests/front-desk-dose.test.js
+node includes/sections/clean-room/tests/medications-admin.test.js
+node includes/sections/clean-room/tests/temp-tanks.test.js
 ```
 
 Every species, price, supplier and figure in these tests is invented
@@ -58,7 +82,8 @@ row-2 totals, the right-hand label block, a second unused "DOA" block,
 box-rate blocks, FishSheetStock, a `PW` sheet that must never be read)
 with `xlsx-builder.php`, a tiny .xlsx writer of hand-written XML parts.
 The CI job runs every `tests/*.php`, so both builders (and
-`fake-store.php`) exit 0 when run directly. Temporary files go to the
+`fake-store.php`, and `dose-helpers.php` — what the two dose tests
+share) exit 0 when run directly. Temporary files go to the
 system temp directory (`FH_TEST_TMP` overrides).
 
 - **layout-test.php** — the seed (six buildings, 22 tanks, 100–400
@@ -223,7 +248,94 @@ system temp directory (`FH_TEST_TMP` overrides).
   averages (the empty batch out, the unknown batch out of the survival
   average, total fish through QT); by supplier / origin (merged
   case-insensitively) / species group ("(no group)" last); one year at
-  a time.
+  a time. **Year by year** (`Stats::compare()`): the figures of each
+  year, the change between consecutive years — a count and money as the
+  difference with the percent where one is defined (never from zero), a
+  rate in points, up / down in money only —, a supplier, origin or
+  group with no order in a year (no figure there — null, never 0 — and
+  no change into or out of it; a real 0 stays a 0), three years with
+  one skipped, one year alone, and how the screen prints a figure and a
+  change ("+2 (+200.0%)", "-44.0 pts", a dash). **Per species**
+  (`Stats::by_species()`): the rows of a year and their estimates, the
+  rows adding up to the year's weighted totals, which fish a line is (a
+  list row by id or by its exact name, the unidentified ones as one
+  row), the groups as "By year" files the lines (a line only typed with
+  a species' name is in no group there, so a fish with linked and typed
+  lines is two rows and every group adds up to "By year"'s), and the
+  sort (numbers, text, empties last, stable) and the search the report
+  views use.
+- **stats-prices-test.php** — Prices to raise: which lines give a fish
+  a row (received at a price; not a free, unknown or nameless one), the
+  landed cost per fish of the latest order (by date, then id; two lines
+  of one fish weighted) and the plain average of the last three, the
+  suggested price — the rounding to the nearest 5 at the halves, the
+  ORDER's markup, and equal to `Costing::compute()`'s line figure with
+  tariffs, fees and a percent of a box —, the price source in order
+  (the linked product; the variation of the size; a product without a
+  price → the species list; neither → none, never 0), the gap, the
+  margin and who is under (a price AT the suggestion is not), the
+  selection (under only, biggest gap first; "show all"), the group and
+  supplier filters, and on the fake store that the view writes nothing
+  — not a species, order, product, price or option; the export sheet.
+- **stats-sales-test.php** — Real sales over a FAKE of WooCommerce's
+  order tables (`fake-store.php`: order stats, lookup rows, order items
+  and their meta): the statuses list (the suggestion from the paid
+  statuses and every registered status with "ship" in it, a saved list,
+  no WooCommerce); a year read — statuses in and out of the list,
+  refunds netted into their line and into the year of the order they
+  refund, a refund without a line counted apart, a zero-quantity refund
+  row, a whole-order refund stored under the order's line ids, the same
+  ledger read three rows (and one row) at a time, a read that is cut
+  off saying so; a variation rolled up to its species; invoice fish
+  lines and invoices kept as one line (split when the lines add up,
+  whole with the reason when not, the credit apart); the exact names
+  (species name, the linked product's title, a learned alias — and what
+  is no name); **not matched** by kind with units and money, and
+  matched + not matched = every paid line; what another section may
+  hand over about an order's invoices (`invoice_parts()`: every shape);
+  the Invoices section absent, then present (asked only about orders
+  with invoice lines, a line matched by its species id, a kept invoice
+  split by the section's lines, an exception over there harmless, the
+  filter before the function, an unknown species id not believed); the
+  rows beside the landed cost (the profit, **no profit without a landed
+  cost that year**, the earlier cost for reference, a fish that landed
+  but did not sell, no estimate without a survivor count); the cache
+  (one transient, a second view reading nothing, another year, a new
+  species link showing without a re-read, dropped by an order's status
+  change — every time —, not used for another list of statuses, a
+  bounded number of years, another version ignored), Refresh and the
+  Sales statuses form (capability, nonce, an empty or unknown list
+  refused, save, reset — each dropping the cache), no WooCommerce
+  tables, the export sheets (the CSV as ONE table that carries the "not
+  matched" too, its first two sections adding up to every paid line),
+  and **a read that fails** (a page of lines, the names of the lines,
+  the refunds, the years: marked failed, never cached, read again on
+  the next view, the sheets ending with INCOMPLETE).
+- **stats-admin-test.php** — the Stats tab's further views on the fake
+  store: which view a request asks for, the years of a comparison (the
+  last two with orders by default, one picked → the default and a
+  notice, at most six), the comparison as sheets (a row per year, the
+  change and change-% rows, empty cells for a missing year, the one
+  table of the CSV, written as CSV), the Species view's year (the
+  latest, or 0 = all, kept in its export link), search, sort and
+  heading links, its sheet, the export switch (every "what", every
+  sheet built into an .xlsx); and the SCREENS, rendered through
+  `Admin_Workbook::render()` with a PHP notice turned into a failure:
+  the strip of views, which numbers each view calls an estimate and
+  which actual, a dash in every cell of a supplier's missing year and
+  of the change next to it, a change in points, the sorted heading, a
+  name with markup escaped, Prices' read-only page without a form that
+  posts, Real sales' statuses, profit, "no landed cost in …", the not
+  matched lists, "How it adds up", the Refresh form and — without
+  WooCommerce's tables — the plain notice; the Settings card. Then:
+  **past the newest 500 orders** (600 orders over twelve years on a store that hands out 500 a read,
+  as the real one does) Compare years offers and shows the oldest years
+  as "By year" does, Real sales has the whole year's landed cost, and
+  Prices to raise says on how many orders it rests; the Species rows of
+  a group add up to that group on "By year" when lines were typed, not
+  linked; the pointer to the theme's "Add fish lines to past invoice
+  orders" tool (only when that theme is there); and the notice of a
+  reading that failed.
 - **species-test.php** — a form row normalised (whitespace, per box,
   money, dates, reef-safe, product); the candidate merge (a species row
   folding into a same-named or linked product, a duplicate dropped, a
@@ -429,6 +541,89 @@ system temp directory (`FH_TEST_TMP` overrides).
   corrected in another tab, and the Stays tab's Edit
   (the other fields saved and the fish left; refused with 409 when the
   fish was changed on the stale row).
+- **temp-tanks-test.php** — temporary tanks: the slot numbering
+  (`slot_number()` / `parse_slot()`, 901–909, a rack number never a
+  slot) and the labels ("TEMP 1" large, "901 · Temporary · …" small,
+  the same Front Desk URL, the path, the title of a free slot); setup
+  validation (the kind asked and never assumed, the first free slot or
+  a named one, a slot in use or retired, gallons, an unknown template,
+  the start date and its range, every slot in use, a tenth slot); what
+  it is for → the templates carrying that word (only Trifecta seeded,
+  any case, two templates for one word, nothing for a word nobody
+  carries, saved / removed / renamed words) and the preview before
+  anything is saved; the copied schedule independent of its template in
+  both directions (the template edited afterwards, the tank's own steps
+  moved / added / removed / replaced); the tank's own clock (day 1 = the
+  treatment start, "starts <date>", a fish's own day and dates
+  untouched); quarantine versus clean for arrivals,
+  moves and clearing — into a clean temporary tank, out of a quarantine
+  one into the Clean Room, a split, the same slot clean this month and
+  quarantine the next; readings and doses as the tank's own water; take
+  down (refused with fish, the history kept — the treatment as it was
+  run, doses, readings, the groups that passed through — and the next
+  setup in the slot starting clean); the 1.6 schema and its gate from
+  1.3, 1.4 and 1.5 (each missing column, a failed ALTER, the `temp`
+  ENUM value); a layout that never sets one up reading exactly as one
+  without the building.
+- **todo-test.php** — the day's list by water system: one line per step
+  per building however many tanks have fish; each line's medication,
+  dose and note; groups on different days ("for the day 2 group"); one
+  truth — ticked on the list, on one tank's own screen, by a copper
+  reading on any tank of the building, by a dose on the system or into
+  one tank — and every tank of the building then showing it; the
+  feeding as one line, tank by tank or all at once; the count at the
+  top, "all done", an empty room; the copper flags (low, due, overdue,
+  none for a tank without a copper test; a copper dose after a low
+  reading turns "below the floor" into "dosed since, test again
+  tomorrow" on the list and on the tank's own screen, and "1 copper
+  flag" is singular); a temporary tank beside the
+  buildings (its own lines, marked, not ticked by a building's dose);
+  the guards of a tick; the pool, the overlay, `spread_logs()` and
+  `merge_copper()` for a slot; the list on the phone's screens.
+- **order-view-test.php** — the supplier order screen read as text: the
+  "Goes on sale" card under the order's title, its fields posting to
+  their own form (no form inside a form), so the order's Save never
+  carries the sale date.
+- **temp-board-test.php** — the Board's side and the seams: the one
+  AJAX write (`Admin_Temp::request()`: 403 without the capability or
+  with a stale nonce, 400 for an act that is not a temporary-tank or
+  to-do act or one that is refused, set up / edit / schedule / take
+  down / tick by the posting user); the Temporary area as data (slots,
+  the set-up form's free slots, words and previews, a setup's own last
+  dose, a layout without the building); a slot with nothing set up
+  taking no reading, dose, tick or note; Settings → Layout's slots (one
+  more, nine at most, retiring a free one, never one that is set up);
+  "Used for" saved, renamed and deleted with its template; the list's
+  lines in words against `fixtures/todo-lines.json`; a temporary tank
+  spoken of by its number (an arrival into a quarantine one taken as
+  said, a clean one or a free slot asking for a quarantine tank, a move,
+  a reading); the count other
+  screens read — `Todo::summary()`, the `fishotel_cleanroom_todo`
+  filter and function (null without the tables, never an exception)
+  and the Today section's line (`today_line()`, never twice, none on a
+  day with nothing due or for a user without the capability).
+- **temp-guards-test.php** — the guards around the temporary tanks and
+  the list: no group comes back to life in a slot whose setup is gone
+  (the undo of a loss and a Count refused once it was taken down, and
+  in the next setup too; `Store::slot_revival()`, a note still taken,
+  the sentence the Stays tab shows); an undo does not reach into a
+  setup that was taken down (`Store::setup_gone()`; refused with the
+  slot free and with it set up again, the group neither moved nor
+  cleared; fine while the setup stands); a building that is *coming
+  soon* or *offline* but has fish keeps its block, the Temporary
+  building cannot leave *active* under a running tank, and a running
+  tank is listed whatever its building says; a step with "<" in its
+  name is stored as plain text and can be ticked on the list and on the
+  tank (`Temp_Tanks::step_text()`, `Todo::posted_key()`, against a
+  `sanitize_text_field()` stub that turns a lone "<" into an entity as
+  WordPress does); a page loaded before the slot changed hands, or
+  before the same setup changed on another screen, writes nothing
+  (`setup_id` required, `Temp_Tanks::seen()`); a dose step naming
+  several medications is not done by one of them — on a temporary tank,
+  on a building's list and on each of its tanks' screens — while a
+  step naming one still is (`Todo::combo()`, `part_dosed()`,
+  `settle_combos()`); and `fishotel_cleanroom_todo()` answering null
+  with no query while the section is off.
 - **fake-store.php** — not a test (exits 0 when run directly): the
   in-memory store the above drives (tanks and buildings from the seed,
   stays — joined with their batch's order and sale date like the real
@@ -437,7 +632,17 @@ system temp directory (`FH_TEST_TMP` overrides).
   per building, with `logs_on_date()`, `latest_doses()`,
   `imported_log_keys()` —, aliases, species rows, orders and lines with
   `update_line_fields()`, the remembered box shares, and what the real
-  Store reads from WooCommerce for the sizes, seeded by a test).
+  Store reads from WooCommerce for the sizes, seeded by a test). It also
+  fakes WooCommerce's order tables for Real sales — `sale()`, `refund()`
+  and `full_refund()` seed the order stats, the lookup rows and the order
+  items with their meta; `sales_rows()` joins them as the real query does
+  (a refund row carries its parent's status and date and the line it
+  refunds; pages by line id, then order id) but hands over the rows of
+  EVERY status, so the tests prove that `Stats_Sales::add_rows()` is what
+  keeps the unpaid ones out — and the products' current prices. Like the
+  real store, `orders()` hands out the newest 500 at most
+  (`ORDERS_LIMIT`), and `$sales_break` makes one sales read fail the way
+  a database error does (it answers null).
 - **xlsx-builder.php**, **fixture-builder.php** — not tests (exit 0 when
   run directly): the tiny .xlsx writer and the synthetic FisHotel-style
   workbook the reader, mapper and import tests use.
@@ -459,6 +664,190 @@ system temp directory (`FH_TEST_TMP` overrides).
   text, "How full"); `unknownName()` /
   `knownName()` (the "??" box of an order line) against
   `fixtures/unknown-names.json`.
+- **temp-tanks.test.js** — the phone's and the Board's pure helpers for
+  the temporary tanks and the day's list, both scripts loaded without a
+  DOM: `tankHeading()`, `offerTemplates()` / `offer()` and
+  `lineDetail()`, `feedText()`, `flagText()` against
+  `fixtures/todo-lines.json` (the file the server's temp-board-test.php
+  reads), `previewLines()` on the phone and on the Board,
+  `todoHeadline()`, `moveClears()`, `gridTanks()` (a free slot is no
+  tank to pick), `stepsFromRows()` (the Board's schedule editor).
+
+- **medications-test.php** — the editable medication list: the seed IS
+  the old fixed list (the same keys in the same order, names, chips, the
+  same names to answer to, the five rates — 25 mg, 9.5 mg, 1 ml per
+  10 gal, 10 mg, 1 g per 100 gal — equal to `Protocol::DOSE_RATES`,
+  copper to a level at 0.692 ml per gallon per 1.0 ppm, Salt typed,
+  Chloroquine's three named doses equal to the seeded CQ schedule's
+  rates); a medication by its names (whole words, the first named, the
+  longer name at the same place, a log note with its working, a retired
+  one still found); the lenient reader of what is stored (drops, caps, a
+  bad rate makes it typed, a measure only in a unit of the same kind);
+  Settings → Medications' operations — add (the key from the name, never
+  digits only, nineteen refusals each naming what is wrong, a name
+  another medication answers to, the cap), edit (the key and the place
+  stay, a changed name or chip is kept as an other name so an old log
+  still reads, the copper row re-rated stays the copper product and made
+  typed is none), retire and bring back (still read in logs, its names
+  still taken); where the list is kept (the settings option, the seed
+  until edited, the Numbers and Sizes saves keep it, no stale copy within
+  a request, junk reads as the seed); that `Protocol::medication_key()` /
+  `medication_label()` / `dose_text()` / `dose_suggestion()`, the to-do
+  tick and the store's "last dose" follow an edited list; and the
+  store's public calculator's copper figure — present and the same,
+  ours edited, ours typed for 10 gallons, absent, no entry of that name,
+  another unit, junk in the data, through the filter, a filter that
+  throws, the theme's own class.
+- **dose-test.php** — `Dose` against `fixtures/dose-maths.json` (the
+  file the page's JS is run against too): `round_amount()` (16.608 →
+  16.6, 5.125 → 5.1, 1.15 → 1.2 although binary floating point holds it
+  a breath low, 0.004 stays 0.004), `display()` (2,500 mg → 2.5 g,
+  950 mg → 0.95 g, 99.9 mg stays mg, 999.96 mg → 1 g), the words (levels, rates, a
+  measure's plural), and 51 sums — the copper example (100 gal, 2.16 →
+  2.40 ppm = 16.6 ml), 100 gallons of Metronidazole (2.5 g), a rate for
+  10 or 100 gallons, a rate typed in grams, a named dose, a schedule
+  step's rate, the top-up in percent and in gallons (with and without a
+  system volume, missing, too much), zero and negative differences, a
+  missing or unreadable reading, unknown gallons, a measure, pieces /
+  drops / teaspoons, three-decimal levels, typed — each with its state,
+  amount, unit, result line, working and note; that the PHP words are
+  the JS file's English; that the seeded list gives exactly the fixed list's
+  amount AND unit on every water from 1 to 4000 gal (milligrams only
+  under 0.1 g); what a schedule step names
+  (`step_rate()`, `step_level()`); what is due today per medication
+  (day 1, day 2, a day with no copper step, two groups on different days
+  — the lower first —, the CQ rates, the first medication a step names);
+  today's copper reading (from today with its site time, from yesterday,
+  none, the site day rather than the UTC day); the doses logged today
+  per water (`doses_today()`: the system's and each tank's, the latest
+  of several, not yesterday's, not the other building's, and for copper
+  whether it went in after the reading — "Now" is then left empty);
+  what "Now" and "Bring it to" start with (`defaults()`); the two waters of a tank's page against
+  the in-memory store (a reading on another tank of the building reads
+  the system, not this tank; a building reading reads both; the due
+  steps of the system and of the tank); what a Save's post turns into
+  (`args_from_request()`, `working_note()`: the gallons never from the
+  post, a named dose only when it is one, no note without the sum);
+  `save_reading()` (logged on the building or the tank, not again when
+  it is today's latest, a failing store); and the Board's "last dose"
+  text.
+- **dose-save-test.php** — the Save through `Front_Desk::perform()`: a
+  plain typed dose logs exactly what it always did; with the sum ONE
+  dose log whose note is the working (per gallon on the system's 100 or
+  205 gal and on the tank's 40, a named dose, a schedule step's rate,
+  the top-up in percent and gallons, a typed medication after a water
+  change), the gallons the store's whatever is posted, the typed amount
+  what is logged; the copper example on the 100 gallon system — the
+  reading 2.16 and the dose with its working, each once, the toast
+  saying both, the day's "Copper Power to 2.4" and the copper test
+  ticked in every tank of the water; saved again with the same Now, or
+  when the page's tank has that reading itself: no second reading; a
+  reading on the sibling tank 611 fills "Now" for the system but the
+  whole-system Save still logs it on the building (621's copper test is
+  ticked), once; another Now, this tank only, a reading two days old:
+  logged; nothing to add but typed anyway; because a dose has no undo —
+  the same post again from a sheet that knew of no dose is refused with
+  nothing written and saving again from the refreshed sheet goes
+  through (another medication, a tank's water after a system dose, a
+  post with no `seen`), "Now" 216 or "Bring it to" 240 refused like a
+  plain reading of 216, "Bring it to" 24 asked about first and written
+  with `sure`, and at or above the target with no amount the reading
+  alone (once; on the tank; never below the target or for another
+  medication); a Now that is no number; unknown gallons; a medication added
+  in Settings (to a level: no copper reading), a retired one refused and
+  not offered; a store whose dose log fails; the Events line and the
+  Board's last dose afterwards; and that every label front-desk.js asks
+  for is sent.
+- **dose-phrases-test.php** — the dose phrases: "copper 2.16 to 2.4"
+  and its relatives ("bring my copper up from 2.16 to 2.4", "cu 2.16 to
+  2.4", in words, with "ppm"), the target said first ("raise copper to
+  2.4 from 2.16" — never a reading of 2.4), the sentence as it was asked
+  for ("I need to bring my copper up from 2.16 to 2.4 in the 100 gallon
+  system"; "521 needs copper 2.16" stays a reading), "raise / bump / top
+  up copper to 2.4",
+  "dose copper", "dose metro", "metro for the system", "prazi this
+  tank", a name alone, a named dose ("cq loading"), a spoken tank, "the
+  100 gallon system" (the building that holds that much; none or two of
+  that size ask which tank), a tank that is not in the layout, a dose
+  spoken with its amount ("metro 5 g", "copper power 55 ml", "metro 212
+  mg"); that a reading is still a reading ("521 copper 2.16", "copper
+  2.4", "copper to 2.4" …) and a phrase with anything but dose words is
+  read as before; the sentences against `fixtures/dose-phrases.json`;
+  then the preview (`Front_Desk::dose_preview()`): the result line, the
+  working, the water, Now from today's reading or asked for (also after
+  a copper dose — the same sum is not offered again, and a preview from
+  before that Save is refused on Confirm), Bring it to
+  from the due step (day 1, day 2) or the copper target, the tank alone,
+  nothing to add, a named dose, the CQ step's rate, a spoken amount, a
+  typed medication, an unknown or offline tank, unknown gallons — and
+  Confirm's post through the same Save.
+- **medications-admin-test.php** — Settings → Medications' save
+  (`Medications_Admin::request()`): the crew without `manage_options`,
+  nobody, a wrong or missing nonce (403), an unknown operation and the
+  list's refusals (400) — nothing stored each time; add / edit / retire
+  / bring back stored in the settings option with every other setting
+  untouched; two tabs — a Save from a form drawn before another tab's
+  change is refused and stores nothing, a reloaded one saves, and the
+  edit form (not the Add form) carries the row's fingerprint; the real `wp_ajax` handler up to its reply; what the panel
+  shows (how each is dosed in words, named doses, the measure, "the
+  built-in list, unchanged"); the public calculator's figure beside
+  ours in each state, absent said plainly; what the Board's Calculator
+  is handed (the medications offered, each building's water, a store
+  that cannot be read); every label the script asks for is sent.
+- **dose-math.test.js** — `js/dose-math.js` against
+  `fixtures/dose-maths.json`: the same tables and the same 51 sums as
+  dose-test.php, plus the page's own spelling of the inputs and
+  translated words.
+- **front-desk-dose.test.js** — the Dose sheet, the Calculator and a
+  dose phrase's preview run for real: `js/front-desk.js` started against
+  a small stand-in DOM and a `fetch` that records what is posted. "Now"
+  filled with today's reading and its time, "Bring it to" with the due
+  step's level; the result line and its working; the amount filled and
+  editable ("Use the result"); typing re-runs the sum in place; nothing
+  to add; a missing reading; the water (this tank alone has no reading
+  of its own); a single rate said, several as chips, the due step's
+  rate picked and marked, a named dose; the Top-up switch in percent
+  and gallons, too much refused; a measure; a typed medication; another
+  medication dosed to a level; unknown gallons; "a dose cannot be
+  undone" and "saving also logs the copper reading" before Save; Save
+  posts ONE request with the amount as it stands and the sum's inputs;
+  the Calculator posts nothing, with a tank, without one, with no
+  medication offered; the phrase preview is never auto-confirmed, asks
+  for a missing reading and runs the sum on the page, Confirm posts the
+  Save by voice, a spoken amount posts no sum, *Open the Dose sheet*
+  carries what was said, an unknown tank asks the server again; and
+  "Already logged today: …" on the sheet and the preview — per
+  medication and water, with "read the level again" only for copper
+  dosed after the reading, "Now" then empty and asked for; and because a
+  dose has no undo: Save tapped three times before the reply posts ONE
+  request, a refusal that carries the screen redraws the open sheet (and
+  the preview) with the dose that went in and saving again posts its
+  time, "Bring it to" 24 is asked about and posted with `sure` only when
+  saved again as it stands, and at or above the target Save posts the
+  levels with no amount (the reading alone) — never for another
+  medication; and on a temporary tank: the sheet shows this tank only
+  ("Whole system" hidden) with the setup's gallons, the sum runs on its
+  own reading and its own schedule's level, Save posts `whole` 0; the
+  tank picker carries the day's list and the Calculator side by side,
+  and the Calculator opens without a tank and from its own address.
+- **dose-temp-test.php** — the dose calculator on a temporary tank,
+  through `Dose::waters()`, `Front_Desk::screen_from()` and
+  `Front_Desk::perform()` on the `Fake_Store`: a slot's waters are its
+  own (`own_water`; no system gallons, readings, doses or due steps; the
+  setup's gallons; the dose steps of the setup's OWN schedule on its OWN
+  day, with no fish in it), a rack tank's are unchanged; the screen
+  carries the `dose` block, the medication list, the day's list and the
+  setup sheet together; a free slot has no water; a Save posted as
+  "whole system" is filed on the tank with the working from the setup's
+  gallons and the copper reading, both stamped with the setup; the
+  stale-sheet refusal works there; the dose and the reading tick the
+  tank's own to-do and no rack tank sees them; a spoken "whole system"
+  is that tank; the Temporary area's "last dose" carries the working;
+  and a new setup in the same slot starts with nothing read, dosed or
+  due.
+- **medications-admin.test.js** — the pure parts of
+  `js/medications-admin.js`: what 100 gallons take at a rate (the
+  editor's hint), the rates the Board's Calculator offers, its sum.
 
 ## By hand, once, on a real site
 
@@ -514,7 +903,7 @@ system temp directory (`FH_TEST_TMP` overrides).
     product* → type a product title → pick it: the row shows the product
     link. Front Desk → Arrival → type the species' name: it is offered
     once (not twice when its name is a product's title).
-11. Arrivals → New order: supplier, origin, box mode, tariffs / flight /
+11. Supplier orders → New order: supplier, origin, box mode, tariffs / flight /
     import fees; two lines picked from the suggestions (the worth
     prefilled from the species' price), ordered / received / price;
     Save: the ref reads `2026-1`, the computed columns and the stats
@@ -565,7 +954,7 @@ system temp directory (`FH_TEST_TMP` overrides).
     Box rates filled; the file is gone. Upload the same file again and
     Import now: every count but the species updates is 0, nothing new on
     the Board or the Events tab. Upload and Discard: the file is gone.
-17. Sale dates. Arrivals → an order with checked-in fish: the *Goes on
+17. Sale dates. Supplier orders → an order with checked-in fish: the *Goes on
     sale* card shows an empty picker and "suggested <check-in + 28>";
     click the suggestion — the picker fills, nothing is saved; reload —
     still empty. Pick a date in the past and Save: the notice "Order … goes
@@ -629,3 +1018,87 @@ system temp directory (`FH_TEST_TMP` overrides).
     and "Not identified yet"; the XLSX has the four columns on Orders,
     By supplier and By origin, the stays export a needs_id column, the
     orders export needs_id and label_name on Lines.
+23. Doses. Settings → Medications lists the seven built-in medications
+    ("the built-in list, unchanged"), copper as "0.692 ml per gallon
+    raises the level by 1.0 ppm" with the store's public calculator's
+    figure beside it ("the same figure" — or that the theme's data is not
+    available here). Log "611 copper 2.16" on the phone, open 621 (same
+    building, 100 gal) → Today → Dose + → Copper: Now 2.16 with its
+    time, Bring it to the due step's level or the copper target; set it
+    to 2.4 — "Add 16.6 ml Copper Power" / "100 gal × 0.24 ppm × 0.692",
+    the amount 16.6 ml. Save: the toast names the dose, the system, the
+    working and that the reading was logged already; the Events tab has
+    ONE new dose row with the working and no second reading; the Board's
+    header for the building reads "last dose: Copper Power 16.6 ml (2.16
+    → 2.40 ppm, 100 gal) …". Dose → Metro: "Add 2.5 g Metronidazole" /
+    "100 gal × 25 mg"; *This tank only* → the tank's gallons; Top-up →
+    25 % → 625 mg. Calculator (phone and Board): Metro, 55 gallons →
+    1.4 g; nothing appears in the Events tab. Mic (or the typed box):
+    "bring copper from 2.16 to 2.4" → the same result and working, no
+    countdown, Confirm; "521 copper 2.2" is still a plain reading. Edit
+    Metronidazole (add a measure "scoop = 0.5 g"), add a medication,
+    retire one: the phone's chips follow, the result reads in scoops,
+    the retired one is gone from the chips and its old log rows still
+    read.
+24. Temporary tanks. The Board has a **Temporary** area with six free
+    slots (TEMP 1 · 901 … TEMP 6 · 906); Settings → Layout shows them
+    with *Add a slot (TEMP 7 · 907)*; *Print tank labels* prints one
+    label per slot. Scan (or open) a free slot's label: "Nothing is set
+    up here — Set up". Set one up from the Board: *What is it for?* →
+    "bacterial infection" picks Trifecta and lists its steps with their
+    days before anything is saved; without a kind the save is refused;
+    as Quarantine with 10 gallons it appears on the Board with its
+    kind, purpose and "day 1", and on the phone's tank picker under
+    Temporary. Its label now opens its screen. Settings → Treatment
+    schedules → Trifecta: change a step's day — the tank's schedule does
+    not change; on the tank, *Schedule* → +1 day on a step — the
+    template does not change.
+25. Fish in a temporary tank. Arrival sheet: the quarantine temporary
+    tank is offered beside the Spa tanks, a clean one is not. Move a
+    Spa group into the quarantine one with the *hospital* chip: not
+    cleared, its QT day unchanged, the tank's own day beside it. Set up
+    a second slot as Clean; move a quarantine group into it: the sheet
+    says it clears and asks ("Move and clear"); the group is cleared
+    today. Dose on a temporary tank: no "whole system", the sum
+    runs on its gallons and its own schedule's steps. *Take down* with fish in it is refused ("move
+    the fish out first"); empty, it is taken down, the slot is free,
+    Board → Temporary → History shows it with its treatment as it was
+    run, its doses, readings and the groups that passed through; a new
+    setup in that slot shows none of the old ticks or readings.
+26. To do. The **To do** tab (and *Today* on the phone's tank picker):
+    one block per Spa building and per temporary tank; with fish in
+    three tanks of one building each due dose and test is listed once;
+    *Done* on a line — every tank of that building then shows it ticked
+    on the Board and on its phone screen; "521 copper 2.4" on the phone
+    ticks the building's copper test; a whole-system dose ticks its
+    step; *All fed* ticks the feeding of every tank; the count at the
+    top goes down and reads "All done" at the end. With the Today
+    section on, its page and the dashboard widget say "Tanks: N things
+    to do" with a link to the tab.
+27. Stats → Compare years: the last two years with orders are ticked;
+    each supplier has a row per year and, under the later one, the
+    change (fish and percent, rates in "pts"). Tick a year in which a
+    supplier had no order: that row is dashes, not zeros, and so is the
+    change next to it. Export XLSX: four sheets; the CSV is one table.
+28. Stats → Species: a row per fish of the year; click "Landed" — the
+    most expensive first, again — the cheapest; search a group name;
+    "All years" lists a fish once per year. A fish whose survivors are
+    not typed reads "survivors not known yet", not a loss.
+29. Stats → Prices to raise: the fish priced under what their latest
+    order suggests, the biggest gap first; the suggested price equals
+    the "Suggested" of that fish's line on its order page. Tick "Show
+    all fish"; filter by a supplier — the costs are then that
+    supplier's. Nothing on the page saves anything; no price changed.
+30. Stats → Real sales: the statuses named at the top are WooCommerce's
+    paid ones plus "Shipped". Compare a linked product's units and
+    revenue for the year with WooCommerce → Analytics → Products (same
+    statuses; a refund made in another year than its order is the one
+    difference). A fish sold but not landed that year reads "no landed
+    cost in <year>", with no profit. "Not matched" lists what is no
+    species — link one of those products on the Species tab and reload:
+    its sales moved up, without a Refresh. "How it adds up" balances.
+    Complete a pending order, wait a minute (WooCommerce updates its
+    tables in the background) and reload: it is counted. Refresh reads
+    again at once. Settings → Sales statuses: untick "Shipped", Save —
+    Real sales names the shorter list and its figures drop; "Back to
+    the suggested list" restores it.

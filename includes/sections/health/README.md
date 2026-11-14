@@ -136,6 +136,61 @@ five errors with their age.
   for 24 h, then listed as info — so one old fatal does not keep the pill
   red for the whole retention period.
 
+## Checkout alarm
+
+Tells the owner within minutes when customers cannot check out. **On while
+the Health section is on** (Settings → *Checkout alarm on* switches it off);
+the page check is the only part that starts off. `class-alarm.php`.
+
+**What it watches** — all read-only and cheap:
+
+| Signal | How it is read |
+|--------|----------------|
+| A **new PHP fatal** since the last look | WooCommerce's `fatal-errors` log source. WooCommerce 11 writes it to **files** by default — `wp-content/uploads/wc-logs/fatal-errors-<date>-<hash>.log` (or `WC_LOG_DIR`), one line per fatal: `2026-01-02T03:04:05+00:00 CRITICAL <message> CONTEXT: {…}` (checked on the rehearsal site, WooCommerce 11.2.0). Only files changed since the last look are opened, and only their last 64 KB. When WooCommerce → Status → Logs is set to the **database** handler (or `WC_LOG_HANDLER` says so), the `{prefix}woocommerce_log` rows with source `fatal-errors` after the last `log_id` seen are read instead, by primary key. Plus WordPress's **recovery mode**: the option `recovery_mode_email_last_sent` moves when WordPress pauses a plugin or the theme after a fatal and e-mails its recovery link. The first look only notes "now", so switching on never e-mails about an old fatal. |
+| **Orders stuck at payment** | At least *N* checkout orders (placed by a customer on the checkout page or the block checkout — `created_via` `checkout` / `store-api`; Batch Manager's batch invoices and orders made in wp-admin also start as *Pending payment* and are left out) created in the last *M* minutes still *Pending payment* or *Failed*, while none created in that window went through (every status WooCommerce counts as paid, or *On hold* — an offline payment proves the checkout works). Two `wc_get_orders()` calls with a date and a limit (the second only when the first reaches *N*); never a scan of every order. Defaults 3 orders / 30 minutes. |
+| The **checkout page** answers with a 5xx | Optional, **off by default**: the site GETs its own checkout page (10 s timeout). A loopback that cannot connect is shown on the Overview as a note — some hosts block a site from calling itself — and never e-mailed. |
+
+**When it looks** — its own WP-Cron event `fishotel_health_checkout_watch`
+every 5 minutes (schedule `fishotel_health_five_minutes`), and a one-off
+look (`fishotel_health_checkout_soon`) a minute after WooCommerce marks an
+order Failed (`woocommerce_order_status_failed`), after the classic checkout
+throws while creating an order (`woocommerce_checkout_order_exception`) or
+after WooCommerce's shutdown handler sees a fatal
+(`woocommerce_shutdown_error`). On the customer's request nothing runs but
+that scheduling, inside a try / catch: the alarm can never slow or break a
+checkout. With `DISABLE_WP_CRON` the looks run when the host's system cron
+calls `wp-cron.php`.
+
+**On a finding** — ONE plain-text e-mail to the site's admin address (or
+Settings → *Send the alarm to*) with what was seen, where to look, and how
+to go back on the last upload (Plugins → Add New Plugin → Upload Plugin →
+the zip you had before → *Replace current with uploaded*; the theme the same
+way). Then silence for an hour **per signal**: a stall found while the fatal
+is still silent still e-mails. A red line on the Today page ("Checkout alarm:
+customers may not be able to check out") and the *Checkout alarm* card on
+the Overview show what is active. A fatal stays there for an hour; stuck
+orders and a page error go as soon as a look no longer finds them. **"All
+clear" is never e-mailed.** The Overview card has **Send a test alarm**
+(AJAX `fishotel_health_test_alarm`, manage_options + nonce), which changes
+nothing.
+
+**Stored** — option `fishotel_health_checkout_alarm` (not autoloaded): the
+last look, the marks (`since`, `db_id`), what is active, when each signal
+last e-mailed, the page note. Switching the alarm off in Settings, switching
+the section off, or deactivating the plugin drops both events and the
+option, so switching back on starts from "now".
+
+## FisHotel versions
+
+The Overview also shows the **FisHotel versions** card the FisHotel Tools
+Dashboard shows (`includes/class-versions.php`, outside this section so the
+Dashboard has it with Health off): one row per FisHotel build — FH Boards,
+FisHotel SMTP, ShipTracker, Batch Manager, Misc, the active theme, WPIT
+Updater when present — with its version, folder and on / off, and a warning
+when the same plugin is installed in two folders or a FisHotel plugin is
+switched off (WPIT Updater off is fine), when the active theme is not
+FisHotel or a second copy of it is installed. Local reads only.
+
 ## Alert email
 
 Settings → *Send alerts to*. When set, a **new** error/critical row from
@@ -167,6 +222,22 @@ its own failure. Blank = off.
   partial site copy), the Overview and Log tabs say so, and deactivating /
   reactivating the plugin really recreates it.
 
+## On the Today page
+
+While this section is on, the Today page and its widget show one line
+for it under **Site** — **"Site health: 2 problems found"**, the errors
+and warnings beside it (the same checks the Health widget runs, counting
+only what the owner can act on: an update check that has not run yet or
+is late, WPIT Updater switched off, and a scheduled job that is only late
+are left to the Health page — `Checks::owner_rows()`) and a link to the
+Overview. No line when every check is fine, and none for a
+user without `manage_options`. It is hooked in wp-admin only and worked
+out once per request (`class-today-line.php`).
+
+While a checkout alarm signal is active, a second, red line sits there
+too: **"Checkout alarm: customers may not be able to check out"**, with
+the signals beside it (one option read, no query of its own).
+
 ## Files
 
 ```
@@ -180,6 +251,8 @@ health/
 ├── class-cron.php       daily prune; records when WP-Cron last ran
 ├── class-settings.php   option, sanitised AJAX save, alert email
 ├── class-admin.php      page (Overview / Log / Settings), dashboard widget, CSV, clear log
+├── class-alarm.php      checkout alarm: new fatals, stuck orders, (optional) the checkout page; 5-minute event, e-mail, Today line
+├── class-today-line.php the "Site health: N problems found" line on Today
 ├── css/health-admin.css, js/health-admin.js
 ├── views/overview.php, log.php, settings.php, widget.php
 └── tests/               headless PHP + node tests (see tests/README.md)

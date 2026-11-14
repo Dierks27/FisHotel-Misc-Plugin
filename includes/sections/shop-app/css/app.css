@@ -1,0 +1,862 @@
+/**
+ * FisHotel Shop — the app's styles. Inlined into the shell page and pasted
+ * (with the script) into a Front Desk page opened with a shop session, so
+ * every rule is under body.fh-sa or a .fh-sa- class: nothing here touches
+ * the Front Desk's own styles.
+ *
+ * Made for a wet room: dark, high contrast, every target large, wide gaps
+ * between them, and every press visibly lights its key.
+ *
+ * @package FisHotel\Misc\Sections\Shop_App
+ */
+
+body.fh-sa,
+.fh-sa-layer,
+.fh-sa-sheet,
+.fh-sa-scan,
+.fh-sa-water,
+.fh-sa-bar {
+	--sa-bg: #0f1720;
+	--sa-card: #1b2733;
+	--sa-card-2: #243544;
+	--sa-text: #f3f6f8;
+	--sa-muted: #9fb0bf;
+	--sa-accent: #35b8ff;
+	--sa-ok: #3ddc84;
+	--sa-warn: #ffc53d;
+	--sa-danger: #ff5c5c;
+	--sa-border: rgba(255, 255, 255, 0.14);
+	--sa-radius: 16px;
+	--sa-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+	font-family: var(--sa-font);
+	color: var(--sa-text);
+	-webkit-tap-highlight-color: transparent;
+}
+
+body.fh-sa {
+	margin: 0;
+	padding: 0;
+	min-height: 100vh;
+	background: var(--sa-bg);
+	font-size: 18px;
+	line-height: 1.35;
+	-webkit-text-size-adjust: 100%;
+	overscroll-behavior: none;
+}
+
+body.fh-sa *,
+.fh-sa-layer *,
+.fh-sa-sheet *,
+.fh-sa-scan *,
+.fh-sa-water *,
+.fh-sa-bar * {
+	box-sizing: border-box;
+}
+
+.fh-sa-app {
+	max-width: 720px;
+	margin: 0 auto;
+	padding: calc(12px + env(safe-area-inset-top, 0px)) 16px calc(28px + env(safe-area-inset-bottom, 0px));
+}
+
+.fh-sa-loading,
+.fh-sa-noscript {
+	padding: 48px 16px;
+	text-align: center;
+	color: var(--sa-muted);
+}
+
+.fh-sa-brand {
+	margin: 8px 0 18px;
+	font-size: 15px;
+	font-weight: 700;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	color: var(--sa-muted);
+	text-align: center;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Buttons                                                            */
+/* ------------------------------------------------------------------ */
+.fh-sa-btn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 100%;
+	min-height: 64px;
+	margin: 0 0 14px;
+	padding: 14px 18px;
+	border: 1px solid var(--sa-border);
+	border-radius: var(--sa-radius);
+	background: var(--sa-card);
+	color: var(--sa-text);
+	font: inherit;
+	font-size: 20px;
+	font-weight: 700;
+	text-align: center;
+	text-decoration: none;
+	cursor: pointer;
+	touch-action: manipulation;
+	-webkit-user-select: none;
+	user-select: none;
+}
+
+.fh-sa-btn:active {
+	background: var(--sa-card-2);
+	transform: scale(0.985);
+}
+
+.fh-sa-btn:disabled {
+	opacity: 0.5;
+	cursor: default;
+}
+
+.fh-sa-btn--primary {
+	border-color: transparent;
+	background: var(--sa-accent);
+	color: #04121c;
+}
+
+.fh-sa-btn--primary:active {
+	background: #7fd2ff;
+}
+
+.fh-sa-btn--quiet {
+	background: transparent;
+	color: var(--sa-accent);
+	font-weight: 600;
+}
+
+.fh-sa-btn--lock {
+	width: auto;
+	min-width: 112px;
+	margin: 0;
+	border-color: var(--sa-danger);
+	background: transparent;
+	color: var(--sa-danger);
+}
+
+.fh-sa-btn--scan {
+	min-height: 84px;
+	font-size: 23px;
+}
+
+.fh-sa-btn--back {
+	width: auto;
+	min-width: 104px;
+	margin: 0;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Notices                                                            */
+/* ------------------------------------------------------------------ */
+.fh-sa-notice {
+	padding: 24px 4px;
+	text-align: center;
+}
+
+.fh-sa-notice__lead {
+	margin: 0 0 12px;
+	font-size: 24px;
+	font-weight: 700;
+	line-height: 1.25;
+}
+
+.fh-sa-notice__more {
+	margin: 0 0 22px;
+	color: var(--sa-muted);
+}
+
+.fh-sa-warn {
+	margin: 0 0 14px;
+	padding: 12px 14px;
+	border: 1px solid var(--sa-warn);
+	border-radius: 12px;
+	color: var(--sa-warn);
+	font-size: 15px;
+	text-align: left;
+}
+
+.fh-sa-warn a {
+	color: var(--sa-text);
+	font-weight: 700;
+}
+
+.fh-sa-foot {
+	margin-top: 26px;
+}
+
+/* ------------------------------------------------------------------ */
+/*  The keypad                                                         */
+/* ------------------------------------------------------------------ */
+.fh-sa-pad {
+	width: 100%;
+	max-width: 460px;
+	margin: 0 auto;
+	text-align: center;
+}
+
+.fh-sa-pad__title {
+	margin: 0;
+	font-size: 28px;
+	font-weight: 800;
+	line-height: 1.15;
+}
+
+.fh-sa-pad__note {
+	margin: 6px 0 0;
+	color: var(--sa-muted);
+	font-size: 16px;
+}
+
+.fh-sa-dots {
+	display: flex;
+	justify-content: center;
+	gap: 18px;
+	margin: 20px 0 6px;
+}
+
+.fh-sa-dot {
+	width: 22px;
+	height: 22px;
+	border: 3px solid var(--sa-muted);
+	border-radius: 50%;
+	background: transparent;
+	transition: background 0.08s linear, border-color 0.08s linear, transform 0.08s linear;
+}
+
+.fh-sa-dot.is-on {
+	border-color: var(--sa-accent);
+	background: var(--sa-accent);
+	transform: scale(1.15);
+}
+
+.fh-sa-pad__msg {
+	min-height: 28px;
+	margin: 8px 0 12px;
+	color: var(--sa-muted);
+	font-size: 18px;
+	font-weight: 600;
+}
+
+.fh-sa-pad__msg.is-bad {
+	color: var(--sa-danger);
+}
+
+.fh-sa-keys {
+	display: grid;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 14px;
+}
+
+.fh-sa-key {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	height: clamp(76px, 13.2vh, 124px);
+	padding: 0;
+	border: 2px solid var(--sa-border);
+	border-radius: 20px;
+	background: var(--sa-card);
+	color: var(--sa-text);
+	font: inherit;
+	font-size: clamp(34px, 5.6vh, 46px);
+	font-weight: 700;
+	line-height: 1;
+	cursor: pointer;
+	touch-action: manipulation;
+	-webkit-user-select: none;
+	user-select: none;
+	transition: background 0.05s linear, border-color 0.05s linear, transform 0.05s linear;
+}
+
+.fh-sa-key--word {
+	font-size: clamp(20px, 3.2vh, 26px);
+	color: var(--sa-muted);
+}
+
+/* The press must be seen through a wet screen: the whole key lights up. */
+.fh-sa-key.is-pressed,
+.fh-sa-key:active {
+	border-color: var(--sa-accent);
+	background: var(--sa-accent);
+	color: #04121c;
+	transform: scale(0.96);
+}
+
+.fh-sa-pad.is-busy .fh-sa-key,
+.fh-sa-pad.is-locked .fh-sa-key {
+	opacity: 0.35;
+}
+
+.fh-sa-pad.is-wrong {
+	animation: fh-sa-shake 0.42s ease-in-out;
+}
+
+.fh-sa-pad.is-wrong .fh-sa-dot {
+	border-color: var(--sa-danger);
+}
+
+@keyframes fh-sa-shake {
+	0%, 100% { transform: translateX(0); }
+	15% { transform: translateX(-14px); }
+	30% { transform: translateX(13px); }
+	45% { transform: translateX(-11px); }
+	60% { transform: translateX(9px); }
+	75% { transform: translateX(-6px); }
+	90% { transform: translateX(3px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.fh-sa-pad.is-wrong {
+		animation: none;
+		outline: 3px solid var(--sa-danger);
+		outline-offset: 8px;
+		border-radius: 12px;
+	}
+}
+
+/* A phone on its side: the title beside the keys, so all twelve stay on screen. */
+@media (orientation: landscape) and (max-height: 560px) {
+	.fh-sa-brand--pad {
+		display: none;
+	}
+
+	.fh-sa-pad {
+		display: grid;
+		grid-template-columns: 1fr minmax(300px, 1.2fr);
+		grid-template-areas: "title keys" "note keys" "dots keys" "msg keys";
+		align-items: center;
+		column-gap: 24px;
+		max-width: 760px;
+	}
+
+	.fh-sa-pad__title { grid-area: title; }
+	.fh-sa-pad__note { grid-area: note; }
+	.fh-sa-dots { grid-area: dots; }
+	.fh-sa-pad__msg { grid-area: msg; }
+	.fh-sa-keys { grid-area: keys; gap: 10px; }
+
+	.fh-sa-key {
+		height: clamp(56px, 19vh, 96px);
+		font-size: clamp(26px, 8vh, 38px);
+	}
+}
+
+/* ------------------------------------------------------------------ */
+/*  Home                                                               */
+/* ------------------------------------------------------------------ */
+.fh-sa-top {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 14px;
+	margin: 0 0 20px;
+	padding: 12px 14px;
+	border: 1px solid var(--sa-border);
+	border-radius: var(--sa-radius);
+	background: var(--sa-card);
+}
+
+.fh-sa-who {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+}
+
+.fh-sa-who__name {
+	overflow: hidden;
+	font-size: 24px;
+	font-weight: 800;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.fh-sa-who__device {
+	color: var(--sa-muted);
+	font-size: 14px;
+}
+
+.fh-sa-h {
+	margin: 18px 0 10px;
+	font-size: 26px;
+	font-weight: 800;
+	line-height: 1.15;
+}
+
+.fh-sa-area {
+	margin: 18px 0 10px;
+	color: var(--sa-muted);
+	font-size: 15px;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+}
+
+.fh-sa-sub {
+	margin: 0 0 12px;
+	color: var(--sa-muted);
+}
+
+.fh-sa-crumb {
+	display: flex;
+	align-items: center;
+	gap: 14px;
+}
+
+.fh-sa-crumb .fh-sa-h {
+	margin: 0;
+}
+
+.fh-sa-grid {
+	display: grid;
+	grid-template-columns: repeat(2, 1fr);
+	gap: 14px;
+}
+
+.fh-sa-grid--tanks {
+	grid-template-columns: repeat(3, 1fr);
+}
+
+@media (min-width: 620px) {
+	.fh-sa-grid {
+		grid-template-columns: repeat(3, 1fr);
+	}
+
+	.fh-sa-grid--tanks {
+		grid-template-columns: repeat(4, 1fr);
+	}
+}
+
+.fh-sa-tile {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 4px;
+	min-height: 96px;
+	padding: 12px 8px;
+	border: 2px solid var(--sa-border);
+	border-radius: var(--sa-radius);
+	background: var(--sa-card);
+	color: var(--sa-text);
+	font: inherit;
+	cursor: pointer;
+	touch-action: manipulation;
+}
+
+.fh-sa-tile:active {
+	border-color: var(--sa-accent);
+	background: var(--sa-card-2);
+	transform: scale(0.97);
+}
+
+.fh-sa-tile:disabled {
+	opacity: 0.45;
+	cursor: default;
+}
+
+.fh-sa-tile.is-qt {
+	border-color: var(--sa-warn);
+}
+
+.fh-sa-tile.is-empty {
+	background: transparent;
+}
+
+.fh-sa-tile__name {
+	font-size: 24px;
+	font-weight: 800;
+	line-height: 1.1;
+	text-align: center;
+}
+
+.fh-sa-tile--tank .fh-sa-tile__name {
+	font-size: 32px;
+}
+
+.fh-sa-tile__sub {
+	color: var(--sa-muted);
+	font-size: 14px;
+	text-align: center;
+}
+
+/* ------------------------------------------------------------------ */
+/*  The scanner: the camera full screen, a square, Cancel; the number  */
+/*  pad when there is no camera                                        */
+/* ------------------------------------------------------------------ */
+.fh-sa-scan {
+	position: fixed;
+	inset: 0;
+	z-index: 2000;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: flex-end;
+	overflow: auto;
+	padding: calc(16px + env(safe-area-inset-top, 0px)) 16px calc(20px + env(safe-area-inset-bottom, 0px));
+	background: #000;
+	font-size: 18px;
+	line-height: 1.35;
+	overscroll-behavior: contain;
+}
+
+.fh-sa-scan__video {
+	position: absolute;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+}
+
+.fh-sa-scan__frame {
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	width: min(64vw, 64vh);
+	height: min(64vw, 64vh);
+	border: 4px solid rgba(255, 255, 255, 0.9);
+	border-radius: 24px;
+	box-shadow: 0 0 0 100vmax rgba(0, 0, 0, 0.45);
+	transform: translate(-50%, -58%);
+	pointer-events: none;
+}
+
+.fh-sa-scan.is-live .fh-sa-scan__frame {
+	border-color: var(--sa-accent);
+}
+
+.fh-sa-scan__foot {
+	position: relative;
+	width: 100%;
+	max-width: 420px;
+}
+
+.fh-sa-scan__hint {
+	margin: 0 0 14px;
+	padding: 10px 14px;
+	border-radius: 12px;
+	background: rgba(0, 0, 0, 0.7);
+	font-size: 18px;
+	font-weight: 600;
+	text-align: center;
+}
+
+.fh-sa-scan__hint.is-bad {
+	background: #4a1515;
+	border: 1px solid rgba(255, 92, 92, 0.6);
+}
+
+.fh-sa-scan__type,
+.fh-sa-scan__cancel {
+	margin: 0 0 12px;
+	border-color: rgba(255, 255, 255, 0.5);
+	background: rgba(0, 0, 0, 0.7);
+	color: #fff;
+}
+
+.fh-sa-scan__cancel {
+	min-height: 72px;
+	margin: 0;
+}
+
+/* No camera, or the number typed: the pad instead of the picture. */
+.fh-sa-scan.is-typing {
+	justify-content: flex-start;
+	background: var(--sa-bg);
+}
+
+.fh-sa-scan.is-typing .fh-sa-scan__video,
+.fh-sa-scan.is-typing .fh-sa-scan__frame,
+.fh-sa-scan.is-typing .fh-sa-scan__type {
+	display: none;
+}
+
+.fh-sa-scan__pad {
+	position: relative;
+	width: 100%;
+	max-width: 420px;
+	margin: 0 0 14px;
+}
+
+.fh-sa-scan__pad[hidden] {
+	display: none;
+}
+
+.fh-sa-scan__title {
+	margin: 4px 0 8px;
+	font-size: 22px;
+	text-align: center;
+}
+
+.fh-sa-scan__typed {
+	margin: 0 0 12px;
+	font-size: 48px;
+	font-weight: 800;
+	letter-spacing: 0.12em;
+	text-align: center;
+	font-variant-numeric: tabular-nums;
+}
+
+.fh-sa-scan__pad .fh-sa-keys {
+	gap: 10px;
+}
+
+.fh-sa-scan__pad .fh-sa-key {
+	height: clamp(64px, 10.5vh, 104px);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Inside a tank screen: the bar, the keypad layer, the sheet         */
+/* ------------------------------------------------------------------ */
+.fh-sa-bar {
+	position: sticky;
+	top: 0;
+	z-index: 900;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	min-height: 56px;
+	padding: calc(6px + env(safe-area-inset-top, 0px)) 12px 6px;
+	border-bottom: 1px solid var(--sa-border);
+	background: #0a1017;
+	font-size: 17px;
+}
+
+.fh-sa-bar__home {
+	display: flex;
+	align-items: center;
+	min-height: 44px;
+	padding: 0 10px 0 2px;
+	color: var(--sa-accent);
+	font-weight: 700;
+	text-decoration: none;
+}
+
+.fh-sa-bar__name {
+	flex: 1;
+	overflow: hidden;
+	font-weight: 700;
+	text-align: center;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.fh-sa-bar__lock {
+	min-width: 84px;
+	min-height: 44px;
+	padding: 0 14px;
+	border: 2px solid var(--sa-danger);
+	border-radius: 12px;
+	background: transparent;
+	color: var(--sa-danger);
+	font: inherit;
+	font-weight: 800;
+	cursor: pointer;
+	touch-action: manipulation;
+}
+
+.fh-sa-bar__lock:active {
+	background: var(--sa-danger);
+	color: #1a0505;
+}
+
+/* Scan a tank, on every screen inside the app: big enough for a wet thumb. */
+.fh-sa-bar__scan {
+	min-width: 132px;
+	min-height: 56px;
+	padding: 0 16px;
+	border: 0;
+	border-radius: 14px;
+	background: var(--sa-accent);
+	color: #04121c;
+	font: inherit;
+	font-size: 18px;
+	font-weight: 800;
+	cursor: pointer;
+	touch-action: manipulation;
+}
+
+.fh-sa-bar__scan:active {
+	background: #7fd2ff;
+	transform: scale(0.97);
+}
+
+@media (max-width: 400px) {
+	.fh-sa-bar {
+		gap: 6px;
+		padding-left: 8px;
+		padding-right: 8px;
+	}
+
+	.fh-sa-bar__scan {
+		min-width: 104px;
+		padding: 0 10px;
+		font-size: 16px;
+	}
+
+	.fh-sa-bar__lock {
+		min-width: 64px;
+		padding: 0 8px;
+	}
+}
+
+.fh-sa-layer {
+	position: fixed;
+	inset: 0;
+	z-index: 3000;
+	overflow: auto;
+	padding: calc(18px + env(safe-area-inset-top, 0px)) 16px calc(24px + env(safe-area-inset-bottom, 0px));
+	background: var(--sa-bg);
+	font-size: 18px;
+	line-height: 1.35;
+}
+
+.fh-sa-sheet {
+	position: fixed;
+	inset: 0;
+	z-index: 2500;
+	display: flex;
+	align-items: flex-end;
+	justify-content: center;
+	padding: 16px 12px calc(16px + env(safe-area-inset-bottom, 0px));
+	background: rgba(0, 0, 0, 0.72);
+	font-size: 18px;
+	line-height: 1.35;
+}
+
+.fh-sa-sheet__box {
+	width: 100%;
+	max-width: 520px;
+	padding: 20px 18px 6px;
+	border: 3px solid var(--sa-danger);
+	border-radius: 20px;
+	background: var(--sa-bg);
+	text-align: center;
+}
+
+.fh-sa-sheet__title {
+	margin: 0 0 8px;
+	color: var(--sa-danger);
+	font-size: 34px;
+	font-weight: 900;
+	line-height: 1.1;
+	letter-spacing: 0.02em;
+}
+
+.fh-sa-sheet__why {
+	margin: 0 0 12px;
+	font-size: 18px;
+}
+
+.fh-sa-sheet__status {
+	min-height: 24px;
+	margin: 0 0 12px;
+	color: var(--sa-muted);
+}
+
+.fh-sa-sheet__retry {
+	min-height: 84px;
+	font-size: 26px;
+}
+
+/* ------------------------------------------------------------------ */
+/*  The enrolment link's page                                          */
+/* ------------------------------------------------------------------ */
+.fh-sa-enrol {
+	max-width: 520px;
+	margin: 0 auto;
+	padding: 40px 16px;
+	text-align: center;
+}
+
+.fh-sa-enrol h1 {
+	margin: 0 0 12px;
+	font-size: 28px;
+	line-height: 1.2;
+}
+
+.fh-sa-enrol p {
+	margin: 0 0 22px;
+	color: var(--sa-muted);
+}
+
+.fh-sa-enrol strong {
+	color: var(--sa-text);
+}
+
+.fh-sa-enrol form {
+	margin: 0;
+}
+
+/* What this tank's water needs today — under the bar on a tank screen. */
+.fh-sa-water {
+	margin: 0;
+	padding: 12px 14px 14px;
+	border-bottom: 1px solid var(--sa-border);
+	background: var(--sa-card);
+	font-size: 17px;
+	line-height: 1.35;
+}
+
+.fh-sa-water__head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 4px 10px;
+}
+
+.fh-sa-water__title {
+	font-weight: 800;
+}
+
+.fh-sa-water__where,
+.fh-sa-water__count {
+	color: var(--sa-muted);
+}
+
+.fh-sa-water__count.is-todo {
+	color: var(--sa-warn);
+	font-weight: 700;
+}
+
+.fh-sa-water__count.is-done {
+	color: var(--sa-ok);
+	font-weight: 700;
+}
+
+.fh-sa-water__list {
+	margin: 8px 0 0;
+	padding: 0;
+	list-style: none;
+}
+
+.fh-sa-water__item {
+	padding: 6px 0;
+	border-top: 1px solid var(--sa-border);
+}
+
+.fh-sa-water__item.is-done {
+	color: var(--sa-muted);
+	text-decoration: line-through;
+}
+
+.fh-sa-water__all {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 52px;
+	margin-top: 10px;
+	border: 2px solid var(--sa-accent);
+	border-radius: 12px;
+	color: var(--sa-accent);
+	font-weight: 800;
+	text-decoration: none;
+	touch-action: manipulation;
+}
+
+.fh-sa-water__all:active {
+	background: var(--sa-accent);
+	color: #04121c;
+}

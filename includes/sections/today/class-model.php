@@ -36,6 +36,24 @@ class Model {
 	const LOOKAHEAD_MAX = 60;
 
 	/**
+	 * The lines other sections add under the header (extra_lines()).
+	 */
+	const EXTRA_LINES_FILTER = 'fishotel_today_lines';
+	const EXTRA_LINES_MAX    = 12;
+	const EXTRA_LINE_LENGTH  = 160;
+	const EXTRA_LINE_TONES   = array( 'todo', 'done', 'bad' );
+
+	/**
+	 * The headings the lines are shown under, in this order (a line's
+	 * `group`). A line with no group, or one not listed, goes under
+	 * EXTRA_LINE_OTHER at the end.
+	 *
+	 * @var string[]
+	 */
+	const EXTRA_LINE_GROUPS = array( 'fish-room', 'customers', 'shipping', 'site' );
+	const EXTRA_LINE_OTHER  = 'other';
+
+	/**
 	 * Badge keys, most serious first. The index is the sort rank of a
 	 * destination (holds first, "nothing needed" last).
 	 *
@@ -538,9 +556,11 @@ class Model {
 	 *
 	 * @param array[] $destinations Destinations.
 	 * @param array   $flags        weather / invoice / tracking => bool.
+	 * @param bool    $tracking_due Whether the box has shipped by now (ship day today or past): before
+	 *                              that a missing tracking number is not counted — a box cannot have one yet.
 	 * @return array<string, int>
 	 */
-	public static function chips( array $destinations, array $flags = self::DEFAULT_FLAGS ) {
+	public static function chips( array $destinations, array $flags = self::DEFAULT_FLAGS, $tracking_due = true ) {
 		$weather_on = self::weather_on( $flags );
 
 		$chips = array(
@@ -586,7 +606,7 @@ class Model {
 			}
 
 			$tracking = $destination['tracking'] ?? null;
-			if ( is_array( $tracking ) && empty( $tracking['done'] ) ) {
+			if ( $tracking_due && is_array( $tracking ) && empty( $tracking['done'] ) ) {
 				$chips['needs_tracking']++;
 			}
 		}
@@ -603,9 +623,11 @@ class Model {
 	 *
 	 * @param array[] $destinations Destinations.
 	 * @param array   $flags        weather / invoice / tracking => bool.
+	 * @param bool    $tracking_due Whether the box has shipped by now (see chips()): "no tracking"
+	 *                              is raised only from the ship day on.
 	 * @return array<int, array{order_id: int, number: string, label: string, edit_url: string, kind: string, reasons: string[], rank: int}>
 	 */
-	public static function needs_attention( array $destinations, array $flags = self::DEFAULT_FLAGS ) {
+	public static function needs_attention( array $destinations, array $flags = self::DEFAULT_FLAGS, $tracking_due = true ) {
 		$weather_on = self::weather_on( $flags );
 		$out        = array();
 
@@ -646,7 +668,7 @@ class Model {
 			}
 
 			$tracking = $destination['tracking'] ?? null;
-			if ( is_array( $tracking ) && empty( $tracking['done'] ) ) {
+			if ( $tracking_due && is_array( $tracking ) && empty( $tracking['done'] ) ) {
 				$reasons['tracking'] = 'no tracking';
 			}
 
@@ -808,6 +830,95 @@ class Model {
 	 */
 	public static function place( $city, $state ) {
 		return Note::place( $city, $state );
+	}
+
+	/**
+	 * The lines other sections add under the header through the
+	 * `fishotel_today_lines` filter, cleaned (pure): each is one short
+	 * sentence with an optional link — e.g. the Clean Room's "Tanks: 3
+	 * things to do". Anything that is not a line with text is dropped;
+	 * the tone is '' / 'todo' / 'done' / 'bad'; the group is one of
+	 * EXTRA_LINE_GROUPS or 'other'; the count is a whole number (0 when the
+	 * line gives none); at most EXTRA_LINES_MAX.
+	 *
+	 * @param mixed $raw What the filter returned.
+	 * @return array<int, array{key: string, text: string, detail: string, url: string, tone: string, group: string, count: int}>
+	 */
+	public static function extra_lines( $raw ) {
+		$out = array();
+		foreach ( is_array( $raw ) ? $raw : array() as $line ) {
+			if ( ! is_array( $line ) || ! isset( $line['text'] ) || ! is_scalar( $line['text'] ) ) {
+				continue;
+			}
+			$text = trim( (string) preg_replace( '/\s+/', ' ', strip_tags( (string) $line['text'] ) ) );
+			if ( '' === $text ) {
+				continue;
+			}
+			$detail = isset( $line['detail'] ) && is_scalar( $line['detail'] ) ? trim( (string) preg_replace( '/\s+/', ' ', strip_tags( (string) $line['detail'] ) ) ) : '';
+			$tone   = isset( $line['tone'] ) && is_scalar( $line['tone'] ) ? (string) $line['tone'] : '';
+			$out[]  = array(
+				'key'    => isset( $line['key'] ) && is_scalar( $line['key'] ) ? (string) preg_replace( '/[^a-z0-9_-]/', '', strtolower( (string) $line['key'] ) ) : '',
+				'text'   => (string) substr( $text, 0, self::EXTRA_LINE_LENGTH ),
+				'detail' => (string) substr( $detail, 0, self::EXTRA_LINE_LENGTH ),
+				'url'    => isset( $line['url'] ) && is_string( $line['url'] ) ? trim( $line['url'] ) : '',
+				'tone'   => in_array( $tone, self::EXTRA_LINE_TONES, true ) ? $tone : '',
+				'group'  => isset( $line['group'] ) && in_array( $line['group'], self::EXTRA_LINE_GROUPS, true ) ? (string) $line['group'] : self::EXTRA_LINE_OTHER,
+				'count'  => isset( $line['count'] ) && is_numeric( $line['count'] ) ? max( 0, (int) $line['count'] ) : 0,
+			);
+			if ( count( $out ) >= self::EXTRA_LINES_MAX ) {
+				break;
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * The cleaned lines under their headings (pure): Fish room, Customers,
+	 * Shipping, Site, then Other — a heading only when it has a line, and
+	 * the lines of one heading in the order the sections gave them.
+	 *
+	 * @param array[] $lines extra_lines().
+	 * @return array<int, array{group: string, title: string, lines: array[]}>
+	 */
+	public static function grouped_lines( array $lines ) {
+		$order = array_merge( self::EXTRA_LINE_GROUPS, array( self::EXTRA_LINE_OTHER ) );
+		$by    = array_fill_keys( $order, array() );
+		foreach ( $lines as $line ) {
+			$group          = isset( $line['group'] ) && isset( $by[ $line['group'] ] ) ? $line['group'] : self::EXTRA_LINE_OTHER;
+			$by[ $group ][] = $line;
+		}
+
+		$out = array();
+		foreach ( $order as $group ) {
+			if ( $by[ $group ] ) {
+				$out[] = array(
+					'group' => $group,
+					'title' => self::group_title( $group ),
+					'lines' => $by[ $group ],
+				);
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * A heading in words.
+	 *
+	 * @param string $group One of EXTRA_LINE_GROUPS, or 'other'.
+	 * @return string
+	 */
+	public static function group_title( $group ) {
+		switch ( (string) $group ) {
+			case 'fish-room':
+				return __( 'Fish room', 'fishotel-misc-plugin' );
+			case 'customers':
+				return __( 'Customers', 'fishotel-misc-plugin' );
+			case 'shipping':
+				return __( 'Shipping', 'fishotel-misc-plugin' );
+			case 'site':
+				return __( 'Site', 'fishotel-misc-plugin' );
+		}
+		return __( 'Other', 'fishotel-misc-plugin' );
 	}
 
 	/**

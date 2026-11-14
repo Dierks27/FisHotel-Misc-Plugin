@@ -61,7 +61,7 @@ foreach ( $stays as $fh_stay ) {
 					/* translators: 1: date, 2: tank path */
 					echo esc_html( sprintf( __( 'Next on sale %1$s (%2$s).', 'fishotel-misc-plugin' ), $facts['next']['sale_ready_date'], $facts['next']['tank'] ) );
 				} else {
-					esc_html_e( 'No sale date set yet: set the batch\'s on its supplier order (Arrivals), or a group\'s own date below.', 'fishotel-misc-plugin' );
+					esc_html_e( 'No sale date set yet: set the batch\'s on its supplier order (Clean Room → Supplier orders), or a group\'s own date below.', 'fishotel-misc-plugin' );
 				}
 				?>
 			</p>

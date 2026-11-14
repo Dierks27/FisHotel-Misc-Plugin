@@ -138,7 +138,9 @@ class Weather {
 		self::load();
 
 		Cron::init();
-		Cron::ensure_scheduled( Settings::get() );
+		// At `init`, not here: reading the settings asks WooCommerce for its order statuses, whose
+		// names are translated — and loading translations this early logs a notice on every request.
+		add_action( 'init', array( __CLASS__, 'arm' ) );
 
 		if ( is_admin() ) {
 			require_once self::path() . 'class-admin.php';
@@ -149,6 +151,13 @@ class Weather {
 			$admin = new Admin();
 			$admin->init();
 		}
+	}
+
+	/**
+	 * Make sure the nightly event is scheduled (hooked to `init` by boot()).
+	 */
+	public static function arm() {
+		Cron::ensure_scheduled( Settings::get() );
 	}
 
 	/**

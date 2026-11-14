@@ -1,0 +1,343 @@
+/**
+ * Clean Room front desk — the temporary tanks' screens (a free slot, Set
+ * up, a setup's own schedule, Take down) and the day's list by water
+ * system. Inlined into the page after front-desk.css by
+ * Front_Desk::maybe_render(); it builds on that file's --fd-* tokens.
+ *
+ * @package FisHotel\Misc\Sections\Clean_Room
+ */
+
+/* ------------------------------------------------------------------ */
+/*  The picker: Today, and the Temporary group                         */
+/* ------------------------------------------------------------------ */
+.fh-fd-today-entry {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	width: 100%;
+	min-height: 72px;
+	margin: 0 0 16px;
+	padding: 12px 16px;
+	border: 1px solid var(--fd-border);
+	border-left: 6px solid var(--fd-muted);
+	border-radius: var(--fd-radius);
+	background: var(--fd-card);
+	color: var(--fd-text);
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.fh-fd-today-entry.is-open { border-left-color: var(--fd-warn); }
+.fh-fd-today-entry.is-done { border-left-color: var(--fd-ok); }
+
+.fh-fd-today-entry__title {
+	font-size: 24px;
+	font-weight: 800;
+}
+
+.fh-fd-today-entry__count {
+	flex: 1;
+	font-size: 17px;
+	font-weight: 600;
+	color: var(--fd-muted);
+}
+
+.fh-fd-today-entry.is-open .fh-fd-today-entry__count { color: var(--fd-warn); }
+.fh-fd-today-entry.is-done .fh-fd-today-entry__count { color: var(--fd-ok); }
+
+.fh-fd-building.is-temp {
+	border-color: rgba(167, 139, 250, 0.55);
+}
+
+.fh-fd-tank.is-temp {
+	font-size: 19px;
+	border-left: 5px solid #b7791f;
+}
+
+.fh-fd-tank.is-temp.is-clean {
+	border-left-color: #2d5fb8;
+}
+
+.fh-fd-tank.is-setup {
+	border-style: dashed;
+	color: var(--fd-accent);
+}
+
+.fh-fd-badge--temp {
+	background: #6b4fbb;
+}
+
+/* ------------------------------------------------------------------ */
+/*  A free slot, Set up, Take down                                     */
+/* ------------------------------------------------------------------ */
+.fh-fd-free p {
+	margin: 0 0 16px;
+	font-size: 20px;
+}
+
+.fh-fd-kinds {
+	display: grid;
+	gap: 8px;
+}
+
+.fh-fd-kind {
+	display: block;
+	width: 100%;
+	min-height: var(--fd-tap);
+	padding: 10px 14px;
+	border: 1px solid var(--fd-border);
+	border-radius: var(--fd-radius);
+	background: var(--fd-card);
+	color: var(--fd-text);
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.fh-fd-kind strong {
+	display: block;
+	font-size: 19px;
+}
+
+.fh-fd-kind small {
+	display: block;
+	font-size: 14px;
+	color: var(--fd-muted);
+}
+
+.fh-fd-kind.is-on {
+	border-color: var(--fd-accent);
+	background: rgba(53, 184, 255, 0.16);
+}
+
+.fh-fd-chip--match {
+	border-color: var(--fd-ok);
+}
+
+.fh-fd-preview {
+	margin: 10px 0 0;
+	padding: 10px 12px;
+	border: 1px dashed var(--fd-border);
+	border-radius: 12px;
+}
+
+.fh-fd-preview p {
+	margin: 0;
+}
+
+.fh-fd-preview ul {
+	margin: 6px 0 0 20px;
+	padding: 0;
+	font-size: 16px;
+}
+
+.fh-fd-preview li {
+	margin: 3px 0;
+}
+
+.fh-fd-temp-tools {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 8px;
+	margin: 0 0 12px;
+}
+
+.fh-fd-ask {
+	margin: 12px 4px;
+	font-size: 20px;
+	line-height: 1.4;
+}
+
+.fh-fd-move-hint {
+	margin: 0 0 4px;
+	color: var(--fd-warn);
+}
+
+/* ------------------------------------------------------------------ */
+/*  A setup's own schedule                                             */
+/* ------------------------------------------------------------------ */
+.fh-fd-steps {
+	display: grid;
+	gap: 8px;
+	margin: 10px 0 18px;
+}
+
+.fh-fd-step {
+	padding: 10px 12px;
+	border: 1px solid var(--fd-border);
+	border-radius: 12px;
+	background: var(--fd-card);
+}
+
+.fh-fd-step__what strong {
+	display: block;
+	font-size: 17px;
+}
+
+.fh-fd-step__what small {
+	display: block;
+	font-size: 14px;
+	color: var(--fd-muted);
+}
+
+.fh-fd-step__tools {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin-top: 8px;
+}
+
+.fh-fd-step__tools .fh-fd-chip {
+	min-height: 44px;
+	padding: 6px 14px;
+	font-size: 15px;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Today: the list by water system                                    */
+/* ------------------------------------------------------------------ */
+.fh-fd-flags {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin: 0 0 12px;
+}
+
+.fh-fd-flag {
+	padding: 6px 12px;
+	border-radius: 999px;
+	font-size: 14px;
+	font-weight: 700;
+	color: var(--fd-warn);
+	background: rgba(255, 197, 61, 0.12);
+}
+
+.fh-fd-flag.is-bad {
+	color: #ffb3b3;
+	background: rgba(255, 92, 92, 0.16);
+}
+
+.fh-fd-todo-block {
+	margin: 0 0 14px;
+	padding: 12px;
+	border: 1px solid var(--fd-border);
+	border-radius: var(--fd-radius);
+	background: rgba(255, 255, 255, 0.03);
+}
+
+.fh-fd-todo-block.is-temp {
+	border-left: 6px solid #6b4fbb;
+}
+
+.fh-fd-todo-block.is-done {
+	border-color: rgba(61, 220, 132, 0.5);
+}
+
+.fh-fd-todo-block.is-idle {
+	opacity: 0.6;
+}
+
+.fh-fd-todo-block__head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 4px 8px;
+	margin: 0 0 8px;
+}
+
+.fh-fd-todo-block__title {
+	font-size: 21px;
+	font-weight: 800;
+	color: var(--fd-text);
+	text-decoration: none;
+}
+
+a.fh-fd-todo-block__title {
+	color: var(--fd-accent);
+}
+
+.fh-fd-todo-block__head small {
+	flex: 1 1 100%;
+	font-size: 14px;
+	color: var(--fd-muted);
+}
+
+.fh-fd-todo-block__head .fh-fd-copper {
+	min-height: 0;
+	padding: 4px 10px;
+	font-size: 14px;
+}
+
+.fh-fd-todo-line {
+	margin: 0 0 8px;
+}
+
+.fh-fd-todo-line__tick {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 2px 10px;
+	width: 100%;
+	min-height: var(--fd-tap);
+	padding: 10px 14px;
+	border: 1px solid var(--fd-border);
+	border-radius: 12px;
+	background: var(--fd-card-2);
+	color: var(--fd-text);
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.fh-fd-todo-line__tick:active {
+	background: var(--fd-accent-2);
+}
+
+.fh-fd-todo-line.is-done .fh-fd-todo-line__tick {
+	opacity: 0.55;
+	background: transparent;
+	cursor: default;
+}
+
+.fh-fd-todo-line__step {
+	font-size: 19px;
+	font-weight: 800;
+}
+
+.fh-fd-todo-line.is-done .fh-fd-todo-line__step {
+	color: var(--fd-ok);
+}
+
+.fh-fd-todo-line__dose {
+	font-size: 16px;
+	font-weight: 700;
+	color: var(--fd-accent);
+}
+
+.fh-fd-todo-line__for {
+	padding: 1px 9px;
+	border-radius: 999px;
+	font-size: 13px;
+	font-weight: 700;
+	color: var(--fd-warn);
+	background: rgba(255, 197, 61, 0.12);
+}
+
+.fh-fd-todo-line__note {
+	flex: 1 1 100%;
+	font-size: 14px;
+	font-weight: 400;
+	color: var(--fd-muted);
+}
+
+.fh-fd-todo-line__more {
+	margin: 4px 0 6px;
+	padding: 6px 4px;
+	border: 0;
+	background: none;
+	color: var(--fd-accent);
+	font: inherit;
+	font-size: 15px;
+	cursor: pointer;
+}

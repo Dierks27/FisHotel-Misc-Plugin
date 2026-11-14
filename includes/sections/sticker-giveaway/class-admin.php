@@ -175,6 +175,18 @@ class Admin {
 				$warnings[] = sprintf( __( '%s is marked "Sold individually" — add-on quantity for it is capped at 1.', 'fishotel-misc-plugin' ), $name );
 			}
 
+			$default_cat      = (int) get_option( 'default_product_cat', 0 );
+			$default_term     = $default_cat > 0 && function_exists( 'get_term' ) ? get_term( $default_cat, 'product_cat' ) : null;
+			$category_warning = self::category_warning(
+				$name,
+				method_exists( $product, 'get_category_ids' ) ? (array) $product->get_category_ids() : array(),
+				$default_cat,
+				is_object( $default_term ) && isset( $default_term->name ) ? (string) $default_term->name : ''
+			);
+			if ( '' !== $category_warning ) {
+				$warnings[] = $category_warning;
+			}
+
 			if ( $preset_cats ) {
 				$in_preset = array_intersect( $preset_cats, Cart::category_slugs( $product->get_id() ) );
 				if ( $in_preset ) {
@@ -194,6 +206,32 @@ class Admin {
 		}
 
 		return $warnings;
+	}
+
+	/**
+	 * The warning for a sticker product saved with no category of its own
+	 * (pure): WooCommerce then files it under the store's default
+	 * category, which the sticker was never meant to be in. '' when it has
+	 * a category of its own.
+	 *
+	 * @param string $name         Product name.
+	 * @param int[]  $category_ids The product's categories.
+	 * @param int    $default_id   The store's default category (default_product_cat).
+	 * @param string $default_name Its name ('' when not known).
+	 * @return string
+	 */
+	public static function category_warning( $name, array $category_ids, $default_id, $default_name = '' ) {
+		$ids = array_values( array_filter( array_map( 'intval', $category_ids ) ) );
+		if ( $ids && ( (int) $default_id <= 0 || array( (int) $default_id ) !== $ids ) ) {
+			return '';
+		}
+		$where = '' !== $default_name
+			/* translators: %s: category name */
+			? sprintf( __( 'the store\'s default category, "%s"', 'fishotel-misc-plugin' ), $default_name )
+			: __( 'the store\'s default category', 'fishotel-misc-plugin' );
+
+		/* translators: 1: product name, 2: where WooCommerce put it */
+		return sprintf( __( '%1$s was saved with no category, so WooCommerce put it in %2$s. Give it a category of its own (e.g. "stickers") on the product page.', 'fishotel-misc-plugin' ), (string) $name, $where );
 	}
 
 	/**

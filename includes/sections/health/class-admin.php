@@ -73,6 +73,7 @@ class Admin {
 		add_action( 'wp_dashboard_setup', array( $this, 'register_widget' ) );
 		add_action( 'admin_post_fishotel_health_csv', array( $this, 'download_csv' ) );
 		add_action( 'wp_ajax_fishotel_health_clear', array( $this, 'ajax_clear' ) );
+		add_action( 'wp_ajax_fishotel_health_test_alarm', array( Alarm::class, 'ajax_test' ) );
 	}
 
 	/**
@@ -146,6 +147,7 @@ class Admin {
 		$groups     = Checks::by_group( $rows );
 		$last_prune = get_option( Cron::LAST_PRUNE_OPTION, array() );
 		$table_ok   = Store::table_exists();
+		$alarm      = self::alarm_view();
 
 		include Health::path() . 'views/overview.php';
 	}
@@ -222,6 +224,27 @@ class Admin {
 		sort( $sources );
 
 		return $sources;
+	}
+
+	/**
+	 * What the Overview's "Checkout alarm" card shows.
+	 *
+	 * @return array on, to, watching, active, notes, last_look, next_look, labels.
+	 */
+	public static function alarm_view() {
+		$settings = Settings::get();
+		$state    = Alarm::state();
+
+		return array(
+			'on'        => ! empty( $settings['checkout_alarm'] ),
+			'to'        => Alarm::recipient( $settings ),
+			'watching'  => Alarm::watching( $settings, Alarm::wc_logs_to_database(), Alarm::wc_log_dir() ),
+			'active'    => Alarm::active( $state ),
+			'notes'     => $state['notes'],
+			'last_look' => (int) $state['last_look'],
+			'next_look' => (int) wp_next_scheduled( Alarm::HOOK ),
+			'labels'    => Alarm::signal_labels(),
+		);
 	}
 
 	/* ============================================================== */
@@ -309,6 +332,7 @@ class Admin {
 					'cleared'      => __( 'Log cleared. Reloading…', 'fishotel-misc-plugin' ),
 					'showContext'  => __( 'Context', 'fishotel-misc-plugin' ),
 					'hideContext'  => __( 'Hide', 'fishotel-misc-plugin' ),
+					'testSending'  => __( 'Sending…', 'fishotel-misc-plugin' ),
 				),
 			)
 		);

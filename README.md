@@ -6,6 +6,53 @@ A modular container plugin for WordPress with a dark theme admin interface.
 
 FisHotel Misc Plugin provides a framework for managing independent feature "sections" through a unified dark-themed dashboard. Each section is a self-contained module that can be enabled or disabled independently.
 
+## Where things are
+
+**FisHotel Tools** in wp-admin lists the sections that are switched on,
+related screens together: **Dashboard**, **Today** (the one to-do page),
+then **Fish room** — Clean Room; **Customers** — Invoices, Requests,
+Lost Fish; **Shipping** — Packing, Foam Cuts, Weather; **Site** — Health,
+Snippets, Shop App and every other section. The Dashboard shows the
+section cards under the same headings, each saying in one sentence what
+the section is for and what switching it on starts by itself. Every
+section arrives switched off. The order and the sentences live in
+`includes/class-layout.php`; no page address changed.
+
+At the top of the Dashboard (and on the Health screen) the **FisHotel
+versions** card lists every FisHotel build on the site — FH Boards,
+FisHotel SMTP, ShipTracker, Batch Manager, Misc, the theme, and WPIT
+Updater when it is there — with its version, its folder and whether it is
+on, and warns when one plugin sits in two folders (a zip that unpacked
+under another name) or a FisHotel plugin is switched off. It only reads
+what the Plugins page reads (`includes/class-versions.php`).
+
+One home per list:
+
+| List | Its home | Elsewhere it is only read, with a link there |
+|---|---|---|
+| Boxes | ShipTracker → Settings → Boxes & label costs | Packing → Boxes, Foam Cuts → Boxes & cut lists (their own lists are hidden while ShipTracker's is in use, and come back if it has none) |
+| Sizes | Clean Room → Settings → Sizes | Packing → Sizes (which bag each size goes in) |
+| Medications | Clean Room → Settings → Medications | — |
+| Supplies (foam, bags, paper): counts and cost per box | ShipTracker → Settings → Boxes & label costs → Supplies | Foam Cuts → Stock keeps only its sheet ledger and leftovers |
+
+## Words used on the screens
+
+One word for one thing, on every screen of these sections:
+
+| Word | Means | Not |
+|---|---|---|
+| **tank** | one tank, numbered by the rule *hundreds = building, tens = level, ones = position* (tank 521 is in building 500). A temporary tank is a numbered **slot** in building 900. | aquarium |
+| **building** | a numbered group of tanks that share one water — 100, 200, … (Clean Room README, *The numbering rule*) | rack, room |
+| **system** | the water a building's tanks share (sump included): "whole system" doses and readings, "system gallons" | building (the place), tank |
+| **tank group** | the fish of one species that arrived and live together — a *stay* on the Clean Room's Stays tab | batch (a supplier order) |
+| **bag** | the bag one fish is packed in; its standard sizes are Packing → Bags | pouch |
+| **box** | the shipping box an order goes out in (its list is ShipTracker's); a supplier's box only in the Clean Room's *Box rates* | carton, shipper |
+| **case** | Lost Fish: one paid-for fish (or several) that was lost, and what the customer is offered | claim, ticket |
+| **request** | Requests: a fish somebody asked for; its fee is sent as a **bill** with a pay link | wish, order |
+| **invoice** | Invoices: the hidden product a customer adds to the cart to pay for the fish picked for them | bill (that is a request's fee) |
+| **e-mail** | written with a hyphen everywhere | email |
+| **fish room** | the room the tanks are in, and the screens the Shop App opens there | wet room, shop floor |
+
 ## Requirements
 
 - WordPress 5.8+
@@ -25,6 +72,8 @@ fishotel-misc-plugin/
 ├── includes/
 │   ├── class-plugin.php            # Main plugin orchestrator
 │   ├── class-section-manager.php   # Section discovery & toggling
+│   ├── class-layout.php            # Menu order, Dashboard headings, one sentence per card
+│   ├── class-versions.php          # The "FisHotel versions" card: every FisHotel build, its version, folder, on/off
 │   │                               # (the main file also includes sections/site-snippets/early-loader.php at load time)
 │   └── sections/
 │       ├── announcer/              # Announcement bars
@@ -32,15 +81,28 @@ fishotel-misc-plugin/
 │       ├── lottery-draw/           # Verifiable lottery for group orders
 │       ├── weather/                # Nightly delivery-day weather notes + packing actions
 │       ├── health/                 # Shared error log, failure capture, FisHotel Health widget + page
-│       ├── today/                  # Today at FisHotel: next delivery days, holds / UPS Store, missing weather / invoice / tracking
-│       ├── clean-room/             # Where every fish is: Spa / Clean Room tanks, stays with replayed events, QR + voice Front Desk, protocol to-do, room board, supplier orders, chosen sale dates, standard sizes, percent-of-a-box costing with remembered shares, unknown / mislabeled fish with one correction
+│       ├── today/                  # Today at FisHotel: next delivery days, holds / UPS Store, missing weather / invoice / tracking; one line for the tanks' to-do list when the Clean Room is on
+│       ├── clean-room/             # Where every fish is: Spa / Clean Room tanks, stays with replayed events, QR + voice Front Desk, protocol to-do, room board, supplier orders, chosen sale dates, standard sizes, percent-of-a-box costing with remembered shares, unknown / mislabeled fish with one correction, a dose calculator over an editable medication list, temporary (hospital) tanks with their own schedules, one To do list by water system, Stats views (compare years, species, prices to raise, real sales)
+│       ├── requests/               # Requests: a request sheet for the fish people ask for — private links, added by hand or by another section, an optional fee, a state that follows the fish from the supplier order to "ready"
+│       ├── lost-fish/              # Lost Fish: a paid-for fish that is lost — the tanks checked for a spare, else a case with the numbers for every choice, the e-mail behind one click, the customer's private page
+│       ├── invoices/               # Invoices: a customer's invoice built from a pick list (tank groups, shop products, the species list, typed), pre-checked against what the customer already has, published as the hidden product
+│       ├── packing/                # Packing: the standard bags, a bag size per fish, how many bags fit each box, the box suggested for an order and the one confirmed
+│       ├── foam-cuts/              # Foam Cuts: a cut sheet for the foam that lines a box — sheets and labelled leftovers in stock, a plan for the boxes of the day, straight edge-to-edge cuts
+│       ├── shop-app/               # Shop App: "FisHotel Shop", an installable web app for the fish room — enrolled devices, a PIN per person, the Front Desk's tank screens without a WordPress login
 │       └── site-snippets/          # Snippets: the site's own code as files in GitHub (was Code Snippets), switched on/off, run at plugins_loaded:1; plus an editor for snippets written in wp-admin (named editors only, history, audit log, export to GitHub)
 ├── admin/
 │   ├── css/admin-style.css         # Dark theme styles
 │   ├── js/admin-script.js          # Toggle & AJAX handling
 │   └── views/dashboard.php         # Dashboard template
+├── tests/layout-test.php           # The menu order and the Dashboard's headings
+├── tests/hook-callbacks-test.php   # Every hook / menu / REST callback names a method that exists
+├── tests/versions-test.php         # The FisHotel versions card and its warnings
 └── README.md
 ```
+
+Each section is switched on and off in **FisHotel Tools → Dashboard** and is described in its own folder: `README.md` (what it does, its screens, its tables and options, its hooks and functions for other code) and, where it has headless tests, `tests/README.md` (how to run them and what each covers, plus what to check by hand on a real site). The sections added in 0.46 — `requests/`, `lost-fish/`, `invoices/`, `packing/`, `foam-cuts/`, `shop-app/` — each have one; so do `clean-room/` (the dose calculator, the temporary tanks, the To do list and the Stats views are chapters of its README), `today/`, `health/`, `weather/`, `lottery-draw/`, `site-snippets/`, `sticker-giveaway/` and `announcer/`.
+
+What the sections offer each other — each function exists while the plugin is active and answers "nothing" while its section is off (null, an empty list, `available: false`; a `WP_Error` from the one that creates), so guard with `function_exists()` and read the answer: `fishotel_cleanroom_product_facts()` and `fishotel_cleanroom_todo()` (Clean Room; actions `fishotel_cleanroom_order_line` and `fishotel_cleanroom_event_recorded`), `fishotel_requests_create()` and `fishotel_requests_get()` (Requests), `fishotel_invoices_lines_for_product()` and `fishotel_invoices_for_order()` (Invoices; action `fishotel_invoice_paid`), `fishotel_lostfish_cases_for_order()` (Lost Fish), `fishotel_packing_suggest()`, `fishotel_packing_bag_for_item()` / `_for_product()` / `_for_size()` and `fishotel_packing_confirmed_box()` (Packing), `fishotel_foam_cuts_plan()` (Foam Cuts). Each section's README has the shapes.
 
 ## Creating a Section
 
@@ -74,6 +136,22 @@ class My_feature {
 The Section Manager will automatically discover and register the section.
 
 ## Version
+
+0.46.1 — Shop App: **Scan a tank**, inside the app. A big button on the app's home screen, on a building's tanks and in the bar of every screen opened in the app (a tank, the picker, the day's list, the calculator) opens the tablet's rear camera full screen with a square to hold the label in, and reads QR codes as they come — no switching to a camera app and back. A tank label of this site opens that tank at once, inside the app, at the same address the label holds (so the PIN, the shop session and *Today for this water* apply as for a label); a code of another site, a product link or anything else says so in a few words and it keeps scanning — a code's own address is never opened. The browser's own QR reader is used where there is one; elsewhere (an iPhone, Firefox) jsQR 1.4.0, shipped in the section (`js/vendor/`, Apache-2.0, its licence beside it) and loaded only the first time the scanner opens on such a browser. No camera, or the camera refused: plain words and a number pad, **Type the tank number**, that opens the same tank. The camera is stopped on Cancel, on a label, when the page is hidden and when it is left; a short buzz on a label where the device can. Nothing changes outside the Shop App or with it switched off, and the labels and their addresses are as they were. No schema, option or address change. See `shop-app/README.md`, *Scan a tank*.
+
+0.46 — Nine features in one build, each built and reviewed on its own branch from 0.45, then stacked into one line, tested together and rehearsed on a copy of the site. Every new section arrives switched off; the details of each are in its own README (`includes/sections/<slug>/README.md`), which this entry only points to.
+
+- **1 · Doses** (Clean Room). Medications become an editable list (Clean Room → Settings → Medications, seeded from the old fixed list, so nothing changes until it is edited), and the phone's Dose sheet, the Board and a calculator work out how much to add — per gallon, to a level, or a top-up after a water change — and log the working with the dose. No schema change. See `clean-room/README.md`.
+- **2 · Temporary tanks and the To do list** (Clean Room). Hospital tanks as numbered slots in a Temporary building (900), each its own water, set up and taken down from the Board or the phone; and one to-do list for the day, by water system, on the Board and the phone. Schema 1.6. See `clean-room/README.md`.
+- **3 · Stats** (Clean Room). The Stats tab replaces the yearly spreadsheet: years side by side, a row per species, prices to raise, and what customers really paid — estimates and actual numbers labelled as such. See `clean-room/README.md`.
+- **4 · Requests** (new section). A request sheet for the fish people ask for, behind private links only: added by hand or by another section, an optional fee sent as a bill into the customer's wallet, a state that follows the fish through the Clean Room, "your fish is ready" e-mails, a "Needs you" strip and a Demand tab. See `requests/README.md`.
+- **5 · Lost Fish** (new section). When a fish somebody already paid for is lost, the tanks are checked for a spare; when there is none a case opens with the money for every choice (refund, credit, try again, cancel) and an e-mail that waits for one click. The customer answers on a signed page. See `lost-fish/README.md`.
+- **6 · Invoices** (new section). A customer's invoice built from a pick list — tank groups, shop products, the species list or typed — checked against what that customer already has, and published as the hidden product they pay. See `invoices/README.md`.
+- **7 · Packing** (new section). The standard bags, a Bag size on every fish (a record only), which bag each size goes in, how many bags fit each box, and a Packing box on every order that suggests the smallest box for the owner to confirm. See `packing/README.md`.
+- **8 · Foam Cuts** (new section). A cut sheet for the foam that lines every box: the stock of sheets and leftovers, a plan for the day's boxes with straight cuts, a printable page, and "Mark as cut". See `foam-cuts/README.md`.
+- **9 · Shop App** (new section). "FisHotel Shop", an installable web app for the fish room: a PIN-unlocked phone or tablet opens the tank screens and the day's list without a WordPress login; Settings stay in wp-admin. Needs HTTPS. See `shop-app/README.md`.
+
+Where the sections meet (an invoice's adjustment line, the Clean Room's events, the boxes and sizes they share) was checked with both sides real, and the rehearsal's findings were fixed — among them the Dashboard switches no longer losing a change when several are clicked close together, and Weather no longer causing a "translation loaded too early" notice. The last pass organized it all: one to-do page (Today lists what every section is waiting on, under Fish room, Customers, Shipping and Site), the menu and the Dashboard grouped the same way, one home per list (boxes, sizes, medications, supplies), and one word for one thing on the screens (see *Where things are* and *Words used on the screens* above). Health gained a **checkout alarm**: every 5 minutes (and a minute after a checkout fails) it looks for a new PHP fatal error in WooCommerce's log and WordPress's recovery mode, and for orders stuck at payment, and e-mails the admin address once an hour per problem, with a red line on Today (`health/README.md`); and the Dashboard and Health show a **FisHotel versions** card. The full notes of each fix are in the section READMEs and the git history.
 
 0.45 — Clean Room: sizes, the percent of a box, remembered box shares, and unknown or mislabeled fish (schema 1.4 and 1.5 through the autoloaded version gate, which now waits for every column added since a table's first version, so a failed ALTER is retried). **Standard sizes**: one list of fish sizes — the terms of the product attribute whose name or slug contains "size" (the one the product variations use), in the attribute's own order, labelled as stored; Settings → Sizes picks the attribute when several match, offers a plain list when none exists, and shows a read-only *Sizes in use on products* report (every size value on the fish products' variations — attribute terms and values typed on a product —, how many products use each, flagged when it is not standard); no product is changed. A size is stored as its slug plus a label snapshot on order lines and stays (one that left the list still shows, marked "not a standard size"); a Size dropdown on the order line, the Front Desk Arrival sheet and the Stays tab's Edit; carried from the line to the stay at check-in and to a sister stay on a split; shown beside the species on the Board, the Stays tab, the phone, the order page and the product box; a `size` column in the exports. The attribute is read only on this section's admin screens and the Front Desk, never on an ordinary front-end request; the voice parser keeps ignoring size words. **Percent of a box**: per order line a *Box #* and a *% of box* — the percent of ONE box the whole line took, guessed while unloading (above 0, at most 400 so a line may span boxes; a mistyped one refuses the save before anything is written). In box mode a line's fraction is that percent ÷ 100 when typed, else received ÷ per box as before, so older and imported orders keep their numbers; bag mode is untouched. The fees are split by each line's share of the total, so the percents only need to be right compared to each other. A *Boxes* card under the lines adds the percents up per box number (under / about full 90–110 / over), the lines without a box number apart, and the boxes they come to beside the Boxes field — recalculated in the page as typed and identical on the server (one fixture tests both sides). **Remembered shares**: per supplier + origin + fish + size, the percent of a box ONE fish takes (`fh_box_shares`), written when an order is saved (percent ÷ received; the latest order wins, by the order's date; counted once per order line and given back when the line changes or goes), offered on the next order from the same place as a "suggested N% (from K orders)" chip that fills the field on a tap and is never saved by itself, and added up into a *How full* line on a draft / ordered order; Settings → Box shares lists the rows, each editable and forgettable. **Unknown fish**: an order line (the ?? box) and a stay (the phone's "Unknown fish (??)" beside "use as an unlisted fish") can be flagged *needs identifying* — named "??" and what it looks like, with its tank, count, size, percent of a box and landed cost like any other, and never remembered as a box share. **One correction**: *Identify… / Correct the fish…* on the Stays tab, on a group's sheet on the phone and on an order line that received fish takes the real fish from the species search (a product, a species-list fish or a typed name) and its size, and updates the stay (name, product link, size) and its supplier order line (species id, name, scientific name, size) together, clears the flag on both, writes a note event on the stay ("identified: <old> → <new>") so the Events tab shows who corrected what and when, and then writes the remembered box share of the corrected fish (the one counted under the wrong fish is given back). The Stays tab's Edit and — on a line that already became a stay — the order editor's grid follow the same rules; a line without a stay stays the order as typed, except that ticking ?? on a named line that received fish keeps its name as the label. The line keeps **what the label said** (`label_name`): its old name, the first time it is corrected to a different fish, never overwritten after that; shown as "arrived labeled: X" and exported. A group that was split: the line follows its stays only when they all agree — until then only the stay changes and the line gets a "[part of this line is … — stay #N]" note; a correction made on the order line corrects the stays that still carried its old name. **Needs identifying** shows as a Board chip (linked to the Stays tab filtered to them), a Stays filter and marker, "?? N to identify" on the Arrivals list and the order, on the phone's rows, and as the "??" wherever a species is printed. **Stats**: by supplier and by origin gain *Mislabeled* — the lines that received fish whose label differs from the fish they turned out to be, with the rate over the lines that received fish — and, counted apart, *Not identified yet*; in the stats exports too (Orders, By supplier, By origin, Totals). **Exports**: `needs_id` on the stays; `size`, `box_no`, `box_pct`, `needs_id` and `label_name` on the orders' Lines sheet — all appended after the columns that were there. **Importer** unchanged: the workbook carries none of this, so imported lines get no size, box percent, flag or label name. Also: a species typed over a picked one on the order page no longer keeps the picked fish's species id, and a line's notes survive an order save. **A page that was already open** cannot undo a correction made elsewhere: the order page and the Stays tab's Edit post the token their row was rendered with, and a row whose fish was corrected since keeps that fish (the rest is saved, the reply says so and the page reloads; a fish changed on such a stale Stays row is refused). A fish that arrived unknown keeps its "??" name in the label's place the first time it is identified, so correcting that first guess later is never a mislabel; the fish a group already is, typed again in *Correct the fish…*, keeps its product link; a fish picked from the species list on one order and typed on the next is one remembered share; a share typed in Settings yields only to an order dated after it; and the Boxes card counts the received lines still without a percent — the percents are only right "compared to each other" once every received line has one. Headless tests: sizes-test, box-shares-test and identify-test (the correction, the label set once, the split rule, the handlers, the capability and nonce in front of the three AJAX endpoints the new action rides on, and the page loaded before a correction), the costing with percents, the mislabel stats and the exports; in node, the page's box helpers and the "??" names against the fixtures the PHP reads.
 

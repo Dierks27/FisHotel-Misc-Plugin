@@ -29,11 +29,20 @@ jobs:
           set -e
           git ls-files '*.php' | while read -r f; do php -l "$f" > /dev/null; done
           echo "PHP syntax OK on $(php -r 'echo PHP_VERSION;')"
-      - name: Section tests (PHP)
+      # Every add_action / add_filter / menu / REST callback names a method
+      # or function that exists — a missing one is a fatal the moment its
+      # hook fires, and a switched-off section would hide it until the
+      # owner switches it on. (Also run by the loop below; its own step so
+      # a failure is named.)
+      - name: Hook callbacks exist
+        if: matrix.php == '8.3'
+        run: php tests/hook-callbacks-test.php
+
+      - name: Plugin and section tests (PHP)
         if: matrix.php == '8.3'
         run: |
           set -e
-          for t in $(git ls-files 'includes/sections/*/tests/*.php' | grep -v 'wp-stubs.php'); do
+          for t in $(git ls-files 'tests/*.php' 'includes/sections/*/tests/*.php' | grep -v 'wp-stubs.php'); do
             echo "== $t"; php "$t"
           done
 

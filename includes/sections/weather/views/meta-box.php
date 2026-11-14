@@ -89,12 +89,12 @@ $fh_box_id = 'fh-weather-email-' . (int) $order->get_id();
 		<?php if ( $stored['email'] ) : ?>
 			<div class="fh-weather-box__email">
 				<label class="fh-weather-box__label" for="<?php echo esc_attr( $fh_box_id ); ?>-subject">
-					<?php esc_html_e( 'Customer email draft — NOT sent, Jeff sends it', 'fishotel-misc-plugin' ); ?>
+					<?php esc_html_e( 'Customer e-mail draft — NOT sent: you send it yourself', 'fishotel-misc-plugin' ); ?>
 				</label>
 				<input type="text" readonly id="<?php echo esc_attr( $fh_box_id ); ?>-subject" class="fh-weather-box__subject" value="<?php echo esc_attr( $stored['email']['subject'] ); ?>">
 				<textarea readonly id="<?php echo esc_attr( $fh_box_id ); ?>-body" class="fh-weather-box__body" rows="9"><?php echo esc_textarea( $stored['email']['body'] ); ?></textarea>
 				<button type="button" class="button fh-weather-copy" data-subject="#<?php echo esc_attr( $fh_box_id ); ?>-subject" data-body="#<?php echo esc_attr( $fh_box_id ); ?>-body">
-					<?php esc_html_e( 'Copy email', 'fishotel-misc-plugin' ); ?>
+					<?php esc_html_e( 'Copy e-mail', 'fishotel-misc-plugin' ); ?>
 				</button>
 			</div>
 		<?php endif; ?>

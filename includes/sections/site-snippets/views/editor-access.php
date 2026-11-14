@@ -18,6 +18,11 @@ if ( ! empty( $perm['allowed'] ) ) {
 <div class="fh-snip-access" role="note">
 	<p><strong><?php esc_html_e( 'Read only.', 'fishotel-misc-plugin' ); ?></strong> <?php echo esc_html( $perm['message'] ); ?></p>
 
+	<?php if ( 'file_edit' === $perm['reason'] || in_array( $perm['reason'], array( 'no_constant', 'empty_constant', 'not_listed' ), true ) ) : ?>
+		<p><?php esc_html_e( 'Writing snippets here is switched off on this site. The person who looks after the site\'s code can switch it on for you; the steps are below.', 'fishotel-misc-plugin' ); ?></p>
+	<details class="fh-snip-dev">
+		<summary><?php esc_html_e( 'For the developer', 'fishotel-misc-plugin' ); ?></summary>
+	<?php endif; ?>
 	<?php if ( 'file_edit' === $perm['reason'] ) : ?>
 		<p><?php esc_html_e( 'DISALLOW_FILE_EDIT turns off every code editor in wp-admin, this one included. Remove it from wp-config.php (or set it to false) only if you want to edit snippets here; the files in GitHub still work either way.', 'fishotel-misc-plugin' ); ?></p>
 	<?php elseif ( in_array( $perm['reason'], array( 'no_constant', 'empty_constant', 'not_listed' ), true ) ) : ?>
@@ -29,5 +34,8 @@ if ( ! empty( $perm['allowed'] ) ) {
 			echo esc_html( sprintf( __( 'Use WordPress usernames or user IDs, separated by commas (an entry made of digits is a user ID). Your username is %s. The person must also be an administrator, and DISALLOW_FILE_EDIT must not be true.', 'fishotel-misc-plugin' ), '' !== $who['user_login'] ? $who['user_login'] : '—' ) );
 			?>
 		</p>
+	<?php endif; ?>
+	<?php if ( 'file_edit' === $perm['reason'] || in_array( $perm['reason'], array( 'no_constant', 'empty_constant', 'not_listed' ), true ) ) : ?>
+	</details>
 	<?php endif; ?>
 </div>

@@ -367,6 +367,22 @@ class Admin {
 	/* ============================================================== */
 
 	/**
+	 * Whether this admin screen shows the "waiting for Code Snippets"
+	 * notice: the Plugins screen, the FisHotel Tools Dashboard and the
+	 * Snippets page.
+	 *
+	 * @return bool
+	 */
+	public static function held_notice_here() {
+		if ( 'plugins.php' === ( $GLOBALS['pagenow'] ?? '' ) ) {
+			return true;
+		}
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- which screen, read only.
+		$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : '';
+		return in_array( $page, array( 'fishotel-misc', Site_Snippets::MENU_SLUG ), true );
+	}
+
+	/**
 	 * Admin notices for manage_options users: safe mode, held back,
 	 * not loaded, threw (this request).
 	 */
@@ -390,12 +406,20 @@ class Admin {
 		$held  = Loader::held( $index );
 		$state = Loader::state();
 
-		if ( ! empty( $held ) ) {
-			$items = array();
-			foreach ( $held as $slug => $reason ) {
-				$items[] = $slug . ' (' . $reason . ')';
-			}
-			echo '<div class="notice notice-warning"><p><strong>' . esc_html__( 'FisHotel Snippets waiting for Code Snippets:', 'fishotel-misc-plugin' ) . '</strong> ' . esc_html( implode( '; ', $items ) ) . ' ' . esc_html__( 'Running both copies would redeclare functions and take the site down.', 'fishotel-misc-plugin' ) . ' <a href="' . esc_url( self::page_url() ) . '">' . esc_html__( 'Open Snippets', 'fishotel-misc-plugin' ) . '</a></p></div>';
+		// Waiting snippets are not urgent (ours simply does not run until the
+		// Code Snippets copy is off), so the notice shows only where it is
+		// acted on: the FisHotel Tools Dashboard, Snippets and Plugins — not
+		// on every screen, order screens included. Each snippet's reason is
+		// on the Snippets page.
+		if ( ! empty( $held ) && self::held_notice_here() ) {
+			$count = count( $held );
+			echo '<div class="notice notice-warning"><p>' . esc_html(
+				sprintf(
+					/* translators: %d: number of snippets */
+					_n( '%d snippet is ready to move over from the Code Snippets plugin. Switch it off there, then on here.', '%d snippets are ready to move over from the Code Snippets plugin. Switch them off there, then on here.', $count, 'fishotel-misc-plugin' ),
+					$count
+				)
+			) . ' <a href="' . esc_url( self::page_url() ) . '">' . esc_html__( 'Open Snippets', 'fishotel-misc-plugin' ) . ' &rarr;</a></p></div>';
 		}
 
 		foreach ( (array) $state['skipped'] as $slug => $reason ) {

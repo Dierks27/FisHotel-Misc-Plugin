@@ -214,10 +214,10 @@ $f = fh_healthy( $now );
 $f['dompdf'] = array( 'available' => false, 'class' => false, 'autoload' => false, 'autoload_path' => '/theme/vendor/autoload.php' );
 $rows = Checks::evaluate( $f, $now );
 check( 'dompdf missing → error', 'error' === fh_status( $rows, 'dompdf' ) );
-check( 'with the packing-slip hint', 'EA packing slips send without the PDF' === fh_row( $rows, 'dompdf' )['hint'] );
+check( 'with the packing-slip hint, in plain words', 0 === strpos( fh_row( $rows, 'dompdf' )['hint'], 'Packing slips are e-mailed without the PDF.' ) && 'Packing-slip printing' === fh_row( $rows, 'dompdf' )['label'] );
 $f['dompdf'] = array( 'available' => true, 'class' => false, 'autoload' => true, 'autoload_path' => '/theme/vendor/autoload.php' );
 $rows = Checks::evaluate( $f, $now );
-check( 'autoload present without the class loaded yet → ok', 'ok' === fh_status( $rows, 'dompdf' ) && 'theme vendor/autoload.php present' === fh_row( $rows, 'dompdf' )['value'] );
+check( 'autoload present without the class loaded yet → ok', 'ok' === fh_status( $rows, 'dompdf' ) && 'ready' === fh_row( $rows, 'dompdf' )['value'] );
 
 echo "6. Cron group\n";
 $f = fh_healthy( $now );
@@ -231,7 +231,7 @@ $f['cron']['hooks']['fishotel_weather_nightly']['next'] = false;                
 $rows = Checks::evaluate( $f, $now );
 check( 'active plugin, hook not scheduled → error', 'error' === fh_status( $rows, 'cron-fishotel_verification_cron' ) && 'not scheduled' === fh_row( $rows, 'cron-fishotel_verification_cron' )['value'] );
 check( 'inactive owner → info, not an error', 'info' === fh_status( $rows, 'cron-fishotel_lastcall_cron' ) );
-check( '2 h + 1 s in the past → warn "WP-Cron overdue"', 'warn' === fh_status( $rows, 'cron-fhsmtp_retry_failed_emails' ) && 0 === strpos( fh_row( $rows, 'cron-fhsmtp_retry_failed_emails' )['value'], 'WP-Cron overdue' ), fh_row( $rows, 'cron-fhsmtp_retry_failed_emails' )['value'] );
+check( '2 h + 1 s in the past → warn "late"', 'warn' === fh_status( $rows, 'cron-fhsmtp_retry_failed_emails' ) && 0 === strpos( fh_row( $rows, 'cron-fhsmtp_retry_failed_emails' )['value'], 'late — was due' ), fh_row( $rows, 'cron-fhsmtp_retry_failed_emails' )['value'] );
 check( 'exactly 2 h in the past → still ok', 'ok' === fh_status( $rows, 'cron-fst_poll_shipments' ) );
 check( '30 min late → ok with "due 30 min ago"', 'ok' === fh_status( $rows, 'cron-fishotel_health_daily' ) && 'due 30 min ago' === fh_row( $rows, 'cron-fishotel_health_daily' )['value'] );
 check( 'Weather enabled but nightly missing → error with the Weather hint', 'error' === fh_status( $rows, 'cron-fishotel_weather_nightly' ) && false !== strpos( fh_row( $rows, 'cron-fishotel_weather_nightly' )['hint'], 'Weather settings' ) );
@@ -269,6 +269,21 @@ check( 'Facts::sections(): the SMTP activation defaults (no retry_enabled) read 
 $GLOBALS['fh_options']['fhsmtp_log_settings']['retry_enabled'] = '1';
 check( 'Facts::sections(): retry_enabled "1" reads as on', true === Facts::sections()['smtp_retry_enabled'] );
 unset( $GLOBALS['fh_options']['fhsmtp_log_settings'] );
+
+// What the Today page counts: only what the owner can act on.
+$fh_rows = array(
+	array( 'id' => 'update-smtp', 'status' => 'warn' ),
+	array( 'id' => 'update-misc', 'status' => 'ok' ),
+	array( 'id' => 'github-auth', 'status' => 'error' ),
+	array( 'id' => 'plugin-wpit', 'status' => 'warn' ),
+	array( 'id' => 'plugin-shiptracker', 'status' => 'warn' ),
+	array( 'id' => 'cron-fst_poll_shipments', 'status' => 'warn' ),
+	array( 'id' => 'cron-fishotel_weather_nightly', 'status' => 'error' ),
+	array( 'id' => 'disk', 'status' => 'warn' ),
+);
+$fh_owner = Checks::summary( Checks::owner_rows( $fh_rows ) );
+check( 'owner_rows(): an update check not run yet, WPIT switched off and a late job are not counted; GitHub refusing, a plugin off, a missing job and the disk are', 2 === $fh_owner['errors'] && 2 === $fh_owner['warnings'] && array( 'update-misc', 'github-auth', 'plugin-shiptracker', 'cron-fishotel_weather_nightly', 'disk' ) === array_column( Checks::owner_rows( $fh_rows ), 'id' ), json_encode( $fh_owner ) );
+check( '… while the Health page still counts them all', 2 === Checks::summary( $fh_rows )['errors'] && 5 === Checks::summary( $fh_rows )['warnings'] );
 
 echo "7. Cron group — DISABLE_WP_CRON\n";
 $f = fh_healthy( $now );

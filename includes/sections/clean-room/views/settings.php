@@ -3,7 +3,9 @@
  * Settings tab — the numbers, the protocol template, the layout editor,
  * the box rates, the standard sizes (with the read-only report of the
  * sizes the products' variations carry), the remembered box shares, the
- * workbook import, the learned aliases, the labels button.
+ * workbook import, the order statuses that count as a sale on Stats →
+ * Real sales (views/settings-sales.php), the learned aliases, the labels
+ * button.
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  *
@@ -11,6 +13,7 @@
  * @var array   $protocols     Settings::protocols() — { default, templates }.
  * @var string  $template_name The template the editor shows.
  * @var array[] $protocol      Its steps.
+ * @var string[] $used_for     What that template is used for (its tags).
  * @var array[] $buildings     Buildings.
  * @var array[] $tanks        Tanks.
  * @var array   $groups       Layout::group().
@@ -34,6 +37,7 @@ use FisHotel\Misc\Sections\Clean_Room\Layout;
 use FisHotel\Misc\Sections\Clean_Room\Protocol;
 use FisHotel\Misc\Sections\Clean_Room\Settings;
 use FisHotel\Misc\Sections\Clean_Room\Sizes;
+use FisHotel\Misc\Sections\Clean_Room\Temp_Tanks;
 
 $tab          = 'settings';
 $fh_standard  = $sizes['standard'];
@@ -64,7 +68,7 @@ $fh_from_attr = Sizes::SOURCE_ATTRIBUTE === $fh_standard['source'];
 				<div class="fishotel-misc-card-icon"><span class="dashicons dashicons-calendar"></span></div>
 				<h2 class="fishotel-misc-card-title"><?php esc_html_e( 'Numbers', 'fishotel-misc-plugin' ); ?></h2>
 			</div>
-			<p class="fishotel-misc-card-desc"><?php esc_html_e( 'A stay is cleared the day it moves from the Spa into the Clean Room (editable per stay). A group goes on sale on the date you choose: its batch\'s date ("Goes on sale" on the supplier order, Arrivals) or its own date (the Clean room box on the product page, or Dates on the phone). The number below never puts anything on sale: it is only the suggested date (check-in + this many days) shown next to the date pickers, which a tap on "suggested …" fills in.', 'fishotel-misc-plugin' ); ?></p>
+			<p class="fishotel-misc-card-desc"><?php esc_html_e( 'A stay is cleared the day it moves from the Spa into the Clean Room (editable per stay). A group goes on sale on the date you choose: its batch\'s date ("Goes on sale" on the supplier order, Supplier orders tab) or its own date (the Clean room box on the product page, or Dates on the phone). The number below never puts anything on sale: it is only the suggested date (check-in + this many days) shown next to the date pickers, which a tap on "suggested …" fills in.', 'fishotel-misc-plugin' ); ?></p>
 
 			<div class="fh-cr-field fh-cr-field--row">
 				<label class="fh-cr-label" for="fh-cr-days"><?php esc_html_e( 'Suggested sale date: days after check-in (1–120)', 'fishotel-misc-plugin' ); ?></label>
@@ -98,6 +102,9 @@ $fh_from_attr = Sizes::SOURCE_ATTRIBUTE === $fh_standard['source'];
 			</p>
 		</form>
 
+		<?php /* ── Medications ───────────────────────────────────── */ ?>
+		<?php include Clean_Room::path() . 'views/medications.php'; ?>
+
 		<?php /* ── Protocol ──────────────────────────────────────── */ ?>
 		<form id="fishotel-cleanroom-protocol" class="fishotel-misc-card fh-cr-card fh-cr-card--wide" method="post" action="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>" onsubmit="return false;" data-template="<?php echo esc_attr( $template_name ); ?>" data-page-url="<?php echo esc_url( Admin::page_url( 'settings' ) ); ?>">
 			<?php wp_nonce_field( Settings::NONCE_ACTION ); ?>
@@ -121,6 +128,12 @@ $fh_from_attr = Sizes::SOURCE_ATTRIBUTE === $fh_standard['source'];
 				<button type="button" class="button button-small fh-cr-template-rename"><?php esc_html_e( 'Rename', 'fishotel-misc-plugin' ); ?></button>
 				<button type="button" class="button button-small fh-cr-template-default" <?php disabled( $template_name === $protocols['default'] ); ?>><?php esc_html_e( 'Make default', 'fishotel-misc-plugin' ); ?></button>
 				<button type="button" class="button button-small fh-cr-template-delete" <?php disabled( count( $protocols['templates'] ) <= 1 ); ?>><?php esc_html_e( 'Delete', 'fishotel-misc-plugin' ); ?></button>
+			</div>
+
+			<div class="fh-cr-field fh-cr-used-for">
+				<label class="fh-cr-label" for="fh-cr-used-for"><?php esc_html_e( 'Used for', 'fishotel-misc-plugin' ); ?></label>
+				<input type="text" id="fh-cr-used-for" class="fh-cr-input" name="used_for" value="<?php echo esc_attr( implode( ', ', (array) $used_for ) ); ?>" maxlength="<?php echo esc_attr( ( Temp_Tanks::MAX_TAG + 2 ) * Temp_Tanks::MAX_TAGS ); ?>" placeholder="<?php esc_attr_e( 'what this schedule treats — a few words, commas between (e.g. bacterial infection)', 'fishotel-misc-plugin' ); ?>">
+				<p class="fh-cr-sub"><?php esc_html_e( 'Setting up a temporary tank asks "What is it for?" and offers these words; choosing one offers the schedules that carry it. Saved with the template. Only Trifecta comes with one (bacterial infection) — the rest are yours to fill.', 'fishotel-misc-plugin' ); ?></p>
 			</div>
 
 			<table class="widefat fh-cr-table fh-cr-protocol" id="fh-cr-protocol-table">
@@ -184,6 +197,11 @@ $fh_from_attr = Sizes::SOURCE_ATTRIBUTE === $fh_standard['source'];
 					<?php
 					$fh_b       = $fh_entry['building'];
 					$fh_gallons = Layout::system_gallons( $fh_b, $fh_entry['tanks'] );
+					if ( Layout::is_own_water( $fh_b ) ) {
+						// The temporary tanks: slots, each its own water.
+						include Clean_Room::path() . 'views/settings-temp.php';
+						continue;
+					}
 					?>
 					<div class="fh-cr-layout-building">
 						<form class="fh-cr-layout-form" data-op="building_save">
@@ -439,6 +457,9 @@ $fh_from_attr = Sizes::SOURCE_ATTRIBUTE === $fh_standard['source'];
 
 		<?php /* ── Import workbook ───────────────────────────────── */ ?>
 		<?php include Clean_Room::path() . 'views/import.php'; ?>
+
+		<?php /* ── Sales statuses (Stats → Real sales) ───────────── */ ?>
+		<?php include Clean_Room::path() . 'views/settings-sales.php'; ?>
 
 		<?php /* ── Aliases ───────────────────────────────────────── */ ?>
 		<div class="fishotel-misc-card fh-cr-card">

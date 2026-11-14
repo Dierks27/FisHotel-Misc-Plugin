@@ -117,14 +117,25 @@ class Section_Manager {
 	/**
 	 * Enable or disable a section and persist the state.
 	 *
+	 * Each click on a switch is a request of its own, and each request
+	 * read the whole list when it started. Two switches clicked close
+	 * together would both write the list as they read it, plus their own
+	 * change — and the one that finished last wiped the other's, while
+	 * both answered "saved". So the list is read again from the database
+	 * right here, under a lock that makes a second click wait its turn.
+	 *
 	 * @param string $slug   Section slug.
 	 * @param bool   $enable True to enable, false to disable.
-	 * @return bool Whether the operation succeeded.
+	 * @return bool Whether the section is now in the asked state.
 	 */
 	public function set_section_state( $slug, $enable ) {
 		if ( ! isset( $this->sections[ $slug ] ) ) {
 			return false;
 		}
+
+		$locked        = $this->lock();
+		$this->enabled = $this->stored_now();
+		$before        = $this->enabled;
 
 		if ( $enable ) {
 			if ( ! in_array( $slug, $this->enabled, true ) ) {
@@ -134,9 +145,73 @@ class Section_Manager {
 			$this->enabled = array_values( array_diff( $this->enabled, array( $slug ) ) );
 		}
 
-		$this->sections[ $slug ]['enabled'] = $enable;
+		// Already as asked (a click repeated, or another window got there first): nothing to write.
+		$saved = $this->enabled === $before || update_option( self::OPTION_KEY, $this->enabled );
 
-		return update_option( self::OPTION_KEY, $this->enabled );
+		if ( $locked ) {
+			$this->unlock();
+		}
+
+		if ( $saved ) {
+			$this->sections[ $slug ]['enabled'] = (bool) $enable;
+		}
+
+		return $saved;
+	}
+
+	/**
+	 * The enabled list as the database holds it at this moment, not as
+	 * this request read it when it started.
+	 *
+	 * @return array<string>
+	 */
+	private function stored_now() {
+		if ( function_exists( 'wp_cache_delete' ) ) {
+			wp_cache_delete( 'alloptions', 'options' );
+			wp_cache_delete( 'notoptions', 'options' );
+			wp_cache_delete( self::OPTION_KEY, 'options' );
+		}
+
+		$stored = get_option( self::OPTION_KEY, array() );
+
+		return is_array( $stored ) ? array_values( $stored ) : array();
+	}
+
+	/**
+	 * The name of the database lock, one per site.
+	 *
+	 * @return string
+	 */
+	private function lock_name() {
+		global $wpdb;
+
+		return 'fh_misc_sections_' . md5( ( defined( 'DB_NAME' ) ? DB_NAME : '' ) . '|' . ( is_object( $wpdb ) && isset( $wpdb->prefix ) ? $wpdb->prefix : '' ) );
+	}
+
+	/**
+	 * Take the lock, waiting up to five seconds for another click to
+	 * finish. Without a database (or when it will not give the lock) the
+	 * save goes ahead as it always did.
+	 *
+	 * @return bool Whether the lock is held.
+	 */
+	private function lock() {
+		global $wpdb;
+
+		if ( ! is_object( $wpdb ) || ! method_exists( $wpdb, 'get_var' ) || ! method_exists( $wpdb, 'prepare' ) ) {
+			return false;
+		}
+
+		return '1' === (string) $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, %d)', $this->lock_name(), 5 ) );
+	}
+
+	/**
+	 * Give the lock back.
+	 */
+	private function unlock() {
+		global $wpdb;
+
+		$wpdb->query( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', $this->lock_name() ) );
 	}
 
 	/**
@@ -169,10 +244,15 @@ class Section_Manager {
 	}
 
 	/**
-	 * Let enabled sections register their own admin submenus.
+	 * Let enabled sections register their own admin submenus, in the
+	 * order Layout::menu_order() gives: related screens together (Today,
+	 * then the fish room, customers, shipping, site), the sections that
+	 * were live before 0.46 in the order they always had among
+	 * themselves. Only the order changes — every slug stays as it is.
 	 */
 	public function register_section_menus() {
-		foreach ( $this->sections as $slug => $section ) {
+		foreach ( Layout::menu_order( array_keys( $this->sections ) ) as $slug ) {
+			$section = $this->sections[ $slug ];
 			if ( $section['enabled'] && method_exists( $section['class'], 'register_menu' ) ) {
 				$section['class']::register_menu();
 			}

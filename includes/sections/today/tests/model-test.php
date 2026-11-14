@@ -205,6 +205,13 @@ check( 'the wrapper carries its combined label', 'Order #200 (combined: #201, #2
 check( 'paperwork-only entry', 'invoice' === $attention[4]['kind'] && array( 'no invoice PDF' ) === $attention[4]['reasons'] );
 check( 'edit URL carried through', false !== strpos( $attention[0]['edit_url'], 'post=102' ) );
 
+// A box cannot have a tracking number before it ships.
+$fh_early = array( fh_dest( 7, fh_checked( 'none' ), array( 'done' => true ), array( 'done' => false ) ) );
+check( 'before the ship day: no "no tracking" entry and no "Need tracking" chip', array() === Model::needs_attention( $fh_early, Model::DEFAULT_FLAGS, false ) && 0 === Model::chips( $fh_early, Model::DEFAULT_FLAGS, false )['needs_tracking'] );
+check( 'from the ship day on: both are there', array( 'no tracking' ) === Model::needs_attention( $fh_early, Model::DEFAULT_FLAGS, true )[0]['reasons'] && 1 === Model::chips( $fh_early, Model::DEFAULT_FLAGS, true )['needs_tracking'] );
+$fh_early_hold = Model::needs_attention( $fixture, Model::DEFAULT_FLAGS, false );
+check( '… and every other reason still shows before the ship day', array( 'HOLD — do not ship', 'no invoice PDF' ) === $fh_early_hold[0]['reasons'] );
+
 $sorted = Model::sort_destinations( array_reverse( $fixture ) );
 check( 'sort: hold, UPS Store, unavailable, not checked, then the rest by number', '102,104,103,200,101,105' === fh_numbers( $sorted ), fh_numbers( $sorted ) );
 $tie = Model::sort_destinations( array( fh_dest( 9, fh_checked( 'none' ) ), fh_dest( 10, fh_checked( 'none' ) ), fh_dest( 100, fh_checked( 'none' ) ) ) );
@@ -291,5 +298,44 @@ check( 'stored values are clamped on read', 3 === $stored['dates_shown'] && arra
 update_option( 'fishotel_today_settings', 'garbage' );
 check( 'a corrupt option reads as defaults', 21 === Settings::get()['lookahead_days'] );
 update_option( 'fishotel_today_settings', array() );
+
+echo "11. Lines from other sections (fishotel_today_lines)\n";
+check( 'nothing hooked: no lines', array() === Model::extra_lines( array() ) && array() === Model::extra_lines( null ) && array() === Model::extra_lines( 'x' ) );
+$lines = Model::extra_lines(
+	array(
+		array( 'key' => 'Clean-Room Todo!', 'text' => "Tanks:  3 things\n to do", 'detail' => '1 copper flag', 'url' => ' https://example.test/wp-admin/admin.php?page=x&tab=todo ', 'tone' => 'todo', 'count' => 3 ),
+		array( 'text' => '<b>Plain</b> line' ),
+		array( 'text' => '   ' ),
+		array( 'url' => 'https://example.test/' ),
+		'not a line',
+		array( 'text' => array( 'x' ) ),
+		array( 'text' => 'Odd tone', 'tone' => 'purple', 'url' => array( 'x' ) ),
+	)
+);
+check( 'a line keeps its text (one line, no markup), detail, link and tone', array( 'key' => 'clean-roomtodo', 'text' => 'Tanks: 3 things to do', 'detail' => '1 copper flag', 'url' => 'https://example.test/wp-admin/admin.php?page=x&tab=todo', 'tone' => 'todo', 'group' => 'other', 'count' => 3 ) === $lines[0] );
+check( 'a line needs text; anything else is dropped', 3 === count( $lines ) && 'Plain line' === $lines[1]['text'] && '' === $lines[1]['url'] && '' === $lines[1]['tone'] && '' === $lines[1]['key'] );
+check( 'an unknown tone and a link that is not a string are left out', 'Odd tone' === $lines[2]['text'] && '' === $lines[2]['tone'] && '' === $lines[2]['url'] );
+check( 'the tones', array( 'todo', 'done', 'bad' ) === Model::EXTRA_LINE_TONES && 'bad' === Model::extra_lines( array( array( 'text' => 'x', 'tone' => 'bad' ) ) )[0]['tone'] );
+check( 'a long text is cut, and there are at most twelve lines', 12 === Model::EXTRA_LINES_MAX && Model::EXTRA_LINE_LENGTH === strlen( Model::extra_lines( array( array( 'text' => str_repeat( 'a', 400 ) ) ) )[0]['text'] ) && Model::EXTRA_LINES_MAX === count( Model::extra_lines( array_fill( 0, 20, array( 'text' => 'line' ) ) ) ) );
+check( 'the filter name other sections hook', 'fishotel_today_lines' === Model::EXTRA_LINES_FILTER );
+
+// The headings the lines are shown under.
+$fh_mixed = Model::extra_lines(
+	array(
+		array( 'text' => 'Site thing', 'group' => 'site', 'count' => 2 ),
+		array( 'text' => 'Tanks: 3 things to do', 'group' => 'fish-room', 'count' => '3' ),
+		array( 'text' => 'No group' ),
+		array( 'text' => 'Invoices: 1 unpaid', 'group' => 'customers', 'count' => 1 ),
+		array( 'text' => 'Requests: 2 need you', 'group' => 'customers', 'count' => -4 ),
+		array( 'text' => 'Odd group', 'group' => 'garage' ),
+	)
+);
+$fh_groups = Model::grouped_lines( $fh_mixed );
+check( 'a group is kept when it is one of the four, else "other"', 'site' === $fh_mixed[0]['group'] && 'other' === $fh_mixed[2]['group'] && 'other' === $fh_mixed[5]['group'] );
+check( 'the count is a whole number, never below 0', 3 === $fh_mixed[1]['count'] && 0 === $fh_mixed[2]['count'] && 0 === $fh_mixed[4]['count'] );
+check( 'headings in order: Fish room, Customers, Site, Other (Shipping has no line, so no heading)', array( 'fish-room', 'customers', 'site', 'other' ) === array_column( $fh_groups, 'group' ) && array( 'Fish room', 'Customers', 'Site', 'Other' ) === array_column( $fh_groups, 'title' ) );
+check( 'the lines of one heading keep the order they came in', array( 'Invoices: 1 unpaid', 'Requests: 2 need you' ) === array_column( $fh_groups[1]['lines'], 'text' ) && array( 'No group', 'Odd group' ) === array_column( $fh_groups[3]['lines'], 'text' ) );
+check( 'no lines: no headings', array() === Model::grouped_lines( array() ) );
+check( 'the four headings in words', 'Shipping' === Model::group_title( 'shipping' ) && 'Other' === Model::group_title( 'x' ) && array( 'fish-room', 'customers', 'shipping', 'site' ) === Model::EXTRA_LINE_GROUPS );
 
 fh_finish();

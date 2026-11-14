@@ -43,12 +43,26 @@ $fh_more    = array_diff_key( (array) $data['counts'], $fh_blocks );
 	.fh-tw-open{color:#8c8f94;font-size:11px;margin-left:6px}
 	.fh-tw-h{margin:10px 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.3px;color:#646970}
 	.fh-tw-note{color:#646970;font-size:11px}
+	.fh-tw-line{margin:0 0 6px;font-size:12px}
 </style>
 <p class="fh-tw-head<?php echo ! empty( $data['plan']['ships_today'] ) ? ' is-ship-day' : ''; ?>"><?php echo esc_html( $header ); ?></p>
 
-<?php foreach ( (array) ( $fh_columns['notes'] ?? array() ) as $fh_note ) : ?>
-	<p class="fh-tw-note"><?php echo esc_html( $fh_note ); ?></p>
+<?php foreach ( Admin::extra_groups() as $fh_group ) : // Other sections' one-liners (fishotel_today_lines), under their headings. ?>
+	<p class="fh-tw-h"><?php echo esc_html( $fh_group['title'] ); ?></p>
+	<?php foreach ( $fh_group['lines'] as $fh_line ) : ?>
+		<p class="fh-tw-line">
+			<?php if ( '' !== $fh_line['url'] ) : ?>
+				<a href="<?php echo esc_url( $fh_line['url'] ); ?>"><?php echo esc_html( $fh_line['text'] ); ?></a>
+			<?php else : ?>
+				<?php echo esc_html( $fh_line['text'] ); ?>
+			<?php endif; ?>
+			<?php if ( '' !== $fh_line['detail'] ) : ?>
+				<span class="fh-tw-note">· <?php echo esc_html( $fh_line['detail'] ); ?></span>
+			<?php endif; ?>
+		</p>
+	<?php endforeach; ?>
 <?php endforeach; ?>
+
 
 <?php if ( $fh_first ) : ?>
 	<?php $fh_chips = (array) $fh_first['chips']; ?>

@@ -169,6 +169,53 @@ $store5->save_order_lines( $hand2, Orders::normalize_lines( array( array( 'speci
 $r6 = Import::run( $map, $store5, $options );
 check( 'the two clashing batches are not imported and are named, the third comes in', array( 'created' => 1, 'skipped' => 2, 'lines' => 1 ) === array( 'created' => $r6['orders']['created'], 'skipped' => $r6['orders']['skipped'], 'lines' => min( 1, $r6['orders']['lines'] ) ) && 2 === count( $r6['errors'] ) && false !== strpos( $r6['errors'][0], 'Batch 2026-1 of the workbook was NOT imported' ) && false !== strpos( $r6['errors'][1], 'Batch 2026-2' ) && false !== strpos( $r6['errors'][1], 'Practice Supplier, not received yet, ordered' ) && false !== strpos( $r6['errors'][1], 'Give that order another Ref' ), json_encode( array( $r6['orders'], $r6['errors'] ) ) );
 check( 'the hand-made orders are left exactly as they were: nothing checked in, no stay, no logs, still "ordered"', 0 === count( $store5->stays ) && 0 === count( $store5->logs ) && array( 'created' => 0, 'skipped' => 0, 'orders' => 0 ) === $r6['stays'] && 'ordered' === $store5->order( $hand2 )['status'] && 'Practice Supplier' === $store5->order( $hand1 )['supplier'] && null === $store5->order( $hand2 )['lines'][0]['stay_id'], json_encode( $r6['stays'] ) );
+if ( ! function_exists( 'esc_html_e' ) ) {
+	function esc_html_e( $text, $domain = null ) {
+		echo esc_html( $text );
+	}
+}
+if ( ! function_exists( 'wp_nonce_field' ) ) {
+	function wp_nonce_field( $action = -1, $name = '_wpnonce' ) {
+		echo '<input type="hidden" name="' . esc_attr( $name ) . '" value="nonce">';
+	}
+}
+if ( ! function_exists( 'disabled' ) ) {
+	function disabled( $disabled, $current = true, $display = true ) {
+		echo $disabled === $current ? ' disabled="disabled"' : '';
+	}
+}
+if ( ! function_exists( 'esc_attr_e' ) ) {
+	function esc_attr_e( $text, $domain = null ) {
+		echo esc_attr( $text );
+	}
+}
+
+// What the Settings tab shows for that run: the counts in the green box,
+// the batches that were NOT imported in a red box of their own.
+$import    = array(
+	'pending'       => null,
+	'result'        => array(
+		'file'   => 'FisHotel-2026.xlsm',
+		'result' => $r6,
+	),
+	'spa_buildings' => array(),
+	'defaults'      => array(),
+	'action_url'    => 'https://example.test/wp-admin/admin-post.php',
+	'max_bytes'     => 20 * 1024 * 1024,
+);
+$tables_ok = true;
+ob_start();
+include FISHOTEL_MISC_PATH . 'includes/sections/clean-room/views/import.php';
+$fh_html    = (string) ob_get_clean();
+$fh_success = (string) substr( $fh_html, (int) strpos( $fh_html, 'fishotel-misc-notice--success' ) );
+$fh_success = (string) substr( $fh_success, 0, (int) strpos( $fh_success, '</div>' ) );
+$fh_problem = (string) substr( $fh_html, (int) strpos( $fh_html, 'fh-cr-import__problems' ) );
+check( 'the screen: a batch NOT imported is a red problem line, outside the green box', false !== strpos( $fh_html, 'fishotel-misc-notice--error fh-cr-import__problems' ) && false !== strpos( $fh_problem, 'Batch 2026-1 of the workbook was NOT imported' ) && false === strpos( $fh_success, 'NOT imported' ) && false !== strpos( $fh_success, 'Imported FisHotel-2026.xlsm.' ) );
+$import['result']['result']['errors'] = array();
+ob_start();
+include FISHOTEL_MISC_PATH . 'includes/sections/clean-room/views/import.php';
+check( '… and no red box when nothing went wrong', false === strpos( (string) ob_get_clean(), 'fh-cr-import__problems' ) );
+
 $renamed = $store5->order( $hand2 );
 $store5->save_order( array_merge( $renamed, array( 'ref' => '2026-90' ) ) );
 $renamed = $store5->order( $hand1 );
@@ -218,8 +265,8 @@ $o = Admin_Import::sanitize_options( array( 'stays_days' => '-4', 'stays_buildin
 check( 'clamped and defaulted: negative days → 0, an unknown building → the 205-gallon one, no checkbox → off; 9999 days → 365', array( 'stays_days' => 0, 'stays_building_id' => 5, 'dose_logs' => false ) === $o && 365 === Admin_Import::sanitize_options( array( 'stays_days' => '9999' ), $spa )['stays_days'] && 45 === Admin_Import::sanitize_options( array( 'stays_days' => 'x' ), $spa )['stays_days'] );
 check( 'default_building: the 205-gallon system, else the most tanks, else null', 5 === Admin_Import::default_building( $spa ) && 5 === Admin_Import::default_building( $unknown ) && null === Admin_Import::default_building( array() ) && 6 === Admin_Import::default_building( array( $spa[1] ) ) );
 $lines = Admin_Import::summary_lines( $r );
-check( 'the result in plain lines, the sale dates last', 6 === count( $lines ) && 'Species: 5 added, 0 updated, 0 skipped.' === $lines[0] && 'Orders: 3 created with 7 lines, 0 already on the site (skipped).' === $lines[1] && 'Stays: 2 created from 1 recent orders, 0 lines skipped (already checked in or nothing received).' === $lines[2] && 'Treatment logs: 6 written, 0 skipped (already there, or undated).' === $lines[3] && 'Box rates: 5 rows in Settings now.' === $lines[4] && 'Sale dates: 2 groups in tanks have no sale date yet, so they are not for sale — set "Goes on sale" on their supplier orders (Arrivals → 2026-2), or a group\'s own date on its product page.' === $lines[5], json_encode( $lines ) );
-check( 'no sale-date line when every group has one; the preview\'s wording', 5 === count( Admin_Import::summary_lines( array_merge( $r, array( 'sale_dates' => array( 'missing' => 0, 'refs' => array() ) ) ) ) ) && '1 group would be in tanks with no sale date (the workbook carries none): after the import, set "Goes on sale" on its supplier order (Arrivals → 2026-2).' === Admin_Import::sale_dates_line( 1, array( '2026-2', '2026-2' ), false ) && '' === Admin_Import::sale_dates_line( 0, array(), false ) );
+check( 'the result in plain lines, the sale dates last', 6 === count( $lines ) && 'Species: 5 added, 0 updated, 0 skipped.' === $lines[0] && 'Orders: 3 created with 7 lines, 0 already on the site (skipped).' === $lines[1] && 'Stays: 2 created from 1 recent orders, 0 lines skipped (already checked in or nothing received).' === $lines[2] && 'Treatment logs: 6 written, 0 skipped (already there, or undated).' === $lines[3] && 'Box rates: 5 rows in Settings now.' === $lines[4] && 'Sale dates: 2 groups in tanks have no sale date yet, so they are not for sale — set "Goes on sale" on their supplier orders (Supplier orders → 2026-2), or a group\'s own date on its product page.' === $lines[5], json_encode( $lines ) );
+check( 'no sale-date line when every group has one; the preview\'s wording', 5 === count( Admin_Import::summary_lines( array_merge( $r, array( 'sale_dates' => array( 'missing' => 0, 'refs' => array() ) ) ) ) ) && '1 group would be in tanks with no sale date (the workbook carries none): after the import, set "Goes on sale" on its supplier order (Supplier orders → 2026-2).' === Admin_Import::sale_dates_line( 1, array( '2026-2', '2026-2' ), false ) && '' === Admin_Import::sale_dates_line( 0, array(), false ) );
 check( 'existing(): the site\'s orders with a sale date', array( '2026-2' ) === Admin_Import::existing( $store )['dated_refs'] );
 check( 'the .htaccess refuses both Apache generations; the file name is random with the extension', false !== strpos( Admin_Import::htaccess(), 'Require all denied' ) && false !== strpos( Admin_Import::htaccess(), 'Deny from all' ) && 1 === preg_match( '/^workbook-0-[A-Za-z0-9]{16}\.xlsm$/', Admin_Import::file_name( '/tmp', 'FisHotel-2026.xlsm', '.XLSM' ) ) && 20971520 === Admin_Import::MAX_BYTES && array( 'xlsx', 'xlsm' ) === array_keys( Admin_Import::MIMES ) );
 check( 'system_label on the panel\'s buildings', '205 gal system' === Layout::system_label( $spa[0]['gallons'] ) );

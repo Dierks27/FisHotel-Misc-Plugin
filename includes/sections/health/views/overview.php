@@ -71,6 +71,82 @@ $fh_group_icons    = array(
 		</span>
 	</div>
 
+	<?php /* ── Checkout alarm ──────────────────────────────────── */ ?>
+	<div class="fishotel-misc-card fh-health-card fh-health-alarm<?php echo $alarm['active'] ? ' fh-health-alarm--on' : ''; ?>">
+		<div class="fishotel-misc-card-header">
+			<div class="fishotel-misc-card-icon"><span class="dashicons dashicons-cart"></span></div>
+			<h2 class="fishotel-misc-card-title"><?php esc_html_e( 'Checkout alarm', 'fishotel-misc-plugin' ); ?></h2>
+		</div>
+
+		<?php if ( ! $alarm['on'] ) : ?>
+			<p class="fishotel-misc-card-desc"><?php esc_html_e( 'Switched off under Settings → Checkout alarm. Nothing is watched and nothing is e-mailed.', 'fishotel-misc-plugin' ); ?></p>
+		<?php else : ?>
+			<?php if ( $alarm['active'] ) : ?>
+				<table class="fh-health-checks">
+					<tbody>
+						<?php foreach ( $alarm['active'] as $fh_signal => $fh_finding ) : ?>
+							<tr class="fh-health-check fh-health-check--error" data-check="alarm-<?php echo esc_attr( $fh_signal ); ?>">
+								<td class="fh-health-check__status"><?php echo Admin::badge_html( 'error' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by badge_html(). ?></td>
+								<td class="fh-health-check__label">
+									<?php echo esc_html( (string) ( $fh_finding['what'] ?? '' ) ); ?>
+									<span class="fh-health-check__hint"><?php echo esc_html( (string) ( $fh_finding['where'] ?? '' ) ); ?></span>
+								</td>
+								<td class="fh-health-check__value"><?php echo esc_html( ! empty( $fh_finding['seen_at'] ) ? wp_date( get_option( 'time_format' ), (int) $fh_finding['seen_at'] ) : '' ); ?></td>
+							</tr>
+						<?php endforeach; ?>
+					</tbody>
+				</table>
+			<?php else : ?>
+				<p class="fishotel-misc-card-desc"><strong><?php esc_html_e( 'All clear: customers can check out as far as the alarm can tell.', 'fishotel-misc-plugin' ); ?></strong></p>
+			<?php endif; ?>
+
+			<?php foreach ( $alarm['notes'] as $fh_note ) : ?>
+				<p class="fishotel-misc-card-desc"><?php echo esc_html( (string) $fh_note ); ?></p>
+			<?php endforeach; ?>
+
+			<p class="fishotel-misc-card-desc"><?php esc_html_e( 'What it watches:', 'fishotel-misc-plugin' ); ?></p>
+			<ul class="fh-health-alarm__list">
+				<?php foreach ( $alarm['watching'] as $fh_text ) : ?>
+					<li><?php echo esc_html( $fh_text ); ?></li>
+				<?php endforeach; ?>
+			</ul>
+
+			<p class="fishotel-misc-card-desc">
+				<?php
+				if ( '' !== $alarm['to'] ) {
+					/* translators: %s: e-mail address */
+					echo esc_html( sprintf( __( 'A problem is e-mailed to %s, at most once an hour for each kind; "all clear" is not e-mailed.', 'fishotel-misc-plugin' ), $alarm['to'] ) );
+				} else {
+					esc_html_e( 'There is no address to e-mail: set one under Settings → Checkout alarm.', 'fishotel-misc-plugin' );
+				}
+				echo ' ';
+				if ( $alarm['last_look'] > 0 ) {
+					/* translators: %s: time */
+					echo esc_html( sprintf( __( 'Last look: %s.', 'fishotel-misc-plugin' ), wp_date( get_option( 'date_format' ) . ' ' . get_option( 'time_format' ), $alarm['last_look'] ) ) );
+				} else {
+					esc_html_e( 'It has not looked yet: the first look runs within 5 minutes, once the site\'s scheduled jobs next run.', 'fishotel-misc-plugin' );
+				}
+				?>
+			</p>
+
+			<p class="fh-health-actions">
+				<button type="button" class="button fh-health-test-alarm"><?php esc_html_e( 'Send a test alarm', 'fishotel-misc-plugin' ); ?></button>
+				<span class="fh-health-status" aria-live="polite"></span>
+			</p>
+		<?php endif; ?>
+	</div>
+
+	<?php
+	// FisHotel versions: the same card as on the FisHotel Tools Dashboard.
+	if ( class_exists( 'FisHotel\\Misc\\Versions' ) ) {
+		try {
+			echo \FisHotel\Misc\Versions::card_html( \FisHotel\Misc\Versions::collect() ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by card_html().
+		} catch ( \Throwable $e ) {
+			unset( $e );
+		}
+	}
+	?>
+
 	<div class="fh-health-groups">
 		<?php foreach ( $groups as $fh_group => $fh_rows ) : ?>
 			<div class="fishotel-misc-card fh-health-card">

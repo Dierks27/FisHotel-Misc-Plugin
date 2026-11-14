@@ -216,13 +216,13 @@ class Collector {
 		$invoice = ! empty( $settings['show_invoice'] );
 		if ( $invoice && ! self::invoice_available() ) {
 			$invoice = false;
-			$notes['invoice'] = __( 'Invoice PDF check needs the PDF Invoices plugin', 'fishotel-misc-plugin' );
+			$notes['invoice'] = __( 'Invoice column: off — it needs the PDF Invoices plugin.', 'fishotel-misc-plugin' );
 		}
 
 		$tracking = ! empty( $settings['show_tracking'] );
 		if ( $tracking && ! self::has_shiptracker() ) {
 			$tracking = false;
-			$notes['tracking'] = __( 'Tracking check needs the ShipTracker plugin', 'fishotel-misc-plugin' );
+			$notes['tracking'] = __( 'Tracking column: off — it needs the ShipTracker plugin.', 'fishotel-misc-plugin' );
 		}
 
 		return array(
@@ -346,13 +346,17 @@ class Collector {
 			// chip and no rank); the weather state itself stays on the
 			// destination for the widget badge and the cache key.
 			$destinations = Model::sort_destinations( $destinations, $columns );
+			$ship         = Model::ship_date_for( $date, $tz );
+			// A box has no tracking number before it ships: "no tracking"
+			// counts only from the ship day on.
+			$tracking_due = strcmp( (string) $ship, $today ) <= 0;
 
 			$blocks[ $date ] = array(
 				'date'         => $date,
-				'ship'         => Model::ship_date_for( $date, $tz ),
+				'ship'         => $ship,
 				'destinations' => $destinations,
-				'chips'        => Model::chips( $destinations, $columns ),
-				'attention'    => Model::needs_attention( $destinations, $columns ),
+				'chips'        => Model::chips( $destinations, $columns, $tracking_due ),
+				'attention'    => Model::needs_attention( $destinations, $columns, $tracking_due ),
 			);
 		}
 
@@ -561,7 +565,9 @@ class Collector {
 	 * Fish / dry-goods quantities of an order's still-to-ship product
 	 * lines: lines whose product (the parent for a variation) is in a fish
 	 * category count as fish, the rest as dry goods. Lines marked shipped
-	 * or na by the theme, and fully refunded lines, are skipped.
+	 * or na by the theme, and fully refunded lines, are skipped — and so is
+	 * an invoice's "Adjustment" (is_invoice_adjustment()): money, nothing
+	 * to ship.
 	 *
 	 * @param object $order Order.
 	 * @return array{fish: int, dry: int}
@@ -596,6 +602,9 @@ class Collector {
 			if ( $qty <= 0 ) {
 				continue;
 			}
+			if ( self::is_invoice_adjustment( $item ) ) {
+				continue;
+			}
 
 			$product = method_exists( $item, 'get_product' ) ? $item->get_product() : null;
 			$slugs   = self::product_category_slugs( $product );
@@ -608,6 +617,31 @@ class Collector {
 		}
 
 		return $out;
+	}
+
+	/**
+	 * Whether an order line is an invoice's "Adjustment": the line that
+	 * brings an invoice up to a stated price. The theme can only itemise
+	 * it as a fish line of the invoice (`_fh_invoice_fish`, no product);
+	 * the Invoices section says which name it goes by
+	 * (fishotel_invoices_is_adjustment()). Without that function nothing
+	 * is one.
+	 *
+	 * @param object $item Order item.
+	 * @return bool
+	 */
+	public static function is_invoice_adjustment( $item ) {
+		if ( ! function_exists( 'fishotel_invoices_is_adjustment' ) || ! is_object( $item ) || ! method_exists( $item, 'get_meta' ) || ! method_exists( $item, 'get_name' ) ) {
+			return false;
+		}
+		$flag = $item->get_meta( '_fh_invoice_fish' );
+		if ( ! is_scalar( $flag ) || ! in_array( strtolower( trim( (string) $flag ) ), array( '1', 'yes', 'true', 'on' ), true ) ) {
+			return false;
+		}
+		if ( method_exists( $item, 'get_product_id' ) && (int) $item->get_product_id() > 0 ) {
+			return false;
+		}
+		return true === \fishotel_invoices_is_adjustment( $item->get_name() );
 	}
 
 	/**

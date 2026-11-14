@@ -83,7 +83,7 @@ class Site_Snippets {
 	 */
 	public static function get_section_info() {
 		return array(
-			'name'        => __( 'Snippets', 'fishotel-misc-plugin' ),
+			'name'        => __( 'FisHotel Snippets', 'fishotel-misc-plugin' ),
 			'description' => __( 'The site\'s own code snippets as files in GitHub, switched on or off here and run the way Code Snippets ran them — with safe mode, a duplicate guard while Code Snippets is still installed, and clash checks. Plus an editor for snippets written in wp-admin (only for users named in wp-config), with history, roll back, an audit log and export to GitHub.', 'fishotel-misc-plugin' ),
 			'icon'        => 'dashicons-editor-code',
 		);
@@ -164,8 +164,8 @@ class Site_Snippets {
 
 		add_submenu_page(
 			'fishotel-misc',
-			__( 'Snippets', 'fishotel-misc-plugin' ),
-			__( 'Snippets', 'fishotel-misc-plugin' ),
+			__( 'FisHotel Snippets', 'fishotel-misc-plugin' ),
+			__( 'FisHotel Snippets', 'fishotel-misc-plugin' ),
 			Loader::CAPABILITY,
 			self::MENU_SLUG,
 			array( new Admin(), 'render_page' )

@@ -138,6 +138,51 @@ class Store {
 	}
 
 	/**
+	 * WooCommerce's own log table ({prefix}woocommerce_log, written only
+	 * when WooCommerce → Status → Logs is set to the database handler):
+	 * the "fatal-errors" rows after a log_id, newest first. Read-only, and
+	 * by the primary key, so it never scans the whole table. Used by the
+	 * checkout alarm.
+	 *
+	 * @param int $after_id Last log_id already seen (0 = only the highest id).
+	 * @return array{max_id: int, count: int, message: string, time: string}
+	 */
+	public static function wc_fatals_after( $after_id ) {
+		global $wpdb;
+
+		$out = array(
+			'max_id'  => (int) $after_id,
+			'count'   => 0,
+			'message' => '',
+			'time'    => '',
+		);
+
+		try {
+			$table = $wpdb->prefix . 'woocommerce_log';
+			if ( $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) ) !== $table ) {
+				return $out;
+			}
+
+			$max           = (int) $wpdb->get_var( 'SELECT MAX(log_id) FROM ' . $table ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			$out['max_id'] = max( (int) $after_id, $max );
+			if ( $max <= (int) $after_id ) {
+				return $out;
+			}
+
+			$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT log_id, timestamp, message FROM ' . $table . " WHERE log_id > %d AND source = 'fatal-errors' ORDER BY log_id DESC LIMIT 20", (int) $after_id ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			if ( is_array( $rows ) && $rows ) {
+				$out['count']   = count( $rows );
+				$out['message'] = (string) $rows[0]['message'];
+				$out['time']    = (string) $rows[0]['timestamp'];
+			}
+		} catch ( \Throwable $e ) {
+			unset( $e );
+		}
+
+		return $out;
+	}
+
+	/**
 	 * Insert one row.
 	 *
 	 * @param array $row logged_at (UTC Y-m-d H:i:s), level, source, message,
@@ -441,36 +486,6 @@ class Store {
 		}
 
 		return $sum;
-	}
-
-	/**
-	 * The newest error / critical row for a source since a timestamp.
-	 *
-	 * @param string $source   Source.
-	 * @param int    $since_ts UNIX timestamp.
-	 * @return array|null
-	 */
-	public function last_error_for_source( $source, $since_ts ) {
-		if ( ! self::table_exists() ) {
-			return null;
-		}
-
-		global $wpdb;
-
-		try {
-			$row = $wpdb->get_row(
-				$wpdb->prepare(
-					'SELECT id, logged_at, level, source, message, context, fingerprint FROM ' . self::table_name() . " WHERE source = %s AND level IN ('error','critical') AND logged_at >= %s ORDER BY logged_at DESC, id DESC LIMIT 1",
-					(string) $source,
-					gmdate( 'Y-m-d H:i:s', (int) $since_ts )
-				),
-				ARRAY_A
-			);
-		} catch ( \Throwable $e ) {
-			return null;
-		}
-
-		return $row ? self::hydrate( $row ) : null;
 	}
 
 	/**

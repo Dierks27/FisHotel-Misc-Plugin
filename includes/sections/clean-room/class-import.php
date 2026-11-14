@@ -307,7 +307,7 @@ class Import {
 				// leave it alone (no check-in, no logs) and say what to do.
 				$result['orders']['skipped']++;
 				$result['errors'][] = sprintf(
-					'Batch %1$s of the workbook was NOT imported: the site already has a different order with that ref (%2$s). Give that order another Ref (Arrivals → the order → Ref → Save), then import the same file again.',
+					'Batch %1$s of the workbook was NOT imported: the site already has a different order with that ref (%2$s). Give that order another Ref (Supplier orders → the order → Ref → Save), then import the same file again.',
 					$ref,
 					self::describe_order( $existing )
 				);

@@ -46,8 +46,12 @@ $fh_ago = static function ( $time ) {
 	?>
 
 	<p class="fh-snip-intro">
-		<?php esc_html_e( 'The site\'s own code, one file per snippet in the plugin\'s GitHub repository (includes/sections/site-snippets/snippets/). Switch a snippet here; change its code in GitHub — it arrives with the next plugin update. PHP snippets run at plugins_loaded priority 1, like Code Snippets. Snippets written here in wp-admin are under My snippets.', 'fishotel-misc-plugin' ); ?>
+		<?php esc_html_e( 'The site\'s own small pieces of code. Switch each one on or off here; new and changed ones arrive with the plugin\'s updates. The ones you write yourself are under My snippets.', 'fishotel-misc-plugin' ); ?>
 	</p>
+	<details class="fh-snip-dev">
+		<summary><?php esc_html_e( 'For the developer', 'fishotel-misc-plugin' ); ?></summary>
+		<p class="fh-snip-help"><?php esc_html_e( 'One file per snippet in the plugin\'s GitHub repository (includes/sections/site-snippets/snippets/); change the code there. PHP snippets run at plugins_loaded priority 1, like Code Snippets.', 'fishotel-misc-plugin' ); ?></p>
+	</details>
 
 	<div class="fh-snip-facts">
 		<span class="fh-snip-fact">
@@ -216,10 +220,16 @@ $fh_ago = static function ( $time ) {
 
 	<h2 class="fh-snip-h2"><?php esc_html_e( 'If a snippet breaks the site', 'fishotel-misc-plugin' ); ?></h2>
 	<p class="fh-snip-help">
-		<?php
-		/* translators: %s: query string */
-		echo esc_html( sprintf( __( 'Logged in as an administrator, add %s to any admin address: nothing runs on that page, and this page and its switches keep the flag. Locked out entirely: add define( \'FISHOTEL_SNIPPETS_SAFE_MODE\', true ); to wp-config.php (Code Snippets\' CODE_SNIPPETS_SAFE_MODE works too), switch the snippet off, then remove the line.', 'fishotel-misc-plugin' ), '?' . Loader::SAFE_MODE_QUERY . '=1' ) );
-		?>
-		<a href="<?php echo esc_url( add_query_arg( Loader::SAFE_MODE_QUERY, '1', Admin::page_url() ) ); ?>"><?php esc_html_e( 'Open this page in safe mode', 'fishotel-misc-plugin' ); ?></a>
+		<?php esc_html_e( 'Open this page in safe mode: no snippet runs there, so you can switch the one that broke the site off.', 'fishotel-misc-plugin' ); ?>
+		<a href="<?php echo esc_url( add_query_arg( Loader::SAFE_MODE_QUERY, '1', Admin::page_url() ) ); ?>"><?php esc_html_e( 'Open this page in safe mode', 'fishotel-misc-plugin' ); ?> &rarr;</a>
 	</p>
+	<details class="fh-snip-dev">
+		<summary><?php esc_html_e( 'For the developer', 'fishotel-misc-plugin' ); ?></summary>
+		<p class="fh-snip-help">
+			<?php
+			/* translators: %s: query string */
+			echo esc_html( sprintf( __( 'Logged in as an administrator, add %s to any admin address: nothing runs on that page, and this page and its switches keep the flag. Locked out entirely: add define( \'FISHOTEL_SNIPPETS_SAFE_MODE\', true ); to wp-config.php (Code Snippets\' CODE_SNIPPETS_SAFE_MODE works too), switch the snippet off, then remove the line.', 'fishotel-misc-plugin' ), '?' . Loader::SAFE_MODE_QUERY . '=1' ) );
+			?>
+		</p>
+	</details>
 </div>

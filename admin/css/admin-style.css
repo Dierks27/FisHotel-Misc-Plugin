@@ -95,6 +95,15 @@ body[class*="page_fishotel-misc"] .wrap {
 /* ------------------------------------------------------------------ */
 /*  Section Grid                                                       */
 /* ------------------------------------------------------------------ */
+.fishotel-misc-group-title {
+	margin: 32px 0 14px;
+	font-size: 13px;
+	font-weight: 600;
+	letter-spacing: 0.4px;
+	text-transform: uppercase;
+	color: var(--fh-text-secondary);
+}
+
 .fishotel-misc-grid {
 	display: grid;
 	grid-template-columns: repeat(3, 1fr);
@@ -325,4 +334,49 @@ body[class*="page_fishotel-misc"] .wrap {
 	background: rgba(220, 50, 50, 0.1);
 	color: var(--fh-danger);
 	border-color: rgba(220, 50, 50, 0.25);
+}
+
+/* ------------------------------------------------------------------ */
+/*  FisHotel versions card (Dashboard and Health)                      */
+/* ------------------------------------------------------------------ */
+.fishotel-misc-versions {
+	margin: 0 0 24px;
+}
+
+.fishotel-misc-versions:hover {
+	transform: none;
+}
+
+.fishotel-misc-versions--warn {
+	border-left: 3px solid var(--fh-warning, #ffb900);
+}
+
+.fishotel-misc-versions__table {
+	width: 100%;
+	border-collapse: collapse;
+	color: var(--fh-text-primary);
+}
+
+.fishotel-misc-versions__table th,
+.fishotel-misc-versions__table td {
+	text-align: left;
+	padding: 6px 8px;
+	border-bottom: 1px solid var(--fh-border);
+	vertical-align: top;
+}
+
+.fishotel-misc-versions__table th {
+	color: var(--fh-text-secondary);
+	font-weight: 600;
+}
+
+.fishotel-misc-versions__note {
+	display: block;
+	margin-top: 4px;
+	color: var(--fh-warning, #ffb900);
+}
+
+.fishotel-misc-versions__row--off td,
+.fishotel-misc-versions__row--missing td {
+	color: var(--fh-text-secondary);
 }

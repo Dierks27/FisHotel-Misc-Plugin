@@ -1,0 +1,40 @@
+{
+	"_about": "The day's to-do list in words — read by todo-test.php (the Board: Admin_Temp::line_detail / feed_text / flag_text, Temp_Tanks::templates_for) and by front-desk.test.js / temp-tanks-admin.test.js (the phone and the Board's set-up form), so the server and the pages cannot drift apart. Invented names and numbers.",
+	"details": [
+		{ "item": { "medication": "Praziquantel", "dose": "suggested 1.9 g for 205 gal" }, "text": "Praziquantel · suggested 1.9 g for 205 gal" },
+		{ "item": { "medication": "", "dose": "40 mg/gal = 8.2 g for 205 gal" }, "text": "40 mg/gal = 8.2 g for 205 gal" },
+		{ "item": { "medication": "Copper Power", "dose": "" }, "text": "Copper Power" },
+		{ "item": { "medication": "", "dose": "" }, "text": "" }
+	],
+	"feeds": [
+		{ "item": { "label": "Feed", "count": 7, "left": 7 }, "text": "Feed — 7 tanks with fish" },
+		{ "item": { "label": "Feed", "count": 7, "left": 3 }, "text": "Feed — 7 tanks with fish · 3 left" },
+		{ "item": { "label": "Feed", "count": 7, "left": 0 }, "text": "Feed — 7 tanks with fish" },
+		{ "item": { "label": "Feed", "count": 1, "left": 1 }, "text": "Feed — 1 tank with fish" },
+		{ "item": { "label": "Evening feed", "count": 2, "left": 1 }, "text": "Evening feed — 2 tanks with fish · 1 left" }
+	],
+	"flags": [
+		{ "flag": { "where": "Building 500", "low": true, "due": false, "overdue": false, "value": 2.1, "ago": "3 h" }, "text": "Building 500 · Cu 2.1 — below the floor" },
+		{ "flag": { "where": "Building 600", "low": false, "due": true, "overdue": true, "value": null, "ago": "" }, "text": "Building 600 · copper reading overdue — no reading yet" },
+		{ "flag": { "where": "Building 500", "low": false, "due": true, "overdue": false, "value": 2.4, "ago": "26 h" }, "text": "Building 500 · copper reading due — last one 2.4, 26 h ago" },
+		{ "flag": { "where": "TEMP 2 · 902 · Test Hospital", "low": true, "due": true, "overdue": true, "value": 1.75, "ago": "3 d" }, "text": "TEMP 2 · 902 · Test Hospital · Cu 1.75 — below the floor · copper reading overdue — last one 1.75, 3 d ago" },
+		{ "flag": { "where": "Building 600", "low": true, "due": false, "overdue": false, "value": 2, "ago": "5 min" }, "text": "Building 600 · Cu 2 — below the floor" }
+	],
+	"offers": {
+		"templates": [
+			{ "name": "Test Copper", "tags": [] },
+			{ "name": "Test Antibiotics", "tags": [ "bacterial infection" ] },
+			{ "name": "Test Dewormer", "tags": [ "Flukes", "worms" ] },
+			{ "name": "Test Bath", "tags": [ "flukes" ] }
+		],
+		"cases": [
+			{ "tag": "bacterial infection", "matching": [ "Test Antibiotics" ] },
+			{ "tag": "  Bacterial   Infection ", "matching": [ "Test Antibiotics" ] },
+			{ "tag": "FLUKES", "matching": [ "Test Dewormer", "Test Bath" ] },
+			{ "tag": "worms", "matching": [ "Test Dewormer" ] },
+			{ "tag": "fin rot", "matching": [] },
+			{ "tag": "bacterial", "matching": [] },
+			{ "tag": "", "matching": [] }
+		]
+	}
+}

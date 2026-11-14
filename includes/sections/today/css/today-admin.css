@@ -91,6 +91,56 @@
 	color: var(--fh-warning, #ffb900);
 }
 
+/* One-liners other sections add under the header (fishotel_today_lines), under their headings. */
+.fh-today-linehead {
+	margin: 16px 0 8px;
+	font-size: 13px;
+	font-weight: 600;
+	letter-spacing: 0.3px;
+	text-transform: uppercase;
+	color: var(--fh-text-secondary, #b0b0b0);
+}
+
+.fh-today-line {
+	margin: 0 0 12px;
+	padding: 10px 14px;
+	font-size: 14px;
+	background: var(--fh-bg-secondary, #2d2d2d);
+	border: 1px solid var(--fh-border, #404040);
+	border-left: 3px solid var(--fh-border, #404040);
+	border-radius: 6px;
+	color: var(--fh-text-primary, #fff);
+}
+
+.fh-today-line a {
+	color: inherit;
+	font-weight: 600;
+	text-decoration: none;
+}
+
+.fh-today-line a:hover,
+.fh-today-line a:focus {
+	text-decoration: underline;
+}
+
+.fh-today-line.is-todo {
+	border-left-color: var(--fh-warning, #ffb900);
+}
+
+.fh-today-line.is-done {
+	border-left-color: var(--fh-success, #46b450);
+}
+
+.fh-today-line.is-bad {
+	border-left-color: var(--fh-danger, #dc3232);
+}
+
+.fh-today-line__detail {
+	margin-left: 10px;
+	font-size: 12px;
+	color: var(--fh-text-secondary, #b0b0b0);
+}
+
 /* ------------------------------------------------------------------ */
 /*  Date block                                                         */
 /* ------------------------------------------------------------------ */

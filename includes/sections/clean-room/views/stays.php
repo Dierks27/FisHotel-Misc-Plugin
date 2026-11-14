@@ -44,7 +44,7 @@ $fh_table = static function ( array $rows, $open ) use ( $today, $sizes ) {
 		return;
 	}
 	?>
-	<table class="widefat striped fh-cr-table">
+	<table class="widefat striped fh-cr-table fh-cr-stays-table">
 		<thead>
 			<tr>
 				<th scope="col"><?php esc_html_e( 'Species', 'fishotel-misc-plugin' ); ?></th>
