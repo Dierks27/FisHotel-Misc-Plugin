@@ -218,12 +218,24 @@ class App {
 	/**
 	 * An inlined file of this section.
 	 *
-	 * @param string $relative css/app.css, js/app.js, js/sw.js.
+	 * @param string $relative css/app.css, js/app.js, js/scanner.js, js/sw.js.
 	 * @return string
 	 */
 	private static function asset( $relative ) {
 		$file = Shop_App::path() . $relative;
 		return is_readable( $file ) ? (string) file_get_contents( $file ) : ''; // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- our own file, inlined so the page makes no further requests.
+	}
+
+	/**
+	 * The app's script as it is inlined: the scanner (js/scanner.js) in
+	 * front of js/app.js, which uses it. The QR reader for browsers without
+	 * one of their own (js/vendor/jsQR.js) is not in it: the scanner loads
+	 * it from its address (urls.qrLib) the first time it is needed.
+	 *
+	 * @return string
+	 */
+	public static function script() {
+		return self::asset( 'js/scanner.js' ) . "\n" . self::asset( 'js/app.js' );
 	}
 
 	/**
@@ -257,6 +269,8 @@ class App {
 			'label'   => Shop_App::label_url( 0 ),
 			'ajax'    => admin_url( 'admin-ajax.php' ),
 			'admin'   => admin_url(),
+			// Loaded by the scanner only on a browser without a QR reader of its own.
+			'qrLib'   => Shop_App::url() . 'js/vendor/jsQR.js?ver=' . rawurlencode( FISHOTEL_MISC_VERSION ),
 		);
 	}
 
@@ -288,7 +302,7 @@ class App {
 			array(
 				'config'   => self::shell_config(),
 				'css'      => self::asset( 'css/app.css' ),
-				'js'       => self::asset( 'js/app.js' ),
+				'js'       => self::script(),
 				'manifest' => Shop_App::route_url( 'manifest' ),
 				'icon'     => Shop_App::url() . 'assets/icon-192.png',
 			)
@@ -364,7 +378,7 @@ class App {
 		}
 
 		$stamp = FISHOTEL_MISC_VERSION;
-		foreach ( array( 'js/app.js', 'css/app.css', 'js/sw.js', 'views/shell.php' ) as $file ) {
+		foreach ( array( 'js/app.js', 'js/scanner.js', 'css/app.css', 'js/sw.js', 'views/shell.php' ) as $file ) {
 			$stamp .= '|' . (string) @filemtime( Shop_App::path() . $file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- a missing file is just an empty stamp.
 		}
 
@@ -886,7 +900,7 @@ class App {
 
 		self::$injection = '<style id="fh-sa-style">' . str_replace( '</style', '<\/style', self::asset( 'css/app.css' ) ) . '</style>'
 			. '<script>window.fhShopApp = ' . wp_json_encode( $config, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT ) . ';</script>'
-			. '<script>' . str_replace( '</script', '<\/script', self::asset( 'js/app.js' ) ) . '</script>';
+			. '<script>' . str_replace( '</script', '<\/script', self::script() ) . '</script>';
 
 		ob_start( array( self::class, 'add_bar' ) );
 	}
@@ -964,12 +978,18 @@ class App {
 			'back'          => __( 'Back', 'fishotel-misc-plugin' ),
 			'pickBuilding'  => __( 'Pick a building', 'fishotel-misc-plugin' ),
 			'pickTank'      => __( 'Pick a tank', 'fishotel-misc-plugin' ),
-			'scan'          => __( 'Scan a tank label', 'fishotel-misc-plugin' ),
-			'scanHint'      => __( 'Point the camera at the label on the tank.', 'fishotel-misc-plugin' ),
+			'scan'          => __( 'Scan a tank', 'fishotel-misc-plugin' ),
+			'scanStarting'  => __( 'Starting the camera…', 'fishotel-misc-plugin' ),
+			'scanHint'      => __( 'Hold the tank\'s label inside the square.', 'fishotel-misc-plugin' ),
 			'scanNotLabel'  => __( 'That is not a FisHotel tank label.', 'fishotel-misc-plugin' ),
-			/* translators: %d: tank number */
-			'scanUnknown'   => __( 'Tank %d is not in the layout.', 'fishotel-misc-plugin' ),
-			'scanNoCamera'  => __( 'The camera could not be opened. Pick the tank instead.', 'fishotel-misc-plugin' ),
+			'scanOtherSite' => __( 'That code is for another website. It was not opened.', 'fishotel-misc-plugin' ),
+			'scanBadTank'   => __( 'That label\'s tank number is not one the shop uses.', 'fishotel-misc-plugin' ),
+			'scanNoCamera'  => __( 'The camera could not be opened. Type the tank number instead.', 'fishotel-misc-plugin' ),
+			'scanDenied'    => __( 'The camera is not allowed for this app. Type the tank number instead — or allow the camera in the browser\'s settings.', 'fishotel-misc-plugin' ),
+			'scanNoReader'  => __( 'The code reader could not be loaded. Type the tank number instead.', 'fishotel-misc-plugin' ),
+			'typeTitle'     => __( 'Type the tank number', 'fishotel-misc-plugin' ),
+			'typeHint'      => __( 'It opens at the third digit.', 'fishotel-misc-plugin' ),
+			'typeBad'       => __( 'Tank numbers have three digits, like 121 or 901.', 'fishotel-misc-plugin' ),
 			'cancel'        => __( 'Cancel', 'fishotel-misc-plugin' ),
 			'empty'         => __( 'empty', 'fishotel-misc-plugin' ),
 			'comingSoon'    => __( 'coming soon', 'fishotel-misc-plugin' ),

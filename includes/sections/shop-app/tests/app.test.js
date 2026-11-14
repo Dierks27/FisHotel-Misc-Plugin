@@ -1,8 +1,9 @@
 /**
  * App script tests — js/app.js.
  *
- * The pure helpers first (the label reader, the countdown, the save id,
- * what an answer means, one keypad press). Then the script is loaded into
+ * The pure helpers first (the countdown, the save id, what an answer
+ * means, one keypad press; what a tank label is, and the scanner itself,
+ * are tests/scanner.test.js). Then the script is loaded into
  * a small stand-in page — a document that can make elements, a fetch that
  * answers as the test says, timers the test runs by hand — and driven:
  *
@@ -24,6 +25,11 @@
  *   buildings then tanks — drawn from the newest state, never from the
  *   one a tile was tapped in), a tank label scanned before the PIN.
  *
+ *   Scan a tank: the button on the home screen, a building's tanks and
+ *   the bar of every screen inside the app; it opens the scanner
+ *   (js/scanner.js, inlined in front of this file), and the tank it
+ *   reads opens at the label address built from this site's own.
+ *
  * Run from the plugin root:
  *   node includes/sections/shop-app/tests/app.test.js
  *
@@ -37,6 +43,7 @@ const path = require('path');
 const nodeCrypto = require('crypto');
 
 const FILE = path.join(__dirname, '..', 'js', 'app.js');
+const SCANNER = path.join(__dirname, '..', 'js', 'scanner.js');
 const SITE = 'https://shop.example.test';
 const AJAX = SITE + '/wp-admin/admin-ajax.php';
 
@@ -54,34 +61,8 @@ function check(label, condition, detail) {
 
 const helpers = require(FILE);
 
-console.log('1. Reading a tank label');
-const L = (text) => helpers.tankFromLabel(text, 'shop.example.test', 'fh_front_desk');
-check('the label address gives its tank number', L('https://shop.example.test/?fh_front_desk=1&tank=521') === 521);
-check('the parameters in the other order', L('https://shop.example.test/?tank=121&fh_front_desk=1') === 121);
-check('http instead of https, www in front, capitals in the host, spaces around: still this shop\'s label', L('http://shop.example.test/?fh_front_desk=1&tank=7') === 7 && L('https://www.shop.example.test/?fh_front_desk=1&tank=7') === 7 && L('  HTTPS://Shop.Example.Test/?fh_front_desk=1&tank=7 ') === 7);
-check('a site in a folder, /index.php, a fragment after it', L('https://shop.example.test/fish/?fh_front_desk=1&tank=7') === 7 && L('https://shop.example.test/index.php?fh_front_desk=1&tank=7#top') === 7);
-for (const [what, text] of [
-	['another site', 'https://elsewhere.example/?fh_front_desk=1&tank=521'],
-	['another site that puts this one in front of an @', 'https://shop.example.test@elsewhere.example/?fh_front_desk=1&tank=521'],
-	['another site with this one as a subdomain label', 'https://shop.example.test.elsewhere.example/?fh_front_desk=1&tank=521'],
-	['this site without the Front Desk switch', 'https://shop.example.test/?tank=521'],
-	['the switch off', 'https://shop.example.test/?fh_front_desk=0&tank=521'],
-	['no tank', 'https://shop.example.test/?fh_front_desk=1'],
-	['a tank that is not a number', 'https://shop.example.test/?fh_front_desk=1&tank=12a'],
-	['a tank with a sign', 'https://shop.example.test/?fh_front_desk=1&tank=-5'],
-	['a ten-digit tank', 'https://shop.example.test/?fh_front_desk=1&tank=1234567890'],
-	['the app\'s own address', 'https://shop.example.test/?fh_shop_app=1&tank=521'],
-	['a javascript: address', 'javascript:alert(1)//?fh_front_desk=1&tank=521'],
-	['plain text', 'Tank 521'],
-	['a bare number', '521'],
-	['nothing', ''],
-	['a broken escape', 'https://shop.example.test/?fh_front_desk=1&tank=%E0%A4%A']
-]) {
-	check('not a tank label: ' + what, L(text) === 0);
-}
-check('null, undefined and a number are not labels', helpers.tankFromLabel(null, 'shop.example.test', 'fh_front_desk') === 0 && helpers.tankFromLabel(undefined, 'shop.example.test', 'fh_front_desk') === 0 && helpers.tankFromLabel(521, 'shop.example.test', 'fh_front_desk') === 0);
-check('without knowing this site\'s host nothing is a label', helpers.tankFromLabel('https://shop.example.test/?fh_front_desk=1&tank=521', '', 'fh_front_desk') === 0);
-check('the port is not part of the comparison', helpers.tankFromLabel('http://127.0.0.1:8491/?fh_front_desk=1&tank=9', '127.0.0.1:8491', 'fh_front_desk') === 9);
+console.log('1. The scanner is its own file');
+check('app.js no longer reads labels itself: the scanner does (tests/scanner.test.js)', typeof helpers.tankFromLabel === 'undefined' && typeof require(SCANNER).readTankCode === 'function');
 
 console.log('\n2. Small things');
 check('a countdown: 4:59, 0:05, 1:02:03, never negative', helpers.clock(299) === '4:59' && helpers.clock(5) === '0:05' && helpers.clock(3723) === '1:02:03' && helpers.clock(-4) === '0:00' && helpers.clock(299.2) === '5:00' && helpers.clock('x') === '0:00');
@@ -231,12 +212,13 @@ const I18N = {
 	lostTitle: 'NOT SAVED', lostWhy: 'The entry that was waiting was made before %s unlocked. It was not saved — enter it again.', lostOk: 'OK — enter it again',
 	sessionEnded: 'Locked. Enter your PIN to go on.', sessionEndedSave: 'Locked before it was saved. %s: enter your PIN and it is saved.', needsHttps: 'The Shop App needs HTTPS.',
 	empty: 'empty', comingSoon: 'coming soon', tankCount: '%d tanks', inQt: 'QT %d', wpLogin: 'Also logged in to WordPress as %s.', wpLogout: 'Log out of WordPress here',
-	noFrontDesk: 'There are no tank screens to open.', scan: 'Scan a tank label'
+	noFrontDesk: 'There are no tank screens to open.', scan: 'Scan a tank'
 };
 
 const URLS = {
 	app: SITE + '/?fh_shop_app=1', state: SITE + '/?fh_shop_app=state', unlock: SITE + '/?fh_shop_app=unlock', lock: SITE + '/?fh_shop_app=lock',
-	sw: SITE + '/?fh_shop_app=sw', swScope: SITE + '/?fh_shop_app=', label: SITE + '/?fh_front_desk=1', ajax: AJAX, admin: SITE + '/wp-admin/'
+	sw: SITE + '/?fh_shop_app=sw', swScope: SITE + '/?fh_shop_app=', label: SITE + '/?fh_front_desk=1', ajax: AJAX, admin: SITE + '/wp-admin/',
+	qrLib: SITE + '/wp-content/plugins/fishotel-misc-plugin/includes/sections/shop-app/js/vendor/jsQR.js?ver=0.46.1'
 };
 
 /* Load js/app.js into a stand-in page. */
@@ -272,7 +254,8 @@ function boot(config, opts) {
 		document: doc,
 		location: location,
 		isSecureContext: opts.insecure ? false : true,
-		navigator: {},
+		navigator: opts.navigator || {},
+		BarcodeDetector: opts.BarcodeDetector,
 		crypto: nodeCrypto.webcrypto,
 		AbortController: AbortController,
 		CustomEvent: class { constructor(type, init) { this.type = type; this.detail = init && init.detail; } },
@@ -285,12 +268,16 @@ function boot(config, opts) {
 		setInterval() { return 0; },
 		clearInterval() {},
 		addEventListener(type, fn) { (page.listeners[type] = page.listeners[type] || []).push(fn); },
+		removeEventListener() {},
 		scrollTo() {}
 	};
 	// The script reads `document` whenever it draws, so the stand-ins stay
 	// in place until the next page replaces them (one page at a time).
 	global.window = win;
 	global.document = doc;
+	// As on the real page: the scanner first, then the app script.
+	delete require.cache[require.resolve(SCANNER)];
+	win.fhShopScanner = require(SCANNER);
 	delete require.cache[require.resolve(FILE)];
 	require(FILE);
 	page.win = win;
@@ -302,6 +289,7 @@ function boot(config, opts) {
 	};
 	page.sheet = () => find(doc.body, 'fh-sa-sheet');
 	page.layer = () => find(doc.body, 'fh-sa-layer');
+	page.scan = () => find(doc.body, 'fh-sa-scan');
 	return page;
 }
 
@@ -333,6 +321,33 @@ const STATE_LOCKED = Object.assign({}, STATE_LIVE, { session: null });
 	click(find(bar, 'fh-sa-bar__lock'));
 	await settle();
 	check('Lock posts to the app with its header, then leaves the tank for the keypad', page.calls.length === 1 && page.calls[0].url === URLS.lock && page.calls[0].init.method === 'POST' && page.calls[0].init.headers['X-FH-Shop-App'] === '1' && page.went.join() === URLS.app);
+
+	console.log('\n5b. Inside a tank screen: Scan a tank');
+	const track = { stopped: false, stop() { this.stopped = true; } };
+	const frames = [[], ['https://elsewhere.example/?fh_front_desk=1&tank=511'], [SITE + '/?fh_front_desk=1&tank=511']];
+	page = boot(frontDeskConfig(), {
+		navigator: { mediaDevices: { getUserMedia: () => Promise.resolve({ getTracks: () => [track] }) }, vibrate() { return true; } },
+		BarcodeDetector: class { static getSupportedFormats() { return Promise.resolve(['qr_code']); } detect() { return Promise.resolve((frames.shift() || []).map((v) => ({ rawValue: v }))); } }
+	});
+	const scanBtn = find(page.doc.body.children[0], 'fh-sa-bar__scan');
+	check('the bar holds Scan a tank, between who is unlocked and Lock', scanBtn !== null && text(scanBtn) === 'Scan a tank' && page.doc.body.children[0].children.map((c) => c.className).join() === 'fh-sa-bar__home,fh-sa-bar__name,fh-sa-bar__scan,fh-sa-bar__lock');
+	click(scanBtn);
+	await settle();
+	check('a tap: the camera over the tank screen', page.scan() !== null && find(page.scan(), 'fh-sa-scan__video').srcObject !== null);
+	const readFrame = async () => { page.run(200); await settle(); };
+	await readFrame();
+	await readFrame();
+	check('another site\'s code: not opened, still scanning', page.went.length === 0 && /another website/.test(text(page.scan())) && !track.stopped);
+	await readFrame();
+	check('a label: that tank opens at THIS site\'s label address, the camera stopped', page.went.join() === SITE + '/?fh_front_desk=1&tank=511' && track.stopped && page.scan() === null);
+
+	page = boot(frontDeskConfig());
+	click(find(page.doc.body.children[0], 'fh-sa-bar__scan'));
+	check('no camera: the number pad', page.scan() !== null && find(page.scan(), 'fh-sa-scan__pad').hidden === false);
+	page.answer = (url) => Promise.resolve(url === URLS.state ? reply(200, STATE_LOCKED) : reply(400, '0'));
+	page.win.fetch(AJAX, SAVE).catch(() => {});
+	await settle();
+	check('the session runs out while the scanner is open: the scanner goes, the PIN keypad comes up', page.scan() === null && page.layer() !== null);
 
 	console.log('\n6. What it leaves alone');
 	page = boot(frontDeskConfig());
@@ -673,10 +688,16 @@ const STATE_LOCKED = Object.assign({}, STATE_LIVE, { session: null });
 	const tiles = () => findAll(home, 'fh-sa-tile');
 	check('first the buildings, by area', /Pick a building/.test(text(home)) && findAll(home, 'fh-sa-area').map(text).join() === 'Clean Room,Spa' && tiles().map((t) => text(find(t, 'fh-sa-tile__name'))).join() === 'Building 100,Building 400,Building 500');
 	check('a building that is coming soon cannot be opened; one with fish in quarantine says so', tiles()[1].disabled === true && /coming soon/.test(text(tiles()[1])) && /QT 3/.test(text(tiles()[2])) && /2 tanks/.test(text(tiles()[0])));
-	check('no Scan button where the browser cannot read codes from the camera', find(home, 'fh-sa-btn--scan') === null);
+	check('Scan a tank, big, above the buildings — on every browser (without a camera it offers the number pad)', find(home, 'fh-sa-btn--scan') !== null && text(find(home, 'fh-sa-btn--scan')) === 'Scan a tank' && home.children.indexOf(find(home, 'fh-sa-btn--scan')) < home.children.indexOf(findAll(home, 'fh-sa-h')[0]));
 	check('a button another section added is there', findAll(home, 'fh-sa-btn').some((b) => text(b) === 'Packing' && b.attrs.href === SITE + '/?fh_packing=1'));
 	click(tiles()[0]);
 	check('then that building\'s tanks', tiles().map((t) => text(find(t, 'fh-sa-tile__name'))).join() === '111,121' && /empty/.test(text(tiles()[0])) && /2 · 20G/.test(text(tiles()[1])));
+	check('… with Scan a tank there too', findAll(home, 'fh-sa-btn--scan').length === 1);
+	click(find(home, 'fh-sa-btn--scan'));
+	check('Scan on a browser without a camera: the scanner opens on the number pad, saying why', page.scan() !== null && find(page.scan(), 'fh-sa-scan__pad').hidden === false && /camera could not be opened/.test(text(page.scan())));
+	['5', '1', '1'].forEach((d) => click(findAll(page.scan(), 'fh-sa-key').filter((k) => text(k) === d)[0]));
+	check('5 1 1: tank 511 opens at its label address, the scanner gone', page.went.join() === SITE + '/?fh_front_desk=1&tank=511' && page.scan() === null);
+	page.went.length = 0;
 	click(tiles()[1]);
 	check('a tank opens at its label address — the Clean Room\'s own page', page.went.join() === SITE + '/?fh_front_desk=1&tank=121');
 	// Somebody saved an arrival in tank 111 (on this tablet or another) and
@@ -797,7 +818,8 @@ const STATE_LOCKED = Object.assign({}, STATE_LIVE, { session: null });
 	const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 	check('it builds every screen from elements and text — never innerHTML, document.write or eval', !/innerHTML|outerHTML|insertAdjacentHTML|document\.write|\beval\(|new Function\(/.test(code));
 	check('it keeps nothing on the device: no localStorage, sessionStorage, IndexedDB or cookie', !/localStorage|sessionStorage|indexedDB|document\.cookie/.test(code));
-	check('a scanned address is never opened: the only places it goes are built from this site\'s own addresses', !/location\.(href|replace)\s*=?\s*\(?\s*(codes|rawValue|text)\b/.test(code) && (code.match(/rawValue/g) || []).length === 1);
+	check('a scanned address is never opened: the scanner hands over a tank NUMBER, and the address is built from this site\'s own label address', !/rawValue|getUserMedia|BarcodeDetector/.test(code) && /open: function \(number\) \{ root\.location\.href = tankUrl\(number\); \}/.test(code) && /var base = String\(urls\.label \|\| ''\);/.test(code));
+	check('the reader for browsers without one is given its address, never loaded by this script', /reader: urls\.qrLib/.test(code) && !/jsQR/.test(code));
 	check('every request to the app\'s own address carries the app header', /init\.headers\[cfg\.header \|\| 'X-FH-Shop-App'\] = '1'/.test(code));
 
 	console.log('\n' + (failures ? failures + ' of ' + checks + ' checks FAILED' : 'All ' + checks + ' checks passed'));
