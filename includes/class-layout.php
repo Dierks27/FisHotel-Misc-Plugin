@@ -9,7 +9,7 @@
  *
  *   Menu       Dashboard, Today, then Fish room (Clean Room), Customers
  *              (Invoices, Requests, Lost Fish, Sticker Giveaway — a
- *              checkout choice for customers), Shipping (Packing, Foam
+ *              checkout choice for customers — and Gift Cards), Shipping (Packing, Foam
  *              Cuts, Weather), Site (Health, Snippets, Shop App, then
  *              every other section in folder order). The sections that
  *              were live before 0.46 — Announcer, Coming Soon, Lottery
@@ -39,7 +39,7 @@ class Layout {
 	 *
 	 * @var string[]
 	 */
-	const MENU_FIRST = array( 'today', 'clean-room', 'invoices', 'requests', 'lost-fish', 'sticker-giveaway', 'packing', 'foam-cuts', 'weather', 'health', 'site-snippets', 'shop-app' );
+	const MENU_FIRST = array( 'today', 'clean-room', 'invoices', 'requests', 'lost-fish', 'sticker-giveaway', 'gift-cards', 'packing', 'foam-cuts', 'weather', 'health', 'site-snippets', 'shop-app' );
 
 	/**
 	 * The Dashboard's headings and the sections under each. A section
@@ -50,7 +50,7 @@ class Layout {
 	const GROUPS = array(
 		'today'     => array( 'today' ),
 		'fish-room' => array( 'clean-room' ),
-		'customers' => array( 'invoices', 'requests', 'lost-fish', 'sticker-giveaway' ),
+		'customers' => array( 'invoices', 'requests', 'lost-fish', 'sticker-giveaway', 'gift-cards' ),
 		'shipping'  => array( 'packing', 'foam-cuts', 'weather' ),
 		'site'      => array( 'health', 'site-snippets', 'shop-app' ),
 	);
@@ -149,6 +149,8 @@ class Layout {
 				return __( 'Build a customer\'s invoice by picking fish and publish it as the hidden product they pay; it is marked paid when its order is paid. Starts nothing by itself and sends no e-mail.', 'fishotel-misc-plugin' );
 			case 'requests':
 				return __( 'Fish people ask for through private links, followed through the Clean Room until the fish is ready. Switching it on starts a daily check that — with the Clean Room on — e-mails people by itself when their fish is ready (Settings → "By itself" turns that off).', 'fishotel-misc-plugin' );
+			case 'gift-cards':
+				return __( 'FisHotel\'s own gift cards, to replace the WooCommerce Gift Cards plugin. Switching it on starts nothing: it waits in mode Off. Shadow imports and counts the old cards; Live takes over checkout and My Account and starts an hourly job that sends gift card e-mails on their delivery day.', 'fishotel-misc-plugin' );
 			case 'lost-fish':
 				return __( 'When a fish a customer already paid for is lost: a case with every choice and an e-mail that waits for your click. Switching it on starts an hourly check that sends one reminder to a customer who has not answered after 2 days (Settings; 0 = none) — the first e-mail always waits for you.', 'fishotel-misc-plugin' );
 			case 'packing':
