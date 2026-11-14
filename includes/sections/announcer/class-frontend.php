@@ -428,6 +428,14 @@ class Frontend {
 			$classes[] = 'ancr-marquee';
 		}
 
+		// The countdown date is stored as a naive datetime-local string; stamp
+		// it with the site offset so every browser counts to the same instant.
+		$cd_target = $cd_date;
+		if ( $cd_date ) {
+			$dt        = \DateTime::createFromFormat( '!Y-m-d\TH:i', $cd_date, wp_timezone() );
+			$cd_target = $dt ? $dt->format( 'c' ) : $cd_date;
+		}
+
 		// Data attributes for JS.
 		$data = array(
 			'id'            => $id,
@@ -443,7 +451,7 @@ class Frontend {
 			'multi-speed'   => absint( $multi_speed ),
 			'ticker-scroll' => $ticker_scroll,
 			'countdown'     => $cd_enabled,
-			'cd-date'       => $cd_date,
+			'cd-date'       => $cd_target,
 			'cd-complete'   => $cd_complete,
 		);
 
@@ -474,7 +482,7 @@ class Frontend {
 						<?php if ( $cd_label ) : ?>
 							<span class="ancr-cd-label"><?php echo esc_html( $cd_label ); ?></span>
 						<?php endif; ?>
-						<span class="ancr-cd-timer" data-ancr-cd-target="<?php echo esc_attr( $cd_date ); ?>">
+						<span class="ancr-cd-timer" data-ancr-cd-target="<?php echo esc_attr( $cd_target ); ?>">
 							<span class="ancr-cd-part" data-unit="d">00</span><span class="ancr-cd-sep">:</span>
 							<span class="ancr-cd-part" data-unit="h">00</span><span class="ancr-cd-sep">:</span>
 							<span class="ancr-cd-part" data-unit="m">00</span><span class="ancr-cd-sep">:</span>

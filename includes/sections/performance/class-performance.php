@@ -29,9 +29,14 @@ class Performance {
 	 */
 	const DEFAULTS = array(
 		'script_cleanup'       => true,
-		'cache_headers'        => true,
-		'gzip_compression'     => true,
-		'remove_query_strings' => true,
+		// Off by default: Cloudways nginx / Varnish already gzip, the theme's
+		// own cache-buster appends ?fhv= at priority 999 (so stripping ?ver=
+		// gains nothing), and public Cache-Control headers need a deliberate
+		// opt-in on a store whose header carries per-visitor cart state.
+		// Only applies when the option has never been saved.
+		'cache_headers'        => false,
+		'gzip_compression'     => false,
+		'remove_query_strings' => false,
 		'combine_assets'       => false,
 	);
 

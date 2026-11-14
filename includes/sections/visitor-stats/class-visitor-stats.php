@@ -176,11 +176,22 @@ class Visitor_Stats {
 		}
 
 		// Daily retention prune.
+		// At `init`, not here: scheduling reads the cron schedules, where WooCommerce
+		// translates its own names — and loading translations this early (sections
+		// boot at plugins_loaded) logs a notice.
+		add_action( 'init', array( self::class, 'ensure_scheduled' ), 10, 0 );
+
+		add_action( self::CRON_HOOK, array( self::class, 'prune_old_rows' ) );
+	}
+
+	/**
+	 * Arm the daily retention prune when nothing is pending (hooked to
+	 * `init` by boot()).
+	 */
+	public static function ensure_scheduled() {
 		if ( ! wp_next_scheduled( self::CRON_HOOK ) ) {
 			wp_schedule_event( time(), 'daily', self::CRON_HOOK );
 		}
-
-		add_action( self::CRON_HOOK, array( self::class, 'prune_old_rows' ) );
 	}
 
 	/**

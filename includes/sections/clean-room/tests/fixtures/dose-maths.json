@@ -1,0 +1,406 @@
+{
+	"_about": "The dose sums. Dose::plan() in PHP (tests/dose-test.php) and plan() in js/dose-math.js (tests/dose-math.test.js) are run against this file, so the phone's sheet, the calculators and the server's previews give the same amount, the same result line and the same working. The two the shop asked for by name are here (100 gal of copper from 2.16 to 2.40 ppm = 16.6 ml; 100 gal of Metronidazole = 2.5 g); every other medication and number is invented.",
+	"medications": {
+		"copper": { "key": "copper", "label": "Copper Power", "short": "Copper", "unit": "ml", "mode": "to_level", "rate": 0.692, "per": 1, "level_unit": "ppm", "doses": [], "measure": null },
+		"metro": { "key": "metro", "label": "Metronidazole", "short": "Metro", "unit": "mg", "mode": "per_gallon", "rate": 25, "per": 1, "level_unit": "", "doses": [], "measure": null },
+		"flukes": { "key": "flukes", "label": "Test Fluke Powder", "short": "Flukes", "unit": "mg", "mode": "per_gallon", "rate": 9.5, "per": 1, "level_unit": "", "doses": [], "measure": null },
+		"bath": { "key": "bath", "label": "Test Bath Liquid", "short": "Bath", "unit": "ml", "mode": "per_gallon", "rate": 1, "per": 10, "level_unit": "", "doses": [], "measure": null },
+		"wormer": { "key": "wormer", "label": "Test Wormer", "short": "Wormer", "unit": "g", "mode": "per_gallon", "rate": 1, "per": 100, "level_unit": "", "doses": [], "measure": null },
+		"grams": { "key": "grams", "label": "Test Gram Powder", "short": "Grams", "unit": "g", "mode": "per_gallon", "rate": 0.025, "per": 1, "level_unit": "", "doses": [], "measure": null },
+		"quine": { "key": "quine", "label": "Test Quine", "short": "Quine", "unit": "mg", "mode": "per_gallon", "rate": 10, "per": 1, "level_unit": "", "doses": [ { "label": "Loading", "rate": 40 }, { "label": "Top-up", "rate": 12 }, { "label": "Last", "rate": 6 } ], "measure": null },
+		"scoop": { "key": "scoop", "label": "Test Scoop Powder", "short": "Scoop", "unit": "mg", "mode": "per_gallon", "rate": 25, "per": 1, "level_unit": "", "doses": [], "measure": { "label": "scoop", "amount": 0.5, "unit": "g" } },
+		"pinch": { "key": "pinch", "label": "Test Pinch Powder", "short": "Pinch", "unit": "g", "mode": "per_gallon", "rate": 1, "per": 50, "level_unit": "", "doses": [], "measure": { "label": "pinch", "amount": 250, "unit": "mg" } },
+		"tabs": { "key": "tabs", "label": "Test Tabs", "short": "Tabs", "unit": "each", "mode": "per_gallon", "rate": 1, "per": 10, "level_unit": "", "doses": [], "measure": null },
+		"drops": { "key": "drops", "label": "Test Drops", "short": "Drops", "unit": "drops", "mode": "per_gallon", "rate": 2, "per": 5, "level_unit": "", "doses": [], "measure": null },
+		"spoon": { "key": "spoon", "label": "Test Spoon Mix", "short": "Spoon", "unit": "tsp", "mode": "per_gallon", "rate": 1, "per": 20, "level_unit": "", "doses": [], "measure": null },
+		"trace": { "key": "trace", "label": "Test Trace", "short": "Trace", "unit": "ml", "mode": "per_gallon", "rate": 0.01, "per": 1, "level_unit": "", "doses": [], "measure": null },
+		"gravity": { "key": "gravity", "label": "Test Gravity Mix", "short": "Gravity", "unit": "g", "mode": "to_level", "rate": 5000, "per": 1, "level_unit": "sg", "doses": [], "measure": null },
+		"ramp": { "key": "ramp", "label": "Test Ramp Liquid", "short": "Ramp", "unit": "ml", "mode": "to_level", "rate": 2, "per": 5, "level_unit": "ppm", "doses": [], "measure": null },
+		"salt": { "key": "salt", "label": "Salt", "short": "Salt", "unit": "tsp", "mode": "typed", "rate": 0, "per": 1, "level_unit": "", "doses": [], "measure": null }
+	},
+	"round_amount": [
+		[16.608, 16.6],
+		[2.5, 2.5],
+		[5.125, 5.1],
+		[1.15, 1.2],
+		[1.25, 1.3],
+		[2.45, 2.5],
+		[0.125, 0.13],
+		[0.005, 0.01],
+		[0.004, 0.004],
+		[0.00004, 0],
+		[0.994, 0.99],
+		[0.996, 1],
+		[283.72, 283.7],
+		[0, 0],
+		[-3, 0]
+	],
+	"display": [
+		[2500, "mg", 2.5, "g"],
+		[5125, "mg", 5.1, "g"],
+		[950, "mg", 0.95, "g"],
+		[999.96, "mg", 1, "g"],
+		[0.4, "g", 0.4, "g"],
+		[0.95, "g", 0.95, "g"],
+		[522.5, "mg", 0.52, "g"],
+		[100, "mg", 0.1, "g"],
+		[99.96, "mg", 0.1, "g"],
+		[99.9, "mg", 99.9, "mg"],
+		[0.0625, "g", 62.5, "mg"],
+		[2.05, "g", 2.1, "g"],
+		[9.5, "mg", 9.5, "mg"],
+		[16.608, "ml", 16.6, "ml"],
+		[2.75, "tsp", 2.8, "tsp"],
+		[12, "drops", 12, "drops"],
+		[4, "each", 4, "each"]
+	],
+	"level_text": [
+		[2.16, "2.16"],
+		[2.4, "2.40"],
+		[2, "2.00"],
+		[1.025, "1.025"],
+		[0.24, "0.24"],
+		[0.005, "0.005"],
+		[12.3456, "12.346"]
+	],
+	"num": [
+		[2.5, 2, "2.5"],
+		[250, 2, "250"],
+		[0.692, 4, "0.692"],
+		[16.6, 4, "16.6"],
+		[12.5, 2, "12.5"],
+		[1.005, 2, "1.01"],
+		[0, 2, "0"]
+	],
+	"rate_text": [
+		[25, "mg", 1, "25 mg per gallon"],
+		[0.025, "g", 1, "25 mg per gallon"],
+		[2500, "mg", 100, "2.5 g per 100 gal"],
+		[1, "ml", 10, "1 ml per 10 gal"],
+		[1, "g", 100, "1 g per 100 gal"],
+		[0.692, "ml", 1, "0.692 ml per gallon"],
+		[1, "each", 10, "1 per 10 gal"],
+		[2, "drops", 5, "2 drops per 5 gal"],
+		[1, "ml", 10.5, "1 ml per 10.5 gal"]
+	],
+	"plural": [
+		["scoop", 5, "scoops"],
+		["scoop", 1, "scoop"],
+		["scoop", 0.5, "scoops"],
+		["pinch", 2, "pinches"],
+		["dash", 3, "dashes"],
+		["capful", 2, "capfuls"],
+		["cap full", 2, "cap fulls"],
+		["tray", 2, "trays"],
+		["baby", 2, "babies"],
+		["", 2, ""]
+	],
+	"cases": [
+		{
+			"name": "the copper example: 100 gal from 2.16 to 2.40 ppm",
+			"medication": "copper",
+			"args": { "gallons": 100, "now": 2.16, "target": 2.4 },
+			"expect": { "state": "ok", "amount": 16.6, "unit": "ml", "line": "Add 16.6 ml Copper Power", "working": "100 gal × 0.24 ppm × 0.692", "note": "2.16 → 2.40 ppm, 100 gal", "measure": "" }
+		},
+		{
+			"name": "the same readings typed as text, as a form posts them",
+			"medication": "copper",
+			"args": { "gallons": "100", "now": "2.16", "target": "2.40" },
+			"expect": { "state": "ok", "amount": 16.6, "unit": "ml", "line": "Add 16.6 ml Copper Power", "working": "100 gal × 0.24 ppm × 0.692", "note": "2.16 → 2.40 ppm, 100 gal", "measure": "" }
+		},
+		{
+			"name": "copper from nothing to 2.0 on 205 gal: one decimal, however large",
+			"medication": "copper",
+			"args": { "gallons": 205, "now": 0, "target": 2 },
+			"expect": { "state": "ok", "amount": 283.7, "unit": "ml", "line": "Add 283.7 ml Copper Power", "working": "205 gal × 2.00 ppm × 0.692", "note": "0.00 → 2.00 ppm, 205 gal", "measure": "" }
+		},
+		{
+			"name": "copper in a 5 gal bucket: two decimals below 1",
+			"medication": "copper",
+			"args": { "gallons": 5, "now": 2.16, "target": 2.4 },
+			"expect": { "state": "ok", "amount": 0.83, "unit": "ml", "line": "Add 0.83 ml Copper Power", "working": "5 gal × 0.24 ppm × 0.692", "note": "2.16 → 2.40 ppm, 5 gal", "measure": "" }
+		},
+		{
+			"name": "at the target: nothing to add",
+			"medication": "copper",
+			"args": { "gallons": 100, "now": 2.4, "target": 2.4 },
+			"expect": { "state": "nothing", "amount": null, "unit": "ml", "line": "Nothing to add", "working": "2.40 ppm is at or above 2.40 ppm", "note": "2.40 → 2.40 ppm, 100 gal", "measure": "" }
+		},
+		{
+			"name": "above the target (a negative difference): nothing to add",
+			"medication": "copper",
+			"args": { "gallons": 100, "now": 2.6, "target": 2.4 },
+			"expect": { "state": "nothing", "amount": null, "unit": "ml", "line": "Nothing to add", "working": "2.60 ppm is at or above 2.40 ppm", "note": "2.60 → 2.40 ppm, 100 gal", "measure": "" }
+		},
+		{
+			"name": "no reading yet: it asks for it",
+			"medication": "copper",
+			"args": { "gallons": 100, "now": null, "target": 2.4 },
+			"expect": { "state": "needs_now", "amount": null, "unit": "ml", "line": "Type the reading now to get the amount.", "working": "", "note": "", "measure": "" }
+		},
+		{
+			"name": "an empty reading is not 0",
+			"medication": "copper",
+			"args": { "gallons": 100, "now": "", "target": 2.4 },
+			"expect": { "state": "needs_now", "amount": null, "unit": "ml", "line": "Type the reading now to get the amount.", "working": "", "note": "", "measure": "" }
+		},
+		{
+			"name": "no target: it asks for it",
+			"medication": "copper",
+			"args": { "gallons": 100, "now": 2.16 },
+			"expect": { "state": "needs_target", "amount": null, "unit": "ml", "line": "Type the level to bring it to.", "working": "", "note": "", "measure": "" }
+		},
+		{
+			"name": "a reading that is not a number, or out of range, is no reading",
+			"medication": "copper",
+			"args": { "gallons": 100, "now": "abc", "target": 1000 },
+			"expect": { "state": "needs_now", "amount": null, "unit": "ml", "line": "Type the reading now to get the amount.", "working": "", "note": "", "measure": "" }
+		},
+		{
+			"name": "to a level with unknown gallons: the readings are kept, the amount is typed",
+			"medication": "copper",
+			"args": { "gallons": 0, "now": 2.16, "target": 2.4 },
+			"expect": { "state": "no_gallons", "amount": null, "unit": "ml", "line": "The gallons of this water are not known — type the amount.", "working": "", "note": "2.16 → 2.40 ppm", "measure": "" }
+		},
+		{
+			"name": "to a level after a water change: it stays now → target, the change is remembered",
+			"medication": "copper",
+			"args": { "gallons": 100, "now": 2, "target": 2.4, "topup": true, "changed": 25, "changed_unit": "pct" },
+			"expect": { "state": "ok", "amount": 27.7, "unit": "ml", "line": "Add 27.7 ml Copper Power", "working": "100 gal × 0.40 ppm × 0.692", "note": "2.00 → 2.40 ppm, 100 gal · top-up after a 25 % water change", "measure": "" }
+		},
+		{
+			"name": "to a level after a water change with nothing typed for the change",
+			"medication": "copper",
+			"args": { "gallons": 100, "now": 2, "target": 2.4, "topup": true },
+			"expect": { "state": "ok", "amount": 27.7, "unit": "ml", "line": "Add 27.7 ml Copper Power", "working": "100 gal × 0.40 ppm × 0.692", "note": "2.00 → 2.40 ppm, 100 gal · top-up after a water change", "measure": "" }
+		},
+		{
+			"name": "100 gal of Metronidazole: 2,500 mg reads 2.5 g",
+			"medication": "metro",
+			"args": { "gallons": 100 },
+			"expect": { "state": "ok", "amount": 2.5, "unit": "g", "line": "Add 2.5 g Metronidazole", "working": "100 gal × 25 mg", "note": "25 mg per gallon, 100 gal", "measure": "" }
+		},
+		{
+			"name": "205 gal of Metronidazole: 5.125 g reads 5.1 g",
+			"medication": "metro",
+			"args": { "gallons": 205 },
+			"expect": { "state": "ok", "amount": 5.1, "unit": "g", "line": "Add 5.1 g Metronidazole", "working": "205 gal × 25 mg", "note": "25 mg per gallon, 205 gal", "measure": "" }
+		},
+		{
+			"name": "one 20 gal tank: 500 mg reads 0.5 g, as the suggestion always did",
+			"medication": "metro",
+			"args": { "gallons": 20 },
+			"expect": { "state": "ok", "amount": 0.5, "unit": "g", "line": "Add 0.5 g Metronidazole", "working": "20 gal × 25 mg", "note": "25 mg per gallon, 20 gal", "measure": "" }
+		},
+		{
+			"name": "a 2.5 gal bucket",
+			"medication": "metro",
+			"args": { "gallons": 2.5 },
+			"expect": { "state": "ok", "amount": 62.5, "unit": "mg", "line": "Add 62.5 mg Metronidazole", "working": "2.5 gal × 25 mg", "note": "25 mg per gallon, 2.5 gal", "measure": "" }
+		},
+		{
+			"name": "per gallon with unknown gallons: nothing is guessed",
+			"medication": "metro",
+			"args": { "gallons": 0 },
+			"expect": { "state": "no_gallons", "amount": null, "unit": "mg", "line": "The gallons of this water are not known — type the amount.", "working": "", "note": "", "measure": "" }
+		},
+		{
+			"name": "9.5 mg per gallon on 100 gal: 0.95 g",
+			"medication": "flukes",
+			"args": { "gallons": 100 },
+			"expect": { "state": "ok", "amount": 0.95, "unit": "g", "line": "Add 0.95 g Test Fluke Powder", "working": "100 gal × 9.5 mg", "note": "9.5 mg per gallon, 100 gal", "measure": "" }
+		},
+		{
+			"name": "9.5 mg per gallon on 205 gal: 1.9 g",
+			"medication": "flukes",
+			"args": { "gallons": 205 },
+			"expect": { "state": "ok", "amount": 1.9, "unit": "g", "line": "Add 1.9 g Test Fluke Powder", "working": "205 gal × 9.5 mg", "note": "9.5 mg per gallon, 205 gal", "measure": "" }
+		},
+		{
+			"name": "a rate for 10 gallons: 1 ml per 10 gal on 205 gal",
+			"medication": "bath",
+			"args": { "gallons": 205 },
+			"expect": { "state": "ok", "amount": 20.5, "unit": "ml", "line": "Add 20.5 ml Test Bath Liquid", "working": "205 gal × 1 ml per 10 gal", "note": "1 ml per 10 gal, 205 gal", "measure": "" }
+		},
+		{
+			"name": "a rate in grams for 100 gallons: 40 gal is 0.4 g",
+			"medication": "wormer",
+			"args": { "gallons": 40 },
+			"expect": { "state": "ok", "amount": 0.4, "unit": "g", "line": "Add 0.4 g Test Wormer", "working": "40 gal × 1 g per 100 gal", "note": "1 g per 100 gal, 40 gal", "measure": "" }
+		},
+		{
+			"name": "…and 205 gal: 2.05 g rounds half up to 2.1 g",
+			"medication": "wormer",
+			"args": { "gallons": 205 },
+			"expect": { "state": "ok", "amount": 2.1, "unit": "g", "line": "Add 2.1 g Test Wormer", "working": "205 gal × 1 g per 100 gal", "note": "1 g per 100 gal, 205 gal", "measure": "" }
+		},
+		{
+			"name": "a rate typed as 0.025 g reads as 25 mg",
+			"medication": "grams",
+			"args": { "gallons": 100 },
+			"expect": { "state": "ok", "amount": 2.5, "unit": "g", "line": "Add 2.5 g Test Gram Powder", "working": "100 gal × 25 mg", "note": "25 mg per gallon, 100 gal", "measure": "" }
+		},
+		{
+			"name": "a named dose: Loading, 40 mg per gallon",
+			"medication": "quine",
+			"args": { "gallons": 100, "rate": 40, "rate_label": "Loading" },
+			"expect": { "state": "ok", "amount": 4, "unit": "g", "line": "Add 4 g Test Quine", "working": "100 gal × 40 mg", "note": "Loading: 40 mg per gallon, 100 gal", "measure": "" }
+		},
+		{
+			"name": "a schedule step's rate (12 mg per gallon) on 205 gal: 2.46 g reads 2.5 g",
+			"medication": "quine",
+			"args": { "gallons": 205, "rate": 12 },
+			"expect": { "state": "ok", "amount": 2.5, "unit": "g", "line": "Add 2.5 g Test Quine", "working": "205 gal × 12 mg", "note": "12 mg per gallon, 205 gal", "measure": "" }
+		},
+		{
+			"name": "no rate chosen: the medication's own",
+			"medication": "quine",
+			"args": { "gallons": 100, "rate": null },
+			"expect": { "state": "ok", "amount": 1, "unit": "g", "line": "Add 1 g Test Quine", "working": "100 gal × 10 mg", "note": "10 mg per gallon, 100 gal", "measure": "" }
+		},
+		{
+			"name": "a rate of 0 or less is not a rate: the medication's own",
+			"medication": "quine",
+			"args": { "gallons": 100, "rate": -5 },
+			"expect": { "state": "ok", "amount": 1, "unit": "g", "line": "Add 1 g Test Quine", "working": "100 gal × 10 mg", "note": "10 mg per gallon, 100 gal", "measure": "" }
+		},
+		{
+			"name": "top-up after a 25 % water change: the amount for the water that was replaced",
+			"medication": "metro",
+			"args": { "gallons": 100, "topup": true, "changed": 25, "changed_unit": "pct" },
+			"expect": { "state": "ok", "amount": 0.63, "unit": "g", "line": "Add 0.63 g Metronidazole", "working": "25 gal × 25 mg (25 % of 100 gal)", "note": "25 mg per gallon, 25 gal · top-up after a 25 % water change", "measure": "" }
+		},
+		{
+			"name": "top-up after a 50 % change of 205 gal: 102.5 gal",
+			"medication": "metro",
+			"args": { "gallons": 205, "topup": true, "changed": 50 },
+			"expect": { "state": "ok", "amount": 2.6, "unit": "g", "line": "Add 2.6 g Metronidazole", "working": "102.5 gal × 25 mg (50 % of 205 gal)", "note": "25 mg per gallon, 102.5 gal · top-up after a 50 % water change", "measure": "" }
+		},
+		{
+			"name": "top-up in gallons: 30 of 205 gal",
+			"medication": "metro",
+			"args": { "gallons": 205, "topup": true, "changed": 30, "changed_unit": "gal" },
+			"expect": { "state": "ok", "amount": 0.75, "unit": "g", "line": "Add 0.75 g Metronidazole", "working": "30 gal × 25 mg", "note": "25 mg per gallon, 30 gal · top-up after a 30 gal water change", "measure": "" }
+		},
+		{
+			"name": "top-up in gallons needs no system volume",
+			"medication": "metro",
+			"args": { "gallons": 0, "topup": true, "changed": 10, "changed_unit": "gal" },
+			"expect": { "state": "ok", "amount": 0.25, "unit": "g", "line": "Add 0.25 g Metronidazole", "working": "10 gal × 25 mg", "note": "25 mg per gallon, 10 gal · top-up after a 10 gal water change", "measure": "" }
+		},
+		{
+			"name": "top-up in percent with unknown gallons: nothing is guessed",
+			"medication": "metro",
+			"args": { "gallons": 0, "topup": true, "changed": 25, "changed_unit": "pct" },
+			"expect": { "state": "no_gallons", "amount": null, "unit": "mg", "line": "The gallons of this water are not known — type the amount.", "working": "", "note": "top-up after a 25 % water change", "measure": "" }
+		},
+		{
+			"name": "top-up without the change typed: it asks",
+			"medication": "metro",
+			"args": { "gallons": 100, "topup": true, "changed": "" },
+			"expect": { "state": "needs_changed", "amount": null, "unit": "mg", "line": "How much of the water was changed?", "working": "", "note": "top-up after a water change", "measure": "" }
+		},
+		{
+			"name": "top-up of more than 100 %: refused",
+			"medication": "metro",
+			"args": { "gallons": 100, "topup": true, "changed": 120, "changed_unit": "pct" },
+			"expect": { "state": "too_much", "amount": null, "unit": "mg", "line": "That is more than this water holds (100 %).", "working": "", "note": "top-up after a water change", "measure": "" }
+		},
+		{
+			"name": "top-up of more gallons than the water holds: refused",
+			"medication": "metro",
+			"args": { "gallons": 100, "topup": true, "changed": 150, "changed_unit": "gal" },
+			"expect": { "state": "too_much", "amount": null, "unit": "mg", "line": "That is more than this water holds (100 gal).", "working": "", "note": "top-up after a water change", "measure": "" }
+		},
+		{
+			"name": "a named dose as a top-up",
+			"medication": "quine",
+			"args": { "gallons": 100, "rate": 12, "rate_label": "Top-up", "topup": true, "changed": 20, "changed_unit": "pct" },
+			"expect": { "state": "ok", "amount": 0.24, "unit": "g", "line": "Add 0.24 g Test Quine", "working": "20 gal × 12 mg (20 % of 100 gal)", "note": "Top-up: 12 mg per gallon, 20 gal · top-up after a 20 % water change", "measure": "" }
+		},
+		{
+			"name": "a measure: 2.5 g is 5 scoops",
+			"medication": "scoop",
+			"args": { "gallons": 100 },
+			"expect": { "state": "ok", "amount": 2.5, "unit": "g", "line": "Add 2.5 g Test Scoop Powder", "working": "100 gal × 25 mg", "note": "25 mg per gallon, 100 gal", "measure": "5 scoops (one scoop = 0.5 g)" }
+		},
+		{
+			"name": "a measure: 0.5 g is 1 scoop",
+			"medication": "scoop",
+			"args": { "gallons": 20 },
+			"expect": { "state": "ok", "amount": 0.5, "unit": "g", "line": "Add 0.5 g Test Scoop Powder", "working": "20 gal × 25 mg", "note": "25 mg per gallon, 20 gal", "measure": "1 scoop (one scoop = 0.5 g)" }
+		},
+		{
+			"name": "a measure counts from the amount as shown: 5.1 g is 10.2 scoops",
+			"medication": "scoop",
+			"args": { "gallons": 205 },
+			"expect": { "state": "ok", "amount": 5.1, "unit": "g", "line": "Add 5.1 g Test Scoop Powder", "working": "205 gal × 25 mg", "note": "25 mg per gallon, 205 gal", "measure": "10.2 scoops (one scoop = 0.5 g)" }
+		},
+		{
+			"name": "a measure in milligrams for an amount in grams: 1.5 g is 6 pinches",
+			"medication": "pinch",
+			"args": { "gallons": 75 },
+			"expect": { "state": "ok", "amount": 1.5, "unit": "g", "line": "Add 1.5 g Test Pinch Powder", "working": "75 gal × 1 g per 50 gal", "note": "1 g per 50 gal, 75 gal", "measure": "6 pinches (one pinch = 250 mg)" }
+		},
+		{
+			"name": "pieces: 1 per 10 gal on 40 gal",
+			"medication": "tabs",
+			"args": { "gallons": 40 },
+			"expect": { "state": "ok", "amount": 4, "unit": "each", "line": "Add 4 × Test Tabs", "working": "40 gal × 1 per 10 gal", "note": "1 per 10 gal, 40 gal", "measure": "" }
+		},
+		{
+			"name": "drops: 2 per 5 gal on 30 gal",
+			"medication": "drops",
+			"args": { "gallons": 30 },
+			"expect": { "state": "ok", "amount": 12, "unit": "drops", "line": "Add 12 drops Test Drops", "working": "30 gal × 2 drops per 5 gal", "note": "2 drops per 5 gal, 30 gal", "measure": "" }
+		},
+		{
+			"name": "teaspoons: 1 per 20 gal on 55 gal, 2.75 rounds half up",
+			"medication": "spoon",
+			"args": { "gallons": 55 },
+			"expect": { "state": "ok", "amount": 2.8, "unit": "tsp", "line": "Add 2.8 tsp Test Spoon Mix", "working": "55 gal × 1 tsp per 20 gal", "note": "1 tsp per 20 gal, 55 gal", "measure": "" }
+		},
+		{
+			"name": "a half that binary floating point holds a breath too low still rounds up: 115 gal × 0.01 ml = 1.15 → 1.2",
+			"medication": "trace",
+			"args": { "gallons": 115 },
+			"expect": { "state": "ok", "amount": 1.2, "unit": "ml", "line": "Add 1.2 ml Test Trace", "working": "115 gal × 0.01 ml", "note": "0.01 ml per gallon, 115 gal", "measure": "" }
+		},
+		{
+			"name": "…and 12.5 gal × 0.01 ml = 0.125 → 0.13",
+			"medication": "trace",
+			"args": { "gallons": 12.5 },
+			"expect": { "state": "ok", "amount": 0.13, "unit": "ml", "line": "Add 0.13 ml Test Trace", "working": "12.5 gal × 0.01 ml", "note": "0.01 ml per gallon, 12.5 gal", "measure": "" }
+		},
+		{
+			"name": "a very small amount keeps the decimals it needs: 0.4 gal × 0.01 ml",
+			"medication": "trace",
+			"args": { "gallons": 0.4 },
+			"expect": { "state": "ok", "amount": 0.004, "unit": "ml", "line": "Add 0.004 ml Test Trace", "working": "0.4 gal × 0.01 ml", "note": "0.01 ml per gallon, 0.4 gal", "measure": "" }
+		},
+		{
+			"name": "a level with three decimals: 1.020 → 1.025 sg in 10 gal",
+			"medication": "gravity",
+			"args": { "gallons": 10, "now": 1.02, "target": 1.025 },
+			"expect": { "state": "ok", "amount": 250, "unit": "g", "line": "Add 250 g Test Gravity Mix", "working": "10 gal × 0.005 sg × 5000", "note": "1.02 → 1.025 sg, 10 gal", "measure": "" }
+		},
+		{
+			"name": "to a level with a rate for 5 gallons",
+			"medication": "ramp",
+			"args": { "gallons": 20, "now": 0.25, "target": 0.5 },
+			"expect": { "state": "ok", "amount": 2, "unit": "ml", "line": "Add 2 ml Test Ramp Liquid", "working": "20 gal × 0.25 ppm × 2 ml per 5 gal", "note": "0.25 → 0.50 ppm, 20 gal", "measure": "" }
+		},
+		{
+			"name": "typed: no sum",
+			"medication": "salt",
+			"args": { "gallons": 100 },
+			"expect": { "state": "typed", "amount": null, "unit": "tsp", "line": "No sum for Salt — type the amount.", "working": "", "note": "", "measure": "" }
+		},
+		{
+			"name": "typed after a water change: the change is remembered",
+			"medication": "salt",
+			"args": { "gallons": 100, "topup": true, "changed": 30, "changed_unit": "pct" },
+			"expect": { "state": "typed", "amount": null, "unit": "tsp", "line": "No sum for Salt — type the amount.", "working": "", "note": "top-up after a 30 % water change", "measure": "" }
+		}
+	]
+}

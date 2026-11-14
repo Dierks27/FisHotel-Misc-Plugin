@@ -1,0 +1,1340 @@
+/**
+ * Clean Room admin styles — the Room Board page under FisHotel Tools
+ * (dark, built on admin/css/admin-style.css and its --fh-* tokens) and
+ * the small product meta box.
+ *
+ * @package FisHotel\Misc\Sections\Clean_Room
+ */
+
+/* ------------------------------------------------------------------ */
+/*  Tabs                                                               */
+/* ------------------------------------------------------------------ */
+.fh-cr-tabs {
+	display: flex;
+	gap: 6px;
+	margin: -14px 0 20px;
+}
+
+.fh-cr-tab {
+	padding: 7px 14px;
+	border-radius: 999px;
+	font-size: 13px;
+	font-weight: 600;
+	text-decoration: none;
+	color: var(--fh-text-secondary, #a0a0a0);
+	background: var(--fh-bg-secondary, #2d2d2d);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+}
+
+.fh-cr-tab:hover,
+.fh-cr-tab:focus {
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-tab.is-active {
+	color: #fff;
+	background: var(--fh-accent, #00a0d2);
+	border-color: var(--fh-accent, #00a0d2);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Toolbar, summary, inputs                                           */
+/* ------------------------------------------------------------------ */
+.fh-cr-toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-end;
+	gap: 16px;
+	margin: 0 0 12px;
+	padding: 14px 16px;
+	background: var(--fh-bg-secondary, #2d2d2d);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	border-radius: var(--fh-radius, 8px);
+}
+
+.fh-cr-filters,
+.fh-cr-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-end;
+	gap: 10px;
+}
+
+.fh-cr-actions {
+	margin-left: auto;
+}
+
+.fh-cr-filter {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	font-size: 12px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-filter--grow {
+	min-width: 220px;
+}
+
+.fh-cr-filter--check {
+	flex-direction: row;
+	align-items: center;
+	gap: 6px;
+	padding-bottom: 6px;
+}
+
+.fh-cr-wrap .fh-cr-input {
+	background: var(--fh-bg-primary, #1a1a1a);
+	border: 1px solid rgba(255, 255, 255, 0.15);
+	color: var(--fh-text-primary, #e0e0e0);
+	padding: 6px 10px;
+	border-radius: 4px;
+	font-size: 13px;
+	box-sizing: border-box;
+	color-scheme: dark;
+	width: 100%;
+	min-height: 32px;
+}
+
+.fh-cr-wrap .fh-cr-input:focus {
+	border-color: var(--fh-accent, #00a0d2);
+	outline: none;
+	box-shadow: 0 0 0 1px var(--fh-accent, #00a0d2);
+}
+
+.fh-cr-wrap .fh-cr-input--num {
+	max-width: 110px;
+	text-align: right;
+}
+
+.fh-cr-status {
+	font-size: 12px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-status.is-error { color: var(--fh-danger, #dc3232); }
+.fh-cr-status.is-ok    { color: var(--fh-success, #46b450); }
+
+.fh-cr-summary {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	margin: 0 0 20px;
+}
+
+.fh-cr-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	padding: 4px 10px;
+	border-radius: 999px;
+	font-size: 12px;
+	color: var(--fh-text-primary, #e0e0e0);
+	background: var(--fh-bg-primary, #1a1a1a);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	border-left: 3px solid var(--fh-accent, #00a0d2);
+}
+
+.fh-cr-chip--ready {
+	border-left-color: var(--fh-success, #46b450);
+}
+
+.fh-cr-chip--warn {
+	color: var(--fh-warning, #ffb900);
+	border-left-color: var(--fh-warning, #ffb900);
+}
+
+a.fh-cr-chip--muted {
+	color: var(--fh-text-secondary, #a0a0a0);
+	text-decoration: none;
+	border-left-color: var(--fh-text-secondary, #a0a0a0);
+}
+
+/* A group for sale whose date came before it left the Spa. */
+.fh-cr-warn {
+	display: inline-block;
+	font-size: 11px;
+	font-weight: 600;
+	color: #996300;
+}
+
+.fh-cr-wrap .fh-cr-warn {
+	color: var(--fh-warning, #ffb900);
+}
+
+.fh-cr-muted {
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-tank__sale {
+	font-size: 11px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-summary__meta {
+	margin-left: auto;
+	font-size: 12px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-count,
+.fh-cr-footnote {
+	margin: 0 0 10px;
+	font-size: 12px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-footnote {
+	margin-top: 16px;
+}
+
+.fh-cr-h2 {
+	margin: 24px 0 10px;
+	font-size: 16px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-h3 {
+	margin: 18px 0 8px;
+	font-size: 13px;
+	text-transform: uppercase;
+	letter-spacing: 0.4px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-sub {
+	display: block;
+	font-size: 11px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-sub a {
+	color: var(--fh-accent, #00a0d2);
+	text-decoration: none;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Badges                                                             */
+/* ------------------------------------------------------------------ */
+.fh-cr-badge,
+.fh-cr-type {
+	display: inline-block;
+	padding: 2px 9px;
+	border-radius: 12px;
+	font-size: 11px;
+	font-weight: 600;
+	line-height: 1.6;
+	letter-spacing: 0.3px;
+	text-transform: uppercase;
+	color: #fff;
+	background: #6b6b6b;
+	white-space: nowrap;
+}
+
+.fh-cr-badge--in_qt   { background: #b7791f; }
+.fh-cr-badge--cleared { background: #2d5fb8; }
+.fh-cr-badge--ready   { background: #2e9e47; }
+.fh-cr-badge--closed  { background: #555; }
+
+.fh-cr-type--arrival { background: #2d5fb8; }
+.fh-cr-type--loss    { background: #c0392b; }
+.fh-cr-type--sold    { background: #2e9e47; }
+.fh-cr-type--move    { background: #6b4fbb; }
+.fh-cr-type--clear   { background: #1f8f4d; }
+.fh-cr-type--count   { background: #b7791f; }
+.fh-cr-type--note    { background: #4a5b6a; }
+
+/* ------------------------------------------------------------------ */
+/*  Board                                                              */
+/* ------------------------------------------------------------------ */
+.fh-cr-area {
+	margin: 0 0 28px;
+}
+
+.fh-cr-area__title {
+	margin: 0 0 12px;
+	font-size: 18px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-building {
+	margin: 0 0 16px;
+	padding: 14px 16px;
+	background: var(--fh-bg-secondary, #2d2d2d);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	border-radius: var(--fh-radius, 8px);
+}
+
+.fh-cr-building.is-coming,
+.fh-cr-building.is-offline {
+	opacity: 0.5;
+}
+
+.fh-cr-building__head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 6px 14px;
+	margin: 0 0 10px;
+}
+
+.fh-cr-building__head h3 {
+	margin: 0;
+	font-size: 15px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-building__meta,
+.fh-cr-building__empty {
+	font-size: 12px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-level {
+	display: grid;
+	grid-template-columns: 56px 1fr;
+	gap: 10px;
+	align-items: start;
+	margin: 0 0 10px;
+}
+
+.fh-cr-level__label {
+	padding-top: 10px;
+	font-size: 11px;
+	text-transform: uppercase;
+	letter-spacing: 0.4px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-tanks {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+	gap: 10px;
+}
+
+.fh-cr-tank {
+	padding: 10px 12px;
+	background: var(--fh-bg-primary, #1a1a1a);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	border-radius: 6px;
+	min-height: 96px;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.fh-cr-tank.is-dim {
+	opacity: 0.45;
+}
+
+.fh-cr-tank__head {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 8px;
+}
+
+.fh-cr-tank__number {
+	font-size: 22px;
+	font-weight: 800;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-tank__size,
+.fh-cr-tank__empty {
+	font-size: 11px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-tank__empty {
+	margin: 0;
+	flex: 1;
+}
+
+.fh-cr-tank__list {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+	flex: 1;
+	font-size: 12px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-tank__list li {
+	padding: 3px 0;
+	border-top: 1px solid var(--fh-border, rgba(255, 255, 255, 0.08));
+}
+
+.fh-cr-tank__list li.is-hit {
+	color: var(--fh-warning, #ffb900);
+}
+
+.fh-cr-tank__species {
+	font-weight: 600;
+}
+
+.fh-cr-tank__foot {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	font-size: 11px;
+}
+
+.fh-cr-tank__link {
+	margin-left: auto;
+	text-decoration: none;
+	color: var(--fh-accent, #00a0d2);
+}
+
+.fh-cr-cu {
+	padding: 1px 7px;
+	border-radius: 999px;
+	font-weight: 700;
+	background: rgba(255, 255, 255, 0.06);
+}
+
+.fh-cr-cu--ok  { color: var(--fh-success, #46b450); }
+.fh-cr-cu--low { color: var(--fh-danger, #dc3232); }
+.fh-cr-cu--dosed { color: #b07d00; }
+
+.fh-cr-todo {
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+/* What is still due today, printed on the card (a tooltip is invisible on a tablet). */
+.fh-cr-todo__due {
+	flex: 1 1 100%;
+	color: var(--fh-warning, #ffb900);
+	font-size: 11px;
+	line-height: 1.3;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Tables (core's list table assumes a light background)              */
+/* ------------------------------------------------------------------ */
+.fh-cr-wrap .widefat {
+	background: var(--fh-bg-secondary, #2d2d2d);
+	border-color: var(--fh-border, rgba(255, 255, 255, 0.1));
+}
+
+.fh-cr-wrap .widefat th,
+.fh-cr-wrap .widefat td,
+.fh-cr-wrap .widefat thead th,
+.fh-cr-wrap .widefat a {
+	color: var(--fh-text-primary, #e0e0e0);
+	border-color: var(--fh-border, rgba(255, 255, 255, 0.1));
+	vertical-align: top;
+}
+
+.fh-cr-wrap .widefat.striped > tbody > :nth-child(odd) {
+	background: var(--fh-bg-primary, #1a1a1a);
+}
+
+.fh-cr-num {
+	text-align: right;
+	white-space: nowrap;
+}
+
+.fh-cr-when {
+	white-space: nowrap;
+	width: 1%;
+}
+
+.fh-cr-row__actions {
+	white-space: nowrap;
+	width: 1%;
+}
+
+.fh-cr-row__actions .button {
+	margin: 0 2px 4px 0;
+}
+
+.fh-cr-fields td {
+	background: var(--fh-bg-primary, #1a1a1a) !important;
+}
+
+.fh-cr-fields__row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-end;
+	gap: 10px;
+	font-size: 12px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-fields__row label {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	min-width: 120px;
+}
+
+.fh-cr-fields__note {
+	flex: 1 1 220px;
+}
+
+.fh-cr-columns {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr));
+	gap: 20px;
+	align-items: start;
+}
+
+.fh-cr-columns--events {
+	grid-template-columns: repeat(auto-fit, minmax(min(460px, 100%), 1fr));
+}
+
+/* ------------------------------------------------------------------ */
+/*  Settings                                                           */
+/* ------------------------------------------------------------------ */
+.fh-cr-card:hover {
+	transform: none;
+}
+
+.fh-cr-card--wide {
+	grid-column: 1 / -1;
+}
+
+.fh-cr-field {
+	margin-top: 16px;
+}
+
+.fh-cr-field--row {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+}
+
+.fh-cr-label {
+	display: block;
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-field .fishotel-misc-card-desc {
+	margin: 4px 0 0;
+}
+
+.fh-cr-actions-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-top: 16px;
+}
+
+.fh-cr-save.button-primary,
+.fh-cr-protocol-save.button-primary {
+	background: var(--fh-accent, #00a0d2);
+	border-color: var(--fh-accent, #00a0d2);
+}
+
+.fh-cr-protocol td,
+.fh-cr-protocol th {
+	padding: 6px 4px;
+}
+
+/* The template picker above the steps editor. */
+.fh-cr-template-bar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	margin: 12px 0;
+}
+
+.fh-cr-template-bar .fh-cr-label {
+	margin-right: 4px;
+}
+
+.fh-cr-template-bar .fh-cr-input {
+	width: auto;
+	min-width: 220px;
+}
+
+/* The last dose per medication in a Board building header. */
+.fh-cr-building__doses {
+	flex: 1 1 100%;
+	font-size: 11px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+/* The Import workbook panel: the preview table, the result lines, the
+   reader's warnings folded away. */
+.fh-cr-import__table {
+	margin: 0 0 12px;
+}
+
+.fh-cr-import__lines {
+	margin: 6px 0 0 18px;
+	list-style: disc;
+	font-size: 12px;
+}
+
+.fh-cr-import__warnings {
+	max-height: 220px;
+	overflow-y: auto;
+}
+
+.fh-cr-import__details {
+	margin: 0 0 12px;
+	font-size: 12px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-import__details summary {
+	cursor: pointer;
+}
+
+.fh-cr-import__form + .fh-cr-import__form .fh-cr-actions-row {
+	margin-top: 0;
+}
+
+.fh-cr-wrap .fh-cr-import__form input[type="file"] {
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-protocol .fh-cr-input--num {
+	max-width: 76px;
+}
+
+.fh-cr-layout-building {
+	margin: 0 0 14px;
+	padding: 10px 12px;
+	background: var(--fh-bg-primary, #1a1a1a);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	border-radius: 6px;
+}
+
+.fh-cr-layout-form {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	margin: 0 0 8px;
+}
+
+.fh-cr-layout-form .fh-cr-input {
+	width: auto;
+	min-width: 110px;
+}
+
+.fh-cr-layout-form .fh-cr-input--num {
+	min-width: 70px;
+	max-width: 90px;
+}
+
+.fh-cr-layout-form--add {
+	margin-top: 6px;
+}
+
+.fh-cr-layout-number {
+	min-width: 44px;
+	font-size: 16px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-layout-tanks td {
+	padding: 4px 6px;
+}
+
+.fh-cr-wrap .fishotel-misc-notice--warning {
+	background: rgba(255, 185, 0, 0.1);
+	border-left: 3px solid var(--fh-warning, #ffb900);
+	color: var(--fh-warning, #ffb900);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Arrivals, Species, Stats                                           */
+/* ------------------------------------------------------------------ */
+.fh-cr-grid-wrap {
+	overflow-x: auto;
+	margin: 0 0 12px;
+}
+
+.fh-cr-badge--order-draft    { background: #6b6b6b; }
+.fh-cr-badge--order-ordered  { background: #b7791f; }
+.fh-cr-badge--order-received { background: #2d5fb8; }
+.fh-cr-badge--order-closed   { background: #555; }
+
+.fh-cr-up   { color: var(--fh-success, #46b450); }
+.fh-cr-down { color: var(--fh-danger, #dc3232); }
+
+.fh-cr-sub--inline {
+	display: inline;
+}
+
+.fh-cr-toolbar--order {
+	align-items: center;
+}
+
+/* The batch's "Goes on sale" card on the order page. */
+.fh-cr-sale {
+	margin: 0 0 16px;
+}
+
+.fh-cr-sale__row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px;
+}
+
+.fh-cr-sale__status {
+	margin: 10px 0 6px;
+	font-size: 13px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-wrap .fh-cr-suggest-date {
+	color: var(--fh-accent, #00a0d2);
+	font-size: 12px;
+}
+
+.fh-cr-sale__own {
+	max-width: 640px;
+	margin-top: 6px;
+}
+
+.fh-cr-order__title {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin: 0;
+	font-size: 18px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-order__head {
+	margin: 0 0 14px;
+}
+
+.fh-cr-fields-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+	gap: 10px 14px;
+}
+
+.fh-cr-fields-grid label {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	font-size: 12px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-fields-grid__wide {
+	grid-column: 1 / -1;
+}
+
+.fh-cr-inline {
+	display: flex;
+	gap: 6px;
+	align-items: center;
+}
+
+.fh-cr-grid td,
+.fh-cr-grid th {
+	padding: 4px 4px;
+	white-space: nowrap;
+}
+
+.fh-cr-grid .fh-cr-input {
+	min-height: 28px;
+	padding: 3px 6px;
+	font-size: 12px;
+}
+
+.fh-cr-grid .fh-cr-species {
+	min-width: 180px;
+}
+
+.fh-cr-grid .fh-cr-input--sci {
+	min-width: 140px;
+}
+
+.fh-cr-grid .fh-cr-input--qty {
+	width: 62px;
+	text-align: right;
+}
+
+.fh-cr-grid .fh-cr-input--money {
+	width: 84px;
+	text-align: right;
+}
+
+.fh-cr-grid .fh-cr-input--tank {
+	width: 80px;
+}
+
+.fh-cr-grid .fh-cr-calc {
+	font-variant-numeric: tabular-nums;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-grid tfoot th {
+	font-weight: 700;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-grid tr.is-linked td {
+	background: rgba(45, 95, 184, 0.12);
+}
+
+.fh-cr-worth.is-yes {
+	color: var(--fh-success, #46b450);
+	font-weight: 700;
+}
+
+.fh-cr-order[data-mode="box"] .fh-cr-col--bags,
+.fh-cr-order[data-mode="bag"] .fh-cr-col--per-box {
+	display: none;
+}
+
+.fh-cr-order__stats {
+	margin-top: 14px;
+}
+
+.fh-cr-stats-block {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+	gap: 8px 16px;
+	margin: 12px 0 0;
+}
+
+.fh-cr-stats-block > div {
+	display: flex;
+	justify-content: space-between;
+	gap: 10px;
+	padding: 6px 0;
+	border-bottom: 1px solid var(--fh-border, rgba(255, 255, 255, 0.08));
+	font-size: 12px;
+}
+
+.fh-cr-stats-block dt {
+	margin: 0;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-stats-block dd {
+	margin: 0;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+	color: var(--fh-text-primary, #e0e0e0);
+	text-align: right;
+}
+
+/* Suggestions under a species / product input. */
+.fh-cr-suggest-wrap {
+	position: relative;
+}
+
+.fh-cr-suggest {
+	position: absolute;
+	z-index: 50;
+	left: 0;
+	top: 100%;
+	min-width: 280px;
+	max-height: 260px;
+	overflow-y: auto;
+	margin: 2px 0 0;
+	padding: 4px 0;
+	list-style: none;
+	background: var(--fh-bg-secondary, #2d2d2d);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.15));
+	border-radius: 6px;
+	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+	white-space: normal;
+}
+
+.fh-cr-suggest__item,
+.fh-cr-suggest__empty {
+	padding: 6px 10px;
+	font-size: 12px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-suggest__item {
+	cursor: pointer;
+}
+
+.fh-cr-suggest__item:hover {
+	background: rgba(255, 255, 255, 0.07);
+}
+
+.fh-cr-suggest__item em {
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-suggest__empty {
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-species-add {
+	margin: 0 0 14px;
+}
+
+.fh-cr-fields__product {
+	flex: 1 1 240px;
+}
+
+.fh-cr-pager {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin: 12px 0;
+	font-size: 12px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-box-rates .fh-cr-input--num {
+	max-width: 110px;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Sizes, percent of a box, remembered shares                         */
+/* ------------------------------------------------------------------ */
+
+/* A stay's or a line's size beside its species. */
+.fh-cr-size {
+	display: inline-block;
+	margin-left: 4px;
+	padding: 0 6px;
+	border-radius: 999px;
+	font-size: 11px;
+	line-height: 18px;
+	color: var(--fh-text-primary, #e0e0e0);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.18));
+	white-space: nowrap;
+}
+
+.fh-cr-grid .fh-cr-input--size {
+	min-width: 92px;
+}
+
+/* The "suggested N%" chip under an empty percent. */
+.fh-cr-pct-hint {
+	display: block;
+	min-height: 0;
+	text-align: right;
+}
+
+.fh-cr-wrap .fh-cr-suggest-pct {
+	color: var(--fh-accent, #00a0d2);
+	font-size: 11px;
+	white-space: nowrap;
+}
+
+/* The Boxes card under the lines of an order. */
+.fh-cr-boxes {
+	margin-top: 14px;
+}
+
+.fh-cr-boxes__list {
+	margin-bottom: 10px;
+}
+
+.fh-cr-boxes__list:empty {
+	display: none;
+}
+
+.fh-cr-chip--box-full {
+	border-left-color: var(--fh-success, #46b450);
+}
+
+.fh-cr-chip--box-over {
+	color: var(--fh-warning, #ffb900);
+	border-left-color: var(--fh-warning, #ffb900);
+}
+
+.fh-cr-chip--box-unboxed {
+	color: var(--fh-text-secondary, #a0a0a0);
+	border-left-color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-boxes__total,
+.fh-cr-boxes__full {
+	margin: 4px 0;
+	font-size: 13px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-boxes__full {
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+/* Bag mode has no boxes to guess. */
+.fh-cr-order[data-mode="bag"] .fh-cr-boxes {
+	display: none;
+}
+
+.fh-cr-wrap .fh-cr-sizes__text {
+	max-width: 320px;
+	font-family: inherit;
+}
+
+.fh-cr-sizes__list {
+	margin-bottom: 12px;
+}
+
+.fh-cr-sizes__report,
+.fh-cr-shares {
+	margin-top: 6px;
+}
+
+.fh-cr-shares .fh-cr-input--num {
+	max-width: 110px;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Unknown and mislabeled fish, the Identify panel                    */
+/* ------------------------------------------------------------------ */
+
+/* The "N need identifying" chip on the Board links to the Stays tab. */
+a.fh-cr-chip--warn {
+	text-decoration: none;
+}
+
+/* "needs identifying" beside a species; "?? N to identify" on an order. */
+.fh-cr-unknown {
+	margin-left: 4px;
+	white-space: nowrap;
+}
+
+a.fh-cr-unknown {
+	margin-left: 0;
+	text-decoration: none;
+}
+
+.fh-cr-order__title .fh-cr-unknown {
+	margin-left: 8px;
+	vertical-align: middle;
+}
+
+.fh-cr-tank__list li.is-unknown .fh-cr-tank__species {
+	color: var(--fh-warning, #ffb900);
+}
+
+/* An order line: the species with its "??" box, then what is known about the fish. */
+.fh-cr-line__name {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.fh-cr-unknown-box {
+	display: inline-flex;
+	align-items: center;
+	gap: 3px;
+	font-size: 12px;
+	font-weight: 700;
+	color: var(--fh-text-secondary, #a0a0a0);
+	white-space: nowrap;
+	cursor: pointer;
+}
+
+.fh-cr-grid tr.is-unknown .fh-cr-unknown-box,
+.fh-cr-grid tr.is-unknown .fh-cr-species {
+	color: var(--fh-warning, #ffb900);
+}
+
+.fh-cr-line__fish .fh-cr-sub {
+	white-space: normal;
+}
+
+.fh-cr-label-name {
+	font-style: italic;
+}
+
+.fh-cr-wrap .fh-cr-line__fish .fh-cr-identify-open {
+	color: var(--fh-accent, #00a0d2);
+	font-size: 11px;
+	white-space: nowrap;
+}
+
+/* The panel the "Identify… / Correct the fish…" button opens under a row. */
+.fh-cr-identify td {
+	background: var(--fh-bg-primary, #1a1a1a) !important;
+	white-space: normal;
+}
+
+.fh-cr-identify__fish {
+	flex: 1 1 260px;
+	max-width: 420px;
+}
+
+.fh-cr-identify__fish .fh-cr-suggest-wrap {
+	display: block;
+}
+
+.fh-cr-identify__fish .fh-cr-input {
+	width: 100%;
+}
+
+.fh-cr-fields__row .fh-cr-identify__unknown {
+	flex-direction: row;
+	align-items: center;
+	min-width: 0;
+	min-height: 30px;
+	gap: 6px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-identify__hint {
+	margin: 8px 0 0;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Product meta box (light WP styling)                                */
+/* ------------------------------------------------------------------ */
+.fh-cr-metabox__facts {
+	margin: 0 0 6px;
+}
+
+.fh-cr-metabox__muted {
+	color: #646970;
+	font-size: 12px;
+}
+
+.fh-cr-metabox__list {
+	margin: 0 0 8px;
+	padding: 0;
+	list-style: none;
+}
+
+.fh-cr-metabox__list li {
+	padding: 4px 0;
+	border-top: 1px solid #f0f0f1;
+	font-size: 12px;
+}
+
+.fh-cr-metabox .fh-cr-badge {
+	font-size: 10px;
+	padding: 1px 7px;
+}
+
+.fh-cr-metabox__head {
+	margin: 10px 0 2px;
+	font-weight: 600;
+}
+
+.fh-cr-metabox__sale > div,
+.fh-cr-metabox__sale > label,
+.fh-cr-metabox__sale > span {
+	display: block;
+	margin: 2px 0;
+}
+
+.fh-cr-metabox__date {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.fh-cr-metabox__date input[type="date"] {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.fh-cr-metabox__batch {
+	font-size: 12px;
+}
+
+.fh-cr-metabox .fh-cr-suggest-date {
+	font-size: 12px;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Stats: the strip of views, estimates and actuals, the comparison   */
+/* ------------------------------------------------------------------ */
+.fh-cr-subtabs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px;
+	margin: -8px 0 16px;
+	padding-bottom: 8px;
+	border-bottom: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+}
+
+.fh-cr-subtab {
+	padding: 5px 12px;
+	border-radius: 4px;
+	font-size: 12px;
+	font-weight: 600;
+	text-decoration: none;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-subtab:hover,
+.fh-cr-subtab:focus {
+	color: var(--fh-text-primary, #e0e0e0);
+	background: var(--fh-bg-secondary, #2d2d2d);
+}
+
+.fh-cr-subtab.is-active {
+	color: var(--fh-text-primary, #e0e0e0);
+	background: var(--fh-bg-secondary, #2d2d2d);
+	box-shadow: inset 0 -2px 0 var(--fh-accent, #00a0d2);
+}
+
+/* Which numbers are estimates and which are actual: said on every view. */
+.fh-cr-legend {
+	margin: 0 0 14px;
+	padding: 10px 14px;
+	font-size: 12px;
+	line-height: 1.7;
+	color: var(--fh-text-secondary, #a0a0a0);
+	background: var(--fh-bg-secondary, #2d2d2d);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	border-radius: var(--fh-radius, 8px);
+}
+
+.fh-cr-legend a {
+	color: var(--fh-accent, #00a0d2);
+}
+
+.fh-cr-kind {
+	display: inline-block;
+	margin-right: 6px;
+	padding: 1px 8px;
+	border-radius: 10px;
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: 0.4px;
+	text-transform: uppercase;
+	color: #fff;
+	background: #6b6b6b;
+}
+
+.fh-cr-kind--est    { background: #b7791f; }
+.fh-cr-kind--actual { background: #2e9e47; }
+.fh-cr-kind--read   { background: #2d5fb8; }
+
+.fh-cr-wrap .widefat th.fh-cr-est,
+.fh-cr-wrap .widefat td.fh-cr-est {
+	box-shadow: inset 0 2px 0 rgba(183, 121, 31, 0.55);
+}
+
+.fh-cr-wrap .widefat th.fh-cr-actual,
+.fh-cr-wrap .widefat td.fh-cr-actual {
+	box-shadow: inset 0 2px 0 rgba(46, 158, 71, 0.55);
+}
+
+.fh-cr-wrap .widefat tbody td.fh-cr-est,
+.fh-cr-wrap .widefat tbody td.fh-cr-actual {
+	box-shadow: none;
+}
+
+.fh-cr-wrap .widefat td.fh-cr-nocost {
+	white-space: normal;
+	max-width: 220px;
+	font-size: 11px;
+	color: var(--fh-warning, #ffb900);
+}
+
+/* A column heading that sorts. */
+.fh-cr-wrap .widefat th.fh-cr-sort a {
+	text-decoration: none;
+	white-space: nowrap;
+}
+
+.fh-cr-wrap .widefat th.fh-cr-sort.is-sorted a {
+	color: var(--fh-accent, #00a0d2);
+}
+
+/* Compare years: a block per name, a row per year, the change under it. */
+.fh-cr-years {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 4px 14px;
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+.fh-cr-years legend {
+	padding: 0 0 4px;
+	font-size: 12px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-years .fh-cr-filter--check {
+	padding-bottom: 0;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-wrap .fh-cr-compare tbody + tbody {
+	border-top: 2px solid var(--fh-border, rgba(255, 255, 255, 0.18));
+}
+
+.fh-cr-wrap .fh-cr-compare th[scope="row"],
+.fh-cr-wrap .fh-cr-compare .fh-cr-compare__name {
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.fh-cr-wrap .fh-cr-compare .fh-cr-compare__name {
+	background: var(--fh-bg-primary, #1a1a1a);
+}
+
+.fh-cr-wrap .fh-cr-compare tr.is-missing td,
+.fh-cr-wrap .fh-cr-compare tr.is-missing th[scope="row"] {
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-wrap .fh-cr-compare tr.fh-cr-compare__change td,
+.fh-cr-wrap .fh-cr-compare tr.fh-cr-compare__change th {
+	font-size: 11px;
+	background: var(--fh-bg-primary, #1a1a1a);
+}
+
+.fh-cr-wrap .fh-cr-compare tr.fh-cr-compare__change td:not(.fh-cr-up):not(.fh-cr-down),
+.fh-cr-wrap .fh-cr-compare tr.fh-cr-compare__change th {
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+/* Real sales: the Refresh form sits among the export buttons; the sums. */
+.fh-cr-refresh {
+	margin: 0;
+}
+
+.fh-cr-addsup {
+	max-width: 760px;
+	grid-template-columns: 1fr;
+}
+
+/* Settings → Sales statuses. */
+.fh-cr-statuses {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+	gap: 2px 16px;
+	margin: 12px 0;
+}
+
+.fh-cr-statuses .fh-cr-filter--check {
+	padding-bottom: 2px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-statuses code {
+	font-size: 11px;
+	color: var(--fh-text-secondary, #a0a0a0);
+	background: transparent;
+}
+
+/* Stays on a tablet: the page never scrolls sideways. Below 900px the
+   check-in, cleared and supplier columns step aside (they are in Edit),
+   and what is left scrolls inside its own box if it still must. */
+@media (max-width: 900px) {
+	.fh-cr-stays-table { display: block; overflow-x: auto; max-width: 100%; }
+	.fh-cr-stays-table > thead > tr > th:nth-child(3),
+	.fh-cr-stays-table > thead > tr > th:nth-child(6),
+	.fh-cr-stays-table > thead > tr > th:nth-child(9),
+	.fh-cr-stays-table > tbody > tr:not(.fh-cr-fields) > td:nth-child(3),
+	.fh-cr-stays-table > tbody > tr:not(.fh-cr-fields) > td:nth-child(6),
+	.fh-cr-stays-table > tbody > tr:not(.fh-cr-fields) > td:nth-child(9) { display: none; }
+}

@@ -1,0 +1,258 @@
+<?php
+/**
+ * Costing — the landed-cost maths of a supplier order in both modes,
+ * worked by hand with invented fish and invented numbers; the suggested
+ * price to the nearest 5; every zero / blank guard; the display helpers;
+ * and the percent of a box: a line's typed percent in place of received
+ * ÷ per box (alone, mixed with per-box lines, zero / empty, a line that
+ * spans boxes, bag mode untouched, the numbers of an order without
+ * percents unchanged), what a typed percent and box number read as, and
+ * the per-box summary with its states — the last three against
+ * fixtures/box-maths.json, which the order page's JS is tested against
+ * too.
+ *
+ * Run from the plugin root:  php includes/sections/clean-room/tests/costing-test.php
+ */
+
+require_once __DIR__ . '/wp-stubs.php';
+
+use FisHotel\Misc\Sections\Clean_Room\Costing;
+
+function near( $a, $b, $eps = 1e-9 ) {
+	return null !== $a && null !== $b && abs( (float) $a - (float) $b ) < $eps;
+}
+
+echo "1. Box mode — a worked example\n";
+/*
+ * Order: tariffs 30, domestic flight 100, import & re-ox fees 200, credit 10,
+ * markup 4, worth threshold 2.75.
+ *
+ * Line 1 Blue Test Wrasse:  ordered 10, received 8, per box 8 (typed), price 5,   worth 40, survived 6, DOA 1
+ * Line 2 Red Test Goby:     ordered 20, received 12, per box — (species 24), price 2.5, worth 20, survived 10, DOA 0
+ * Line 3 Green Test Blenny: ordered 5,  received 0,  price 10, worth 30, survived — , DOA 0
+ *
+ * fraction:  8 ÷ 8 = 1 · 12 ÷ 24 = 0.5 · 0 (nothing received) → Σ 1.5
+ * fees per box = (100 + 200) ÷ 1.5 = 200
+ * goods = 8 × 5 + 12 × 2.5 = 70 → tariff factor = 1 + 30 ÷ 70 = 10 ÷ 7
+ * landed 1 = 40 × 10/7 + 1 × 200   = 57.142857… + 200 = 257.142857…
+ * landed 2 = 30 × 10/7 + 0.5 × 200 = 42.857142… + 100 = 142.857142…
+ * landed 3 = 0
+ * total = 400 (= goods + tariffs + flight + import), grand total = 390
+ * per fish 1 = 32.142857… × 4 = 128.57 → 130 ; per fish 2 = 11.904761… × 4 = 47.62 → 50 ; line 3 undefined
+ * profit 1 = 320 − 257.14 = 62.857142… margin 0.2444 (not worth it) ; profit 2 = 240 − 142.86 = 97.142857… margin 0.68
+ * revenue = 40 × 6 + 20 × 10 + 30 × 0 = 440 ; up/down = 440 − 390 = 50 ; ratio = 440 ÷ 390
+ * fill = 20 ÷ 35 ; survival = 16 ÷ (20 − 1) ; DOA rate = 1 ÷ 20
+ * DOA cost (sheet) = 1 × 5 + 1 × 200 = 205 (a whole box's fees per fish — the sheet's quirk)
+ * DOA cost per fish = 1 × (5 + 200 ÷ 8) = 30
+ */
+$order = array(
+	'cost_mode'       => 'box',
+	'tariffs'         => 30,
+	'domestic_flight' => 100,
+	'import_fees'     => 200,
+	'credit'          => 10,
+	'markup'          => 4,
+	'worth_threshold' => 2.75,
+);
+$lines = array(
+	array( 'species' => 'Blue Test Wrasse', 'qty_ordered' => 10, 'qty_received' => 8, 'per_box' => 8, 'unit_price' => 5, 'worth' => 40, 'qty_survived' => 6, 'qty_doa' => 1 ),
+	array( 'species' => 'Red Test Goby', 'qty_ordered' => 20, 'qty_received' => 12, 'per_box' => null, 'species_per_box' => 24, 'unit_price' => 2.5, 'worth' => 20, 'qty_survived' => 10, 'qty_doa' => 0 ),
+	array( 'species' => 'Green Test Blenny', 'qty_ordered' => 5, 'qty_received' => 0, 'unit_price' => 10, 'worth' => 30, 'qty_survived' => null, 'qty_doa' => 0 ),
+);
+$c = Costing::compute( $order, $lines );
+$l = $c['lines'];
+$o = $c['order'];
+check( 'mode and the per-box fallback (line, species, default)', 'box' === $c['mode'] && 8 === $l[0]['per_box'] && 24 === $l[1]['per_box'] && 24 === $l[2]['per_box'] );
+check( 'box fractions 1 / 0.5 / 0 and Σ 1.5', near( $l[0]['fraction'], 1 ) && near( $l[1]['fraction'], 0.5 ) && near( $l[2]['fraction'], 0 ) && near( $o['boxes'], 1.5 ) );
+check( 'fees per box 200, tariff factor 10/7', near( $o['fees_per_box'], 200 ) && near( $o['fee_rate'], 200 ) && null === $o['per_bag'] && near( $o['tariff_factor'], 10 / 7 ) );
+check( 'landed totals 257.142857 / 142.857142 / 0', near( $l[0]['landed_total'], 40 * 10 / 7 + 200 ) && near( $l[1]['landed_total'], 30 * 10 / 7 + 100 ) && near( $l[2]['landed_total'], 0 ) );
+check( 'total 400, grand total 390', near( $o['total'], 400 ) && near( $o['grand_total'], 390 ) );
+check( 'landed per fish, and null when nothing was received', near( $l[0]['landed_per_fish'], ( 40 * 10 / 7 + 200 ) / 8 ) && near( $l[1]['landed_per_fish'], ( 30 * 10 / 7 + 100 ) / 12 ) && null === $l[2]['landed_per_fish'] );
+check( 'suggested prices 130 / 50 / —', near( $l[0]['suggested_price'], 130 ) && near( $l[1]['suggested_price'], 50 ) && null === $l[2]['suggested_price'] );
+check( 'profit and margin', near( $l[0]['profit'], 320 - ( 40 * 10 / 7 + 200 ) ) && near( $l[0]['margin'], ( 320 - ( 40 * 10 / 7 + 200 ) ) / ( 40 * 10 / 7 + 200 ) ) && near( $l[1]['profit'], 240 - ( 30 * 10 / 7 + 100 ) ) && near( $l[1]['margin'], 0.68 ) );
+check( 'margin undefined on a 0 landed line, nothing worth it at 2.75', null === $l[2]['margin'] && false === $l[0]['worth_it'] && false === $l[1]['worth_it'] && false === $l[2]['worth_it'] );
+check( 'revenue per line (an unknown survived counts 0) and 440 in all', near( $l[0]['revenue'], 240 ) && near( $l[1]['revenue'], 200 ) && near( $l[2]['revenue'], 0 ) && near( $o['revenue'], 440 ) );
+check( 'up/down 50, ratio 440/390', near( $o['up_down'], 50 ) && near( $o['ratio'], 440 / 390 ) );
+check( 'totals: 35 ordered, 20 received, 16 survived (known), 1 DOA, 3 lines', 35 === $o['ordered'] && 20 === $o['received'] && 16 === $o['survived'] && true === $o['survived_known'] && 1 === $o['doa'] && 3 === $o['lines'] );
+check( 'fill 20/35, survival 16/19, DOA 1/20', near( $o['fill_rate'], 20 / 35 ) && near( $o['survival_rate'], 16 / 19 ) && near( $o['doa_rate'], 0.05 ) );
+check( 'DOA cost: the sheet\'s 205 (a whole box\'s fees), per fish 30', near( $o['doa_cost_sheet'], 205 ) && near( $o['doa_cost_lines'], 5 ) && near( $o['doa_cost_per_fish'], 30 ) && near( $l[0]['doa_cost'], 5 ) && near( $l[0]['doa_cost_per_fish'], 30 ) );
+check( 'the inputs echo back (markup, threshold, credit)', near( $o['markup'], 4 ) && near( $o['worth_threshold'], 2.75 ) && near( $o['credit'], 10 ) && near( $o['goods'], 70 ) );
+
+echo "2. Box mode — a line worth it\n";
+$c = Costing::compute( array( 'cost_mode' => 'box', 'tariffs' => 0, 'domestic_flight' => 0, 'import_fees' => 0 ), array( array( 'qty_received' => 10, 'per_box' => 10, 'unit_price' => 2, 'worth' => 10, 'qty_survived' => 10 ) ) );
+check( 'landed 20, profit 80, margin 4 > 2.75 → worth it, suggested 10 (2 × 4 = 8 → 10)', near( $c['lines'][0]['landed_total'], 20 ) && near( $c['lines'][0]['profit'], 80 ) && near( $c['lines'][0]['margin'], 4 ) && true === $c['lines'][0]['worth_it'] && near( $c['lines'][0]['suggested_price'], 10 ) );
+$c = Costing::compute( array( 'cost_mode' => 'box', 'worth_threshold' => 5 ), array( array( 'qty_received' => 10, 'per_box' => 10, 'unit_price' => 2, 'worth' => 10, 'qty_survived' => 10 ) ) );
+check( 'a higher threshold: the same line is not worth it; blank fees read as 0', false === $c['lines'][0]['worth_it'] && near( $c['order']['total'], 20 ) );
+
+echo "3. Bag mode — a worked example\n";
+/*
+ * Order: tariffs 20, flight 50, import 30 → everything per bag: (50 + 30 + 20) ÷ Σ units.
+ * Line 1: ordered 12, received 10, bags 2 (typed), price 15 (per bag), worth 40, survived 9, DOA 1 → units 2
+ * Line 2: ordered 6,  received 6,  bags —,          price 3,            worth 25, survived 6, DOA 0 → units 6 (= received)
+ * per bag = 100 ÷ 8 = 12.5
+ * landed 1 = 2 × 15 + 2 × 12.5 = 55 ; landed 2 = 6 × 3 + 6 × 12.5 = 93 ; total 148
+ * per fish 1 = 5.5 × 4 = 22 → 20 ; per fish 2 = 15.5 × 4 = 62 → 60
+ * profit 1 = 400 − 55 = 345, margin 6.27 → worth it ; profit 2 = 150 − 93 = 57, margin 0.61
+ * revenue = 40 × 9 + 25 × 6 = 510 ; up/down = 510 − 148 = 362
+ * fill = 16 ÷ 18 ; survival = 15 ÷ (16 − 1) = 1 ; DOA rate = 1 ÷ 16
+ * DOA cost (sheet) = 1 × 15 + 1 × 12.5 = 27.5 ; per fish the same in bag mode
+ */
+$c = Costing::compute(
+	array( 'cost_mode' => 'bag', 'tariffs' => 20, 'domestic_flight' => 50, 'import_fees' => 30 ),
+	array(
+		array( 'qty_ordered' => 12, 'qty_received' => 10, 'bags' => 2, 'unit_price' => 15, 'worth' => 40, 'qty_survived' => 9, 'qty_doa' => 1 ),
+		array( 'qty_ordered' => 6, 'qty_received' => 6, 'bags' => null, 'unit_price' => 3, 'worth' => 25, 'qty_survived' => 6, 'qty_doa' => 0 ),
+	)
+);
+$l = $c['lines'];
+$o = $c['order'];
+check( 'units: the bags when typed, else the received count', 'bag' === $c['mode'] && near( $l[0]['units'], 2 ) && near( $l[1]['units'], 6 ) && null === $l[0]['fraction'] && null === $o['boxes'] );
+check( 'per bag 12.5 (tariffs included), no fees per box', near( $o['per_bag'], 12.5 ) && near( $o['fee_rate'], 12.5 ) && null === $o['fees_per_box'] && near( $o['tariff_factor'], 1 ) );
+check( 'landed 55 / 93, total 148', near( $l[0]['landed_total'], 55 ) && near( $l[1]['landed_total'], 93 ) && near( $o['total'], 148 ) && near( $o['grand_total'], 148 ) );
+check( 'suggested 20 / 60', near( $l[0]['suggested_price'], 20 ) && near( $l[1]['suggested_price'], 60 ) );
+check( 'worth it only on the first line', true === $l[0]['worth_it'] && near( $l[0]['margin'], 345 / 55 ) && false === $l[1]['worth_it'] );
+check( 'revenue 510, up/down 362', near( $o['revenue'], 510 ) && near( $o['up_down'], 362 ) && near( $o['ratio'], 510 / 148 ) );
+check( 'fill 16/18, survival 1, DOA 1/16', near( $o['fill_rate'], 16 / 18 ) && near( $o['survival_rate'], 1 ) && near( $o['doa_rate'], 1 / 16 ) );
+check( 'DOA cost 27.5 both ways', near( $o['doa_cost_sheet'], 27.5 ) && near( $o['doa_cost_per_fish'], 27.5 ) );
+
+echo "4. Guards — nothing divides by zero\n";
+$c = Costing::compute( array( 'cost_mode' => 'box', 'tariffs' => 10, 'domestic_flight' => 20, 'import_fees' => 30, 'credit' => 5 ), array() );
+$o = $c['order'];
+check( 'no lines: sums 0, every rate null, grand total = −credit', array() === $c['lines'] && 0 === $o['lines'] && near( $o['total'], 0 ) && near( $o['grand_total'], -5 ) && null === $o['fill_rate'] && null === $o['survival_rate'] && null === $o['doa_rate'] && near( $o['fee_rate'], 0 ) && near( $o['tariff_factor'], 1 ) && false === $o['survived_known'] );
+check( 'ratio = revenue ÷ grand total: defined on a negative grand total, null at 0', near( $o['ratio'], 0 ) && null === Costing::compute( array(), array() )['order']['ratio'] );
+$c = Costing::compute( array( 'cost_mode' => 'box', 'tariffs' => 10, 'domestic_flight' => 20, 'import_fees' => 30 ), array( array( 'qty_ordered' => 5, 'qty_received' => 0, 'unit_price' => 9, 'worth' => 30, 'qty_doa' => 0 ) ) );
+check( 'nothing received: fraction 0, fees 0, landed 0, per-fish / suggested / margin null, fill 0, survival and DOA null', near( $c['lines'][0]['fraction'], 0 ) && near( $c['order']['fee_rate'], 0 ) && near( $c['lines'][0]['landed_total'], 0 ) && null === $c['lines'][0]['landed_per_fish'] && null === $c['lines'][0]['suggested_price'] && null === $c['lines'][0]['margin'] && near( $c['order']['fill_rate'], 0 ) && null === $c['order']['survival_rate'] && null === $c['order']['doa_rate'] );
+$c = Costing::compute( array( 'cost_mode' => 'bag', 'tariffs' => 10 ), array( array( 'qty_received' => 0, 'bags' => 0, 'unit_price' => 1, 'qty_survived' => 0 ) ) );
+check( 'bag mode with no units: per bag 0', near( $c['order']['per_bag'], 0 ) && near( $c['lines'][0]['landed_total'], 0 ) );
+$c = Costing::compute( array( 'cost_mode' => 'box' ), array( array( 'qty_received' => 4, 'qty_doa' => 4, 'unit_price' => 2, 'qty_survived' => 0 ) ) );
+check( 'everything DOA: survival null (received − DOA = 0), DOA rate 1', null === $c['order']['survival_rate'] && near( $c['order']['doa_rate'], 1 ) );
+$c = Costing::compute( array( 'cost_mode' => 'box' ), array( array( 'qty_received' => 4, 'unit_price' => 2, 'qty_survived' => null ), array( 'qty_received' => 2, 'unit_price' => 2, 'qty_survived' => '' ) ) );
+check( 'survivors not typed on any line: survival null, not 0', null === $c['order']['survival_rate'] && false === $c['order']['survived_known'] && 0 === $c['order']['survived'] );
+$c = Costing::compute( array( 'cost_mode' => 'box', 'tariffs' => '', 'domestic_flight' => 'abc', 'import_fees' => null, 'markup' => '', 'worth_threshold' => 'x' ), array( array( 'qty_received' => '3', 'per_box' => '0', 'unit_price' => '$1,000.50', 'worth' => '', 'qty_survived' => '2', 'qty_doa' => '' ) ) );
+check( 'blanks and junk: fees 0, markup 4 and threshold 2.75 by default, per box 24, a formatted price read', near( $c['order']['markup'], 4 ) && near( $c['order']['worth_threshold'], 2.75 ) && 24 === $c['lines'][0]['per_box'] && near( $c['lines'][0]['landed_total'], 3001.5 ) && 2 === $c['order']['survived'] && 0 === $c['order']['doa'] );
+check( 'a negative per-box default falls back to 24', 24 === Costing::compute( array(), array( array( 'qty_received' => 1 ) ), -3 )['lines'][0]['per_box'] );
+check( 'an unknown mode is box', 'box' === Costing::compute( array( 'cost_mode' => 'crate' ), array() )['mode'] );
+
+echo "5. Rounding to the nearest 5 (MROUND)\n";
+check( '12.5 → 15 (halves away from zero), 12.4 → 10, 17.5 → 20, 2.4 → 0, 2.5 → 5', near( Costing::round_to( 12.5, 5 ), 15 ) && near( Costing::round_to( 12.4, 5 ), 10 ) && near( Costing::round_to( 17.5, 5 ), 20 ) && near( Costing::round_to( 2.4, 5 ), 0 ) && near( Costing::round_to( 2.5, 5 ), 5 ) );
+check( '128.57 → 130, 47.62 → 50, 0 → 0, −2.5 → −5', near( Costing::round_to( 128.57, 5 ), 130 ) && near( Costing::round_to( 47.62, 5 ), 50 ) && near( Costing::round_to( 0, 5 ), 0 ) && near( Costing::round_to( -2.5, 5 ), -5 ) );
+check( 'a step of 0 leaves the value alone', near( Costing::round_to( 12.34, 0 ), 12.34 ) );
+
+echo "6. money_in and the display helpers\n";
+check( 'money_in reads $ and thousands separators, blanks and junk fall back', near( Costing::money_in( '$1,234.50' ), 1234.5 ) && near( Costing::money_in( '' , 7 ), 7 ) && near( Costing::money_in( 'abc', 2.75 ), 2.75 ) && near( Costing::money_in( null, 4 ), 4 ) && near( Costing::money_in( true, 1 ), 1 ) && near( Costing::money_in( ' 12 ' ), 12 ) );
+check( 'money(): two decimals with thousands, the blank for null', '1,234.50' === Costing::money( 1234.5 ) && '0.00' === Costing::money( 0 ) && '—' === Costing::money( null ) && '' === Costing::money( null, '' ) && '257.14' === Costing::money( 40 * 10 / 7 + 200 ) );
+check( 'pct(): one decimal, the blank for null', '80.7%' === Costing::pct( 0.80714 ) && '100.0%' === Costing::pct( 1 ) && '—' === Costing::pct( null ) && '57.14%' === Costing::pct( 20 / 35, '—', 2 ) );
+check( 'num(): no trailing zeros, no −0', '2.75' === Costing::num( 2.75 ) && '3' === Costing::num( 3.0 ) && '0' === Costing::num( -0.001 ) && '1.5' === Costing::num( 1.5 ) && '—' === Costing::num( null ) );
+check( 'cents(): rounds for storage, null stays null', 32.14 === Costing::cents( 32.142857 ) && null === Costing::cents( null ) );
+
+echo "7. Box mode — a percent of a box in place of received ÷ per box\n";
+/*
+ * Order: tariffs 30, domestic flight 100, import & re-ox fees 200.
+ * Line 1 Blue Test Wrasse:  received 2,  price 50, 25 % of a box, DOA 0
+ * Line 2 Red Test Goby:     received 10, price 4,  50 % of a box, DOA 1
+ * Line 3 Green Test Blenny: received 6,  price 10, 25 % of a box
+ *
+ * fraction: 0.25 · 0.5 · 0.25 → Σ 1 ; fees per box = 300 ÷ 1 = 300
+ * goods = 100 + 40 + 60 = 200 → tariff factor = 1 + 30 ÷ 200 = 1.15
+ * landed 1 = 100 × 1.15 + 0.25 × 300 = 190 ; landed 2 = 40 × 1.15 + 0.5 × 300 = 196 ; landed 3 = 60 × 1.15 + 75 = 144
+ * total 530 (= goods + tariffs + flight + import) ; per fish 95 / 19.6 / 24
+ * DOA cost per fish, line 2 = 1 × (4 + 0.5 × 300 ÷ 10) = 19 ; the sheet's = 1 × 4 + 1 × 300 = 304
+ */
+$order = array( 'cost_mode' => 'box', 'tariffs' => 30, 'domestic_flight' => 100, 'import_fees' => 200 );
+$pct   = array(
+	array( 'species' => 'Blue Test Wrasse', 'qty_ordered' => 2, 'qty_received' => 2, 'unit_price' => 50, 'worth' => 300, 'box_pct' => 25, 'qty_survived' => 2, 'qty_doa' => 0 ),
+	array( 'species' => 'Red Test Goby', 'qty_ordered' => 10, 'qty_received' => 10, 'unit_price' => 4, 'worth' => 20, 'box_pct' => '50', 'qty_survived' => 9, 'qty_doa' => 1 ),
+	array( 'species' => 'Green Test Blenny', 'qty_ordered' => 6, 'qty_received' => 6, 'unit_price' => 10, 'worth' => 30, 'box_pct' => 25.0, 'qty_survived' => 6, 'qty_doa' => 0 ),
+);
+$c = Costing::compute( $order, $pct );
+$l = $c['lines'];
+$o = $c['order'];
+check( 'percents alone: fractions 0.25 / 0.5 / 0.25, Σ 1, each line says its fraction came from the percent', near( $l[0]['fraction'], 0.25 ) && near( $l[1]['fraction'], 0.5 ) && near( $l[2]['fraction'], 0.25 ) && near( $o['boxes'], 1 ) && array( 'pct', 'pct', 'pct' ) === array_column( $l, 'fraction_from' ) && near( $l[0]['box_pct'], 25 ) && near( $l[1]['box_pct'], 50 ) );
+check( 'fees per box 300, tariff factor 1.15', near( $o['fees_per_box'], 300 ) && near( $o['tariff_factor'], 1.15 ) );
+check( 'landed 190 / 196 / 144, total 530 = goods + tariffs + flight + import', near( $l[0]['landed_total'], 190 ) && near( $l[1]['landed_total'], 196 ) && near( $l[2]['landed_total'], 144 ) && near( $o['total'], 530 ) );
+check( 'landed per fish 95 / 19.6 / 24 — the per-box count plays no part (it would be 24 by default)', near( $l[0]['landed_per_fish'], 95 ) && near( $l[1]['landed_per_fish'], 19.6 ) && near( $l[2]['landed_per_fish'], 24 ) && 24 === $l[0]['per_box'] );
+check( 'DOA cost per fish: the line\'s own fees over its fish (4 + 15 = 19); the sheet\'s whole-box figure 304', near( $l[1]['doa_cost_per_fish'], 19 ) && near( $o['doa_cost_per_fish'], 19 ) && near( $o['doa_cost_sheet'], 304 ) );
+$doubled = $pct;
+foreach ( $doubled as $i => $line ) {
+	$doubled[ $i ]['box_pct'] = 2 * (float) $line['box_pct'];
+}
+$d = Costing::compute( $order, $doubled );
+check( 'every guess twice as high: twice the boxes, half the fees per box, the SAME cost per line', near( $d['order']['boxes'], 2 ) && near( $d['order']['fees_per_box'], 150 ) && near( $d['lines'][0]['landed_total'], 190 ) && near( $d['lines'][1]['landed_total'], 196 ) && near( $d['lines'][2]['landed_total'], 144 ) && near( $d['lines'][1]['doa_cost_per_fish'], 19 ) );
+
+echo "8. Box mode — percents mixed with per-box lines\n";
+/*
+ * tariffs 26, flight 100, import 200.
+ * Line 1: received 8,  per box 8 (typed)          → 1     (per box), price 5
+ * Line 2: received 3,  per box 6 AND 50 % typed   → 0.5   (the percent wins), price 20
+ * Line 3: received 0,  25 % typed                 → 0     (nothing received takes no space), price 10
+ * Line 4: received 12, per box — (species 24)     → 0.5   (per box), price 2.5, percent left empty
+ * Σ 2 ; fees per box 150 ; goods 40 + 60 + 0 + 30 = 130 → factor 1.2
+ * landed 48 + 150 = 198 · 72 + 75 = 147 · 0 · 36 + 75 = 111 → 456
+ */
+$mixed = array(
+	array( 'qty_received' => 8, 'per_box' => 8, 'unit_price' => 5 ),
+	array( 'qty_received' => 3, 'per_box' => 6, 'unit_price' => 20, 'box_pct' => 50 ),
+	array( 'qty_received' => 0, 'unit_price' => 10, 'box_pct' => 25 ),
+	array( 'qty_received' => 12, 'per_box' => null, 'species_per_box' => 24, 'unit_price' => 2.5, 'box_pct' => '' ),
+);
+$c = Costing::compute( array( 'cost_mode' => 'box', 'tariffs' => 26, 'domestic_flight' => 100, 'import_fees' => 200 ), $mixed );
+$l = $c['lines'];
+check( 'fractions 1 / 0.5 / 0 / 0.5 — the percent wins over a typed per box, nothing received is 0 either way', near( $l[0]['fraction'], 1 ) && near( $l[1]['fraction'], 0.5 ) && near( $l[2]['fraction'], 0 ) && near( $l[3]['fraction'], 0.5 ) && array( 'per_box', 'pct', 'per_box', 'per_box' ) === array_column( $l, 'fraction_from' ) && null === $l[2]['box_pct'] && null === $l[3]['box_pct'] );
+check( 'landed 198 / 147 / 0 / 111, total 456', near( $l[0]['landed_total'], 198 ) && near( $l[1]['landed_total'], 147 ) && near( $l[2]['landed_total'], 0 ) && near( $l[3]['landed_total'], 111 ) && near( $c['order']['total'], 456 ) && near( $c['order']['fees_per_box'], 150 ) );
+
+echo "9. Box mode — zero, empty and out-of-range percents; a line that spans boxes; bag mode\n";
+$plain = array(
+	array( 'qty_received' => 8, 'per_box' => 8, 'unit_price' => 5, 'qty_doa' => 1 ),
+	array( 'qty_received' => 12, 'species_per_box' => 24, 'unit_price' => 2.5 ),
+);
+$base  = Costing::compute( array( 'cost_mode' => 'box', 'tariffs' => 30, 'domestic_flight' => 100, 'import_fees' => 200 ), $plain );
+foreach ( array( 0, '0', '', null, 'abc', -5, 400.01, 401, true ) as $junk ) {
+	$with = $plain;
+	foreach ( $with as $i => $line ) {
+		$with[ $i ]['box_pct'] = $junk;
+	}
+	$j = Costing::compute( array( 'cost_mode' => 'box', 'tariffs' => 30, 'domestic_flight' => 100, 'import_fees' => 200 ), $with );
+	check( 'a percent of ' . var_export( $junk, true ) . ' is no percent: the per-box count is used and every number is the same', $j['lines'][0]['landed_total'] === $base['lines'][0]['landed_total'] && $j['lines'][1]['landed_total'] === $base['lines'][1]['landed_total'] && $j['lines'][0]['doa_cost_per_fish'] === $base['lines'][0]['doa_cost_per_fish'] && $j['order']['fee_rate'] === $base['order']['fee_rate'] && 'per_box' === $j['lines'][0]['fraction_from'] && null === $j['lines'][0]['box_pct'] );
+}
+check( 'an order without any percent costs exactly what it did (the worked example of section 1)', near( $base['lines'][0]['landed_total'], 40 * 10 / 7 + 200 ) && near( $base['lines'][1]['landed_total'], 30 * 10 / 7 + 100 ) && near( $base['order']['doa_cost_per_fish'], 30 ) );
+/*
+ * A big fish: 4 received in 2.5 boxes (250 %), price 100; 20 small ones in half a box, price 5; fees 300, no tariffs.
+ * Σ 3 ; fees per box 100 ; landed 400 + 250 = 650 · 100 + 50 = 150 → 800
+ */
+$c = Costing::compute( array( 'cost_mode' => 'box', 'domestic_flight' => 100, 'import_fees' => 200 ), array( array( 'qty_received' => 4, 'unit_price' => 100, 'box_pct' => 250 ), array( 'qty_received' => 20, 'unit_price' => 5, 'box_pct' => 50 ) ) );
+check( 'above 100: a line that spans boxes — fractions 2.5 / 0.5, landed 650 / 150, total 800', near( $c['lines'][0]['fraction'], 2.5 ) && near( $c['lines'][1]['fraction'], 0.5 ) && near( $c['order']['boxes'], 3 ) && near( $c['lines'][0]['landed_total'], 650 ) && near( $c['lines'][1]['landed_total'], 150 ) && near( $c['order']['total'], 800 ) );
+check( '400 is the most a line may take; a hair above is no percent', near( Costing::compute( array(), array( array( 'qty_received' => 1, 'box_pct' => 400 ) ) )['lines'][0]['fraction'], 4 ) && near( Costing::compute( array(), array( array( 'qty_received' => 1, 'box_pct' => 400.01 ) ) )['lines'][0]['fraction'], 1 / 24 ) );
+$bag_lines = array( array( 'qty_received' => 10, 'bags' => 2, 'unit_price' => 15, 'qty_doa' => 1 ), array( 'qty_received' => 6, 'unit_price' => 3 ) );
+$bag       = Costing::compute( array( 'cost_mode' => 'bag', 'tariffs' => 20, 'domestic_flight' => 50, 'import_fees' => 30 ), $bag_lines );
+$bag_lines[0]['box_pct'] = 80;
+$bag_lines[1]['box_pct'] = 20;
+$bag_pct   = Costing::compute( array( 'cost_mode' => 'bag', 'tariffs' => 20, 'domestic_flight' => 50, 'import_fees' => 30 ), $bag_lines );
+check( 'bag mode is untouched: a percent changes nothing and is not reported as used', $bag['lines'][0]['landed_total'] === $bag_pct['lines'][0]['landed_total'] && $bag['lines'][1]['landed_total'] === $bag_pct['lines'][1]['landed_total'] && $bag['order']['per_bag'] === $bag_pct['order']['per_bag'] && $bag['lines'][0]['doa_cost_per_fish'] === $bag_pct['lines'][0]['doa_cost_per_fish'] && null === $bag_pct['lines'][0]['box_pct'] && null === $bag_pct['lines'][0]['fraction_from'] && null === $bag_pct['lines'][0]['fraction'] );
+
+echo "10. What a typed percent and a typed box number read as (the fixture the page's JS reads too)\n";
+$fixture = fh_box_fixture();
+foreach ( $fixture['pct'] as $row ) {
+	check_json( 'box_pct_in( ' . json_encode( $row[0] ) . ' ) → ' . json_encode( $row[1] ), $row[1], Costing::box_pct_in( $row[0] ) );
+}
+check( 'box_pct_in: a boolean, an array and an infinite number are no percent', null === Costing::box_pct_in( true ) && null === Costing::box_pct_in( array( 25 ) ) && null === Costing::box_pct_in( '1e999' ) && null === Costing::box_pct_in( INF ) );
+foreach ( $fixture['box_no'] as $row ) {
+	check_json( 'box_no_in( ' . json_encode( $row[0] ) . ' ) → ' . json_encode( $row[1] ), $row[1], Costing::box_no_in( $row[0] ) );
+}
+foreach ( $fixture['state'] as $row ) {
+	check( 'box_state( ' . $row[0] . ' ) → ' . $row[1], $row[1] === Costing::box_state( $row[0] ) );
+}
+check( 'the tolerance is two constants: about full = 90 to 110, a line at most 400, a box number at most 999', 90.0 === Costing::BOX_FULL_MIN && 110.0 === Costing::BOX_FULL_MAX && 400.0 === Costing::BOX_PCT_MAX && 999 === Costing::BOX_NO_MAX && array( 'under', 'full', 'over' ) === Costing::BOX_STATES );
+
+echo "11. The per-box summary\n";
+foreach ( $fixture['summary'] as $case ) {
+	check_json( $case['name'], $case['expect'], Costing::box_summary( $case['lines'], $case['boxes'] ) );
+}
+$s = Costing::box_summary( array( 'junk', null, array( 'box_no' => 2, 'box_pct' => 'x' ) ) );
+check( 'no lines with a percent: nothing per box, nothing loose, 0 boxes, no Boxes field', array() === $s['boxes'] && 0 === $s['lines'] && 0 === $s['unboxed']['lines'] && near( $s['boxes_total'], 0 ) && null === $s['order_boxes'] );
+check( 'a received count that is not a number is no received line (as the page\'s JS reads it)', 0 === Costing::box_summary( array( array( 'box_pct' => '25' ), array( 'qty_received' => array( 3 ) ), array( 'qty_received' => true ), array( 'qty_received' => 'x' ), array( 'qty_received' => null ) ) )['missing'] && 1 === Costing::box_summary( array( array( 'box_pct' => '25' ), array( 'qty_received' => ' 2 ' ) ) )['missing'] && 0 === $s['missing'] );
+$s = Costing::box_summary( array( array( 'box_no' => 1, 'box_pct' => 0.1 ), array( 'box_no' => 1, 'box_pct' => 0.2 ) ) );
+check( 'sums are counted in whole hundredths: 0.1 + 0.2 is exactly 0.3', 0.3 === $s['boxes'][0]['pct'] && 0.3 === $s['pct_total'] );
+$s = Costing::box_summary( array( array( 'box_no' => 1000, 'box_pct' => 20 ), array( 'box_no' => 'A', 'box_pct' => 30 ) ), -4 );
+check( 'a box number that is not one counts as no box number; a negative Boxes field reads 0', array() === $s['boxes'] && 2 === $s['unboxed']['lines'] && near( $s['unboxed']['pct'], 50 ) && 0 === $s['order_boxes'] );
+
+fh_finish();

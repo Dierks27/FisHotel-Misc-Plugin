@@ -35,7 +35,10 @@ class Frontend {
 		add_action( 'woocommerce_product_thumbnails', array( $this, 'render_single_ribbon' ), 5 );
 
 		// ── Shop / archive / search sort ────────────────────────────
-		add_filter( 'posts_clauses', array( $this, 'sort_clauses' ), 10, 2 );
+		// Priority 20: WooCommerce registers its price / popularity / rating
+		// posts_clauses callbacks at 10 during pre_get_posts (after we hooked),
+		// so at 10 they would run after us and overwrite the ORDER BY we prepend.
+		add_filter( 'posts_clauses', array( $this, 'sort_clauses' ), 20, 2 );
 
 		// ── Asset enqueue ───────────────────────────────────────────
 		add_action( 'wp_enqueue_scripts', array( $this, 'enqueue_assets' ) );

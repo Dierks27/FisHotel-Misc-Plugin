@@ -15,7 +15,7 @@ $features = array(
 	),
 	'cache_headers'        => array(
 		'label' => __( 'Browser Cache-Control Headers', 'fishotel-misc-plugin' ),
-		'desc'  => __( 'Add Cache-Control: public, max-age=3600 for front-end pages. WooCommerce cart, checkout, and account pages are excluded.', 'fishotel-misc-plugin' ),
+		'desc'  => __( 'Add Cache-Control: public, max-age=600 for front-end pages. Logged-in visitors, non-empty carts, and WooCommerce cart, checkout, and account pages are excluded.', 'fishotel-misc-plugin' ),
 	),
 	'gzip_compression'     => array(
 		'label' => __( 'Gzip Compression', 'fishotel-misc-plugin' ),
@@ -28,6 +28,8 @@ $features = array(
 	'combine_assets'       => array(
 		'label' => __( 'CSS & JS File Combiner', 'fishotel-misc-plugin' ),
 		'desc'  => __( 'Combine local CSS and non-deferred JS into single cached files to reduce HTTP requests. External assets (CDN, Google, PayPal, OneSignal) are skipped automatically.', 'fishotel-misc-plugin' ),
+		// Shown under the toggle: these are enforced in code, not optional.
+		'note'  => __( 'Never runs on cart, checkout, or account pages, and scripts that carry inline data (nonces, localized settings) and WooCommerce / PayPal / jQuery handles are left out of the bundle.', 'fishotel-misc-plugin' ),
 	),
 );
 ?>
@@ -66,6 +68,11 @@ $features = array(
 						<p class="fishotel-misc-card-desc" style="margin-top: 4px;">
 							<?php echo esc_html( $feature['desc'] ); ?>
 						</p>
+						<?php if ( ! empty( $feature['note'] ) ) : ?>
+							<p class="fishotel-misc-card-desc" style="margin-top: 4px;">
+								<em><?php echo esc_html( $feature['note'] ); ?></em>
+							</p>
+						<?php endif; ?>
 					</div>
 					<label class="fishotel-misc-toggle">
 						<input type="checkbox"

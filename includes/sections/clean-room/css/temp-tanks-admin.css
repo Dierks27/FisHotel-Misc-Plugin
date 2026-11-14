@@ -1,0 +1,388 @@
+/**
+ * Clean Room admin — the temporary tanks on the Room Board (the
+ * Temporary area, the set-up form, a setup's card and its panels), the
+ * To do tab (everything due today, by water system) and the history of
+ * the setups that were taken down. Builds on clean-room-admin.css and
+ * its --fh-* tokens.
+ *
+ * @package FisHotel\Misc\Sections\Clean_Room
+ */
+
+/* ------------------------------------------------------------------ */
+/*  The Temporary area of the Board                                    */
+/* ------------------------------------------------------------------ */
+.fh-cr-area--temp {
+	padding: 14px 16px 16px;
+	background: var(--fh-bg-secondary, #2d2d2d);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	border-left: 4px solid #6b4fbb;
+	border-radius: var(--fh-radius, 8px);
+}
+
+.fh-cr-area__sub {
+	margin-left: 8px;
+	font-size: 12px;
+	font-weight: 400;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-temp-bar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px 14px;
+	margin: 0 0 12px;
+}
+
+.fh-cr-temp-bar .fh-cr-tank__link {
+	font-size: 12px;
+}
+
+.fh-cr-temp-form {
+	margin: 0 0 14px;
+	padding: 12px 14px;
+	background: var(--fh-bg-primary, #1a1a1a);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	border-radius: 6px;
+}
+
+.fh-cr-temp-form[hidden],
+.fh-cr-temp-panel[hidden],
+.fh-cr-temp-purpose-text[hidden] {
+	display: none;
+}
+
+.fh-cr-temp-form .fh-cr-h3 {
+	margin-top: 0;
+}
+
+.fh-cr-temp-form__grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+	gap: 10px 14px;
+	align-items: start;
+}
+
+.fh-cr-temp-form__grid .fh-cr-filter--wide,
+.fh-cr-temp-kind {
+	grid-column: 1 / -1;
+}
+
+.fh-cr-temp-kind {
+	margin: 0;
+	padding: 8px 10px;
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	border-radius: 4px;
+}
+
+.fh-cr-temp-kind legend {
+	padding: 0 4px;
+	font-size: 12px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-temp-kind label {
+	display: block;
+	padding: 3px 0;
+	font-size: 12px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-temp-purpose-text {
+	margin-top: 6px;
+}
+
+.fh-cr-temp-preview {
+	margin: 10px 0 0;
+}
+
+.fh-cr-temp-preview__list {
+	margin: 4px 0 0 18px;
+	padding: 0;
+	list-style: disc;
+	font-size: 12px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-temp-preview__list li {
+	margin: 2px 0;
+}
+
+.fh-cr-tanks--temp {
+	grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+}
+
+.fh-cr-tank--temp {
+	border-left: 3px solid #b7791f;
+}
+
+.fh-cr-tank--temp.fh-cr-tank--clean {
+	border-left-color: #2d5fb8;
+}
+
+.fh-cr-temp-free {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+	margin: 0 0 12px;
+}
+
+.fh-cr-tank--temp .fh-cr-tank__number {
+	font-size: 18px;
+}
+
+.fh-cr-temp-what {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+	font-size: 13px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-temp-purpose-word {
+	font-size: 12px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-temp-clock {
+	font-size: 12px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-temp-note {
+	margin: 0;
+	font-size: 12px;
+	font-style: italic;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-temp-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+	padding-top: 6px;
+	border-top: 1px solid var(--fh-border, rgba(255, 255, 255, 0.08));
+}
+
+.fh-cr-temp-panel {
+	display: grid;
+	gap: 8px;
+	padding: 10px;
+	background: var(--fh-bg-secondary, #2d2d2d);
+	border-radius: 4px;
+}
+
+.fh-cr-temp-steps__table td {
+	padding: 4px;
+}
+
+.fh-cr-temp-steps__table .fh-cr-input--num {
+	max-width: 64px;
+}
+
+.fh-cr-building__doses {
+	flex: 1 1 100%;
+	font-size: 11px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-temp-mark {
+	display: inline-block;
+	margin-right: 6px;
+	padding: 2px 9px;
+	border-radius: 12px;
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.3px;
+	text-transform: uppercase;
+	color: #fff;
+	background: #6b4fbb;
+	vertical-align: middle;
+}
+
+/* ------------------------------------------------------------------ */
+/*  To do                                                              */
+/* ------------------------------------------------------------------ */
+a.fh-cr-chip--todo {
+	text-decoration: none;
+	font-weight: 600;
+}
+
+.fh-cr-todo-top {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px 12px;
+	margin: 0 0 6px;
+	padding: 14px 16px;
+	background: var(--fh-bg-secondary, #2d2d2d);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	border-left: 4px solid var(--fh-warning, #ffb900);
+	border-radius: var(--fh-radius, 8px);
+}
+
+.fh-cr-todo-top.is-done {
+	border-left-color: var(--fh-success, #46b450);
+}
+
+.fh-cr-todo-count {
+	margin: 0;
+	font-size: 16px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-todo-count strong {
+	font-size: 26px;
+	margin-right: 4px;
+}
+
+.fh-cr-todo-flag {
+	padding: 3px 10px;
+	border-radius: 999px;
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--fh-warning, #ffb900);
+	background: rgba(255, 185, 0, 0.1);
+}
+
+.fh-cr-todo-flag.is-bad {
+	color: var(--fh-danger, #dc3232);
+	background: rgba(220, 50, 50, 0.12);
+}
+
+.fh-cr-todo-top__meta {
+	margin-left: auto;
+	font-size: 12px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-todo-top__meta a {
+	color: var(--fh-accent, #00a0d2);
+	text-decoration: none;
+}
+
+.fh-cr-todo-status {
+	min-height: 18px;
+	margin: 0 0 10px;
+}
+
+.fh-cr-todo-block {
+	margin: 0 0 14px;
+	padding: 14px 16px;
+	background: var(--fh-bg-secondary, #2d2d2d);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	border-radius: var(--fh-radius, 8px);
+}
+
+.fh-cr-todo-block--temp {
+	border-left: 4px solid #6b4fbb;
+}
+
+.fh-cr-todo-block.is-done {
+	border-color: rgba(70, 180, 80, 0.5);
+}
+
+.fh-cr-todo-block.is-idle {
+	opacity: 0.6;
+}
+
+.fh-cr-todo-block__head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 6px 14px;
+	margin: 0 0 8px;
+}
+
+.fh-cr-todo-block__head h2 {
+	margin: 0;
+	font-size: 16px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-todo-lines {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.fh-cr-todo-line {
+	display: grid;
+	grid-template-columns: 84px 1fr;
+	gap: 12px;
+	align-items: start;
+	padding: 8px 0;
+	border-top: 1px solid var(--fh-border, rgba(255, 255, 255, 0.08));
+}
+
+.fh-cr-todo-line.is-done {
+	opacity: 0.55;
+}
+
+.fh-cr-todo-check {
+	font-size: 18px;
+	font-weight: 700;
+	text-align: center;
+	color: var(--fh-success, #46b450);
+}
+
+.fh-cr-todo-line__body {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 4px 10px;
+}
+
+.fh-cr-todo-line__step {
+	font-size: 14px;
+	font-weight: 700;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-todo-line.is-done .fh-cr-todo-line__step {
+	text-decoration: line-through;
+}
+
+.fh-cr-todo-line__dose {
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--fh-accent, #00a0d2);
+}
+
+.fh-cr-todo-line__for {
+	padding: 1px 8px;
+	border-radius: 999px;
+	font-size: 11px;
+	font-weight: 600;
+	color: var(--fh-warning, #ffb900);
+	background: rgba(255, 185, 0, 0.1);
+}
+
+.fh-cr-todo-line__note {
+	flex: 1 1 100%;
+	font-size: 12px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-todo-tanks {
+	flex: 1 1 100%;
+	font-size: 12px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-todo-tanks summary {
+	cursor: pointer;
+	color: var(--fh-accent, #00a0d2);
+}
+
+.fh-cr-todo-tank {
+	display: inline-block;
+	margin: 6px 6px 0 0;
+}
+
+span.fh-cr-todo-tank.is-done {
+	color: var(--fh-success, #46b450);
+}

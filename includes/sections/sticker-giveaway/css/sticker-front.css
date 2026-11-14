@@ -1,0 +1,321 @@
+/**
+ * Sticker Giveaway — checkout picker card.
+ *
+ * Self-contained: mirrors the FisHotel theme's .fh-checkout-card (dark
+ * surface, gold eyebrow, Montserrat) through var() fallbacks, so it looks
+ * right with or without the theme stylesheet loaded.
+ *
+ * @package FisHotel\Misc\Sections\Sticker_Giveaway
+ */
+
+.fh-sticker {
+	background: var(--fh-bg-dk, #1c1c1c);
+	border: 1px solid var(--fh-border-md, rgba(255, 255, 255, 0.10));
+	border-radius: 8px;
+	padding: 26px;
+	color: var(--fh-text-1, #e8e4dc);
+	font-family: var(--fh-font, 'Montserrat', sans-serif);
+	box-sizing: border-box;
+}
+
+.fh-sticker--cart {
+	margin: 24px 0;
+}
+
+.fh-sticker__header {
+	padding-bottom: 14px;
+	margin-bottom: 18px;
+	border-bottom: 1px solid var(--fh-border, rgba(255, 255, 255, 0.06));
+}
+
+.fh-sticker__eyebrow {
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 2.5px;
+	text-transform: uppercase;
+	color: var(--fh-gold, #c9963a);
+}
+
+.fh-sticker__intro {
+	margin: 0 0 18px;
+	font-size: 13px;
+	line-height: 1.6;
+	color: var(--fh-text-2, #a09890);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Free sticker radio cards                                           */
+/* ------------------------------------------------------------------ */
+.fh-sticker__grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+	gap: 12px;
+}
+
+.fh-sticker__option {
+	position: relative;
+	display: block;
+	margin: 0;
+	cursor: pointer;
+}
+
+.fh-sticker__radio {
+	position: absolute;
+	opacity: 0;
+	width: 1px;
+	height: 1px;
+	margin: 0;
+	pointer-events: none;
+}
+
+.fh-sticker__card {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 8px;
+	height: 100%;
+	padding: 14px 12px;
+	box-sizing: border-box;
+	text-align: center;
+	background: var(--fh-bg, #252525);
+	border: 1px solid var(--fh-border-md, rgba(255, 255, 255, 0.10));
+	border-radius: 6px;
+	transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.fh-sticker__option:hover .fh-sticker__card {
+	border-color: var(--fh-border-gold, rgba(201, 150, 58, 0.25));
+}
+
+.fh-sticker__radio:checked + .fh-sticker__card {
+	border-color: var(--fh-gold, #c9963a);
+	box-shadow: 0 0 0 1px var(--fh-gold, #c9963a) inset;
+}
+
+.fh-sticker__radio:focus-visible + .fh-sticker__card {
+	outline: 2px solid var(--fh-gold-lt, #deb96a);
+	outline-offset: 2px;
+}
+
+.fh-sticker__thumb {
+	display: block;
+	width: 96px;
+	height: 96px;
+}
+
+.fh-sticker__thumb img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
+	border-radius: 4px;
+}
+
+.fh-sticker__name {
+	font-size: 13px;
+	font-weight: 600;
+	line-height: 1.35;
+	color: var(--fh-text-1, #e8e4dc);
+}
+
+.fh-sticker__badge {
+	display: inline-block;
+	margin-top: auto;
+	font-size: 9px;
+	font-weight: 700;
+	letter-spacing: 1.5px;
+	text-transform: uppercase;
+	padding: 3px 8px;
+	border-radius: 2px;
+	border: 1px solid var(--fh-border-gold, rgba(201, 150, 58, 0.25));
+	color: var(--fh-gold, #c9963a);
+	background: var(--fh-gold-dim, rgba(201, 150, 58, 0.12));
+}
+
+.fh-sticker__option--none .fh-sticker__card {
+	justify-content: center;
+	min-height: 96px;
+}
+
+.fh-sticker__option--none .fh-sticker__name {
+	color: var(--fh-text-2, #a09890);
+	font-weight: 500;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Add-on rows                                                        */
+/* ------------------------------------------------------------------ */
+.fh-sticker__upsell {
+	margin-top: 24px;
+}
+
+.fh-sticker__rows {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+}
+
+.fh-sticker__row {
+	display: grid;
+	grid-template-columns: 44px 1fr auto auto;
+	align-items: center;
+	gap: 12px;
+	padding: 10px 0;
+	border-bottom: 1px solid var(--fh-border, rgba(255, 255, 255, 0.06));
+}
+
+.fh-sticker__row:last-child {
+	border-bottom: none;
+}
+
+.fh-sticker__row-thumb {
+	width: 44px;
+	height: 44px;
+}
+
+.fh-sticker__row-thumb img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
+	border-radius: 4px;
+}
+
+.fh-sticker__row-name {
+	display: block;
+	margin: 0;
+	font-size: 13px;
+	font-weight: 600;
+	letter-spacing: 0;
+	text-transform: none;
+	color: var(--fh-text-1, #e8e4dc);
+}
+
+.fh-sticker__row-price {
+	font-size: 13px;
+	color: var(--fh-gold-lt, #deb96a);
+	white-space: nowrap;
+}
+
+.fh-sticker__stepper {
+	display: inline-flex;
+	align-items: stretch;
+	border: 1px solid var(--fh-border-md, rgba(255, 255, 255, 0.10));
+	border-radius: 4px;
+	overflow: hidden;
+	background: var(--fh-bg, #252525);
+}
+
+.fh-sticker__step {
+	appearance: none;
+	-webkit-appearance: none;
+	width: 32px;
+	min-height: 32px;
+	margin: 0;
+	padding: 0;
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+	color: var(--fh-text-1, #e8e4dc);
+	font-size: 16px;
+	line-height: 1;
+	cursor: pointer;
+	transition: background 0.15s ease;
+}
+
+.fh-sticker__step:hover {
+	background: rgba(255, 255, 255, 0.06);
+}
+
+.fh-sticker__step:disabled {
+	opacity: 0.35;
+	cursor: default;
+}
+
+/*
+ * The quantity field sits inside <form class="fh-checkout-form">, whose
+ * stylesheet themes every input[type="number"] at specificity (0,2,1)
+ * (full width, 12px padding, its own border and gold focus ring). These
+ * selectors are (0,3,1) so the stepper keeps its compact inline look,
+ * and 16px type keeps iOS Safari from zooming the page on focus.
+ */
+.fh-sticker .fh-sticker__stepper input.fh-sticker__qty[type="number"] {
+	width: 44px;
+	min-height: 32px;
+	margin: 0;
+	padding: 0 4px;
+	border: 0;
+	border-left: 1px solid var(--fh-border, rgba(255, 255, 255, 0.06));
+	border-right: 1px solid var(--fh-border, rgba(255, 255, 255, 0.06));
+	border-radius: 0;
+	background: transparent;
+	color: var(--fh-text-1, #e8e4dc);
+	font-family: inherit;
+	font-size: 16px;
+	font-weight: 600;
+	line-height: 1;
+	text-align: center;
+	box-shadow: none;
+	-moz-appearance: textfield;
+}
+
+.fh-sticker__qty::-webkit-outer-spin-button,
+.fh-sticker__qty::-webkit-inner-spin-button {
+	-webkit-appearance: none;
+	margin: 0;
+}
+
+.fh-sticker .fh-sticker__stepper input.fh-sticker__qty[type="number"]:focus {
+	outline: none;
+	border-color: var(--fh-border, rgba(255, 255, 255, 0.06));
+	box-shadow: 0 0 0 1px var(--fh-gold, #c9963a) inset;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Cart / checkout line labels                                        */
+/* ------------------------------------------------------------------ */
+.fh-sticker-free-price {
+	font-weight: 700;
+	letter-spacing: 1px;
+	color: var(--fh-green, #5aaa78);
+}
+
+.fh-sticker-qty-locked {
+	display: inline-block;
+	min-width: 24px;
+	text-align: center;
+}
+
+/*
+ * The theme's cart.php draws its own qty stepper for every line. The
+ * free sticker is always exactly one, so hide the stepper on that row
+ * (the server forces it back to 1 regardless). Add-on rows keep it; the
+ * server clamps whatever comes back to the configured max.
+ */
+.fh-sticker-line--free .fh-cart-qty {
+	display: none;
+}
+
+@media (max-width: 600px) {
+	.fh-sticker {
+		padding: 20px;
+	}
+
+	.fh-sticker__grid {
+		grid-template-columns: repeat(2, 1fr);
+	}
+
+	.fh-sticker__row {
+		grid-template-columns: 44px 1fr;
+		grid-template-rows: auto auto;
+	}
+
+	.fh-sticker__row-price {
+		grid-column: 2;
+	}
+
+	.fh-sticker__stepper {
+		grid-column: 2;
+		justify-self: start;
+	}
+}

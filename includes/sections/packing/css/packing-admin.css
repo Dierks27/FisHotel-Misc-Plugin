@@ -1,0 +1,468 @@
+/**
+ * Packing admin styles.
+ *
+ * Two surfaces: the section page under FisHotel Tools (dark, built on
+ * admin/css/admin-style.css and its --fh-* tokens) and the Packing box on
+ * the WooCommerce order screen (stock light admin). The badges use solid
+ * colours so they read the same on both. And one rule for the product
+ * editor, at the end.
+ *
+ * @package FisHotel\Misc\Sections\Packing
+ */
+
+/* ------------------------------------------------------------------ */
+/*  Section page (dark)                                                */
+/* ------------------------------------------------------------------ */
+.fh-pack-tabs {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin: -14px 0 20px;
+}
+
+.fh-pack-tab {
+	padding: 7px 14px;
+	border-radius: 999px;
+	font-size: 13px;
+	font-weight: 600;
+	text-decoration: none;
+	color: var(--fh-text-secondary, #a0a0a0);
+	background: var(--fh-bg-secondary, #2d2d2d);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+}
+
+.fh-pack-tab:hover,
+.fh-pack-tab:focus {
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-pack-tab.is-active {
+	color: #fff;
+	background: var(--fh-accent, #00a0d2);
+	border-color: var(--fh-accent, #00a0d2);
+}
+
+.fh-pack-intro {
+	margin: 0 0 20px;
+	font-size: 13px;
+	line-height: 1.5;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-pack-wrap .fh-pack-card {
+	margin-bottom: 24px;
+}
+
+.fh-pack-wrap .fh-pack-card:hover {
+	transform: none;
+}
+
+.fh-pack-wrap .fishotel-misc-card-desc {
+	flex: none;
+}
+
+.fh-pack-wrap a {
+	color: var(--fh-accent, #00a0d2);
+}
+
+.fh-pack-wrap .fishotel-misc-notice {
+	margin-bottom: 0;
+}
+
+.fh-pack-wrap > .fishotel-misc-notice {
+	margin-bottom: 20px;
+}
+
+.fh-pack-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 13px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-pack-table--narrow {
+	max-width: 640px;
+}
+
+.fh-pack-table th,
+.fh-pack-table td {
+	padding: 8px 10px;
+	text-align: left;
+	vertical-align: middle;
+	border-bottom: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+}
+
+.fh-pack-table thead th {
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.4px;
+	text-transform: uppercase;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-pack-table tbody th {
+	font-weight: 600;
+}
+
+.fh-pack-table .fh-pack-num {
+	text-align: right;
+	white-space: nowrap;
+}
+
+.fh-pack-col-id {
+	width: 44px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-pack-row--new td {
+	border-bottom-style: dashed;
+}
+
+.fh-pack-scroll {
+	overflow-x: auto;
+}
+
+.fh-pack-table--matrix {
+	width: auto;
+	min-width: 360px;
+}
+
+.fh-pack-sub {
+	display: block;
+	font-size: 11px;
+	font-weight: 400;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-pack-muted {
+	color: var(--fh-text-secondary, #a0a0a0);
+	font-size: 12px;
+}
+
+.fh-pack-wrap .fh-pack-input {
+	width: 100%;
+	max-width: 280px;
+	min-height: 32px;
+	padding: 4px 8px;
+	box-sizing: border-box;
+	color: var(--fh-text-primary, #e0e0e0);
+	background: var(--fh-bg-primary, #1a1a1a);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	border-radius: 6px;
+}
+
+.fh-pack-wrap .fh-pack-input:focus {
+	border-color: var(--fh-accent, #00a0d2);
+	box-shadow: 0 0 0 1px var(--fh-accent, #00a0d2);
+	outline: none;
+}
+
+.fh-pack-wrap .fh-pack-input--num {
+	max-width: 96px;
+}
+
+.fh-pack-wrap .fh-pack-input--fit {
+	max-width: 76px;
+	text-align: right;
+}
+
+.fh-pack-wrap select.fh-pack-input {
+	max-width: 320px;
+}
+
+.fh-pack-field {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px;
+	margin: 16px 0 0;
+}
+
+.fh-pack-label {
+	font-size: 13px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-pack-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px;
+	margin: 14px 0 0;
+}
+
+.fh-pack-hint {
+	padding: 8px 10px;
+	border-left: 3px solid var(--fh-warning, #ffb900);
+	background: rgba(255, 185, 0, 0.08);
+}
+
+.fh-pack-status {
+	font-size: 12px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-pack-status.is-ok {
+	color: var(--fh-success, #46b450);
+}
+
+.fh-pack-status.is-error {
+	color: var(--fh-danger, #dc3232);
+}
+
+.fh-pack-fill-result {
+	margin: 12px 0 0;
+	padding: 0;
+	list-style: none;
+	font-size: 13px;
+	line-height: 1.6;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-pack-fill-result:empty {
+	display: none;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Badges (both surfaces)                                             */
+/* ------------------------------------------------------------------ */
+.fh-pack-badge {
+	display: inline-block;
+	margin-left: 6px;
+	padding: 2px 9px;
+	border-radius: 12px;
+	font-size: 11px;
+	font-weight: 600;
+	line-height: 1.5;
+	letter-spacing: 0.3px;
+	text-transform: uppercase;
+	color: #fff;
+	background: #6b6b6b;
+	white-space: nowrap;
+}
+
+.fh-pack-badge--line {
+	background: #b26200;
+}
+
+.fh-pack-badge--incomplete {
+	background: #b32d2e;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Packing box (order screen, light)                                  */
+/* ------------------------------------------------------------------ */
+.fh-pack-box {
+	font-size: 13px;
+}
+
+.fh-pack-box__lines {
+	width: 100%;
+	max-width: 760px;
+	border-collapse: collapse;
+	margin: 0 0 10px;
+}
+
+.fh-pack-box__lines th,
+.fh-pack-box__lines td {
+	padding: 6px 8px;
+	text-align: left;
+	vertical-align: top;
+	border-bottom: 1px solid #f0f0f1;
+}
+
+.fh-pack-box__lines thead th {
+	font-size: 11px;
+	text-transform: uppercase;
+	letter-spacing: 0.3px;
+	color: #646970;
+}
+
+.fh-pack-box__qty {
+	width: 44px;
+	white-space: nowrap;
+}
+
+.fh-pack-box__lines tr.is-missing td {
+	background: #fcf0f1;
+}
+
+.fh-pack-box__none {
+	color: #b32d2e;
+}
+
+.fh-pack-box__sub {
+	margin-left: 6px;
+	font-size: 11px;
+	font-weight: 400;
+	color: #646970;
+}
+
+.fh-pack-box__tag {
+	margin-left: 6px;
+	padding: 1px 6px;
+	border-radius: 3px;
+	font-size: 11px;
+	background: #f0f0f1;
+	color: #50575e;
+}
+
+.fh-pack-box__bags {
+	margin: 0 0 8px;
+}
+
+.fh-pack-box__hint {
+	margin: 0 0 6px;
+	font-size: 12px;
+	color: #50575e;
+}
+
+.fh-pack-box__note,
+.fh-pack-box__warn {
+	max-width: 760px;
+	margin: 6px 0;
+	padding: 6px 10px;
+	font-size: 12px;
+	background: #fcf9e8;
+	border-left: 3px solid #dba617;
+	box-sizing: border-box;
+}
+
+.fh-pack-box__flash {
+	max-width: 760px;
+	margin: 0 0 8px;
+	padding: 6px 10px;
+	font-size: 12px;
+	background: #edfaef;
+	border-left: 3px solid #00a32a;
+	box-sizing: border-box;
+}
+
+.fh-pack-box__flash.is-error {
+	background: #fcf0f1;
+	border-left-color: #d63638;
+}
+
+.fh-pack-box__suggest,
+.fh-pack-box__confirmed {
+	max-width: 760px;
+	margin: 10px 0;
+	padding: 10px 12px;
+	border: 1px solid #dcdcde;
+	border-left: 4px solid #2271b1;
+	background: #f6f7f7;
+	box-sizing: border-box;
+}
+
+.fh-pack-box__suggest.is-line {
+	border-left-color: #b26200;
+}
+
+.fh-pack-box__suggest.is-incomplete {
+	border-left-color: #b32d2e;
+}
+
+.fh-pack-box__confirmed {
+	border-left-color: #00a32a;
+	background: #edfaef;
+}
+
+.fh-pack-box__label {
+	display: block;
+	margin: 0 0 4px;
+	font-size: 11px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.3px;
+	color: #50575e;
+}
+
+.fh-pack-box__boxes {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.fh-pack-box__boxes li {
+	margin: 0 0 4px;
+}
+
+.fh-pack-meter {
+	display: inline-block;
+	width: 120px;
+	height: 8px;
+	margin-left: 8px;
+	vertical-align: middle;
+	border-radius: 4px;
+	background: #dcdcde;
+	overflow: hidden;
+}
+
+.fh-pack-meter__bar {
+	display: block;
+	height: 100%;
+	background: #2271b1;
+}
+
+.fh-pack-meter__bar.is-line {
+	background: #b26200;
+}
+
+.fh-pack-box__controls {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px;
+	margin: 10px 0 0;
+}
+
+.fh-pack-box__choose {
+	display: inline-flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+}
+
+.fh-pack-box__choose .fh-pack-choice {
+	max-width: 340px;
+}
+
+.fh-pack-box__choose .fh-pack-count {
+	width: 60px;
+}
+
+.fh-pack-box .fh-pack-clear {
+	color: #b32d2e;
+}
+
+.fh-pack-box .fh-pack-status {
+	color: #50575e;
+}
+
+.fh-pack-box .fh-pack-status.is-error {
+	color: #d63638;
+}
+
+.fh-pack-box .fh-pack-status.is-ok {
+	color: #008a20;
+}
+
+.fh-pack-box__foot {
+	margin: 12px 0 0;
+	font-size: 11px;
+	color: #646970;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Product editor: Bag size only for what is packed in a bag          */
+/* ------------------------------------------------------------------ */
+
+/*
+ * The product-data box carries .fh-no-bag while "Livestock — packed in a
+ * bag" is off. Every Bag size dropdown under it is hidden — the simple
+ * product's and each variation's, also on the variation panels WooCommerce
+ * loads later. !important: WooCommerce's show_if_* sets an inline display.
+ */
+#woocommerce-product-data.fh-no-bag .fh-bag-size-field {
+	display: none !important;
+}

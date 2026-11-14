@@ -1,0 +1,2024 @@
+<?php
+/**
+ * An in-memory Store: the methods the Front Desk's perform() and the
+ * Admin's stay edits call, with no $wpdb. Tanks come from the seed
+ * layout — plus the Temporary building with its six slots, as the 1.6
+ * install adds it —; stays, events, tank logs and setups are kept in
+ * insertion order with integer ids and run through the SAME pure code as
+ * the real Store (Replay::state for the replay, Store::hydrate_* for the
+ * row shapes, Store::site_noon_utc for backdating, Store::event_setups /
+ * spread_logs / merge_copper / assemble_room for the temporary tanks and
+ * the to-do).
+ *
+ * Two seams a test may use that the real Store has no need for:
+ * record_event() honours a 'created_at' in the event (to age an event
+ * past the undo window) and append_only() inserts without replaying
+ * (another phone's write landing between this phone's read and write).
+ *
+ * @package FisHotel\Misc\Sections\Clean_Room
+ */
+
+namespace FisHotel\Misc\Sections\Clean_Room\Tests;
+
+use FisHotel\Misc\Sections\Clean_Room\Costing;
+use FisHotel\Misc\Sections\Clean_Room\Import;
+use FisHotel\Misc\Sections\Clean_Room\Layout;
+use FisHotel\Misc\Sections\Clean_Room\Orders;
+use FisHotel\Misc\Sections\Clean_Room\Protocol;
+use FisHotel\Misc\Sections\Clean_Room\Replay;
+use FisHotel\Misc\Sections\Clean_Room\Settings;
+use FisHotel\Misc\Sections\Clean_Room\Species;
+use FisHotel\Misc\Sections\Clean_Room\Stats;
+use FisHotel\Misc\Sections\Clean_Room\Store;
+use FisHotel\Misc\Sections\Clean_Room\Temp_Tanks;
+
+// Helper, not a test: the CI lint job runs every tests/*.php with php, so
+// exit cleanly when executed directly instead of as a require. (The
+// namespace statement has to come first, hence the order.)
+if ( ! empty( $_SERVER['SCRIPT_FILENAME'] ) && realpath( $_SERVER['SCRIPT_FILENAME'] ) === __FILE__ ) {
+	exit( 0 );
+}
+
+class Fake_Store {
+
+	/**
+	 * Hydrated tanks (Store::hydrate_tank shape), id => tank.
+	 *
+	 * @var array[]
+	 */
+	public $tanks = array();
+
+	/**
+	 * Raw stay rows, id => row.
+	 *
+	 * @var array[]
+	 */
+	public $stays = array();
+
+	/**
+	 * Raw event rows, id => row.
+	 *
+	 * @var array[]
+	 */
+	public $events = array();
+
+	/**
+	 * Tank log rows, id => row.
+	 *
+	 * @var array[]
+	 */
+	public $logs = array();
+
+	/**
+	 * Learned aliases: alias => array( product_id, species ).
+	 *
+	 * @var array[]
+	 */
+	public $aliases = array();
+
+	/**
+	 * Products the species search knows: id => title.
+	 *
+	 * @var array<int, string>
+	 */
+	public $products = array();
+
+	/**
+	 * Species rows (Store::hydrate_species shape), id => row.
+	 *
+	 * @var array[]
+	 */
+	public $species = array();
+
+	/**
+	 * Order headers, id => row; order lines, id => row.
+	 *
+	 * @var array[]
+	 */
+	public $orders = array();
+	public $lines  = array();
+
+	/**
+	 * Remembered box shares (Store::hydrate_box_share shape), id => row.
+	 *
+	 * @var array[]
+	 */
+	public $box_shares = array();
+
+	/**
+	 * What the real Store reads from WooCommerce, seeded by a test: the
+	 * product attributes that match "size" (taxonomy, name, label,
+	 * orderby), their terms by taxonomy (term_id, name, slug, menu_order)
+	 * and the size values the variations carry (key, global, value, label,
+	 * products).
+	 *
+	 * @var array[]
+	 */
+	public $size_attributes = array();
+	public $size_terms      = array();
+	public $variation_sizes = array();
+
+	/**
+	 * Setup rows (raw, as the table holds them), id => row.
+	 *
+	 * @var array[]
+	 */
+	public $setups = array();
+
+	private $next_setup   = 1;
+	private $next_share   = 1;
+	private $next_stay    = 1;
+	private $next_event   = 1;
+	private $next_log     = 1;
+	private $next_species = 1;
+	private $next_order   = 1;
+	private $next_line    = 1;
+
+	/**
+	 * Hydrated buildings (Store::hydrate_building shape), id => building.
+	 *
+	 * @var array[]
+	 */
+	public $buildings = array();
+
+	/**
+	 * @param array $products Products the species search knows: id => title.
+	 * @param bool  $temp     Whether the layout has the Temporary building (the 1.6 install adds it;
+	 *                        false = a layout as it was before).
+	 */
+	public function __construct( array $products = array(), $temp = true ) {
+		$this->products = $products;
+
+		$seed = Layout::seed();
+		if ( $temp ) {
+			$seed[] = Layout::temp_seed( Layout::temp_building_number( array_column( $seed, 'number' ) ), Layout::TEMP_SLOTS, count( $seed ) + 1 );
+		}
+
+		$tank_id = 0;
+		foreach ( $seed as $index => $building ) {
+			$this->buildings[ $index + 1 ] = Store::hydrate_building( array_merge( $building, array( 'id' => $index + 1 ) ) );
+			foreach ( $building['tanks'] as $tank ) {
+				$tank_id++;
+				$this->tanks[ $tank_id ] = $this->tank_row( $tank, $tank_id, $this->buildings[ $index + 1 ] );
+			}
+		}
+	}
+
+	/**
+	 * A tank in the shape the real Store's tanks() query hydrates.
+	 */
+	private function tank_row( array $tank, $tank_id, array $building ) {
+		return Store::hydrate_tank(
+			array_merge(
+				$tank,
+				array(
+					'id'                 => (int) $tank_id,
+					'building_id'        => (int) $building['id'],
+					'building_area'      => $building['area'],
+					'building_number'    => $building['number'],
+					'building_name'      => $building['name'],
+					'building_status'    => $building['status'],
+					'building_own_water' => ! empty( $building['own_water'] ) ? 1 : 0,
+				)
+			)
+		);
+	}
+
+	/* ---- buildings and tanks -------------------------------------- */
+
+	public function buildings() {
+		return array_values( $this->buildings );
+	}
+
+	public function building( $id ) {
+		return isset( $this->buildings[ (int) $id ] ) ? $this->buildings[ (int) $id ] : null;
+	}
+
+	/**
+	 * Every tank; a slot with what is set up in it and every tank with
+	 * what it behaves as (Temp_Tanks::attach(), as the real tanks() does).
+	 */
+	public function tanks( $include_offline = true ) {
+		$out = array();
+		foreach ( $this->tanks as $tank ) {
+			if ( ! $include_offline && 'offline' === $tank['status'] ) {
+				continue;
+			}
+			$out[] = $tank;
+		}
+		return Temp_Tanks::attach( $out, $this->open_setups() );
+	}
+
+	public function tanks_in_building( $building_id ) {
+		$out = array();
+		foreach ( $this->tanks() as $tank ) {
+			if ( (int) $tank['building_id'] === (int) $building_id ) {
+				$out[] = $tank;
+			}
+		}
+		return $out;
+	}
+
+	public function tank( $id ) {
+		foreach ( $this->tanks() as $tank ) {
+			if ( (int) $tank['id'] === (int) $id ) {
+				return $tank;
+			}
+		}
+		return null;
+	}
+
+	public function tank_by_number( $number ) {
+		foreach ( $this->tanks() as $tank ) {
+			if ( (int) $tank['number'] === (int) $number ) {
+				return $tank;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Update a tank that exists (the layout editor's save): its status,
+	 * size, gallons and sort. Returns its id, like the real save_tank().
+	 */
+	public function save_tank( array $tank ) {
+		$id = (int) ( $tank['id'] ?? 0 );
+		if ( ! isset( $this->tanks[ $id ] ) ) {
+			return false;
+		}
+		foreach ( array( 'status', 'size_label', 'gallons', 'sort' ) as $key ) {
+			if ( array_key_exists( $key, $tank ) ) {
+				$this->tanks[ $id ][ $key ] = $tank[ $key ];
+			}
+		}
+		return $id;
+	}
+
+	/* ---- temporary tanks: the slots and their setups ---------------- */
+
+	public function temp_building() {
+		foreach ( $this->buildings as $building ) {
+			if ( Layout::is_own_water( $building ) ) {
+				return $building;
+			}
+		}
+		return null;
+	}
+
+	public function add_slot() {
+		$building = $this->temp_building();
+		if ( ! $building ) {
+			return false;
+		}
+		$numbers = array();
+		foreach ( $this->tanks as $tank ) {
+			if ( (int) $tank['building_id'] === (int) $building['id'] ) {
+				$numbers[] = (int) $tank['number'];
+			}
+		}
+		$slot = Layout::next_slot( (int) $building['number'], $numbers );
+		if ( $slot <= 0 ) {
+			return false;
+		}
+		$id                 = $this->tanks ? max( array_keys( $this->tanks ) ) + 1 : 1;
+		$this->tanks[ $id ] = $this->tank_row( Layout::slot_row( (int) $building['number'], $slot ), $id, $building );
+		return (int) $this->tanks[ $id ]['number'];
+	}
+
+	/**
+	 * A setup row as the real Store's setup_select() joins it.
+	 */
+	private function setup_row( array $row ) {
+		$tank = isset( $this->tanks[ (int) $row['tank_id'] ] ) ? $this->tanks[ (int) $row['tank_id'] ] : null;
+		return Store::hydrate_setup( array_merge( $row, array( 'tank_number' => $tank ? $tank['number'] : null ) ) );
+	}
+
+	public function open_setups() {
+		$out = array();
+		foreach ( $this->setups as $row ) {
+			if ( ! empty( $row['open_tank_id'] ) ) {
+				$out[ (int) $row['tank_id'] ] = $this->setup_row( $row );
+			}
+		}
+		return $out;
+	}
+
+	public function slot_setups() {
+		$out = array();
+		foreach ( $this->tanks as $id => $tank ) {
+			if ( Layout::is_slot( $tank ) ) {
+				$out[ (int) $id ] = 0;
+			}
+		}
+		foreach ( $this->setups as $row ) {
+			if ( ! empty( $row['open_tank_id'] ) && isset( $out[ (int) $row['tank_id'] ] ) ) {
+				$out[ (int) $row['tank_id'] ] = (int) $row['id'];
+			}
+		}
+		return $out;
+	}
+
+	public function setup( $id ) {
+		return isset( $this->setups[ (int) $id ] ) ? $this->setup_row( $this->setups[ (int) $id ] ) : null;
+	}
+
+	public function closed_setups( $limit = 200 ) {
+		$out = array();
+		foreach ( array_reverse( $this->setups, true ) as $row ) {
+			if ( empty( $row['open_tank_id'] ) ) {
+				$out[] = $this->setup_row( $row );
+			}
+		}
+		return array_slice( $out, 0, max( 1, (int) $limit ) );
+	}
+
+	/**
+	 * As the real Store: only into a slot, and only one open setup per
+	 * slot (its unique open_tank_id key).
+	 */
+	public function insert_setup( array $setup ) {
+		$tank_id = (int) ( $setup['tank_id'] ?? 0 );
+		$slots   = $this->slot_setups();
+		if ( $tank_id <= 0 || ! isset( $slots[ $tank_id ] ) || $slots[ $tank_id ] > 0 ) {
+			return false;
+		}
+		$id  = $this->next_setup++;
+		$now = gmdate( 'Y-m-d H:i:s' );
+
+		$this->setups[ $id ] = array(
+			'id'           => $id,
+			'tank_id'      => $tank_id,
+			'open_tank_id' => $tank_id,
+			'slot'         => (int) ( $setup['slot'] ?? 0 ),
+			'name'         => substr( (string) ( $setup['name'] ?? '' ), 0, 60 ),
+			'purpose'      => substr( (string) ( $setup['purpose'] ?? '' ), 0, 120 ),
+			'kind'         => Temp_Tanks::kind( $setup['kind'] ?? '' ),
+			'gallons'      => (int) ( $setup['gallons'] ?? 0 ),
+			'template'     => substr( (string) ( $setup['template'] ?? '' ), 0, 40 ),
+			'start_date'   => (string) $setup['start_date'],
+			'steps'        => (string) json_encode( Protocol::normalize( $setup['steps'] ?? array() ) ),
+			'note'         => (string) ( $setup['note'] ?? '' ),
+			'created_by'   => (int) ( $setup['created_by'] ?? 0 ),
+			'created_at'   => $now,
+			'updated_at'   => $now,
+			'closed_by'    => 0,
+			'closed_at'    => null,
+		);
+
+		return $id;
+	}
+
+	public function update_setup( $id, array $fields ) {
+		if ( ! isset( $this->setups[ (int) $id ] ) || empty( $this->setups[ (int) $id ]['open_tank_id'] ) ) {
+			return false;
+		}
+		foreach ( array( 'name', 'purpose', 'gallons', 'start_date', 'note' ) as $key ) {
+			if ( array_key_exists( $key, $fields ) ) {
+				$this->setups[ (int) $id ][ $key ] = 'gallons' === $key ? (int) $fields[ $key ] : (string) $fields[ $key ];
+			}
+		}
+		if ( array_key_exists( 'steps', $fields ) && is_array( $fields['steps'] ) ) {
+			$this->setups[ (int) $id ]['steps'] = (string) json_encode( Protocol::normalize( $fields['steps'] ) );
+		}
+		return true;
+	}
+
+	public function close_setup( $id, $actor_id = 0 ) {
+		if ( ! isset( $this->setups[ (int) $id ] ) || empty( $this->setups[ (int) $id ]['open_tank_id'] ) ) {
+			return false;
+		}
+		$this->setups[ (int) $id ]['open_tank_id'] = null;
+		$this->setups[ (int) $id ]['closed_at']    = gmdate( 'Y-m-d H:i:s' );
+		$this->setups[ (int) $id ]['closed_by']    = (int) $actor_id;
+		return true;
+	}
+
+	public function setup_logs( $setup_id, $limit = 3000 ) {
+		$out = array();
+		foreach ( $this->logs as $row ) {
+			if ( (int) $setup_id > 0 && (int) ( $row['setup_id'] ?? 0 ) === (int) $setup_id ) {
+				$tank  = $row['tank_id'] ? ( $this->tanks[ (int) $row['tank_id'] ] ?? null ) : null;
+				$out[] = Store::hydrate_log( array_merge( $row, array( 'tank_number' => $tank ? $tank['number'] : null, 'building_number' => null, 'actor_name' => '' ) ) );
+			}
+		}
+		usort(
+			$out,
+			static function ( $a, $b ) {
+				return strcmp( $a['logged_at'], $b['logged_at'] ) ?: ( $a['id'] <=> $b['id'] );
+			}
+		);
+		return $out;
+	}
+
+	public function setup_events( $setup_id, $limit = 3000 ) {
+		$out = array();
+		foreach ( $this->events as $row ) {
+			if ( (int) $setup_id > 0 && ( (int) ( $row['to_setup_id'] ?? 0 ) === (int) $setup_id || (int) ( $row['from_setup_id'] ?? 0 ) === (int) $setup_id ) ) {
+				$out[] = $this->event_row( $row );
+			}
+		}
+		return Replay::sort_events( $out );
+	}
+
+	public function setup_doses( array $setup_ids ) {
+		$rows = array();
+		foreach ( array_reverse( $this->logs, true ) as $row ) {
+			if ( 'dose' === $row['kind'] && in_array( (int) ( $row['setup_id'] ?? 0 ), array_map( 'intval', $setup_ids ), true ) ) {
+				$rows[] = $row;
+			}
+		}
+		return Store::last_doses( $rows, 'setup_id' );
+	}
+
+	/* ---- the room: every tank with its to-do, and the list by system - */
+
+	public function latest_copper( $tanks = null ) {
+		$rows = array();
+		foreach ( array_reverse( $this->logs, true ) as $row ) {
+			if ( 'copper' === $row['kind'] && null !== $row['value'] ) {
+				$rows[] = $row;
+			}
+		}
+		return Store::merge_copper( $rows, is_array( $tanks ) ? $tanks : $this->tanks() );
+	}
+
+	public function room( $today, array $settings, array $protocol = array() ) {
+		$tanks = $this->tanks();
+		return Store::assemble_room( $tanks, $this->buildings(), $this->open_stays( array(), $today, $settings ), $this->latest_copper( $tanks ), $this->day_logs( $today ), $today, $settings, $protocol );
+	}
+
+	public function tanks_with_occupants( $today, array $settings, array $protocol = array() ) {
+		$room = $this->room( $today, $settings, $protocol );
+		return $room['tanks'];
+	}
+
+	public function tank_areas() {
+		$out = array();
+		foreach ( $this->tanks as $id => $tank ) {
+			$out[ (int) $id ] = (string) $tank['building']['area'];
+		}
+		return $out;
+	}
+
+	/* ---- stays ---------------------------------------------------- */
+
+	public function create_stay( array $fields ) {
+		$id  = $this->next_stay++;
+		$now = gmdate( 'Y-m-d H:i:s' );
+
+		$this->stays[ $id ] = array(
+			'id'              => $id,
+			'product_id'      => ! empty( $fields['product_id'] ) ? (int) $fields['product_id'] : null,
+			'species'         => substr( (string) ( $fields['species'] ?? '' ), 0, 120 ),
+			'size_slug'       => Store::size_or_null( $fields['size_slug'] ?? null ),
+			'size_label'      => null !== Store::size_or_null( $fields['size_slug'] ?? null ) ? Store::size_or_null( $fields['size_label'] ?? null ) : null,
+			'needs_id'        => ! empty( $fields['needs_id'] ) ? 1 : 0,
+			'qty_arrived'     => 0,
+			'qty_live'        => 0,
+			'checkin_date'    => Replay::is_date( $fields['checkin_date'] ?? null ) ? (string) $fields['checkin_date'] : gmdate( 'Y-m-d' ),
+			'cleared_date'    => null,
+			'sale_ready_date' => null,
+			'closed_date'     => null,
+			'status'          => 'in_qt',
+			'tank_id'         => ! empty( $fields['tank_id'] ) ? (int) $fields['tank_id'] : null,
+			'source'          => (string) ( $fields['source'] ?? 'manual' ),
+			'order_line_id'   => ! empty( $fields['order_line_id'] ) ? (int) $fields['order_line_id'] : null,
+			'supplier'        => '' !== trim( (string) ( $fields['supplier'] ?? '' ) ) ? trim( (string) $fields['supplier'] ) : null,
+			'order_ref'       => '' !== trim( (string) ( $fields['order_ref'] ?? '' ) ) ? trim( (string) $fields['order_ref'] ) : null,
+			'landed_cost'     => isset( $fields['landed_cost'] ) && is_numeric( $fields['landed_cost'] ) ? round( (float) $fields['landed_cost'], 2 ) : null,
+			'notes'           => (string) ( $fields['notes'] ?? '' ),
+			'created_at'      => $now,
+			'updated_at'      => $now,
+		);
+
+		return $id;
+	}
+
+	/**
+	 * A stay row with the columns the real Store's stay_select() joins:
+	 * the tank and building, and the batch (the order line → its order,
+	 * with the order's sale date).
+	 */
+	private function joined_row( array $row ) {
+		$tank  = $row['tank_id'] ? $this->tank( $row['tank_id'] ) : null;
+		$line  = ! empty( $row['order_line_id'] ) && isset( $this->lines[ (int) $row['order_line_id'] ] ) ? $this->lines[ (int) $row['order_line_id'] ] : null;
+		$order = $line && isset( $this->orders[ (int) $line['order_id'] ] ) ? $this->orders[ (int) $line['order_id'] ] : null;
+		return array_merge(
+			$row,
+			array(
+				'tank_number'     => $tank ? $tank['number'] : null,
+				'tank_size'       => $tank ? $tank['size_label'] : '',
+				'building_id'     => $tank ? $tank['building']['id'] : null,
+				'building_number' => $tank ? $tank['building']['number'] : null,
+				'building_area'   => $tank ? $tank['building']['area'] : '',
+				'building_name'   => $tank ? $tank['building']['name'] : '',
+				'building_own_water' => $tank && ! empty( $tank['building']['own_water'] ) ? 1 : 0,
+				'batch_order_id'  => $order ? (int) $order['id'] : null,
+				'batch_order_ref' => $order ? (string) $order['ref'] : null,
+				'batch_sale_date' => $order ? ( $order['sale_date'] ?? null ) : null,
+			)
+		);
+	}
+
+	/**
+	 * The supplier order a stay row belongs to (its order line's order), or 0.
+	 */
+	private function batch_of( array $row ) {
+		$line = ! empty( $row['order_line_id'] ) && isset( $this->lines[ (int) $row['order_line_id'] ] ) ? $this->lines[ (int) $row['order_line_id'] ] : null;
+		return $line ? (int) $line['order_id'] : 0;
+	}
+
+	public function stay( $id, $today = '', array $settings = array() ) {
+		if ( ! isset( $this->stays[ (int) $id ] ) ) {
+			return null;
+		}
+		$stay           = Store::hydrate_stay( $this->joined_row( $this->stays[ (int) $id ] ), $today, $settings );
+		$stay['events'] = $this->events( (int) $id );
+		return $stay;
+	}
+
+	public function open_stays( array $filters, $today, array $settings ) {
+		$out = array();
+		foreach ( $this->stays as $row ) {
+			if ( empty( $filters['include_closed'] ) && 'closed' === $row['status'] ) {
+				continue;
+			}
+			if ( ! empty( $filters['tank_id'] ) && (int) $row['tank_id'] !== (int) $filters['tank_id'] ) {
+				continue;
+			}
+			if ( ! empty( $filters['product_id'] ) && (int) $row['product_id'] !== (int) $filters['product_id'] ) {
+				continue;
+			}
+			if ( ! empty( $filters['order_id'] ) && $this->batch_of( $row ) !== (int) $filters['order_id'] ) {
+				continue;
+			}
+			if ( ! empty( $filters['needs_id'] ) && empty( $row['needs_id'] ) ) {
+				continue;
+			}
+			if ( ! empty( $filters['species'] ) && false === stripos( (string) $row['species'], (string) $filters['species'] ) ) {
+				continue;
+			}
+			$stay = Store::hydrate_stay( $this->joined_row( $row ), $today, $settings );
+			if ( ! empty( $filters['ready'] ) && empty( $stay['sale_ready'] ) ) {
+				continue;
+			}
+			$out[] = $stay;
+		}
+		usort(
+			$out,
+			static function ( $a, $b ) {
+				return strcmp( $a['checkin_date'], $b['checkin_date'] ) ?: ( $a['id'] <=> $b['id'] );
+			}
+		);
+		return $out;
+	}
+
+	/**
+	 * Every stay of a product, open first, then closed (Store::stays_for_product()).
+	 */
+	public function stays_for_product( $product_id, $today, array $settings ) {
+		$out = array();
+		foreach ( $this->stays as $row ) {
+			if ( (int) $product_id > 0 && (int) $row['product_id'] === (int) $product_id ) {
+				$out[] = Store::hydrate_stay( $this->joined_row( $row ), $today, $settings );
+			}
+		}
+		usort(
+			$out,
+			static function ( $a, $b ) {
+				$closed = (int) ( 'closed' === $a['status'] ) <=> (int) ( 'closed' === $b['status'] );
+				return $closed ?: ( strcmp( $a['checkin_date'], $b['checkin_date'] ) ?: ( $a['id'] <=> $b['id'] ) );
+			}
+		);
+		return $out;
+	}
+
+	/**
+	 * Every stay of an order line, open and closed, oldest first (Store::stays_for_line()).
+	 */
+	public function stays_for_line( $line_id, $today, array $settings ) {
+		$out = array();
+		foreach ( $this->stays as $row ) {
+			if ( (int) $line_id > 0 && (int) $row['order_line_id'] === (int) $line_id ) {
+				$out[] = Store::hydrate_stay( $this->joined_row( $row ), $today, $settings );
+			}
+		}
+		usort(
+			$out,
+			static function ( $a, $b ) {
+				return $a['id'] <=> $b['id'];
+			}
+		);
+		return $out;
+	}
+
+	/**
+	 * The facts of a product (Store::product_facts() → the same pure facts_from_stays()).
+	 */
+	public function product_facts( $product_id, $today, array $settings ) {
+		return Store::facts_from_stays( $this->stays_for_product( $product_id, $today, $settings ) );
+	}
+
+	/**
+	 * Per order: its open stays and how many carry their own sale date (Store::batch_sale_counts()).
+	 */
+	public function batch_sale_counts() {
+		$out = array();
+		foreach ( $this->stays as $row ) {
+			$order_id = $this->batch_of( $row );
+			if ( $order_id <= 0 || 'closed' === $row['status'] ) {
+				continue;
+			}
+			if ( ! isset( $out[ $order_id ] ) ) {
+				$out[ $order_id ] = array( 'open' => 0, 'own' => 0 );
+			}
+			$out[ $order_id ]['open']++;
+			if ( null !== $row['sale_ready_date'] ) {
+				$out[ $order_id ]['own']++;
+			}
+		}
+		return $out;
+	}
+
+	public function update_stay_fields( $stay_id, array $fields ) {
+		if ( ! isset( $this->stays[ (int) $stay_id ] ) ) {
+			return false;
+		}
+		foreach ( array( 'product_id', 'species', 'supplier', 'order_ref', 'landed_cost', 'order_line_id', 'notes' ) as $key ) {
+			if ( ! array_key_exists( $key, $fields ) ) {
+				continue;
+			}
+			if ( 'species' === $key && '' === trim( (string) $fields[ $key ] ) ) {
+				continue; // As the real Store: an empty name never replaces one.
+			}
+			if ( 'product_id' === $key ) {
+				$fields[ $key ] = (int) $fields[ $key ] > 0 ? (int) $fields[ $key ] : null;
+			}
+			$this->stays[ (int) $stay_id ][ $key ] = $fields[ $key ];
+		}
+		if ( array_key_exists( 'needs_id', $fields ) ) {
+			$this->stays[ (int) $stay_id ]['needs_id'] = ! empty( $fields['needs_id'] ) ? 1 : 0;
+		}
+		if ( array_key_exists( 'size_slug', $fields ) ) {
+			$slug                                       = Store::size_or_null( $fields['size_slug'] );
+			$this->stays[ (int) $stay_id ]['size_slug']  = $slug;
+			$this->stays[ (int) $stay_id ]['size_label'] = null !== $slug ? Store::size_or_null( $fields['size_label'] ?? null ) : null;
+		}
+		return true;
+	}
+
+	/* ---- events --------------------------------------------------- */
+
+	private function event_row( array $row ) {
+		$stay = isset( $this->stays[ (int) $row['stay_id'] ] ) ? $this->stays[ (int) $row['stay_id'] ] : array();
+		$from = ! empty( $row['from_tank_id'] ) ? $this->tank( $row['from_tank_id'] ) : null;
+		$to   = ! empty( $row['to_tank_id'] ) ? $this->tank( $row['to_tank_id'] ) : null;
+		return Store::hydrate_event(
+			array_merge(
+				$row,
+				array(
+					'stay_species'     => $stay['species'] ?? '',
+					'stay_product_id'  => $stay['product_id'] ?? null,
+					'from_tank_number' => $from ? $from['number'] : null,
+					'to_tank_number'   => $to ? $to['number'] : null,
+					'actor_name'       => '',
+					// As the real event_select(): the kind of the setup the move touched.
+					'from_setup_kind'  => ! empty( $row['from_setup_id'] ) && isset( $this->setups[ (int) $row['from_setup_id'] ] ) ? $this->setups[ (int) $row['from_setup_id'] ]['kind'] : null,
+					'to_setup_kind'    => ! empty( $row['to_setup_id'] ) && isset( $this->setups[ (int) $row['to_setup_id'] ] ) ? $this->setups[ (int) $row['to_setup_id'] ]['kind'] : null,
+				)
+			)
+		);
+	}
+
+	public function events( $stay_id ) {
+		$out = array();
+		foreach ( $this->events as $row ) {
+			if ( (int) $row['stay_id'] === (int) $stay_id ) {
+				$out[] = $this->event_row( $row );
+			}
+		}
+		return Replay::sort_events( $out );
+	}
+
+	public function event( $id ) {
+		return isset( $this->events[ (int) $id ] ) ? $this->event_row( $this->events[ (int) $id ] ) : null;
+	}
+
+	/**
+	 * Insert an event WITHOUT replaying: the other phone's write landing
+	 * between this phone's read and write. Returns the event id.
+	 */
+	public function append_only( $stay_id, array $event ) {
+		$type = (string) ( $event['type'] ?? '' );
+		if ( ! isset( $this->stays[ (int) $stay_id ] ) || ! in_array( $type, Replay::TYPES, true ) ) {
+			return false;
+		}
+		// As the real record_event(): the setups the tanks are tied to — and nothing lands in a free slot.
+		$from   = ! empty( $event['from_tank_id'] ) ? (int) $event['from_tank_id'] : 0;
+		$to     = ! empty( $event['to_tank_id'] ) ? (int) $event['to_tank_id'] : 0;
+		$setups = Store::event_setups( $type, $from, $to, $this->slot_setups() );
+		if ( false === $setups ) {
+			return false;
+		}
+		$id = $this->next_event++;
+
+		$this->events[ $id ] = array(
+			'id'            => $id,
+			'stay_id'       => (int) $stay_id,
+			'type'          => $type,
+			'qty'           => isset( $event['qty'] ) && null !== $event['qty'] ? (int) $event['qty'] : null,
+			'from_tank_id'  => $from > 0 ? $from : null,
+			'to_tank_id'    => $to > 0 ? $to : null,
+			'note'          => (string) ( $event['note'] ?? '' ),
+			'event_at'      => Store::utc_datetime( $event['event_at'] ?? '' ),
+			'actor_id'      => (int) ( $event['actor_id'] ?? 0 ),
+			'source'        => in_array( (string) ( $event['source'] ?? '' ), Store::SOURCES, true ) ? (string) $event['source'] : 'manual',
+			'created_at'    => ! empty( $event['created_at'] ) ? Store::utc_datetime( $event['created_at'] ) : gmdate( 'Y-m-d H:i:s' ),
+			'from_setup_id' => $setups['from'],
+			'to_setup_id'   => $setups['to'],
+		);
+
+		return $id;
+	}
+
+	public function record_event( $stay_id, array $event, $today, array $settings ) {
+		// As the real record_event(): no group comes back to life in a slot whose setup is gone.
+		$slots  = $this->slot_setups();
+		$setups = Store::event_setups( (string) ( $event['type'] ?? '' ), (int) ( $event['from_tank_id'] ?? 0 ), (int) ( $event['to_tank_id'] ?? 0 ), $slots );
+		if ( false !== $setups && $slots && in_array( (string) ( $event['type'] ?? '' ), Store::RAISING_TYPES, true ) ) {
+			$stay = $this->stay( (int) $stay_id, $today, $settings );
+			if ( $stay && isset( $slots[ (int) $stay['tank_id'] ] ) && Store::slot_revival( $stay, Store::event_with_setups( $event, $setups ), $slots, $today, $this->replay_opts( $settings ) ) ) {
+				return false;
+			}
+		}
+		$id = $this->append_only( $stay_id, $event );
+		if ( ! $id ) {
+			return false;
+		}
+		$state = $this->replay( (int) $stay_id, $today, $settings );
+
+		return array(
+			'event_id'  => $id,
+			'state'     => $state,
+			'overdrawn' => ! empty( $state['overdrawn'] ),
+		);
+	}
+
+	public function replay_opts( array $settings ) {
+		return array_merge( Settings::replay_opts( $settings ), array( 'tank_areas' => $this->tank_areas() ) );
+	}
+
+	public function replay( $stay_id, $today, array $settings ) {
+		$stay = $this->stay( (int) $stay_id, $today, $settings );
+		if ( ! $stay ) {
+			return array();
+		}
+		$state = Replay::state( $stay, $stay['events'], $today, $this->replay_opts( $settings ) );
+
+		$row                    = &$this->stays[ (int) $stay_id ];
+		$row['qty_arrived']     = (int) $state['qty_arrived'];
+		$row['qty_live']        = (int) $state['qty_live'];
+		$row['checkin_date']    = '' !== $state['checkin_date'] ? $state['checkin_date'] : $row['checkin_date'];
+		$row['cleared_date']    = $state['cleared_date'];
+		$row['sale_ready_date'] = $state['sale_ready_override'];
+		$row['closed_date']     = $state['closed_date'];
+		$row['status']          = $state['stored_status'];
+		$row['tank_id']         = $state['tank_id'];
+		$row['updated_at']      = gmdate( 'Y-m-d H:i:s' );
+		unset( $row );
+
+		return $state;
+	}
+
+	public function state_before( array $stay, $event_id, $today, array $settings ) {
+		$before = array();
+		foreach ( Replay::sort_events( (array) ( $stay['events'] ?? array() ) ) as $event ) {
+			if ( (int) $event['id'] === (int) $event_id ) {
+				break;
+			}
+			$before[] = $event;
+		}
+		return Replay::state( $stay, $before, $today, $this->replay_opts( $settings ) );
+	}
+
+	public function undo_event( array $stay, array $event, array $base, $today, array $settings ) {
+		$events = isset( $stay['events'] ) && is_array( $stay['events'] ) ? $stay['events'] : $this->events( (int) $stay['id'] );
+		if ( Replay::is_undone( $events, (int) $event['id'] ) ) {
+			return null;
+		}
+		if ( ( ! empty( $event['from_setup_id'] ) || ! empty( $event['to_setup_id'] ) ) && Store::setup_gone( $event, $this->slot_setups() ) ) {
+			return false;
+		}
+		$before = $this->state_before( array_merge( $stay, array( 'events' => $events ) ), (int) $event['id'], $today, $settings );
+		$comp   = Replay::compensating( $event, $before );
+		if ( ! $comp ) {
+			return null;
+		}
+		return $this->record_event( (int) $stay['id'], array_merge( $base, $comp, array( 'event_at' => gmdate( 'Y-m-d H:i:s' ) ) ), $today, $settings );
+	}
+
+	public function split_stay( array $stay, $qty, array $to_tank, array $base, $today, array $settings, $reason = '' ) {
+		$qty    = (int) $qty;
+		$reason = trim( (string) $reason );
+		if ( $qty < 1 || $qty >= (int) $stay['qty_live'] ) {
+			return false;
+		}
+		$sister = $this->create_stay(
+			array(
+				'product_id'    => $stay['product_id'],
+				'species'       => $stay['species'],
+				'size_slug'     => $stay['size_slug'] ?? null,
+				'size_label'    => $stay['size_label'] ?? null,
+				'needs_id'      => ! empty( $stay['needs_id'] ),
+				'checkin_date'  => $stay['checkin_date'],
+				'tank_id'       => $stay['tank_id'],
+				'source'        => (string) ( $base['source'] ?? 'manual' ),
+				'order_line_id' => $stay['order_line_id'],
+				'supplier'      => $stay['supplier'],
+				'order_ref'     => $stay['order_ref'],
+				'landed_cost'   => $stay['landed_cost'],
+				'notes'         => 'split from #' . (int) $stay['id'],
+			)
+		);
+		$ids   = array();
+		$now   = gmdate( 'Y-m-d H:i:s' );
+		$birth = Store::site_noon_utc( $stay['checkin_date'] );
+		if ( strcmp( $birth, $now ) > 0 ) {
+			$birth = $now; // A same-day split before noon: the arrival must still sort before the move.
+		}
+
+		$written = $this->record_event( (int) $stay['id'], array_merge( $base, array( 'type' => 'move', 'qty' => $qty, 'from_tank_id' => $stay['tank_id'], 'to_tank_id' => (int) $to_tank['id'], 'note' => 'split to #' . $sister . ( '' !== $reason ? ' · ' . $reason : '' ), 'event_at' => $now ) ), $today, $settings );
+		$ids[]   = $written['event_id'];
+		$written = $this->record_event( $sister, array_merge( $base, array( 'type' => 'arrival', 'qty' => $qty, 'to_tank_id' => $stay['tank_id'], 'note' => 'split from #' . (int) $stay['id'], 'event_at' => $birth ) ), $today, $settings );
+		$ids[]   = $written['event_id'];
+		if ( ! empty( $stay['cleared_date'] ) ) {
+			$this->record_event( $sister, array_merge( $base, array( 'type' => 'clear', 'note' => Replay::NOTE_CLEARED . $stay['cleared_date'], 'event_at' => $now ) ), $today, $settings );
+		}
+		if ( ! empty( $stay['sale_ready_override'] ) ) {
+			$this->record_event( $sister, array_merge( $base, array( 'type' => 'note', 'note' => Replay::NOTE_SALE_READY . $stay['sale_ready_override'], 'event_at' => $birth ) ), $today, $settings );
+		}
+		$written = $this->record_event( $sister, array_merge( $base, array( 'type' => 'move', 'from_tank_id' => $stay['tank_id'], 'to_tank_id' => (int) $to_tank['id'], 'note' => $reason, 'event_at' => $now ) ), $today, $settings );
+		$ids[]   = $written['event_id'];
+
+		return array(
+			'stay_id'   => (int) $sister,
+			'event_ids' => $ids,
+		);
+	}
+
+	/* ---- tank logs, species, aliases ------------------------------ */
+
+	public function log_tank( $tank_id, array $log ) {
+		if ( ! $this->tank( $tank_id ) ) {
+			return false;
+		}
+		return $this->insert_log( (int) $tank_id, null, $log );
+	}
+
+	public function log_building( $building_id, array $log ) {
+		if ( ! $this->building( $building_id ) ) {
+			return false;
+		}
+		return $this->insert_log( 0, (int) $building_id, $log );
+	}
+
+	public function log_dose( $building_id, $tank_id, $medication, $amount, $unit, $note = '', $actor_id = 0, $source = 'manual' ) {
+		$note = trim( (string) $note );
+		$log  = array(
+			'kind'     => 'dose',
+			'value'    => (float) $amount,
+			'note'     => Protocol::dose_text( $medication, $amount, $unit ) . ( '' !== $note ? ' · ' . $note : '' ),
+			'actor_id' => (int) $actor_id,
+			'source'   => (string) $source,
+		);
+		return (int) $tank_id > 0 ? $this->log_tank( (int) $tank_id, $log ) : $this->log_building( (int) $building_id, $log );
+	}
+
+	private function insert_log( $tank_id, $building_id, array $log ) {
+		$id    = $this->next_log++;
+		$slots = $this->slot_setups();
+
+		$this->logs[ $id ] = array(
+			'id'          => $id,
+			'tank_id'     => (int) $tank_id,
+			'building_id' => (int) $building_id > 0 ? (int) $building_id : null,
+			// As the real Store: an entry on a slot belongs to the setup that stands there now.
+			'setup_id'    => (int) $tank_id > 0 && ! empty( $slots[ (int) $tank_id ] ) ? (int) $slots[ (int) $tank_id ] : null,
+			'kind'        => in_array( (string) ( $log['kind'] ?? '' ), Store::LOG_KINDS, true ) ? (string) $log['kind'] : 'note',
+			'value'       => isset( $log['value'] ) && null !== $log['value'] && is_numeric( $log['value'] ) ? round( (float) $log['value'], 3 ) : null,
+			'note'        => substr( (string) ( $log['note'] ?? '' ), 0, 2000 ),
+			'logged_at'   => Store::utc_datetime( $log['logged_at'] ?? '' ),
+			'actor_id'    => (int) ( $log['actor_id'] ?? 0 ),
+			'source'      => in_array( (string) ( $log['source'] ?? '' ), Store::SOURCES, true ) ? (string) $log['source'] : 'manual',
+		);
+
+		return $id;
+	}
+
+	/**
+	 * Today's logs by tank, a building-level log under every tank of its
+	 * building (Store::spread_logs) — the same rows the real Store hands
+	 * Protocol::todo().
+	 */
+	public function logs_on_date( $date ) {
+		return Store::spread_logs( $this->day_logs( $date ), $this->tanks() );
+	}
+
+	/**
+	 * The day's log rows as written, oldest first (Store::day_logs()).
+	 */
+	public function day_logs( $date ) {
+		list( $start, $end ) = Store::site_day_bounds( $date );
+		$rows                = array();
+		foreach ( $this->logs as $row ) {
+			if ( strcmp( $row['logged_at'], $start ) >= 0 && strcmp( $row['logged_at'], $end ) <= 0 ) {
+				$rows[] = $row;
+			}
+		}
+		return $rows;
+	}
+
+	/**
+	 * The latest log entries (every tank, or one), newest first, hydrated.
+	 */
+	public function tank_logs( $tank_id = 0, $limit = 50 ) {
+		$out = array();
+		foreach ( array_reverse( $this->logs, true ) as $row ) {
+			if ( (int) $tank_id > 0 && (int) $row['tank_id'] !== (int) $tank_id ) {
+				continue;
+			}
+			$building = $row['building_id'] ? $this->building( $row['building_id'] ) : null;
+			$tank     = $row['tank_id'] ? $this->tank( $row['tank_id'] ) : null;
+			$out[]    = Store::hydrate_log(
+				array_merge(
+					$row,
+					array(
+						'tank_number'     => $tank ? $tank['number'] : null,
+						'building_number' => $building ? $building['number'] : null,
+						'actor_name'      => '',
+					)
+				)
+			);
+			if ( count( $out ) >= max( 1, (int) $limit ) ) {
+				break;
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * The import markers already on a batch's logs (Store::imported_log_keys()).
+	 */
+	public function imported_log_keys( $ref ) {
+		$rows = array();
+		foreach ( $this->logs as $row ) {
+			if ( 'import' === $row['source'] && false !== strpos( $row['note'], Import::MARKER . trim( (string) $ref ) . '#' ) ) {
+				$rows[] = $row;
+			}
+		}
+		return Store::log_keys( $rows );
+	}
+
+	/**
+	 * The last dose per medication per building (Store::latest_doses()).
+	 */
+	public function latest_doses( $limit = 500 ) {
+		$out = array();
+		foreach ( array_reverse( $this->logs, true ) as $row ) {
+			if ( 'dose' !== $row['kind'] || ! empty( $row['setup_id'] ) ) {
+				continue; // A dose on a slot is that setup's own (setup_doses()).
+			}
+			$building = $row['building_id'] ? (int) $row['building_id'] : 0;
+			if ( ! $building && $row['tank_id'] ) {
+				$tank     = $this->tank( $row['tank_id'] );
+				$building = $tank ? (int) $tank['building_id'] : 0;
+			}
+			$key = Protocol::medication_key( $row['note'] );
+			if ( $building <= 0 || null === $key || isset( $out[ $building ][ $key ] ) ) {
+				continue;
+			}
+			$out[ $building ][ $key ] = array(
+				'label'     => Protocol::medication_label( $key ),
+				'note'      => $row['note'],
+				'logged_at' => $row['logged_at'],
+			);
+		}
+		return $out;
+	}
+
+	public function fish_product_names() {
+		return array_map( 'strval', $this->products );
+	}
+
+	public function product_title( $product_id ) {
+		return isset( $this->products[ (int) $product_id ] ) ? (string) $this->products[ (int) $product_id ] : '';
+	}
+
+	public function product_titles( array $ids ) {
+		$out = array();
+		foreach ( array_unique( array_map( 'intval', $ids ) ) as $id ) {
+			if ( isset( $this->products[ $id ] ) ) {
+				$out[ $id ] = (string) $this->products[ $id ];
+			}
+		}
+		return $out;
+	}
+
+	public function add_alias( $alias, $product_id, $species ) {
+		$alias = strtolower( trim( preg_replace( '/\s+/', ' ', (string) $alias ) ) );
+		if ( '' === $alias ) {
+			return false;
+		}
+		$this->aliases[ $alias ] = array(
+			'product_id' => (int) $product_id > 0 ? (int) $product_id : null,
+			'species'    => (string) $species,
+		);
+		return true;
+	}
+
+	/**
+	 * The species of the latest stays, newest first (Store::recent_species()).
+	 */
+	public function recent_species( $limit = 10 ) {
+		$out  = array();
+		$seen = array();
+		foreach ( array_reverse( $this->stays, true ) as $row ) {
+			$key = strtolower( (string) $row['species'] );
+			if ( '' === $key || isset( $seen[ $key ] ) ) {
+				continue;
+			}
+			$seen[ $key ] = true;
+			$out[]        = array(
+				'species'    => (string) $row['species'],
+				'product_id' => $row['product_id'],
+			);
+			if ( count( $out ) >= max( 1, (int) $limit ) ) {
+				break;
+			}
+		}
+		return $out;
+	}
+
+	public function last_event() {
+		return $this->events ? $this->event_row( end( $this->events ) ) : null;
+	}
+
+	public function event_count() {
+		return count( $this->events );
+	}
+
+	/**
+	 * The product list in the shape Store::fish_products() returns.
+	 */
+	private function fish_products() {
+		$out = array();
+		foreach ( $this->products as $id => $title ) {
+			$out[] = array(
+				'product_id' => (int) $id,
+				'name'       => (string) $title,
+				'common'     => '',
+				'sci'        => '',
+			);
+		}
+		return $out;
+	}
+
+	/**
+	 * Products, aliases and species rows matching a term, deduped the
+	 * way the real Store does (Store::fold_species_rows).
+	 */
+	public function species_suggestions( $term, $limit = 10 ) {
+		$term = trim( (string) $term );
+		if ( '' === $term ) {
+			return array();
+		}
+		$items = array();
+		foreach ( $this->aliases as $alias => $row ) {
+			if ( false !== stripos( $alias, $term ) ) {
+				$items[] = array(
+					'product_id' => $row['product_id'],
+					'name'       => '' !== $row['species'] ? $row['species'] : $alias,
+					'common'     => '',
+					'sci'        => '',
+					'match'      => 'alias',
+					'alias'      => $alias,
+				);
+			}
+		}
+		foreach ( $this->products as $id => $title ) {
+			if ( false !== stripos( $title, $term ) ) {
+				$items[] = array(
+					'product_id' => (int) $id,
+					'name'       => (string) $title,
+					'common'     => '',
+					'sci'        => '',
+					'match'      => 'title',
+					'alias'      => '',
+				);
+			}
+		}
+		$product_ids = array();
+		foreach ( $items as $item ) {
+			if ( ! empty( $item['product_id'] ) ) {
+				$product_ids[] = (int) $item['product_id'];
+			}
+		}
+		$rows = array();
+		foreach ( $this->species as $row ) {
+			if ( false !== stripos( $row['name'], $term ) || false !== stripos( $row['sci_name'], $term ) || ( $row['product_id'] && in_array( (int) $row['product_id'], $product_ids, true ) ) ) {
+				$rows[] = $row;
+			}
+		}
+		return array_slice( Store::fold_species_rows( $items, $rows ), 0, max( 1, (int) $limit ) );
+	}
+
+	/**
+	 * The parser candidates: products merged with the species rows, then
+	 * the same variant building as the real Store.
+	 */
+	public function species_candidates() {
+		$merged = Species::merge_candidates( $this->fish_products(), array_values( $this->species ) );
+		$out    = array();
+		foreach ( $merged as $entry ) {
+			$variants = array( array( 'text' => $entry['name'], 'kind' => 'title' ) );
+			foreach ( Store::split_names( $entry['common'] ) as $name ) {
+				$variants[] = array( 'text' => $name, 'kind' => 'common' );
+			}
+			if ( '' !== trim( (string) $entry['sci'] ) ) {
+				$variants[] = array( 'text' => $entry['sci'], 'kind' => 'sci' );
+			}
+			$out[] = array(
+				'product_id' => $entry['product_id'],
+				'name'       => $entry['name'],
+				'variants'   => $variants,
+			);
+		}
+		return $out;
+	}
+
+	/* ---- species master ------------------------------------------- */
+
+	public function species_list( array $filters = array(), $limit = 50, $offset = 0 ) {
+		$out = array();
+		foreach ( $this->species as $row ) {
+			if ( ! Species::matches( $row, (string) ( $filters['search'] ?? '' ) ) ) {
+				continue;
+			}
+			if ( isset( $filters['group'] ) && '' !== trim( (string) $filters['group'] ) && $row['group_name'] !== trim( (string) $filters['group'] ) ) {
+				continue;
+			}
+			$out[] = $row;
+		}
+		usort(
+			$out,
+			static function ( $a, $b ) {
+				return strcasecmp( $a['name'], $b['name'] );
+			}
+		);
+		return array_slice( $out, max( 0, (int) $offset ), max( 1, (int) $limit ) );
+	}
+
+	public function species_count( array $filters = array() ) {
+		return count( $this->species_list( $filters, PHP_INT_MAX, 0 ) );
+	}
+
+	public function species( $id ) {
+		return isset( $this->species[ (int) $id ] ) ? $this->species[ (int) $id ] : null;
+	}
+
+	public function species_by_name( $name ) {
+		$key = Species::key( $name );
+		if ( '' === $key ) {
+			return null;
+		}
+		foreach ( $this->species as $row ) {
+			if ( Species::key( $row['name'] ) === $key ) {
+				return $row;
+			}
+		}
+		return null;
+	}
+
+	public function species_by_product( $product_id ) {
+		foreach ( $this->species as $row ) {
+			if ( (int) $product_id > 0 && (int) $row['product_id'] === (int) $product_id ) {
+				return $row;
+			}
+		}
+		return null;
+	}
+
+	public function species_brief() {
+		return $this->species_list( array(), PHP_INT_MAX, 0 );
+	}
+
+	public function species_groups() {
+		$out = array();
+		foreach ( $this->species as $row ) {
+			if ( '' !== $row['group_name'] && ! in_array( $row['group_name'], $out, true ) ) {
+				$out[] = $row['group_name'];
+			}
+		}
+		sort( $out );
+		return $out;
+	}
+
+	public function save_species( array $fields ) {
+		if ( '' === trim( (string) ( $fields['name'] ?? '' ) ) ) {
+			return false;
+		}
+		$id    = (int) ( $fields['id'] ?? 0 );
+		$other = $this->species_by_name( $fields['name'] );
+		if ( $other && (int) $other['id'] !== $id ) {
+			return false; // The unique key.
+		}
+		$now = gmdate( 'Y-m-d H:i:s' );
+		if ( $id <= 0 || ! isset( $this->species[ $id ] ) ) {
+			$id                  = $this->next_species++;
+			$fields['created_at'] = $now;
+		} else {
+			$fields['created_at'] = $this->species[ $id ]['created_at'];
+		}
+		$fields['id']         = $id;
+		$fields['updated_at'] = $now;
+		$this->species[ $id ] = Store::hydrate_species( $fields );
+		return $id;
+	}
+
+	public function delete_species( $id ) {
+		if ( ! isset( $this->species[ (int) $id ] ) ) {
+			return false;
+		}
+		foreach ( $this->lines as $line ) {
+			if ( (int) $line['species_id'] === (int) $id ) {
+				return 'referenced';
+			}
+		}
+		unset( $this->species[ (int) $id ] );
+		return true;
+	}
+
+	public function link_species_product( $id, $product_id ) {
+		if ( ! isset( $this->species[ (int) $id ] ) ) {
+			return false;
+		}
+		$this->species[ (int) $id ]['product_id'] = (int) $product_id > 0 ? (int) $product_id : null;
+		return true;
+	}
+
+	public function open_stay_counts() {
+		$out = array( 'product' => array(), 'name' => array() );
+		foreach ( $this->stays as $row ) {
+			if ( 'closed' === $row['status'] ) {
+				continue;
+			}
+			if ( ! empty( $row['product_id'] ) ) {
+				$out['product'][ (int) $row['product_id'] ] = ( $out['product'][ (int) $row['product_id'] ] ?? 0 ) + 1;
+			}
+			$key                 = Species::key( $row['species'] );
+			$out['name'][ $key ] = ( $out['name'][ $key ] ?? 0 ) + 1;
+		}
+		return $out;
+	}
+
+	/* ---- supplier orders ------------------------------------------ */
+
+	private function order_row( array $row ) {
+		$building = $row['building_id'] ? $this->building( $row['building_id'] ) : null;
+		$count    = 0;
+		foreach ( $this->lines as $line ) {
+			if ( (int) $line['order_id'] === (int) $row['id'] ) {
+				$count++;
+			}
+		}
+		return Store::hydrate_order(
+			array_merge(
+				$row,
+				array(
+					'line_count'      => $count,
+					'building_number' => $building ? $building['number'] : null,
+					'building_name'   => $building ? $building['name'] : '',
+				)
+			)
+		);
+	}
+
+	private function line_row( array $row ) {
+		$species = $row['species_id'] && isset( $this->species[ (int) $row['species_id'] ] ) ? $this->species[ (int) $row['species_id'] ] : null;
+		$stay    = $row['stay_id'] && isset( $this->stays[ (int) $row['stay_id'] ] ) ? $this->stays[ (int) $row['stay_id'] ] : null;
+		$tank    = $row['tank_id'] ? $this->tank( $row['tank_id'] ) : null;
+		return Store::hydrate_line(
+			array_merge(
+				$row,
+				array(
+					'species_per_box'    => $species ? $species['per_box'] : null,
+					'species_group'      => $species ? $species['group_name'] : '',
+					'species_product_id' => $species ? $species['product_id'] : null,
+					'species_my_price'   => $species ? $species['my_price'] : null,
+					'stay_live'          => $stay ? $stay['qty_live'] : null,
+					'stay_status'        => $stay ? $stay['status'] : null,
+					'tank_number'        => $tank ? $tank['number'] : null,
+				)
+			)
+		);
+	}
+
+	private function order_sort_date( array $row ) {
+		return (string) ( $row['received_date'] ?: ( $row['order_date'] ?: substr( (string) $row['created_at'], 0, 10 ) ) );
+	}
+
+	/** As the real store: a read returns the newest 500 headers at most. */
+	const ORDERS_LIMIT = 500;
+
+	public function orders( array $filters = array() ) {
+		$out = array();
+		foreach ( $this->orders as $row ) {
+			$order = $this->order_row( $row );
+			if ( ! empty( $filters['year'] ) && Stats::order_year( $order ) !== (int) $filters['year'] ) {
+				continue;
+			}
+			if ( ! empty( $filters['status'] ) && $order['status'] !== (string) $filters['status'] ) {
+				continue;
+			}
+			if ( ! empty( $filters['supplier'] ) && $order['supplier'] !== (string) $filters['supplier'] ) {
+				continue;
+			}
+			$out[] = $order;
+		}
+		usort(
+			$out,
+			function ( $a, $b ) {
+				return strcmp( $this->order_sort_date( $b ), $this->order_sort_date( $a ) ) ?: ( $b['id'] <=> $a['id'] );
+			}
+		);
+		return array_slice( $out, 0, isset( $filters['limit'] ) ? max( 1, min( self::ORDERS_LIMIT, (int) $filters['limit'] ) ) : self::ORDERS_LIMIT );
+	}
+
+	public function order_years() {
+		$years = array();
+		foreach ( $this->orders as $row ) {
+			$year = Stats::order_year( $this->order_row( $row ) );
+			if ( $year ) {
+				$years[ $year ] = true;
+			}
+		}
+		$years = array_keys( $years );
+		rsort( $years );
+		return $years;
+	}
+
+	public function order_refs() {
+		return array_values( array_map( static function ( $row ) { return $row['ref']; }, $this->orders ) );
+	}
+
+	public function order_pick_lists() {
+		$out = array( 'suppliers' => array(), 'origins' => array() );
+		foreach ( $this->orders as $row ) {
+			if ( '' !== $row['supplier'] && ! in_array( $row['supplier'], $out['suppliers'], true ) ) {
+				$out['suppliers'][] = $row['supplier'];
+			}
+			if ( '' !== $row['origin'] && ! in_array( $row['origin'], $out['origins'], true ) ) {
+				$out['origins'][] = $row['origin'];
+			}
+		}
+		sort( $out['suppliers'] );
+		sort( $out['origins'] );
+		return $out;
+	}
+
+	public function order( $id ) {
+		if ( ! isset( $this->orders[ (int) $id ] ) ) {
+			return null;
+		}
+		$order          = $this->order_row( $this->orders[ (int) $id ] );
+		$order['lines'] = $this->order_lines( (int) $id );
+		return $order;
+	}
+
+	public function order_by_ref( $ref ) {
+		foreach ( $this->orders as $row ) {
+			if ( $row['ref'] === trim( (string) $ref ) ) {
+				return $this->order_row( $row );
+			}
+		}
+		return null;
+	}
+
+	public function save_order( array $fields ) {
+		if ( '' === trim( (string) ( $fields['ref'] ?? '' ) ) ) {
+			return false;
+		}
+		$id    = (int) ( $fields['id'] ?? 0 );
+		$other = $this->order_by_ref( $fields['ref'] );
+		if ( $other && (int) $other['id'] !== $id ) {
+			return false; // The unique key.
+		}
+		$now = gmdate( 'Y-m-d H:i:s' );
+		if ( $id <= 0 || ! isset( $this->orders[ $id ] ) ) {
+			$id                   = $this->next_order++;
+			$fields['created_at'] = $now;
+		} else {
+			$fields['created_at'] = $this->orders[ $id ]['created_at'];
+			// The real save_order() never writes sale_date (the batch calendar does, through update_order_fields()).
+			$fields['sale_date'] = $this->orders[ $id ]['sale_date'] ?? null;
+		}
+		$fields['id']         = $id;
+		$fields['updated_at'] = $now;
+		$this->orders[ $id ]  = Store::hydrate_order( $fields );
+		return $id;
+	}
+
+	public function update_order_fields( $id, array $fields ) {
+		if ( ! isset( $this->orders[ (int) $id ] ) ) {
+			return false;
+		}
+		foreach ( $fields as $key => $value ) {
+			if ( in_array( $key, array( 'id', 'ref', 'created_at' ), true ) ) {
+				continue;
+			}
+			$this->orders[ (int) $id ][ $key ] = $value;
+		}
+		$this->orders[ (int) $id ]['updated_at'] = gmdate( 'Y-m-d H:i:s' );
+		$this->orders[ (int) $id ]               = Store::hydrate_order( $this->orders[ (int) $id ] );
+		return true;
+	}
+
+	public function delete_order( $id ) {
+		if ( ! isset( $this->orders[ (int) $id ] ) ) {
+			return false;
+		}
+		foreach ( $this->lines as $line ) {
+			if ( (int) $line['order_id'] === (int) $id && ! empty( $line['stay_id'] ) ) {
+				return 'referenced';
+			}
+		}
+		foreach ( $this->lines as $line_id => $line ) {
+			if ( (int) $line['order_id'] === (int) $id ) {
+				unset( $this->lines[ $line_id ] );
+			}
+		}
+		unset( $this->orders[ (int) $id ] );
+		return true;
+	}
+
+	public function order_lines( $order_id ) {
+		$by_order = $this->lines_for_orders( array( (int) $order_id ) );
+		return isset( $by_order[ (int) $order_id ] ) ? $by_order[ (int) $order_id ] : array();
+	}
+
+	public function lines_for_orders( array $order_ids ) {
+		$out = array();
+		foreach ( $this->lines as $row ) {
+			if ( in_array( (int) $row['order_id'], array_map( 'intval', $order_ids ), true ) ) {
+				$out[ (int) $row['order_id'] ][] = $this->line_row( $row );
+			}
+		}
+		foreach ( $out as &$lines ) {
+			usort(
+				$lines,
+				static function ( $a, $b ) {
+					return ( $a['sort'] <=> $b['sort'] ) ?: ( $a['id'] <=> $b['id'] );
+				}
+			);
+		}
+		unset( $lines );
+		return $out;
+	}
+
+	public function save_order_lines( $order_id, array $lines ) {
+		if ( ! isset( $this->orders[ (int) $order_id ] ) ) {
+			return false;
+		}
+		$existing = array();
+		foreach ( $this->lines as $id => $row ) {
+			if ( (int) $row['order_id'] === (int) $order_id ) {
+				$existing[ (int) $id ] = $row;
+			}
+		}
+		$ids = array();
+		foreach ( array_values( $lines ) as $sort => $line ) {
+			$id      = (int) ( $line['id'] ?? 0 );
+			$current = $id > 0 && isset( $existing[ $id ] ) ? $existing[ $id ] : null;
+			$linked  = $current && ! empty( $current['stay_id'] );
+			$row     = array(
+				'order_id'     => (int) $order_id,
+				'species_id'   => ! empty( $line['species_id'] ) ? (int) $line['species_id'] : null,
+				'species'      => (string) ( $line['species'] ?? '' ),
+				'sci_name'     => (string) ( $line['sci_name'] ?? '' ),
+				'needs_id'     => ! empty( $line['needs_id'] ) ? 1 : 0,
+				'label_name'   => $current ? ( $current['label_name'] ?? null ) : null, // Identify owns it (update_line_fields()).
+				'size_slug'    => Store::size_or_null( $line['size_slug'] ?? null ),
+				'size_label'   => null !== Store::size_or_null( $line['size_slug'] ?? null ) ? Store::size_or_null( $line['size_label'] ?? null ) : null,
+				'qty_ordered'  => max( 0, (int) ( $line['qty_ordered'] ?? 0 ) ),
+				'qty_received' => $linked ? $current['qty_received'] : ( isset( $line['qty_received'] ) && null !== $line['qty_received'] ? (int) $line['qty_received'] : null ),
+				'per_box'      => isset( $line['per_box'] ) && null !== $line['per_box'] ? (int) $line['per_box'] : null,
+				'box_no'       => Costing::box_no_in( $line['box_no'] ?? null ),
+				'box_pct'      => Costing::box_pct_in( $line['box_pct'] ?? null ),
+				'share_key'    => $current ? ( $current['share_key'] ?? null ) : null, // Box_Shares owns it (set_line_share_key()).
+				'bags'         => isset( $line['bags'] ) && null !== $line['bags'] ? (int) $line['bags'] : null,
+				'unit_price'   => isset( $line['unit_price'] ) && null !== $line['unit_price'] ? round( (float) $line['unit_price'], 4 ) : null,
+				'worth'        => isset( $line['worth'] ) && null !== $line['worth'] ? round( (float) $line['worth'], 2 ) : null,
+				'qty_doa'      => $linked ? (int) $current['qty_doa'] : max( 0, (int) ( $line['qty_doa'] ?? 0 ) ),
+				'qty_survived' => $linked ? $current['qty_survived'] : ( isset( $line['qty_survived'] ) && null !== $line['qty_survived'] ? (int) $line['qty_survived'] : null ),
+				'landed_total' => array_key_exists( 'landed_total', $line ) ? ( null !== $line['landed_total'] ? round( (float) $line['landed_total'], 2 ) : null ) : ( $current ? $current['landed_total'] : null ),
+				'stay_id'      => $current ? $current['stay_id'] : null,
+				'tank_id'      => $linked ? $current['tank_id'] : ( ! empty( $line['tank_id'] ) ? (int) $line['tank_id'] : null ),
+				'sort'         => (int) $sort,
+				'notes'        => (string) ( $line['notes'] ?? '' ),
+			);
+			if ( $current ) {
+				$row['id']           = $id;
+				$this->lines[ $id ]  = $row;
+				$ids[]               = $id;
+				unset( $existing[ $id ] );
+				continue;
+			}
+			$id                 = $this->next_line++;
+			$row['id']          = $id;
+			$this->lines[ $id ] = $row;
+			$ids[]              = $id;
+		}
+		$deleted = 0;
+		foreach ( $existing as $id => $row ) {
+			if ( ! empty( $row['stay_id'] ) ) {
+				$ids[] = (int) $id;
+				continue;
+			}
+			unset( $this->lines[ $id ] );
+			$deleted++;
+		}
+		return array( 'ids' => $ids, 'deleted' => $deleted );
+	}
+
+	public function cache_line_total( $line_id, $landed ) {
+		if ( ! isset( $this->lines[ (int) $line_id ] ) ) {
+			return false;
+		}
+		$this->lines[ (int) $line_id ]['landed_total'] = null === $landed ? null : round( (float) $landed, 2 );
+		return true;
+	}
+
+	public function set_line_stay( $line_id, $stay_id, $tank_id = null ) {
+		if ( ! isset( $this->lines[ (int) $line_id ] ) ) {
+			return false;
+		}
+		$this->lines[ (int) $line_id ]['stay_id'] = (int) $stay_id > 0 ? (int) $stay_id : null;
+		if ( null !== $tank_id ) {
+			$this->lines[ (int) $line_id ]['tank_id'] = (int) $tank_id > 0 ? (int) $tank_id : null;
+		}
+		return true;
+	}
+
+	/**
+	 * Who a line's fish is, as a correction writes it (Store::update_line_fields()).
+	 */
+	public function update_line_fields( $line_id, array $fields ) {
+		if ( ! isset( $this->lines[ (int) $line_id ] ) ) {
+			return false;
+		}
+		$row     = &$this->lines[ (int) $line_id ];
+		$changed = false;
+		if ( array_key_exists( 'species_id', $fields ) ) {
+			$row['species_id'] = (int) $fields['species_id'] > 0 ? (int) $fields['species_id'] : null;
+			$changed           = true;
+		}
+		if ( array_key_exists( 'species', $fields ) && '' !== trim( (string) $fields['species'] ) ) {
+			$row['species'] = substr( trim( (string) $fields['species'] ), 0, 120 );
+			$changed        = true;
+		}
+		if ( array_key_exists( 'sci_name', $fields ) ) {
+			$row['sci_name'] = substr( trim( (string) $fields['sci_name'] ), 0, 120 );
+			$changed         = true;
+		}
+		if ( array_key_exists( 'size_slug', $fields ) ) {
+			$row['size_slug']  = Store::size_or_null( $fields['size_slug'] );
+			$row['size_label'] = null !== $row['size_slug'] ? Store::size_or_null( $fields['size_label'] ?? null ) : null;
+			$changed           = true;
+		}
+		if ( array_key_exists( 'needs_id', $fields ) ) {
+			$row['needs_id'] = ! empty( $fields['needs_id'] ) ? 1 : 0;
+			$changed         = true;
+		}
+		if ( array_key_exists( 'label_name', $fields ) ) {
+			$label             = substr( trim( (string) $fields['label_name'] ), 0, 120 );
+			$row['label_name'] = '' !== $label ? $label : null;
+			$changed           = true;
+		}
+		if ( array_key_exists( 'notes', $fields ) ) {
+			$row['notes'] = (string) $fields['notes'];
+			$changed      = true;
+		}
+		unset( $row );
+		return $changed;
+	}
+
+	/* ---- remembered box shares ------------------------------------ */
+
+	public function set_line_share_key( $line_id, $key ) {
+		if ( ! isset( $this->lines[ (int) $line_id ] ) ) {
+			return false;
+		}
+		$this->lines[ (int) $line_id ]['share_key'] = is_string( $key ) && 1 === preg_match( '/^[a-f0-9]{32}$/', $key ) ? $key : null;
+		return true;
+	}
+
+	public function clear_line_share_keys( $key ) {
+		if ( '' === (string) $key ) {
+			return false;
+		}
+		foreach ( $this->lines as $id => $line ) {
+			if ( ( $line['share_key'] ?? null ) === (string) $key ) {
+				$this->lines[ $id ]['share_key'] = null;
+			}
+		}
+		return true;
+	}
+
+	public function box_shares( array $filters = array() ) {
+		$out = array();
+		foreach ( $this->box_shares as $row ) {
+			if ( isset( $filters['location_key'] ) && $row['location_key'] !== (string) $filters['location_key'] ) {
+				continue;
+			}
+			$out[] = $row;
+		}
+		usort(
+			$out,
+			static function ( $a, $b ) {
+				return strcasecmp( $a['supplier'], $b['supplier'] ) ?: ( strcasecmp( $a['origin'], $b['origin'] ) ?: ( strcasecmp( $a['species'], $b['species'] ) ?: ( strcasecmp( $a['size_label'], $b['size_label'] ) ?: ( $a['id'] <=> $b['id'] ) ) ) );
+			}
+		);
+		return $out;
+	}
+
+	public function box_share( $id ) {
+		return isset( $this->box_shares[ (int) $id ] ) ? $this->box_shares[ (int) $id ] : null;
+	}
+
+	public function box_share_by_key( $key ) {
+		foreach ( $this->box_shares as $row ) {
+			if ( '' !== (string) $key && $row['share_key'] === (string) $key ) {
+				return $row;
+			}
+		}
+		return null;
+	}
+
+	public function insert_box_share( array $row ) {
+		if ( '' === (string) ( $row['share_key'] ?? '' ) || $this->box_share_by_key( $row['share_key'] ) ) {
+			return false; // The unique key.
+		}
+		$id                      = $this->next_share++;
+		$row['id']               = $id;
+		$row['pct_per_fish']     = round( (float) ( $row['pct_per_fish'] ?? 0 ), 4 );
+		$row['updated_at']       = gmdate( 'Y-m-d H:i:s' );
+		$this->box_shares[ $id ] = Store::hydrate_box_share( $row );
+		return $id;
+	}
+
+	public function update_box_share( $id, array $fields ) {
+		if ( ! isset( $this->box_shares[ (int) $id ] ) ) {
+			return false;
+		}
+		$row     = $this->box_shares[ (int) $id ];
+		$changed = false;
+		foreach ( array( 'pct_per_fish', 'order_count', 'last_line_id', 'last_date', 'species', 'size_label' ) as $key ) {
+			if ( array_key_exists( $key, $fields ) ) {
+				$row[ $key ] = 'pct_per_fish' === $key ? round( (float) $fields[ $key ], 4 ) : $fields[ $key ];
+				$changed     = true;
+			}
+		}
+		if ( ! $changed ) {
+			return false;
+		}
+		$row['updated_at']             = gmdate( 'Y-m-d H:i:s' );
+		$this->box_shares[ (int) $id ] = Store::hydrate_box_share( $row );
+		return true;
+	}
+
+	public function delete_box_share( $id ) {
+		if ( ! isset( $this->box_shares[ (int) $id ] ) ) {
+			return false;
+		}
+		unset( $this->box_shares[ (int) $id ] );
+		return true;
+	}
+
+	/* ---- standard sizes ------------------------------------------- */
+
+	public function size_attributes() {
+		return array_values( $this->size_attributes );
+	}
+
+	public function size_terms( $taxonomy ) {
+		return isset( $this->size_terms[ (string) $taxonomy ] ) ? array_values( $this->size_terms[ (string) $taxonomy ] ) : array();
+	}
+
+	public function variation_size_values() {
+		return array_values( $this->variation_sizes );
+	}
+
+	public function stay_figures( array $stay_ids ) {
+		$out = array();
+		foreach ( array_unique( array_map( 'intval', $stay_ids ) ) as $id ) {
+			if ( $id > 0 ) {
+				$out[ $id ] = Orders::figures_from_events( $this->events( $id ) );
+			}
+		}
+		return $out;
+	}
+
+	/* ---- aliases as rows ------------------------------------------- */
+
+	public function aliases() {
+		$out = array();
+		$id  = 0;
+		foreach ( $this->aliases as $alias => $row ) {
+			$out[] = array(
+				'id'         => ++$id,
+				'alias'      => (string) $alias,
+				'product_id' => $row['product_id'],
+				'species'    => (string) $row['species'],
+				'created_at' => '2026-01-01 00:00:00',
+			);
+		}
+		return $out;
+	}
+
+	/* ---- WooCommerce's order tables, faked -------------------------- */
+
+	/**
+	 * What the real Store reads from WooCommerce's order tables, seeded by
+	 * a test through sale() / refund():
+	 *
+	 *   $wc_orders  wc_order_stats: order id → parent_id, status ("wc-…"),
+	 *               date_created, net_total
+	 *   $wc_lines   wc_order_product_lookup: rows of order_item_id,
+	 *               order_id, product_id, variation_id, qty, revenue
+	 *   $wc_items   the order items: item id → name, meta (key → value)
+	 *
+	 * sales_rows() joins them the way the real query does (a refund row
+	 * carries its parent's status and date and the line it refunds) but
+	 * hands over the rows of EVERY status, so a test proves that
+	 * Stats_Sales::add_rows() is what keeps the unpaid ones out.
+	 *
+	 * @var array[]
+	 */
+	public $wc_orders = array();
+	public $wc_lines  = array();
+	public $wc_items  = array();
+
+	/**
+	 * Whether WooCommerce's order tables "exist", how often they were
+	 * read, and the current prices by product id (Store::product_prices()
+	 * shape).
+	 */
+	public $wc_tables      = true;
+	public $sales_reads    = 0;
+	/** Make one read fail as a database error does: 'rows:3' (the third sales_rows() call), 'details', 'refunds', 'years'. */
+	public $sales_break    = '';
+	public $product_prices = array();
+
+	private $next_wc_order = 9000;
+	private $next_wc_item  = 100;
+
+	/**
+	 * Seed an order: its status, its date, its lines — each array(
+	 * product_id, variation_id, qty, revenue, name, meta ). Returns the
+	 * order id and the item ids of the lines, in order.
+	 */
+	public function sale( $status, $date, array $lines ) {
+		$order_id = $this->next_wc_order++;
+		$net      = 0.0;
+		$items    = array();
+		foreach ( $lines as $line ) {
+			$item_id                    = $this->next_wc_item++;
+			$this->wc_items[ $item_id ] = array(
+				'name' => (string) ( $line['name'] ?? '' ),
+				'meta' => (array) ( $line['meta'] ?? array() ),
+			);
+			$this->wc_lines[] = array(
+				'order_item_id' => $item_id,
+				'order_id'      => $order_id,
+				'product_id'    => (int) ( $line['product_id'] ?? 0 ),
+				'variation_id'  => (int) ( $line['variation_id'] ?? 0 ),
+				'qty'           => (int) ( $line['qty'] ?? 1 ),
+				'revenue'       => (float) ( $line['revenue'] ?? 0 ),
+			);
+			$net    += (float) ( $line['revenue'] ?? 0 );
+			$items[] = $item_id;
+		}
+		$this->wc_orders[ $order_id ] = array(
+			'parent_id'    => 0,
+			'status'       => 'wc-' . $status,
+			'date_created' => $date,
+			'net_total'    => $net,
+		);
+		return array( $order_id, $items );
+	}
+
+	/**
+	 * Seed a refund of an order: its date, the lines it takes back — item
+	 * id → array( qty, amount ), both given positive — and money refunded
+	 * without a line. Returns the refund's id.
+	 *
+	 * Money taken off a line without a quantity: WooCommerce used to keep
+	 * no lookup row for such a refund line (the default here); newer
+	 * versions keep one with a quantity of 0 ($zero_rows).
+	 */
+	public function refund( $order_id, $date, array $lines = array(), $loose = 0.0, $zero_rows = false ) {
+		$refund_id = $this->next_wc_order++;
+		$net       = -1 * abs( (float) $loose );
+		foreach ( $lines as $refunded_item => $what ) {
+			$source = null;
+			foreach ( $this->wc_lines as $line ) {
+				if ( (int) $line['order_item_id'] === (int) $refunded_item ) {
+					$source = $line;
+				}
+			}
+			$item_id                    = $this->next_wc_item++;
+			$this->wc_items[ $item_id ] = array(
+				'name' => $this->wc_items[ (int) $refunded_item ]['name'],
+				'meta' => array( '_refunded_item_id' => (int) $refunded_item ),
+			);
+			$net -= abs( (float) $what[1] );
+			if ( 0 === (int) $what[0] && ! $zero_rows ) {
+				continue;
+			}
+			$this->wc_lines[] = array(
+				'order_item_id' => $item_id,
+				'order_id'      => $refund_id,
+				'product_id'    => $source ? $source['product_id'] : 0,
+				'variation_id'  => $source ? $source['variation_id'] : 0,
+				'qty'           => -1 * abs( (int) $what[0] ),
+				'revenue'       => -1 * abs( (float) $what[1] ),
+			);
+		}
+		$this->wc_orders[ $refund_id ] = array(
+			'parent_id'    => (int) $order_id,
+			'status'       => $this->wc_orders[ (int) $order_id ]['status'],
+			'date_created' => $date,
+			'net_total'    => $net,
+		);
+		return $refund_id;
+	}
+
+	/**
+	 * Seed the refund WooCommerce books when a whole order is refunded
+	 * without naming a line: it has no order items of its own — its lookup
+	 * rows are stored under the ORDER's line ids, with the refund's order
+	 * id. Returns the refund's id.
+	 */
+	public function full_refund( $order_id, $date ) {
+		$refund_id = $this->next_wc_order++;
+		$net       = 0.0;
+		foreach ( $this->wc_lines as $line ) {
+			if ( (int) $line['order_id'] !== (int) $order_id ) {
+				continue;
+			}
+			$this->wc_lines[] = array_merge(
+				$line,
+				array(
+					'order_id' => $refund_id,
+					'qty'      => -1 * abs( (int) $line['qty'] ),
+					'revenue'  => -1 * abs( (float) $line['revenue'] ),
+				)
+			);
+			$net -= abs( (float) $line['revenue'] );
+		}
+		$this->wc_orders[ $refund_id ] = array(
+			'parent_id'    => (int) $order_id,
+			'status'       => $this->wc_orders[ (int) $order_id ]['status'],
+			'date_created' => $date,
+			'net_total'    => $net,
+		);
+		return $refund_id;
+	}
+
+	public function sales_tables_exist() {
+		return (bool) $this->wc_tables;
+	}
+
+	/**
+	 * The status and the date a row counts under: its parent's for a
+	 * refund (as the real query's COALESCE reads them).
+	 */
+	private function wc_effective( array $order ) {
+		$parent = (int) $order['parent_id'] > 0 && isset( $this->wc_orders[ (int) $order['parent_id'] ] ) ? $this->wc_orders[ (int) $order['parent_id'] ] : null;
+		return array( $parent ? $parent['status'] : $order['status'], $parent ? $parent['date_created'] : $order['date_created'], $parent );
+	}
+
+	public function sales_years( array $statuses ) {
+		if ( 'years' === $this->sales_break ) {
+			return null;
+		}
+		$years = array();
+		foreach ( $this->wc_orders as $order ) {
+			if ( 0 === (int) $order['parent_id'] && in_array( substr( $order['status'], 3 ), $statuses, true ) ) {
+				$years[ (int) substr( $order['date_created'], 0, 4 ) ] = true;
+			}
+		}
+		$years = array_keys( $years );
+		rsort( $years );
+		return $years;
+	}
+
+	public function sales_rows( $year, array $statuses, $after_item = 0, $after_order = 0, $limit = 5000 ) {
+		if ( ! $this->wc_tables ) {
+			return array();
+		}
+		$this->sales_reads++;
+		if ( 'rows:' . $this->sales_reads === $this->sales_break ) {
+			return null;
+		}
+		$out = array();
+		foreach ( $this->wc_lines as $line ) {
+			$order = $this->wc_orders[ (int) $line['order_id'] ];
+			list( , $date, $parent ) = $this->wc_effective( $order );
+			$past                    = (int) $line['order_item_id'] > (int) $after_item || ( (int) $line['order_item_id'] === (int) $after_item && (int) $line['order_id'] > (int) $after_order );
+			if ( ! $past || (int) substr( $date, 0, 4 ) !== (int) $year ) {
+				continue;
+			}
+			$item  = $this->wc_items[ (int) $line['order_item_id'] ];
+			$out[] = array(
+				'row_id'           => (int) $line['order_item_id'],
+				'order_id'         => (int) $line['order_id'],
+				'product_id'       => (int) $line['product_id'],
+				'variation_id'     => (int) $line['variation_id'],
+				'qty'              => (int) $line['qty'],
+				'revenue'          => (float) $line['revenue'],
+				'parent_id'        => (int) $order['parent_id'],
+				'status'           => (string) $order['status'],
+				'date_created'     => (string) $order['date_created'],
+				'parent_status'    => $parent ? (string) $parent['status'] : '',
+				'parent_date'      => $parent ? (string) $parent['date_created'] : '',
+				'refunded_item_id' => isset( $item['meta']['_refunded_item_id'] ) ? (int) $item['meta']['_refunded_item_id'] : 0,
+			);
+		}
+		usort(
+			$out,
+			static function ( $a, $b ) {
+				return ( $a['row_id'] <=> $b['row_id'] ) ?: ( $a['order_id'] <=> $b['order_id'] );
+			}
+		);
+		return array_slice( $out, 0, max( 1, (int) $limit ) );
+	}
+
+	public function sales_item_details( array $item_ids ) {
+		if ( 'details' === $this->sales_break ) {
+			return null;
+		}
+		$out = array();
+		foreach ( array_unique( array_map( 'intval', $item_ids ) ) as $id ) {
+			if ( ! isset( $this->wc_items[ $id ] ) ) {
+				continue;
+			}
+			$meta       = $this->wc_items[ $id ]['meta'];
+			$out[ $id ] = array(
+				'name'               => (string) $this->wc_items[ $id ]['name'],
+				'fish'               => ! empty( $meta['_fh_invoice_fish'] ),
+				'lines'              => isset( $meta['_fh_invoice_lines'] ) && '' !== trim( (string) $meta['_fh_invoice_lines'] ) ? (string) $meta['_fh_invoice_lines'] : null,
+				'invoice_product_id' => isset( $meta['_fh_invoice_product_id'] ) ? max( 0, (int) $meta['_fh_invoice_product_id'] ) : 0,
+			);
+		}
+		return $out;
+	}
+
+	public function sales_refund_rows( $year, array $statuses ) {
+		if ( 'refunds' === $this->sales_break ) {
+			return null;
+		}
+		$out = array();
+		foreach ( $this->wc_orders as $id => $order ) {
+			if ( 0 === (int) $order['parent_id'] ) {
+				continue;
+			}
+			list( $status, $date ) = $this->wc_effective( $order );
+			if ( (int) substr( $date, 0, 4 ) !== (int) $year || ! in_array( substr( $status, 3 ), $statuses, true ) ) {
+				continue;
+			}
+			$on_lines = 0.0;
+			foreach ( $this->wc_lines as $line ) {
+				if ( (int) $line['order_id'] === (int) $id ) {
+					$on_lines += (float) $line['revenue'];
+				}
+			}
+			$out[] = array(
+				'order_id'  => (int) $id,
+				'net_total' => (float) $order['net_total'],
+				'on_lines'  => $on_lines,
+			);
+		}
+		return $out;
+	}
+
+	public function product_prices( array $ids ) {
+		$out = array();
+		foreach ( array_unique( array_map( 'intval', $ids ) ) as $id ) {
+			if ( isset( $this->product_prices[ $id ] ) ) {
+				$out[ $id ] = $this->product_prices[ $id ];
+			}
+		}
+		return $out;
+	}
+}

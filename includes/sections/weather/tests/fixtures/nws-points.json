@@ -1,0 +1,31 @@
+{
+  "id": "https://api.weather.gov/points/36.9397,-76.56",
+  "type": "Feature",
+  "properties": {
+    "@id": "https://api.weather.gov/points/36.9397,-76.56",
+    "cwa": "AKQ",
+    "forecastOffice": "https://api.weather.gov/offices/AKQ",
+    "gridId": "AKQ",
+    "gridX": 58,
+    "gridY": 62,
+    "forecast": "https://api.weather.gov/gridpoints/AKQ/58,62/forecast",
+    "forecastHourly": "https://api.weather.gov/gridpoints/AKQ/58,62/forecast/hourly",
+    "forecastGridData": "https://api.weather.gov/gridpoints/AKQ/58,62",
+    "observationStations": "https://api.weather.gov/gridpoints/AKQ/58,62/stations",
+    "relativeLocation": {
+      "type": "Feature",
+      "geometry": { "type": "Point", "coordinates": [-76.5649, 36.9476] },
+      "properties": {
+        "city": "Carrollton",
+        "state": "VA",
+        "distance": { "unitCode": "wmoUnit:m", "value": 1021.4 },
+        "bearing": { "unitCode": "wmoUnit:degree_(angle)", "value": 180 }
+      }
+    },
+    "forecastZone": "https://api.weather.gov/zones/forecast/VAZ523",
+    "county": "https://api.weather.gov/zones/county/VAC093",
+    "fireWeatherZone": "https://api.weather.gov/zones/fire/VAZ523",
+    "timeZone": "America/New_York",
+    "radarStation": "KAKQ"
+  }
+}
