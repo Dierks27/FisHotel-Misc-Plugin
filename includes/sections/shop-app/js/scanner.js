@@ -247,9 +247,10 @@
 				var typed = tankNumber(event.value);
 				return typed ? next('done', '', typed, ['hide', 'go']) : next('typing', 'bad_typed', 0, ['say']);
 			case 'hidden':
-				return at === 'starting' || at === 'scanning' ? next('paused', '', 0, ['stop']) : same;
+				// say: a message about the last code read must not outlive it.
+				return at === 'starting' || at === 'scanning' ? next('paused', '', 0, ['stop', 'say']) : same;
 			case 'visible':
-				return at === 'paused' ? next('starting', '', 0, ['camera', 'reader']) : same;
+				return at === 'paused' ? next('starting', '', 0, ['say', 'camera', 'reader']) : same;
 			case 'cancel':
 			case 'leave':
 				return at === 'closed' || at === 'done' ? same : next('closed', '', 0, ['stop', 'hide']);
@@ -563,7 +564,15 @@
 			if (!hint) {
 				return;
 			}
-			hint.textContent = why && WORDS[why] ? WORDS[why]() : (machine.phase === 'typing' ? t('typeHint', 'It opens at the third digit.') : t('scanHint', 'Hold the tank\'s label inside the square.'));
+			var plain;
+			if (machine.phase === 'typing') {
+				plain = t('typeHint', 'It opens at the third digit.');
+			} else if (machine.phase === 'starting' || machine.phase === 'paused') {
+				plain = t('scanStarting', 'Starting the camera…');
+			} else {
+				plain = t('scanHint', 'Hold the tank\'s label inside the square.');
+			}
+			hint.textContent = why && WORDS[why] ? WORDS[why]() : plain;
 			hint.className = 'fh-sa-scan__hint' + (why ? ' is-bad' : '');
 		}
 

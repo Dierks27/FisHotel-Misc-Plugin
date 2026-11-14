@@ -159,11 +159,11 @@ check('Cancel: the camera stopped, the scanner away', w.m.phase === 'closed' && 
 w = run([{ type: 'open', camera: true }, { type: 'cancel' }, { type: 'ready' }, LABEL_121]);
 check('Cancel while the camera is still being asked for: closed, and what comes late is not acted on', w.m.phase === 'closed' && w.effects[2] === '' && w.effects[3] === '');
 w = run([{ type: 'open', camera: true }, { type: 'ready' }, { type: 'hidden' }]);
-check('the page hidden (screen off, another app): the camera stopped', w.m.phase === 'paused' && w.effects[2] === 'stop');
+check('the page hidden (screen off, another app): the camera stopped, the message reset', w.m.phase === 'paused' && w.effects[2] === 'stop,say');
 w = run([{ type: 'open', camera: true }, { type: 'ready' }, { type: 'hidden' }, LABEL_121, { type: 'visible' }, { type: 'ready' }]);
-check('… nothing read while hidden; back: the camera asked for again, then scanning', w.effects[3] === '' && w.effects[4] === 'camera,reader' && w.m.phase === 'scanning');
+check('… nothing read while hidden; back: the camera asked for again, then scanning', w.effects[3] === '' && w.effects[4] === 'say,camera,reader' && w.m.phase === 'scanning');
 w = run([{ type: 'open', camera: true }, { type: 'hidden' }, { type: 'visible' }]);
-check('hidden while still starting: the same', w.effects[1] === 'stop' && w.effects[2] === 'camera,reader' && w.m.phase === 'starting');
+check('hidden while still starting: the same', w.effects[1] === 'stop,say' && w.effects[2] === 'say,camera,reader' && w.m.phase === 'starting');
 w = run([{ type: 'open', camera: true }, { type: 'ready' }, { type: 'leave' }]);
 check('the page left: the camera stopped, the scanner away', w.m.phase === 'closed' && w.effects[2] === 'stop,hide');
 w = run([{ type: 'open', camera: true }, { type: 'denied' }]);
@@ -413,6 +413,22 @@ check('anything else: no change, no effect', S.step(null, { type: 'nonsense' }).
 	page.giveCamera(page.makeStream());
 	await settle();
 	check('a camera that answers after the page was hidden is stopped too', page.tracks[0].stopped && page.scanner.phase() === 'paused');
+
+	/* A message on screen, the phone locked and unlocked: the old message must not stay over the restarting camera. */
+	page = makePage({ codes: [['https://evil.example/?fh_front_desk=1&tank=121']] });
+	page.scanner.open();
+	await settle();
+	page.tick();
+	await settle();
+	check('another site\'s code: its message shows', /another website/.test(page.hint()) && page.scanner.phase() === 'scanning');
+	page.doc.hidden = true;
+	page.fire('doc', 'visibilitychange');
+	check('… hidden: the old message is gone', !/another website/.test(page.hint()) && !page.find('fh-sa-scan__hint').className.includes('is-bad'));
+	page.doc.hidden = false;
+	page.fire('doc', 'visibilitychange');
+	check('… back: "Starting the camera…", not the old message', page.hint() === 'Starting the camera…' && !page.find('fh-sa-scan__hint').className.includes('is-bad') && page.scanner.phase() === 'starting');
+	await settle();
+	check('… then the scanning hint once the camera is live', /inside the square/.test(page.hint()) && page.scanner.phase() === 'scanning');
 
 	/* -- No camera → the number pad -- */
 	page = makePage({ codes: [], cameraError: 'NotAllowedError' });

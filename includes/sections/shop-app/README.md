@@ -272,7 +272,8 @@ scratched to read.
 
 **The camera is stopped** on Cancel (or Escape), on a label, on *Type the
 tank number*, when the page is hidden — screen off, another app; it starts
-again when the page is back — and when the page is left. A camera that
+again when the page is back, with "Starting the camera…" in place of any
+message that was showing — and when the page is left. A camera that
 answers after any of those is stopped at once, unseen. When the session
 ends under it the scanner closes and the PIN keypad comes up.
 
@@ -327,6 +328,14 @@ an answer only when it is a plain 200 that does not say `no-store` or
 when the network gives nothing. The shell is one static page — the same
 bytes for every visitor, with no name, tank or nonce in it — which asks
 `…=state` what the device is.
+
+It does **not** keep jsQR (`js/vendor/jsQR.js`), on purpose. A scan only
+leads to a tank screen, and a tank screen needs the network; with no
+connection the scanner says the reader could not be loaded and shows the
+number pad, which is as far as anyone can get offline anyway. The tank
+screens are outside the worker's scope too, so a copy would not reach the
+*Scan a tank* button there. Keeping it would add a 257 KB download to
+every install of the worker for nothing.
 
 ## For other sections
 
