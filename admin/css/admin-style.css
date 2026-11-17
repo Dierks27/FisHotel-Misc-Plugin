@@ -380,3 +380,90 @@ body[class*="page_fishotel-misc"] .wrap {
 .fishotel-misc-versions__row--missing td {
 	color: var(--fh-text-secondary);
 }
+
+/* ------------------------------------------------------------------ */
+/*  Dropdowns (every <select> on the plugin's own pages)               */
+/*  WordPress's forms.css sets .wp-core-ui select:hover and :focus to  */
+/*  color #1e1e1e (0,2,1), which beats each section's dark input rule  */
+/*  (0,1,1 / 0,2,0). An open dropdown is focused, so its options       */
+/*  inherited near-black text on the dark list, and the closed select  */
+/*  went black on hover. Pinned once here for every state; scoped to   */
+/*  the plugin's wrappers, so WordPress's own screens are untouched.   */
+/* ------------------------------------------------------------------ */
+body[class*="page_fishotel-misc"] .fishotel-misc-wrap,
+body[class*="page_fishotel-misc"] .fh-draw-admin {
+	color-scheme: dark;
+}
+
+body[class*="page_fishotel-misc"] .fishotel-misc-wrap select,
+body[class*="page_fishotel-misc"] .fishotel-misc-wrap select:hover,
+body[class*="page_fishotel-misc"] .fishotel-misc-wrap select:focus,
+body[class*="page_fishotel-misc"] .fishotel-misc-wrap select:active,
+body[class*="page_fishotel-misc"] .fh-draw-admin select,
+body[class*="page_fishotel-misc"] .fh-draw-admin select:hover,
+body[class*="page_fishotel-misc"] .fh-draw-admin select:focus,
+body[class*="page_fishotel-misc"] .fh-draw-admin select:active {
+	background-color: var(--fh-bg-primary);
+	color: var(--fh-text-primary);
+	text-shadow: none;
+}
+
+/* WordPress's arrow is drawn #1e1e1e; the same Dashicons arrow, light. */
+body[class*="page_fishotel-misc"] .fishotel-misc-wrap select:not([multiple]):not([size]),
+body[class*="page_fishotel-misc"] .fh-draw-admin select:not([multiple]):not([size]) {
+	padding-right: 28px;
+	background-image: url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2220%22%20height%3D%2220%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M5%206l5%205%205-5%202%201-7%207-7-7%202-1z%22%20fill%3D%22%23a0a0a0%22%2F%3E%3C%2Fsvg%3E');
+	background-repeat: no-repeat;
+	background-position: right 8px top 55%;
+	background-size: 16px 16px;
+}
+
+/* The open list: its own colours, so nothing inherits from :focus. */
+body[class*="page_fishotel-misc"] .fishotel-misc-wrap select option,
+body[class*="page_fishotel-misc"] .fh-draw-admin select option {
+	background-color: var(--fh-bg-secondary);
+	color: var(--fh-text-primary);
+}
+
+body[class*="page_fishotel-misc"] .fishotel-misc-wrap select optgroup,
+body[class*="page_fishotel-misc"] .fh-draw-admin select optgroup {
+	background-color: var(--fh-bg-secondary);
+	color: var(--fh-text-secondary);
+	font-weight: 600;
+}
+
+body[class*="page_fishotel-misc"] .fishotel-misc-wrap select optgroup option,
+body[class*="page_fishotel-misc"] .fh-draw-admin select optgroup option {
+	color: var(--fh-text-primary);
+	font-weight: 400;
+}
+
+/* Placeholders ("— choose —", value ""), and a required one still on it. */
+body[class*="page_fishotel-misc"] .fishotel-misc-wrap select option[value=""],
+body[class*="page_fishotel-misc"] .fishotel-misc-wrap select option:disabled,
+body[class*="page_fishotel-misc"] .fishotel-misc-wrap select:invalid,
+body[class*="page_fishotel-misc"] .fh-draw-admin select option[value=""],
+body[class*="page_fishotel-misc"] .fh-draw-admin select option:disabled,
+body[class*="page_fishotel-misc"] .fh-draw-admin select:invalid {
+	color: var(--fh-text-secondary);
+}
+
+/* Disabled: WordPress paints it #f6f7f7 with a white text-shadow. */
+body[class*="page_fishotel-misc"] .fishotel-misc-wrap select:disabled,
+body[class*="page_fishotel-misc"] .fishotel-misc-wrap select.disabled,
+body[class*="page_fishotel-misc"] .fh-draw-admin select:disabled,
+body[class*="page_fishotel-misc"] .fh-draw-admin select.disabled {
+	background-color: var(--fh-bg-secondary);
+	border-color: var(--fh-border);
+	color: var(--fh-text-secondary);
+	text-shadow: none;
+	cursor: default;
+}
+
+/* Firefox: WordPress hides focused text behind a #0a4b78 text-shadow.
+   Its own rule, so the unknown pseudo-class does not void the others. */
+body[class*="page_fishotel-misc"] .fishotel-misc-wrap select:-moz-focusring,
+body[class*="page_fishotel-misc"] .fh-draw-admin select:-moz-focusring {
+	color: var(--fh-text-primary);
+	text-shadow: none;
+}
