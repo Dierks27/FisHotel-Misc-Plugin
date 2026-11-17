@@ -819,3 +819,53 @@
 .post-type-fishotel_announce .notice {
 	border-left-width: 4px;
 }
+
+/* ------------------------------------------------------------------ */
+/*  Dropdowns — readable open lists                                    */
+/*  WordPress's .wp-core-ui select:hover / :focus set color #1e1e1e    */
+/*  (0,2,1), above .ancr-panel select (0,1,1). An open dropdown is     */
+/*  focused, so its options inherited near-black text on the dark      */
+/*  list. Kept to the meta box and this list's own tablenav.           */
+/* ------------------------------------------------------------------ */
+.post-type-fishotel_announce .ancr-meta-wrap {
+	color-scheme: dark;
+}
+
+.post-type-fishotel_announce .ancr-meta-wrap select,
+.post-type-fishotel_announce .ancr-meta-wrap select:hover,
+.post-type-fishotel_announce .ancr-meta-wrap select:focus,
+.post-type-fishotel_announce .ancr-meta-wrap select:active {
+	color: #e0e0e0;
+	text-shadow: none;
+}
+
+.post-type-fishotel_announce .ancr-meta-wrap select option,
+.post-type-fishotel_announce .ancr-meta-wrap select optgroup option,
+.post-type-fishotel_announce .tablenav select option {
+	background-color: #2d2d2d;
+	color: #e0e0e0;
+	font-weight: 400;
+}
+
+.post-type-fishotel_announce .ancr-meta-wrap select optgroup {
+	background-color: #2d2d2d;
+	color: #a0a0a0;
+	font-weight: 600;
+}
+
+.post-type-fishotel_announce .ancr-meta-wrap select option[value=""],
+.post-type-fishotel_announce .ancr-meta-wrap select option:disabled {
+	color: #a0a0a0;
+}
+
+.post-type-fishotel_announce .ancr-meta-wrap select:disabled {
+	color: #a0a0a0;
+	background-color: #2d2d2d;
+	border-color: rgba(255, 255, 255, 0.1);
+	text-shadow: none;
+}
+
+.post-type-fishotel_announce .ancr-meta-wrap select:-moz-focusring {
+	color: #e0e0e0;
+	text-shadow: none;
+}
