@@ -40,7 +40,7 @@ foreach ( glob( dirname( __DIR__ ) . '/includes/sections/*', GLOB_ONLYDIR ) as $
 		$fh_folders[] = basename( $fh_dir );
 	}
 }
-$fh_live = array( 'announcer', 'coming-soon', 'lottery-draw', 'performance', 'product-archive', 'visitor-stats' ); // Misc 0.35, on the live site.
+$fh_live = array( 'announcer', 'coming-soon', 'lottery-draw', 'product-archive', 'visitor-stats' ); // Misc 0.35, on the live site.
 
 echo "The menu\n";
 $fh_order = Layout::menu_order( $fh_folders );
