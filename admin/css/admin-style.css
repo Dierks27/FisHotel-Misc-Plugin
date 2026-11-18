@@ -221,16 +221,25 @@ body[class*="page_fishotel-misc"] .wrap {
 /* ------------------------------------------------------------------ */
 /*  Toggle Switch                                                      */
 /* ------------------------------------------------------------------ */
+/* A <label>, so inline by default: width/height are then ignored and the
+   track collapses to 0x0 (only the knob shows). The card rows happen to be
+   flex and blockify it; a table cell (Snippets) does not. Set it here. */
 .fishotel-misc-toggle {
 	position: relative;
+	display: inline-block;
+	vertical-align: middle;
 	width: 44px;
 	height: 24px;
 	flex-shrink: 0;
 }
 
-.fishotel-misc-toggle input {
+/* :disabled too: WordPress's forms.css gives a disabled checkbox opacity
+   0.7 (0,2,1), which showed its box and tick over a locked switch. */
+.fishotel-misc-toggle input,
+.fishotel-misc-toggle input:disabled {
 	opacity: 0;
 	width: 0;
+	min-width: 0;
 	height: 0;
 	position: absolute;
 }
