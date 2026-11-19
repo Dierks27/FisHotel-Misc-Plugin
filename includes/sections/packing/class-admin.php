@@ -136,6 +136,7 @@ class Admin {
 		$blocked  = '';
 		$current  = array();
 		$boxes    = array();
+		$model    = Boxes::model( $settings );
 
 		if ( 'bags' === $tab ) {
 			$usage = $store->bag_usage();
@@ -145,7 +146,7 @@ class Admin {
 			$blocked  = Fill::blocked( $settings, $standard );
 		} else {
 			$current = Boxes::current( $settings );
-			$boxes   = Boxes::with_fits( $current['boxes'], $settings['fits'] );
+			$boxes   = Boxes::with_fits( $current['boxes'], $settings['fits'], $settings['bags'], $model );
 		}
 
 		include Packing::path() . 'views/page.php';

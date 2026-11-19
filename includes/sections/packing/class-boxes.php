@@ -254,17 +254,104 @@ class Boxes {
 	}
 
 	/**
+	 * The two numbers of the fit model (Fit): the foam on each side and the
+	 * filled share. The foam is the Foam Cuts section's thickness while that
+	 * section is switched on, else this section's own setting.
+	 *
+	 * @param array $settings Settings (foam, fill_share).
+	 * @return array{foam: float, share: int, foam_from: string}
+	 */
+	public static function model( array $settings ) {
+		$foam = Fit::foam( $settings['foam'] ?? Fit::FOAM_DEFAULT );
+		$from = 'packing';
+
+		$cuts = self::foam_cuts_thickness();
+		if ( null !== $cuts ) {
+			$foam = $cuts;
+			$from = 'foam-cuts';
+		}
+
+		return array(
+			'foam'      => $foam,
+			'share'     => Fit::share( $settings['fill_share'] ?? Fit::SHARE_DEFAULT ),
+			'foam_from' => $from,
+		);
+	}
+
+	/**
+	 * The Foam Cuts section's foam thickness in inches, while that section
+	 * is switched on — null otherwise (it is off or not there, its classes
+	 * cannot be read, or the number is out of range). Reached through
+	 * class_exists() / is_callable() only, inside a try, and never written.
+	 *
+	 * @return float|null
+	 */
+	public static function foam_cuts_thickness() {
+		$section  = 'FisHotel\\Misc\\Sections\\Foam_Cuts\\Foam_Cuts';
+		$settings = 'FisHotel\\Misc\\Sections\\Foam_Cuts\\Settings';
+		$units    = 'FisHotel\\Misc\\Sections\\Foam_Cuts\\Units';
+
+		try {
+			if ( ! class_exists( $section ) || ! is_callable( array( $section, 'enabled' ) ) || ! call_user_func( array( $section, 'enabled' ) ) ) {
+				return null;
+			}
+			if ( ! class_exists( $settings ) && is_callable( array( $section, 'load' ) ) ) {
+				call_user_func( array( $section, 'load' ) );
+			}
+			if ( ! class_exists( $settings ) || ! is_callable( array( $settings, 'get' ) ) || ! class_exists( $units ) || ! defined( $units . '::PER_INCH' ) ) {
+				return null;
+			}
+			$stored   = call_user_func( array( $settings, 'get' ) );
+			$per_inch = (int) constant( $units . '::PER_INCH' );
+			if ( ! is_array( $stored ) || ! isset( $stored['thickness'] ) || ! is_numeric( $stored['thickness'] ) || $per_inch < 1 ) {
+				return null;
+			}
+			$inches = round( (int) $stored['thickness'] / $per_inch, 4 );
+		} catch ( \Throwable $e ) {
+			return null;
+		}
+
+		return ( $inches >= 0 && $inches <= Fit::FOAM_MAX ) ? $inches : null;
+	}
+
+	/**
+	 * The boxes in use with how many of each bag fit — the typed numbers
+	 * and the fit model together (with_fits() with the bags and the model).
+	 *
+	 * @param array[]    $boxes    Boxes (rows()).
+	 * @param array      $settings Settings.
+	 * @param array|null $model    model() (null = work it out).
+	 * @return array[]
+	 */
+	public static function fitted( array $boxes, array $settings, $model = null ) {
+		if ( ! is_array( $model ) ) {
+			$model = self::model( $settings );
+		}
+		return self::with_fits( $boxes, $settings['fits'] ?? array(), $settings['bags'] ?? array(), $model );
+	}
+
+	/**
 	 * Each box with its "how many fit" (pure): `fits` (bag id → how many)
 	 * and `fits_from` (the key the numbers are stored under; '' without
 	 * any). A box with no numbers under its own name takes over those of an
 	 * entry that belongs to no box of the list and was typed for exactly
 	 * the same size — each such entry is taken once.
 	 *
-	 * @param array[] $boxes Boxes (rows()).
-	 * @param array   $fits  Settings' fits: key → name, dims, bags.
+	 * With the bags and the model (Fit), a bag that has no typed number for
+	 * a box gets the formula's: `fits` is then what is used, `fits_typed`
+	 * only what was typed, `fits_computed` the formula's count for every
+	 * bag with a size (0 = too wide), `fits_by` 'typed' | 'computed',
+	 * `shares` each bag's part of the box, and `tie_off` the usable height
+	 * for the bags that stand taller than it. Without them (the saves of
+	 * the Boxes tab) only the typed numbers are read.
+	 *
+	 * @param array[]    $boxes Boxes (rows()).
+	 * @param array      $fits  Settings' fits: key → name, dims, bags.
+	 * @param array|null $bags  The bag list (null = typed numbers only).
+	 * @param array|null $model model(): foam, share.
 	 * @return array[]
 	 */
-	public static function with_fits( array $boxes, array $fits ) {
+	public static function with_fits( array $boxes, array $fits, $bags = null, $model = null ) {
 		$in_list = array();
 		foreach ( $boxes as $box ) {
 			$in_list[ (string) $box['key'] ] = true;
@@ -301,8 +388,22 @@ class Boxes {
 				}
 			}
 
-			$boxes[ $index ]['fits']      = $clean;
-			$boxes[ $index ]['fits_from'] = $clean ? $from : '';
+			$boxes[ $index ]['fits']       = $clean;
+			$boxes[ $index ]['fits_from']  = $clean ? $from : '';
+			$boxes[ $index ]['fits_typed'] = $clean;
+
+			if ( is_array( $bags ) ) {
+				$model = is_array( $model ) ? $model : array();
+				$fit   = Fit::box( $box, $bags, $clean, $model['foam'] ?? Fit::FOAM_DEFAULT, $model['share'] ?? Fit::SHARE_DEFAULT );
+
+				$boxes[ $index ]['fits']          = $fit['fits'];
+				$boxes[ $index ]['shares']        = $fit['shares'];
+				$boxes[ $index ]['fits_by']       = $fit['from'];
+				$boxes[ $index ]['fits_computed'] = $fit['computed'];
+				$boxes[ $index ]['tie_off']       = $fit['tie_off'];
+				$boxes[ $index ]['diameters']     = $fit['diameters'];
+				$boxes[ $index ]['usable']        = Fit::usable( $box, $model['foam'] ?? Fit::FOAM_DEFAULT );
+			}
 		}
 
 		return $boxes;

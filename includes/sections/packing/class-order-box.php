@@ -130,7 +130,7 @@ class Order_Box {
 		foreach ( $result['bags'] as $bag ) {
 			$needs[ (int) $bag['id'] ] = (int) $bag['count'];
 		}
-		$candidates = Suggest::candidates( $needs, Boxes::with_fits( $current['boxes'], $settings['fits'] ), $settings['threshold'] );
+		$candidates = Suggest::candidates( $needs, Boxes::fitted( $current['boxes'], $settings ), $settings['threshold'] );
 		$nonce      = wp_create_nonce( Order_Packing::NONCE_ACTION );
 		$page_url   = admin_url( 'admin.php?page=' . Packing::MENU_SLUG );
 

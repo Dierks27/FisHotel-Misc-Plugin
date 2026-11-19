@@ -28,6 +28,7 @@ php  includes/sections/packing/tests/product-test.php
 php  includes/sections/packing/tests/page-test.php
 php  includes/sections/packing/tests/storefront-test.php
 php  includes/sections/packing/tests/foam-cuts-seam-test.php
+php  includes/sections/packing/tests/upsize-test.php
 node includes/sections/packing/tests/packing-admin.test.js
 ```
 
@@ -168,15 +169,46 @@ helper files exit cleanly when they are run directly (the CI runs every
   among them; working out a suggestion or a line's bag writing nothing
   anywhere — also with the checkbox stored as yes and as no, the choice
   never reaching the variation or the order line.
+- **upsize-test.php** — the fit model by the numbers (D = 2W / π; the
+  filled share, the setting's and a bag's own; the foam off every side,
+  this section's setting and Foam Cuts' thickness while that section is
+  on; the D × D floor squares; the single-size grid check, the smaller
+  answer winning; the rows of mixed sizes; a bag too wide for the floor;
+  a bag taller than the box still used, with where to tie it off; a typed
+  number winning, and the Boxes tab's saves still reading only what was
+  typed); the two settings and a bag's own share, saved and refused; the
+  fill of a box; the round robin (the owner's example — one 2" fish alone
+  in an 8 × 8 × 8 box ends in the largest bag that fits —, two fish of
+  different sizes both moved up, the larger first in each round wherever
+  its line is, a tie keeping the order of the lines, a tight box moving
+  nobody, a bag with no number for the box passed over, never past the
+  last bag, a bag chosen by hand taking its space first, chosen bags that
+  overfill or do not go in); on an order (the box chosen from the
+  smallest bags and not on the line, the bags to use, the plan, nothing
+  written); a split upsized box by box; the bags chosen by hand (who may
+  choose — capability and nonce —, a line or a bag that is not there,
+  stored through the order object, surviving a reload and respected, an
+  overfill stored with a warning, back to Auto, Auto twice writing
+  nothing, confirming another box working the bags out again, clearing
+  it, an order inside a combined box); `fishotel_packing_bag_for_item()`
+  with a plan (upsized, mixed, chosen by hand), without one, and while
+  the section is off; nothing written by any of it, and the three new
+  classes pure.
 - **packing-admin.test.js** — the script's pure helpers: the tiny
   sprintf, a new table row from its template, the fill tool's run loop
   (it must end: a cursor that does not move, an answer that is not a
   success and a run that never says done all stop it), what a button of
-  the Packing box posts (Confirm carries what it showed), a saved form
+  the Packing box posts (Confirm carries what it showed), what a fish
+  line's bag dropdown posts, a saved form
   that redraws the page keeping its button disabled, a save that would
   redraw the page being stopped while another form holds unsaved changes,
   the product editor's checkbox following the product's categories only
   while no choice is stored and the box was not touched, and a box the
   owner clicked being marked on the form as a choice.
 
-607 checks in the nine PHP files and 44 in the node test.
+730 checks in the twelve PHP files and 49 in the node test. Since 0.46.5
+three older checks expect the fit model's answer where a bag with a size
+has no typed number (lines-test: one Large now goes alone in Cube 8;
+order-test: three Cube 8 now report a fill; the "no numbers yet" case
+strips the bag sizes too), and the order box is drawn with the bags to
+use.

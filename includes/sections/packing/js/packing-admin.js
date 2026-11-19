@@ -8,7 +8,7 @@
  *
  * The server draws every piece of HTML and writes every sentence; this
  * file posts forms and swaps the answers in. The pure helpers (fmt,
- * rowFromTemplate, fillStep, nowLine, confirmPayload, afterSave,
+ * rowFromTemplate, fillStep, nowLine, confirmPayload, bagPayload, afterSave,
  * unsavedElsewhere, livestockFromCategories, drawnAsAfterClick) are exported for
  * tests/packing-admin.test.js.
  *
@@ -138,6 +138,23 @@
 	}
 
 	/**
+	 * What a fish line's bag dropdown on the Packing box posts: the line's
+	 * key and the bag chosen ('' = back to Auto).
+	 *
+	 * @param {*} line The line's key ("order id-item id-n").
+	 * @param {*} bag  The bag id chosen, or '' for Auto.
+	 * @return {Object|null} The fields, or null without a line.
+	 */
+	function bagPayload(line, bag) {
+		line = String(line === null || typeof line === 'undefined' ? '' : line);
+		if (!/^\d+-\d+-\d+$/.test(line)) {
+			return null;
+		}
+		bag = String(bag === null || typeof bag === 'undefined' ? '' : bag);
+		return { op: 'bag', line: line, bag: /^\d+$/.test(bag) ? bag : '' };
+	}
+
+	/**
 	 * What follows a form's save. A saved form that reloads the page keeps
 	 * its button disabled until the page is there again: a second click in
 	 * between would post the same rows against a list that has changed.
@@ -229,6 +246,7 @@
 		fillStep: fillStep,
 		nowLine: nowLine,
 		confirmPayload: confirmPayload,
+		bagPayload: bagPayload,
 		afterSave: afterSave,
 		unsavedElsewhere: unsavedElsewhere,
 		livestockFromCategories: livestockFromCategories,
@@ -466,12 +484,26 @@
 			}
 		});
 
+		$(document).on('keydown', '.fh-pack-box .fh-pack-bag', function (e) {
+			if (e.key === 'Enter' || e.keyCode === 13) {
+				e.preventDefault();
+			}
+		});
+
+		// A fish line's bag: Auto, or a bag chosen by hand — stored at once.
+		$(document).on('change', '.fh-pack-box .fh-pack-bag', function () {
+			var $select = $(this);
+			var payload = bagPayload($select.attr('data-line'), $select.val());
+			if (payload) {
+				send($select.closest('.fh-pack-box'), payload);
+			}
+		});
+
 		$(document).on('click', '.fh-pack-box .fh-pack-confirm', function (e) {
 			e.preventDefault();
 
 			var $btn = $(this);
 			var $box = $btn.closest('.fh-pack-box');
-			var $status = $box.find('.fh-pack-status');
 			var payload = confirmPayload($btn.attr('data-op'), $btn.attr('data-choice'), $box.find('.fh-pack-choice').val(), $box.find('.fh-pack-count').val(), $btn.attr('data-shown'));
 
 			if (!payload) {
@@ -479,11 +511,18 @@
 				return;
 			}
 
+			send($box, payload);
+		});
+
+		// One post of the Packing box; the reply draws the box again.
+		function send($box, payload) {
+			var $status = $box.find('.fh-pack-status');
+
 			payload.action = 'fishotel_packing_confirm';
 			payload._wpnonce = $box.attr('data-nonce');
 			payload.order_id = $box.attr('data-order-id');
 
-			$box.find('button').prop('disabled', true);
+			$box.find('button, select').prop('disabled', true);
 			setStatus($status, i18n.saving || 'Saving…', '');
 
 			$.post(ajaxUrl, payload)
@@ -492,7 +531,7 @@
 						$box.replaceWith(reply.data.html);
 						return;
 					}
-					$box.find('button').prop('disabled', false);
+					$box.find('button, select').prop('disabled', false);
 					setStatus($status, messageOf(reply), 'is-error');
 				})
 				.fail(function (xhr) {
@@ -502,9 +541,9 @@
 						$box.replaceWith(data.html);
 						return;
 					}
-					$box.find('button').prop('disabled', false);
+					$box.find('button, select').prop('disabled', false);
 					setStatus($status, messageOf(xhr), 'is-error');
 				});
-		});
+		}
 	});
 })(typeof window !== 'undefined' ? window : globalThis, typeof jQuery !== 'undefined' ? jQuery : null);

@@ -6,12 +6,17 @@
  *
  *   - one bag per fish (a line's "fish per bag" can raise that —
  *     bags_for() — the seam for a product-level number later);
- *   - the fill of a box = the sum over the bag sizes of
- *     bags needed ÷ how many of that size fit the box. Six small bags in a
- *     box that takes twelve and two large ones in a box that takes six is
- *     6/12 + 2/6 = 83 %;
- *   - a bag size with no "how many fit" for a box does not go in that box
- *     at all; a bag size that goes in NO box is set aside and named, and
+ *   - the fill of a box = the sum over the bags of each bag's part of the
+ *     box: 1 ÷ how many fit for a typed number, D² ÷ the usable floor for
+ *     a number the fit model worked out (Fit; each bag a D × D square of
+ *     floor) — and never less than the share of the size that is fullest
+ *     on its own (bags ÷ how many of it fit), nor less than the rows the
+ *     model's round bags take (Fit::rows()) when those run past the floor.
+ *     With typed numbers only this is exactly the sum of bags needed ÷ how
+ *     many fit: six small bags in a box that takes twelve and two large
+ *     ones in a box that takes six is 6/12 + 2/6 = 83 %;
+ *   - a bag size with neither a "how many fit" nor a size that fits a box
+ *     does not go in that box at all; a bag size that goes in NO box is set aside and named, and
  *     the rest is boxed as usual (the status is then "partial");
  *   - the suggestion is the SMALLEST box (by volume) whose fill is at most
  *     100 %;
@@ -94,12 +99,26 @@ class Suggest {
 	 * The fill of a box (1.0 = full), or null when a bag size that is
 	 * needed does not go in it.
 	 *
-	 * @param array $needs Bag id → bags needed.
-	 * @param array $fits  Bag id → how many fit the box.
+	 * Each bag takes its share of the box — `shares` when given (the fit
+	 * model's D² ÷ floor), else 1 ÷ how many fit — and the fill is never
+	 * less than that of the fullest size on its own (bags ÷ how many of it
+	 * fit), so a size never goes past its own count. With no shares this is
+	 * the plain sum of bags ÷ how many fit.
+	 *
+	 * With the floor (the fit model), the bags it placed are also laid out
+	 * in rows (Fit::rows()): when the rows run deeper than the floor is
+	 * wide, the fill is that depth ÷ the floor's width — over 100 %.
+	 *
+	 * @param array $needs  Bag id → bags needed.
+	 * @param array $fits   Bag id → how many fit the box.
+	 * @param array $shares Bag id → one bag's part of the box (optional).
+	 * @param array $floor  length, width (the usable floor) and diameters (bag id → D) — optional.
 	 * @return float|null
 	 */
-	public static function fill( array $needs, array $fits ) {
-		$fill = 0.0;
+	public static function fill( array $needs, array $fits, array $shares = array(), array $floor = array() ) {
+		$fill  = 0.0;
+		$worst = 0.0;
+		$round = array();
 		foreach ( $needs as $bag_id => $count ) {
 			$count = (int) $count;
 			if ( $count <= 0 ) {
@@ -109,9 +128,48 @@ class Suggest {
 			if ( $fit < 1 ) {
 				return null;
 			}
-			$fill += $count / $fit;
+			$share = isset( $shares[ $bag_id ] ) && is_numeric( $shares[ $bag_id ] ) && (float) $shares[ $bag_id ] > 0 ? (float) $shares[ $bag_id ] : 1 / $fit;
+			$fill += $count * $share;
+			$worst = max( $worst, $count / $fit );
+			if ( isset( $floor['diameters'][ $bag_id ] ) && (float) $floor['diameters'][ $bag_id ] > 0 ) {
+				$round = array_merge( $round, array_fill( 0, $count, (float) $floor['diameters'][ $bag_id ] ) );
+			}
 		}
+		$fill = max( $fill, $worst );
+
+		$width = isset( $floor['width'] ) ? (float) $floor['width'] : 0.0;
+		if ( count( $round ) > 1 && $width > 0 ) {
+			$depth = Fit::rows( $round, (float) ( $floor['length'] ?? 0 ) );
+			if ( $depth > $width + Fit::EPSILON ) {
+				$fill = max( $fill, $depth / $width );
+			}
+		}
+
 		return $fill;
+	}
+
+	/**
+	 * The fill of a box from the box itself (its `fits` and `shares`).
+	 *
+	 * @param array $needs Bag id → bags needed.
+	 * @param array $box   A box with fits (and shares).
+	 * @return float|null
+	 */
+	public static function fill_of( array $needs, array $box ) {
+		$floor = array();
+		if ( ! empty( $box['diameters'] ) && is_array( $box['diameters'] ) && isset( $box['usable']['length'], $box['usable']['width'] ) ) {
+			$floor = array(
+				'length'    => (float) $box['usable']['length'],
+				'width'     => (float) $box['usable']['width'],
+				'diameters' => $box['diameters'],
+			);
+		}
+		return self::fill(
+			$needs,
+			isset( $box['fits'] ) && is_array( $box['fits'] ) ? $box['fits'] : array(),
+			isset( $box['shares'] ) && is_array( $box['shares'] ) ? $box['shares'] : array(),
+			$floor
+		);
 	}
 
 	/**
@@ -227,7 +285,7 @@ class Suggest {
 
 			$took = false;
 			foreach ( $largest_first as $box ) {
-				$load = self::pack( $remaining, isset( $box['fits'] ) && is_array( $box['fits'] ) ? $box['fits'] : array(), $bag_order );
+				$load = self::pack( $remaining, $box, $bag_order );
 				if ( ! $load[0] ) {
 					continue;
 				}
@@ -277,7 +335,7 @@ class Suggest {
 
 		foreach ( Boxes::by_volume( array_values( array_filter( $boxes, 'is_array' ) ) ) as $box ) {
 			$fits    = isset( $box['fits'] ) && is_array( $box['fits'] ) ? $box['fits'] : array();
-			$fill    = self::fill( $needs, $fits );
+			$fill    = self::fill_of( $needs, $box );
 			$missing = array();
 			foreach ( $needs as $bag_id => $count ) {
 				if ( ! isset( $fits[ $bag_id ] ) || (int) $fits[ $bag_id ] < 1 ) {
@@ -307,7 +365,7 @@ class Suggest {
 	private static function smallest_holding( array $needs, array $boxes ) {
 		$best = null;
 		foreach ( $boxes as $box ) {
-			$fill = self::fill( $needs, isset( $box['fits'] ) && is_array( $box['fits'] ) ? $box['fits'] : array() );
+			$fill = self::fill_of( $needs, $box );
 			if ( null === $fill || self::pct( $fill ) > 100.0 ) {
 				continue;
 			}
@@ -331,11 +389,12 @@ class Suggest {
 	 * takes fewest of) first, then whatever still goes in.
 	 *
 	 * @param array $remaining Bag id → bags left.
-	 * @param array $fits      Bag id → how many fit the box.
+	 * @param array $box       The box (fits, shares).
 	 * @param int[] $bag_order Bag ids in list order.
 	 * @return array{0: array<int, int>, 1: float} What goes in, and the fill.
 	 */
-	private static function pack( array $remaining, array $fits, array $bag_order ) {
+	public static function pack( array $remaining, array $box, array $bag_order ) {
+		$fits     = isset( $box['fits'] ) && is_array( $box['fits'] ) ? $box['fits'] : array();
 		$position = array_flip( array_map( 'intval', array_values( $bag_order ) ) );
 		$ids      = array();
 		foreach ( $remaining as $bag_id => $count ) {
@@ -359,12 +418,19 @@ class Suggest {
 		$load = array();
 		$fill = 0.0;
 		foreach ( $ids as $bag_id ) {
-			$fit  = (int) $fits[ $bag_id ];
-			$room = (int) floor( ( 1 - $fill ) * $fit + 1e-7 );
-			$take = min( (int) $remaining[ $bag_id ], max( 0, $room ) );
+			$take = 0;
+			while ( $take < (int) $remaining[ $bag_id ] ) {
+				$try            = $load;
+				$try[ $bag_id ] = $take + 1;
+				$with           = self::fill_of( $try, $box );
+				if ( null === $with || self::pct( $with ) > 100.0 ) {
+					break;
+				}
+				$take++;
+				$fill = $with;
+			}
 			if ( $take > 0 ) {
 				$load[ $bag_id ] = $take;
-				$fill           += $take / $fit;
 			}
 		}
 

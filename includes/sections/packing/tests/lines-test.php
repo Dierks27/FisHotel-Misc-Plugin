@@ -207,7 +207,8 @@ wc_get_product( 130 )->meta['_fh_packs_in_bag'] = 'no';  // The frag plug with i
 $result = fh_suggest( $order );
 check( 'a product that was unticked is ignored by the suggestion — every variation of it, its own Bag size or the map\'s', array( '1 × Invented Snail → Large' ) === fh_lines( $result ), fh_test_export( fh_lines( $result ) ) );
 check( 'and named as ignored, with that reason — apart from what is simply not a fish', array( array( 'item_id' => 1, 'order_id' => 540, 'name' => 'Invented Goby - Small', 'qty' => 2, 'reason' => $unticked ), array( 'item_id' => 2, 'order_id' => 540, 'name' => 'Invented Goby - Mid', 'qty' => 1, 'reason' => $unticked ), array( 'item_id' => 4, 'order_id' => 540, 'name' => 'Reef Salt 5 lb', 'qty' => 1, 'reason' => 'not a fish' ), array( 'item_id' => 5, 'order_id' => 540, 'name' => 'Frag plug with a bag', 'qty' => 2, 'reason' => $unticked ) ) === $result['ignored'] && $unticked === Livestock::unticked_reason(), fh_test_export( $result['ignored'] ) );
-check( 'the box is worked out for what is left: one Large bag, 25 % of the smallest box that takes it — and the suggestion is complete', 1 === $result['bag_total'] && array( array( 3, 1 ) ) === array_map( static function ( $bag ) { return array( $bag['id'], $bag['count'] ); }, $result['bags'] ) && 'Cube 12' === $result['boxes'][0]['name'] && 25.0 === $result['boxes'][0]['fill_pct'] && true === $result['complete'] && array() === $result['incomplete'] );
+// Cube 8 has no typed number for Large: the fit model's (an 8 in wide bag stands 5.09 in across — one on the 7 × 7 in floor) is used.
+check( 'the box is worked out for what is left: one Large bag, alone in the smallest box that takes it — and the suggestion is complete', 1 === $result['bag_total'] && array( array( 3, 1 ) ) === array_map( static function ( $bag ) { return array( $bag['id'], $bag['count'] ); }, $result['bags'] ) && 'Cube 8' === $result['boxes'][0]['name'] && 100.0 === $result['boxes'][0]['fill_pct'] && true === $result['complete'] && array() === $result['incomplete'] );
 check( 'the Bag sizes stored earlier are still there: unticking deleted nothing, and working it out wrote nothing', '3' === wc_get_product( 102 )->meta['_fh_bag_size'] && '1' === wc_get_product( 130 )->meta['_fh_bag_size'] && 0 === wc_get_product( 130 )->meta_saves && array() === $order->writes() );
 
 wc_get_product( 120 )->meta['_fh_packs_in_bag'] = 'yes'; // The salt, ticked: packed in a bag after all.
@@ -299,8 +300,18 @@ $result = fh_suggest( $order );
 check( 'a single box at or over the threshold is flagged for the owner', true === $result['on_the_line'] && false !== strpos( $result['messages'][0], 'On the line: Cube 8 is 100% full' ) );
 $result = Order_Packing::for_order( $order, $settings, $standard, Boxes::current( array_merge( $settings, array( 'boxes' => array() ) ), null, false ) );
 check( 'no boxes at all: no suggestion, and where to add them', Suggest::STATUS_NO_BOXES === $result['status'] && array() === $result['boxes'] && false !== strpos( $result['messages'][0], 'There are no boxes to choose from' ) && false !== strpos( $result['messages'][0], 'FisHotel Tools → Packing → Boxes' ), fh_test_export( $result['messages'] ) );
+$no_sizes = array_map(
+	static function ( $bag ) {
+		$bag['width']  = '';
+		$bag['length'] = '';
+		return $bag;
+	},
+	$settings['bags']
+);
+$result   = Order_Packing::for_order( $order, array_merge( $settings, array( 'fits' => array(), 'bags' => $no_sizes ) ), $standard, $current );
+check( 'boxes but no "how many fit" and no bag sizes yet: no box takes the bags, and where to type them', Suggest::STATUS_NO_FIT === $result['status'] && array( array( 'id' => 1, 'name' => 'Small', 'count' => 6 ) ) === $result['unplaced'] && false !== strpos( $result['messages'][0], 'No box takes these bags' ) );
 $result = Order_Packing::for_order( $order, array_merge( $settings, array( 'fits' => array() ) ), $standard, $current );
-check( 'boxes but no "how many fit" yet: no box takes the bags, and where to type them', Suggest::STATUS_NO_FIT === $result['status'] && array( array( 'id' => 1, 'name' => 'Small', 'count' => 6 ) ) === $result['unplaced'] && false !== strpos( $result['messages'][0], 'No box takes these bags' ) );
+check( 'nothing typed, but the bags have their sizes: the fit model boxes them — six Small (4 in wide, 2.55 in across) are too many for Cube 8\'s 7 × 7 in floor (2 × 2), and 6 of 16 on Cube 12\'s', Suggest::STATUS_FITS === $result['status'] && 'Cube 12' === $result['boxes'][0]['name'] && 37.5 === $result['boxes'][0]['fill_pct'], fh_test_export( $result['boxes'] ) );
 $order  = fh_order( new Fh_Fake_Order( 522, array( new Fh_Fake_Item( 1, 'Invented Goby - Small', 2, 100, array(), 101 ), new Fh_Fake_Item( 2, 'A jumbo fish', 1, 130 ) ) ) );
 wc_get_product( 130 )->meta['_fh_bag_size'] = '4';
 $result = Order_Packing::for_order( $order, $settings, $standard, Boxes::current( array_merge( $settings, array( 'boxes' => array_slice( $settings['boxes'], 0, 2 ) ) ), null, false ) );

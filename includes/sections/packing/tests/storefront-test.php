@@ -222,8 +222,8 @@ foreach ( $code as $name => $text ) {
 	}
 }
 ksort( $meta_writes );
-check_same( 'the only meta ever written: the bag size and the "packed in a bag" choice on a product, the confirmed box (and its name) on an order', array( 'Packing::META_BAG', 'Packing::META_BOX', 'Packing::META_BOX_NAME', 'Packing::META_PACKS' ), array_keys( $meta_writes ) );
-check( 'the bag size is written by the product editor and the fill tool only; the box by the order packing only', array( 'class-fill.php', 'class-product.php' ) === array_values( array_unique( $meta_writes['Packing::META_BAG'] ) ) && array( 'class-order-packing.php' ) === array_values( array_unique( $meta_writes['Packing::META_BOX'] ) ), fh_test_export( $meta_writes ) );
+check_same( 'the only meta ever written: the bag size and the "packed in a bag" choice on a product, the confirmed box (and its name) and the bags chosen by hand on an order', array( 'Packing::META_BAG', 'Packing::META_BAGS', 'Packing::META_BOX', 'Packing::META_BOX_NAME', 'Packing::META_PACKS' ), array_keys( $meta_writes ) );
+check( 'the bag size is written by the product editor and the fill tool only; the box and the bags chosen by hand by the order packing only', array( 'class-fill.php', 'class-product.php' ) === array_values( array_unique( $meta_writes['Packing::META_BAG'] ) ) && array( 'class-order-packing.php' ) === array_values( array_unique( $meta_writes['Packing::META_BOX'] ) ) && array( 'class-order-packing.php' ) === array_values( array_unique( $meta_writes['Packing::META_BAGS'] ) ), fh_test_export( $meta_writes ) );
 check( 'the "packed in a bag" choice is written by the product editor only — the fill tool, the order screen and the contracts only read it', array( 'class-product.php' ) === array_values( array_unique( $meta_writes['Packing::META_PACKS'] ) ), fh_test_export( $meta_writes ) );
 $names_key = array_values( array_filter( array_keys( $code ), static function ( $name ) use ( $code ) { return false !== strpos( $code[ $name ], '_fh_packs_in_bag' ); } ) );
 check( 'the key itself is spelled in one place, the section\'s constant: no view, no script and no other class names it', array( 'class-packing.php' ) === $names_key, implode( ', ', $names_key ) );
@@ -240,6 +240,7 @@ echo "4. The meta keys are hidden, and reading writes nothing\n";
 check( 'the bag size is hidden meta: the underscore keeps it out of every list of item or product data WooCommerce formats for a customer, and out of the Custom Fields box', '_fh_bag_size' === Packing::META_BAG && '_' === Packing::META_BAG[0] );
 check( 'so is the "Livestock — packed in a bag" choice: hidden product meta, on the parent product — never on a variation, never on an order line', '_fh_packs_in_bag' === Packing::META_PACKS && '_' === Packing::META_PACKS[0] );
 check( 'the confirmed box is hidden order meta', '_fh_packing_box' === Packing::META_BOX && '_fh_packing_box_name' === Packing::META_BOX_NAME );
+check( 'so are the bags chosen by hand: hidden order meta, never on an order line', '_fh_packing_bags' === Packing::META_BAGS && '_' === Packing::META_BAGS[0] );
 
 Packing::load();
 fh_test_settings();

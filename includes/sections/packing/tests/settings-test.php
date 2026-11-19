@@ -306,7 +306,7 @@ $GLOBALS['fh_options'][ Packing::OPTION_KEY ] = array(
 	'threshold'   => 400,
 );
 $read = Settings::get();
-check( 'only what is a bag stays; ids are unique; a bad width is blank', array( array( 'id' => 9, 'name' => 'Nine', 'width' => '', 'length' => '', 'sort' => 0 ) ) === $read['bags'] && 9 === $read['last_bag_id'], fh_test_export( $read['bags'] ) );
+check( 'only what is a bag stays; ids are unique; a bad width is blank', array( array( 'id' => 9, 'name' => 'Nine', 'width' => '', 'length' => '', 'share' => '', 'sort' => 0 ) ) === $read['bags'] && 9 === $read['last_bag_id'], fh_test_export( $read['bags'] ) );
 check( 'only what is a box stays', array( array( 'name' => 'Ok', 'length' => '5', 'width' => '5', 'height' => '5' ) ) === $read['boxes'] );
 check( 'numbers for unknown bags and entries with none are dropped; a bad size is blank; the key is the lower-cased name', array( 'ok' => array( 'name' => 'Ok', 'dims' => '', 'bags' => array( 9 => 4 ) ) ) === $read['fits'], fh_test_export( $read['fits'] ) );
 check( 'the map keeps only known bags; an impossible percent is 90', array( 'mid' => 9 ) === $read['size_map'] && 90 === $read['threshold'] );
