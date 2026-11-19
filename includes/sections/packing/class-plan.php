@@ -8,9 +8,11 @@
  *     suggestion's.
  *   - Each box takes the fish the suggestion put in it (by their minimum
  *     bag, in the order of the lines). A confirmed box that is not the
- *     suggestion takes every fish; several of them are filled one after
- *     the other, the bulkiest bags first, and what is left goes in the
- *     last one.
+ *     suggestion takes every fish whose minimum bag goes in it; several of
+ *     them are filled one after the other, the bulkiest bags first, and
+ *     what is left goes in the last one that takes its bag. A fish whose
+ *     minimum bag none of the confirmed boxes takes is left out of them
+ *     (said under left_out when another box on the list would take it).
  *   - Inside each box, Upsize moves the fish up (the round robin).
  *   - A line whose bag was chosen by hand (an override on the order) keeps
  *     that bag; it takes its space first.
@@ -42,7 +44,8 @@ class Plan {
 	 * @param array        $overrides  Line key → bag id chosen by hand.
 	 * @param array[]|null $confirmed  The confirmed boxes with their fits (null = none).
 	 * @param bool         $same       Whether the confirmed boxes are the suggestion's.
-	 * @return array{from: string, boxes: array[], lines: array[], moved: int, over: bool, chosen: int}
+	 * @return array{from: string, boxes: array[], lines: array[], moved: int, over: bool, chosen: int, left_out: array} left_out: bag id → fish
+	 *         left out of the confirmed boxes because only another box takes that bag.
 	 */
 	public static function build( array $lines, array $suggestion, array $fitted, array $ladder, array $overrides = array(), $confirmed = null, $same = false ) {
 		$known = array_flip( array_map( 'intval', $ladder ) );
@@ -71,12 +74,13 @@ class Plan {
 		}
 
 		$out = array(
-			'from'   => '',
-			'boxes'  => array(),
-			'lines'  => array(),
-			'moved'  => 0,
-			'over'   => false,
-			'chosen' => 0,
+			'from'     => '',
+			'boxes'    => array(),
+			'lines'    => array(),
+			'moved'    => 0,
+			'over'     => false,
+			'chosen'   => 0,
+			'left_out' => array(),
 		);
 
 		// The boxes, and which fish go in each.
@@ -85,7 +89,20 @@ class Plan {
 		if ( is_array( $confirmed ) && $confirmed && ! $same ) {
 			$out['from'] = self::FROM_CONFIRMED;
 			$boxes       = array_values( $confirmed );
-			$groups      = self::spread( $by_min, $boxes, $ladder );
+
+			// A fish whose smallest bag goes in none of the confirmed boxes
+			// is left out of them (it would leave the box with no fill, and
+			// nobody would move up): a bag no box on the list takes stays
+			// "No box takes"; one that only another box takes is said.
+			$placeable = array();
+			foreach ( $by_min as $bag_id => $ids ) {
+				if ( self::goes_in( (int) $bag_id, $boxes ) ) {
+					$placeable[ $bag_id ] = $ids;
+				} elseif ( $ids && self::goes_in( (int) $bag_id, $fitted ) ) {
+					$out['left_out'][ (int) $bag_id ] = count( $ids );
+				}
+			}
+			$groups = self::spread( $placeable, $boxes, $ladder );
 		} elseif ( ! empty( $suggestion['boxes'] ) ) {
 			$out['from'] = is_array( $confirmed ) && $confirmed ? self::FROM_CONFIRMED : self::FROM_SUGGESTION;
 			foreach ( $suggestion['boxes'] as $placed ) {
@@ -187,6 +204,22 @@ class Plan {
 	}
 
 	/**
+	 * Whether any of the boxes takes a bag size.
+	 *
+	 * @param int     $bag_id The bag.
+	 * @param array[] $boxes  Boxes with their fits.
+	 * @return bool
+	 */
+	private static function goes_in( $bag_id, array $boxes ) {
+		foreach ( $boxes as $box ) {
+			if ( is_array( $box ) && isset( $box['fits'][ $bag_id ] ) && (int) $box['fits'][ $bag_id ] >= 1 ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * The bag sizes of a load that do not go in a box at all.
 	 *
 	 * @param array $load Bag id → bags.
@@ -206,7 +239,8 @@ class Plan {
 	/**
 	 * The fish spread over boxes chosen by hand: one box takes them all;
 	 * several are filled one after the other (the bulkiest bags first, by
-	 * Suggest::pack()), and what is left goes in the last.
+	 * Suggest::pack()), and what is left goes in the last one that takes
+	 * its bag (every fish given here has one).
 	 *
 	 * @param array   $by_min Bag id → fish ids, in the order of the lines.
 	 * @param array[] $boxes  The boxes with their fits.
@@ -241,9 +275,16 @@ class Plan {
 			}
 		}
 
-		foreach ( $by_min as $ids ) {
+		foreach ( $by_min as $bag_id => $ids ) {
+			$into = $last;
+			for ( $b = $last; $b >= 0; $b-- ) {
+				if ( self::goes_in( (int) $bag_id, array( $boxes[ $b ] ) ) ) {
+					$into = $b;
+					break;
+				}
+			}
 			foreach ( $ids as $id ) {
-				$groups[ $last ][] = $id;
+				$groups[ $into ][] = $id;
 			}
 		}
 		foreach ( $groups as $b => $ids ) {

@@ -190,7 +190,12 @@ helper files exit cleanly when they are run directly (the CI runs every
   stored through the order object, surviving a reload and respected, an
   overfill stored with a warning, back to Auto, Auto twice writing
   nothing, confirming another box working the bags out again, clearing
-  it, an order inside a combined box); `fishotel_packing_bag_for_item()`
+  it, an order inside a combined box); a fish whose bag the confirmed box
+  does not take (a Pouch no box takes: confirming the suggested box or
+  another one keeps the Goby moving up, with no false warning; an Extra
+  large only Cube 12 takes, with Cube 8 confirmed: left out and said;
+  boxes chosen by hand that cannot hold it all: the rest in the last box
+  that takes its bag); `fishotel_packing_bag_for_item()`
   with a plan (upsized, mixed, chosen by hand), without one, and while
   the section is off; nothing written by any of it, and the three new
   classes pure.
@@ -206,7 +211,7 @@ helper files exit cleanly when they are run directly (the CI runs every
   while no choice is stored and the box was not touched, and a box the
   owner clicked being marked on the form as a choice.
 
-730 checks in the twelve PHP files and 49 in the node test. Since 0.46.5
+735 checks in the twelve PHP files and 49 in the node test. Since 0.46.5
 three older checks expect the fit model's answer where a bag with a size
 has no typed number (lines-test: one Large now goes alone in Cube 8;
 order-test: three Cube 8 now report a fill; the "no numbers yet" case

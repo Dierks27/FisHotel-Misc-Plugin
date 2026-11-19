@@ -177,7 +177,7 @@ class Order_Packing {
 		$same      = false;
 		if ( $confirmed && ! $folded ) {
 			$in_boxes = self::confirmed_boxes( $confirmed, $settings, $model );
-			$same     = in_array( $plan['status'], array( Suggest::STATUS_FITS, Suggest::STATUS_SPLIT ), true ) && self::boxes_name( $plan['boxes'] ) === $confirmed['name'];
+			$same     = in_array( $plan['status'], array( Suggest::STATUS_FITS, Suggest::STATUS_SPLIT, Suggest::STATUS_PARTIAL ), true ) && self::boxes_name( $plan['boxes'] ) === $confirmed['name'];
 		}
 		$packed = Plan::build( $lines, $folded ? array() : $plan, $boxes, $order_of_bags, $overrides, $in_boxes, $same );
 		$lines  = self::with_use( $lines, $packed, $settings );
@@ -355,6 +355,20 @@ class Order_Packing {
 			}
 		}
 
+		if ( ! empty( $result['packed']['left_out'] ) ) {
+			$names = array();
+			foreach ( $result['packed']['left_out'] as $bag_id => $count ) {
+				$bag     = Bags::find( $settings['bags'], $bag_id );
+				$names[] = (int) $count . ' × ' . ( $bag ? (string) $bag['name'] : '#' . (int) $bag_id );
+			}
+			$confirmed_names = array();
+			foreach ( $result['packed']['boxes'] as $box ) {
+				$confirmed_names[] = (string) $box['name'];
+			}
+			/* translators: 1: bags, as "2 × Name" separated by commas, 2: the confirmed box names */
+			$out[] = sprintf( __( 'Check it: %1$s does not go in %2$s — choose another box.', 'fishotel-misc-plugin' ), implode( ', ', $names ), implode( ' + ', array_unique( $confirmed_names ) ) );
+		}
+
 		// Two boxes of one kind, equally full, are said once.
 		return array_values( array_unique( $out ) );
 	}
@@ -526,7 +540,8 @@ class Order_Packing {
 	 * (suggestion | confirmed | ''), boxes (each: key, name, sizes, bags =
 	 * the bags to use, fill_min / fill_min_pct with the minimum bags, fill /
 	 * fill_pct with the bags to use, over, moved, tie_off, missing), moved,
-	 * over, chosen.
+	 * over, chosen, left_out (bag id → fish left out of the confirmed boxes
+	 * because only another box takes that bag).
 	 *
 	 * @param array $packed Plan::build().
 	 * @return array

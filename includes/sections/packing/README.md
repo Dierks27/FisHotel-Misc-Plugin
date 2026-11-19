@@ -309,10 +309,17 @@ every fish in a round robin starting with the largest fish."
    or under 100 %. The rounds stop when a whole round moves nobody. A fish
    never goes past the last bag of the list.
 4. A split upsizes each box on its own, with the fish the suggestion put
-   in it. A confirmed box that is not the suggestion takes every fish (a
-   hand-chosen "3 × Box" is filled one box after the other, the bulkiest
-   bags first, the rest in the last), and the bags are worked out again
-   for it.
+   in it. A confirmed box that is not the suggestion takes every fish
+   whose smallest bag goes in it (a hand-chosen "3 × Box" is filled one
+   box after the other, the bulkiest bags first, the rest in the last box
+   that takes their bag), and the bags are worked out again for it.
+   Confirming the suggested box itself keeps the suggestion's bags, even
+   when some fish are "No box takes".
+5. A fish whose smallest bag none of the confirmed boxes takes is left
+   out of them, so the other fish still move up: a bag no box on the list
+   takes stays *No box takes*; one that only another box would take is
+   said — "Check it: 1 × Extra large does not go in Cube 8 — choose
+   another box." (`packed.left_out`).
 
 ## Bags chosen by hand
 
@@ -373,7 +380,7 @@ fishotel_packing_bag_for_size( string $size_slug_or_label ): ?array
 | `split`, `on_the_line`, `threshold` | more than one box · a suggested box is at or over the threshold · the percent |
 | `bags`, `bag_total` | bags needed by size — every fish in its smallest bag, what the box is chosen from — in the bag list's order: `id`, `name`, `width`, `length`, `label`, `count` |
 | `bags_used` | the bags to use by size, after upsizing and the choices by hand, in the same shape |
-| `packed` | the upsizing: `from` (`suggestion` · `confirmed` · `''`), `boxes` (each: `key`, `name`, `length`, `width`, `height`, `bags` — bag id → how many to use, `fill_min` / `fill_min_pct` with the smallest bags, `fill` / `fill_pct` after upsizing — null when a chosen bag does not go in —, `over`, `moved`, `tie_off` — bag id → inches, `missing` — bag ids that do not go in), `moved` (fish moved up), `over` (a box is too full), `chosen` (lines chosen by hand) |
+| `packed` | the upsizing: `from` (`suggestion` · `confirmed` · `''`), `boxes` (each: `key`, `name`, `length`, `width`, `height`, `bags` — bag id → how many to use, `fill_min` / `fill_min_pct` with the smallest bags, `fill` / `fill_pct` after upsizing — null when a chosen bag does not go in —, `over`, `moved`, `tie_off` — bag id → inches, `missing` — bag ids that do not go in), `moved` (fish moved up), `over` (a box is too full), `chosen` (lines chosen by hand), `left_out` (bag id → fish left out of the confirmed boxes because only another box takes that bag) |
 | `overrides` | the bags chosen by hand that apply: line key → bag id |
 | `unplaced` | bags no box takes: `id`, `name`, `count` |
 | `lines` | every fish line: `item_id`, `order_id`, `name`, `qty`, `fish_per_bag`, `bags`, `bag` (its smallest bag; null without one), `size`, `size_label`, `flag`, `from`, and `key` (`order id-item id-n`), `use` (the bags to use: `id`, `name`, `label`, `count`, the largest first), `use_name` (`Large`, `2 × Large + Medium`), `upsized`, `chosen` (bag id chosen by hand, 0 = Auto), `tie_off` (inches, or null) |

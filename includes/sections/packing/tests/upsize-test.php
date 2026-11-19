@@ -19,6 +19,9 @@
  *     by the upsizing, cleared, a warning (never a refusal) when they
  *     overfill the box, and confirming another box working the bags out
  *     again for it;
+ *   - a fish whose bag the confirmed box does not take: left out of it,
+ *     so the others still move up (no false warning), and said when only
+ *     another box would take it;
  *   - fishotel_packing_bag_for_item() with and without a plan;
  *   - nothing written by working any of it out.
  *
@@ -381,6 +384,48 @@ check( 'with the box cleared the bags are worked out in the suggested box again 
 $wrapped = fh_up_order( 911, array( array( 1, 'Invented Goby', 1, 301 ) ), array( '_fishotel_fulfilled_by_order' => 910 ) );
 $out     = Order_Packing::confirm_request( array( 'order_id' => '911', 'line' => '911-1-0' ) + $post );
 check( 'an order that went into a combined box: its bags are chosen there — 409, nothing written', 409 === $out['status'] && array() === $wrapped->writes() );
+
+echo "7b. A fish whose bag the confirmed box does not take\n";
+fh_up_shop();
+fh_product( new Fh_Fake_Product( 304, 'variation', array(), array( '_fh_bag_size' => '4' ), 300 ) ); // Extra large.
+fh_product( new Fh_Fake_Product( 305, 'variation', array(), array( '_fh_bag_size' => '5' ), 300 ) ); // Pouch: no size, nothing typed.
+$order  = fh_up_order( 912, array( array( 1, 'Invented Goby', 1, 301 ), array( 2, 'Invented Pipefish', 1, 305 ) ) );
+$result = fishotel_packing_suggest( 912 );
+check( 'a Goby and a fish in Pouch (no box takes it): Cube 8 for the Goby, which goes in Large; Pouch is "No box takes"', Suggest::STATUS_PARTIAL === $result['status'] && 'Cube 8' === $result['boxes'][0]['name'] && array( '1 × Invented Goby → Large (upsized)', '1 × Invented Pipefish → Pouch' ) === fh_up_lines( $result ) && array( 'No box takes: 1 × Pouch — type how many fit under FisHotel Tools → Packing → Boxes.' ) === $result['messages'], fh_test_export( array( fh_up_lines( $result ), $result['messages'] ) ) );
+$fh_confirm = static function ( $order_id, $choice ) use ( $nonce ) {
+	Order_Packing::confirm_request(
+		array(
+			'_wpnonce' => $nonce,
+			'order_id' => (string) $order_id,
+			'op'       => 'confirm',
+			'choice'   => $choice,
+		)
+	);
+	return fishotel_packing_suggest( $order_id );
+};
+$result = $fh_confirm( 912, 'cube 8' );
+check( 'confirming that same box keeps the upsizing: the Goby still goes in Large, Pouch stays out of the box, no false "does not go in"', Plan::FROM_CONFIRMED === $result['packed']['from'] && array( 3 => 1 ) === $result['packed']['boxes'][0]['bags'] && false === $result['packed']['over'] && array( '1 × Invented Goby → Large (upsized)', '1 × Invented Pipefish → Pouch' ) === fh_up_lines( $result ) && array( 'No box takes: 1 × Pouch — type how many fit under FisHotel Tools → Packing → Boxes.' ) === $result['messages'], fh_test_export( array( fh_up_lines( $result ), $result['messages'] ) ) );
+$result = $fh_confirm( 912, 'cube 12' );
+check( 'confirming a different box: the Goby moves up in it (Extra large in Cube 12), Pouch stays out, no false warning', 'Cube 12' === $result['packed']['boxes'][0]['name'] && array( 4 => 1 ) === $result['packed']['boxes'][0]['bags'] && false === $result['packed']['over'] && array( '1 × Invented Goby → Extra large (upsized)', '1 × Invented Pipefish → Pouch' ) === fh_up_lines( $result ) && array( 'No box takes: 1 × Pouch — type how many fit under FisHotel Tools → Packing → Boxes.' ) === $result['messages'], fh_test_export( array( fh_up_lines( $result ), $result['messages'] ) ) );
+
+$order  = fh_up_order( 913, array( array( 1, 'Invented Goby', 1, 301 ), array( 2, 'Invented Grouper', 1, 304 ) ) );
+$result = $fh_confirm( 913, 'cube 8' );
+check( 'a bag only another box takes (Extra large; Cube 12 was suggested) with Cube 8 confirmed: left out of Cube 8 and said, while the Goby still moves up', array( 3 => 1 ) === $result['packed']['boxes'][0]['bags'] && array( 4 => 1 ) === $result['packed']['left_out'] && false === $result['packed']['over'] && array( '1 × Invented Goby → Large (upsized)', '1 × Invented Grouper → Extra large' ) === fh_up_lines( $result ) && in_array( 'Check it: 1 × Extra large does not go in Cube 8 — choose another box.', $result['messages'], true ), fh_test_export( array( fh_up_lines( $result ), $result['messages'] ) ) );
+
+$fitted = fh_up_boxes();
+$packed = Plan::build(
+	array(
+		array( 'key' => 'a', 'bag' => array( 'id' => 4 ), 'bags' => 2 ),
+		array( 'key' => 'b', 'bag' => array( 'id' => 5 ), 'bags' => 1 ),
+	),
+	array(),
+	$fitted,
+	array( 1, 5, 2, 3, 4 ),
+	array(),
+	array( $fitted[1], $fitted[0] ),
+	false
+);
+check( 'boxes chosen by hand that cannot hold it all: what is left goes in the last box that takes its bag (the second Extra large in Cube 12, too full — not "does not go" in Cube 8); a bag no box takes goes in none', array( 4 => 2 ) === $packed['boxes'][0]['bags'] && true === $packed['boxes'][0]['over'] && array() === $packed['boxes'][0]['missing'] && array() === $packed['boxes'][1]['bags'] && false === $packed['boxes'][1]['over'] && array() === $packed['left_out'] && array() === $packed['lines'][1]['boxes'], fh_test_export( $packed['boxes'] ) );
 
 echo "8. fishotel_packing_bag_for_item()\n";
 fh_up_shop();
