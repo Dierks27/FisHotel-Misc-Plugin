@@ -169,6 +169,13 @@ class Fh_Fake_Item {
 	public $meta;
 
 	/**
+	 * The order the line belongs to (0 = none, as a line built by hand).
+	 *
+	 * @var int
+	 */
+	public $order_id = 0;
+
+	/**
 	 * Every write to the line (there must be none).
 	 *
 	 * @var array
@@ -194,6 +201,10 @@ class Fh_Fake_Item {
 
 	public function get_id() {
 		return $this->id;
+	}
+
+	public function get_order_id() {
+		return $this->order_id;
 	}
 
 	public function get_name() {

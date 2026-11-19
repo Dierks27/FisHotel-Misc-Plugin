@@ -142,7 +142,8 @@ $out = Order_Packing::confirm_request( array( 'choice' => 'Cube 12', 'count' => 
 check( 'choosing the very box that is suggested counts as the suggestion', true === fishotel_packing_confirmed_box( 700 )['suggested'] );
 $out = Order_Packing::confirm_request( array( 'choice' => 'cube 8', 'count' => '3' ) + $post );
 $box = fishotel_packing_confirmed_box( 700 );
-check( 'three of a box: three boxes, named "3 × …"; a box a Large bag does not go in has no fill to report', 200 === $out['status'] && 3 === $box['count'] && '3 × Cube 8' === $box['name'] && '3 × Cube 8' === $order->meta['_fh_packing_box_name'] && array() === $box['fill'] && 3 === count( $box['boxes'] ), fh_test_export( $box ) );
+// Cube 8 has no typed number for Large: the fit model's is used (one Large, 5.09 in across, on its 7 × 7 in floor): 2 Large = 2 boxes' worth, over three boxes.
+check( 'three of a box: three boxes, named "3 × …", the fill shared between them', 200 === $out['status'] && 3 === $box['count'] && '3 × Cube 8' === $box['name'] && '3 × Cube 8' === $order->meta['_fh_packing_box_name'] && 3 === count( $box['fill'] ) && abs( $box['fill'][0] - 0.6862 ) < 0.0001 && 3 === count( $box['boxes'] ), fh_test_export( $box ) );
 $out = Order_Packing::confirm_request( array( 'choice' => 'long 20', 'count' => '2' ) + $post );
 check( 'two of a box that takes every bag: the fill is shared between them', array( 0.2, 0.2 ) === fishotel_packing_confirmed_box( 700 )['fill'] );
 
@@ -290,12 +291,15 @@ ob_start();
 $box_ui->render_meta_box( (object) array( 'ID' => 700 ) ); // The legacy screen hands a post.
 $legacy = (string) ob_get_clean();
 check( 'the same box from an order (HPOS) and from a post (legacy)', $html === $legacy && false !== strpos( $html, 'class="fh-pack-box"' ) );
-check( 'each fish line with its bag', false !== strpos( $html, 'Invented Goby - Small' ) && false !== strpos( $html, '<strong>Small</strong>' ) && false !== strpos( $html, '<strong>Large</strong>' ) && false !== strpos( $html, 'from the size map' ) );
-check( 'the bag counts by size', false !== strpos( $html, '6 × Small · 2 × Large' ) && false !== strpos( $html, '8 bags in all' ) );
+// Long 20 is confirmed: inside it the fish are upsized (typed numbers: 30 Small, 18 Medium, 10 Large, 2 Jumbo).
+check( 'each fish line with the bag to use in bold, why, and its smallest bag still there', false !== strpos( $html, 'Invented Goby - Small' ) && false !== strpos( $html, '<strong class="fh-pack-box__use">Large + 5 × Medium</strong>' ) && false !== strpos( $html, '<strong class="fh-pack-box__use">Jumbo + Large</strong>' ) && false !== strpos( $html, 'upsized from Small to fill the box' ) && false !== strpos( $html, 'smallest: Small, from the size map' ) && false !== strpos( $html, 'smallest: Large, from the size map' ) );
+check( 'the bag counts by size: the bags to use, and the smallest that fit', false !== strpos( $html, 'Bags to use:</strong>' ) && false !== strpos( $html, '5 × Medium · 2 × Large · 1 × Jumbo' ) && false !== strpos( $html, 'smallest that fit: 6 × Small · 2 × Large' ) && false !== strpos( $html, '8 bags in all' ) );
+check( 'the bags in the confirmed box, its fill after upsizing and with the smallest bags', false !== strpos( $html, 'Bags in the confirmed box' ) && false !== strpos( $html, '97.8% full after upsizing' ) && false !== strpos( $html, '40% with the smallest bags' ) );
+check( 'a bag that stands taller than the box (Large: 18 in × 70 % = 12.6 in, the box 11 in inside the foam) is used, with where to tie it off', false !== strpos( $html, 'tie off at about 11 in to suit the box' ) );
 check( 'the suggested box with its fill, and the on-the-line flag', false !== strpos( $html, 'Suggested box' ) && false !== strpos( $html, '<strong>Cube 12</strong>' ) && false !== strpos( $html, '100% full' ) && false !== strpos( $html, 'fh-pack-badge--line' ) && false !== strpos( $html, 'On the line' ) );
 check( 'what is ignored is named — and a product name is escaped', false !== strpos( $html, 'Ignored (not fish):' ) && false !== strpos( $html, 'Reef &lt;b&gt;Salt&lt;/b&gt; 5 lb' ) && false === strpos( $html, '<b>Salt</b>' ) );
 check( 'the confirmed box, who confirmed it, and that the suggestion differs from it', false !== strpos( $html, 'Confirmed' ) && false !== strpos( $html, '<strong>Long 20</strong>' ) && false !== strpos( $html, 'by User 5' ) && false !== strpos( $html, 'The suggestion above is different now' ) );
-check( 'the Confirm / change control: confirm the suggestion, choose from every box with its fill, clear', false !== strpos( $html, 'data-choice="suggested"' ) && false !== strpos( $html, 'data-choice="chosen"' ) && false !== strpos( $html, 'Cube 8 (8 × 8 × 8 in) — a bag size does not go in it' ) && false !== strpos( $html, 'Long 20 (20 × 14 × 12 in) — 40%' ) && false !== strpos( $html, 'data-op="clear"' ) );
+check( 'the Confirm / change control: confirm the suggestion, choose from every box with its fill, clear', false !== strpos( $html, 'data-choice="suggested"' ) && false !== strpos( $html, 'data-choice="chosen"' ) && false !== strpos( $html, 'Cube 8 (8 × 8 × 8 in) — 205.9% — too small' ) && false !== strpos( $html, 'Long 20 (20 × 14 × 12 in) — 40%' ) && false !== strpos( $html, 'data-op="clear"' ) );
 check( 'the box carries its own nonce and the order id; its fields have no name, so the order form never posts them', false !== strpos( $html, 'data-nonce="' . $nonce . '"' ) && false !== strpos( $html, 'data-order-id="700"' ) && 0 === preg_match( '/<(select|input)[^>]*\sname=/', $html ) );
 ob_start();
 $box_ui->render_meta_box( (object) array( 'ID' => 999 ) );

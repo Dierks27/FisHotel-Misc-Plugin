@@ -34,7 +34,7 @@ function same( a, b ) {
 }
 
 console.log( '1. Exports' );
-check( 'the helpers are exported for node', helpers && [ 'fmt', 'rowFromTemplate', 'fillStep', 'nowLine', 'confirmPayload', 'afterSave', 'unsavedElsewhere', 'livestockFromCategories', 'drawnAsAfterClick' ].every( function ( name ) {
+check( 'the helpers are exported for node', helpers && [ 'fmt', 'rowFromTemplate', 'fillStep', 'nowLine', 'confirmPayload', 'bagPayload', 'afterSave', 'unsavedElsewhere', 'livestockFromCategories', 'drawnAsAfterClick' ].every( function ( name ) {
 	return typeof helpers[ name ] === 'function';
 } ) );
 check( 'and hung on the global for the browser', globalThis.fhPacking && globalThis.fhPacking.helpers === helpers );
@@ -87,6 +87,11 @@ check( 'a count that is not a number, or below one, is one', helpers.confirmPayl
 check( '"Use this box" with no box picked posts nothing', helpers.confirmPayload( 'confirm', 'chosen', '', '1' ) === null && helpers.confirmPayload( 'confirm', 'chosen', null, '1' ) === null && helpers.confirmPayload( 'confirm', 'chosen', undefined, '1' ) === null );
 check( 'Clear and Refresh post only themselves', same( helpers.confirmPayload( 'clear', 'chosen', 'cube 8', '4' ), { op: 'clear' } ) && same( helpers.confirmPayload( 'view' ), { op: 'view' } ) );
 check( 'an unknown button posts nothing', helpers.confirmPayload( 'delete-everything' ) === null && helpers.confirmPayload() === null );
+
+console.log( '5b. bagPayload(): what a fish line\'s bag dropdown posts' );
+check( 'a bag chosen by hand: the line\'s key and the bag id', same( helpers.bagPayload( '910-1-0', '3' ), { op: 'bag', line: '910-1-0', bag: '3' } ) );
+check( 'Auto posts an empty bag (back to the worked-out one)', same( helpers.bagPayload( '910-1-0', '' ), { op: 'bag', line: '910-1-0', bag: '' } ) && helpers.bagPayload( '910-1-0', null ).bag === '' && helpers.bagPayload( '910-1-0', 'x' ).bag === '' );
+check( 'no line, or a line that is not a key, posts nothing', helpers.bagPayload( '', '3' ) === null && helpers.bagPayload( undefined, '3' ) === null && helpers.bagPayload( '910-1', '3' ) === null && helpers.bagPayload( '<b>', '3' ) === null );
 
 console.log( '6. afterSave(): what follows a form\'s save' );
 check( 'a saved form that reloads the page keeps its button disabled until the page is back (no second post of the same rows)', same( helpers.afterSave( { success: true, data: { message: 'Boxes saved: 2 boxes.' } }, true ), { ok: true, reload: true, enable: false } ) );

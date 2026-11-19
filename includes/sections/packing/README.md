@@ -6,8 +6,12 @@ The owner packs every fish in one of a handful of standard bags — normally
 one fish per bag — and knows from experience which box an order needs.
 This section writes that knowledge down so somebody else can pack: a **Bag
 size** on every fish variation, **how many bags of each size fit each
-standard box**, and from those two a **suggested box on every order**,
-flagged *on the line* when it is nearly full so the owner confirms it.
+standard box** — worked out from the bag's flat size and the box's floor
+(*The fit model*), or typed by the owner — and from those a **suggested box
+on every order**, flagged *on the line* when it is nearly full so the owner
+confirms it. Inside the box every fish then goes in **the largest bag that
+still fits** (*Upsizing*): more water, less swinging. The owner can choose a
+fish's bag by hand on the order.
 
 Bags are for livestock only. A product-level checkbox, **Livestock — packed
 in a bag**, says whether a product is bagged at all: the Bag size fields
@@ -19,21 +23,30 @@ on the storefront, in the cart, at checkout, in an e-mail, on an invoice,
 in My Account or in the customer-facing REST / Store API. See *Storefront
 silence* below.
 
-Nothing is seeded: no bag, no box and no number is filled in by the code.
+Nothing is seeded: no bag, no box and no number is filled in by the code
+(the fit model's numbers are worked out each time from the sizes typed,
+never stored).
 
 ## Where it shows
 
 **FisHotel Tools → Packing** (users who can `manage_woocommerce`), three tabs:
 
 - **Bags** — the standard bags: a name, an optional width and length in
-  inches, a sort number. A bag keeps its `#` for good, so renaming one
+  inches (the bag lying flat — with both, the fit model works out how many
+  fit each box; a bag without both falls back to the typed numbers, and the
+  tab says so), an optional filled share (blank = the setting), how the
+  bag stands once filled, a sort number. The list runs from the smallest
+  bag to the largest: upsizing moves a fish down it. A bag keeps its `#` for good, so renaming one
   changes nothing on the products that use it; a removed bag's `#` is never
   given to another, and a page that was drawn before the bag was removed
   cannot bring it back under a new `#` (that save is refused: reload).
 - **Sizes → bags** — one row per fish size with a bag dropdown (the map),
   and the *Fill empty ones from the map* tool.
-- **Boxes** — where the boxes come from, this section's own list of boxes,
-  the *how many fit* table (box × bag), and the *on the line* percent.
+- **Boxes** — where the boxes come from (with the room each leaves inside
+  the foam), this section's own list of boxes, the *how many fit* table
+  (box × bag: the number typed — "your number" — beside the worked-out one,
+  "too wide", "no size", and where to tie a tall bag off), the *on the
+  line* percent, the filled share and the foam.
   *Save boxes* draws the page again, so it refuses to run while *how many
   fit* holds numbers that are not saved yet: save those first.
 
@@ -47,9 +60,13 @@ product under *Shipping*. The dropdown's first option is "Not set", and
 says which bag the size map gives that variation right now.
 
 **The order screen** (the legacy one and the High-Performance Order Storage
-one) — a **Packing** box: each fish line with its bag and where the bag
-came from, the bags needed by size, the suggested box with its fill, the
-*on the line* flag, what was ignored and what was left out, and the
+one) — a **Packing** box: each fish line with the bag to use (bold), "upsized
+from <smallest> to fill the box" or "chosen by hand", its smallest bag and
+where that came from, "tie off at about N in" when the bag stands taller
+than the box, and a bag dropdown (Auto, or any bag of the list); the bags to
+use and the smallest that fit, by size; the suggested box with its fill, the
+*on the line* flag, the bags in the box (confirmed, else suggested) with the
+fill after upsizing, what was ignored and what was left out, and the
 Confirm / change control. *Confirm* stores the suggestion that is on the
 screen and no other: when the order, a bag size or the numbers changed
 since the box was drawn, nothing is stored, the box is drawn again with
@@ -159,18 +176,29 @@ variation set back to "Not set" follows the map again).
 - **Bags needed** — for each fish line, its quantity in its bag size: one
   bag per fish. (The filter `fishotel_packing_fish_per_bag` can raise the
   fish per bag for a line; that is the seam for a product-level number.)
-- **The fill of a box** — the sum over the bag sizes of *bags needed ÷ how
-  many of that size fit the box*. Six small bags in a box that takes
-  twelve and two large ones in a box that takes six is 50 % + 33 % = 83 %.
-- A blank *how many fit* means that bag does not go in that box at all.
+- **How many fit** — for each box and bag, the number the owner typed
+  ("your number") when there is one, else the fit model's (below). A bag
+  with neither — no number typed and no width and length, or too wide for
+  the box's floor — does not go in that box at all.
+- **The fill of a box** — each bag's share of the box added up: 1 ÷ the
+  typed number, or D² ÷ the usable floor for a worked-out one; and never
+  less than the fullest size on its own (bags ÷ how many of it fit), nor
+  less than the rows the round bags take when those run past the floor.
+  With typed numbers only that is the sum of *bags needed ÷ how many fit*:
+  six small bags in a box that takes twelve and two large ones in a box
+  that takes six is 50 % + 33 % = 83 %.
+- **The box is chosen from each fish's smallest bag** — its own Bag size or
+  the size → bag map (*Which bag*). Upsizing comes after, inside the box.
 - **The suggestion** is the smallest box (by volume) whose fill is at most
   100 %.
 - **When no box holds it all** it is split, and the box says so: the
   largest box that takes any of what is left is filled (the bulkiest bags
   first), and so on — except that as soon as one box holds everything that
   is left, the smallest such box takes it.
-- **On the line** — a suggested box whose fill is at or over the threshold
-  (a setting, 90 % until changed) is flagged for the owner to confirm.
+- **On the line** — a suggested box whose fill, with every fish in its
+  smallest bag, is at or over the threshold (a setting, 90 % until
+  changed) is flagged for the owner to confirm. The fill after upsizing is
+  shown beside it and is not judged: upsizing fills boxes on purpose.
 - **A line with no bag size** is listed by name and the suggestion is
   marked *incomplete* — it is worked out for the lines that do have one.
 - **What is not a fish** is ignored, and named as ignored — a line whose
@@ -230,22 +258,103 @@ the settings and comes back, as it was, the moment ShipTracker has none.
 The sizes are the Clean Room's (Settings → Sizes): the Sizes tab says so
 with a link there, and only says which bag each size goes in.
 
+## The fit model
+
+The owner never stacks fish, and a bag is not all water: "figure out the
+circumference of the bag, then compare that to the floor space of the
+box … I also only use about 70% of the bag for water and oxygen, the other
+30% is used for tying off the bags." So, from the bag's flat width W and
+length L (Bags tab) and the box's inside size (`class-fit.php`, pure):
+
+- **Across** — filled and tied a bag stands as a round column. Its
+  circumference is the flat bag's mouth, 2 × W, so its diameter is
+  **D = 2W ÷ π** (a 6 in bag stands 3.82 in across).
+- **Tall** — L × the **filled share**: a setting (70 % until changed), or
+  the bag's own (50 % for a bag filled half way).
+- **The room** — only the box's **floor** counts: its inside length and
+  width less the foam on both sides; the height less the foam top and
+  bottom. The foam is the Foam Cuts section's thickness while that section
+  is switched on, else this section's setting (0.5 in until changed).
+- **Goes in** — when D fits the floor's shorter side. **Height never
+  refuses a bag**: one that stands taller than the room is tied off shorter
+  ("I can of course adjust this to whatever I need for the height of the
+  box"), and the order says "tie off at about N in", N being the room's
+  height.
+- **How many** — each bag takes a D × D square of floor (round columns in
+  rows — a deliberately simple ballpark): its share of the box is D² ÷ the
+  floor. For one size alone the count is the smaller of floor(area ÷ D²)
+  and floor(length ÷ D) × floor(width ÷ D). Bags of different sizes are
+  also laid out in rows, the widest first, each row as deep as its first
+  bag: when the rows run deeper than the floor is wide the bags do not
+  stand side by side, whatever the shares add up to, so two big bags that
+  each fit alone never share a box.
+
+A number the owner typed for a box and a bag always beats the formula. The
+Boxes tab shows both, per box and bag.
+
+## Upsizing
+
+"We will put the fish in the largest bags that fit into the box … the more
+water the less it swings so ideally we always fill our boxes … give it to
+every fish in a round robin starting with the largest fish."
+(`class-upsize.php`, pure; `class-plan.php` puts the fish in the boxes.)
+
+1. The box is chosen as above, from every fish's **smallest** bag.
+2. The fish of the box — one entry per bag, so one per fish normally — are
+   listed by their smallest bag, the largest first; a tie keeps the order
+   line's position.
+3. Round after round, each fish of the list moves up **one** bag — the next
+   bag of the list that goes in this box at all (a bag with no number for
+   the box is passed over) — when the box's fill with that change stays at
+   or under 100 %. The rounds stop when a whole round moves nobody. A fish
+   never goes past the last bag of the list.
+4. A split upsizes each box on its own, with the fish the suggestion put
+   in it. A confirmed box that is not the suggestion takes every fish
+   whose smallest bag goes in it (a hand-chosen "3 × Box" is filled one
+   box after the other, the bulkiest bags first, the rest in the last box
+   that takes their bag), and the bags are worked out again for it.
+   Confirming the suggested box itself keeps the suggestion's bags, even
+   when some fish are "No box takes".
+5. A fish whose smallest bag none of the confirmed boxes takes is left
+   out of them, so the other fish still move up: a bag no box on the list
+   takes stays *No box takes*; one that only another box would take is
+   said — "Check it: 1 × Extra large does not go in Cube 8 — choose
+   another box." (`packed.left_out`).
+
+## Bags chosen by hand
+
+On the order's Packing box every fish line with a bag has a dropdown:
+**Auto** (the worked-out bag) or any bag of the list. A choice is stored on
+the order at once (`_fh_packing_bags`, through the order object, behind the
+order box's nonce and `manage_woocommerce`), survives reloads and is shown as
+"chosen by hand". It covers every fish of that line. The upsizing respects
+it: the chosen bags take their space first, and the other fish round-robin
+into what is left. When the chosen bags come to more than the box holds — or
+one does not go in the box at all — the box is marked *Too full — check it*
+and a sentence says so; nothing is refused. **Auto** removes the choice
+(and the meta, with the last one). Confirming another box keeps the choices
+and works the other fish out again in the new box. A line whose order went
+into a combined box is chosen there.
+
 ## What is stored
 
 | Where | Key | What |
 |-------|-----|------|
-| option (not autoloaded) | `fishotel_packing_settings` | `bags` (id, name, width, length, sort), `last_bag_id`, `boxes` (the own list: name, length, width, height), `fits` (per box: name, dims, bag id → how many), `size_map` (size slug → bag id), `threshold` |
+| option (not autoloaded) | `fishotel_packing_settings` | `bags` (id, name, width, length, share — '' or a whole percent, sort), `last_bag_id`, `boxes` (the own list: name, length, width, height), `fits` (per box: name, dims, bag id → how many — only what was typed), `size_map` (size slug → bag id), `threshold`, `fill_share` (percent, 70), `foam` (inches, 0.5) |
 | product / variation meta | `_fh_bag_size` | the bag's id |
 | product meta (the parent product, never a variation) | `_fh_packs_in_bag` | *Livestock — packed in a bag*: `yes` or `no`; absent = follow the default |
 | order meta | `_fh_packing_box` | the confirmed box: `v`, `boxes` (name, length, width, height), `fill` (as it stood), `suggested`, `complete`, `by` (user id), `at` (UTC) |
 | order meta | `_fh_packing_box_name` | the same as plain text: `Medium box`, `2 × Large box + Small box` |
+| order meta | `_fh_packing_bags` | the bags chosen by hand: line key (`order id-item id-n`, n counting the fish an Invoice line opened up into) → bag id; absent = every line on Auto |
 
 There is no table and no cron event. Product meta is written through the
 WooCommerce product object, order meta through the order object
 (`update_meta_data()` / `delete_meta_data()` / `save()`), so it works with
 High-Performance Order Storage on or off. Confirming a box writes those
-two order meta keys and nothing else: no note, no status change, no
-e-mail, no stock.
+two order meta keys and nothing else, and choosing a bag by hand writes
+`_fh_packing_bags` and nothing else: no note, no status change, no
+e-mail, no stock. The bags to use are worked out each time; none of it is
+written to an order line.
 
 ## Contracts
 
@@ -255,7 +364,7 @@ All of these are declared by the Misc plugin — guard a call with
 
 ```php
 fishotel_packing_suggest( int $order_id ): array
-fishotel_packing_bag_for_item( WC_Order_Item_Product $item ): ?array   // for the pick list
+fishotel_packing_bag_for_item( WC_Order_Item_Product $item ): ?array   // for the pick list: the bag to USE
 fishotel_packing_confirmed_box( int $order_id ): ?array
 fishotel_packing_bag_for_product( int|WC_Product $product ): ?array
 fishotel_packing_bag_for_size( string $size_slug_or_label ): ?array
@@ -269,9 +378,12 @@ fishotel_packing_bag_for_size( string $size_slug_or_label ): ?array
 | `status` | `fits` (one box holds every bag) · `split` (several do) · `partial` (boxes for what can be boxed; some bags go in no box) · `no_fit` · `no_boxes` · `empty` (no bags needed) · `unavailable` |
 | `boxes` | the suggested box(es): `key`, `name`, `length`, `width`, `height` (inches), `dims` (`LxWxH`), `volume`, `source`, `bags` (bag id → how many go in it), `fill` (1.0 = full), `fill_pct`, `on_the_line` |
 | `split`, `on_the_line`, `threshold` | more than one box · a suggested box is at or over the threshold · the percent |
-| `bags`, `bag_total` | bags needed by size, in the bag list's order: `id`, `name`, `width`, `length`, `label`, `count` |
+| `bags`, `bag_total` | bags needed by size — every fish in its smallest bag, what the box is chosen from — in the bag list's order: `id`, `name`, `width`, `length`, `label`, `count` |
+| `bags_used` | the bags to use by size, after upsizing and the choices by hand, in the same shape |
+| `packed` | the upsizing: `from` (`suggestion` · `confirmed` · `''`), `boxes` (each: `key`, `name`, `length`, `width`, `height`, `bags` — bag id → how many to use, `fill_min` / `fill_min_pct` with the smallest bags, `fill` / `fill_pct` after upsizing — null when a chosen bag does not go in —, `over`, `moved`, `tie_off` — bag id → inches, `missing` — bag ids that do not go in), `moved` (fish moved up), `over` (a box is too full), `chosen` (lines chosen by hand), `left_out` (bag id → fish left out of the confirmed boxes because only another box takes that bag) |
+| `overrides` | the bags chosen by hand that apply: line key → bag id |
 | `unplaced` | bags no box takes: `id`, `name`, `count` |
-| `lines` | every fish line: `item_id`, `order_id`, `name`, `qty`, `fish_per_bag`, `bags`, `bag` (null without one), `size`, `size_label`, `flag`, `from` |
+| `lines` | every fish line: `item_id`, `order_id`, `name`, `qty`, `fish_per_bag`, `bags`, `bag` (its smallest bag; null without one), `size`, `size_label`, `flag`, `from`, and `key` (`order id-item id-n`), `use` (the bags to use: `id`, `name`, `label`, `count`, the largest first), `use_name` (`Large`, `2 × Large + Medium`), `upsized`, `chosen` (bag id chosen by hand, 0 = Auto), `tie_off` (inches, or null) |
 | `incomplete`, `complete` | the fish lines with no bag size (`item_id`, `order_id`, `name`, `qty`, `reason`) · true when there is none |
 | `ignored`, `skipped` | lines that are not fish, or whose product is not packed in a bag (*Livestock — packed in a bag* unticked — the `reason` says so) · lines left out (shipped, never shipping, refunded) — each with a `reason` |
 | `box_source` | `shiptracker` or `own` |
@@ -288,6 +400,20 @@ not packed in a bag — `fishotel_packing_bag_for_item()` and
 `fishotel_packing_bag_for_product()` ask the same rule as the order's
 Packing box (`fishotel_packing_bag_for_size()` is the bag of a size, not of
 a product, and answers as before).
+
+**`fishotel_packing_bag_for_item()`** answers with the bag to **use** when the
+line's order has a plan — chosen by hand, else upsized, else the smallest
+— in the same shape, plus `min` (the smallest bag, the shape above),
+`upsized`, `chosen_by_hand`, `mixed` and `bags` (each `id`, `name`, `label`,
+`count`, the largest first); `source` is then `hand` or `upsized` when the
+bag is not the smallest. A line whose fish ended in different bags is
+`mixed`: `name` says all of them, largest first (`Medium + 2 × Small`),
+`label` the same with their sizes, and `id`, `width`, `length`, `sort` are
+the largest bag's. A line that went into a combined box is read through the
+combined box. The plan of an order is worked out once per request. With no
+plan (a line on no order) it answers the smallest bag, without `min`, as
+before. The Batch plugin's pick list prints `name` ("Bag: Large") — no
+change is needed there.
 
 **`fishotel_packing_confirmed_box()`**: `order_id`, `boxes` (each `name`,
 `length`, `width`, `height`, `dims`, `volume`), `count`, `name`, the first
@@ -326,7 +452,8 @@ into a combined box has none of its own — ask the combined box
 `fishotel_packing_confirm` (nonce `fishotel_packing_order`; with
 `choice=suggested` the screen posts `shown`, the suggestion it displayed,
 and gets 409 plus the box drawn again when that is not the suggestion any
-more). The product
+more; `op=bag` with `line` and `bag` — a bag id, or empty for Auto —
+chooses a line's bag by hand). The product
 editor's two fields — the checkbox and the dropdown — are saved by
 WooCommerce's own product saves, behind this section's nonce
 `fishotel_packing_bag_size` and `manage_woocommerce` as well, through the
@@ -340,6 +467,7 @@ product object.
 | ShipTracker | `FST_Settings::get_standard_boxes()` — the standard boxes | this section's own list of boxes |
 | Batch plugin | `FisHotel_Ship_Day::fish_categories()`, `::parse_invoice_lines()`; the line meta `_fishotel_fish_id` | `quarantined-fish` + `inverts`; an Invoice without a snapshot is reported as unreadable |
 | Theme | `FisHotel_Invoice_Lines::get_lines()`; the line and order meta `_fishotel_line_status`, `_fh_invoice_fish`, `_fh_invoice_product_id`, `_fh_invoice_lines`, `_fh_invoice_credit`, `_fishotel_is_fulfillment`, `_fishotel_fulfillment_sources`, `_fishotel_fulfilled_by_order` | every order is an ordinary order |
+| Foam Cuts section | `Foam_Cuts::enabled()`, `Settings::get()['thickness']` ÷ `Units::PER_INCH` — the foam thickness, while that section is switched on | this section's own foam setting (0.5 in) |
 | WooCommerce | products, orders | the page still opens and says so; the lists can be filled in |
 
 Each is reached through `class_exists()` / `method_exists()` /
@@ -364,7 +492,9 @@ Each is reached through `class_exists()` / `method_exists()` /
   invoice / My Account order-item data, or to build a REST or Store API
   answer.
 - The bag is never written to an order line: it is worked out from the
-  product each time. Both meta keys — `_fh_bag_size` and
+  product each time — the bag to use as well. The bags chosen by hand are
+  hidden order meta (`_fh_packing_bags`), written only by the order's
+  Packing box. Both product meta keys — `_fh_bag_size` and
   `_fh_packs_in_bag` — are hidden (a leading underscore), are not
   registered for REST, are not product attributes, and make no variation
   and no term. The checkbox is drawn in the product editor only; no view
@@ -395,12 +525,15 @@ packing/
 ├── class-packing.php        the section, and the contract functions
 ├── class-settings.php       the one option, its sanitisers, the four saves
 ├── class-size-list.php      the fish sizes (the Clean Room's, else found here)
-├── class-boxes.php          the boxes in use; "how many fit" per box
+├── class-fit.php            PURE: the fit model — a bag's size against a box's floor
+├── class-boxes.php          the boxes in use; "how many fit" per box (typed, else the fit model)
 ├── class-suggest.php        PURE: bags needed → box(es), fill, on the line
+├── class-upsize.php         PURE: the round robin inside one box
+├── class-plan.php           PURE: the fish into the box(es), upsized; the choices by hand
 ├── class-bags.php           a product's / an order line's bag
 ├── class-livestock.php      "Livestock — packed in a bag": the one rule
 ├── class-lines.php          an order's fish lines
-├── class-order-packing.php  the suggestion of an order; the confirmed box
+├── class-order-packing.php  the suggestion of an order; the bags to use; the confirmed box; the choices by hand
 ├── class-store.php          the only $wpdb file — reads only
 ├── class-fill.php           "Fill empty ones from the map"
 ├── class-product.php        the checkbox and the Bag size dropdown in the product editor
@@ -416,8 +549,11 @@ packing/
 
 - **Fish per bag** on a product: the maths and the filter are there, the
   field is not.
-- **The pick list** itself lives in the Batch plugin; it can show the bag
-  of a line by calling `fishotel_packing_bag_for_item()`.
+- **The pick list** itself lives in the Batch plugin; it shows the bag to
+  use of a line by calling `fishotel_packing_bag_for_item()`.
+- **The fit model is a ballpark**: square cells and rows, not the best
+  packing of circles. Where it is off for a box and a bag, type the number:
+  "your number" wins.
 - The checkbox and the Bag size dropdown are in the **classic** product
   editor (the Shipping tab and the variations); quick edit, bulk edit and
   the product import set neither — a product made that way follows the

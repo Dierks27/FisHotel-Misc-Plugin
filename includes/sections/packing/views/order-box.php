@@ -22,6 +22,7 @@ use FisHotel\Misc\Sections\Packing\Bags;
 use FisHotel\Misc\Sections\Packing\Boxes;
 use FisHotel\Misc\Sections\Packing\Livestock;
 use FisHotel\Misc\Sections\Packing\Order_Packing;
+use FisHotel\Misc\Sections\Packing\Plan;
 use FisHotel\Misc\Sections\Packing\Suggest;
 
 $fh_order_id  = method_exists( $order, 'get_id' ) ? (int) $order->get_id() : 0;
@@ -92,7 +93,11 @@ if ( $fh_confirmed && $fh_can_use ) {
 						</td>
 						<td>
 							<?php if ( $fh_line['bag'] ) : ?>
-								<strong><?php echo esc_html( $fh_line['bag']['name'] ); ?></strong>
+								<?php
+								$fh_use_name = '' !== (string) ( $fh_line['use_name'] ?? '' ) ? (string) $fh_line['use_name'] : (string) $fh_line['bag']['name'];
+								$fh_from     = Bags::SOURCE_OWN === $fh_line['bag']['source'] ? __( 'set on the product', 'fishotel-misc-plugin' ) : __( 'from the size map', 'fishotel-misc-plugin' );
+								?>
+								<strong class="fh-pack-box__use"><?php echo esc_html( $fh_use_name ); ?></strong>
 								<?php if ( (int) $fh_line['bags'] !== (int) $fh_line['qty'] ) : ?>
 									<span class="fh-pack-box__sub">
 										<?php
@@ -101,9 +106,44 @@ if ( $fh_confirmed && $fh_can_use ) {
 										?>
 									</span>
 								<?php endif; ?>
-								<span class="fh-pack-box__sub">
-									<?php echo esc_html( Bags::SOURCE_OWN === $fh_line['bag']['source'] ? __( 'set on the product', 'fishotel-misc-plugin' ) : __( 'from the size map', 'fishotel-misc-plugin' ) ); ?>
+								<?php if ( ! empty( $fh_line['chosen'] ) ) : ?>
+									<span class="fh-pack-box__tag"><?php esc_html_e( 'chosen by hand', 'fishotel-misc-plugin' ); ?></span>
+								<?php elseif ( ! empty( $fh_line['upsized'] ) ) : ?>
+									<span class="fh-pack-box__sub fh-pack-box__upsized">
+										<?php
+										/* translators: %s: the smallest bag */
+										echo esc_html( sprintf( __( 'upsized from %s to fill the box', 'fishotel-misc-plugin' ), $fh_line['bag']['name'] ) );
+										?>
+									</span>
+								<?php endif; ?>
+								<span class="fh-pack-box__sub fh-pack-box__min">
+									<?php
+									/* translators: 1: the smallest bag, 2: where it comes from */
+									echo esc_html( sprintf( __( 'smallest: %1$s, %2$s', 'fishotel-misc-plugin' ), $fh_line['bag']['name'], $fh_from ) );
+									?>
 								</span>
+								<?php if ( isset( $fh_line['tie_off'] ) && null !== $fh_line['tie_off'] ) : ?>
+									<span class="fh-pack-box__sub fh-pack-box__tie">
+										<?php
+										/* translators: %s: inches */
+										echo esc_html( sprintf( __( 'tie off at about %s in to suit the box', 'fishotel-misc-plugin' ), Boxes::num_text( $fh_line['tie_off'], 1 ) ) );
+										?>
+									</span>
+								<?php endif; ?>
+								<?php if ( ! $fh_folded && '' !== (string) ( $fh_line['key'] ?? '' ) ) : ?>
+									<label class="screen-reader-text" for="fh-pack-bag-<?php echo esc_attr( $fh_line['key'] ); ?>">
+										<?php
+										/* translators: %s: fish name */
+										echo esc_html( sprintf( __( 'Bag for %s', 'fishotel-misc-plugin' ), $fh_line['name'] ) );
+										?>
+									</label>
+									<select id="fh-pack-bag-<?php echo esc_attr( $fh_line['key'] ); ?>" class="fh-pack-bag" data-line="<?php echo esc_attr( $fh_line['key'] ); ?>">
+										<option value=""<?php selected( empty( $fh_line['chosen'] ) ); ?>><?php esc_html_e( 'Auto', 'fishotel-misc-plugin' ); ?></option>
+										<?php foreach ( $settings['bags'] as $fh_bag ) : ?>
+											<option value="<?php echo esc_attr( (int) $fh_bag['id'] ); ?>"<?php selected( (int) ( $fh_line['chosen'] ?? 0 ), (int) $fh_bag['id'] ); ?>><?php echo esc_html( Bags::label( $fh_bag ) ); ?></option>
+										<?php endforeach; ?>
+									</select>
+								<?php endif; ?>
 							<?php else : ?>
 								<strong class="fh-pack-box__none"><?php esc_html_e( 'No bag size', 'fishotel-misc-plugin' ); ?></strong>
 								<?php if ( isset( $fh_line['reason'] ) ) : ?>
@@ -118,15 +158,28 @@ if ( $fh_confirmed && $fh_can_use ) {
 	<?php endif; ?>
 
 	<?php if ( $result['bags'] ) : ?>
+		<?php
+		$fh_parts = array();
+		foreach ( $result['bags'] as $fh_bag ) {
+			$fh_parts[] = (int) $fh_bag['count'] . ' × ' . $fh_bag['name'];
+		}
+		$fh_used = array();
+		foreach ( (array) ( $result['bags_used'] ?? array() ) as $fh_bag ) {
+			$fh_used[] = (int) $fh_bag['count'] . ' × ' . $fh_bag['name'];
+		}
+		$fh_used = $fh_used ? $fh_used : $fh_parts;
+		?>
 		<p class="fh-pack-box__bags">
-			<strong><?php esc_html_e( 'Bags:', 'fishotel-misc-plugin' ); ?></strong>
-			<?php
-			$fh_parts = array();
-			foreach ( $result['bags'] as $fh_bag ) {
-				$fh_parts[] = (int) $fh_bag['count'] . ' × ' . $fh_bag['name'];
-			}
-			echo esc_html( implode( ' · ', $fh_parts ) );
-			?>
+			<strong><?php esc_html_e( 'Bags to use:', 'fishotel-misc-plugin' ); ?></strong>
+			<?php echo esc_html( implode( ' · ', $fh_used ) ); ?>
+			<?php if ( $fh_used !== $fh_parts ) : ?>
+				<span class="fh-pack-box__sub">
+					<?php
+					/* translators: %s: bags, as "2 × Name" separated by dots */
+					echo esc_html( sprintf( __( 'smallest that fit: %s', 'fishotel-misc-plugin' ), implode( ' · ', $fh_parts ) ) );
+					?>
+				</span>
+			<?php endif; ?>
 			<span class="fh-pack-box__sub">
 				<?php
 				/* translators: %d: number of bags */
@@ -224,6 +277,57 @@ if ( $fh_confirmed && $fh_can_use ) {
 								echo esc_html( implode( ' · ', $fh_parts ) );
 								?>
 							</span>
+						<?php endif; ?>
+					</li>
+				<?php endforeach; ?>
+			</ul>
+		</div>
+	<?php endif; ?>
+
+	<?php if ( ! $fh_folded && ! empty( $result['packed']['boxes'] ) ) : ?>
+		<div class="fh-pack-box__packed">
+			<span class="fh-pack-box__label">
+				<?php
+				$fh_many = count( $result['packed']['boxes'] ) > 1;
+				if ( Plan::FROM_CONFIRMED === $result['packed']['from'] ) {
+					echo esc_html( $fh_many ? __( 'Bags in the confirmed boxes', 'fishotel-misc-plugin' ) : __( 'Bags in the confirmed box', 'fishotel-misc-plugin' ) );
+				} else {
+					echo esc_html( $fh_many ? __( 'Bags in the suggested boxes', 'fishotel-misc-plugin' ) : __( 'Bags in the suggested box', 'fishotel-misc-plugin' ) );
+				}
+				?>
+			</span>
+			<ul class="fh-pack-box__boxes">
+				<?php foreach ( $result['packed']['boxes'] as $fh_box ) : ?>
+					<?php
+					$fh_parts = array();
+					foreach ( array_reverse( $settings['bags'] ) as $fh_bag ) {
+						if ( ! empty( $fh_box['bags'][ (int) $fh_bag['id'] ] ) ) {
+							$fh_parts[] = (int) $fh_box['bags'][ (int) $fh_bag['id'] ] . ' × ' . $fh_bag['name'];
+						}
+					}
+					?>
+					<li class="<?php echo $fh_box['over'] ? 'is-over' : ''; ?>">
+						<strong><?php echo esc_html( $fh_box['name'] ); ?></strong>
+						<?php echo esc_html( $fh_parts ? ': ' . implode( ' + ', $fh_parts ) : '' ); ?>
+						&mdash;
+						<?php
+						if ( null === $fh_box['fill_pct'] ) {
+							esc_html_e( 'a bag chosen does not go in it', 'fishotel-misc-plugin' );
+						} else {
+							/* translators: %s: percent */
+							echo esc_html( sprintf( __( '%s full after upsizing', 'fishotel-misc-plugin' ), $fh_pct( $fh_box['fill_pct'] ) ) );
+						}
+						?>
+						<?php if ( null !== $fh_box['fill_min_pct'] && $fh_box['fill_min_pct'] !== $fh_box['fill_pct'] ) : ?>
+							<span class="fh-pack-box__sub">
+								<?php
+								/* translators: %s: percent */
+								echo esc_html( sprintf( __( '%s with the smallest bags', 'fishotel-misc-plugin' ), $fh_pct( $fh_box['fill_min_pct'] ) ) );
+								?>
+							</span>
+						<?php endif; ?>
+						<?php if ( $fh_box['over'] ) : ?>
+							<span class="fh-pack-badge fh-pack-badge--line"><?php esc_html_e( 'Too full — check it', 'fishotel-misc-plugin' ); ?></span>
 						<?php endif; ?>
 					</li>
 				<?php endforeach; ?>

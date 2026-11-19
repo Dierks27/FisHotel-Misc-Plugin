@@ -7,13 +7,16 @@
  *
  * @var array $settings Settings::get().
  * @var array $current  Boxes::current(): source, shiptracker, boxes, own.
- * @var array $boxes    The boxes in use with `fits` and `fits_from`.
+ * @var array $boxes    The boxes in use with `fits` and `fits_from`, and the fit model's
+ *                      `fits_typed`, `fits_computed`, `tie_off` and `usable`.
+ * @var array $model    Boxes::model(): foam, share, foam_from.
  */
 
 defined( 'ABSPATH' ) || exit;
 
 use FisHotel\Misc\Sections\Packing\Admin;
 use FisHotel\Misc\Sections\Packing\Boxes;
+use FisHotel\Misc\Sections\Packing\Fit;
 use FisHotel\Misc\Sections\Packing\Settings;
 
 $fh_bags     = $settings['bags'];
@@ -56,6 +59,7 @@ if ( $fh_from_st ) {
 					<th><?php esc_html_e( 'Box', 'fishotel-misc-plugin' ); ?></th>
 					<th><?php esc_html_e( 'Length × width × height', 'fishotel-misc-plugin' ); ?></th>
 					<th class="fh-pack-num"><?php esc_html_e( 'Volume (cu in)', 'fishotel-misc-plugin' ); ?></th>
+					<th><?php esc_html_e( 'Room for bags (inside the foam)', 'fishotel-misc-plugin' ); ?></th>
 				</tr>
 			</thead>
 			<tbody>
@@ -64,6 +68,13 @@ if ( $fh_from_st ) {
 						<td><?php echo esc_html( $fh_box['name'] ); ?></td>
 						<td><?php echo esc_html( Boxes::size_text( $fh_box ) ); ?></td>
 						<td class="fh-pack-num"><?php echo esc_html( Boxes::num_text( $fh_box['volume'], 1 ) ); ?></td>
+						<td class="fh-pack-muted">
+							<?php
+							$fh_room = $fh_box['usable'] ?? Fit::usable( $fh_box, $model['foam'] );
+							/* translators: 1: floor length, 2: floor width, 3: height, all in inches */
+							echo esc_html( sprintf( __( 'floor %1$s × %2$s in, %3$s in tall', 'fishotel-misc-plugin' ), Boxes::num_text( $fh_room['length'] ), Boxes::num_text( $fh_room['width'] ), Boxes::num_text( $fh_room['height'] ) ) );
+							?>
+						</td>
 					</tr>
 				<?php endforeach; ?>
 			</tbody>
@@ -160,7 +171,10 @@ if ( ! $fh_from_st ) :
 		<h2 class="fishotel-misc-card-title"><?php esc_html_e( 'How many fit', 'fishotel-misc-plugin' ); ?></h2>
 	</div>
 	<p class="fishotel-misc-card-desc">
-		<?php esc_html_e( 'For each box, how many bags of each size fit when the box holds only that size. Blank = that bag does not go in that box. An order\'s fill is the sum of bags needed ÷ how many fit: 6 small in a box that takes 12 plus 2 large in a box that takes 6 is 50% + 33% = 83%.', 'fishotel-misc-plugin' ); ?>
+		<?php esc_html_e( 'Worked out for you from each bag\'s width and length (Bags tab): bags are never stacked, so only the floor counts — each filled bag takes a square of floor as wide as the bag stands across, and a bag goes in a box when it fits the floor\'s shorter side. Under each cell, "by size" is that number; "too wide" means the bag does not go in that box. A bag that stands taller than the box is still used — tie it off shorter (the order says at about what height).', 'fishotel-misc-plugin' ); ?>
+	</p>
+	<p class="fishotel-misc-card-desc">
+		<?php esc_html_e( 'A number you type here wins over the worked-out one ("your number"), for that box and bag — blank goes back to the worked-out number. A bag without a width and a length goes in a box only where you typed a number. An order\'s fill adds up each bag\'s share of the box: 6 small in a box that takes 12 plus 2 large in a box that takes 6 is 50% + 33% = 83%.', 'fishotel-misc-plugin' ); ?>
 	</p>
 
 	<?php if ( ! $fh_bags || ! $boxes ) : ?>
@@ -216,9 +230,26 @@ if ( ! $fh_from_st ) :
 									<input type="hidden" name="box_key[<?php echo esc_attr( $fh_i ); ?>]" value="<?php echo esc_attr( $fh_box['key'] ); ?>">
 								</th>
 								<?php foreach ( $fh_bags as $fh_bag ) : ?>
-									<?php $fh_fit = (int) ( $fh_box['fits'][ (int) $fh_bag['id'] ] ?? 0 ); ?>
+									<?php
+									$fh_id   = (int) $fh_bag['id'];
+									$fh_fit  = (int) ( $fh_box['fits_typed'][ $fh_id ] ?? 0 );
+									$fh_calc = $fh_box['fits_computed'][ $fh_id ] ?? null;
+									if ( null === $fh_calc ) {
+										$fh_note = __( 'no size', 'fishotel-misc-plugin' );
+									} elseif ( 0 === (int) $fh_calc ) {
+										$fh_note = __( 'too wide', 'fishotel-misc-plugin' );
+									} else {
+										/* translators: %d: how many fit by the bag's size */
+										$fh_note = sprintf( __( 'by size: %d', 'fishotel-misc-plugin' ), (int) $fh_calc );
+									}
+									if ( null !== $fh_calc && (int) $fh_calc > 0 && isset( $fh_box['tie_off'][ $fh_id ] ) ) {
+										/* translators: %s: inches */
+										$fh_note .= ' · ' . sprintf( __( 'tie off at about %s in', 'fishotel-misc-plugin' ), Boxes::num_text( $fh_box['tie_off'][ $fh_id ], 1 ) );
+									}
+									?>
 									<td class="fh-pack-num">
-										<input type="number" class="fh-pack-input fh-pack-input--fit" name="fits[<?php echo esc_attr( $fh_i ); ?>][<?php echo esc_attr( (int) $fh_bag['id'] ); ?>]" value="<?php echo esc_attr( $fh_fit > 0 ? $fh_fit : '' ); ?>" min="1" max="<?php echo esc_attr( Settings::MAX_FIT ); ?>" step="1" aria-label="<?php echo esc_attr( sprintf( /* translators: 1: bag name, 2: box name */ __( 'How many %1$s bags fit %2$s', 'fishotel-misc-plugin' ), $fh_bag['name'], $fh_box['name'] ) ); ?>">
+										<input type="number" class="fh-pack-input fh-pack-input--fit" name="fits[<?php echo esc_attr( $fh_i ); ?>][<?php echo esc_attr( $fh_id ); ?>]" value="<?php echo esc_attr( $fh_fit > 0 ? $fh_fit : '' ); ?>" min="1" max="<?php echo esc_attr( Settings::MAX_FIT ); ?>" step="1" placeholder="<?php echo esc_attr( null !== $fh_calc && (int) $fh_calc > 0 ? (int) $fh_calc : '' ); ?>" aria-label="<?php echo esc_attr( sprintf( /* translators: 1: bag name, 2: box name */ __( 'How many %1$s bags fit %2$s', 'fishotel-misc-plugin' ), $fh_bag['name'], $fh_box['name'] ) ); ?>">
+										<span class="fh-pack-sub fh-pack-fit-note"><?php echo esc_html( ( $fh_fit > 0 ? __( 'your number', 'fishotel-misc-plugin' ) . ' · ' : '' ) . $fh_note ); ?></span>
 									</td>
 								<?php endforeach; ?>
 							</tr>
@@ -231,7 +262,34 @@ if ( ! $fh_from_st ) :
 		<div class="fh-pack-field">
 			<label class="fh-pack-label" for="fh-pack-threshold"><?php esc_html_e( 'A suggested box is "on the line" — flagged for you to confirm — at or over', 'fishotel-misc-plugin' ); ?></label>
 			<input type="number" id="fh-pack-threshold" class="fh-pack-input fh-pack-input--num" name="threshold" value="<?php echo esc_attr( (int) $settings['threshold'] ); ?>" min="<?php echo esc_attr( Settings::THRESHOLD_MIN ); ?>" max="<?php echo esc_attr( Settings::THRESHOLD_MAX ); ?>" step="1" required>
-			<span class="fh-pack-muted"><?php esc_html_e( '% full (default 90)', 'fishotel-misc-plugin' ); ?></span>
+			<span class="fh-pack-muted"><?php esc_html_e( '% full (default 90) — judged with every fish in its smallest bag, before the bags are upsized to fill the box', 'fishotel-misc-plugin' ); ?></span>
+		</div>
+
+		<div class="fh-pack-field">
+			<label class="fh-pack-label" for="fh-pack-fill-share"><?php esc_html_e( 'Water and oxygen take this share of a bag\'s length (the rest is the tie-off)', 'fishotel-misc-plugin' ); ?></label>
+			<input type="number" id="fh-pack-fill-share" class="fh-pack-input fh-pack-input--num" name="fill_share" value="<?php echo esc_attr( (int) $settings['fill_share'] ); ?>" min="<?php echo esc_attr( Fit::SHARE_MIN ); ?>" max="<?php echo esc_attr( Fit::SHARE_MAX ); ?>" step="1" required>
+			<span class="fh-pack-muted">
+				<?php
+				/* translators: %d: the default percent */
+				echo esc_html( sprintf( __( '%% (default %d) — a bag can have its own on the Bags tab', 'fishotel-misc-plugin' ), Fit::SHARE_DEFAULT ) );
+				?>
+			</span>
+		</div>
+
+		<div class="fh-pack-field">
+			<label class="fh-pack-label" for="fh-pack-foam"><?php esc_html_e( 'Foam on each side of a box', 'fishotel-misc-plugin' ); ?></label>
+			<input type="number" id="fh-pack-foam" class="fh-pack-input fh-pack-input--num" name="foam" value="<?php echo esc_attr( Boxes::num_text( $settings['foam'] ) ); ?>" min="0" max="<?php echo esc_attr( Fit::FOAM_MAX ); ?>" step="0.01" required>
+			<span class="fh-pack-muted">
+				<?php
+				if ( 'foam-cuts' === $model['foam_from'] ) {
+					/* translators: %s: inches */
+					echo esc_html( sprintf( __( 'in — not used while Foam Cuts is switched on: its foam thickness (%s in) is taken off every side.', 'fishotel-misc-plugin' ), Boxes::num_text( $model['foam'] ) ) );
+				} else {
+					/* translators: %s: the default inches */
+					echo esc_html( sprintf( __( 'in (default %s), taken off every side — while Foam Cuts is switched on, its thickness is used instead.', 'fishotel-misc-plugin' ), Boxes::num_text( Fit::FOAM_DEFAULT ) ) );
+				}
+				?>
+			</span>
 		</div>
 
 		<p class="fh-pack-actions">

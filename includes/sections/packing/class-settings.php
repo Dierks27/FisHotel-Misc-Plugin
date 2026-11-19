@@ -8,8 +8,10 @@
  *
  *   bags        the standard bags: id (a number that is never reused, so a
  *               renamed bag keeps every product that carries it), name,
- *               width and length in inches (optional), sort. Nothing is
- *               seeded.
+ *               width and length in inches flat (optional — with both,
+ *               the fit model works out how many fit each box), share (the
+ *               filled share of this bag in percent, '' = the setting),
+ *               sort. Nothing is seeded.
  *   last_bag_id the highest id ever given.
  *   boxes       this section's OWN list of boxes (name, length, width,
  *               height in inches) — used only while ShipTracker provides
@@ -21,6 +23,11 @@
  *   size_map    the size → bag map: size slug → bag id.
  *   threshold   a suggested box is "on the line" at or over this percent
  *               (default 90).
+ *   fill_share  the share of a bag's length that is water and oxygen, in
+ *               percent (default 70) — how tall a filled bag stands.
+ *   foam        the foam on each side of a box, in inches (default 0.5) —
+ *               used while the Foam Cuts section is off (its thickness wins
+ *               while it is on).
  *
  * Every save — bags_request(), boxes_request(), fits_request(),
  * map_request() — checks the capability (manage_woocommerce) and the
@@ -95,6 +102,8 @@ class Settings {
 			'fits'        => array(),
 			'size_map'    => array(),
 			'threshold'   => self::THRESHOLD_DEFAULT,
+			'fill_share'  => Fit::SHARE_DEFAULT,
+			'foam'        => Fit::FOAM_DEFAULT,
 		);
 	}
 
@@ -144,6 +153,7 @@ class Settings {
 			}
 			$width  = self::dim_in( $row['width'] ?? '' );
 			$length = self::dim_in( $row['length'] ?? '' );
+			$share  = self::share_in( $row['share'] ?? '' );
 			$sort   = isset( $row['sort'] ) && is_numeric( $row['sort'] ) ? (int) $row['sort'] : 0;
 
 			$known[ $id ] = true;
@@ -152,6 +162,7 @@ class Settings {
 				'name'   => $name,
 				'width'  => null === $width ? '' : $width,
 				'length' => null === $length ? '' : $length,
+				'share'  => null === $share ? '' : $share,
 				'sort'   => max( -self::MAX_SORT, min( self::MAX_SORT, $sort ) ),
 			);
 			$last_id      = max( $last_id, $id );
@@ -234,6 +245,8 @@ class Settings {
 		}
 
 		$threshold = self::threshold_in( $raw['threshold'] ?? null );
+		$share     = self::share_in( $raw['fill_share'] ?? '' );
+		$foam      = self::foam_in( $raw['foam'] ?? '' );
 
 		return array(
 			'bags'        => $bags,
@@ -242,6 +255,8 @@ class Settings {
 			'fits'        => $fits,
 			'size_map'    => $map,
 			'threshold'   => null === $threshold ? self::THRESHOLD_DEFAULT : $threshold,
+			'fill_share'  => null === $share || '' === $share ? Fit::SHARE_DEFAULT : $share,
+			'foam'        => null === $foam || '' === $foam ? Fit::FOAM_DEFAULT : $foam,
 		);
 	}
 
@@ -332,6 +347,50 @@ class Settings {
 		}
 		$value = (int) $text;
 		return ( $value < self::THRESHOLD_MIN || $value > self::THRESHOLD_MAX ) ? null : $value;
+	}
+
+	/**
+	 * A filled share in percent: '' when blank, the whole number from
+	 * Fit::SHARE_MIN to Fit::SHARE_MAX, null for anything else.
+	 *
+	 * @param mixed $raw Raw value.
+	 * @return int|string|null
+	 */
+	public static function share_in( $raw ) {
+		if ( null === $raw || ( is_string( $raw ) && '' === trim( $raw ) ) ) {
+			return '';
+		}
+		if ( ! is_scalar( $raw ) || is_bool( $raw ) ) {
+			return null;
+		}
+		$text = trim( (string) $raw );
+		if ( 1 !== preg_match( '/^\d{1,3}$/', $text ) ) {
+			return null;
+		}
+		$value = (int) $text;
+		return ( $value < Fit::SHARE_MIN || $value > Fit::SHARE_MAX ) ? null : $value;
+	}
+
+	/**
+	 * A foam thickness in inches: '' when blank, the number (0 included, at
+	 * most Fit::FOAM_MAX, two places), null for anything else.
+	 *
+	 * @param mixed $raw Raw value.
+	 * @return float|string|null
+	 */
+	public static function foam_in( $raw ) {
+		if ( null === $raw || ( is_string( $raw ) && '' === trim( $raw ) ) ) {
+			return '';
+		}
+		if ( ! is_scalar( $raw ) || is_bool( $raw ) ) {
+			return null;
+		}
+		$text = trim( (string) $raw );
+		if ( ! is_numeric( $text ) ) {
+			return null;
+		}
+		$value = round( (float) $text, 2 );
+		return ( $value < 0 || $value > Fit::FOAM_MAX || is_nan( $value ) ) ? null : $value;
 	}
 
 	/**
@@ -427,6 +486,12 @@ class Settings {
 				$errors[] = sprintf( __( '%1$s: width and length are inches above 0 and at most %2$s, or blank', 'fishotel-misc-plugin' ), $name, Boxes::num_text( self::MAX_DIM ) );
 				continue;
 			}
+			$share = self::share_in( $row['share'] ?? '' );
+			if ( null === $share ) {
+				/* translators: 1: bag name, 2: lowest percent, 3: highest percent */
+				$errors[] = sprintf( __( '%1$s: the filled share is a whole percent from %2$d to %3$d, or blank', 'fishotel-misc-plugin' ), $name, Fit::SHARE_MIN, Fit::SHARE_MAX );
+				continue;
+			}
 
 			$sort = $line * 10;
 			if ( ! self::is_blank( $row['sort'] ?? '' ) ) {
@@ -449,6 +514,7 @@ class Settings {
 				'name'   => $name,
 				'width'  => $width,
 				'length' => $length,
+				'share'  => $share,
 				'sort'   => $sort,
 			);
 		}
@@ -682,6 +748,25 @@ class Settings {
 				$errors[] = sprintf( __( '"on the line" is a whole percent from %1$d to %2$d', 'fishotel-misc-plugin' ), self::THRESHOLD_MIN, self::THRESHOLD_MAX );
 			} else {
 				$settings['threshold'] = $threshold;
+			}
+		}
+
+		if ( array_key_exists( 'fill_share', $raw ) ) {
+			$share = self::share_in( $raw['fill_share'] );
+			if ( null === $share || '' === $share ) {
+				/* translators: 1: lowest percent, 2: highest percent */
+				$errors[] = sprintf( __( 'the filled share of a bag is a whole percent from %1$d to %2$d', 'fishotel-misc-plugin' ), Fit::SHARE_MIN, Fit::SHARE_MAX );
+			} else {
+				$settings['fill_share'] = $share;
+			}
+		}
+		if ( array_key_exists( 'foam', $raw ) ) {
+			$foam = self::foam_in( $raw['foam'] );
+			if ( null === $foam || '' === $foam ) {
+				/* translators: %s: the most inches allowed */
+				$errors[] = sprintf( __( 'the foam is inches from 0 to %s', 'fishotel-misc-plugin' ), Boxes::num_text( Fit::FOAM_MAX ) );
+			} else {
+				$settings['foam'] = $foam;
 			}
 		}
 

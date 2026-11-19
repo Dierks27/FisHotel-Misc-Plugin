@@ -18,6 +18,12 @@
  *                         line had a bag size), by (user id), at (UTC)
  *   _fh_packing_box_name  the same as plain text: "Medium box",
  *                         "2 × Large box + Small box"
+ *   _fh_packing_bags      the bags chosen by hand: line key → bag id
+ *
+ * The bag each fish goes in (Plan): its minimum bag chooses the box; inside
+ * the box (the confirmed one, else the suggestion's) the fish are moved up
+ * to the largest bags that still fit (Upsize); a bag chosen by hand on a
+ * line is kept.
  *
  * Confirming, changing and clearing go through confirm_request(), which
  * checks the capability (manage_woocommerce) and the nonce itself and
@@ -49,6 +55,20 @@ class Order_Packing {
 	 * @var int
 	 */
 	const MAX_COUNT = 20;
+
+	/**
+	 * The most bags chosen by hand one order keeps.
+	 *
+	 * @var int
+	 */
+	const MAX_OVERRIDES = 200;
+
+	/**
+	 * The plans bag_to_use() worked out in this request, by order id.
+	 *
+	 * @var array<int, array>
+	 */
+	private static $plans = array();
 
 	/* ============================================================== */
 	/*  The suggestion                                                 */
@@ -140,15 +160,38 @@ class Order_Packing {
 			);
 		}
 
-		$boxes = Boxes::with_fits( $current['boxes'], $settings['fits'] );
+		$model         = Boxes::model( $settings );
+		$boxes         = Boxes::with_fits( $current['boxes'], $settings['fits'], $settings['bags'], $model );
 		$order_of_bags = array();
 		foreach ( $settings['bags'] as $bag ) {
 			$order_of_bags[] = (int) $bag['id'];
 		}
 		$plan = Suggest::suggest( $needs, $boxes, $settings['threshold'], $order_of_bags );
 
-		$bags     = array();
-		$unplaced = array();
+		// The bags to use: upsized inside the confirmed box, else the suggested one.
+		$lines     = self::keyed( $gathered['lines'] );
+		$confirmed = self::confirmed( $order );
+		$overrides = self::overrides( $order, $lines, $settings );
+		$folded    = (int) $gathered['packed_with'] > 0;
+		$in_boxes  = null;
+		$same      = false;
+		if ( $confirmed && ! $folded ) {
+			$in_boxes = self::confirmed_boxes( $confirmed, $settings, $model );
+			$same     = in_array( $plan['status'], array( Suggest::STATUS_FITS, Suggest::STATUS_SPLIT, Suggest::STATUS_PARTIAL ), true ) && self::boxes_name( $plan['boxes'] ) === $confirmed['name'];
+		}
+		$packed = Plan::build( $lines, $folded ? array() : $plan, $boxes, $order_of_bags, $overrides, $in_boxes, $same );
+		$lines  = self::with_use( $lines, $packed, $settings );
+
+		$used = array();
+		foreach ( $lines as $line ) {
+			foreach ( $line['use'] as $row ) {
+				$used[ $row['id'] ] = ( $used[ $row['id'] ] ?? 0 ) + $row['count'];
+			}
+		}
+
+		$bags      = array();
+		$bags_used = array();
+		$unplaced  = array();
 		foreach ( $settings['bags'] as $bag ) {
 			$id = (int) $bag['id'];
 			if ( ! empty( $needs[ $id ] ) ) {
@@ -159,6 +202,16 @@ class Order_Packing {
 					'length' => (string) $bag['length'],
 					'label'  => Bags::label( $bag ),
 					'count'  => (int) $needs[ $id ],
+				);
+			}
+			if ( ! empty( $used[ $id ] ) ) {
+				$bags_used[] = array(
+					'id'     => $id,
+					'name'   => (string) $bag['name'],
+					'width'  => (string) $bag['width'],
+					'length' => (string) $bag['length'],
+					'label'  => Bags::label( $bag ),
+					'count'  => (int) $used[ $id ],
 				);
 			}
 			if ( ! empty( $plan['unplaced'][ $id ] ) ) {
@@ -181,8 +234,11 @@ class Order_Packing {
 			'threshold'      => $plan['threshold'],
 			'bags'           => $bags,
 			'bag_total'      => $plan['bag_total'],
+			'bags_used'      => $bags_used,
+			'packed'         => self::packed_summary( $packed ),
+			'overrides'      => $overrides,
 			'unplaced'       => $unplaced,
-			'lines'          => $gathered['lines'],
+			'lines'          => $lines,
 			'incomplete'     => $incomplete,
 			'complete'       => ! $incomplete,
 			'ignored'        => $gathered['ignored'],
@@ -191,7 +247,7 @@ class Order_Packing {
 			'is_fulfillment' => $gathered['is_fulfillment'],
 			'sources'        => $gathered['sources'],
 			'packed_with'    => $gathered['packed_with'],
-			'confirmed'      => self::confirmed( $order ),
+			'confirmed'      => $confirmed,
 			'messages'       => array(),
 		);
 
@@ -281,8 +337,400 @@ class Order_Packing {
 			}
 		}
 
+		foreach ( isset( $result['packed']['boxes'] ) ? $result['packed']['boxes'] : array() as $box ) {
+			if ( empty( $box['over'] ) ) {
+				continue;
+			}
+			if ( ! empty( $box['missing'] ) ) {
+				$names = array();
+				foreach ( $box['missing'] as $bag_id ) {
+					$bag     = Bags::find( $settings['bags'], $bag_id );
+					$names[] = $bag ? (string) $bag['name'] : '#' . (int) $bag_id;
+				}
+				/* translators: 1: bag names, separated by commas, 2: box name */
+				$out[] = sprintf( __( 'Check it: %1$s does not go in %2$s at all — choose another bag or another box.', 'fishotel-misc-plugin' ), implode( ', ', $names ), $box['name'] );
+			} else {
+				/* translators: 1: box name, 2: percent full */
+				$out[] = sprintf( __( 'Check it: the bags chosen come to %2$s%% of %1$s — more than it holds.', 'fishotel-misc-plugin' ), $box['name'], Boxes::num_text( (float) $box['fill_pct'], 1 ) );
+			}
+		}
+
+		if ( ! empty( $result['packed']['left_out'] ) ) {
+			$names = array();
+			foreach ( $result['packed']['left_out'] as $bag_id => $count ) {
+				$bag     = Bags::find( $settings['bags'], $bag_id );
+				$names[] = (int) $count . ' × ' . ( $bag ? (string) $bag['name'] : '#' . (int) $bag_id );
+			}
+			$confirmed_names = array();
+			foreach ( $result['packed']['boxes'] as $box ) {
+				$confirmed_names[] = (string) $box['name'];
+			}
+			/* translators: 1: bags, as "2 × Name" separated by commas, 2: the confirmed box names */
+			$out[] = sprintf( __( 'Check it: %1$s does not go in %2$s — choose another box.', 'fishotel-misc-plugin' ), implode( ', ', $names ), implode( ' + ', array_unique( $confirmed_names ) ) );
+		}
+
 		// Two boxes of one kind, equally full, are said once.
 		return array_values( array_unique( $out ) );
+	}
+
+	/* ============================================================== */
+	/*  The bags to use                                                */
+	/* ============================================================== */
+
+	/**
+	 * Each fish line with its key: "order id-item id-n", n counting the
+	 * lines one order line opened up into (an Invoice's fish), from 0.
+	 *
+	 * @param array[] $lines Lines::for_order()['lines'].
+	 * @return array[]
+	 */
+	public static function keyed( array $lines ) {
+		$seen = array();
+		foreach ( $lines as $index => $line ) {
+			$base                   = (int) ( $line['order_id'] ?? 0 ) . '-' . (int) ( $line['item_id'] ?? 0 );
+			$n                      = $seen[ $base ] ?? 0;
+			$seen[ $base ]          = $n + 1;
+			$lines[ $index ]['key'] = $base . '-' . $n;
+		}
+		return $lines;
+	}
+
+	/**
+	 * The bags chosen by hand as stored on the order, cleaned: line key →
+	 * bag id (pure apart from reading the meta).
+	 *
+	 * @param object $order WC_Order.
+	 * @return array<string, int>
+	 */
+	public static function stored_overrides( $order ) {
+		$raw = is_object( $order ) && method_exists( $order, 'get_meta' ) ? $order->get_meta( Packing::META_BAGS, true ) : array();
+		if ( is_string( $raw ) && '' !== trim( $raw ) ) {
+			$raw = json_decode( $raw, true );
+		}
+		$out = array();
+		foreach ( is_array( $raw ) ? $raw : array() as $key => $bag_id ) {
+			$key = (string) $key;
+			if ( 1 === preg_match( '/^\d+-\d+-\d+$/', $key ) && is_numeric( $bag_id ) && (int) $bag_id > 0 ) {
+				$out[ $key ] = (int) $bag_id;
+			}
+			if ( count( $out ) >= self::MAX_OVERRIDES ) {
+				break;
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * The bags chosen by hand that apply now: those of a fish line of the
+	 * order that has a bag, naming a bag of the list.
+	 *
+	 * @param object  $order    WC_Order.
+	 * @param array[] $lines    The keyed fish lines.
+	 * @param array   $settings Settings.
+	 * @return array<string, int>
+	 */
+	public static function overrides( $order, array $lines, array $settings ) {
+		$stored = self::stored_overrides( $order );
+		$out    = array();
+		foreach ( $lines as $line ) {
+			$key = (string) ( $line['key'] ?? '' );
+			if ( ! empty( $line['bag'] ) && isset( $stored[ $key ] ) && Bags::find( $settings['bags'], $stored[ $key ] ) ) {
+				$out[ $key ] = $stored[ $key ];
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * The confirmed boxes as boxes with their fits.
+	 *
+	 * @param array $confirmed read_record().
+	 * @param array $settings  Settings.
+	 * @param array $model     Boxes::model().
+	 * @return array[]
+	 */
+	public static function confirmed_boxes( array $confirmed, array $settings, array $model ) {
+		$rows = array();
+		foreach ( $confirmed['boxes'] as $box ) {
+			$row = Boxes::row( $box, 'confirmed' );
+			if ( null !== $row ) {
+				$rows[] = $row;
+			}
+		}
+		return Boxes::with_fits( $rows, $settings['fits'], $settings['bags'], $model );
+	}
+
+	/**
+	 * The fish lines with the bags to use (pure): `use` (each bag: id,
+	 * name, label, count — the largest first), `use_name` ("Large",
+	 * "2 × Large + Medium"), `upsized` (fish of the line were moved up),
+	 * `chosen` (the bag id chosen by hand, 0 = Auto) and `tie_off` (the
+	 * usable height of the box when a bag stands taller — tie it off at
+	 * about that; null otherwise).
+	 *
+	 * @param array[] $lines    The keyed fish lines.
+	 * @param array   $packed   Plan::build().
+	 * @param array   $settings Settings.
+	 * @return array[]
+	 */
+	public static function with_use( array $lines, array $packed, array $settings ) {
+		$largest_first = array_reverse( $settings['bags'] );
+
+		foreach ( $lines as $index => $line ) {
+			$row = $packed['lines'][ $index ] ?? array(
+				'use'    => array(),
+				'boxes'  => array(),
+				'moved'  => 0,
+				'chosen' => 0,
+			);
+
+			$use = array();
+			foreach ( $largest_first as $bag ) {
+				$id = (int) $bag['id'];
+				if ( ! empty( $row['use'][ $id ] ) ) {
+					$use[] = array(
+						'id'    => $id,
+						'name'  => (string) $bag['name'],
+						'label' => Bags::label( $bag ),
+						'count' => (int) $row['use'][ $id ],
+					);
+				}
+			}
+
+			$tie_off = null;
+			foreach ( $row['boxes'] as $b ) {
+				foreach ( $use as $bag ) {
+					$height = $packed['boxes'][ $b ]['tie_off'][ $bag['id'] ] ?? null;
+					if ( null !== $height && ( null === $tie_off || $height < $tie_off ) ) {
+						$tie_off = (float) $height;
+					}
+				}
+			}
+
+			$lines[ $index ]['use']      = $use;
+			$lines[ $index ]['use_name'] = self::use_name( $use );
+			$lines[ $index ]['upsized']  = $row['moved'] > 0;
+			$lines[ $index ]['chosen']   = (int) $row['chosen'];
+			$lines[ $index ]['tie_off']  = $tie_off;
+		}
+
+		return $lines;
+	}
+
+	/**
+	 * The bags of a line in one go: "Large", "2 × Large + Medium" (pure).
+	 *
+	 * @param array[] $use name, count.
+	 * @param string  $key name or label.
+	 * @return string
+	 */
+	public static function use_name( array $use, $key = 'name' ) {
+		if ( 1 === count( $use ) ) {
+			return (string) $use[0][ $key ];
+		}
+		$parts = array();
+		foreach ( $use as $bag ) {
+			$parts[] = ( (int) $bag['count'] > 1 ? (int) $bag['count'] . ' × ' : '' ) . (string) $bag[ $key ];
+		}
+		return implode( ' + ', $parts );
+	}
+
+	/**
+	 * What fishotel_packing_suggest() says about the upsizing: from
+	 * (suggestion | confirmed | ''), boxes (each: key, name, sizes, bags =
+	 * the bags to use, fill_min / fill_min_pct with the minimum bags, fill /
+	 * fill_pct with the bags to use, over, moved, tie_off, missing), moved,
+	 * over, chosen, left_out (bag id → fish left out of the confirmed boxes
+	 * because only another box takes that bag).
+	 *
+	 * @param array $packed Plan::build().
+	 * @return array
+	 */
+	public static function packed_summary( array $packed ) {
+		unset( $packed['lines'] );
+		return $packed;
+	}
+
+	/**
+	 * The bag to use for one order line, for fishotel_packing_bag_for_item():
+	 * null when its order has no plan for it (the caller then keeps the
+	 * minimum). The order's plan is worked out once per request (forget()
+	 * drops it); an order that went into a combined box is read through
+	 * the combined box, which holds its fish.
+	 *
+	 * @param object $item WC_Order_Item_Product.
+	 * @param array  $min  Its minimum bag (Bags::describe()).
+	 * @return array|null Bags::describe() of the bag to use, plus min,
+	 *                    upsized, chosen_by_hand, mixed and bags (each: id,
+	 *                    name, label, count).
+	 */
+	public static function bag_to_use( $item, array $min ) {
+		if ( ! is_object( $item ) || ! method_exists( $item, 'get_order_id' ) || ! method_exists( $item, 'get_id' ) ) {
+			return null;
+		}
+		$order_id = (int) $item->get_order_id();
+		$item_id  = (int) $item->get_id();
+		$order    = $order_id > 0 && $item_id > 0 ? self::load( $order_id ) : null;
+		if ( null === $order ) {
+			return null;
+		}
+
+		$owner   = $order;
+		$wrapper = Lines::packed_with( $order );
+		if ( $wrapper > 0 ) {
+			$combined = self::load( $wrapper );
+			if ( null !== $combined ) {
+				$owner = $combined;
+			}
+		}
+
+		$owner_id = method_exists( $owner, 'get_id' ) ? (int) $owner->get_id() : 0;
+		if ( ! isset( self::$plans[ $owner_id ] ) ) {
+			self::$plans[ $owner_id ] = self::for_order( $owner );
+		}
+		$result = self::$plans[ $owner_id ];
+
+		$counts = array();
+		$moved  = false;
+		$chosen = 0;
+		foreach ( $result['lines'] as $line ) {
+			if ( (int) $line['order_id'] !== $order_id || (int) $line['item_id'] !== $item_id || empty( $line['use'] ) ) {
+				continue;
+			}
+			foreach ( $line['use'] as $bag ) {
+				$counts[ $bag['id'] ] = ( $counts[ $bag['id'] ] ?? 0 ) + $bag['count'];
+			}
+			$moved  = $moved || ! empty( $line['upsized'] );
+			$chosen = $chosen > 0 ? $chosen : (int) $line['chosen'];
+		}
+		if ( ! $counts ) {
+			return null;
+		}
+
+		$settings = Settings::get();
+		$use      = array();
+		$first    = null;
+		foreach ( array_reverse( $settings['bags'] ) as $bag ) {
+			$id = (int) $bag['id'];
+			if ( ! empty( $counts[ $id ] ) ) {
+				$first = null === $first ? $bag : $first;
+				$use[] = array(
+					'id'    => $id,
+					'name'  => (string) $bag['name'],
+					'label' => Bags::label( $bag ),
+					'count' => (int) $counts[ $id ],
+				);
+			}
+		}
+		if ( null === $first ) {
+			return null;
+		}
+
+		if ( $chosen > 0 ) {
+			$source = 'hand';
+		} elseif ( $moved ) {
+			$source = 'upsized';
+		} else {
+			$source = $min['source'];
+		}
+
+		return array(
+			'id'             => (int) $first['id'],
+			'name'           => self::use_name( $use ),
+			'width'          => (string) $first['width'],
+			'length'         => (string) $first['length'],
+			'label'          => self::use_name( $use, 'label' ),
+			'sort'           => (int) $first['sort'],
+			'source'         => $source,
+			'size'           => $min['size'],
+			'size_label'     => $min['size_label'],
+			'min'            => $min,
+			'upsized'        => $moved,
+			'chosen_by_hand' => $chosen > 0,
+			'mixed'          => count( $use ) > 1,
+			'bags'           => $use,
+		);
+	}
+
+	/**
+	 * Drop the plans worked out for bag_to_use() in this request.
+	 */
+	public static function forget() {
+		self::$plans = array();
+	}
+
+	/**
+	 * Choose a line's bag by hand, or put it back on Auto — op "bag" of
+	 * confirm_request() (the capability and the nonce are checked there).
+	 * `line` is the line's key, `bag` a bag id of the list or '' / "auto".
+	 * Stored on the order as META_BAGS through the order object; nothing
+	 * else changes.
+	 *
+	 * @param object $order WC_Order.
+	 * @param array  $raw   line, bag.
+	 * @return array See answer().
+	 */
+	private static function bag_request( $order, array $raw ) {
+		$settings = Settings::get();
+		$result   = self::for_order( $order, $settings );
+
+		if ( $result['packed_with'] > 0 ) {
+			/* translators: %d: order ID of the combined box */
+			return self::answer( 409, sprintf( __( 'This order is packed with combined box #%d — choose the bags there.', 'fishotel-misc-plugin' ), $result['packed_with'] ) );
+		}
+
+		$key  = isset( $raw['line'] ) && is_scalar( $raw['line'] ) && ! is_bool( $raw['line'] ) ? trim( (string) $raw['line'] ) : '';
+		$line = null;
+		foreach ( $result['lines'] as $one ) {
+			if ( '' !== $key && $one['key'] === $key && ! empty( $one['bag'] ) ) {
+				$line = $one;
+				break;
+			}
+		}
+		if ( null === $line ) {
+			return self::answer( 400, __( 'That fish line is not on the order any more — reload the page.', 'fishotel-misc-plugin' ), $order );
+		}
+
+		if ( isset( $raw['bag'] ) && ( ! is_scalar( $raw['bag'] ) || is_bool( $raw['bag'] ) ) ) {
+			return self::answer( 400, __( 'That bag is not in the list of bags any more — choose again.', 'fishotel-misc-plugin' ), $order );
+		}
+		$value = isset( $raw['bag'] ) ? trim( (string) $raw['bag'] ) : '';
+		$bag   = null;
+		if ( '' !== $value && 'auto' !== $value ) {
+			$bag = 1 === preg_match( '/^\d{1,9}$/', $value ) ? Bags::find( $settings['bags'], (int) $value ) : null;
+			if ( null === $bag ) {
+				return self::answer( 400, __( 'That bag is not in the list of bags any more — choose again.', 'fishotel-misc-plugin' ), $order );
+			}
+		}
+
+		$stored = self::stored_overrides( $order );
+		if ( null === $bag ) {
+			if ( ! isset( $stored[ $key ] ) ) {
+				/* translators: %s: fish name */
+				return self::answer( 200, sprintf( __( '%s was on Auto already.', 'fishotel-misc-plugin' ), $line['name'] ), $order );
+			}
+			unset( $stored[ $key ] );
+		} else {
+			$stored[ $key ] = (int) $bag['id'];
+			if ( count( $stored ) > self::MAX_OVERRIDES ) {
+				return self::answer( 400, __( 'Too many bags chosen by hand on this order — put some back on Auto first.', 'fishotel-misc-plugin' ), $order );
+			}
+		}
+
+		if ( $stored ) {
+			$order->update_meta_data( Packing::META_BAGS, $stored );
+		} else {
+			$order->delete_meta_data( Packing::META_BAGS );
+		}
+		$order->save();
+		self::forget();
+
+		if ( null === $bag ) {
+			/* translators: %s: fish name */
+			return self::answer( 200, sprintf( __( '%s is back on Auto.', 'fishotel-misc-plugin' ), $line['name'] ), $order );
+		}
+		/* translators: 1: fish name, 2: bag name */
+		return self::answer( 200, sprintf( __( '%1$s goes in %2$s — chosen by hand.', 'fishotel-misc-plugin' ), $line['name'], $bag['name'] ), $order );
 	}
 
 	/* ============================================================== */
@@ -515,9 +963,14 @@ class Order_Packing {
 			$order->delete_meta_data( Packing::META_BOX );
 			$order->delete_meta_data( Packing::META_BOX_NAME );
 			$order->save();
+			self::forget();
 			do_action( 'fishotel_packing_box_cleared', $order_id );
 
 			return self::answer( 200, __( 'Confirmed box cleared.', 'fishotel-misc-plugin' ), $order );
+		}
+
+		if ( 'bag' === $op ) {
+			return self::bag_request( $order, $raw );
 		}
 
 		if ( 'confirm' !== $op ) {
@@ -569,8 +1022,8 @@ class Order_Packing {
 			foreach ( $result['bags'] as $bag ) {
 				$needs[ (int) $bag['id'] ] = (int) $bag['count'];
 			}
-			$with  = Boxes::with_fits( array( $box ), $settings['fits'] );
-			$fill  = Suggest::fill( $needs, $with[0]['fits'] );
+			$with  = Boxes::fitted( array( $box ), $settings );
+			$fill  = Suggest::fill_of( $needs, $with[0] );
 			$boxes = array_fill( 0, $count, $box );
 			$fills = null === $fill || ! $needs ? array() : array_fill( 0, $count, $fill / $count );
 
@@ -586,6 +1039,7 @@ class Order_Packing {
 		$order->update_meta_data( Packing::META_BOX, $record );
 		$order->update_meta_data( Packing::META_BOX_NAME, $name );
 		$order->save();
+		self::forget();
 
 		do_action( 'fishotel_packing_box_confirmed', $order_id, self::read_record( $record, $order_id ) );
 

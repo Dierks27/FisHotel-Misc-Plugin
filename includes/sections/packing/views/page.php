@@ -14,6 +14,7 @@
  * @var string $blocked     Why the fill tool cannot run, or '' (Sizes tab).
  * @var array  $current     Boxes::current() (Boxes tab).
  * @var array  $boxes       The boxes in use with their "how many fit" (Boxes tab).
+ * @var array  $model       Boxes::model(): the foam and the filled share (Bags and Boxes tabs).
  */
 
 defined( 'ABSPATH' ) || exit;

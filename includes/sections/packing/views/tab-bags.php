@@ -6,11 +6,14 @@
  *
  * @var array $settings Settings::get().
  * @var array $usage    Bag id → how many products / variations name it.
+ * @var array $model    Boxes::model(): the foam and the filled share.
  */
 
 defined( 'ABSPATH' ) || exit;
 
 use FisHotel\Misc\Sections\Packing\Admin;
+use FisHotel\Misc\Sections\Packing\Boxes;
+use FisHotel\Misc\Sections\Packing\Fit;
 use FisHotel\Misc\Sections\Packing\Settings;
 
 $fh_bags  = $settings['bags'];
@@ -23,7 +26,16 @@ $fh_next  = count( $fh_bags ) + $fh_spare;
 		<h2 class="fishotel-misc-card-title"><?php esc_html_e( 'Bag sizes', 'fishotel-misc-plugin' ); ?></h2>
 	</div>
 	<p class="fishotel-misc-card-desc">
-		<?php esc_html_e( 'The bags you pack fish in — nothing is filled in for you. A name is all a bag needs; width and length are optional. The sort number orders the list everywhere (smallest first reads best). A bag keeps its # for good, so renaming one changes nothing on the products that use it.', 'fishotel-misc-plugin' ); ?>
+		<?php esc_html_e( 'The bags you pack fish in — nothing is filled in for you. A name is all a bag needs. A bag keeps its # for good, so renaming one changes nothing on the products that use it.', 'fishotel-misc-plugin' ); ?>
+	</p>
+	<p class="fishotel-misc-card-desc">
+		<?php esc_html_e( 'Width and length are the bag lying flat, in inches. With both, the section works out how many of that bag stand on each box\'s floor: filled and tied, a bag stands as a round column 2 × width ÷ π across (its mouth is twice the width around), and as tall as its length × the filled share — the rest is the tie-off. A bag without both falls back to the numbers typed under Boxes → How many fit, and goes in no box where none is typed.', 'fishotel-misc-plugin' ); ?>
+	</p>
+	<p class="fishotel-misc-card-desc">
+		<?php
+		/* translators: %d: percent */
+		echo esc_html( sprintf( __( 'The sort number orders the list everywhere, and the list runs from the smallest bag to the largest: a fish is moved up the list, one bag at a time, to fill its box. Filled share: blank uses the setting under Boxes (%d%% now); type 50 for a bag you fill only half way.', 'fishotel-misc-plugin' ), (int) $model['share'] ) );
+		?>
 	</p>
 
 	<form class="fh-pack-form" method="post" action="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>" data-reload="1">
@@ -37,6 +49,8 @@ $fh_next  = count( $fh_bags ) + $fh_spare;
 					<th><?php esc_html_e( 'Name', 'fishotel-misc-plugin' ); ?></th>
 					<th><?php esc_html_e( 'Width (in)', 'fishotel-misc-plugin' ); ?></th>
 					<th><?php esc_html_e( 'Length (in)', 'fishotel-misc-plugin' ); ?></th>
+					<th><?php esc_html_e( 'Filled share (%)', 'fishotel-misc-plugin' ); ?></th>
+					<th><?php esc_html_e( 'Filled, it stands', 'fishotel-misc-plugin' ); ?></th>
 					<th><?php esc_html_e( 'Sort', 'fishotel-misc-plugin' ); ?></th>
 					<th><?php esc_html_e( 'Set on', 'fishotel-misc-plugin' ); ?></th>
 					<th><?php esc_html_e( 'Remove', 'fishotel-misc-plugin' ); ?></th>
@@ -53,6 +67,17 @@ $fh_next  = count( $fh_bags ) + $fh_spare;
 						<td><input type="text" class="fh-pack-input" name="bags[<?php echo esc_attr( $fh_i ); ?>][name]" value="<?php echo esc_attr( $fh_bag['name'] ); ?>" maxlength="<?php echo esc_attr( Settings::MAX_NAME ); ?>" aria-label="<?php esc_attr_e( 'Name', 'fishotel-misc-plugin' ); ?>"></td>
 						<td><input type="number" class="fh-pack-input fh-pack-input--num" name="bags[<?php echo esc_attr( $fh_i ); ?>][width]" value="<?php echo esc_attr( $fh_bag['width'] ); ?>" min="0" step="0.01" aria-label="<?php esc_attr_e( 'Width in inches', 'fishotel-misc-plugin' ); ?>"></td>
 						<td><input type="number" class="fh-pack-input fh-pack-input--num" name="bags[<?php echo esc_attr( $fh_i ); ?>][length]" value="<?php echo esc_attr( $fh_bag['length'] ); ?>" min="0" step="0.01" aria-label="<?php esc_attr_e( 'Length in inches', 'fishotel-misc-plugin' ); ?>"></td>
+						<td><input type="number" class="fh-pack-input fh-pack-input--num" name="bags[<?php echo esc_attr( $fh_i ); ?>][share]" value="<?php echo esc_attr( $fh_bag['share'] ?? '' ); ?>" min="<?php echo esc_attr( Fit::SHARE_MIN ); ?>" max="<?php echo esc_attr( Fit::SHARE_MAX ); ?>" step="1" placeholder="<?php echo esc_attr( (int) $model['share'] ); ?>" aria-label="<?php esc_attr_e( 'Filled share in percent', 'fishotel-misc-plugin' ); ?>"></td>
+						<td class="fh-pack-muted">
+							<?php
+							if ( Fit::has_size( $fh_bag ) ) {
+								/* translators: 1: inches across, 2: inches tall */
+								echo esc_html( sprintf( __( '%1$s in across, %2$s in tall', 'fishotel-misc-plugin' ), Boxes::num_text( Fit::diameter( $fh_bag['width'] ), 1 ), Boxes::num_text( Fit::standing( $fh_bag, $model['share'] ), 1 ) ) );
+							} else {
+								esc_html_e( 'no size: typed numbers only', 'fishotel-misc-plugin' );
+							}
+							?>
+						</td>
 						<td><input type="number" class="fh-pack-input fh-pack-input--num" name="bags[<?php echo esc_attr( $fh_i ); ?>][sort]" value="<?php echo esc_attr( (int) $fh_bag['sort'] ); ?>" step="1" aria-label="<?php esc_attr_e( 'Sort order', 'fishotel-misc-plugin' ); ?>"></td>
 						<td class="fh-pack-muted">
 							<?php
@@ -70,6 +95,8 @@ $fh_next  = count( $fh_bags ) + $fh_spare;
 						<td><input type="text" class="fh-pack-input" name="bags[<?php echo esc_attr( $fh_i ); ?>][name]" value="" maxlength="<?php echo esc_attr( Settings::MAX_NAME ); ?>" aria-label="<?php esc_attr_e( 'Name', 'fishotel-misc-plugin' ); ?>"></td>
 						<td><input type="number" class="fh-pack-input fh-pack-input--num" name="bags[<?php echo esc_attr( $fh_i ); ?>][width]" value="" min="0" step="0.01" aria-label="<?php esc_attr_e( 'Width in inches', 'fishotel-misc-plugin' ); ?>"></td>
 						<td><input type="number" class="fh-pack-input fh-pack-input--num" name="bags[<?php echo esc_attr( $fh_i ); ?>][length]" value="" min="0" step="0.01" aria-label="<?php esc_attr_e( 'Length in inches', 'fishotel-misc-plugin' ); ?>"></td>
+						<td><input type="number" class="fh-pack-input fh-pack-input--num" name="bags[<?php echo esc_attr( $fh_i ); ?>][share]" value="" min="<?php echo esc_attr( Fit::SHARE_MIN ); ?>" max="<?php echo esc_attr( Fit::SHARE_MAX ); ?>" step="1" placeholder="<?php echo esc_attr( (int) $model['share'] ); ?>" aria-label="<?php esc_attr_e( 'Filled share in percent', 'fishotel-misc-plugin' ); ?>"></td>
+						<td class="fh-pack-muted">&mdash;</td>
 						<td><input type="number" class="fh-pack-input fh-pack-input--num" name="bags[<?php echo esc_attr( $fh_i ); ?>][sort]" value="" step="1" aria-label="<?php esc_attr_e( 'Sort order', 'fishotel-misc-plugin' ); ?>"></td>
 						<td class="fh-pack-muted">&mdash;</td>
 						<td></td>
@@ -84,6 +111,8 @@ $fh_next  = count( $fh_bags ) + $fh_spare;
 				<td><input type="text" class="fh-pack-input" name="bags[__i__][name]" value="" maxlength="<?php echo esc_attr( Settings::MAX_NAME ); ?>" aria-label="<?php esc_attr_e( 'Name', 'fishotel-misc-plugin' ); ?>"></td>
 				<td><input type="number" class="fh-pack-input fh-pack-input--num" name="bags[__i__][width]" value="" min="0" step="0.01" aria-label="<?php esc_attr_e( 'Width in inches', 'fishotel-misc-plugin' ); ?>"></td>
 				<td><input type="number" class="fh-pack-input fh-pack-input--num" name="bags[__i__][length]" value="" min="0" step="0.01" aria-label="<?php esc_attr_e( 'Length in inches', 'fishotel-misc-plugin' ); ?>"></td>
+				<td><input type="number" class="fh-pack-input fh-pack-input--num" name="bags[__i__][share]" value="" min="<?php echo esc_attr( Fit::SHARE_MIN ); ?>" max="<?php echo esc_attr( Fit::SHARE_MAX ); ?>" step="1" placeholder="<?php echo esc_attr( (int) $model['share'] ); ?>" aria-label="<?php esc_attr_e( 'Filled share in percent', 'fishotel-misc-plugin' ); ?>"></td>
+				<td class="fh-pack-muted">&mdash;</td>
 				<td><input type="number" class="fh-pack-input fh-pack-input--num" name="bags[__i__][sort]" value="" step="1" aria-label="<?php esc_attr_e( 'Sort order', 'fishotel-misc-plugin' ); ?>"></td>
 				<td class="fh-pack-muted">&mdash;</td>
 				<td></td>

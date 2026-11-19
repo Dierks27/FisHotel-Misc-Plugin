@@ -121,6 +121,15 @@ namespace FisHotel\Misc\Sections\Packing {
 		const META_BOX_NAME = '_fh_packing_box_name';
 
 		/**
+		 * Order meta: the bags chosen by hand on the order's Packing box —
+		 * line key ("order id-item id-n") → bag id. Absent = every line on
+		 * Auto.
+		 *
+		 * @var string
+		 */
+		const META_BAGS = '_fh_packing_bags';
+
+		/**
 		 * Order meta other plugins write that the Today page's line reads:
 		 * the delivery date (the Batch plugin, Y-m-d — an order ships the
 		 * day before) and the combined box an order was folded into (the
@@ -176,8 +185,11 @@ namespace FisHotel\Misc\Sections\Packing {
 		public static function load() {
 			require_once __DIR__ . '/class-size-list.php';
 			require_once __DIR__ . '/class-settings.php';
+			require_once __DIR__ . '/class-fit.php';
 			require_once __DIR__ . '/class-boxes.php';
 			require_once __DIR__ . '/class-suggest.php';
+			require_once __DIR__ . '/class-upsize.php';
+			require_once __DIR__ . '/class-plan.php';
 			require_once __DIR__ . '/class-bags.php';
 			require_once __DIR__ . '/class-livestock.php';
 			require_once __DIR__ . '/class-lines.php';
@@ -306,6 +318,15 @@ namespace FisHotel\Misc\Sections\Packing {
 				'threshold'      => 90,
 				'bags'           => array(),
 				'bag_total'      => 0,
+				'bags_used'      => array(),
+				'packed'         => array(
+					'from'   => '',
+					'boxes'  => array(),
+					'moved'  => 0,
+					'over'   => false,
+					'chosen' => 0,
+				),
+				'overrides'      => array(),
 				'unplaced'       => array(),
 				'lines'          => array(),
 				'incomplete'     => array(),
@@ -348,7 +369,10 @@ namespace FisHotel\Misc\Sections\Packing {
 		}
 
 		/**
-		 * fishotel_packing_bag_for_item(): the bag of one order line.
+		 * fishotel_packing_bag_for_item(): the bag of one order line — the
+		 * bag to USE when its order has a plan (chosen by hand, else
+		 * upsized, else the minimum), with the minimum under `min`; the
+		 * minimum alone when it has none.
 		 *
 		 * @param mixed $order_item A WC_Order_Item_Product (anything else gives null).
 		 * @return array|null
@@ -360,6 +384,10 @@ namespace FisHotel\Misc\Sections\Packing {
 				try {
 					self::load();
 					$bag = Bags::for_item( $order_item );
+					if ( is_array( $bag ) ) {
+						$use = Order_Packing::bag_to_use( $order_item, $bag );
+						$bag = is_array( $use ) ? $use : $bag;
+					}
 				} catch ( \Throwable $e ) {
 					$bag = null;
 				}
