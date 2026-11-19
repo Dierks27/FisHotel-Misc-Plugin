@@ -13,8 +13,8 @@
  *              Cuts, Weather), Site (Health, Snippets, Shop App, then
  *              every other section in folder order). The sections that
  *              were live before 0.46 — Announcer, Coming Soon, Lottery
- *              Draw, Performance, Product Archive, Visitor Stats — keep
- *              their order among themselves.
+ *              Draw, Product Archive, Visitor Stats — keep their order
+ *              among themselves.
  *   Dashboard  the same four headings; Today sits at the top on its own,
  *              with no heading.
  *
@@ -171,8 +171,6 @@ class Layout {
 				return __( 'Products marked "Coming Soon" with a release time and a countdown; they cannot be bought before it. Starts nothing by itself.', 'fishotel-misc-plugin' );
 			case 'lottery-draw':
 				return __( 'Shares out group-order fish that more people want than there are, by a lottery anyone can check. Starts nothing by itself.', 'fishotel-misc-plugin' );
-			case 'performance':
-				return __( 'Page-speed settings: script clean-up, browser caching, compression. Starts nothing by itself.', 'fishotel-misc-plugin' );
 			case 'product-archive':
 				return __( 'Hides old products from the shop and search without deleting them. Starts nothing by itself.', 'fishotel-misc-plugin' );
 			case 'visitor-stats':

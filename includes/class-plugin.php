@@ -63,8 +63,42 @@ class Plugin {
 		$this->update_checker->init();
 
 		if ( is_admin() ) {
+			add_action( 'admin_init', array( $this, 'retire_performance_section' ) );
 			add_action( 'admin_menu', array( $this, 'register_menus' ) );
 			add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_admin_assets' ) );
+		}
+	}
+
+	/**
+	 * Clear what the Performance section (removed in 0.46.4) left behind:
+	 * its slug in the enabled list, its settings option, its prune
+	 * transient and the combined CSS / JS files it cached under
+	 * wp-content/cache/fishotel-perf/. Runs once — after the option is
+	 * gone, the check is a single cached get_option() that finds nothing.
+	 */
+	public function retire_performance_section() {
+		$enabled = get_option( Section_Manager::OPTION_KEY, array() );
+		$listed  = is_array( $enabled ) && in_array( 'performance', $enabled, true );
+
+		if ( ! $listed && false === get_option( 'fishotel_perf_settings' ) ) {
+			return;
+		}
+
+		if ( $listed ) {
+			update_option( Section_Manager::OPTION_KEY, array_values( array_diff( $enabled, array( 'performance' ) ) ) );
+		}
+
+		delete_option( 'fishotel_perf_settings' );
+		delete_transient( 'fishotel_perf_cache_pruned' );
+
+		$dir = WP_CONTENT_DIR . '/cache/fishotel-perf/';
+		if ( is_dir( $dir ) ) {
+			foreach ( (array) glob( $dir . 'combined-*' ) as $file ) {
+				if ( is_file( $file ) ) {
+					@unlink( $file ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged
+				}
+			}
+			@rmdir( $dir ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- only if now empty.
 		}
 	}
 
