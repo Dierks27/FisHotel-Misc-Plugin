@@ -40,6 +40,13 @@ check( 'Today, then Ship Day right under it', array( 'Today', 'Ship Day' ) === a
 $fh_ship = $GLOBALS['fh_menu'][1];
 check( '… in FisHotel Tools, pointing at the Batch Manager page by its address, with no page of its own', 'fishotel-misc' === $fh_ship[0] && 'admin.php?page=fishotel-invoicing&tab=ship-day' === $fh_ship[3] && false === $fh_ship[4] && 'manage_options' === $fh_ship[2] );
 
+echo "2b. Batch Manager 10.34 and later: Ship Day has its own page and lists itself\n";
+eval( 'class FisHotel_Ship_Day_Today_Line {}' );
+$GLOBALS['fh_menu'] = array();
+Today::register_menu();
+check( 'Today only (Batch Manager adds Ship Day itself)', array( 'Today' ) === array_column( $GLOBALS['fh_menu'], 1 ) );
+check( 'links go to Ship Day\'s own page', false !== strpos( \FisHotel\Misc\Sections\Today\Admin::ship_day_url(), 'admin.php?page=fishotel-ship-day' ) );
+
 echo "3. A user who cannot open it\n";
 $GLOBALS['fh_can']  = false;
 $GLOBALS['fh_menu'] = array();

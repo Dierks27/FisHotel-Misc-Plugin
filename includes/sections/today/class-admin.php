@@ -65,6 +65,15 @@ class Admin {
 	const SHIP_DAY_URL = 'admin.php?page=fishotel-invoicing&tab=ship-day';
 
 	/**
+	 * Ship Day's own page, from Batch Manager 10.34 on (FisHotel Tools →
+	 * Ship Day). That build registers the menu entry itself, so Today then
+	 * only links to it.
+	 *
+	 * @var string
+	 */
+	const SHIP_DAY_PAGE_URL = 'admin.php?page=fishotel-ship-day';
+
+	/**
 	 * The capability the Batch plugin registers its Invoicing page (and so
 	 * the Ship Day tab) with. A manage_woocommerce user without it gets
 	 * "not allowed" from WordPress core, so the link is only offered to
@@ -141,7 +150,17 @@ class Admin {
 			return '';
 		}
 
-		return admin_url( self::SHIP_DAY_URL );
+		return admin_url( self::ship_day_own_page() ? self::SHIP_DAY_PAGE_URL : self::SHIP_DAY_URL );
+	}
+
+	/**
+	 * Whether Batch Manager gives Ship Day its own page (10.34 and later,
+	 * recognised by its Today line class).
+	 *
+	 * @return bool
+	 */
+	public static function ship_day_own_page() {
+		return class_exists( 'FisHotel_Ship_Day_Today_Line' );
 	}
 
 	/**

@@ -63,7 +63,7 @@ toggle: with the column off no weather reason is raised.
 
 **Links** under each block: *Weather overview for this date* (the Weather
 section's page with `?date=`; shown when that section is enabled) and *Ship
-Day pick list* (the Batch plugin's Group-order invoices → Ship Day tab, also listed as FisHotel Tools → Ship Day right under Today; shown when Batch
+Day pick list* (Ship Day's own page, FisHotel Tools → Ship Day, with Batch Manager 10.34 or later — that plugin lists it under Today itself and adds its own Ship Day line to Today; with an older Batch Manager, its Group-order invoices → Ship Day tab, which Today then lists right under itself; shown when Batch
 ≥ 10.27 is active **and** the user has `manage_options`, the capability that
 page is registered with — the tab picks its own date).
 

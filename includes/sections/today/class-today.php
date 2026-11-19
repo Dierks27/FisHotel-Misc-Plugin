@@ -188,7 +188,9 @@ class Today {
 		// invoices → Ship Day), listed here so it has one home beside the
 		// to-do page. A menu entry whose slug is an address links straight
 		// to it; nothing new is registered.
-		if ( '' !== Admin::ship_day_url() ) {
+		// From Batch Manager 10.34 on, Ship Day has its own page and that
+		// plugin lists it here itself.
+		if ( '' !== Admin::ship_day_url() && ! Admin::ship_day_own_page() ) {
 			add_submenu_page(
 				'fishotel-misc',
 				__( 'Ship Day', 'fishotel-misc-plugin' ),
