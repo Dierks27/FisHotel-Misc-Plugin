@@ -42,6 +42,16 @@
 	 */
 	function fields( pairs, over, more ) {
 		var out = {};
+		// What the click is comes first, and what Apply cannot do without: should a server cut a very
+		// long form short (PHP's max_input_vars), it is the tail of the choices that goes, not these.
+		Object.keys( more || {} ).forEach( function ( key ) {
+			out[ key ] = more[ key ];
+		} );
+		( pairs || [] ).forEach( function ( pair ) {
+			if ( pair && ( 'token' === pair.name || 'backup' === pair.name || 'confirm' === pair.name || 'short' === pair.name ) ) {
+				out[ pair.name ] = pair.value;
+			}
+		} );
 		( pairs || [] ).forEach( function ( pair ) {
 			// A "leave alone" radio and an empty pick are no choice at all.
 			if ( pair && pair.name && '' !== pair.value && ! ( /^keep_one\[/.test( pair.name ) && '0' === String( pair.value ) ) ) {
@@ -50,9 +60,6 @@
 		} );
 		Object.keys( over || {} ).forEach( function ( key ) {
 			out[ 'over[' + key + ']' ] = over[ key ];
-		} );
-		Object.keys( more || {} ).forEach( function ( key ) {
-			out[ key ] = more[ key ];
 		} );
 		return out;
 	}

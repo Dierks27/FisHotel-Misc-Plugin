@@ -63,7 +63,7 @@ var sent = tidy.fields(
 	{ 'g:3-5': 'to:4-5' },
 	{ op: 'preview' }
 );
-check( 'the form\'s fields, the rows set by hand and the op', same( sent, { 'short': '1-2"\n2-3"', 'instock': 'move', 'move[13]': 'medium', 'keep_one[6][cd]': '77', 'convert[9]': '1', 'token': 'abc', 'over[g:3-5]': 'to:4-5', 'op': 'preview' } ), JSON.stringify( sent ) );
+check( 'the op, the form\'s fields and the rows set by hand — what Apply cannot do without first', same( sent, { 'op': 'preview', 'short': '1-2"\n2-3"', 'token': 'abc', 'instock': 'move', 'move[13]': 'medium', 'keep_one[6][cd]': '77', 'convert[9]': '1', 'over[g:3-5]': 'to:4-5' } ), JSON.stringify( sent ) );
 check( 'an empty pick and "leave this fish alone" are no choice', ! ( 'move[12]' in sent ) && ! ( 'keep_one[5][ab]' in sent ) );
 
 console.log( '3. Stepping a run' );
