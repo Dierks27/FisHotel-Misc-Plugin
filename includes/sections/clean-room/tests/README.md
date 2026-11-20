@@ -816,11 +816,18 @@ system temp directory (`FH_TEST_TMP` overrides).
   on the next action, when a sheet opens by any road (the Mic sheet does
   not pass through `go()`), and ten seconds before the server's window
   ends — and is never shown when the page was told no window; Undo from
-  the pill posts the very request the big Undo posts; a next action
-  inside the seconds lets the whole toast finish and go, unfolded; a tap
-  on the message folds it at once; an error and a plain "Saved" never
-  fold; an undo refused as too late says so; a tap on the pill while
-  another write is under way posts nothing and keeps the pill. And the
+  the pill posts the very request the big Undo posts; a sheet opening
+  inside the seconds closes the whole toast too; a tap on the words does
+  nothing; the whole toast's Undo is at the left end and an Undo that
+  has only just come up, whole or folded, takes no tap for 0.7 s (the
+  second of two quick taps on "−1 lost"); a phone that slept, the clock
+  on and its timers held, is not left with a pill past its time, and a
+  tap on one says "That can no longer be undone." without a request; a
+  whole toast whose top is under the head of the page, or off the
+  screen, folds as it comes up, one under a layer over the whole screen
+  does not; an error and a plain "Saved" never fold; an undo refused as
+  too late says so; a tap on the pill while another write is under way
+  posts nothing and keeps the pill. And the
   place: the bar measured at each render (three rows, a sheet's one,
   none), again through the observer when it grows, without an observer
   at each render and window change; the toast and the strip measured at
@@ -923,7 +930,7 @@ system temp directory (`FH_TEST_TMP` overrides).
 3. Arrival → type "paj": suggestions from the quarantined-fish products;
    pick one, qty 4, Save. The row shows 4 live · in QT · day 1, above the
    folded "Today · N to do ▸" line; the toast is whole for 10 s (above
-   the button bar, on none of its buttons), then folds to a small
+   the button bar, on none of its buttons, its Undo at the left), then folds to a small
    "↶ Undo" at the right on top of the bar, which stays until the next
    tap; its Undo removes the arrival (a compensating event, visible on
    the Events tab); tapping Undo twice changes nothing more.

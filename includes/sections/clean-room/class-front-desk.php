@@ -268,6 +268,7 @@ class Front_Desk {
 			'undo'        => __( 'Undo', 'fishotel-misc-plugin' ),
 			/* translators: %s: what the Undo takes back, e.g. "1 × Pajama Cardinal lost" */
 			'undoWhat'    => __( 'Undo: %s', 'fishotel-misc-plugin' ),
+			'undoLate'    => __( 'That can no longer be undone.', 'fishotel-misc-plugin' ), // The page's own answer once UNDO_WINDOW is over; act_undo() says the same.
 			'saved'       => __( 'Saved', 'fishotel-misc-plugin' ),
 			'undone'      => __( 'Undone', 'fishotel-misc-plugin' ),
 			'empty'       => __( 'No fish in this tank', 'fishotel-misc-plugin' ),

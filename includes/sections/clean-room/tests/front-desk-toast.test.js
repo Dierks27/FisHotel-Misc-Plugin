@@ -9,11 +9,17 @@
  * the same screen and goes on the next action, when a sheet opens by any
  * road, and by itself before the server's window ends (and is never
  * shown when the page was told no window); Undo from the pill posts
- * what the big Undo posts; a next action inside the seconds lets the
- * whole toast finish and then go, unfolded; a tap on the message folds
- * it at once; an error and a plain "Saved" never fold; an undo the
- * server refuses as too late says so; the Undo is not thrown away while
- * another write is under way.
+ * what the big Undo posts; a sheet opening inside the seconds closes the
+ * whole toast too; a tap on the words does nothing; an Undo that has
+ * only just come up, whole or folded, takes no tap (the second of two
+ * quick taps on a row's "−1 lost"), and whole it stands at the left end;
+ * a phone that slept (the clock on, its timers held) is not left with a
+ * pill past its time, and a tap on one says "too late" without asking
+ * the server; a whole toast whose top is under the head of the page
+ * folds at once, one under a layer over the whole screen does not; an
+ * error and a plain "Saved" never fold; an undo the server refuses as
+ * too late says so; the Undo is not thrown away while another write is
+ * under way.
  *
  * And its place: the button bar and the toast are measured as they are
  * (three rows, a sheet's one row, none; larger text through the
@@ -100,6 +106,14 @@ function settle() {
 /* How tall the things the page measures stand, by class — the test changes these as a phone would. */
 var tall = { 'fh-fd-bar': 197, 'fh-fd-toast': 74, 'is-pill': 55 };
 
+/*
+ * The screen above the toast: where the toast's foot stands, and what
+ * lies over the page from y = 0 down to `under` (a head: the Shop App's
+ * bar) or over all of it (`layer`). The test changes these too.
+ */
+var view = { foot: 600, under: 0, layer: false };
+var HEAD = { head: true };
+
 function El( tag ) {
 	this.tag        = tag;
 	this.children   = [];
@@ -160,7 +174,16 @@ El.prototype.getBoundingClientRect = function () {
 			height = tall[ cls ];
 		}
 	} );
-	return { height: this.hidden ? 0 : height };
+	height = this.hidden ? 0 : height;
+	return { height: height, left: 12, width: 366, top: view.foot - height, bottom: view.foot };
+};
+El.prototype.contains = function ( node ) {
+	for ( var at = node; at; at = at.parentNode ) {
+		if ( at === this ) {
+			return true;
+		}
+	}
+	return false;
 };
 
 function has( node, cls ) {
@@ -247,6 +270,7 @@ function start( config ) {
 	var held      = [];
 	var observers = [];
 	var windowOn  = {};
+	var documentOn = {};
 	var reply     = config.reply || server;
 
 	toast.className = 'fh-fd-toast';
@@ -259,6 +283,18 @@ function start( config ) {
 		createTextNode: function ( text ) { var n = new El( '#text' ); n._text = String( text ); return n; },
 		getElementById: function ( id ) { return 'fh-fd-app' === id ? app : ( 'fh-fd-toast' === id ? toast : null ); },
 		querySelector: function ( selector ) { return find( body, function ( n ) { return '.' + n.className === selector; } )[0] || null; },
+		addEventListener: function ( type, fn ) { documentOn[ type ] = fn; },
+		/* What a thumb would meet at that height: off the screen nothing, a layer or the head, else the toast. */
+		elementFromPoint: function ( x, y ) {
+			var box = toast.getBoundingClientRect();
+			if ( y < 0 ) {
+				return null;
+			}
+			if ( view.layer || y < view.under ) {
+				return HEAD;
+			}
+			return ! toast.hidden && y >= box.top && y <= box.bottom ? ( toast.children[0] || toast ) : app;
+		},
 		body: body
 	};
 	global.sessionStorage = { getItem: function () { return '0'; }, setItem: function () {} };
@@ -316,6 +352,7 @@ function start( config ) {
 		posts: posts,
 		observers: observers,
 		windowOn: windowOn,
+		documentOn: documentOn,
 		bar: function () { return find( body, function ( n ) { return 'fh-fd-bar' === n.className; } )[0] || null; },
 		/* What the stylesheet was handed. */
 		barVar: function () { return body.style['--fd-bar-h']; },
@@ -422,6 +459,7 @@ async function run() {
 
 	console.log( '6. Undo from the pill posts what the big Undo posts' );
 	page = await lostOne( { screen: screen( true, 900 ) } );
+	pass( 1 );
 	fire( page.undo(), 'click' );
 	await settle();
 	big = page.posts[1];
@@ -444,27 +482,136 @@ async function run() {
 	page = await lostOne( { screen: screen( true, 900 ) } );
 	pass( 3 );
 	page.tap( 'Note' );
-	check( 'a next action 3 s in: the whole toast stays for the rest of its seconds, Undo and all', page.shown() && ! page.folded() && null !== page.undo() );
-	pass( 6.8 );
-	check( '… still there just before they end', page.shown() && ! page.folded() );
-	pass( 0.4 );
-	check( '… then it goes — it does not fold onto the sheet', ! page.shown() );
+	check( 'a sheet opened 3 s in: the whole toast goes at once — it does not ride onto the sheet', ! page.shown() && '0px' === page.toastVar(), page.toast.className );
 	pass( 1200 );
-	check( '… ever', ! page.shown() );
+	check( '… and never comes back, whole or folded', ! page.shown() && 1 === page.posts.length );
 
 	page = await lostOne( { screen: screen( true, 900 ) } );
 	pass( 3 );
+	page.tap( 'Mic' ); // Opens its sheet without go(): the render itself must close the toast.
+	check( 'the Mic sheet (which opens by its own road) carries no whole toast either', ! page.shown(), page.toast.className );
+
+	page = await lostOne( { screen: screen( true, 900 ) } );
+	pass( 3 );
+	page.tap( 'Today' );
+	check( 'a redraw of the same screen 3 s in keeps the whole toast', page.shown() && ! page.folded() && null !== page.undo() );
 	fire( page.toast, 'click' );
-	check( 'a tap on the message 3 s in folds it at once', page.folded() && '↶ Undo' === page.undo().textContent );
-	pass( 886 );
-	check( '… and the pill still ends by the window, counted from when the toast came up', page.folded() );
-	pass( 1.5 );
-	check( '… not later', ! page.shown() );
+	check( 'a tap on the words does nothing: no fold, nothing posted', page.shown() && ! page.folded() && 1 === page.posts.length, page.toast.className );
+	pass( 7.2 );
+	check( '… and the toast still folds on its own seconds', page.folded() );
 
 	page = await lostOne( { screen: screen( true, 900 ) } );
 	pass( 10.2 );
 	fire( page.toast, 'click' );
 	check( 'a tap on the strip beside the pill does nothing: the pill stays', page.folded() && 1 === page.posts.length );
+
+	console.log( '7a. The second of two quick taps does not undo the first' );
+	page = await lostOne( { screen: screen( true, 900 ) } );
+	check( 'the whole toast\'s Undo is shown at its left end, away from the rows\' own buttons', /order:\s*-1;/.test( rule( '.fh-fd-toast.is-sticky button' ) ) && /justify-content:\s*flex-start;/.test( rule( '.fh-fd-toast.is-sticky' ) ), rule( '.fh-fd-toast.is-sticky button' ) );
+	check( '… while the words still come first for a screen reader', 'span' === page.toast.children[0].tag && 'button' === page.toast.children[1].tag );
+	pass( 0.3 );
+	fire( page.undo(), 'click' );
+	await settle();
+	check( 'a tap on the Undo 0.3 s after it came up posts nothing', 1 === page.posts.length, JSON.stringify( page.posts ) );
+	check( '… and the toast stays as it was, Undo and all', page.shown() && ! page.folded() && null !== page.undo() );
+	pass( 0.3 );
+	fire( page.undo(), 'click' );
+	await settle();
+	check( '… nor at 0.6 s', 1 === page.posts.length );
+	pass( 0.2 );
+	fire( page.undo(), 'click' );
+	await settle();
+	check( '… at 0.8 s it undoes', 2 === page.posts.length && 'undo' === page.posts[1].act, JSON.stringify( page.posts ) );
+
+	page = await lostOne( { screen: screen( true, 900 ) } );
+	pass( 10.2 );
+	fire( page.undo(), 'click' );
+	await settle();
+	check( 'the pill, come up 0.2 s ago where a thumb may be on its way, takes no tap', 1 === page.posts.length && page.folded() );
+	pass( 0.6 );
+	fire( page.undo(), 'click' );
+	await settle();
+	check( '… 0.8 s after the fold it undoes', 2 === page.posts.length && 'undo' === page.posts[1].act );
+
+	console.log( '7b. A phone that slept: the clock went on, its timers did not run' );
+	page = await lostOne( { screen: screen( true, 900 ) } );
+	pass( 10.2 );
+	clock.now += 30 * 60 * 1000; // Half an hour locked: no timer ran.
+	check( 'the page hears when it is looked at again', 'function' === typeof page.documentOn.visibilitychange && 'function' === typeof page.windowOn.pageshow );
+	check( '(the pill is still on the page: its timer was held)', page.folded() );
+	page.documentOn.visibilitychange();
+	check( 'looked at again after 30 minutes: the pill is gone', ! page.shown() && '0px' === page.toastVar() );
+	check( '… and nothing was posted', 1 === page.posts.length );
+
+	page = await lostOne( { screen: screen( true, 900 ) } );
+	pass( 10.2 );
+	clock.now += 30 * 60 * 1000;
+	fire( page.undo(), 'click' ); // The thumb is faster than the page's waking.
+	await settle();
+	check( 'a tap on a pill whose window ended asks nothing of the server', 1 === page.posts.length, JSON.stringify( page.posts ) );
+	check( '… and says so plainly, as the server would', page.shown() && has( page.toast, 'is-error' ) && -1 !== page.words().indexOf( 'That can no longer be undone.' ) && null === page.undo(), page.words() );
+	check( 'the page has those words from the server', /'undoLate'\s*=>\s*__\( 'That can no longer be undone\.'/.test( php ) && 2 === php.split( "'That can no longer be undone.'" ).length - 1 );
+
+	page = await lostOne( { screen: screen( true, 900 ) } );
+	pass( 10.2 );
+	clock.now += 5 * 60 * 1000;
+	page.windowOn.pageshow();
+	check( 'a five-minute sleep leaves the pill: its window is not over', page.folded() );
+	fire( page.undo(), 'click' );
+	await settle();
+	check( '… and its tap undoes', 2 === page.posts.length && 'undo' === page.posts[1].act );
+
+	page = await lostOne( { screen: screen( true, 900 ) } );
+	pass( 4 );
+	clock.now += 60 * 1000; // A minute asleep with the whole toast up.
+	page.documentOn.visibilitychange();
+	check( 'a whole toast that slept past its seconds folds when looked at again', page.folded() );
+
+	page = await lostOne( { screen: screen( true, 900 ), reply: function ( fields, config ) { return { message: 'Saved', undo: { eventIds: [], label: '' }, screen: config.screen }; } } );
+	pass( 4 );
+	page.documentOn.visibilitychange();
+	check( 'a "Saved" looked at again inside its seconds stays', page.shown() );
+	clock.now += 60 * 1000;
+	page.documentOn.visibilitychange();
+	check( '… and one that slept past them goes', ! page.shown() );
+
+	console.log( '7c. No room under the head of the page: the small Undo at once' );
+	view.under = 69;  // The Shop App's bar on a small phone turned on its side …
+	view.foot  = 113; // … and a button bar that leaves the toast 39 px from the top.
+	page = await lostOne( { screen: screen( true, 900 ) } );
+	check( 'a whole toast whose top would be under the head folds as it comes up', page.folded() && '↶ Undo' === page.undo().textContent, page.toast.className );
+	check( '… named by what it undoes', 'Undo: ' + LOSS === page.undo().attrs['aria-label'] );
+	fire( page.undo(), 'click' );
+	await settle();
+	check( '… and guarded like any Undo that has just come up', 1 === page.posts.length );
+	pass( 1 );
+	fire( page.undo(), 'click' );
+	await settle();
+	check( '… then it undoes', 2 === page.posts.length && 'undo' === page.posts[1].act );
+
+	view.under = 0;
+	view.foot  = 40; // Words so long the toast runs off the top of the screen.
+	page = await lostOne( { screen: screen( true, 900 ) } );
+	check( 'a whole toast that runs off the top of the screen folds too', page.folded() );
+
+	view.foot = 600;
+	page = await lostOne( { screen: screen( true, 900 ) } );
+	check( 'with room above the bar the toast is whole', page.shown() && ! page.folded() );
+	view.under = 560; // The phone is turned: the observer measures again.
+	page.observers[0].callback();
+	check( '… and folds when a turn of the phone puts its top under the head', page.folded() );
+	view.under = 0;
+
+	view.layer = true; // The Shop App's keypad or one of its questions lies over the whole screen.
+	page = await lostOne( { screen: screen( true, 900 ) } );
+	check( 'under a layer over the whole screen the toast stays whole: its words are there when the layer goes', page.shown() && ! page.folded() );
+	view.layer = false;
+
+	page = await lostOne( { screen: screen( true, 900 ), reply: function () { return { refused: { message: 'No fish left to lose.' } }; } } );
+	view.under = 590;
+	page.observers[0].callback();
+	check( 'an error under the head is left alone: it has nothing to fold to', page.shown() && has( page.toast, 'is-error' ) );
+	view.under = 0;
 
 	console.log( '8. An error, and a plain "Saved", never fold' );
 	page = await lostOne( { screen: screen( true, 900 ), reply: function () { return { refused: { message: 'No fish left to lose.' } }; } } );
@@ -501,7 +648,7 @@ async function run() {
 	page.tap( '−1 lost' );
 	page.release();
 	await settle();
-	pass( 10.2 );
+	pass( 12 );
 	page.tap( '−1 lost' ); // Under way: its reply is held.
 	fire( page.undo(), 'click' );
 	check( 'a tap on the pill while a write is under way posts nothing', 2 === page.posts.length && 'loss' === page.posts[1].act );

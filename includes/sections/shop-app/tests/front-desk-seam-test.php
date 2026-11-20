@@ -27,7 +27,10 @@
  *     foot of the page, above its button bar; this app adds its bar at
  *     the head and pins nothing to the foot, and every layer it lays over
  *     the whole screen (the keypad, a question, the scanner) lies over
- *     the toast, never under it.
+ *     the toast, never under it; and where this app's bar at the head
+ *     leaves the whole toast no room (a small phone on its side), the
+ *     Front Desk folds it to the small Undo — by asking the page what
+ *     lies at the toast's top, with no knowledge of this app.
  *
  * Run from the plugin root:
  *   php includes/sections/shop-app/tests/front-desk-seam-test.php
@@ -386,5 +389,14 @@ check( 'the Front Desk\'s toast has a place in the stack', $toast_z > 0, (string
 check( 'the app\'s bar on a tank screen is at the head of the page (sticky, top), above the toast in the stack', 1 === preg_match( '/\n\.fh-sa-bar \{[^}]*position:\s*sticky;\s*top:\s*0;\s*z-index:\s*(\d+);/', $app_css, $z ) && (int) $z[1] > $toast_z );
 check( 'the app pins nothing to the foot of the page, where the toast and the Undo stand', array() === $at_foot, implode( ' | ', $at_foot ) );
 check( 'every layer the app fixes to the screen covers all of it and lies over the toast (the keypad, a question, the scanner)', count( $fixed ) >= 3 && array() === $under, implode( ' | ', $fixed ) . ' — under: ' . implode( ' | ', $under ) );
+// The app's bar is sticky and above the toast in the stack: on a small
+// phone turned on its side the whole toast would slide under it, its
+// Undo half hidden beside Lock. The Front Desk folds such a toast as it
+// comes up — and finds out by asking the page, not by knowing this app.
+$place = preg_match( '/\n\tfunction place\(\) \{(.*?)\n\t\}/s', $page_js, $z ) ? $z[1] : '';
+$clear = preg_match( '/\n\tfunction headClear\(\) \{(.*?)\n\t\}/s', $page_js, $z ) ? $z[1] : '';
+check( 'the Front Desk folds a whole toast whose top is not to be seen, each time it measures', 1 === preg_match( '/!headClear\(\)\) \{\s*foldToast\(\);/', $place ), $place );
+check( '… by asking the page what lies at the toast\'s top and at its foot (a layer over both is not a head)', 2 === substr_count( $clear, 'seen(' ) - 1 && false !== strpos( $clear, 'document.elementFromPoint(' ) && false !== strpos( $clear, 'box.top' ) && false !== strpos( $clear, 'box.bottom' ), $clear );
+check( '… and knows nothing of this app: no fh-sa name in the Front Desk\'s script or stylesheet', false === strpos( $page_js, 'fh-sa' ) && false === strpos( $desk_css, 'fh-sa' ) );
 
 fh_finish();

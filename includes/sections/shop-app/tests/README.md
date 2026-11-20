@@ -134,8 +134,11 @@ Each helper exits 0 when CI runs it directly.
   visitor; outside the wp-admin screens nothing on the act path asks
   for a capability of its own; and the screen: the app's bar is at the
   head of the page, nothing of the app is pinned to the foot where the
-  Front Desk's toast and its folded Undo stand, and every layer the app
-  fixes to the screen covers all of it and lies over the toast.
+  Front Desk's toast and its folded Undo stand, every layer the app
+  fixes to the screen covers all of it and lies over the toast, and the
+  Front Desk folds a whole toast that would slide under the app's bar
+  (a small phone on its side) by asking the page what lies at the
+  toast's top — it names nothing of this app.
 - **saves-test.php** — a save id: the handler runs once however often the
   id arrives, the first answer is repeated with a fresh screen; a refused
   save can be sent again; "still saving" while the first runs, taken over

@@ -301,29 +301,43 @@ Every write is one AJAX action (`fishotel_cleanroom_act`, nonce +
 `manage_woocommerce`); the reply carries the refreshed screen, and a
 toast offers **Undo** — a compensating event, never a delete. The toast
 is shown whole for 10 seconds (`Settings::UNDO_SECONDS`, the bar under
-it running out): the words, a big Undo. Then it folds to a small
-**↶ Undo** at the right, in a strip of its own on top of the button bar
-— no countdown, at least 44 px tall, and named for a screen reader by
-what it undoes ("Undo: 1 × … lost"). A tap on the message folds it at
-once. The small Undo stays until the next action (another write, a
-sheet opening — it never sits on a sheet) and leaves by itself ten
-seconds before the server's window ends: the server honours the undo
-for 15 minutes (`Front_Desk::UNDO_WINDOW`, handed to the page as
-`settings.undoWindow`), only for the user who wrote the event, and never
-twice for the same event, and it stays the judge — an undo that comes
-too late is answered "That can no longer be undone." A next action
-inside the 10 seconds lets the whole toast finish them and go; an error
-(4 seconds) and a "Saved" with nothing to undo go after their seconds
-and never fold. The toast never lies on a button: the script measures
-the button bar as it stands (`place()`, a `ResizeObserver` on the bar
+it running out): a big Undo at its left end, the words beside it. Then
+it folds to a small **↶ Undo** at the right, in a strip of its own on
+top of the button bar — no countdown, at least 44 px tall, and named
+for a screen reader by what it undoes ("Undo: 1 × … lost"). Whole or
+folded, the Undo goes on the next action (another write brings its own;
+a sheet opening closes it at once — it never sits on a sheet), and the
+small one leaves by itself ten seconds before the server's window ends:
+the server honours the undo for 15 minutes (`Front_Desk::UNDO_WINDOW`,
+handed to the page as `settings.undoWindow`), only for the user who
+wrote the event, and never twice for the same event, and it stays the
+judge — an undo that comes too late is answered "That can no longer be
+undone." A phone that slept holds its timers, so the page looks at the
+clock again when it is back on the screen and at every tap on an Undo:
+one whose window has ended is taken away, and a tap on it gets that
+same answer without asking the server. An error (4 seconds) and a
+"Saved" with nothing to undo go after their seconds and never fold.
+
+Where it stands: the toast never lies on the button bar. The script
+measures the bar as it stands (`place()`, a `ResizeObserver` on the bar
 and the toast — three rows on a tank, one on a sheet, none on the
 picker; larger text, a turned phone) and hands the heights to the
 stylesheet as `--fd-bar-h` and `--fd-toast-h`, which puts the toast
 above the bar and keeps that much room at the foot of the page, so the
-last row scrolls clear of both; rows that scroll under the Undo's strip
-are behind it as they are behind the bar. The Shop App adds its bar at
-the head of the page and pins nothing to the foot; its keypad and its
-questions cover the whole screen, the toast included. The temporary tanks ride on the same action
+last row scrolls clear of both. The whole toast does come up over the
+rows of the page for its 10 seconds — often over the very "−1 lost"
+that was just tapped — so its Undo is at the left, away from the rows'
+own buttons at the right, an Undo that has only just come up (whole or
+folded) takes no tap for 0.7 seconds, and a tap on the words does
+nothing: the second of two quick taps never undoes the first. Rows
+that scroll under the small Undo's strip are behind it as they are
+behind the bar. Where there is no room for the whole toast between the
+head of the page and the bar (a small phone on its side, most of all
+under the Shop App's bar), it folds as it comes up. The Shop App adds
+its bar at the head of the page and pins nothing to the foot; its
+keypad and its questions cover the whole screen, the toast included.
+
+The temporary tanks ride on the same action
 with five more acts — `setup`, `setup_edit`, `setup_steps`, `takedown`
 and `todo_tick` (one line of the day's list, for a whole building or
 for one tank) — which need no tank on the page and have no undo: a

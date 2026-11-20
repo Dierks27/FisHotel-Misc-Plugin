@@ -773,9 +773,19 @@ button.fh-fd-occ:active {
 	color: var(--fd-accent);
 }
 
-/* A sticky toast (with Undo): whole while its bar runs out, then folded to the pill. */
+/*
+ * A sticky toast (with Undo): whole while its bar runs out, then folded
+ * to the pill. Whole, it comes up over the rows of the page, whose own
+ * buttons ("−1 lost") are at the right: its Undo stands at the left end,
+ * so a second tap on such a row meets the words, not the Undo.
+ */
 .fh-fd-toast.is-sticky {
+	justify-content: flex-start;
 	border-color: rgba(53, 184, 255, 0.5);
+}
+
+.fh-fd-toast.is-sticky button {
+	order: -1;
 }
 
 /*

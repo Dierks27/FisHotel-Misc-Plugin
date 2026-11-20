@@ -893,6 +893,7 @@
 		sure: null,
 		timers: {},
 		toastShownAt: 0,
+		toastSeconds: 0,
 		toastSticky: false,
 		toastPill: false,
 		toastView: '',
@@ -1117,25 +1118,48 @@
 	 * A toast with Undo is sticky. It is shown whole for
 	 * settings.undoSeconds (the bar running out), so a wet thumb can still
 	 * undo after the server round trip; then it folds to a small "↶ Undo"
-	 * in a strip of its own on top of the button bar (foldToast()). The
-	 * pill goes on the next action (dismissToast(): a new screen opens, a
-	 * new toast replaces it), never rides onto a sheet (render() closes it
-	 * when the view is no longer the one it came up on) and leaves by
-	 * itself before the server's own window (settings.undoWindow) ends.
-	 * An error, or a toast with nothing to undo, goes after its seconds
-	 * and never folds.
+	 * in a strip of its own on top of the button bar (foldToast()). Whole
+	 * or folded, it goes on the next action (dismissToast(): another
+	 * screen opens — it never rides onto a sheet, whatever road opened it —
+	 * or a new toast replaces it), and the pill leaves by itself before the
+	 * server's own window (settings.undoWindow) ends. An error, or a toast
+	 * with nothing to undo, goes after its seconds and never folds.
+	 *
+	 * The whole toast comes up over the rows of the page, often over the
+	 * very "−1 lost" that was just tapped. So its Undo stands at the left
+	 * end (the stylesheet), away from the row buttons at the right, and an
+	 * Undo that has only just come up — whole or folded — takes no tap for
+	 * UNDO_GUARD: the second of two quick taps must not undo the first. A
+	 * tap on the words does nothing.
 	 *
 	 * place() measures the button bar and the toast as they are and hands
 	 * both heights to the stylesheet (--fd-bar-h, --fd-toast-h): the toast
 	 * sits above the bar that is really there — two rows, three, a sheet's
 	 * one — and the page keeps that much room at its foot.
 	 */
+	var UNDO_GUARD = 700;
+
 	function undoSeconds() {
 		return Math.max(10, parseInt(settings().undoSeconds, 10) || 10);
 	}
 
+	/* The server's window for an undo (ms); 0 when the page was told none. */
+	function undoWindow() {
+		return (parseInt(settings().undoWindow, 10) || 0) * 1000;
+	}
+
+	/*
+	 * How much longer the pill may be offered (ms): to undoSeconds before
+	 * the window's end — the round trip of the write, and of the undo — so
+	 * it is not there to offer an undo the server would refuse.
+	 */
+	function pillLeft() {
+		return undoWindow() - undoSeconds() * 1000 - (Date.now() - state.toastShownAt);
+	}
+
 	function undoButton(text, label) {
 		var undo = state.toastUndo;
+		var born = Date.now();
 		return el('button', {
 			type: 'button',
 			text: text,
@@ -1143,10 +1167,15 @@
 			on: {
 				click: function (e) {
 					e.stopPropagation();
-					if (state.sending) {
-						return; // A write is under way: the Undo stays for the next tap.
+					if (state.sending || Date.now() - born < UNDO_GUARD) {
+						return; // A write is under way, or the Undo has only just come up under the thumb: it stays for the next tap.
 					}
 					hideToast();
+					if (undoWindow() && Date.now() - undo.shownAt >= undoWindow()) {
+						// The window ended while the phone slept (its timers held): say so, ask nothing of the server.
+						toast(t('undoLate', 'That can no longer be undone.'), null, true);
+						return;
+					}
 					act({ act: 'undo', event_ids: undo.ids, tank: tank() ? tank().number : 0 });
 				}
 			}
@@ -1162,21 +1191,22 @@
 		while (toastEl.firstChild) {
 			toastEl.removeChild(toastEl.firstChild);
 		}
+		var started = Date.now();
 		toastEl.className = 'fh-fd-toast' + (isError ? ' is-error' : '') + (sticky ? ' is-sticky' : '');
 		toastEl.appendChild(el('span', { text: message }));
-		state.toastUndo = undoIds && undoIds.length ? { ids: undoIds, label: undoLabel || message } : null;
+		state.toastUndo = sticky ? { ids: undoIds, label: undoLabel || message, shownAt: started } : null;
 		if (state.toastUndo) {
-			toastEl.appendChild(undoButton(t('undo', 'Undo')));
+			toastEl.appendChild(undoButton(t('undo', 'Undo'))); // Shown at the left end: the stylesheet puts it first.
 		}
-		// A tap on the message itself: what the caller asked for, or (with Undo) fold it now.
+		// A tap on the message itself: what the caller asked for (the reload), else nothing.
 		state.toastTap = onTap || null;
 		var bar = el('span', { class: 'fh-fd-toast__bar' });
 		bar.style.width = '100%';
 		toastEl.appendChild(bar);
 		toastEl.hidden = false;
 
-		var started = Date.now();
 		state.toastShownAt = started;
+		state.toastSeconds = seconds;
 		state.toastSticky = sticky;
 		state.toastPill = false;
 		state.toastView = state.view;
@@ -1192,18 +1222,16 @@
 	}
 
 	/*
-	 * The seconds are up (or the message was tapped): the toast folds to
-	 * the pill, which says what it undoes to a screen reader and counts
-	 * nothing down. It leaves undoSeconds before the server's window ends
-	 * — the round trip of the write, and of the undo — so it is not there
-	 * to offer an undo the server would refuse; with no window known there
-	 * is no pill.
+	 * The seconds are up (or the whole toast does not fit under the head
+	 * of the page — place()): the toast folds to the pill, which says what
+	 * it undoes to a screen reader and counts nothing down. With no window
+	 * known, or none of it left, there is no pill.
 	 */
 	function foldToast() {
 		if (toastEl.hidden || !state.toastSticky || state.toastPill || !state.toastUndo) {
 			return;
 		}
-		var life = ((parseInt(settings().undoWindow, 10) || 0) - undoSeconds()) * 1000 - (Date.now() - state.toastShownAt);
+		var life = pillLeft();
 		if (life <= 0) {
 			hideToast();
 			return;
@@ -1221,21 +1249,15 @@
 	}
 
 	/*
-	 * The next action happened: the pill goes at once; the whole toast is
-	 * from here a plain one — it ends with its seconds and does not fold.
+	 * The next action happened, or another screen opened: the Undo goes at
+	 * once, whole or folded — over a sheet it would lie on the sheet's own
+	 * fields and buttons. A toast with nothing to undo ends with its
+	 * seconds.
 	 */
 	function dismissToast() {
-		if (toastEl.hidden || !state.toastSticky) {
-			return;
-		}
-		var left = state.toastPill ? 0 : undoSeconds() * 1000 - (Date.now() - state.toastShownAt);
-		if (left <= 0) {
+		if (!toastEl.hidden && state.toastUndo) {
 			hideToast();
-			return;
 		}
-		state.toastSticky = false;
-		root.clearTimeout(state.timers.toast);
-		state.timers.toast = root.setTimeout(hideToast, left);
 	}
 
 	function hideToast() {
@@ -1254,10 +1276,33 @@
 		if (tap) {
 			state.toastTap = null;
 			tap();
+		}
+	});
+
+	/*
+	 * A phone that slept held its timers while the clock went on. When the
+	 * page is looked at again, what is overdue happens now: a toast past
+	 * its seconds folds or goes, a pill past its time goes — it is not
+	 * left there offering an undo whose window has ended.
+	 */
+	function wake() {
+		if (toastEl.hidden) {
 			return;
 		}
-		foldToast();
-	});
+		if (state.toastPill) {
+			if (pillLeft() <= 0) {
+				hideToast();
+			}
+		} else if (Date.now() - state.toastShownAt >= state.toastSeconds * 1000) {
+			(state.toastSticky ? foldToast : hideToast)();
+		}
+	}
+	if (typeof document.addEventListener === 'function') {
+		document.addEventListener('visibilitychange', wake);
+	}
+	if (typeof root.addEventListener === 'function') {
+		root.addEventListener('pageshow', wake);
+	}
 
 	/* The height a thing takes on the screen now; nothing for one that is not there. */
 	function tall(node) {
@@ -1267,6 +1312,31 @@
 	function place() {
 		document.body.style.setProperty('--fd-bar-h', tall(document.querySelector('.fh-fd-bar')) + 'px');
 		document.body.style.setProperty('--fd-toast-h', tall(toastEl) + 'px');
+		if (state.toastSticky && !state.toastPill && !toastEl.hidden && !headClear()) {
+			foldToast(); // No room for the whole toast between the head of the page and the bar: the small Undo at once.
+		}
+	}
+
+	/*
+	 * Whether the top of the whole toast is really to be seen: on a small
+	 * phone turned on its side the button bar takes most of the screen and
+	 * the toast above it would slide under whatever heads the page (the
+	 * Shop App's bar with its Lock) or off the screen. Asked of the page
+	 * itself — what is at that point? — so no head has to be known here.
+	 * Something that lies over the foot of the toast as well is a layer
+	 * over the whole screen (the Shop App's keypad, its questions): the
+	 * toast is whole under it, and stays so.
+	 */
+	function headClear() {
+		if (typeof document.elementFromPoint !== 'function') {
+			return true;
+		}
+		var box = toastEl.getBoundingClientRect();
+		function seen(y) {
+			var at = document.elementFromPoint(box.left + box.width / 2, y);
+			return !!at && (at === toastEl || toastEl.contains(at));
+		}
+		return seen(box.top + 2) || !seen(box.bottom - 2);
 	}
 
 	/*
@@ -1287,7 +1357,7 @@
 	function render() {
 		draw();
 		// A sheet never carries the Undo: a view other than the one it came up on counts as the next action.
-		if (state.toastSticky && state.view !== state.toastView) {
+		if (state.view !== state.toastView) {
 			dismissToast();
 		}
 		// Each render makes its bar anew (or none): watch that one, and measure now.
