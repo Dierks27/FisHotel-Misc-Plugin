@@ -92,6 +92,15 @@ class Admin_Workbook {
 	const SALE_DATE_ACTION = 'fishotel_cleanroom_sale_date';
 
 	/**
+	 * The order page's two views of its lines, and the user meta that
+	 * remembers which one each person left it in.
+	 *
+	 * @var string[]
+	 */
+	const VIEWS     = array( 'entry', 'numbers' );
+	const VIEW_META = 'fishotel_cleanroom_order_view';
+
+	/**
 	 * Register hooks.
 	 */
 	public function init() {
@@ -258,6 +267,8 @@ class Admin_Workbook {
 				$batch_stays = $store->open_stays( array( 'order_id' => (int) $order['id'] ), $today, $settings );
 				$batch       = self::batch_sale_panel( $order, $batch_stays, self::product_titles( $store, array_column( $batch_stays, 'product_id' ) ), $settings );
 			}
+			$view  = self::order_view( $order, self::view_prefs( get_user_meta( get_current_user_id(), self::VIEW_META, true ) ) );
+			$split = self::split_panel( $store, $order, $today, $settings );
 
 			include Clean_Room::path() . 'views/order.php';
 			return;
@@ -446,6 +457,188 @@ class Admin_Workbook {
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * Which stage an order is in for its page's default view (pure):
+	 * 'working' while it is a draft, ordered, or being received — fish still
+	 * to check in, or none checked in yet —, 'done' once it is closed or
+	 * every line that received fish is a stay.
+	 *
+	 * @param array $order The order with its lines.
+	 * @return string working|done
+	 */
+	public static function order_stage( array $order ) {
+		$status = (string) ( $order['status'] ?? 'draft' );
+		if ( 'closed' === $status ) {
+			return 'done';
+		}
+		if ( 'received' !== $status || self::can_check_in( $order ) ) {
+			return 'working';
+		}
+		foreach ( (array) ( $order['lines'] ?? array() ) as $line ) {
+			if ( ! empty( $line['stay_id'] ) ) {
+				return 'done';
+			}
+		}
+		return 'working';
+	}
+
+	/**
+	 * What a user remembers of the order page, cleaned (pure): the view
+	 * they left a working order in, the one they left a finished order in,
+	 * and whether "More columns" was on. Anything else is the default —
+	 * Entry for an order being worked on, Numbers for one that is done.
+	 *
+	 * @param mixed $raw The stored user meta.
+	 * @return array{working: string, done: string, more: bool}
+	 */
+	public static function view_prefs( $raw ) {
+		$raw  = is_array( $raw ) ? $raw : array();
+		$view = static function ( $key, $default ) use ( $raw ) {
+			return isset( $raw[ $key ] ) && is_string( $raw[ $key ] ) && in_array( $raw[ $key ], self::VIEWS, true ) ? $raw[ $key ] : $default;
+		};
+		return array(
+			'working' => $view( 'working', 'entry' ),
+			'done'    => $view( 'done', 'numbers' ),
+			'more'    => ! empty( $raw['more'] ),
+		);
+	}
+
+	/**
+	 * The view an order page opens in (pure).
+	 *
+	 * @param array $order The order with its lines.
+	 * @param array $prefs view_prefs().
+	 * @return array{view: string, stage: string, more: bool}
+	 */
+	public static function order_view( array $order, array $prefs ) {
+		$stage = self::order_stage( $order );
+		return array(
+			'view'  => $prefs[ $stage ],
+			'stage' => $stage,
+			'more'  => ! empty( $prefs['more'] ),
+		);
+	}
+
+	/**
+	 * Remember the view a user switched to (the testable half of the "view"
+	 * op): the view of the stage the order is in, and the "More columns"
+	 * switch. Returns what is stored now.
+	 *
+	 * @param mixed $stored The user meta as stored.
+	 * @param array $raw    Unslashed payload: stage, view, more.
+	 * @return array view_prefs().
+	 */
+	public static function remember_view( $stored, array $raw ) {
+		$prefs = self::view_prefs( $stored );
+		$stage = isset( $raw['stage'] ) && 'done' === $raw['stage'] ? 'done' : 'working';
+		if ( isset( $raw['view'] ) && is_string( $raw['view'] ) && in_array( $raw['view'], self::VIEWS, true ) ) {
+			$prefs[ $stage ] = $raw['view'];
+		}
+		if ( isset( $raw['more'] ) && is_scalar( $raw['more'] ) ) {
+			$prefs['more'] = in_array( (string) $raw['more'], array( '1', 'true', 'on' ), true );
+		}
+		return $prefs;
+	}
+
+	/**
+	 * What the order page needs for its Split buttons: the tanks a part may
+	 * go into (Splits::tanks(): the empty ones first), each line's plan as
+	 * its hidden field posts it, and — for a line that is no stay yet and
+	 * has no plan — whether its fish was split last time (the offer).
+	 *
+	 * @param object $store    Store or stand-in.
+	 * @param array  $order    The order with its lines.
+	 * @param string $today    Site date.
+	 * @param array  $settings Settings.
+	 * @return array{tanks: array[], fields: array<int, string>, offers: array<int, string>}
+	 *               fields: line id → 'none' | the JSON of [[qty, tank id], …];
+	 *               offers: line id → 'ones' | 'some'.
+	 */
+	public static function split_panel( $store, array $order, $today, array $settings ) {
+		$all = Splits::all();
+		$out = array(
+			'tanks'  => Splits::tanks( $store, $today, $settings ),
+			'fields' => array(),
+			'offers' => array(),
+		);
+		foreach ( (array) ( $order['lines'] ?? array() ) as $line ) {
+			$id = (int) ( $line['id'] ?? 0 );
+			if ( $id < 1 || ! empty( $line['stay_id'] ) ) {
+				continue;
+			}
+			$plan = isset( $all['plans'][ $id ] ) ? $all['plans'][ $id ] : null;
+			if ( is_array( $plan ) ) {
+				$rows = array();
+				foreach ( $plan as $part ) {
+					$rows[] = array( (int) $part['qty'], (int) $part['tank_id'] );
+				}
+				$out['fields'][ $id ] = (string) wp_json_encode( $rows );
+				continue;
+			}
+			if ( Splits::NONE === $plan ) {
+				$out['fields'][ $id ] = Splits::NONE;
+				continue;
+			}
+			$memory = Splits::remembered( $line, $all['species'] );
+			if ( null !== $memory ) {
+				$out['offers'][ $id ] = $memory['ones'] ? 'ones' : 'some';
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * What js/order-entry.js says on the order page: the Split rows, their
+	 * running count and mistakes (Splits::strings()), the offers, the
+	 * pencil.
+	 *
+	 * @return array{i18n: array<string, string>}
+	 */
+	public static function entry_js_config() {
+		return array(
+			'i18n' => array_merge(
+				Splits::strings(),
+				array(
+					'split'          => __( 'Split', 'fishotel-misc-plugin' ),
+					'edit'           => __( 'Edit split', 'fishotel-misc-plugin' ),
+					/* translators: %s: species */
+					'title'          => __( 'Split %s — how many go into which tank:', 'fishotel-misc-plugin' ),
+					'thisLine'       => __( 'this line', 'fishotel-misc-plugin' ),
+					'howMany'        => __( 'How many', 'fishotel-misc-plugin' ),
+					'whichTank'      => __( 'Which tank', 'fishotel-misc-plugin' ),
+					'pickTank'       => __( '— tank —', 'fishotel-misc-plugin' ),
+					'hasFish'        => __( 'has fish', 'fishotel-misc-plugin' ),
+					'goneTank'       => __( '(no longer a tank for arrivals)', 'fishotel-misc-plugin' ),
+					'firstTank'      => __( 'first tank', 'fishotel-misc-plugin' ),
+					'removePart'     => __( 'Take this tank out of the split', 'fishotel-misc-plugin' ),
+					'addTank'        => __( '+ tank', 'fishotel-misc-plugin' ),
+					'ones'           => __( '1 per tank', 'fishotel-misc-plugin' ),
+					'onesTitle'      => __( 'One fish to a tank over the next empty Spa tanks of the order\'s building (received − DOA).', 'fishotel-misc-plugin' ),
+					'keep'           => __( 'Keep together', 'fishotel-misc-plugin' ),
+					'keepTitle'      => __( 'No split: the whole line goes into one tank.', 'fishotel-misc-plugin' ),
+					/* translators: 1: fish placed, 2: fish alive */
+					'placed'         => __( '%1$d of %2$d placed', 'fishotel-misc-plugin' ),
+					/* translators: %1$d: fish placed */
+					'placedOnly'     => __( '%1$d placed — the received count is not typed yet', 'fishotel-misc-plugin' ),
+					/* translators: %d: fish */
+					'rest'           => __( '%d stay in the first tank', 'fishotel-misc-plugin' ),
+					/* translators: 1: fish, 2: the tank */
+					'part'           => __( '%1$s → %2$s', 'fishotel-misc-plugin' ),
+					/* translators: %d: tanks */
+					'saidTanks'      => __( '%d tanks', 'fishotel-misc-plugin' ),
+					'onesNoCount'    => __( 'Type the received count first: one fish goes to each tank.', 'fishotel-misc-plugin' ),
+					/* translators: 1: empty tanks, 2: fish */
+					'onesShort'      => __( 'Only %1$d empty Spa tanks: the other %2$d stay in the first tank.', 'fishotel-misc-plugin' ),
+					'offerOnes'      => __( 'This fish was split one per tank last time, so the same is laid out here. Change it, or "Keep together" if this group stays as one.', 'fishotel-misc-plugin' ),
+					'offerOnesLater' => __( 'This fish was split one per tank last time: once the received count is typed, one goes to each empty tank. "Keep together" if this group stays as one.', 'fishotel-misc-plugin' ),
+					'offerSome'      => __( 'This fish was split over tanks last time. Add the tanks, or "Keep together" if this group stays as one.', 'fishotel-misc-plugin' ),
+					'worthTyped'     => __( 'A price of your own for this line — kept on Save.', 'fishotel-misc-plugin' ),
+					'worthCleared'   => __( 'No price of your own: the shop price is read again on Save.', 'fishotel-misc-plugin' ),
+				)
+			),
+		);
 	}
 
 	/**
@@ -842,7 +1035,8 @@ class Admin_Workbook {
 	 * (the stays), delete (a draft without stays), identify (correct the
 	 * fish of one line that received fish — and its stays), shares (the
 	 * remembered box shares of a supplier + origin — read only, for the
-	 * suggestion chips when either field changes on the page).
+	 * suggestion chips when either field changes on the page), view (which
+	 * of Entry / Numbers this user left the page in — nothing of the order).
 	 */
 	public function ajax_order() {
 		self::guard();
@@ -905,6 +1099,12 @@ class Admin_Workbook {
 					break;
 				case 'shares':
 					$result = array( 'shares' => self::shares_for( $store, $raw ) );
+					break;
+				case 'view':
+					// Which view (and "More columns") this user left the order page in.
+					$prefs = self::remember_view( get_user_meta( get_current_user_id(), self::VIEW_META, true ), $raw );
+					update_user_meta( get_current_user_id(), self::VIEW_META, $prefs );
+					$result = array( 'prefs' => $prefs );
 					break;
 				default:
 					wp_send_json_error( array( 'message' => __( 'Unknown action.', 'fishotel-misc-plugin' ) ), 400 );
@@ -1050,7 +1250,9 @@ class Admin_Workbook {
 	 * longer in the list leaves that line without one and is named in the
 	 * message. A line typed with a leading "??" is an unknown fish
 	 * (Identify::flag_lines()); a line's notes are kept as stored (the
-	 * grid has no field for them). On a line that already became a stay, a
+	 * grid has no field for them — only for the supplier's code in them).
+	 * A split planned in a Tank cell is checked and kept by line id
+	 * (split_plans(), Splits::keep()); it is never carried out here. On a line that already became a stay, a
 	 * changed species, "??" box or size is a correction: its stays follow
 	 * and the line keeps what the label said (Identify::line()). A line
 	 * without a stay is the order as typed: retyping its species records
@@ -1116,9 +1318,9 @@ class Admin_Workbook {
 		// The splits planned in the Tank cells: a plan that cannot work refuses the save like a
 		// mistyped percent does; a plan on a line that already is a stay is refused plainly, the
 		// rest of the save goes on.
-		$splits   = Orders::posted_splits( $raw_lines );
+		$extras   = Orders::posted_extras( $raw_lines );
 		$warnings = array();
-		$planned  = self::split_plans( $store, $splits, $before, $today, $warnings );
+		$planned  = self::split_plans( $store, $extras, $before, $today, $warnings );
 		if ( ! empty( $planned['errors'] ) ) {
 			return array( 'error' => implode( ' ', $planned['errors'] ) . ' ' . __( 'Nothing was saved.', 'fishotel-misc-plugin' ) );
 		}
@@ -1133,6 +1335,10 @@ class Admin_Workbook {
 		foreach ( $lines as $index => $line ) {
 			if ( '' === $line['notes'] && isset( $before[ (int) $line['id'] ] ) ) {
 				$lines[ $index ]['notes'] = (string) $before[ (int) $line['id'] ]['notes'];
+			}
+			// The supplier's code typed (or emptied) under "More columns" lives in the notes, as an import writes it.
+			if ( isset( $extras[ $index ] ) && null !== $extras[ $index ]['code'] && $extras[ $index ]['code'] !== Order_Import::code_of( $lines[ $index ]['notes'] ) ) {
+				$lines[ $index ]['notes'] = Order_Import::note_with( $lines[ $index ]['notes'], Order_Import::NOTE_CODE, $extras[ $index ]['code'] );
 			}
 		}
 
@@ -1277,7 +1483,7 @@ class Admin_Workbook {
 	 * split now — and nothing is kept for it.
 	 *
 	 * @param object $store    Store or stand-in.
-	 * @param array  $splits   Orders::posted_splits().
+	 * @param array  $splits   Orders::posted_extras().
 	 * @param array  $before   The lines as stored, by id.
 	 * @param string $today    Site date.
 	 * @param array  $warnings What was not saved (by reference).

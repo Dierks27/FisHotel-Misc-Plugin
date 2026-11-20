@@ -728,6 +728,16 @@ class Admin {
 				true
 			);
 			wp_localize_script( 'fishotel-cleanroom-order-import', 'fhCleanRoomImport', Admin_Order_Import::js_config() );
+
+			// The order page's Entry / Numbers views, the keys that walk down a column, Split.
+			wp_enqueue_script(
+				'fishotel-cleanroom-order-entry',
+				Clean_Room::url() . 'js/order-entry.js',
+				array( 'jquery', 'fishotel-cleanroom-admin' ),
+				FISHOTEL_MISC_VERSION,
+				true
+			);
+			wp_localize_script( 'fishotel-cleanroom-order-entry', 'fhCleanRoomEntry', Admin_Workbook::entry_js_config() );
 		}
 	}
 

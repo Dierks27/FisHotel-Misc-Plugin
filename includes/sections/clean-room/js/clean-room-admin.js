@@ -1360,12 +1360,19 @@
 						$row.find('[data-f="' + key + '"]').text(f[key]);
 					});
 					$row.find('.fh-cr-worth').toggleClass('is-yes', !!f.worth_flag);
+					// The shop price: where it came from, and whether the line has one at all.
+					$row.find('[data-f="shop_price"]').attr('title', f.shop_note || '');
+					$row.find('.fh-cr-shop').toggleClass('is-typed', f.shop_from === 'typed');
+					$row.find('.fh-cr-shop, .fh-cr-priced').toggleClass('is-none', !f.priced);
 					$row.find('input[name$="[per_box]"]').attr('placeholder', f.per_box_used || '');
 				});
 				Object.keys(fig.order || {}).forEach(function (key) {
 					$order.find('[data-t="' + key + '"]').text(fig.order[key]);
 				});
 				$order.find('[data-t="up_down"]').removeClass('fh-cr-up fh-cr-down').addClass('fh-cr-' + (fig.order.up_down_flag || 'up'));
+				// The Numbers panel's line about the fish without a shop price; the worth-it rule on its column.
+				$order.find('[data-t="no_price"]').prop('hidden', !(fig.order && fig.order.no_price));
+				$order.find('[data-rule="worth_rule"]').attr('title', (fig.order && fig.order.worth_rule) || '');
 			}
 
 			/**
@@ -1377,6 +1384,7 @@
 				$lines.find('tr.fh-cr-line').not('.is-linked').each(function () {
 					// A line without a species goes — unless it is ticked "??": an unknown fish needs no description.
 					if (!$.trim($(this).find('.fh-cr-species').val()) && !$(this).find('input[name$="[needs_id]"]').prop('checked')) {
+						$(this).next('tr.fh-cr-split-row').remove(); // Its split rows go with it.
 						$(this).remove();
 					}
 				});
@@ -1456,6 +1464,7 @@
 			});
 
 			$order.on('click', '.fh-cr-line-remove', function () {
+				$(this).closest('tr').next('tr.fh-cr-split-row').remove(); // Its split rows go with it.
 				$(this).closest('tr').remove();
 				renumberLines();
 				refreshBoxes();
@@ -1536,10 +1545,8 @@
 				if (item.per_box) {
 					$tr.find('input[name$="[per_box]"]').attr('placeholder', item.per_box);
 				}
-				var $worth = $tr.find('input[name$="[worth]"]');
-				if (!$.trim($worth.val()) && item.my_price !== null && item.my_price !== undefined) {
-					$worth.val(Number(item.my_price).toFixed(2));
-				}
+				// What the fish sells for is no longer filled in here: the shop price is read on Save
+				// (Shop_Price), and the line's own field holds only a price typed with the pencil.
 				refreshBoxes(); // The line has its fish: its remembered share, if any, is offered.
 			});
 		}

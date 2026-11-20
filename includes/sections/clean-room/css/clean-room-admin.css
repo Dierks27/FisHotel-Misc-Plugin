@@ -1338,3 +1338,398 @@ a.fh-cr-unknown {
 	.fh-cr-stays-table > tbody > tr:not(.fh-cr-fields) > td:nth-child(6),
 	.fh-cr-stays-table > tbody > tr:not(.fh-cr-fields) > td:nth-child(9) { display: none; }
 }
+
+/* ------------------------------------------------------------------ */
+/*  The order page: Entry and Numbers                                  */
+/* ------------------------------------------------------------------ */
+/*
+ * Two views of ONE table. A cell says which view it belongs to
+ * (fh-cr-c-entry, fh-cr-c-more, fh-cr-c-numbers) and the form's data-view
+ * shows those. A hidden cell is display:none — its inputs stay in the
+ * form and are posted on Save like the shown ones.
+ *
+ * The table is laid out with fixed column widths (table-layout: fixed,
+ * the widths on the head cells), the fish taking what is left: in Entry
+ * a whole row fits the page without sideways scrolling from a 1280-px
+ * window down to a 1024-px one.
+ */
+.fh-cr-order[data-view="entry"] .fh-cr-c-numbers,
+.fh-cr-order[data-view="numbers"] .fh-cr-c-entry,
+.fh-cr-order[data-view="numbers"] .fh-cr-c-more,
+.fh-cr-order[data-view="entry"]:not([data-more="1"]) .fh-cr-c-more {
+	display: none;
+}
+
+/* The mode's own columns stay hidden whatever the view says. */
+.fh-cr-order[data-mode="box"] .fh-cr-col--bags,
+.fh-cr-order[data-mode="bag"] .fh-cr-col--per-box {
+	display: none;
+}
+
+.fh-cr-views {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-end;
+	justify-content: space-between;
+	gap: 10px 16px;
+	margin: 16px 0 8px;
+}
+
+.fh-cr-views__tabs {
+	display: flex;
+	gap: 8px;
+}
+
+.fh-cr-wrap .fh-cr-view-tab {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 200px;
+	padding: 10px 16px;
+	text-align: left;
+	cursor: pointer;
+	color: var(--fh-text-secondary, #a0a0a0);
+	background: var(--fh-bg-secondary, #2d2d2d);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.12));
+	border-bottom-width: 3px;
+	border-radius: var(--fh-radius, 8px);
+}
+
+.fh-cr-wrap .fh-cr-view-tab strong {
+	font-size: 16px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-wrap .fh-cr-view-tab span {
+	font-size: 11px;
+}
+
+.fh-cr-wrap .fh-cr-view-tab:hover,
+.fh-cr-wrap .fh-cr-view-tab:focus {
+	border-color: var(--fh-accent, #00a0d2);
+	outline: none;
+}
+
+.fh-cr-wrap .fh-cr-view-tab.is-on {
+	border-color: var(--fh-accent, #00a0d2);
+	background: rgba(0, 160, 210, 0.14);
+}
+
+.fh-cr-wrap .fh-cr-view-tab.is-on strong {
+	color: #fff;
+}
+
+.fh-cr-views__tools {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px 12px;
+}
+
+.fh-cr-order[data-view="entry"] .fh-cr-views__tools {
+	display: flex;
+}
+
+.fh-cr-more-switch {
+	font-size: 12px;
+	color: var(--fh-text-secondary, #a0a0a0);
+	white-space: nowrap;
+	cursor: pointer;
+}
+
+/* The Numbers panel: the order's summary as boxes. */
+.fh-cr-numbers-panel {
+	margin: 0 0 10px;
+}
+
+.fh-cr-kpis {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+	gap: 8px;
+}
+
+.fh-cr-kpi {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: 10px 12px;
+	background: var(--fh-bg-secondary, #2d2d2d);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	border-radius: var(--fh-radius, 8px);
+}
+
+.fh-cr-kpi__label {
+	font-size: 11px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-kpi__value {
+	font-size: 17px;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-kpi__value.fh-cr-up   { color: var(--fh-success, #46b450); }
+.fh-cr-kpi__value.fh-cr-down { color: var(--fh-danger, #dc3232); }
+
+.fh-cr-numbers-panel__note,
+.fh-cr-numbers-panel__rule {
+	margin: 8px 0 0;
+}
+
+/* The table: fixed widths, the fish takes the rest. */
+.fh-cr-order .fh-cr-grid {
+	table-layout: fixed;
+	width: 100%;
+}
+
+.fh-cr-order .fh-cr-grid td,
+.fh-cr-order .fh-cr-grid th {
+	box-sizing: border-box;
+	padding: 4px 3px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	vertical-align: top;
+}
+
+.fh-cr-order .fh-cr-grid thead th {
+	font-size: 12px;
+	vertical-align: bottom;
+}
+
+/* The fish cell holds the suggestion list and its notes: nothing of it is cut off. */
+.fh-cr-order .fh-cr-grid td.fh-cr-line__fish {
+	overflow: visible;
+	white-space: normal;
+}
+
+.fh-cr-order .fh-cr-grid .fh-cr-w-n     { width: 30px; }
+.fh-cr-order .fh-cr-grid .fh-cr-w-sci   { width: 15%; }
+.fh-cr-order .fh-cr-grid .fh-cr-w-size  { width: 92px; }
+.fh-cr-order .fh-cr-grid .fh-cr-w-qty   { width: 56px; }
+.fh-cr-order .fh-cr-grid .fh-cr-w-pct   { width: 64px; }
+.fh-cr-order .fh-cr-grid .fh-cr-w-money { width: 82px; }
+.fh-cr-order .fh-cr-grid .fh-cr-w-tank  { width: 132px; }
+.fh-cr-order .fh-cr-grid .fh-cr-w-code  { width: 84px; }
+.fh-cr-order .fh-cr-grid .fh-cr-w-x     { width: 30px; }
+.fh-cr-order .fh-cr-grid .fh-cr-w-shop  { width: 112px; }
+.fh-cr-order .fh-cr-grid .fh-cr-w-calc  { width: 84px; }
+.fh-cr-order .fh-cr-grid .fh-cr-w-count { width: 62px; }
+
+/* Every field fills its cell: the number boxes are as narrow as their numbers. */
+.fh-cr-order .fh-cr-grid .fh-cr-input {
+	box-sizing: border-box;
+	width: 100%;
+	min-width: 0;
+	max-width: none;
+	padding: 3px 4px;
+}
+
+.fh-cr-order .fh-cr-grid .fh-cr-line__name .fh-cr-species {
+	flex: 1 1 auto;
+	width: auto;
+	min-width: 0;
+}
+
+/* No spin buttons in the grid: they eat a third of a three-digit box. */
+.fh-cr-order .fh-cr-grid input[type="number"] {
+	-moz-appearance: textfield;
+	appearance: textfield;
+}
+
+.fh-cr-order .fh-cr-grid input[type="number"]::-webkit-outer-spin-button,
+.fh-cr-order .fh-cr-grid input[type="number"]::-webkit-inner-spin-button {
+	-webkit-appearance: none;
+	margin: 0;
+}
+
+.fh-cr-order .fh-cr-grid .fh-cr-pct-hint .fh-cr-suggest-pct {
+	white-space: normal;
+}
+
+/* The Tank cell: the tank, or what the split says, and Split. */
+.fh-cr-line__tank {
+	white-space: nowrap;
+}
+
+.fh-cr-order .fh-cr-grid .fh-cr-line__tank .fh-cr-input--tank {
+	width: 64px;
+}
+
+.fh-cr-order .fh-cr-grid .fh-cr-line__tank .button {
+	min-height: 28px;
+	padding: 0 6px;
+	vertical-align: top;
+}
+
+.fh-cr-line.is-split .fh-cr-line__tank .fh-cr-input--tank {
+	display: none;
+}
+
+.fh-cr-split-said {
+	display: none;
+	max-width: 70px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	vertical-align: middle;
+	font-size: 11px;
+	color: var(--fh-accent, #00a0d2);
+}
+
+.fh-cr-line.is-split .fh-cr-split-said {
+	display: inline-block;
+}
+
+/* The rows of "how many → which tank" under a line. */
+.fh-cr-split-row td {
+	background: var(--fh-bg-primary, #1a1a1a) !important;
+	white-space: normal;
+	overflow: visible;
+}
+
+.fh-cr-order[data-view="numbers"] .fh-cr-split-row {
+	display: none;
+}
+
+.fh-cr-split {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px 12px;
+	padding: 6px 4px 8px 30px;
+}
+
+.fh-cr-split__title {
+	font-size: 12px;
+	font-weight: 700;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-split__parts {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px 10px;
+}
+
+.fh-cr-split__part {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 3px 4px 3px 6px;
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.14));
+	border-radius: 6px;
+	white-space: nowrap;
+}
+
+.fh-cr-order .fh-cr-grid .fh-cr-split__part .fh-cr-split__qty {
+	width: 46px;
+	text-align: right;
+}
+
+.fh-cr-order .fh-cr-grid .fh-cr-split__part .fh-cr-split__tank {
+	width: 128px;
+}
+
+.fh-cr-split__count {
+	font-size: 12px;
+	font-weight: 700;
+	font-variant-numeric: tabular-nums;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-split__count.is-full { color: var(--fh-success, #46b450); }
+.fh-cr-split__count.is-over { color: var(--fh-danger, #dc3232); }
+
+.fh-cr-split__why {
+	flex-basis: 100%;
+	font-size: 11px;
+	color: var(--fh-warning, #ffb900);
+}
+
+/* Numbers: the fish as text, the shop price with its pencil. */
+.fh-cr-line__read {
+	font-weight: 600;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-order[data-view="numbers"] .fh-cr-grid td {
+	white-space: normal;
+}
+
+.fh-cr-shop__price {
+	font-variant-numeric: tabular-nums;
+	color: var(--fh-text-primary, #e0e0e0);
+	cursor: help;
+}
+
+.fh-cr-shop.is-typed .fh-cr-shop__price {
+	font-style: italic;
+}
+
+.fh-cr-shop.is-none .fh-cr-shop__price,
+.fh-cr-priced.is-none {
+	font-size: 11px;
+	font-style: italic;
+	color: var(--fh-warning, #ffb900);
+}
+
+.fh-cr-wrap .fh-cr-worth-edit {
+	margin-left: 2px;
+	color: var(--fh-text-secondary, #a0a0a0);
+	text-decoration: none;
+}
+
+.fh-cr-wrap .fh-cr-worth-edit .dashicons {
+	width: 14px;
+	height: 14px;
+	font-size: 14px;
+	vertical-align: middle;
+}
+
+.fh-cr-shop.is-typed .fh-cr-worth-edit,
+.fh-cr-wrap .fh-cr-worth-edit:hover,
+.fh-cr-wrap .fh-cr-worth-edit:focus {
+	color: var(--fh-accent, #00a0d2);
+}
+
+.fh-cr-order .fh-cr-grid .fh-cr-worth-input {
+	display: block;
+	margin-top: 3px;
+}
+
+.fh-cr-order .fh-cr-grid .fh-cr-worth-input[hidden] {
+	display: none;
+}
+
+.fh-cr-order .fh-cr-grid .fh-cr-calc .fh-cr-sub {
+	display: block;
+	font-size: 10px;
+}
+
+/* "More columns" adds three: the table may then be wider than a 1280-px page. */
+.fh-cr-order[data-view="entry"][data-more="1"] .fh-cr-grid {
+	min-width: 1180px;
+}
+
+/* Numbers is for reading at a desk: it keeps its widths and scrolls on a small window. */
+.fh-cr-order[data-view="numbers"] .fh-cr-grid {
+	min-width: 1020px;
+}
+
+/* A 1024-px window: the scientific name moves behind "More columns", the rest tightens. */
+@media (max-width: 1100px) {
+	.fh-cr-order[data-view="entry"]:not([data-more="1"]) .fh-cr-c-sci {
+		display: none;
+	}
+
+	.fh-cr-order .fh-cr-grid .fh-cr-w-size  { width: 80px; }
+	.fh-cr-order .fh-cr-grid .fh-cr-w-qty   { width: 50px; }
+	.fh-cr-order .fh-cr-grid .fh-cr-w-pct   { width: 58px; }
+	.fh-cr-order .fh-cr-grid .fh-cr-w-money { width: 72px; }
+	.fh-cr-order .fh-cr-grid .fh-cr-w-tank  { width: 124px; }
+
+	.fh-cr-wrap .fh-cr-view-tab {
+		min-width: 0;
+	}
+}

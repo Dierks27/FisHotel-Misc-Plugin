@@ -1,7 +1,7 @@
 /**
  * Import lines — the page's pure helpers (js/order-import.js), run
  * without a DOM or jQuery: "Received: all as ordered" (fills the EMPTY
- * received fields only), Enter / Tab in the received column, the foot of
+ * received fields only), the foot of
  * the ordered preview as the ticks stand, what the page tells the server
  * about the owner's choices — and the order form's lines packed into one
  * field (packLines() of js/clean-room-admin.js), which
@@ -50,12 +50,7 @@ check( 'a line without a usable ordered count stays empty', filled[3] === '' && 
 check( 'an ordered 0 fills a 0', filled[7] === '0' );
 check( 'nothing at all gives nothing', same( helpers.receivedAsOrdered( [] ), [] ) && same( helpers.receivedAsOrdered( null ), [] ) );
 
-console.log( '2. Enter / Tab in the received column' );
-check( 'the next line\'s received', helpers.nextReceived( 5, 0, false ) === 1 && helpers.nextReceived( 5, 3, false ) === 4 );
-check( 'with Shift, the one above', helpers.nextReceived( 5, 3, true ) === 2 );
-check( 'at either end the key does what it always does', helpers.nextReceived( 5, 4, false ) === -1 && helpers.nextReceived( 5, 0, true ) === -1 && helpers.nextReceived( 0, 0, false ) === -1 );
-
-console.log( '3. The foot of the ordered preview' );
+console.log( '2. The foot of the ordered preview' );
 var rows = [
 	{ on: true, ordered: 4, dup: '', dup_choice: '' },
 	{ on: false, ordered: 6, dup: '', dup_choice: '' },
@@ -68,14 +63,14 @@ check( 'no rows, no lines', same( helpers.orderedFoot( [] ), { lines: 0, fish: 0
 check( 'thousands separators, as the server writes them', helpers.thousands( 1188 ) === '1,188' && helpers.thousands( 61 ) === '61' && helpers.thousands( 1234567 ) === '1,234,567' );
 check( 'the page fills the server\'s sentences', helpers.fmt( '%1$s lines · %2$s fish', '61', '412' ) === '61 lines · 412 fish' && helpers.fmt( 'code %s', 'XA1' ) === 'code XA1' && helpers.fmt( '%d fields', 3 ) === '3 fields' );
 
-console.log( '4. What the page tells the server' );
+console.log( '3. What the page tells the server' );
 var plain = helpers.payloadOf( { mode: 'ordered', hand: false, too: false, rows: {}, lines: {}, remember: true, token: 'abc' } );
 check( 'the moment, the ticks, the token — and no column map the owner did not set', plain.mode === 'ordered' && plain.hand === 0 && plain.remember === 1 && plain.token === 'abc' && ! ( 'map' in plain ) && ! ( 'use_layout' in plain ) && ! ( 'sections' in plain ) && plain.same_fish === 'sum' );
 var hand = helpers.payloadOf( { mode: 'arrived', hand: true, map: { 0: 'fish', 2: 'qty' }, headerRow: null, useLayout: 'abc123', sections: [ 'Northland' ], sameFish: 'separate', useFilePrice: true, fees: true, feesReplace: false, rows: { 4: { on: 0 } }, lines: { 2: 'keep' } } );
 check( 'the columns set by hand travel with the header row ("" = none), the layout to use, the sections, the choices', hand.hand === 1 && same( hand.map, { 0: 'fish', 2: 'qty' } ) && hand.header_row === '' && hand.use_layout === 'abc123' && same( hand.sections, [ 'Northland' ] ) && hand.same_fish === 'separate' && hand.use_file_price === 1 && hand.fees === 1 && hand.fees_replace === 0 && same( hand.rows, { 4: { on: 0 } } ) && same( hand.lines, { 2: 'keep' } ) );
 check( 'a header on the first row is row 0, not "none"', helpers.payloadOf( { hand: true, map: {}, headerRow: 0 } ).header_row === 0 );
 
-console.log( '5. The order form\'s lines as one field' );
+console.log( '4. The order form\'s lines as one field' );
 var fields = [
 	{ name: 'order_id', value: '7' },
 	{ name: 'lines[0][id]', value: '11' },
@@ -98,7 +93,7 @@ for ( var i = 0; i < 150; i++ ) {
 check( 'an order of 150 fish: 2,550 form fields become one — it cannot be cut short by max_input_vars', many.length === 2550 && admin.packLines( many ).length === 1 && JSON.parse( admin.packLines( many )[0].value ).length === 150 );
 check( 'an order without lines posts an empty list, so a Save that removed the last line still removes it', same( admin.packLines( [ { name: 'ref', value: 'x' } ] ), [ { name: 'ref', value: 'x' }, { name: 'lines_json', value: '[]' } ] ) );
 
-console.log( '6. Nothing is ever set as HTML' );
+console.log( '5. Nothing is ever set as HTML' );
 var source = fs.readFileSync( path.join( __dirname, '..', 'js', 'order-import.js' ), 'utf8' );
 check( 'the page code never writes HTML from data: no .html( … ), no innerHTML, no insertAdjacentHTML', ! /\.html\s*\(\s*[^)\s]/.test( source ) && source.indexOf( 'innerHTML' ) === -1 && source.indexOf( 'insertAdjacentHTML' ) === -1 );
 check( 'the only markup it builds itself is a bare checkbox', ( source.match( /\$\(\s*'<[^']*'\s*\)/g ) || [] ).every( function ( m ) { return /^\$\(\s*'<input type="checkbox"( checked)?>'\s*\)$/.test( m ); } ), JSON.stringify( source.match( /\$\(\s*'<[^']*'\s*\)/g ) ) );

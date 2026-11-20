@@ -173,6 +173,25 @@ class Splits {
 	}
 
 	/**
+	 * The sentences of a plan's mistakes — one table for errors() and for
+	 * the page's JS (splitErrors() fills the same templates as the rows are
+	 * typed).
+	 *
+	 * @return array<string, string>
+	 */
+	public static function strings() {
+		return array(
+			'noQty'  => __( 'a part of the split has no count', 'fishotel-misc-plugin' ),
+			'noTank' => __( 'a part of the split has no tank', 'fishotel-misc-plugin' ),
+			'area'   => __( 'a part of the split names a tank that takes no arrivals (Spa tanks and quarantine temporary tanks only)', 'fishotel-misc-plugin' ),
+			/* translators: %s: tank number */
+			'twice'  => __( 'Tank %s is picked twice', 'fishotel-misc-plugin' ),
+			/* translators: 1: fish placed, 2: fish alive */
+			'live'   => __( 'the split places %1$d fish but only %2$d arrived alive (received − DOA)', 'fishotel-misc-plugin' ),
+		);
+	}
+
+	/**
 	 * What is wrong with a plan (pure): a row without a count or without a
 	 * tank, a tank that takes no arrivals, a tank picked twice, more fish
 	 * placed than are alive.
@@ -183,31 +202,30 @@ class Splits {
 	 * @return string[] One sentence per mistake; empty when the plan is sound.
 	 */
 	public static function errors( array $parts, $live, array $tanks ) {
+		$s      = self::strings();
 		$errors = array();
 		$seen   = array();
 		foreach ( $parts as $part ) {
 			$qty  = (int) ( $part['qty'] ?? 0 );
 			$tank = (int) ( $part['tank_id'] ?? 0 );
 			if ( $qty < 1 ) {
-				$errors['qty'] = __( 'a part of the split has no count', 'fishotel-misc-plugin' );
+				$errors['qty'] = $s['noQty'];
 			}
 			if ( $tank < 1 ) {
-				$errors['tank'] = __( 'a part of the split has no tank', 'fishotel-misc-plugin' );
+				$errors['tank'] = $s['noTank'];
 				continue;
 			}
 			if ( ! isset( $tanks[ $tank ] ) ) {
-				$errors['area'] = __( 'a part of the split names a tank that takes no arrivals (Spa tanks and quarantine temporary tanks only)', 'fishotel-misc-plugin' );
+				$errors['area'] = $s['area'];
 				continue;
 			}
 			if ( isset( $seen[ $tank ] ) ) {
-				/* translators: %s: tank number */
-				$errors[ 'twice' . $tank ] = sprintf( __( 'Tank %s is picked twice', 'fishotel-misc-plugin' ), (string) $tanks[ $tank ]['number'] );
+				$errors[ 'twice' . $tank ] = sprintf( $s['twice'], (string) $tanks[ $tank ]['number'] );
 			}
 			$seen[ $tank ] = true;
 		}
 		if ( null !== $live && self::placed( $parts ) > (int) $live ) {
-			/* translators: 1: fish placed, 2: fish alive */
-			$errors['live'] = sprintf( __( 'the split places %1$d fish but only %2$d arrived alive (received − DOA)', 'fishotel-misc-plugin' ), self::placed( $parts ), max( 0, (int) $live ) );
+			$errors['live'] = sprintf( $s['live'], self::placed( $parts ), max( 0, (int) $live ) );
 		}
 		return array_values( $errors );
 	}

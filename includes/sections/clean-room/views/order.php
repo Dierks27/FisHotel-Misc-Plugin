@@ -1,16 +1,34 @@
 <?php
 /**
- * The order editor — the header, the lines grid with the sheet's
- * computed columns (each line with its size, the box it came out of and
- * the percent of a box it took), the Boxes card that adds the percents
- * up, the totals and the stats block, Save and Check in. A line can be an
- * unknown fish (the "??" box); a line that received fish shows what its
- * label said once it was corrected, and "Identify…" / "Correct the fish…"
- * opens the panel of views/identify-panel.php under it. Every saved line
- * posts the token of the fish it was rendered with (Identify::seen()), so
- * a page loaded before a correction made elsewhere cannot undo it. Under
- * the grid: "Import lines…" (views/order-import.php) and "Received: all
- * as ordered".
+ * The order editor — the header, then the lines in TWO VIEWS of one
+ * table, switched by the two tabs above it and remembered per user:
+ *
+ *   Entry    only what is typed — # · Fish · Sci name · Size · Ordered ·
+ *            Received · Cost · DOA · Box # · % of box · Tank (bag mode:
+ *            Bags in place of the two box columns) —, narrow enough that
+ *            a whole row fits a 1280-px window. Per box, the typed
+ *            survivors and the supplier's code sit behind "More columns".
+ *            The Tank cell carries Split (js: rows of "how many → which
+ *            tank" under the line, posted as the line's hidden `split`).
+ *   Numbers  the fish and what the site works out, nothing to type: shop
+ *            price (read — Shop_Price; a pencil types an override) ·
+ *            landed per fish · the target price headed as the sheet heads
+ *            it ("400%") · profit · margin · Worth it? · revenue ·
+ *            survived · live · sold, under a panel of the order's summary.
+ *
+ * NOTHING IS LOST BY HIDING: both views are the same rows of the same
+ * form — a column that is not shown is display:none, and its inputs are
+ * posted on Save exactly as the shown ones (tests/order-view-test.php
+ * saves from each view and compares the stored lines).
+ *
+ * Under the table: Add line, "Import lines…" (views/order-import.php),
+ * the Boxes card that adds the percents up, and — in Numbers — the
+ * order's full figures. A line can be an unknown fish (the "??" box); a
+ * line that received fish shows what its label said once it was
+ * corrected, and "Identify…" / "Correct the fish…" opens the panel of
+ * views/identify-panel.php under it. Every saved line posts the token of
+ * the fish it was rendered with (Identify::seen()), so a page loaded
+ * before a correction made elsewhere cannot undo it.
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  *
@@ -26,6 +44,8 @@
  * @var bool    $can_checkin   Whether a line can be checked in.
  * @var bool    $is_new        Whether the order is unsaved.
  * @var array   $batch         Admin_Workbook::batch_sale_panel() (empty for a new order).
+ * @var array   $view          Admin_Workbook::order_view(): view (entry|numbers), stage, more.
+ * @var array   $split         Admin_Workbook::split_panel(): tanks, fields, offers.
  * @var string  $list_url      The Arrivals list URL.
  * @var string  $flash         One-time notice.
  * @var string  $today         Site date.
@@ -42,6 +62,7 @@ use FisHotel\Misc\Sections\Clean_Room\Clean_Room;
 use FisHotel\Misc\Sections\Clean_Room\Costing;
 use FisHotel\Misc\Sections\Clean_Room\Identify;
 use FisHotel\Misc\Sections\Clean_Room\Layout;
+use FisHotel\Misc\Sections\Clean_Room\Order_Import;
 use FisHotel\Misc\Sections\Clean_Room\Orders;
 use FisHotel\Misc\Sections\Clean_Room\Replay;
 use FisHotel\Misc\Sections\Clean_Room\Sizes;
@@ -57,15 +78,21 @@ foreach ( $order['lines'] as $fh_l ) {
 	}
 }
 $fh_unknown = Admin_Workbook::unknown_lines( $order );
+$fh_view    = in_array( (string) ( $view['view'] ?? '' ), Admin_Workbook::VIEWS, true ) ? (string) $view['view'] : 'entry';
+$fh_more    = ! empty( $view['more'] );
+$fh_cols    = 26; // Every column of the grid, shown or not: a row that opens under a line spans them all.
 
 /**
- * One line row (or the template row with index __i__).
+ * One line row (or the template row with index __i__). A cell is marked
+ * with the view it belongs to: fh-cr-c-entry, fh-cr-c-more (Entry, behind
+ * "More columns") or fh-cr-c-numbers; the CSS shows the ones of the
+ * form's data-view. Every input is in the row in both views.
  *
  * @param string|int $i    Row index.
  * @param array      $line Resolved line (empty for the template).
  * @param array      $fig  Its figures (empty for the template).
  */
-$fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks, $sizes, $shares, $fh_mode ) {
+$fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks, $sizes, $shares, $fh_mode, $split ) {
 	$name   = static function ( $field ) use ( $i ) {
 		return 'lines[' . $i . '][' . $field . ']';
 	};
@@ -79,19 +106,26 @@ $fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks,
 	$money  = static function ( $field, $decimals ) use ( $line ) {
 		return isset( $line[ $field ] ) && null !== $line[ $field ] ? number_format( (float) $line[ $field ], $decimals, '.', '' ) : '';
 	};
+	$id      = (int) $value( 'id', 0 );
 	// The remembered share's suggestion, for a line that has no percent yet (box mode only).
 	$hint    = $line && 'bag' !== $fh_mode ? Box_Shares::suggest_for( $shares, $line ) : null;
 	$unknown = ! empty( $line['needs_id'] );
 	// "Correct the fish…" once fish arrived on a saved line; before that its species is simply retyped.
-	$correct = (int) $value( 'id', 0 ) > 0 && ( $linked || (int) $value( 'qty_received', 0 ) > 0 );
+	$correct = $id > 0 && ( $linked || (int) $value( 'qty_received', 0 ) > 0 );
+	// The split planned for the line (its hidden field), or the offer of one because its fish was split last time.
+	$plan    = ! $linked && $id > 0 && isset( $split['fields'][ $id ] ) ? (string) $split['fields'][ $id ] : '';
+	$offer   = ! $linked && $id > 0 && isset( $split['offers'][ $id ] ) ? (string) $split['offers'][ $id ] : '';
+	$priced  = ! empty( $fig['priced'] );
+	$typed   = 'typed' === (string) ( $fig['shop_from'] ?? '' );
 	?>
-	<tr class="fh-cr-line<?php echo $linked ? ' is-linked' : ''; ?><?php echo $unknown ? ' is-unknown' : ''; ?>" data-line="<?php echo esc_attr( $value( 'id', 0 ) ); ?>">
-		<td class="fh-cr-num fh-cr-line__n"><span class="fh-cr-line__num"><?php echo esc_html( is_int( $i ) ? (string) ( $i + 1 ) : '' ); ?></span><input type="hidden" name="<?php echo esc_attr( $name( 'id' ) ); ?>" value="<?php echo esc_attr( $value( 'id', 0 ) ); ?>"><input type="hidden" name="<?php echo esc_attr( $name( 'species_id' ) ); ?>" value="<?php echo esc_attr( $value( 'species_id' ) ); ?>"><input type="hidden" name="<?php echo esc_attr( $name( 'seen' ) ); ?>" value="<?php echo esc_attr( (int) $value( 'id', 0 ) > 0 ? Identify::seen( $line ) : '' ); ?>"></td>
+	<tr class="fh-cr-line<?php echo $linked ? ' is-linked' : ''; ?><?php echo $unknown ? ' is-unknown' : ''; ?>" data-line="<?php echo esc_attr( $id ); ?>"<?php echo '' !== $offer ? ' data-split-offer="' . esc_attr( $offer ) . '"' : ''; ?>>
+		<td class="fh-cr-num fh-cr-line__n"><span class="fh-cr-line__num"><?php echo esc_html( is_int( $i ) ? (string) ( $i + 1 ) : '' ); ?></span><input type="hidden" name="<?php echo esc_attr( $name( 'id' ) ); ?>" value="<?php echo esc_attr( $id ); ?>"><input type="hidden" name="<?php echo esc_attr( $name( 'species_id' ) ); ?>" value="<?php echo esc_attr( $value( 'species_id' ) ); ?>"><input type="hidden" name="<?php echo esc_attr( $name( 'seen' ) ); ?>" value="<?php echo esc_attr( $id > 0 ? Identify::seen( $line ) : '' ); ?>"><?php if ( ! $linked ) : ?><input type="hidden" class="fh-cr-split-field" name="<?php echo esc_attr( $name( 'split' ) ); ?>" value="<?php echo esc_attr( $plan ); ?>"><?php endif; ?></td>
 		<td class="fh-cr-line__fish">
-			<span class="fh-cr-line__name fh-cr-suggest-wrap">
-				<input type="text" class="fh-cr-input fh-cr-species" name="<?php echo esc_attr( $name( 'species' ) ); ?>" value="<?php echo esc_attr( $value( 'species' ) ); ?>" placeholder="<?php esc_attr_e( 'species', 'fishotel-misc-plugin' ); ?>" autocomplete="off" maxlength="120">
+			<span class="fh-cr-line__name fh-cr-suggest-wrap fh-cr-c-entry">
+				<input type="text" class="fh-cr-input fh-cr-species" name="<?php echo esc_attr( $name( 'species' ) ); ?>" value="<?php echo esc_attr( $value( 'species' ) ); ?>" placeholder="<?php esc_attr_e( 'fish', 'fishotel-misc-plugin' ); ?>" autocomplete="off" maxlength="120">
 				<label class="fh-cr-unknown-box" title="<?php esc_attr_e( 'Nobody knows what this fish is yet: it reads "??" and what you type here (what it looks like). It still gets its tank, count, size, percent of the box and landed cost.', 'fishotel-misc-plugin' ); ?>"><input type="checkbox" name="<?php echo esc_attr( $name( 'needs_id' ) ); ?>" value="1" <?php checked( $unknown ); ?>> ??</label>
 			</span>
+			<span class="fh-cr-line__read fh-cr-c-numbers"><?php echo esc_html( $value( 'species' ) ); ?><?php if ( '' !== $value( 'size_label' ) ) : ?> <span class="fh-cr-sub fh-cr-sub--inline"><?php echo esc_html( $value( 'size_label' ) ); ?></span><?php endif; ?></span>
 			<?php if ( $linked ) : ?>
 				<span class="fh-cr-sub"><a href="<?php echo esc_url( Admin::page_url( 'stays', array( 's' => $value( 'species' ) ) ) ); ?>"><?php echo esc_html( sprintf( /* translators: %d: stay id */ __( 'stay #%d', 'fishotel-misc-plugin' ), (int) $line['stay_id'] ) ); ?></a></span>
 			<?php endif; ?>
@@ -102,14 +136,15 @@ $fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks,
 				<span class="fh-cr-sub fh-cr-label-name" title="<?php esc_attr_e( 'What the supplier\'s label or invoice called this fish before it was corrected. Kept for the mislabel stats; a later correction never replaces it.', 'fishotel-misc-plugin' ); ?>"><?php echo esc_html( sprintf( /* translators: %s: what the label called the fish */ __( 'arrived labeled: %s', 'fishotel-misc-plugin' ), Identify::label_shown( $line ) ) ); ?></span>
 			<?php endif; ?>
 			<?php if ( '' !== $value( 'notes' ) ) : ?>
-				<span class="fh-cr-sub fh-cr-line__notes"><?php echo esc_html( $value( 'notes' ) ); ?></span>
+				<span class="fh-cr-sub fh-cr-line__notes fh-cr-c-entry"><?php echo esc_html( $value( 'notes' ) ); ?></span>
 			<?php endif; ?>
 			<?php do_action( 'fishotel_cleanroom_order_line', $line ); // Other sections add a line under the fish (Requests: "Requested by: …"). ?>
 			<?php if ( $correct ) : ?>
-				<button type="button" class="button-link fh-cr-identify-open" data-line="<?php echo esc_attr( $value( 'id', 0 ) ); ?>" data-size="<?php echo esc_attr( $value( 'size_slug' ) ); ?>" data-size-label="<?php echo esc_attr( $value( 'size_label' ) ); ?>" title="<?php esc_attr_e( 'Name the real fish and its size. The line keeps what the label said, its stays follow, and the remembered box share is written for the corrected fish.', 'fishotel-misc-plugin' ); ?>"><?php echo esc_html( $unknown ? __( 'Identify…', 'fishotel-misc-plugin' ) : __( 'Correct the fish…', 'fishotel-misc-plugin' ) ); ?></button>
+				<button type="button" class="button-link fh-cr-identify-open fh-cr-c-entry" data-line="<?php echo esc_attr( $id ); ?>" data-size="<?php echo esc_attr( $value( 'size_slug' ) ); ?>" data-size-label="<?php echo esc_attr( $value( 'size_label' ) ); ?>" title="<?php esc_attr_e( 'Name the real fish and its size. The line keeps what the label said, its stays follow, and the remembered box share is written for the corrected fish.', 'fishotel-misc-plugin' ); ?>"><?php echo esc_html( $unknown ? __( 'Identify…', 'fishotel-misc-plugin' ) : __( 'Correct the fish…', 'fishotel-misc-plugin' ) ); ?></button>
 			<?php endif; ?>
 		</td>
-		<td>
+		<td class="fh-cr-c-entry fh-cr-c-sci"><input type="text" class="fh-cr-input fh-cr-input--sci" name="<?php echo esc_attr( $name( 'sci_name' ) ); ?>" value="<?php echo esc_attr( $value( 'sci_name' ) ); ?>" maxlength="120"></td>
+		<td class="fh-cr-c-entry">
 			<select class="fh-cr-input fh-cr-input--size" name="<?php echo esc_attr( $name( 'size_slug' ) ); ?>">
 				<option value="">—</option>
 				<?php foreach ( Sizes::options( $sizes, $line ) as $fh_o ) : ?>
@@ -117,49 +152,60 @@ $fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks,
 				<?php endforeach; ?>
 			</select>
 		</td>
-		<td><input type="text" class="fh-cr-input fh-cr-input--sci" name="<?php echo esc_attr( $name( 'sci_name' ) ); ?>" value="<?php echo esc_attr( $value( 'sci_name' ) ); ?>" maxlength="120"></td>
-		<td class="fh-cr-num"><input type="number" class="fh-cr-input fh-cr-input--qty" name="<?php echo esc_attr( $name( 'qty_ordered' ) ); ?>" value="<?php echo esc_attr( $value( 'qty_ordered', 0 ) ); ?>" min="0" max="9999"></td>
-		<td class="fh-cr-num fh-cr-col--per-box"><input type="number" class="fh-cr-input fh-cr-input--qty" name="<?php echo esc_attr( $name( 'per_box' ) ); ?>" value="<?php echo esc_attr( $value( 'per_box' ) ); ?>" min="1" max="999" placeholder="<?php echo esc_attr( $f( 'per_box_used' ) ); ?>"></td>
-		<td class="fh-cr-num fh-cr-col--per-box"><input type="number" class="fh-cr-input fh-cr-input--qty" name="<?php echo esc_attr( $name( 'box_no' ) ); ?>" value="<?php echo esc_attr( $value( 'box_no' ) ); ?>" min="1" max="<?php echo esc_attr( Costing::BOX_NO_MAX ); ?>" step="1"></td>
-		<td class="fh-cr-num fh-cr-col--per-box">
+		<td class="fh-cr-num fh-cr-c-entry"><input type="number" class="fh-cr-input fh-cr-input--qty" name="<?php echo esc_attr( $name( 'qty_ordered' ) ); ?>" value="<?php echo esc_attr( $value( 'qty_ordered', 0 ) ); ?>" min="0" max="9999"></td>
+		<?php if ( $linked ) : ?>
+			<td class="fh-cr-num fh-cr-c-entry" data-received="<?php echo esc_attr( $value( 'qty_received', 0 ) ); ?>"><?php echo esc_html( $value( 'qty_received', 0 ) ); ?></td>
+		<?php else : ?>
+			<td class="fh-cr-num fh-cr-c-entry"><input type="number" class="fh-cr-input fh-cr-input--qty" name="<?php echo esc_attr( $name( 'qty_received' ) ); ?>" value="<?php echo esc_attr( $value( 'qty_received' ) ); ?>" min="0" max="9999"></td>
+		<?php endif; ?>
+		<td class="fh-cr-num fh-cr-c-entry"><input type="number" step="0.0001" class="fh-cr-input fh-cr-input--money" name="<?php echo esc_attr( $name( 'unit_price' ) ); ?>" value="<?php echo esc_attr( $money( 'unit_price', 4 ) ); ?>" min="0"></td>
+		<?php if ( $linked ) : ?>
+			<td class="fh-cr-num fh-cr-c-entry" data-f="doa"><?php echo esc_html( $f( 'doa' ) ); ?></td>
+		<?php else : ?>
+			<td class="fh-cr-num fh-cr-c-entry"><input type="number" class="fh-cr-input fh-cr-input--qty" name="<?php echo esc_attr( $name( 'qty_doa' ) ); ?>" value="<?php echo esc_attr( $value( 'qty_doa', 0 ) ); ?>" min="0" max="9999"></td>
+		<?php endif; ?>
+		<td class="fh-cr-num fh-cr-c-entry fh-cr-col--per-box"><input type="number" class="fh-cr-input fh-cr-input--qty" name="<?php echo esc_attr( $name( 'box_no' ) ); ?>" value="<?php echo esc_attr( $value( 'box_no' ) ); ?>" min="1" max="<?php echo esc_attr( Costing::BOX_NO_MAX ); ?>" step="1"></td>
+		<td class="fh-cr-num fh-cr-c-entry fh-cr-col--per-box">
 			<input type="number" class="fh-cr-input fh-cr-input--qty" name="<?php echo esc_attr( $name( 'box_pct' ) ); ?>" value="<?php echo esc_attr( Costing::num( $line['box_pct'] ?? null, '', 2 ) ); ?>" min="0" max="<?php echo esc_attr( Costing::num( Costing::BOX_PCT_MAX ) ); ?>" step="0.01">
 			<span class="fh-cr-pct-hint"><?php if ( $hint ) : ?><button type="button" class="button-link fh-cr-suggest-pct" data-pct="<?php echo esc_attr( Costing::num( $hint['pct'], '', 2 ) ); ?>"><?php echo esc_html( Box_Shares::suggest_text( $hint ) ); ?></button><?php endif; ?></span>
 		</td>
-		<td class="fh-cr-num fh-cr-col--bags"><input type="number" class="fh-cr-input fh-cr-input--qty" name="<?php echo esc_attr( $name( 'bags' ) ); ?>" value="<?php echo esc_attr( $value( 'bags' ) ); ?>" min="1" max="9999"></td>
+		<td class="fh-cr-num fh-cr-c-entry fh-cr-col--bags"><input type="number" class="fh-cr-input fh-cr-input--qty" name="<?php echo esc_attr( $name( 'bags' ) ); ?>" value="<?php echo esc_attr( $value( 'bags' ) ); ?>" min="1" max="9999"></td>
 		<?php if ( $linked ) : ?>
-			<td class="fh-cr-num" data-received="<?php echo esc_attr( $value( 'qty_received', 0 ) ); ?>"><?php echo esc_html( $value( 'qty_received', 0 ) ); ?></td>
+			<td class="fh-cr-c-entry fh-cr-line__tank"><?php echo esc_html( ! empty( $line['tank_number'] ) ? (string) $line['tank_number'] : '—' ); ?></td>
 		<?php else : ?>
-			<td class="fh-cr-num"><input type="number" class="fh-cr-input fh-cr-input--qty" name="<?php echo esc_attr( $name( 'qty_received' ) ); ?>" value="<?php echo esc_attr( $value( 'qty_received' ) ); ?>" min="0" max="9999"></td>
-		<?php endif; ?>
-		<td class="fh-cr-num"><input type="number" step="0.0001" class="fh-cr-input fh-cr-input--money" name="<?php echo esc_attr( $name( 'unit_price' ) ); ?>" value="<?php echo esc_attr( $money( 'unit_price', 4 ) ); ?>" min="0"></td>
-		<td class="fh-cr-num"><input type="number" step="0.01" class="fh-cr-input fh-cr-input--money" name="<?php echo esc_attr( $name( 'worth' ) ); ?>" value="<?php echo esc_attr( $money( 'worth', 2 ) ); ?>" min="0"></td>
-		<?php if ( $linked ) : ?>
-			<td class="fh-cr-num" data-f="doa"><?php echo esc_html( $f( 'doa' ) ); ?></td>
-			<td class="fh-cr-num" data-f="survived"><?php echo esc_html( $f( 'survived' ) ); ?></td>
-			<td><?php echo esc_html( ! empty( $line['tank_number'] ) ? (string) $line['tank_number'] : '—' ); ?></td>
-		<?php else : ?>
-			<td class="fh-cr-num"><input type="number" class="fh-cr-input fh-cr-input--qty" name="<?php echo esc_attr( $name( 'qty_doa' ) ); ?>" value="<?php echo esc_attr( $value( 'qty_doa', 0 ) ); ?>" min="0" max="9999"></td>
-			<td class="fh-cr-num"><input type="number" class="fh-cr-input fh-cr-input--qty" name="<?php echo esc_attr( $name( 'qty_survived' ) ); ?>" value="<?php echo esc_attr( $value( 'qty_survived' ) ); ?>" min="0" max="9999" placeholder="—"></td>
-			<td>
+			<td class="fh-cr-c-entry fh-cr-line__tank">
 				<select class="fh-cr-input fh-cr-input--tank" name="<?php echo esc_attr( $name( 'tank_id' ) ); ?>">
 					<option value=""><?php esc_html_e( 'auto', 'fishotel-misc-plugin' ); ?></option>
 					<?php foreach ( $spa_tanks as $fh_t ) : ?>
 						<option value="<?php echo esc_attr( $fh_t['id'] ); ?>" <?php selected( (int) $fh_t['id'], (int) $value( 'tank_id', 0 ) ); ?>><?php echo esc_html( $fh_t['number'] ); ?></option>
 					<?php endforeach; ?>
 				</select>
+				<span class="fh-cr-split-said"></span>
+				<button type="button" class="button button-small fh-cr-split-open" aria-expanded="false" title="<?php esc_attr_e( 'Lay this line out over several tanks: how many go into which tank. The check-in then puts them there.', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'Split', 'fishotel-misc-plugin' ); ?></button>
 			</td>
 		<?php endif; ?>
-		<td class="fh-cr-num fh-cr-calc" data-f="units"><?php echo esc_html( $f( 'units' ) ); ?></td>
-		<td class="fh-cr-num fh-cr-calc" data-f="landed_total"><?php echo esc_html( $f( 'landed_total' ) ); ?></td>
-		<td class="fh-cr-num fh-cr-calc" data-f="landed_per_fish"><?php echo esc_html( $f( 'landed_per_fish' ) ); ?></td>
-		<td class="fh-cr-num fh-cr-calc" data-f="suggested_price"><?php echo esc_html( $f( 'suggested_price' ) ); ?></td>
-		<td class="fh-cr-num fh-cr-calc" data-f="profit"><?php echo esc_html( $f( 'profit' ) ); ?></td>
-		<td class="fh-cr-num fh-cr-calc" data-f="margin"><?php echo esc_html( $f( 'margin' ) ); ?></td>
-		<td class="fh-cr-calc fh-cr-worth<?php echo ! empty( $fig['worth_flag'] ) ? ' is-yes' : ''; ?>" data-f="worth_it"><?php echo esc_html( $f( 'worth_it' ) ); ?></td>
-		<td class="fh-cr-num fh-cr-calc" data-f="revenue"><?php echo esc_html( $f( 'revenue' ) ); ?></td>
-		<td class="fh-cr-num fh-cr-calc" data-f="live"><?php echo esc_html( $f( 'live' ) ); ?></td>
-		<td class="fh-cr-num fh-cr-calc" data-f="sold"><?php echo esc_html( $f( 'sold' ) ); ?></td>
-		<td class="fh-cr-row__actions"><?php if ( ! $linked ) : ?><button type="button" class="button button-small fh-cr-line-remove" title="<?php esc_attr_e( 'Remove line', 'fishotel-misc-plugin' ); ?>">&times;</button><?php endif; ?></td>
+		<td class="fh-cr-num fh-cr-c-more fh-cr-col--per-box"><input type="number" class="fh-cr-input fh-cr-input--qty" name="<?php echo esc_attr( $name( 'per_box' ) ); ?>" value="<?php echo esc_attr( $value( 'per_box' ) ); ?>" min="1" max="999" placeholder="<?php echo esc_attr( $f( 'per_box_used' ) ); ?>"></td>
+		<?php if ( $linked ) : ?>
+			<td class="fh-cr-num fh-cr-c-more" data-f="survived"><?php echo esc_html( $f( 'survived' ) ); ?></td>
+		<?php else : ?>
+			<td class="fh-cr-num fh-cr-c-more"><input type="number" class="fh-cr-input fh-cr-input--qty" name="<?php echo esc_attr( $name( 'qty_survived' ) ); ?>" value="<?php echo esc_attr( $value( 'qty_survived' ) ); ?>" min="0" max="9999" placeholder="—"></td>
+		<?php endif; ?>
+		<td class="fh-cr-c-more"><input type="text" class="fh-cr-input fh-cr-input--code" name="<?php echo esc_attr( $name( 'code' ) ); ?>" value="<?php echo esc_attr( Order_Import::code_of( $value( 'notes' ) ) ); ?>" maxlength="40"></td>
+		<td class="fh-cr-num fh-cr-c-numbers fh-cr-shop<?php echo $priced ? '' : ' is-none'; ?><?php echo $typed ? ' is-typed' : ''; ?>">
+			<span class="fh-cr-shop__price" data-f="shop_price" title="<?php echo esc_attr( $f( 'shop_note' ) ); ?>"><?php echo esc_html( $line ? $f( 'shop_price' ) : '—' ); ?></span>
+			<button type="button" class="button-link fh-cr-worth-edit" aria-expanded="false" title="<?php esc_attr_e( 'Type a price of your own for this line (a price you plan). Empty the field to follow the shop again.', 'fishotel-misc-plugin' ); ?>"><span class="dashicons dashicons-edit" aria-hidden="true"></span><span class="screen-reader-text"><?php esc_html_e( 'Type a price of your own', 'fishotel-misc-plugin' ); ?></span></button>
+			<input type="number" step="0.01" class="fh-cr-input fh-cr-input--money fh-cr-worth-input" name="<?php echo esc_attr( $name( 'worth' ) ); ?>" value="<?php echo esc_attr( $money( 'worth', 2 ) ); ?>" min="0" hidden>
+		</td>
+		<td class="fh-cr-num fh-cr-calc fh-cr-c-numbers"><span data-f="landed_per_fish"><?php echo esc_html( $f( 'landed_per_fish' ) ); ?></span><span class="fh-cr-sub" title="<?php echo esc_attr( 'bag' === $fh_mode ? __( 'What the whole line cost landed, and its bags (else the received count).', 'fishotel-misc-plugin' ) : __( 'What the whole line cost landed, and the part of a box it took.', 'fishotel-misc-plugin' ) ); ?>"><span data-f="landed_total"><?php echo esc_html( $f( 'landed_total' ) ); ?></span> · <span data-f="units"><?php echo esc_html( $f( 'units' ) ); ?></span></span></td>
+		<td class="fh-cr-num fh-cr-calc fh-cr-c-numbers" data-f="suggested_price"><?php echo esc_html( $f( 'suggested_price' ) ); ?></td>
+		<td class="fh-cr-num fh-cr-calc fh-cr-c-numbers fh-cr-priced<?php echo $priced ? '' : ' is-none'; ?>" data-f="profit"><?php echo esc_html( $f( 'profit' ) ); ?></td>
+		<td class="fh-cr-num fh-cr-calc fh-cr-c-numbers fh-cr-priced<?php echo $priced ? '' : ' is-none'; ?>" data-f="margin"><?php echo esc_html( $f( 'margin' ) ); ?></td>
+		<td class="fh-cr-calc fh-cr-c-numbers fh-cr-priced fh-cr-worth<?php echo ! empty( $fig['worth_flag'] ) ? ' is-yes' : ''; ?><?php echo $priced ? '' : ' is-none'; ?>" data-f="worth_it"><?php echo esc_html( $f( 'worth_it' ) ); ?></td>
+		<td class="fh-cr-num fh-cr-calc fh-cr-c-numbers" data-f="revenue"><?php echo esc_html( $f( 'revenue' ) ); ?></td>
+		<td class="fh-cr-num fh-cr-calc fh-cr-c-numbers" data-f="survived"><?php echo esc_html( $f( 'survived' ) ); ?></td>
+		<td class="fh-cr-num fh-cr-calc fh-cr-c-numbers" data-f="live"><?php echo esc_html( $f( 'live' ) ); ?></td>
+		<td class="fh-cr-num fh-cr-calc fh-cr-c-numbers" data-f="sold"><?php echo esc_html( $f( 'sold' ) ); ?></td>
+		<td class="fh-cr-row__actions fh-cr-c-entry"><?php if ( ! $linked ) : ?><button type="button" class="button button-small fh-cr-line-remove" title="<?php esc_attr_e( 'Remove line', 'fishotel-misc-plugin' ); ?>">&times;</button><?php endif; ?></td>
 	</tr>
 	<?php
 };
@@ -189,7 +235,7 @@ $fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks,
 		</form>
 	<?php endif; ?>
 
-	<form id="fh-cr-order" class="fh-cr-order" data-order="<?php echo esc_attr( (int) $order['id'] ); ?>" data-mode="<?php echo esc_attr( $fh_mode ); ?>" onsubmit="return false;">
+	<form id="fh-cr-order" class="fh-cr-order" data-order="<?php echo esc_attr( (int) $order['id'] ); ?>" data-mode="<?php echo esc_attr( $fh_mode ); ?>" data-view="<?php echo esc_attr( $fh_view ); ?>" data-more="<?php echo $fh_more ? '1' : '0'; ?>" data-stage="<?php echo esc_attr( (string) ( $view['stage'] ?? 'working' ) ); ?>" onsubmit="return false;">
 		<input type="hidden" name="order_id" value="<?php echo esc_attr( (int) $order['id'] ); ?>">
 
 		<div class="fh-cr-toolbar fh-cr-toolbar--order">
@@ -306,44 +352,77 @@ $fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks,
 					</span>
 				</label>
 				<label><span><?php esc_html_e( 'Credit', 'fishotel-misc-plugin' ); ?></span><input type="number" step="0.01" class="fh-cr-input" name="credit" value="<?php echo esc_attr( number_format( (float) $order['credit'], 2, '.', '' ) ); ?>" min="0"></label>
-				<label><span><?php esc_html_e( 'Markup (suggested price)', 'fishotel-misc-plugin' ); ?></span><input type="number" step="0.01" class="fh-cr-input" name="markup" value="<?php echo esc_attr( Costing::num( $order['markup'] ) ); ?>" min="0.01"></label>
-				<label><span><?php esc_html_e( 'Worth-it margin', 'fishotel-misc-plugin' ); ?></span><input type="number" step="0.01" class="fh-cr-input" name="worth_threshold" value="<?php echo esc_attr( Costing::num( $order['worth_threshold'] ) ); ?>" min="0"></label>
+				<label title="<?php esc_attr_e( 'The target price is the landed cost per fish × this (4 = the sheet\'s "400%").', 'fishotel-misc-plugin' ); ?>"><span><?php esc_html_e( 'Markup (target price)', 'fishotel-misc-plugin' ); ?></span><input type="number" step="0.01" class="fh-cr-input" name="markup" value="<?php echo esc_attr( Costing::num( $order['markup'] ) ); ?>" min="0.01"></label>
+				<label title="<?php echo esc_attr( $fh_totals['worth_rule'] . ' ' . __( 'That is a margin (profit ÷ landed cost) above this number.', 'fishotel-misc-plugin' ) ); ?>"><span><?php esc_html_e( 'Worth-it margin', 'fishotel-misc-plugin' ); ?></span><input type="number" step="0.01" class="fh-cr-input" name="worth_threshold" value="<?php echo esc_attr( Costing::num( $order['worth_threshold'] ) ); ?>" min="0"></label>
 				<label class="fh-cr-fields-grid__wide"><span><?php esc_html_e( 'Notes', 'fishotel-misc-plugin' ); ?></span><textarea class="fh-cr-input" name="notes" rows="2"><?php echo esc_textarea( $order['notes'] ); ?></textarea></label>
 			</div>
 			<datalist id="fh-cr-suppliers"><?php foreach ( $pick['suppliers'] as $fh_v ) : ?><option value="<?php echo esc_attr( $fh_v ); ?>"></option><?php endforeach; ?></datalist>
 			<datalist id="fh-cr-origins"><?php foreach ( $pick['origins'] as $fh_v ) : ?><option value="<?php echo esc_attr( $fh_v ); ?>"></option><?php endforeach; ?></datalist>
 		</div>
 
+		<div class="fh-cr-views" id="fh-cr-views">
+			<div class="fh-cr-views__tabs" role="tablist" aria-label="<?php esc_attr_e( 'Two views of the same lines', 'fishotel-misc-plugin' ); ?>">
+				<button type="button" class="fh-cr-view-tab<?php echo 'entry' === $fh_view ? ' is-on' : ''; ?>" role="tab" data-view="entry" aria-selected="<?php echo 'entry' === $fh_view ? 'true' : 'false'; ?>" aria-controls="fh-cr-lines">
+					<strong><?php esc_html_e( 'Entry', 'fishotel-misc-plugin' ); ?></strong>
+					<span><?php esc_html_e( 'what you type: the fish, the counts, the cost, where they went', 'fishotel-misc-plugin' ); ?></span>
+				</button>
+				<button type="button" class="fh-cr-view-tab<?php echo 'numbers' === $fh_view ? ' is-on' : ''; ?>" role="tab" data-view="numbers" aria-selected="<?php echo 'numbers' === $fh_view ? 'true' : 'false'; ?>" aria-controls="fh-cr-lines">
+					<strong><?php esc_html_e( 'Numbers', 'fishotel-misc-plugin' ); ?></strong>
+					<span><?php esc_html_e( 'what the site works out: prices, profit, survival', 'fishotel-misc-plugin' ); ?></span>
+				</button>
+			</div>
+			<div class="fh-cr-views__tools fh-cr-c-entry">
+				<button type="button" class="button fh-cr-received-all" title="<?php esc_attr_e( 'Fills every EMPTY received field with its ordered count — then correct the few that differ. Nothing is saved until Save.', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'Received: all as ordered', 'fishotel-misc-plugin' ); ?></button>
+				<span class="fh-cr-sub fh-cr-sub--inline fh-cr-received-all__said" aria-live="polite"></span>
+				<label class="fh-cr-more-switch" title="<?php esc_attr_e( 'The fields that are rarely typed: fish per box, the survivors of an order that was never checked in, the supplier\'s code.', 'fishotel-misc-plugin' ); ?>"><input type="checkbox" class="fh-cr-more-toggle" <?php checked( $fh_more ); ?>> <?php esc_html_e( 'More columns', 'fishotel-misc-plugin' ); ?></label>
+			</div>
+		</div>
+
+		<div class="fh-cr-numbers-panel fh-cr-c-numbers" id="fh-cr-numbers-panel">
+			<div class="fh-cr-kpis">
+				<div class="fh-cr-kpi"><span class="fh-cr-kpi__label"><?php esc_html_e( 'Grand total', 'fishotel-misc-plugin' ); ?></span><span class="fh-cr-kpi__value" data-t="grand_total"><?php echo esc_html( $fh_totals['grand_total'] ); ?></span></div>
+				<div class="fh-cr-kpi"><span class="fh-cr-kpi__label"><?php esc_html_e( 'Up or down', 'fishotel-misc-plugin' ); ?></span><span class="fh-cr-kpi__value fh-cr-<?php echo esc_attr( $fh_totals['up_down_flag'] ); ?>" data-t="up_down"><?php echo esc_html( $fh_totals['up_down'] ); ?></span></div>
+				<div class="fh-cr-kpi"><span class="fh-cr-kpi__label"><?php esc_html_e( 'Revenue', 'fishotel-misc-plugin' ); ?></span><span class="fh-cr-kpi__value" data-t="revenue"><?php echo esc_html( $fh_totals['revenue'] ); ?></span></div>
+				<div class="fh-cr-kpi"><span class="fh-cr-kpi__label"><?php esc_html_e( 'Fill rate', 'fishotel-misc-plugin' ); ?></span><span class="fh-cr-kpi__value" data-t="fill_rate"><?php echo esc_html( $fh_totals['fill_rate'] ); ?></span></div>
+				<div class="fh-cr-kpi"><span class="fh-cr-kpi__label"><?php esc_html_e( 'Survival', 'fishotel-misc-plugin' ); ?></span><span class="fh-cr-kpi__value" data-t="survival_rate"><?php echo esc_html( $fh_totals['survival_rate'] ); ?></span></div>
+				<div class="fh-cr-kpi"><span class="fh-cr-kpi__label"><?php esc_html_e( 'DOA', 'fishotel-misc-plugin' ); ?></span><span class="fh-cr-kpi__value"><span data-t="doa"><?php echo esc_html( $fh_totals['doa'] ); ?></span> · <span data-t="doa_rate"><?php echo esc_html( $fh_totals['doa_rate'] ); ?></span></span></div>
+				<div class="fh-cr-kpi" title="<?php esc_attr_e( 'As the sheet counts it: the price of each DOA fish plus a whole box\'s fees per fish. The figure with the fees per fish is in the full list under the lines.', 'fishotel-misc-plugin' ); ?>"><span class="fh-cr-kpi__label"><?php esc_html_e( 'DOA cost', 'fishotel-misc-plugin' ); ?></span><span class="fh-cr-kpi__value" data-t="doa_cost_sheet"><?php echo esc_html( $fh_totals['doa_cost_sheet'] ); ?></span></div>
+				<div class="fh-cr-kpi"><span class="fh-cr-kpi__label"><?php esc_html_e( 'Credit', 'fishotel-misc-plugin' ); ?></span><span class="fh-cr-kpi__value" data-t="credit"><?php echo esc_html( $fh_totals['credit'] ); ?></span></div>
+			</div>
+			<p class="fh-cr-numbers-panel__note fh-cr-warn" data-t="no_price" <?php echo '' === $fh_totals['no_price'] ? 'hidden' : ''; ?>><?php echo esc_html( $fh_totals['no_price'] ); ?></p>
+			<p class="fh-cr-sub fh-cr-numbers-panel__rule"><span data-t="worth_rule"><?php echo esc_html( $fh_totals['worth_rule'] ); ?></span> <?php esc_html_e( 'The shop price is read from the fish\'s product (else the species list) every time this page loads; the pencil types a price of your own.', 'fishotel-misc-plugin' ); ?></p>
+		</div>
+
 		<div class="fh-cr-grid-wrap">
-			<table class="widefat fh-cr-table fh-cr-grid" id="fh-cr-lines">
+			<table class="widefat fh-cr-table fh-cr-grid" id="fh-cr-lines" data-cols="<?php echo esc_attr( $fh_cols ); ?>" data-split-tanks="<?php echo esc_attr( (string) wp_json_encode( $split['tanks'] ) ); ?>">
 				<thead>
 					<tr>
-						<th scope="col">#</th>
-						<th scope="col"><?php esc_html_e( 'Species', 'fishotel-misc-plugin' ); ?></th>
-						<th scope="col" title="<?php esc_attr_e( 'One of the standard sizes (Settings → Sizes) — the same list the product variations use.', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'Size', 'fishotel-misc-plugin' ); ?></th>
-						<th scope="col"><?php esc_html_e( 'Sci name', 'fishotel-misc-plugin' ); ?></th>
-						<th scope="col" class="fh-cr-num"><?php esc_html_e( 'Order', 'fishotel-misc-plugin' ); ?></th>
-						<th scope="col" class="fh-cr-num fh-cr-col--per-box"><?php esc_html_e( 'Per box', 'fishotel-misc-plugin' ); ?></th>
-						<th scope="col" class="fh-cr-num fh-cr-col--per-box" title="<?php esc_attr_e( 'Which box the line came out of (optional).', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'Box #', 'fishotel-misc-plugin' ); ?></th>
-						<th scope="col" class="fh-cr-num fh-cr-col--per-box" title="<?php esc_attr_e( 'About how much of ONE box the whole line took: 25 = a quarter of a box; above 100 when the line spans boxes. Used in place of received ÷ per box.', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( '% of box', 'fishotel-misc-plugin' ); ?></th>
-						<th scope="col" class="fh-cr-num fh-cr-col--bags"><?php esc_html_e( 'Bags', 'fishotel-misc-plugin' ); ?></th>
-						<th scope="col" class="fh-cr-num"><?php esc_html_e( 'Rcv\'d', 'fishotel-misc-plugin' ); ?></th>
-						<th scope="col" class="fh-cr-num"><?php esc_html_e( 'Price', 'fishotel-misc-plugin' ); ?></th>
-						<th scope="col" class="fh-cr-num"><?php esc_html_e( 'Worth $', 'fishotel-misc-plugin' ); ?></th>
-						<th scope="col" class="fh-cr-num"><?php esc_html_e( 'DOA', 'fishotel-misc-plugin' ); ?></th>
-						<th scope="col" class="fh-cr-num"><?php esc_html_e( 'Srv\'d', 'fishotel-misc-plugin' ); ?></th>
-						<th scope="col"><?php esc_html_e( 'Tank', 'fishotel-misc-plugin' ); ?></th>
-						<th scope="col" class="fh-cr-num" title="<?php esc_attr_e( 'box mode: the % of box ÷ 100 when one is typed, else received ÷ per box; bag mode: bags, else received', 'fishotel-misc-plugin' ); ?>"><?php echo esc_html( 'box' === $fh_mode ? __( 'Box frac.', 'fishotel-misc-plugin' ) : __( 'Units', 'fishotel-misc-plugin' ) ); ?></th>
-						<th scope="col" class="fh-cr-num"><?php esc_html_e( 'Total', 'fishotel-misc-plugin' ); ?></th>
-						<th scope="col" class="fh-cr-num"><?php esc_html_e( 'Per fish', 'fishotel-misc-plugin' ); ?></th>
-						<th scope="col" class="fh-cr-num"><?php echo esc_html( Costing::num( $order['markup'] ) ); ?>&times;</th>
-						<th scope="col" class="fh-cr-num"><?php esc_html_e( 'Profit', 'fishotel-misc-plugin' ); ?></th>
-						<th scope="col" class="fh-cr-num"><?php esc_html_e( 'Margin', 'fishotel-misc-plugin' ); ?></th>
-						<th scope="col"><?php esc_html_e( 'Worth?', 'fishotel-misc-plugin' ); ?></th>
-						<th scope="col" class="fh-cr-num"><?php esc_html_e( 'Revenue', 'fishotel-misc-plugin' ); ?></th>
-						<th scope="col" class="fh-cr-num"><?php esc_html_e( 'Live', 'fishotel-misc-plugin' ); ?></th>
-						<th scope="col" class="fh-cr-num"><?php esc_html_e( 'Sold', 'fishotel-misc-plugin' ); ?></th>
-						<th scope="col"></th>
+						<th scope="col" class="fh-cr-w-n">#</th>
+						<th scope="col" class="fh-cr-w-fish"><?php esc_html_e( 'Fish', 'fishotel-misc-plugin' ); ?></th>
+						<th scope="col" class="fh-cr-c-entry fh-cr-c-sci fh-cr-w-sci"><?php esc_html_e( 'Sci name', 'fishotel-misc-plugin' ); ?></th>
+						<th scope="col" class="fh-cr-c-entry fh-cr-w-size" title="<?php esc_attr_e( 'One of the standard sizes (Settings → Sizes) — the same list the product variations use.', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'Size', 'fishotel-misc-plugin' ); ?></th>
+						<th scope="col" class="fh-cr-num fh-cr-c-entry fh-cr-w-qty"><?php esc_html_e( 'Ordered', 'fishotel-misc-plugin' ); ?></th>
+						<th scope="col" class="fh-cr-num fh-cr-c-entry fh-cr-w-qty" title="<?php esc_attr_e( 'How many came. Enter or Tab goes down the column.', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'Received', 'fishotel-misc-plugin' ); ?></th>
+						<th scope="col" class="fh-cr-num fh-cr-c-entry fh-cr-w-money" title="<?php esc_attr_e( 'The supplier\'s price for one fish (bag mode: for one bag).', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'Cost', 'fishotel-misc-plugin' ); ?></th>
+						<th scope="col" class="fh-cr-num fh-cr-c-entry fh-cr-w-qty"><?php esc_html_e( 'DOA', 'fishotel-misc-plugin' ); ?></th>
+						<th scope="col" class="fh-cr-num fh-cr-c-entry fh-cr-col--per-box fh-cr-w-qty" title="<?php esc_attr_e( 'Which box the line came out of (optional).', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'Box #', 'fishotel-misc-plugin' ); ?></th>
+						<th scope="col" class="fh-cr-num fh-cr-c-entry fh-cr-col--per-box fh-cr-w-pct" title="<?php esc_attr_e( 'About how much of ONE box the whole line took: 25 = a quarter of a box; above 100 when the line spans boxes. Used in place of received ÷ per box.', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( '% of box', 'fishotel-misc-plugin' ); ?></th>
+						<th scope="col" class="fh-cr-num fh-cr-c-entry fh-cr-col--bags fh-cr-w-qty"><?php esc_html_e( 'Bags', 'fishotel-misc-plugin' ); ?></th>
+						<th scope="col" class="fh-cr-c-entry fh-cr-w-tank" title="<?php esc_attr_e( 'The Spa tank the line is checked in to ("auto" picks an empty one). Split lays the line out over several tanks.', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'Tank', 'fishotel-misc-plugin' ); ?></th>
+						<th scope="col" class="fh-cr-num fh-cr-c-more fh-cr-col--per-box fh-cr-w-qty" title="<?php esc_attr_e( 'How many of this fish fill a box — used only while the line has no % of box.', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'Per box', 'fishotel-misc-plugin' ); ?></th>
+						<th scope="col" class="fh-cr-num fh-cr-c-more fh-cr-w-qty" title="<?php esc_attr_e( 'Survivors typed by hand, for an order that was never checked in (history). A checked-in line counts them from its tanks.', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'Srv\'d', 'fishotel-misc-plugin' ); ?></th>
+						<th scope="col" class="fh-cr-c-more fh-cr-w-code" title="<?php esc_attr_e( 'The supplier\'s code for this fish, as on their price list and invoice. An arrived invoice is matched by it first.', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'Code', 'fishotel-misc-plugin' ); ?></th>
+						<th scope="col" class="fh-cr-num fh-cr-c-numbers fh-cr-w-shop" title="<?php esc_attr_e( 'What the fish sells for: read from its product (else the species list), or typed with the pencil.', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'Shop price', 'fishotel-misc-plugin' ); ?></th>
+						<th scope="col" class="fh-cr-num fh-cr-c-numbers fh-cr-w-calc" title="<?php esc_attr_e( 'What one fish cost by the time it was here: its price, its share of the fees and of the tariffs.', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'Landed per fish', 'fishotel-misc-plugin' ); ?></th>
+						<th scope="col" class="fh-cr-num fh-cr-c-numbers fh-cr-w-calc" data-t="target_head" title="<?php esc_attr_e( 'The target price: landed per fish × the order\'s markup, to the nearest 5.', 'fishotel-misc-plugin' ); ?>"><?php echo esc_html( $fh_totals['target_head'] ); ?></th>
+						<th scope="col" class="fh-cr-num fh-cr-c-numbers fh-cr-w-calc"><?php esc_html_e( 'Profit', 'fishotel-misc-plugin' ); ?></th>
+						<th scope="col" class="fh-cr-num fh-cr-c-numbers fh-cr-w-calc"><?php esc_html_e( 'Margin', 'fishotel-misc-plugin' ); ?></th>
+						<th scope="col" class="fh-cr-c-numbers fh-cr-w-calc" data-rule="worth_rule" title="<?php echo esc_attr( $fh_totals['worth_rule'] ); ?>"><?php esc_html_e( 'Worth it?', 'fishotel-misc-plugin' ); ?></th>
+						<th scope="col" class="fh-cr-num fh-cr-c-numbers fh-cr-w-calc" title="<?php esc_attr_e( 'Shop price × survivors.', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'Revenue', 'fishotel-misc-plugin' ); ?></th>
+						<th scope="col" class="fh-cr-num fh-cr-c-numbers fh-cr-w-count"><?php esc_html_e( 'Survived', 'fishotel-misc-plugin' ); ?></th>
+						<th scope="col" class="fh-cr-num fh-cr-c-numbers fh-cr-w-count"><?php esc_html_e( 'Live', 'fishotel-misc-plugin' ); ?></th>
+						<th scope="col" class="fh-cr-num fh-cr-c-numbers fh-cr-w-count"><?php esc_html_e( 'Sold', 'fishotel-misc-plugin' ); ?></th>
+						<th scope="col" class="fh-cr-c-entry fh-cr-w-x"></th>
 					</tr>
 				</thead>
 				<tbody>
@@ -353,34 +432,42 @@ $fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks,
 				</tbody>
 				<tfoot>
 					<tr>
-						<th colspan="4"><?php esc_html_e( 'Totals', 'fishotel-misc-plugin' ); ?></th>
-						<th class="fh-cr-num" data-t="ordered"><?php echo esc_html( $fh_totals['ordered'] ); ?></th>
-						<th class="fh-cr-col--per-box"></th>
-						<th class="fh-cr-col--per-box"></th>
-						<th class="fh-cr-num fh-cr-col--per-box" data-box="pct_total"><?php echo esc_html( $boxes['summary']['lines'] > 0 ? Costing::num( $boxes['summary']['pct_total'], '', 2 ) . '%' : '' ); ?></th>
-						<th class="fh-cr-col--bags"></th>
-						<th class="fh-cr-num" data-t="received"><?php echo esc_html( $fh_totals['received'] ); ?></th>
 						<th></th>
-						<th></th>
-						<th class="fh-cr-num" data-t="doa"><?php echo esc_html( $fh_totals['doa'] ); ?></th>
-						<th class="fh-cr-num" data-t="survived"><?php echo esc_html( $fh_totals['survived'] ); ?></th>
-						<th></th>
-						<th class="fh-cr-num" data-t="units"><?php echo esc_html( $fh_totals['units'] ); ?></th>
-						<th class="fh-cr-num" data-t="total"><?php echo esc_html( $fh_totals['total'] ); ?></th>
-						<th colspan="5"></th>
-						<th class="fh-cr-num" data-t="revenue"><?php echo esc_html( $fh_totals['revenue'] ); ?></th>
-						<th colspan="3"></th>
+						<th><?php esc_html_e( 'Totals', 'fishotel-misc-plugin' ); ?></th>
+						<th class="fh-cr-c-entry fh-cr-c-sci"></th>
+						<th class="fh-cr-c-entry"></th>
+						<th class="fh-cr-num fh-cr-c-entry" data-t="ordered"><?php echo esc_html( $fh_totals['ordered'] ); ?></th>
+						<th class="fh-cr-num fh-cr-c-entry" data-t="received"><?php echo esc_html( $fh_totals['received'] ); ?></th>
+						<th class="fh-cr-c-entry"></th>
+						<th class="fh-cr-num fh-cr-c-entry" data-t="doa"><?php echo esc_html( $fh_totals['doa'] ); ?></th>
+						<th class="fh-cr-c-entry fh-cr-col--per-box"></th>
+						<th class="fh-cr-num fh-cr-c-entry fh-cr-col--per-box" data-box="pct_total"><?php echo esc_html( $boxes['summary']['lines'] > 0 ? Costing::num( $boxes['summary']['pct_total'], '', 2 ) . '%' : '' ); ?></th>
+						<th class="fh-cr-c-entry fh-cr-col--bags"></th>
+						<th class="fh-cr-c-entry"></th>
+						<th class="fh-cr-c-more fh-cr-col--per-box"></th>
+						<th class="fh-cr-num fh-cr-c-more" data-t="survived"><?php echo esc_html( $fh_totals['survived'] ); ?></th>
+						<th class="fh-cr-c-more"></th>
+						<th class="fh-cr-c-numbers"></th>
+						<th class="fh-cr-num fh-cr-c-numbers" data-t="total" title="<?php esc_attr_e( 'What every line cost landed, together.', 'fishotel-misc-plugin' ); ?>"><?php echo esc_html( $fh_totals['total'] ); ?></th>
+						<th class="fh-cr-c-numbers"></th>
+						<th class="fh-cr-c-numbers"></th>
+						<th class="fh-cr-c-numbers"></th>
+						<th class="fh-cr-c-numbers"></th>
+						<th class="fh-cr-num fh-cr-c-numbers" data-t="revenue"><?php echo esc_html( $fh_totals['revenue'] ); ?></th>
+						<th class="fh-cr-num fh-cr-c-numbers" data-t="survived"><?php echo esc_html( $fh_totals['survived'] ); ?></th>
+						<th class="fh-cr-c-numbers"></th>
+						<th class="fh-cr-c-numbers"></th>
+						<th class="fh-cr-c-entry"></th>
 					</tr>
 				</tfoot>
 			</table>
 		</div>
 		<template id="fh-cr-line-template"><?php $fh_line_row( '__i__', array(), array() ); ?></template>
 		<p class="fh-cr-actions-row">
-			<button type="button" class="button fh-cr-line-add"><?php esc_html_e( 'Add line', 'fishotel-misc-plugin' ); ?></button>
-			<button type="button" class="button fh-cr-import-open" aria-expanded="false" aria-controls="fh-cr-import" title="<?php esc_attr_e( 'Paste the rows of your order sheet or of the supplier\'s invoice, or pick a file, instead of typing the lines one by one.', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'Import lines…', 'fishotel-misc-plugin' ); ?></button>
-			<button type="button" class="button fh-cr-received-all" title="<?php esc_attr_e( 'Fills every EMPTY received field with its ordered count — then correct the few that differ. Nothing is saved until Save.', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'Received: all as ordered', 'fishotel-misc-plugin' ); ?></button>
-			<span class="fh-cr-sub fh-cr-sub--inline fh-cr-received-all__said" aria-live="polite"></span>
-			<span class="fh-cr-sub fh-cr-sub--inline"><?php esc_html_e( 'Type a species for suggestions (products and the species list); picking one fills the scientific name, the per-box count and the worth from the list. Tick ?? for a fish nobody knows yet — what you type is then what it looks like. Computed columns update on Save; the Boxes card below adds the percents up as they are typed.', 'fishotel-misc-plugin' ); ?></span>
+			<button type="button" class="button fh-cr-line-add fh-cr-c-entry"><?php esc_html_e( 'Add line', 'fishotel-misc-plugin' ); ?></button>
+			<button type="button" class="button fh-cr-import-open fh-cr-c-entry" aria-expanded="false" aria-controls="fh-cr-import" title="<?php esc_attr_e( 'Paste the rows of your order sheet or of the supplier\'s invoice, or pick a file, instead of typing the lines one by one.', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'Import lines…', 'fishotel-misc-plugin' ); ?></button>
+			<span class="fh-cr-sub fh-cr-sub--inline fh-cr-c-entry"><?php esc_html_e( 'Type a fish for suggestions (products and the species list); picking one fills its scientific name. Tick ?? for a fish nobody knows yet — what you type is then what it looks like. Enter goes down a column; in Received, DOA, Box # and % of box so does Tab. Nothing is saved until Save.', 'fishotel-misc-plugin' ); ?></span>
+			<span class="fh-cr-sub fh-cr-sub--inline fh-cr-c-numbers"><?php esc_html_e( 'These figures are worked out when the order is saved; the Entry view is where the lines are typed.', 'fishotel-misc-plugin' ); ?></span>
 		</p>
 
 		<?php include Clean_Room::path() . 'views/order-import.php'; ?>
@@ -400,7 +487,7 @@ $fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks,
 			<p class="fh-cr-boxes__full" data-box="how_full" <?php echo '' === $boxes['how_full'] ? 'hidden' : ''; ?>><?php echo esc_html( $boxes['how_full'] ); ?></p>
 		</div>
 
-		<div class="fishotel-misc-card fh-cr-card fh-cr-order__stats">
+		<div class="fishotel-misc-card fh-cr-card fh-cr-order__stats fh-cr-c-numbers">
 			<div class="fishotel-misc-card-header">
 				<div class="fishotel-misc-card-icon"><span class="dashicons dashicons-chart-bar"></span></div>
 				<h2 class="fishotel-misc-card-title"><?php esc_html_e( 'This order', 'fishotel-misc-plugin' ); ?></h2>
@@ -409,9 +496,9 @@ $fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks,
 				<div><dt><?php esc_html_e( 'Total', 'fishotel-misc-plugin' ); ?></dt><dd data-t="total"><?php echo esc_html( $fh_totals['total'] ); ?></dd></div>
 				<div><dt><?php esc_html_e( 'Credit', 'fishotel-misc-plugin' ); ?></dt><dd data-t="credit"><?php echo esc_html( $fh_totals['credit'] ); ?></dd></div>
 				<div><dt><?php esc_html_e( 'Grand total', 'fishotel-misc-plugin' ); ?></dt><dd data-t="grand_total"><?php echo esc_html( $fh_totals['grand_total'] ); ?></dd></div>
-				<div><dt><?php esc_html_e( 'Revenue (survivors at FisHotel prices)', 'fishotel-misc-plugin' ); ?></dt><dd data-t="revenue"><?php echo esc_html( $fh_totals['revenue'] ); ?></dd></div>
+				<div><dt><?php esc_html_e( 'Revenue (survivors at shop prices)', 'fishotel-misc-plugin' ); ?></dt><dd data-t="revenue"><?php echo esc_html( $fh_totals['revenue'] ); ?></dd></div>
 				<div><dt><?php esc_html_e( 'Up or down', 'fishotel-misc-plugin' ); ?></dt><dd data-t="up_down" class="fh-cr-<?php echo esc_attr( $fh_totals['up_down_flag'] ); ?>"><?php echo esc_html( $fh_totals['up_down'] ); ?></dd></div>
-				<div><dt><?php esc_html_e( 'Revenue ÷ grand total', 'fishotel-misc-plugin' ); ?></dt><dd data-t="ratio"><?php echo esc_html( $fh_totals['ratio'] ); ?></dd></div>
+				<div><dt><?php esc_html_e( 'Revenue ÷ what those fish cost', 'fishotel-misc-plugin' ); ?></dt><dd data-t="ratio"><?php echo esc_html( $fh_totals['ratio'] ); ?></dd></div>
 				<div><dt><?php esc_html_e( 'Total critters (received)', 'fishotel-misc-plugin' ); ?></dt><dd data-t="received"><?php echo esc_html( $fh_totals['received'] ); ?></dd></div>
 				<div><dt><?php esc_html_e( 'Fill rate', 'fishotel-misc-plugin' ); ?></dt><dd data-t="fill_rate"><?php echo esc_html( $fh_totals['fill_rate'] ); ?></dd></div>
 				<div><dt><?php esc_html_e( 'Survival rate', 'fishotel-misc-plugin' ); ?></dt><dd data-t="survival_rate"><?php echo esc_html( $fh_totals['survival_rate'] ); ?></dd></div>
@@ -425,11 +512,13 @@ $fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks,
 	</form>
 
 	<?php
-	$fh_identify_colspan = 26;
+	$fh_identify_colspan = $fh_cols;
 	include Clean_Room::path() . 'views/identify-panel.php';
 	?>
 
 	<p class="fh-cr-footnote">
-		<?php esc_html_e( 'Box mode: each line takes a fraction of a box (its % of box ÷ 100 when one is typed, else received ÷ per box — the line\'s, else the species list\'s, else 24); the domestic flight and the import & re-ox fees are shared by box space, the tariffs by goods value. Bag mode: bags (else received) × price, plus the flight, import fees and tariffs per bag. Per fish × markup, to the nearest 5, is the suggested price; a line is worth it when its margin (profit ÷ landed) is above the threshold. Checking in creates one stay per line with received fish (the DOA as a loss) and the order becomes "received"; from then on a line\'s DOA, survived, live and sold come from its stay, and its received count is kept as typed. A fish that is not what its label said: "Correct the fish…" on a line that received fish names the real one — the line keeps what the label said ("arrived labeled"), its stays follow, and the remembered box share is written for the corrected fish; once a line is a stay, changing its species, its ?? box or its size here does the same. A fish that still needs identifying is never remembered as a box share.', 'fishotel-misc-plugin' ); ?>
+		<?php esc_html_e( 'Box mode: each line takes a fraction of a box (its % of box ÷ 100 when one is typed, else received ÷ per box — the line\'s, else the species list\'s, else 24); the domestic flight and the import & re-ox fees are shared by box space, the tariffs by goods value. Bag mode: bags (else received) × cost, plus the flight, import fees and tariffs per bag. Landed per fish × markup, to the nearest 5, is the target price.', 'fishotel-misc-plugin' ); ?>
+		<?php echo esc_html( $fh_totals['worth_rule'] ); ?>
+		<?php esc_html_e( 'A fish with no shop price yet says so: it is not counted as a loss, and it is left out of the revenue and of "up or down". Checking in creates one stay per line with received fish (the DOA as a loss) — a line with a split goes on into its other tanks, one move per tank, as if it were done by hand — and the order becomes "received"; from then on a line\'s DOA, survived, live and sold come from its tanks, all of them, and its received count is kept as typed. A fish that is not what its label said: "Correct the fish…" on a line that received fish names the real one — the line keeps what the label said ("arrived labeled"), its stays follow, and the remembered box share is written for the corrected fish; once a line is a stay, changing its species, its ?? box or its size here does the same. A fish that still needs identifying is never remembered as a box share.', 'fishotel-misc-plugin' ); ?>
 	</p>
 </div>

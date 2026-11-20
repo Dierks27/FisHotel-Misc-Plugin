@@ -7,8 +7,7 @@
  * the owner chooses in it — the columns, the ticks, the fish of a row, a
  * pairing — and the confirm. Also on the order page, for the day there is
  * no file: "Received: all as ordered" (fills the EMPTY received fields
- * only) and Enter / Tab in the received column, which move to the next
- * line's received.
+ * only; Enter and Tab down the received column are js/order-entry.js's).
  *
  * Nothing the server sends is ever set as HTML: every text goes in as
  * text. Every request carries the order form as it stands on the page;
@@ -44,21 +43,6 @@
 			}
 			return String(parseInt(ordered, 10));
 		});
-	}
-
-	/**
-	 * The received field Enter / Tab moves to: the next one down (the one
-	 * above with Shift), or -1 at the end of the column — the key then
-	 * does what it always does.
-	 *
-	 * @param {number}  count How many received fields the grid has.
-	 * @param {number}  index The one the key was pressed in.
-	 * @param {boolean} back  Shift held.
-	 * @return {number}
-	 */
-	function nextReceived(count, index, back) {
-		var next = index + (back ? -1 : 1);
-		return next >= 0 && next < count ? next : -1;
 	}
 
 	/**
@@ -144,7 +128,6 @@
 
 	var helpers = {
 		receivedAsOrdered: receivedAsOrdered,
-		nextReceived: nextReceived,
 		orderedFoot: orderedFoot,
 		thousands: thousands,
 		fmt: fmt,
@@ -191,7 +174,7 @@
 		}
 		var $grid = $('#fh-cr-lines tbody');
 
-		/* ---- Received: all as ordered, and the quick column ---- */
+		/* ---- Received: all as ordered (Enter and Tab down the column: js/order-entry.js) ---- */
 
 		function receivedInputs() {
 			return $grid.find('tr.fh-cr-line input[name$="[qty_received]"]');
@@ -210,22 +193,6 @@
 				}
 			});
 			$order.find('.fh-cr-received-all__said').text(fmt(filled === 1 ? t.filledOne : t.filledMany, filled));
-		});
-
-		$order.on('keydown', 'input[name$="[qty_received]"]', function (e) {
-			if ((e.key !== 'Enter' && e.key !== 'Tab') || e.altKey || e.ctrlKey || e.metaKey) {
-				return;
-			}
-			var $inputs = receivedInputs();
-			var next = nextReceived($inputs.length, $inputs.index(this), e.shiftKey);
-			if (next < 0) {
-				if (e.key === 'Enter') {
-					e.preventDefault(); // Never a Save by accident from the last received field.
-				}
-				return;
-			}
-			e.preventDefault();
-			$inputs.eq(next).trigger('focus').trigger('select');
 		});
 
 		/* ---- The importer ---- */

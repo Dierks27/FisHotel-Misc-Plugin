@@ -250,16 +250,19 @@ class Orders {
 	}
 
 	/**
-	 * What a form's rows say about splitting their lines (pure), in the
-	 * order normalize_lines() keeps the lines (a row without a species is
-	 * skipped): per line its posted plan (Splits::parts_in(): parts, NONE or
-	 * null), its live fish as typed (received − DOA; null while nothing is
-	 * received), its name and its id.
+	 * What a form's rows carry beside the line itself (pure), in the order
+	 * normalize_lines() keeps the lines (a row without a species is
+	 * skipped): per line its posted split plan (Splits::parts_in(): parts,
+	 * NONE or null), its live fish as typed (received − DOA; null while
+	 * nothing is received), the supplier's code when the row posts one
+	 * (the Entry view's "More columns"; null when the row has no such
+	 * field — an older page —, so a stored code is then left alone), its
+	 * name and its id.
 	 *
-	 * @param mixed $raw lines[n][…] (split, qty_received, qty_doa, species, id).
-	 * @return array[] plan, live, species, id.
+	 * @param mixed $raw lines[n][…] (split, code, qty_received, qty_doa, species, id).
+	 * @return array[] plan, live, code, species, id.
 	 */
-	public static function posted_splits( $raw ) {
+	public static function posted_extras( $raw ) {
 		$out = array();
 		foreach ( (array) $raw as $row ) {
 			if ( ! is_array( $row ) ) {
@@ -272,6 +275,7 @@ class Orders {
 			$out[] = array(
 				'plan'    => Splits::parts_in( $row['split'] ?? null ),
 				'live'    => Splits::live_of( $line ),
+				'code'    => isset( $row['code'] ) && is_scalar( $row['code'] ) && ! is_bool( $row['code'] ) ? (string) substr( trim( preg_replace( '/\s+/', ' ', preg_replace( '/[\x00-\x1F\x7F<>]/', ' ', (string) $row['code'] ) ) ), 0, 40 ) : null,
 				'species' => $line['species'],
 				'id'      => (int) $line['id'],
 			);

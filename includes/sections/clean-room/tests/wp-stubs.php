@@ -197,6 +197,15 @@ function current_user_can( $capability, ...$args ) {
 /**
  * The current user: ID and user_login ($GLOBALS['fh_user_logins'][ id ], else "user<id>").
  */
+function get_user_meta( $user_id, $key = '', $single = false ) {
+	return $GLOBALS['fh_user_meta'][ (int) $user_id ][ (string) $key ] ?? ( $single ? '' : array() );
+}
+
+function update_user_meta( $user_id, $key, $value ) {
+	$GLOBALS['fh_user_meta'][ (int) $user_id ][ (string) $key ] = $value;
+	return true;
+}
+
 function wp_get_current_user() {
 	$id = get_current_user_id();
 	return (object) array(
