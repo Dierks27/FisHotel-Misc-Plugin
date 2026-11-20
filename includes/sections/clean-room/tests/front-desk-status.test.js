@@ -20,11 +20,17 @@
  *   - a phone that slept (the clock on, its timers held): looked at
  *     again the Undo past its time has gone, and a tap on one answers
  *     plainly without a request;
- *   - an error keeps an Undo that is still good for after;
+ *   - an error keeps an Undo that is still good for after, and keeps
+ *     its place: the error's words do not start where the Undo was;
  *   - the tap guard, and that no tap elsewhere on the line undoes; a
  *     write on the tank screen leaves the page where it was scrolled to;
+ *   - on a sheet the line's Undo opens the whole message first: one
+ *     stray tap takes back nothing and drops nothing that was typed;
  *   - a tap on the words opens the whole message with its Undo, and Back
- *     shows the screen under it as it was, what was typed included;
+ *     shows the screen under it as it was, what was typed included — a
+ *     page that was at its foot too;
+ *   - what a screen reader is told: the words of a message alone, once,
+ *     in one span that is always in the line;
  *   - the words for the last thing done;
  *   - the bar measured as it stands for the room at the page's foot,
  *     and what css/front-desk.css fixes: one line, one height, no toast.
@@ -318,13 +324,15 @@ function inTurn( replies ) {
  * app's box, and the button bar holding the status line. config: screen,
  * reply( fields, config, n ), search (the address's query), noObserver (a
  * browser without ResizeObserver), hold (replies wait for
- * page.release()).
+ * page.release()), bareLine (a page whose line came without its span
+ * for the screen reader).
  */
 function start( config ) {
 	var body      = new El( 'body' );
 	var app       = new El( 'div' );
 	var firstBar  = new El( 'div' );
 	var line      = new El( 'div' );
+	var said      = new El( 'span' );
 	var posts     = [];
 	var held      = [];
 	var observers = [];
@@ -332,6 +340,7 @@ function start( config ) {
 	var documentOn = {};
 	var reloads   = 0;
 	var scrolls   = [];
+	var scrollsAt = [];
 	var reply     = config.reply || server;
 
 	app.attrs.id       = 'fh-fd-app';
@@ -341,6 +350,12 @@ function start( config ) {
 	body.appendChild( app );
 	body.appendChild( firstBar );
 	firstBar.appendChild( line );
+	said.className  = 'fh-fd-status__said';
+	said.attrs.id   = 'fh-fd-said';
+	said.attrs.role = 'status';
+	if ( ! config.bareLine ) {
+		line.appendChild( said );
+	}
 	clock.timers = [];
 	styleWrites  = [];
 
@@ -354,7 +369,7 @@ function start( config ) {
 		body: body
 	};
 	global.sessionStorage = { getItem: function () { return '0'; }, setItem: function () {} };
-	global.scrollTo       = function ( x, y ) { scrolls.push( y ); global.pageYOffset = y; };
+	global.scrollTo       = function ( x, y ) { scrolls.push( y ); scrollsAt.push( body.style['--fd-bar-h'] ); global.pageYOffset = y; };
 	global.pageYOffset    = 0;
 	global.location       = { href: '', search: config.search || '', reload: function () { reloads++; } };
 	global.addEventListener = function ( type, fn ) { windowOn[ type ] = fn; };
@@ -422,6 +437,8 @@ function start( config ) {
 		helpers: helpers,
 		reloads: function () { return reloads; },
 		scrolls: scrolls,
+		/* The room at the page's foot (what the stylesheet had been handed) at each scroll. */
+		scrollsAt: scrollsAt,
 		bar: function () { return find( body, function ( n ) { return 'fh-fd-bar' === n.className; } )[0] || null; },
 		bars: function () { return find( body, function ( n ) { return 'fh-fd-bar' === n.className; } ).length; },
 		inner: function () { return find( body, function ( n ) { return 'fh-fd-bar__inner' === n.className && ! n.hidden; } )[0] || null; },
@@ -438,7 +455,11 @@ function start( config ) {
 		},
 		/* The status line as a thumb meets it. */
 		undoNode: function () { return part( 'fh-fd-status__undo' ); },
-		undo: function () { var n = part( 'fh-fd-status__undo' ); return n && ! n.hidden ? n : null; },
+		undo: function () { var n = part( 'fh-fd-status__undo' ); return n && ! n.hidden && ! has( n, 'is-held' ) ? n : null; },
+		/* The Undo's place kept, empty, behind an error: there, not seen, taking no tap. */
+		held: function () { var n = part( 'fh-fd-status__undo' ); return !! n && ! n.hidden && has( n, 'is-held' ) && true === n.disabled; },
+		/* What a screen reader is told. */
+		said: function () { return part( 'fh-fd-status__said' ); },
 		quiet: function () { var n = page.undo(); return !! n && has( n, 'is-quiet' ); },
 		textNode: function () { return part( 'fh-fd-status__text' ); },
 		words: function () { var n = part( 'fh-fd-status__text' ); return n && ! n.hidden ? find( n, function ( c ) { return ! c.hidden && ! c.children.length; } ).map( function ( c ) { return c._text; } ).join( '' ) : ''; },
@@ -482,7 +503,7 @@ async function run() {
 	var page, first, big, small, before, node, typed;
 
 	console.log( '1. Always there: in the page as it arrives, first in every bar' );
-	check( 'the page itself is written with the bar and the status line in it', /<div class="fh-fd-bar"><div id="fh-fd-status" class="fh-fd-status"[^>]*><\/div><\/div>/.test( view ), '' );
+	check( 'the page itself is written with the bar and the status line in it', /<div class="fh-fd-bar"><div id="fh-fd-status" class="fh-fd-status">.*<\/div><\/div>/.test( view ), '' );
 	check( '… and with no toast', -1 === view.indexOf( 'toast' ) );
 	page = start( { screen: screen( true, 900 ) } );
 	check( 'the tank screen has one bar', 1 === page.bars() && page.bar() !== page.firstBar );
@@ -515,12 +536,12 @@ async function run() {
 	page = start( { screen: screen( true, 900 ), reply: inTurn( [ null, function () { return REFUSED; } ] ) } );
 	before = page.sizes();
 	first  = page.bar();
-	check( 'the bar as it stands before: the line and three rows of buttons', '{"bar":246,"line":48,"handed":"246px","lineIsFirst":true,"barHolds":2,"lineHolds":"button.fh-fd-status__undo button.fh-fd-status__text span.fh-fd-status__bar"}' === before, before );
+	check( 'the bar as it stands before: the line and three rows of buttons', '{"bar":246,"line":48,"handed":"246px","lineIsFirst":true,"barHolds":2,"lineHolds":"button.fh-fd-status__undo button.fh-fd-status__text span.fh-fd-status__bar span.fh-fd-status__said"}' === before, before );
 	styleWrites = [];
 	page.tap( '−1 lost' );
 	await settle();
 	check( 'the message is up: its words and an Undo', LOSS === page.words() && null !== page.undo() );
-	check( '… and the bar and the line are as tall as before, the line made of the same three parts', before === page.sizes(), page.sizes() );
+	check( '… and the bar and the line are as tall as before, the line made of the same parts', before === page.sizes(), page.sizes() );
 	pass( 5 );
 	check( 'half its seconds on: the same', before === page.sizes(), page.sizes() );
 	pass( 5.2 );
@@ -553,7 +574,6 @@ async function run() {
 	check( '… the first thing in the line: at its left end', page.line.children[0] === page.undo() && page.line.children[1] === page.textNode() );
 	check( '… named by what it undoes', 'Undo: ' + LOSS === page.undo().attrs['aria-label'], page.undo().attrs['aria-label'] );
 	check( '… and the thin bar, full', 100 === page.run(), String( page.run() ) );
-	check( 'a screen reader is told (the line is a live region)', 'polite' === page.line.attrs['aria-live'] );
 	pass( 5 );
 	check( 'half the seconds on: the bar is half gone, the Undo still filled', Math.abs( page.run() - 50 ) < 3 && ! page.quiet(), String( page.run() ) );
 	pass( 4.9 );
@@ -567,7 +587,6 @@ async function run() {
 	check( '… still named by what it undoes', 'Undo: ' + LOSS === page.undo().attrs['aria-label'] );
 	check( 'the thin bar has run out', 0 === page.run(), String( page.run() ) );
 	check( 'the words are the last thing done, in muted words', 'Last: ' + LOSS + ' · just now' === page.words() && 'is-last' === page.kind(), page.kind() + '|' + page.words() );
-	check( '… not read out again every minute', 'off' === page.line.attrs['aria-live'] );
 	check( 'nothing was posted by any of it', 1 === page.posts.length );
 	pass( 120 );
 	check( 'two minutes on: "· 2 min ago", the Undo still there', 'Last: ' + LOSS + ' · 2 min ago' === page.words() && page.quiet(), page.words() );
@@ -583,9 +602,49 @@ async function run() {
 	check( '… and back on the tank screen, unchanged', page.quiet() && before === page.sizes(), page.sizes() );
 	page.tap( 'Mic' ); // Opens its sheet by its own road.
 	check( 'the Mic sheet: the same', page.quiet() && page.bar().children[0] === page.line );
+
+	console.log( '5a. On a sheet the Undo asks first: one stray tap beside Save takes back nothing' );
+	page = await lostOne( { screen: screen( true, 900 ) } );
+	pass( 30 );
+	page.tap( 'Note' );
+	node       = find( page.app, function ( n ) { return 'textarea' === n.tag; } )[0];
+	node.value = 'two more look thin';
+	fire( node, 'input' );
+	before = page.sizes();
 	page.tapUndo();
 	await settle();
-	check( 'from a sheet the Undo undoes, and the page is back on the tank screen', 2 === page.posts.length && 'undo' === page.posts[1].act && page.can( '−1 lost' ) && 'Undone' === page.words(), page.words() );
+	check( 'a tap on the line\'s Undo on the Note sheet posts nothing', 1 === page.posts.length, JSON.stringify( page.posts ) );
+	check( '… it opens the whole message — what would be undone, and its Undo', null !== page.sheet() && -1 !== page.sheetText().indexOf( LOSS ) && page.can( '↶ Undo' ) && page.can( 'Back' ) );
+	check( '… the Undo in the line is where it was', page.quiet() && page.line.children[0] === page.undo() );
+	page.tapUndo();
+	page.tap( '↶ Undo' );
+	await settle();
+	check( '… a second tap in the same moment, on either Undo, still posts nothing', 1 === page.posts.length );
+	page.tap( 'Back' );
+	typed = find( page.app, function ( n ) { return 'textarea' === n.tag; } )[0];
+	check( 'Back: the Note sheet as it was, what was typed still in its field, the bar as before', null === page.sheet() && typed === node && 'two more look thin' === typed.value && page.can( 'Save' ) && page.can( 'Cancel' ) && before === page.sizes(), page.sizes() );
+	page.tapUndo();
+	pass( 1 );
+	page.tap( '↶ Undo' );
+	await settle();
+	check( 'opened again and its Undo tapped: now it undoes, and the page is back on the tank screen', 2 === page.posts.length && 'undo' === page.posts[1].act && '41,141' === ( page.posts[1]['event_ids[]'] || [] ).join( ',' ) && null === page.sheet() && page.can( '−1 lost' ) && 'Undone' === page.words(), page.words() );
+
+	page = await lostOne( { screen: screen( true, 900 ) } );
+	pass( 30 );
+	page.tap( 'Mic' );
+	page.tapUndo();
+	check( 'the Mic sheet: the same — the message first', 1 === page.posts.length && null !== page.sheet() );
+	pass( 1 );
+	page.tapUndo();
+	await settle();
+	check( '… and with the message open the line\'s Undo undoes as the sheet\'s does', 2 === page.posts.length && 'undo' === page.posts[1].act && page.can( '−1 lost' ) );
+
+	page = await lostOne( { screen: screen( true, 900 ) } );
+	pass( 30 );
+	page.tap( 'Today' );
+	page.tapUndo();
+	await settle();
+	check( 'on the tank screen — its Today strip open or not — the Undo undoes at once', 2 === page.posts.length && 'undo' === page.posts[1].act && null === page.sheet() );
 
 	page = await lostOne( { screen: screen( true, 900 ) } );
 	pass( 3 );
@@ -718,8 +777,10 @@ async function run() {
 	global.pageYOffset = 200;
 	page.tapWords();
 	check( 'the whole message opens at its top', null !== page.sheet() && 0 === global.pageYOffset );
+	check( '(its bar is shorter — Back alone under the line — and the page\'s foot room with it)', '118px' === page.barVar(), page.barVar() );
 	page.tap( 'Back' );
 	check( '… and Back puts the screen under it where it was', 200 === global.pageYOffset );
+	check( '… with the room at the page\'s foot given back BEFORE the page is put there: one that was at its foot can be again', 200 === page.scrolls[ page.scrolls.length - 1 ] && '246px' === page.scrollsAt[ page.scrollsAt.length - 1 ], JSON.stringify( page.scrollsAt ) );
 
 	console.log( '10. A phone that slept: the clock went on, its timers did not run' );
 	page = await lostOne( { screen: screen( true, 900 ) } );
@@ -776,11 +837,19 @@ async function run() {
 	await settle();
 	check( 'a refusal: the server\'s words in the error colour', 'is-error' === page.kind() && 'No fish left to lose.' === page.words(), page.kind() + '|' + page.words() );
 	check( '… with no Undo beside it — an error has nothing to undo', null === page.undo() );
-	check( '… and its own thin bar', page.run() > 90 );
-	pass( 3.8 );
+	check( '… but the Undo\'s place is kept, empty: the same button, first in the line, not seen and taking no tap', page.held() && page.undoNode() === node && page.line.children[0] === node && page.line.children[1] === page.textNode() );
+	check( '… the stylesheet hides it without giving up its box', /visibility:\s*hidden;/.test( rule( '.fh-fd-status__undo.is-held' ) ) && ! /display/.test( rule( '.fh-fd-status__undo.is-held' ) ), rule( '.fh-fd-status__undo.is-held' ) );
+	before = page.sizes();
+	pass( 1 );
+	page.tapUndo();
+	await settle();
+	check( '… a tap where the Undo was does nothing: no undo, and the error is not opened as a sheet', 2 === page.posts.length && null === page.sheet() && 'is-error' === page.kind() );
+	check( '… and its own thin bar', page.run() > 60 );
+	pass( 2.8 );
 	check( '… there for its 4 seconds', 'is-error' === page.kind() );
 	pass( 0.4 );
-	check( '… then the Undo of the write before is back, quiet, where it was', page.quiet() && page.undo() === node && page.line.children[0] === node && 'Undo: ' + LOSS === node.attrs['aria-label'] );
+	check( '… then the Undo of the write before is back, quiet, where it was', page.quiet() && ! page.held() && false === node.disabled && page.undo() === node && page.line.children[0] === node && 'Undo: ' + LOSS === node.attrs['aria-label'] );
+	check( '… the line made of the same parts all the while', before === page.sizes(), page.sizes() );
 	check( '… beside the last thing done', 'Last: ' + LOSS + ' · 1 min ago' === page.words(), page.words() );
 	page.tapUndo();
 	await settle();
@@ -794,7 +863,7 @@ async function run() {
 	pass( 3 );
 	page.tap( '−1 lost' );
 	await settle();
-	check( 'an error inside the message\'s own seconds takes the line', 'is-error' === page.kind() && null === page.undo() );
+	check( 'an error inside the message\'s own seconds takes the line, the Undo\'s place kept', 'is-error' === page.kind() && null === page.undo() && page.held() );
 	pass( 4.2 );
 	check( '… and gives it back: the message, its Undo still filled, what is left of its bar', LOSS === page.words() && null !== page.undo() && ! page.quiet() && Math.abs( page.run() - 28 ) < 4, String( page.run() ) );
 
@@ -810,7 +879,14 @@ async function run() {
 	page.tap( '−1 lost' );
 	await settle();
 	pass( 4.2 );
-	check( 'an error that outlasts the Undo\'s time: no Undo comes back', null === page.undo() && 'is-last' === page.kind() );
+	check( 'an error that outlasts the Undo\'s time: no Undo comes back, and no place is kept for one', null === page.undo() && ! page.held() && true === page.undoNode().hidden && 'is-last' === page.kind() );
+
+	page = start( { screen: screen( true, 900 ), reply: function () { return REFUSED; } } );
+	page.tap( '−1 lost' );
+	await settle();
+	check( 'an error with no Undo behind it: no place is kept — its words start at the left', 'is-error' === page.kind() && ! page.held() && true === page.undoNode().hidden );
+	page.tapWords();
+	check( '… and a tap on them opens them', null !== page.sheet() && -1 !== page.sheetText().indexOf( 'No fish left to lose.' ) );
 
 	page = await lostOne( { screen: screen( true, 900 ), reply: inTurn( [ null, function () { return { refused: { message: 'That can no longer be undone.' } }; } ] ) } );
 	pass( 600 );
@@ -840,6 +916,37 @@ async function run() {
 	check( '… and it stays until it is tapped', 'is-error' === page.kind() );
 	page.tapWords();
 	check( '… a tap on its words reloads the page — it opens no sheet', 1 === page.reloads() && null === page.sheet() );
+
+	console.log( '11a. What a screen reader is told: the words of a message, alone, once' );
+	check( 'the page is written with one span for it in the line, a status region from the first paint', /<div id="fh-fd-status" class="fh-fd-status"><span id="fh-fd-said" class="fh-fd-status__said" role="status"><\/span><\/div>/.test( view ) );
+	check( '… and the line itself is no live region, in the page or by the script', ! /fh-fd-status[^>]*aria-live/.test( view ) && ! /statusEl\.setAttribute\(\s*'aria-live'/.test( fs.readFileSync( file, 'utf8' ) ) );
+	page = start( { screen: screen( true, 900 ), reply: inTurn( [ null, null, function () { return REFUSED; }, SAVED ] ) } );
+	first = page.said();
+	check( 'the script keeps the very span the page came with, in the line', first && first.parentNode === page.line && 'status' === first.attrs.role && '' === first.textContent );
+	page.tap( '−1 lost' );
+	await settle();
+	check( 'a message: the span holds its words and nothing else — no "Undo:", no "Last:"', LOSS === page.said().textContent && page.said() === first, page.said().textContent );
+	check( '… the line has no aria-live of its own, so "Undo: …" beside the words is not read with them', undefined === page.line.attrs['aria-live'] && 'Undo: ' + LOSS === page.undo().attrs['aria-label'] );
+	pass( 10.2 );
+	pass( 300 );
+	check( 'the Undo turned quiet, "Last: … · 5 min ago": nothing new is told', LOSS === page.said().textContent && 'Last: ' + LOSS + ' · 5 min ago' === page.words(), page.said().textContent );
+	page.tap( '−1 lost' );
+	await settle();
+	check( 'the same words a second time are told again: the span\'s text is not what it was', LOSS !== page.said().textContent && LOSS === page.said().textContent.trim() && LOSS === page.said().textContent.replace( /\u00a0$/, '' ), JSON.stringify( page.said().textContent ) );
+	pass( 60 );
+	page.tap( '−1 lost' );
+	await settle();
+	check( 'an error is told', 'No fish left to lose.' === page.said().textContent );
+	pass( 4.2 );
+	check( '… and when it has gone and the Undo is back, nothing is told again', 'No fish left to lose.' === page.said().textContent && page.quiet() );
+	page.tap( 'Note' );
+	check( 'on a sheet the span is still in the line, in the sheet\'s bar', page.said() === first && first.parentNode === page.line && page.line.parentNode === page.bar() );
+	page.tap( 'Save' );
+	await settle();
+	check( 'a plain "Saved" is told', 'Saved' === page.said().textContent );
+	check( 'the stylesheet takes the span out of sight without taking it from the reader, and gives it no room in the line', /position:\s*absolute;/.test( rule( '.fh-fd-status__said' ) ) && /width:\s*1px;/.test( rule( '.fh-fd-status__said' ) ) && /height:\s*1px;/.test( rule( '.fh-fd-status__said' ) ) && /overflow:\s*hidden;/.test( rule( '.fh-fd-status__said' ) ) && ! /display:\s*none|visibility/.test( rule( '.fh-fd-status__said' ) ), rule( '.fh-fd-status__said' ) );
+	page = start( { screen: screen( true, 900 ), bareLine: true } );
+	check( 'a page whose line came without the span is given one by the script', page.said() && 'status' === page.said().attrs.role && page.said().parentNode === page.line && page.line.children[0] === page.undoNode() );
 
 	console.log( '12. The Undo is not thrown away while another write is under way' );
 	page = start( { screen: screen( true, 900 ), hold: true } );

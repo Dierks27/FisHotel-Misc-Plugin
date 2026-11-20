@@ -1168,25 +1168,39 @@
 	 *     expired session until it is tapped). It never throws away an
 	 *     Undo that is still good: the Undo is back when the error has
 	 *     gone — after its seconds, or when another screen is opened.
+	 *     Meanwhile its place is kept, empty: the error's words do not
+	 *     start where a thumb was on its way to the Undo.
 	 *
 	 * UNDO_GUARD: an Undo that has only just come up takes no tap, so the
 	 * second of two quick taps cannot undo the first. The Undo is always
 	 * at the left end, and a tap anywhere else on the line never undoes.
+	 *
+	 * On a sheet the Undo sits a finger's width above Cancel / Save, and
+	 * an undo goes back to the tank screen — what was typed would be
+	 * gone. So there a tap on it opens the whole message first, with its
+	 * Undo; Back shows the sheet as it was.
+	 *
+	 * For a screen reader the words of each message are put, alone, into
+	 * one span that is always in the line (role="status", tell()). The
+	 * line itself is no live region: "Undo: …" beside the words would be
+	 * read as well, and "… 3 min ago" every minute.
 	 */
 	var UNDO_GUARD = 700;
 	var ERROR_SECONDS = 4;
 
 	// The line itself comes with the page (views/front-desk.php), so it is there from the first paint.
 	var statusEl = document.getElementById('fh-fd-status') || el('div', { id: 'fh-fd-status', class: 'fh-fd-status' });
-	var undoEl = el('button', { type: 'button', class: 'fh-fd-status__undo', text: '↶ ' + t('undo', 'Undo'), hidden: true, on: { click: takeUndo } });
+	var undoEl = el('button', { type: 'button', class: 'fh-fd-status__undo', text: '↶ ' + t('undo', 'Undo'), hidden: true, on: { click: tapUndo } });
 	var wordsEl = el('span', { class: 'fh-fd-status__words' });
 	var agoEl = el('span', { class: 'fh-fd-status__ago', hidden: true });
 	var textEl = el('button', { type: 'button', class: 'fh-fd-status__text', hidden: true, on: { click: tapWords } }, [wordsEl, agoEl]);
 	var runEl = el('span', { class: 'fh-fd-status__bar' });
-	while (statusEl.firstChild) {
-		statusEl.removeChild(statusEl.firstChild);
+	// What a screen reader is told. It comes with the page too, and is never taken out of the line.
+	var saidEl = document.getElementById('fh-fd-said') || el('span', { id: 'fh-fd-said', class: 'fh-fd-status__said', role: 'status' });
+	if (saidEl.parentNode !== statusEl) {
+		statusEl.appendChild(saidEl);
 	}
-	[undoEl, textEl, runEl].forEach(function (node) { statusEl.appendChild(node); });
+	[undoEl, textEl, runEl].forEach(function (node) { statusEl.insertBefore(node, saidEl); });
 
 	var shownUndo = null; // The Undo the button stands for now …
 	var undoBorn = 0;     // … and when it came up.
@@ -1233,16 +1247,17 @@
 		var note = state.note;
 		var undo = state.undo;
 		if (note) {
-			return { kind: note.error ? 'error' : 'ok', text: note.text, ago: '', undo: null, fresh: false, from: note.at, to: note.until };
+			// held: an Undo that is still good waits behind these words; its place is kept for it.
+			return { kind: note.error ? 'error' : 'ok', text: note.text, ago: '', undo: null, held: !!undo, fresh: false, from: note.at, to: note.until };
 		}
 		var fresh = undo ? undo.at + undoSeconds() * 1000 : 0;
 		if (undo && now < fresh) {
-			return { kind: 'ok', text: undo.text, ago: '', undo: undo, fresh: true, from: undo.at, to: fresh };
+			return { kind: 'ok', text: undo.text, ago: '', undo: undo, held: false, fresh: true, from: undo.at, to: fresh };
 		}
 		if (state.last) {
-			return { kind: 'last', text: fmt(t('lastDone', 'Last: %s'), state.last.text), ago: agoText(now - state.last.at, i18n), undo: undo, fresh: false, from: 0, to: 0 };
+			return { kind: 'last', text: fmt(t('lastDone', 'Last: %s'), state.last.text), ago: agoText(now - state.last.at, i18n), undo: undo, held: false, fresh: false, from: 0, to: 0 };
 		}
-		return { kind: '', text: '', ago: '', undo: null, fresh: false, from: 0, to: 0 };
+		return { kind: '', text: '', ago: '', undo: null, held: false, fresh: false, from: 0, to: 0 };
 	}
 
 	/* The line as it is now, and a timer for the next thing the clock changes. Nothing here changes its size. */
@@ -1253,7 +1268,6 @@
 		root.clearInterval(state.timers.lineBar);
 
 		statusEl.className = 'fh-fd-status' + (m.kind ? ' is-' + m.kind : '');
-		statusEl.setAttribute('aria-live', m.kind === 'last' ? 'off' : 'polite'); // "… 3 min ago" is not read out every minute.
 		if (wordsEl.textContent !== m.text) {
 			wordsEl.textContent = m.text;
 		}
@@ -1265,8 +1279,9 @@
 			shownUndo = m.undo;
 			undoBorn = now; // Just come up (or back, after an error): no tap yet.
 		}
-		undoEl.hidden = !m.undo;
-		undoEl.className = 'fh-fd-status__undo' + (m.fresh ? '' : ' is-quiet');
+		undoEl.hidden = !m.undo && !m.held;
+		undoEl.disabled = m.held; // Held behind an error: in its place, not seen, and it takes no tap.
+		undoEl.className = 'fh-fd-status__undo' + (m.held ? ' is-held' : (m.fresh ? '' : ' is-quiet'));
 		if (m.undo) {
 			undoEl.setAttribute('aria-label', fmt(t('undoWhat', 'Undo: %s'), m.undo.label));
 		}
@@ -1312,7 +1327,13 @@
 			state.note = ids ? null : { text: message, error: false, at: now, until: now + undoSeconds() * 1000, tap: null };
 			state.last = { text: message, at: now };
 		}
+		tell(message);
 		paintLine();
+	}
+
+	/* For a screen reader: the words alone, once. The same words said again are a new message — the space makes them new. */
+	function tell(message) {
+		saidEl.textContent = saidEl.textContent === message ? message + '\u00a0' : message;
 	}
 
 	/* Another screen is opened: an error said on the one before has had its say. */
@@ -1342,6 +1363,22 @@
 			return;
 		}
 		act({ act: 'undo', event_ids: undo.ids, tank: tank() ? tank().number : 0 });
+	}
+
+	/*
+	 * A tap on the line's own Undo. On the tank screen it undoes. On a
+	 * sheet it opens the whole message, whose Undo then does: one stray
+	 * tap beside Save cannot take back a write and drop what was typed.
+	 */
+	function tapUndo() {
+		if (undoEl.disabled) {
+			return;
+		}
+		if (state.undo && state.view !== 'tank' && !state.msg) {
+			openMessage();
+			return;
+		}
+		takeUndo();
 	}
 
 	/* A tap on the words: what the message asked for (the reload), else the whole message. */
@@ -1429,8 +1466,8 @@
 		}
 		app.hidden = false;
 		if (!stay) {
+			place(); // First the room at the page's foot for the screen's own bar: a page that was at its foot can only then be put back there.
 			root.scrollTo(0, msg.y);
-			place();
 		}
 	}
 

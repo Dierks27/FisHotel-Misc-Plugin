@@ -40,8 +40,8 @@ if ( ! empty( $screen['tank']['temp']['label'] ) ) {
 	<div id="fh-fd-app" class="fh-fd-app" aria-live="polite">
 		<p class="fh-fd-loading"><?php echo esc_html( $fh_title ); ?> …</p>
 	</div>
-	<?php // The button bar with its status line, there from the first paint; the script gives it the screen's buttons. ?>
-	<div class="fh-fd-bar"><div id="fh-fd-status" class="fh-fd-status" aria-live="polite"></div></div>
+	<?php // The button bar with its status line, there from the first paint; the script gives it the screen's buttons. The span is what a screen reader is told: the words of a message, alone. ?>
+	<div class="fh-fd-bar"><div id="fh-fd-status" class="fh-fd-status"><span id="fh-fd-said" class="fh-fd-status__said" role="status"></span></div></div>
 	<script>window.fhFrontDesk = <?php echo wp_json_encode( $config, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- JSON with HTML-safe flags. ?>;</script>
 	<script><?php echo str_replace( '</script', '<\/script', $js ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- our own script, inlined. ?></script>
 </body>

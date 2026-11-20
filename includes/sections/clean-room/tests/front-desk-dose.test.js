@@ -80,6 +80,12 @@ El.prototype.removeChild = function ( child ) {
 	}
 	return child;
 };
+El.prototype.insertBefore = function ( child, before ) {
+	var at = before ? this.children.indexOf( before ) : -1;
+	child.parentNode = this;
+	this.children.splice( at < 0 ? this.children.length : at, 0, child );
+	return child;
+};
 El.prototype.setAttribute = function ( key, value ) {
 	this.attrs[ key ] = value;
 	if ( 'value' === key ) {

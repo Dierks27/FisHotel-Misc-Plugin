@@ -318,6 +318,11 @@ button.fh-fd-occ:active {
 	color: var(--fd-muted);
 }
 
+/* An error has the line and the Undo is still good: its place is kept, empty, so the error's words do not start under a thumb on its way there. */
+.fh-fd-status__undo.is-held {
+	visibility: hidden;
+}
+
 .fh-fd-status__undo[hidden],
 .fh-fd-status__text[hidden],
 .fh-fd-status__ago[hidden] {
@@ -356,6 +361,16 @@ button.fh-fd-occ:active {
 	flex: 0 0 auto;
 	font-size: 0.875em;
 	white-space: pre;
+}
+
+/* What a screen reader is told (role="status"): the words of a message alone. In the line, taking no room in it. */
+.fh-fd-status__said {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
 }
 
 /* The line lets nothing out of its box: a keyboard's focus ring is drawn inside it. */

@@ -315,7 +315,10 @@ bar, nothing shifts, a second tap lands where the first did. In it:
 
 - at the left, **↶ Undo** (at least 44 px each way, named for a screen
   reader by what it undoes: "Undo: 1 × … lost"), only while there is
-  something to undo;
+  something to undo. On the tank screen a tap undoes. On a sheet — where
+  it sits a finger's width above Cancel / Save, and an undo would go
+  back to the tank screen and drop what was typed — a tap opens the
+  whole message first, and the Undo there does it;
 - the words, on one line, cut with "…" when long. A tap on them opens
   the whole message as a sheet of its own — with the Undo, while it is
   good — and Back shows the screen under it as it was, what was typed
@@ -342,7 +345,9 @@ it is the next write, so the Undo before it has gone. An error is said
 in the same line in the error colour for 4 seconds (an expired session
 until its words are tapped, which reloads) and never throws away an Undo
 that is still good: the Undo is back when the error has gone — after its
-seconds, or when another screen is opened. An undo that never reached
+seconds, or when another screen is opened. Meanwhile the Undo's place is
+kept, empty (`.is-held`: not seen, no tap), so the error's words do not
+start where a thumb was on its way to the Undo. An undo that never reached
 the server (no signal) keeps its Undo for another try; one the server
 refused does not. Before anything was done on the page the line is
 empty; it is there all the same. The "last thing done" is kept for the
@@ -354,8 +359,18 @@ for 0.7 seconds, so the second of two quick taps never undoes the first;
 its place never moves; and a tap anywhere else on the line never undoes.
 A write made on the tank screen itself ("−1 lost" on a row, a to-do
 chip, the Undo) leaves the page where it was scrolled to: counting
-bodies down a long tank, the second tap lands on the same row. Undo
-tapped from a sheet goes back to the tank screen, as every write does.
+bodies down a long tank, the second tap lands on the same row. Back from
+the whole message puts the page where it was as well, at its foot too
+(the room for the screen's own bar is given back first). An undo done
+from a sheet's message goes back to the tank screen, as every write
+does.
+
+For a screen reader the words of each message — a write, a "Saved", an
+error — are put alone into one span that is in the line from the first
+paint (`#fh-fd-said`, `role="status"`). The line itself is no live
+region, so "Undo: …" is not read beside the words and "… 3 min ago" not
+every minute; the same words said twice are told twice. Not yet heard on
+a real screen reader.
 
 The script measures the bar as it stands (`place()`, a `ResizeObserver`
 on the bar — the line and three rows of buttons on a tank, one row on a
