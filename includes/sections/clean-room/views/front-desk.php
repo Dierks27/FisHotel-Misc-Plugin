@@ -2,7 +2,9 @@
 /**
  * The Front Desk — a self-contained phone page: no theme, its CSS and JS
  * inlined, no external requests. The JS renders every screen from the
- * config object below and re-renders from each AJAX reply.
+ * config object below and re-renders from each AJAX reply. The button
+ * bar's status line — where every message is shown — is in the page
+ * itself, so its place is taken before the script has run.
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  *
@@ -38,7 +40,8 @@ if ( ! empty( $screen['tank']['temp']['label'] ) ) {
 	<div id="fh-fd-app" class="fh-fd-app" aria-live="polite">
 		<p class="fh-fd-loading"><?php echo esc_html( $fh_title ); ?> …</p>
 	</div>
-	<div id="fh-fd-toast" class="fh-fd-toast" hidden></div>
+	<?php // The button bar with its status line, there from the first paint; the script gives it the screen's buttons. ?>
+	<div class="fh-fd-bar"><div id="fh-fd-status" class="fh-fd-status" aria-live="polite"></div></div>
 	<script>window.fhFrontDesk = <?php echo wp_json_encode( $config, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- JSON with HTML-safe flags. ?>;</script>
 	<script><?php echo str_replace( '</script', '<\/script', $js ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- our own script, inlined. ?></script>
 </body>
