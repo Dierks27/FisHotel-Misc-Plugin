@@ -463,6 +463,8 @@ class Sizes_Tidy {
 		$over     = isset( $request['over'] ) && is_array( $request['over'] ) ? $request['over'] : array();
 		$retiring = isset( $shop['state']['retiring'] ) && is_array( $shop['state']['retiring'] ) ? $shop['state']['retiring'] : array();
 
+		$retired  = isset( $shop['state']['retired'] ) && is_array( $shop['state']['retired'] ) ? $shop['state']['retired'] : array();
+
 		$rows = array();
 		foreach ( (array) ( $shop['terms'] ?? array() ) as $term ) {
 			$slug = (string) ( $term['slug'] ?? '' );
@@ -478,7 +480,8 @@ class Sizes_Tidy {
 			foreach ( (array) ( $product['sizes'] ?? array() ) as $slug ) {
 				$key = 'g:' . $slug;
 				if ( ! isset( $rows[ $key ] ) ) {
-					$rows[ $key ]           = self::blank_row( $key, (string) $slug, (string) $slug, false );
+					// A size without a term: it reads as the name a tidy-up remembers for it, else as its slug.
+					$rows[ $key ]           = self::blank_row( $key, (string) $slug, isset( $retired[ $slug ] ) ? (string) $retired[ $slug ] : (string) $slug, false );
 					$rows[ $key ]['orphan'] = true;
 				}
 				$seen[ $key ][ $pid ] = true;
@@ -489,7 +492,7 @@ class Sizes_Tidy {
 				if ( '' !== $slug ) {
 					$key = 'g:' . $slug;
 					if ( ! isset( $rows[ $key ] ) ) {
-						$rows[ $key ]           = self::blank_row( $key, $slug, $slug, false );
+						$rows[ $key ]           = self::blank_row( $key, $slug, isset( $retired[ $slug ] ) ? (string) $retired[ $slug ] : $slug, false );
 						$rows[ $key ]['orphan'] = true;
 					}
 					$seen[ $key ][ $pid ] = true;
@@ -1130,6 +1133,7 @@ class Sizes_Tidy {
 			'targets'     => $targets,
 			'labels'      => $labels,
 			'instock'     => $instock,
+			'keep_plus'   => ! empty( $request['keep_plus'] ),
 			'products'    => $products,
 			'changes'     => $changes,
 			'two'         => $two,

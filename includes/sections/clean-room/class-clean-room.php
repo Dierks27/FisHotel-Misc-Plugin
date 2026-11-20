@@ -271,6 +271,9 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 			// The theme's Tools button "Add fish lines to past invoice orders" rewrites order lines without
 			// a status change, and ends its request: drop the cache just before it runs.
 			add_action( 'admin_post_fishotel_invoice_backfill', array( Stats_Sales::class, 'flush' ), 1, 0 );
+			// A past order line keeps the size text it was bought with, also after "Tidy up the sizes"
+			// removed that size from the list. The callback reads nothing unless an order line is shown.
+			add_filter( 'woocommerce_order_item_display_meta_value', array( Sizes::class, 'order_size_name' ), 10, 2 );
 
 			$front = new Front_Desk();
 			$front->init();
@@ -296,6 +299,11 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 
 				$import = new Admin_Import();
 				$import->init();
+
+				// Settings → Sizes → "Tidy up the sizes": its AJAX and assets. It does nothing until a button is pressed.
+				require_once self::path() . 'class-sizes-tidy-admin.php';
+				$tidy = new Sizes_Tidy_Admin();
+				$tidy->init();
 			}
 		}
 
@@ -318,6 +326,7 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 			require_once self::path() . 'class-admin-stats.php';
 			require_once self::path() . 'class-admin-import.php';
 			require_once self::path() . 'class-admin-temp.php';
+			require_once self::path() . 'class-sizes-tidy-admin.php';
 
 			add_submenu_page(
 				'fishotel-misc',

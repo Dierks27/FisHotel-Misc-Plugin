@@ -513,7 +513,7 @@ class Fake_Tidy_Shop implements Sizes_Tidy_Shop {
 	/**
 	 * The "Sizes to fill in" list, as the real site gives it.
 	 */
-	public function fill_list() {
+	public function fill_list( $taxonomy = 'pa_size' ) {
 		$out = array();
 		foreach ( $this->products as $pid => $product ) {
 			$open = array();

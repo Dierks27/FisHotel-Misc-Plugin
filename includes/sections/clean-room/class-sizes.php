@@ -310,6 +310,34 @@ class Sizes {
 	}
 
 	/**
+	 * The size a past order line shows (the filter
+	 * woocommerce_order_item_display_meta_value): WooCommerce stores the
+	 * size's slug on the line and looks its name up when the order is
+	 * shown, so a size a tidy-up removed from the list would read as its
+	 * slug ("2-3-5"). The tidy-up remembers the names of the sizes it
+	 * removed; this gives the line its name back. No order is changed.
+	 *
+	 * @param string $display_value What WooCommerce is about to show.
+	 * @param object $meta          The line's meta (key, value).
+	 * @return string
+	 */
+	public static function order_size_name( $display_value, $meta = null ) {
+		if ( ! is_object( $meta ) || ! isset( $meta->key, $meta->value ) || ! is_string( $meta->key ) || ! is_scalar( $meta->value ) ) {
+			return $display_value;
+		}
+		$key   = 0 === strpos( $meta->key, 'attribute_' ) ? substr( $meta->key, 10 ) : $meta->key;
+		$state = function_exists( 'get_option' ) ? get_option( self::STATE_OPTION, array() ) : array();
+		$slug  = (string) $meta->value;
+		if ( ! is_array( $state ) || (string) ( $state['taxonomy'] ?? '' ) !== $key || ! isset( $state['retired'][ $slug ] ) || ! is_scalar( $state['retired'][ $slug ] ) ) {
+			return $display_value;
+		}
+		if ( function_exists( 'get_term_by' ) && get_term_by( 'slug', $slug, $key ) ) {
+			return $display_value; // The size is a term again: WooCommerce has its name.
+		}
+		return esc_html( self::plain( (string) $state['retired'][ $slug ] ) );
+	}
+
+	/**
 	 * The size with a slug, from a list.
 	 *
 	 * @param array[] $sizes Sizes (slug, label).

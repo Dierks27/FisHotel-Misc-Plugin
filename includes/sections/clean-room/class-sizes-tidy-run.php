@@ -336,9 +336,10 @@ interface Sizes_Tidy_Shop {
 	 * The "Sizes to fill in" list: every product a tidy-up took a size
 	 * off (Sizes_Tidy::FILL_META) whose variation still has none.
 	 *
+	 * @param string $taxonomy Taxonomy.
 	 * @return array[] product id → id, title, sizes (variation id → slug, label).
 	 */
-	public function fill_list();
+	public function fill_list( $taxonomy );
 
 	/**
 	 * Tick a product off the "Sizes to fill in" list.
