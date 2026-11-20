@@ -219,7 +219,7 @@ class Admin_Order_Import {
 		} catch ( \Throwable $e ) {
 			$result = array( 'error' => $e->getMessage() );
 		}
-		// The file was read (or not): it goes, whatever happened.
+		// request() deletes the file once it is read; should it have thrown before that, it goes here.
 		if ( $file && ! empty( $file['path'] ) && is_file( $file['path'] ) ) {
 			unlink( $file['path'] ); // phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink -- our own upload.
 		}
@@ -303,7 +303,12 @@ class Admin_Order_Import {
 		$in = is_array( $in ) ? $in : array();
 
 		// The grid: an uploaded file, a paste, or the grid the page posts back.
-		$read = self::read_input( $in, isset( $ctx['file'] ) && is_array( $ctx['file'] ) ? $ctx['file'] : null, $store, $raw );
+		$file = isset( $ctx['file'] ) && is_array( $ctx['file'] ) ? $ctx['file'] : null;
+		$read = self::read_input( $in, $file, $store, $raw );
+		// An uploaded file is read once and goes — whatever it held.
+		if ( $file && ! empty( $file['path'] ) && is_file( $file['path'] ) ) {
+			unlink( $file['path'] ); // phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink -- our own upload.
+		}
 		if ( isset( $read['error'] ) ) {
 			return array( 'error' => $read['error'] );
 		}
@@ -445,6 +450,11 @@ class Admin_Order_Import {
 			}
 			$read          = Order_Import::grid_from_rows( $rows );
 			$read['sheet'] = (string) $candidate;
+			foreach ( $names as $name ) {
+				if ( 0 === strcasecmp( $name, (string) $candidate ) ) {
+					$read['sheet'] = $name; // As the workbook spells it.
+				}
+			}
 			if ( ! $read['grid'] ) {
 				continue;
 			}
@@ -511,6 +521,10 @@ class Admin_Order_Import {
 			if ( $stay ) {
 				$line['qty_received'] = $was['qty_received'];
 				$line['qty_doa']      = (int) $was['qty_doa'];
+			}
+			// The form posts the size's slug only: its label is the stored line's.
+			if ( null !== $line['size_slug'] && null === $line['size_label'] && $was && (string) $was['size_slug'] === (string) $line['size_slug'] ) {
+				$line['size_label'] = $was['size_label'];
 			}
 			$line['key']     = (string) $key;
 			$line['stay_id'] = $stay ? (int) $was['stay_id'] : null;
@@ -633,6 +647,12 @@ class Admin_Order_Import {
 
 		/* ---- the rows ---- */
 		$sizes    = Sizes::standard( $store, $settings )['sizes'];
+		foreach ( $lines as $i => $line ) {
+			$size = null !== $line['size_slug'] && null === $line['size_label'] ? Sizes::find( $sizes, $line['size_slug'] ) : null;
+			if ( $size ) {
+				$lines[ $i ]['size_label'] = $size['label'];
+			}
+		}
 		$analysis = Order_Import::analyse(
 			$grid,
 			array(
@@ -778,7 +798,7 @@ class Admin_Order_Import {
 				'product_id' => null,
 				'sci_name'   => '',
 				'kind'       => 'unknown',
-				'corrected'  => $hand,
+				'corrected'  => false,
 			);
 		}
 		$fish = Identify::fish_from(
