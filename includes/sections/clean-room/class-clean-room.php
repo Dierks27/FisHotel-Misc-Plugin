@@ -211,8 +211,6 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 			require_once self::path() . 'class-workbook.php';
 			require_once self::path() . 'class-import-map.php';
 			require_once self::path() . 'class-import.php';
-			require_once self::path() . 'class-order-import.php';
-			require_once self::path() . 'class-import-layouts.php';
 			require_once self::path() . 'class-store.php';
 			require_once self::path() . 'class-settings.php';
 			require_once self::path() . 'class-front-desk.php';
@@ -280,6 +278,9 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 				require_once self::path() . 'class-admin-workbook.php';
 				require_once self::path() . 'class-admin-stats.php';
 				require_once self::path() . 'class-admin-import.php';
+				// The order page's line importer: admin only, so nothing of it is read on a shop request.
+				require_once self::path() . 'class-order-import.php';
+				require_once self::path() . 'class-import-layouts.php';
 				require_once self::path() . 'class-admin-order-import.php';
 				require_once self::path() . 'class-admin-temp.php';
 
@@ -321,6 +322,8 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 			require_once self::path() . 'class-admin-workbook.php';
 			require_once self::path() . 'class-admin-stats.php';
 			require_once self::path() . 'class-admin-import.php';
+			require_once self::path() . 'class-order-import.php';
+			require_once self::path() . 'class-import-layouts.php';
 			require_once self::path() . 'class-admin-order-import.php';
 			require_once self::path() . 'class-admin-temp.php';
 
