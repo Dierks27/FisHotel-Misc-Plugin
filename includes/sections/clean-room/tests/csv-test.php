@@ -75,7 +75,7 @@ echo "4. Filters and totals\n";
 $filters = Admin::filters_from_request( array( 'area' => 'SPA', 's' => ' <b>cardinal</b> ' ) );
 check( 'area is validated (lower-cased), species sanitised', 'spa' === $filters['area'] && 'cardinal' === $filters['species'] );
 check( 'unknown area → both', '' === Admin::filters_from_request( array( 'area' => 'lab' ) )['area'] );
-check( 'nothing → empty filters', array( 'area' => '', 'species' => '', 'ready' => false, 'needs_id' => false ) === Admin::filters_from_request( null ) );
+check( 'nothing → empty filters', array( 'area' => '', 'species' => '', 'ready' => false, 'needs_id' => false, 'no_sale' => false, 'tank' => 0 ) === Admin::filters_from_request( null ) );
 check( 'ready=1 → only the groups for sale today', true === Admin::filters_from_request( array( 'ready' => '1' ) )['ready'] && false === Admin::filters_from_request( array( 'ready' => 'yes' ) )['ready'] );
 $tanks = array(
 	array( 'status' => 'active', 'occupants' => array( array( 'qty_live' => 4, 'status' => 'in_qt', 'sale_ready' => false, 'sale_ready_date' => null ), array( 'qty_live' => 2, 'status' => 'cleared', 'sale_ready' => false, 'sale_ready_date' => '2026-05-01' ) ) ),

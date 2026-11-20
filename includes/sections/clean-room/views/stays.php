@@ -4,14 +4,15 @@
  * and the per-row edits (counts stay editable at any time). A stay whose
  * fish still has to be identified is marked and has its own filter;
  * "Identify…" / "Correct fish…" opens the panel of views/identify-panel.php
- * under the row.
+ * under the row. A Board card links here filtered to its tank (and to
+ * its groups without a sale date), and to one group's row by its id.
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  *
  * @var array[] $stays        Open stays.
  * @var bool    $show_closed  Whether closed stays are listed.
  * @var array[] $closed_stays Closed stays (when shown).
- * @var array   $filters      area, species, ready, needs_id.
+ * @var array   $filters      area, species, ready, needs_id, no_sale, tank (what a Board card links with).
  * @var array[] $sizes        The standard sizes (slug, label).
  * @var array[] $fish_tanks   The tanks "Add fish already here" offers (Admin::existing_tanks()).
  * @var array   $picks        suppliers, origins the supplier orders already name.
@@ -65,7 +66,7 @@ $fh_table = static function ( array $rows, $open ) use ( $today, $sizes ) {
 		<tbody>
 			<?php foreach ( $rows as $fh_stay ) : ?>
 				<?php $fh_sale = Admin::sale_words( $fh_stay ); ?>
-				<tr data-stay="<?php echo esc_attr( $fh_stay['id'] ); ?>" data-live="<?php echo esc_attr( $fh_stay['qty_live'] ); ?>">
+				<tr id="fh-cr-stay-<?php echo esc_attr( $fh_stay['id'] ); ?>" data-stay="<?php echo esc_attr( $fh_stay['id'] ); ?>" data-live="<?php echo esc_attr( $fh_stay['qty_live'] ); ?>">
 					<td>
 						<strong><?php echo esc_html( $fh_stay['species'] ); ?></strong>
 						<?php echo Admin::size_html( $fh_stay, $sizes ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by size_html(). ?>
@@ -207,6 +208,16 @@ $fh_table = static function ( array $rows, $open ) use ( $today, $sizes ) {
 				<span><?php esc_html_e( 'Needs identifying', 'fishotel-misc-plugin' ); ?></span>
 			</label>
 			<label class="fh-cr-filter fh-cr-filter--check">
+				<input type="checkbox" name="no_sale" value="1" <?php checked( ! empty( $filters['no_sale'] ) ); ?>>
+				<span><?php esc_html_e( 'No sale date', 'fishotel-misc-plugin' ); ?></span>
+			</label>
+			<?php if ( ! empty( $filters['tank'] ) ) : ?>
+				<label class="fh-cr-filter fh-cr-filter--check">
+					<input type="checkbox" name="tank" value="<?php echo esc_attr( (int) $filters['tank'] ); ?>" checked>
+					<span><?php echo esc_html( sprintf( /* translators: %d: tank number */ __( 'Tank %d only', 'fishotel-misc-plugin' ), (int) $filters['tank'] ) ); ?></span>
+				</label>
+			<?php endif; ?>
+			<label class="fh-cr-filter fh-cr-filter--check">
 				<input type="checkbox" name="closed" value="1" <?php checked( $show_closed ); ?>>
 				<span><?php esc_html_e( 'Show closed', 'fishotel-misc-plugin' ); ?></span>
 			</label>
@@ -277,12 +288,21 @@ $fh_table = static function ( array $rows, $open ) use ( $today, $sizes ) {
 	} elseif ( ! empty( $filters['ready'] ) ) {
 		/* translators: %d: open stays */
 		$fh_count = __( '%d open stays for sale today · oldest check-in first', 'fishotel-misc-plugin' );
+	} elseif ( ! empty( $filters['no_sale'] ) ) {
+		/* translators: %d: open stays */
+		$fh_count = __( '%d open stays without a sale date · oldest check-in first', 'fishotel-misc-plugin' );
 	} else {
 		/* translators: %d: open stays */
 		$fh_count = __( '%d open stays · oldest check-in first', 'fishotel-misc-plugin' );
 	}
 	?>
-	<p class="fh-cr-count"><?php echo esc_html( sprintf( $fh_count, count( $stays ) ) ); ?></p>
+	<p class="fh-cr-count">
+		<?php echo esc_html( sprintf( $fh_count, count( $stays ) ) ); ?>
+		<?php if ( ! empty( $filters['tank'] ) ) : ?>
+			· <?php echo esc_html( sprintf( /* translators: %d: tank number */ __( 'tank %d only', 'fishotel-misc-plugin' ), (int) $filters['tank'] ) ); ?>
+			· <a href="<?php echo esc_url( Admin::page_url( 'stays' ) ); ?>"><?php esc_html_e( 'show every tank', 'fishotel-misc-plugin' ); ?></a>
+		<?php endif; ?>
+	</p>
 	<?php $fh_table( $stays, true ); ?>
 	<?php
 	$fh_identify_colspan = 10;

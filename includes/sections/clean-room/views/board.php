@@ -1,6 +1,8 @@
 <?php
 /**
- * Room Board — Area → Building → Level grid of tank cards.
+ * Room Board — Area → Building → Level grid of tank cards. A card's
+ * fish are the lines of views/board-lines.php; its foot says once how
+ * many of its groups have no sale date.
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  *
@@ -17,12 +19,14 @@
  * @var bool   $tables_ok    Whether the tables exist.
  * @var bool   $can_settings Whether the Settings tab is offered.
  * @var string $labels_url   Printable labels URL.
+ * @var array  $origins      Admin::origins(): stay id => the quarantine tank a cleared group came out of.
  */
 
 defined( 'ABSPATH' ) || exit;
 
 use FisHotel\Misc\Sections\Clean_Room\Admin;
 use FisHotel\Misc\Sections\Clean_Room\Admin_Temp;
+use FisHotel\Misc\Sections\Clean_Room\Board_Lines;
 use FisHotel\Misc\Sections\Clean_Room\Clean_Room;
 use FisHotel\Misc\Sections\Clean_Room\Layout;
 use FisHotel\Misc\Sections\Clean_Room\Protocol;
@@ -158,6 +162,7 @@ $fh_temp_done = false;
 								<?php foreach ( $fh_entry['levels'][ $fh_level ] as $fh_tank ) : ?>
 									<?php
 									$fh_occupants = (array) ( $fh_tank['occupants'] ?? array() );
+									$fh_card      = Board_Lines::card( $fh_occupants, $sizes ); // In order, the same fish gathered.
 									$fh_match     = false;
 									if ( '' !== $fh_species ) {
 										foreach ( $fh_occupants as $fh_stay ) {
@@ -181,23 +186,10 @@ $fh_temp_done = false;
 											<span class="fh-cr-tank__size"><?php echo esc_html( $fh_tank['size_label'] ); ?><?php echo 'offline' === $fh_tank['status'] ? ' · ' . esc_html__( 'offline', 'fishotel-misc-plugin' ) : ''; ?></span>
 										</div>
 										<?php if ( $fh_occupants ) : ?>
-											<ul class="fh-cr-tank__list">
-												<?php foreach ( $fh_occupants as $fh_stay ) : ?>
-													<li class="<?php echo ( '' !== $fh_species && Admin::matches_species( $fh_stay, $fh_species ) ) ? 'is-hit' : ''; ?><?php echo ! empty( $fh_stay['needs_id'] ) ? ' is-unknown' : ''; ?>">
-														<span class="fh-cr-tank__species"><?php echo esc_html( $fh_stay['species'] ); ?></span>
-														<?php echo Admin::size_html( $fh_stay, $sizes ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by size_html(). ?>
-														· <?php echo esc_html( $fh_stay['qty_live'] ); ?>
-														<?php if ( '' !== Admin::day_text( $fh_stay ) ) : ?>
-															· <?php echo esc_html( Admin::day_text( $fh_stay ) ); ?>
-														<?php endif; ?>
-														<?php echo Admin::badge_html( $fh_stay ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by badge_html(). ?>
-														<?php $fh_sale = Admin::sale_words( $fh_stay ); ?>
-														<?php if ( empty( $fh_stay['sale_ready'] ) ) : ?>
-															<span class="fh-cr-tank__sale"><?php echo esc_html( $fh_sale['text'] ); ?></span>
-														<?php endif; ?>
-													</li>
-												<?php endforeach; ?>
-											</ul>
+											<?php
+											$fh_qt = false;
+											include Clean_Room::path() . 'views/board-lines.php';
+											?>
 										<?php else : ?>
 											<p class="fh-cr-tank__empty"><?php esc_html_e( 'empty', 'fishotel-misc-plugin' ); ?></p>
 										<?php endif; ?>
@@ -210,6 +202,9 @@ $fh_temp_done = false;
 												<?php if ( $fh_labels ) : ?>
 													<span class="fh-cr-todo__due"><?php echo esc_html( implode( ' · ', $fh_labels ) ); ?></span>
 												<?php endif; ?>
+											<?php endif; ?>
+											<?php if ( $fh_card['no_sale'] > 0 ) : ?>
+												<a class="fh-cr-tank__nosale" href="<?php echo esc_url( Admin::tank_stays_url( (int) $fh_tank['number'], true ) ); ?>"><?php echo esc_html( sprintf( /* translators: %d: groups in this tank without a sale date */ __( 'Sale date not set: %d', 'fishotel-misc-plugin' ), $fh_card['no_sale'] ) ); ?> &rarr;</a>
 											<?php endif; ?>
 											<a class="fh-cr-tank__link" href="<?php echo esc_url( Clean_Room::front_desk_url( (int) $fh_tank['number'] ) ); ?>" target="_blank" rel="noopener"><?php esc_html_e( 'Front Desk', 'fishotel-misc-plugin' ); ?> &rarr;</a>
 										</div>

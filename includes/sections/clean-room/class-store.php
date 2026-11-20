@@ -1731,6 +1731,33 @@ class Store {
 	}
 
 	/**
+	 * The move events of a set of stays, oldest first — what the Board
+	 * reads the tank a group came out of from (Board_Lines::origins()).
+	 *
+	 * @param int[] $stay_ids Stay ids.
+	 * @return array[]
+	 */
+	public function move_events( array $stay_ids ) {
+		$stay_ids = array_values( array_unique( array_filter( array_map( 'intval', $stay_ids ) ) ) );
+		if ( ! self::tables_exist() || ! $stay_ids ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		try {
+			$rows = $wpdb->get_results(
+				self::event_select() . " WHERE e.type = 'move' AND e.stay_id IN (" . implode( ',', $stay_ids ) . ') ORDER BY e.event_at ASC, e.id ASC LIMIT 10000', // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- integers only.
+				ARRAY_A
+			);
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+
+		return array_map( array( self::class, 'hydrate_event' ), is_array( $rows ) ? $rows : array() );
+	}
+
+	/**
 	 * The latest events across every stay, newest first.
 	 *
 	 * @param int $limit Row cap.

@@ -519,7 +519,8 @@ class Front_Desk {
 
 	/**
 	 * Everything the page needs for one tank (or, without a tank, for the
-	 * tank picker): the tank with its occupants, its to-do and its last
+	 * tank picker): the tank with its occupants (in the Board's order:
+	 * by name, then size, then check-in), its to-do and its last
 	 * copper reading, the destination grid, the tanks a check-in may go
 	 * into, the recent species, the standard sizes (the Arrival sheet's
 	 * dropdown), the medications offered (the Dose sheet's and the
@@ -605,8 +606,9 @@ class Front_Desk {
 			return $data;
 		}
 
+		// The Board's order — by name, then size, then check-in — with every group still its own row.
 		$occupants = array();
-		foreach ( $current['occupants'] as $stay ) {
+		foreach ( Board_Lines::sort( (array) $current['occupants'], $data['sizes'] ) as $stay ) {
 			$occupants[] = self::occupant( $stay, $data['sizes'] );
 		}
 
