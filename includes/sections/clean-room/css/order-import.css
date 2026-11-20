@@ -269,3 +269,9 @@
 	gap: 8px 14px;
 	align-items: center;
 }
+
+/* Dropdowns inside the preview are as wide as their words, not as the page. */
+.fh-cr-import__preview select.fh-cr-input {
+	width: auto;
+	max-width: 100%;
+}

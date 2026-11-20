@@ -151,8 +151,8 @@ class Admin_Order_Import {
 				/* translators: %s: an order line */
 				'pairInstead'    => __( 'this came instead of: %s', 'fishotel-misc-plugin' ),
 				'sections'       => __( 'Which sections of this invoice belong to this order?', 'fishotel-misc-plugin' ),
-				/* translators: 1: section, 2: rows */
-				'sectionN'       => __( '%1$s (%2$s rows)', 'fishotel-misc-plugin' ),
+				/* translators: 1: section, 2: how many rows it has */
+				'sectionN'       => __( '%1$s (%2$s)', 'fishotel-misc-plugin' ),
 				'sameFish'       => __( 'The same fish in two boxes:', 'fishotel-misc-plugin' ),
 				'sameSum'        => __( 'add them up on the one ordered line (the boxes are noted)', 'fishotel-misc-plugin' ),
 				'sameSeparate'   => __( 'keep them as separate lines', 'fishotel-misc-plugin' ),

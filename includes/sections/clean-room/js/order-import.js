@@ -241,6 +241,7 @@
 		var $confirm = $panel.find('.fh-cr-import__confirm');
 		var state = null;
 		var busy = false;
+		var again = false; // Something was chosen while a request was out: draw once more when it is back.
 
 		function fresh(mode) {
 			return {
@@ -355,7 +356,11 @@
 
 		/** Draw the preview again with what the owner chose. */
 		function refresh() {
-			if (!state || !state.grid || busy) {
+			if (!state || !state.grid) {
+				return;
+			}
+			if (busy) {
+				again = true;
 				return;
 			}
 			var extra = payloadOf(state);
@@ -378,7 +383,13 @@
 					take(res.data);
 				})
 				.fail(failed)
-				.always(function () { busy = false; });
+				.always(function () {
+					busy = false;
+					if (again) {
+						again = false;
+						refresh();
+					}
+				});
 		}
 
 		/* ---- Drawing ---- */

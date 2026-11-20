@@ -1808,7 +1808,10 @@ about the permanent buildings, tanks, stays, events and logs changes.
 - `{prefix}fh_order_lines` — its lines: order_id, species_id, species, sci_name, needs_id (1.5), label_name (1.5: what the label called a corrected fish — the "??" name of one that arrived unknown —, NULL = never corrected), size_slug + size_label (1.4), qty_ordered, qty_received, per_box, box_no + box_pct (1.4), bags, unit_price, worth, qty_doa, qty_survived, landed_total (a cache of the costing), stay_id, tank_id, share_key (1.4: the remembered share the line counts in), sort, notes (the "part of this line" notes of a split group live here)
 - `{prefix}fh_box_shares` (1.4) — the remembered shares: share_key (unique: location + fish + size), location_key (supplier + origin), supplier, origin, fish_key (`s:<species id>` or `n:<name>`), species_id, species, size_slug, size_label, pct_per_fish, order_count, last_line_id + last_date (the line and the order date the value came from), updated_at
 
-Five options: `fishotel_cleanroom_sales_statuses` (the order statuses that
+Six options: `fishotel_cleanroom_import_layouts` (what *Import lines*
+remembers about each supplier's sheet — see *Saved layouts*; absent until
+the owner saves one, at most 40, not autoloaded),
+`fishotel_cleanroom_sales_statuses` (the order statuses that
 count as a sale on *Stats → Real sales*, slugs without "wc-"; absent —
 and then the suggested list applies — until Settings → Sales statuses is
 saved; not autoloaded), `fishotel_cleanroom_settings` (with `size_attribute` and `size_list`, the source of the standard sizes, and `medications`, the medication list — absent until it is first edited, which means the seed; no table and no schema change), `fishotel_cleanroom_protocol`
@@ -1910,6 +1913,11 @@ clean-room/
 ├── class-import.php        the mapped workbook into the Store (species upsert, box rates, orders,
 │                           the recent batches as stays, the treatment logs), idempotent;
 │                           preview() pure; takes the store as a parameter like Orders::check_in()
+├── class-order-import.php  PURE: the order page's line importer — the reader (pasted rows, a sheet's
+│                           rows), the column finder, the numbers, the sizes inside names, the
+│                           matcher, the rows left out, the arrived reconciliation, the fees, the
+│                           instruction text for a chat assistant
+├── class-import-layouts.php  the saved import layouts (one option): build, fit, recognise, forget
 ├── class-settings.php      options, sanitised AJAX saves (settings, the schedule templates and
 │                           their operations, box rates, sizes, box shares), layout editor, aliases
 ├── class-front-desk.php    the phone page (query var fh_front_desk), the label-login cookie life,
@@ -1923,16 +1931,23 @@ clean-room/
 │                           Real sales): their data, the sales cache, Refresh and the Sales statuses
 │                           form (admin-post), their export sheets
 ├── class-admin-import.php  Settings → Import workbook: the private folder, upload → preview → import
+│                           (move_upload(): the upload handling, shared with the line importer)
+├── class-admin-order-import.php  Import lines on the order page: its one AJAX action (preview /
+│                           confirm — the confirm is save_order() with the rows appended), an uploaded
+│                           file read once and deleted, Settings → Saved import layouts' Forget
 ├── class-admin-temp.php    the To do tab, the Board's Temporary area, the temporary tanks' history,
 │                           and the one AJAX action behind their writes (fishotel_cleanroom_temp)
 ├── css/front-desk.css, front-desk-temp.css, js/front-desk.js   the phone screen (inlined into the page)
 ├── js/dose-math.js         the dose sum for the pages (inlined before front-desk.js; enqueued on
 │                           the Board and Settings)
 ├── css/clean-room-admin.css, js/clean-room-admin.js
+├── css/order-import.css, js/order-import.js   Import lines, "Received: all as ordered"
 ├── css/medications-admin.css, js/medications-admin.js   Settings → Medications, the Board's Calculator
 ├── css/temp-tanks-admin.css, js/temp-tanks-admin.js   the Temporary area and the To do tab
 ├── views/front-desk.php, board.php, stays.php, arrivals.php, order.php, species.php, stats.php,
 │          events.php, settings.php, import.php, tabs.php, labels.php, meta-box.php,
+│          order-import.php (the Import lines panel of the order page),
+│          settings-import-layouts.php (Settings → Saved import layouts),
 │          identify-panel.php (the Identify… panel of the Stays tab and the order page),
 │          medications.php + medication-form.php (Settings → Medications),
 │          board-temp.php (the Board's Temporary area), todo.php (the To do tab),

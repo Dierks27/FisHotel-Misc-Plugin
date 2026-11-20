@@ -63,11 +63,15 @@ php  includes/sections/clean-room/tests/temp-board-test.php
 php  includes/sections/clean-room/tests/temp-guards-test.php
 php  includes/sections/clean-room/tests/dose-temp-test.php
 php  includes/sections/clean-room/tests/order-view-test.php
+php  includes/sections/clean-room/tests/order-import-test.php
+php  includes/sections/clean-room/tests/order-import-layouts-test.php
+php  includes/sections/clean-room/tests/order-import-admin-test.php
 node includes/sections/clean-room/tests/front-desk.test.js
 node includes/sections/clean-room/tests/clean-room-admin.test.js
 node includes/sections/clean-room/tests/dose-math.test.js
 node includes/sections/clean-room/tests/front-desk-dose.test.js
 node includes/sections/clean-room/tests/medications-admin.test.js
+node includes/sections/clean-room/tests/order-import.test.js
 node includes/sections/clean-room/tests/temp-tanks.test.js
 ```
 
@@ -584,6 +588,53 @@ system temp directory (`FH_TEST_TMP` overrides).
   "Goes on sale" card under the order's title, its fields posting to
   their own form (no form inside a form), so the order's Save never
   carries the sale date.
+- **order-import-test.php** — Import lines, the pure half
+  (`Order_Import`): the reader (pasted tabs, commas with quoted cells, a
+  header row or none, a sheet's rows, the bounds); the column finder
+  (every synonym by its text, the labels of the workbook's own "Recieved
+  (N)" sheet read from `Import_Map`, the header row found under title
+  rows, the guess without a header, the refusal without a fish or a
+  quantity column); the numbers (currency, thousands, "ea"; a decimal
+  comma is flagged; a formula-looking cell is text); the sizes inside
+  names and the words that are no sizes; the matcher's flags (exact,
+  alias, close, by scientific name, weak, ambiguous, none, unknown) with
+  the voice parser's own scores; the rows left out; an invented
+  1,200-row price list with title rows, a STOCK and an ORDER column and
+  60 ordered rows; a multi-box, two-origin invoice block with fee lines
+  and a subtotal; the invoice as printed with box headings; the
+  reconciliation (the four groups, the code first, the same fish in two
+  boxes, a substitution, a line with a stay, the foot); the fees; the
+  notes; and the instruction text against the header the README
+  documents — one test reads both.
+- **order-import-layouts-test.php** — the saved layouts
+  (`Import_Layouts`): built from a hand-set mapping, recognised the next
+  time with and without a header, an ordered and an arrived layout side
+  by side, another supplier's layout offered and never applied, the same
+  headings at two suppliers, a partly fitting layout, used / updated /
+  forgotten, the bounds, a hostile heading saved as text and shown
+  escaped on the Settings list.
+- **order-import-admin-test.php** — both moments on the in-memory store
+  (`Admin_Order_Import::request()`): ordered (the preview, received left
+  empty, the order becomes *ordered*, the same figures and the same box
+  shares as the same lines typed by hand, appends only, duplicates, a
+  line with a stay untouched, a formula-looking cell, an alias learned
+  on a corrected match, the arrived-too tick); the stale preview; the
+  limits; the dropdowns without a header; the layouts through whole
+  imports; arrived (the sections, the four groups, a substitution paired
+  by hand, received written, a did-not-come line kept at 0, a typed
+  price kept unless ticked, DOA / box / percent into empty fields, the
+  extras, the line with a stay, the fees by their ticks, the subtotal
+  that does and does not add up, a second import of the same invoice);
+  the fill rate in the Stats afterwards; what the label said; an XLSX
+  and a CSV file read and deleted; the form's lines as one field (an
+  order of 150 fish); the nonce and the capabilities; a section that is
+  switched off.
+- **order-import.test.js** — the page's pure helpers
+  (`js/order-import.js`): "Received: all as ordered" fills the empty
+  fields only, Enter / Tab in the received column, the ordered foot as
+  the ticks stand, what the page tells the server, the order form's
+  lines packed into one field (`packLines()`), and that the page code
+  never writes HTML from data.
 - **temp-board-test.php** — the Board's side and the seams: the one
   AJAX write (`Admin_Temp::request()`: 403 without the capability or
   with a stale nonce, 400 for an act that is not a temporary-tank or
@@ -1102,3 +1153,28 @@ system temp directory (`FH_TEST_TMP` overrides).
     again at once. Settings → Sales statuses: untick "Shipped", Save —
     Real sales names the shorter list and its figures drop; "Back to
     the suggested list" restores it.
+31. Import lines. Arrivals → *New order from pasted lines / a file*:
+    the new order opens with **Import lines** showing, "This is what I
+    ORDERED" on. Type the supplier, paste the supplier's price list
+    with your order quantities filled in (title rows and all) and press
+    *Read it*: the preview says "N of M rows have an order quantity",
+    lists only those rows, each with *matched: …* or a flag, the size
+    lifted out of the name when it is one of your sizes, and the foot
+    counts lines and fish. A sheet whose headings nobody knows shows a
+    dropdown above each column: set the fish and the quantity, leave
+    *Remember this layout for <supplier>* ticked, confirm. The order is
+    saved as *ordered*, every line with received empty and its `[code …]`
+    under it; Settings → *Saved import layouts* lists the layout. Paste
+    the same sheet on the supplier's next order: "Using the layout saved
+    for …" and no dropdowns; on another supplier's order it only offers
+    it. When the boxes land: *Copy the instructions*, give them to a chat
+    assistant with the invoice PDF, paste the block back under "This is
+    what ARRIVED": four groups, the fees, "The rows add up to … — the
+    invoice says …", and the foot "Ordered … · arrived … · N% filled · K
+    kinds did not come". Confirm: received is written, the lines that
+    did not come stay at 0, extras are appended, nothing is checked in;
+    Stats → By supplier shows that fill rate. On a day without a file:
+    *Received: all as ordered* fills the empty received fields, Enter
+    moves down the column. As a shop manager who is not an administrator:
+    pasting works, the file picker is not offered. Save an order of 150
+    lines, reload: all 150 are there.
