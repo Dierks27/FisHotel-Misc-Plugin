@@ -200,6 +200,8 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 			require_once self::path() . 'class-qr.php';
 			require_once self::path() . 'class-costing.php';
 			require_once self::path() . 'class-sizes.php';
+			require_once self::path() . 'class-sizes-tidy.php';
+			require_once self::path() . 'class-sizes-tidy-run.php';
 			require_once self::path() . 'class-box-shares.php';
 			require_once self::path() . 'class-stats.php';
 			require_once self::path() . 'class-stats-prices.php';

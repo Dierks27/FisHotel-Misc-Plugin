@@ -27,7 +27,10 @@
  * together, and it is only ever made from the section's own admin
  * screens and the Front Desk — never on an ordinary front-end request.
  * report() is the read-only "Sizes in use on products" list: nothing in
- * this file, or anywhere in the section, changes a product.
+ * this file changes a product. The one thing in the section that does is
+ * the owner's own tool "Tidy up the sizes" (Sizes_Tidy, Sizes_Tidy_Run):
+ * the sizes it is taking out of the shop are left out of the list here
+ * (leaving()).
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  */
@@ -49,6 +52,15 @@ class Sizes {
 
 	const MAX_SIZES = 60;
 	const MAX_LABEL = 100;
+
+	/**
+	 * Where "Tidy up the sizes" (Sizes_Tidy) keeps its own state — not
+	 * autoloaded: the short list as the owner left it, the sizes that are
+	 * on their way out but still on a product (retiring: a fish in stock
+	 * still carries it; waiting: a product needs a look first) and the
+	 * names of the sizes it deleted (past orders still show them).
+	 */
+	const STATE_OPTION = 'fishotel_cleanroom_sizes_tidy';
 
 	/**
 	 * Whether an attribute name, slug or variation key is a size (the
@@ -206,9 +218,10 @@ class Sizes {
 	 * @param array[] $attributes Store::size_attributes() — the attributes that match "size".
 	 * @param array[] $terms      Store::size_terms() of the attribute in use.
 	 * @param array   $settings   Settings (size_attribute, size_list).
+	 * @param array   $leaving    Slugs a tidy-up is taking out of the shop (leaving()): still terms, no longer offered.
 	 * @return array{source: string, attribute: string, label: string, attributes: array[], sizes: array[]}
 	 */
-	public static function resolve( array $attributes, array $terms, array $settings ) {
+	public static function resolve( array $attributes, array $terms, array $settings, array $leaving = array() ) {
 		$attributes = array_values(
 			array_filter(
 				$attributes,
@@ -234,7 +247,7 @@ class Sizes {
 		foreach ( self::order_terms( $terms, (string) ( $attribute['orderby'] ?? 'menu_order' ) ) as $term ) {
 			$slug  = trim( (string) ( $term['slug'] ?? '' ) );
 			$label = self::plain( (string) ( $term['name'] ?? '' ) );
-			if ( '' === $slug || isset( $seen[ $slug ] ) ) {
+			if ( '' === $slug || isset( $seen[ $slug ] ) || in_array( $slug, $leaving, true ) ) {
 				continue;
 			}
 			$seen[ $slug ] = true;
@@ -268,7 +281,32 @@ class Sizes {
 		$attribute  = self::pick_attribute( $attributes, (string) ( $settings['size_attribute'] ?? '' ) );
 		$terms      = null !== $attribute && method_exists( $store, 'size_terms' ) ? (array) $store->size_terms( (string) $attribute['taxonomy'] ) : array();
 
-		return self::resolve( $attributes, $terms, $settings );
+		return self::resolve( $attributes, $terms, $settings, null !== $attribute ? self::leaving( (string) $attribute['taxonomy'] ) : array() );
+	}
+
+	/**
+	 * The sizes a tidy-up (Settings → Sizes → Tidy up the sizes) is
+	 * taking out of the shop but could not delete yet — a fish in stock
+	 * still carries one ("retiring"), or a product needs a look first.
+	 * They are still terms of the attribute; the pickers leave them out,
+	 * and a stay or an order line that carries one shows it as "not a
+	 * standard size", like any size that left the list.
+	 *
+	 * @param string $taxonomy The attribute in use.
+	 * @return string[] Slugs.
+	 */
+	public static function leaving( $taxonomy ) {
+		$state = function_exists( 'get_option' ) ? get_option( self::STATE_OPTION, array() ) : array();
+		if ( ! is_array( $state ) || (string) ( $state['taxonomy'] ?? '' ) !== (string) $taxonomy ) {
+			return array();
+		}
+		$out = array();
+		foreach ( array( 'retiring', 'waiting' ) as $key ) {
+			foreach ( isset( $state[ $key ] ) && is_array( $state[ $key ] ) ? array_keys( $state[ $key ] ) : array() as $slug ) {
+				$out[] = (string) $slug;
+			}
+		}
+		return $out;
 	}
 
 	/**
