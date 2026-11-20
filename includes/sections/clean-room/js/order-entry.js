@@ -178,8 +178,9 @@
 
 	/**
 	 * What is wrong with a plan — the sentences Splits::errors() gives: a
-	 * part without a count or a tank, a tank that takes no arrivals, a
-	 * tank picked twice, more placed than alive.
+	 * part without a tank, a further part without a count (the first tank
+	 * needs none), a tank that takes no arrivals, a tank picked twice,
+	 * more placed than alive.
 	 *
 	 * @param {Object[]}    parts The parts.
 	 * @param {number|null} live  The live fish; null while nothing is received.
@@ -197,10 +198,11 @@
 			}
 			errors[key] = text;
 		}
-		(Array.isArray(parts) ? parts : []).forEach(function (part) {
+		(Array.isArray(parts) ? parts : []).forEach(function (part, index) {
 			var qty = whole(part.qty);
 			var tank = whole(part.tank_id);
-			if (qty < 1) {
+			// The first tank needs no count: what is not placed elsewhere stays there.
+			if (qty < 1 && index > 0) {
 				add('qty', t.noQty);
 			}
 			if (tank < 1) {
@@ -620,7 +622,7 @@
 			var $parts = $('<span class="fh-cr-split__parts"></span>').appendTo($box);
 			parts.forEach(function (part, i) {
 				var $part = $('<span class="fh-cr-split__part"></span>').attr('data-part', i);
-				$('<input type="number" class="fh-cr-input fh-cr-split__qty" min="1" max="9999" step="1">').val(whole(part.qty) > 0 ? String(whole(part.qty)) : '').attr('aria-label', t.howMany || 'How many').appendTo($part);
+				$('<input type="number" class="fh-cr-input fh-cr-split__qty" min="1" max="9999" step="1">').val(whole(part.qty) > 0 ? String(whole(part.qty)) : '').attr('aria-label', t.howMany || 'How many').attr('placeholder', i === 0 ? (t.theRest || 'rest') : '').appendTo($part);
 				$part.append(document.createTextNode(' → '));
 				tankSelect(parts, i).attr('aria-label', t.whichTank || 'Which tank').appendTo($part);
 				if (i === 0) {
@@ -688,12 +690,8 @@
 			$row.removeData('auto');
 			var parts = partsOf($row);
 			if (!parts.length) {
-				var live = liveOf($row);
+				// Two empty rows to start from: the first tank (the Tank cell's, when one is picked) and one more.
 				parts = [{ qty: 0, tank_id: whole($row.find('select[name$="[tank_id]"]').val()) }, { qty: 0, tank_id: 0 }];
-				if (live !== null && live > 1) {
-					parts[0].qty = live - 1;
-					parts[1].qty = 1;
-				}
 			}
 			draw($row, parts, '');
 		});

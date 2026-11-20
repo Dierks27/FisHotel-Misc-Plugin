@@ -89,7 +89,8 @@ check( 'more placed than alive', same( helpers.splitErrors( ok, 5, byId, t ), [ 
 check( 'nothing received yet: the counts cannot be checked', same( helpers.splitErrors( ok, null, byId, t ), [] ) );
 check( 'a tank picked twice', same( helpers.splitErrors( [ { qty: 1, tank_id: 18 }, { qty: 1, tank_id: 18 } ], 6, byId, t ), [ 'Tank 511 is picked twice' ] ) );
 check( 'a tank that takes no arrivals', helpers.splitErrors( [ { qty: 1, tank_id: 18 }, { qty: 1, tank_id: 1 } ], 6, byId, t ).length === 1 && helpers.splitErrors( [ { qty: 1, tank_id: 99999 } ], 6, byId, t )[0].indexOf( 'takes no arrivals' ) > 0 );
-check( 'a row without a count, a row without a tank — in the order the server names them', same( helpers.splitErrors( [ { qty: 0, tank_id: 18 }, { qty: 2, tank_id: 0 } ], 6, byId, t ), [ 'a part of the split has no count', 'a part of the split has no tank' ] ) );
+check( 'a further row without a count, a row without a tank — in the order the server names them', same( helpers.splitErrors( [ { qty: 1, tank_id: 20 }, { qty: 0, tank_id: 18 }, { qty: 2, tank_id: 0 } ], 6, byId, t ), [ 'a part of the split has no count', 'a part of the split has no tank' ] ) );
+check( 'the first tank needs no count: it keeps what is not placed elsewhere', same( helpers.splitErrors( [ { qty: 0, tank_id: 18 }, { qty: 2, tank_id: 20 } ], 6, byId, t ), [] ) && same( helpers.splitErrors( [ { qty: 3, tank_id: 0 }, { qty: 2, tank_id: 20 } ], 6, byId, t ), [ 'a part of the split has no tank' ] ) && helpers.splitField( [ { qty: 0, tank_id: 18 }, { qty: 2, tank_id: 20 } ] ) === '[[0,18],[2,20]]' );
 
 console.log( '3. "1 per tank"' );
 check( 'six live fish: one each over the next empty Spa tanks of the order\'s building, in rack order', same( numbers( helpers.onePerTank( 6, tanks, 5, [], 0 ) ), [ '1>511', '1>512', '1>513', '1>521', '1>522', '1>523' ] ) );

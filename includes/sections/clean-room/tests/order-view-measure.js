@@ -82,7 +82,11 @@
 		var pre = document.createElement('pre');
 		pre.id = 'fh-result';
 		pre.textContent = JSON.stringify(out);
-		document.body.appendChild(pre);
+		// One long line must not widen the page it measured: the box around it wraps it.
+		var box = document.createElement('div');
+		box.style.cssText = 'width:600px;overflow:hidden;font-size:10px';
+		box.appendChild(pre);
+		document.body.appendChild(box);
 	}
 
 	window.addEventListener('load', function () {

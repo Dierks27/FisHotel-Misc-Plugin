@@ -167,7 +167,8 @@ check( 'more placed than alive', array( 'the split places 6 fish but only 5 arri
 check( 'nothing received yet: the counts cannot be checked, the plan waits', array() === Splits::errors( $ok, null, $by_id ) );
 check( 'a tank picked twice', array( 'Tank 511 is picked twice' ) === Splits::errors( Splits::parts_in( plan( $store, array( array( 1, 511 ), array( 1, 511 ) ) ) ), 6, $by_id ) );
 check( 'a Clean Room tank, a clean temporary tank and a tank that does not exist take no arrivals', 1 === count( Splits::errors( Splits::parts_in( plan( $store, array( array( 1, 511 ), array( 1, 121 ) ) ) ), 6, $by_id ) ) && false !== strpos( Splits::errors( Splits::parts_in( plan( $store, array( array( 1, 511 ), array( 1, (int) $cln['tank'] ) ) ) ), 6, $by_id )[0], 'takes no arrivals' ) && 1 === count( Splits::errors( Splits::parts_in( '[[1,99999]]' ), 6, $by_id ) ) );
-check( 'a row without a count, a row without a tank', array( 'a part of the split has no count', 'a part of the split has no tank' ) === Splits::errors( Splits::parts_in( '[[0,' . tank_id( $store, 511 ) . '],[2,0]]' ), 6, $by_id ) );
+check( 'a further row without a count, a row without a tank', array( 'a part of the split has no count', 'a part of the split has no tank' ) === Splits::errors( Splits::parts_in( '[[1,' . tank_id( $store, 513 ) . '],[0,' . tank_id( $store, 511 ) . '],[2,0]]' ), 6, $by_id ) );
+check( 'the first tank needs no count: it keeps what is not placed elsewhere', array() === Splits::errors( Splits::parts_in( '[[0,' . tank_id( $store, 511 ) . '],[2,' . tank_id( $store, 513 ) . ']]' ), 6, $by_id ) && array( 'a part of the split has no tank' ) === Splits::errors( Splits::parts_in( '[[3,0],[2,' . tank_id( $store, 513 ) . ']]' ), 6, $by_id ) );
 
 echo "4. \"1 per tank\"\n";
 $store = fh_store();
@@ -421,6 +422,19 @@ $store->update_line_fields( (int) $early['line_ids'][0], array() ); // (No-op: t
 $store->lines[ (int) $early['line_ids'][0] ]['qty_received'] = 2; // Two came, typed elsewhere after the plan was made.
 $in = check_in( $store, (int) $early['order_id'] );
 check( 'a plan for more fish than came: one moves on, the part that would empty the first tank is skipped and said', 1 === count( $in['created'] ) && array( 522 ) === array_column( $in['created'][0]['splits'], 'tank' ) && 1 === $store->stay( $in['created'][0]['stay_id'], $today, $settings )['qty_live'] && 1 === count( $in['errors'] ) && false !== strpos( $in['errors'][0], 'not enough left' ), json_encode( $in ) );
+
+// The first tank's count left empty: "the rest".
+delete_option( Splits::OPTION );
+$store = fh_store();
+$rest  = save( $store, array( row( 'Copper Test Butterfly', array( 'species_id' => '1', 'qty_received' => '6', 'qty_doa' => '1', 'split' => (string) json_encode( array( array( 0, tank_id( $store, 521 ) ), array( 2, tank_id( $store, 522 ) ) ) ) ) ) ) );
+$in    = check_in( $store, (int) $rest['order_id'] );
+check( 'the first tank\'s count left empty: 2 go to 522, the other 3 alive stay in 521', empty( $rest['error'] ) && 1 === count( $in['created'] ) && 521 === $in['created'][0]['tank'] && array( 522 ) === array_column( $in['created'][0]['splits'], 'tank' ) && 3 === $store->stay( $in['created'][0]['stay_id'], $today, $settings )['qty_live'] && 2 === $store->stay( $in['created'][0]['splits'][0]['stay_id'], $today, $settings )['qty_live'] && array() === $in['errors'], json_encode( array( $rest['error'] ?? '', $in ) ) );
+check( '… and that is no "one per tank"', array( 'ones' => false, 'on' => $today ) === Splits::remembered( array( 'species_id' => 1, 'species' => 'Copper Test Butterfly' ) ) );
+delete_option( Splits::OPTION );
+$store = fh_store();
+$ones  = save( $store, array( row( 'Copper Test Butterfly', array( 'species_id' => '1', 'qty_received' => '3', 'split' => (string) json_encode( array( array( 0, tank_id( $store, 521 ) ), array( 1, tank_id( $store, 522 ) ), array( 1, tank_id( $store, 523 ) ) ) ) ) ) ) );
+check_in( $store, (int) $ones['order_id'] );
+check( 'three fish, the rest in the first tank and one each in two more: that IS one per tank, and remembered so', array( 'ones' => true, 'on' => $today ) === Splits::remembered( array( 'species_id' => 1, 'species' => 'Copper Test Butterfly' ) ) );
 
 echo "14. What is stored is bounded and sanitised\n";
 delete_option( Splits::OPTION );

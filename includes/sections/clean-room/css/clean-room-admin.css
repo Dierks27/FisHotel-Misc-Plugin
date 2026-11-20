@@ -1496,6 +1496,7 @@ a.fh-cr-unknown {
 .fh-cr-order .fh-cr-grid thead th {
 	font-size: 12px;
 	vertical-align: bottom;
+	white-space: normal; /* "Landed per fish" takes two lines rather than cutting itself off. */
 }
 
 /* The fish cell holds the suggestion list and its notes: nothing of it is cut off. */

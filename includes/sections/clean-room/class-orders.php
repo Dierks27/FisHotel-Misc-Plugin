@@ -724,8 +724,14 @@ class Orders {
 				$result['errors'] = array_merge( $result['errors'], $split['errors'] );
 			}
 			if ( 'order' === $source ) {
-				// What this fish did this time is what its next line offers.
-				Splits::remember( $line, (bool) $split['made'], Splits::is_ones( $parts ) && count( $split['made'] ) === count( $parts ) - 1, $today );
+				// What this fish did this time is what its next line offers: split, and whether that
+				// came out as one fish in every tank (the first tank's count may have been "the rest").
+				$ones = false;
+				if ( $split['made'] && count( $split['made'] ) === count( $parts ) - 1 && array( 1 ) === array_values( array_unique( array_map( 'intval', array_column( $split['made'], 'qty' ) ) ) ) ) {
+					$left = $store->stay( $stay_id, $today, $settings );
+					$ones = $left && 1 === (int) $left['qty_live'];
+				}
+				Splits::remember( $line, (bool) $split['made'], $ones, $today );
 			}
 
 			$result['created'][] = array(

@@ -856,7 +856,8 @@ anthias and damsels they almost always stay as a group."
 
 In Entry the Tank cell has a small **Split** button. It opens, under the
 line, rows of **"how many → which tank"**: the first row is the line's
-first tank, every further row a part that goes on to a tank of its own.
+first tank (its count may be left empty — it keeps "the rest"), every
+further row a part that goes on to a tank of its own.
 Only tanks that take arrivals are offered — Spa tanks and quarantine
 temporary tanks —, the empty ones first, and a tank cannot be picked
 twice for one line. **1 per tank** lays the line's live fish (received −

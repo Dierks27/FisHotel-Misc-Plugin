@@ -56,9 +56,27 @@ if ( ! function_exists( 'esc_textarea' ) ) {
 		return htmlspecialchars( (string) $text, ENT_QUOTES, 'UTF-8' );
 	}
 }
-foreach ( array( 'selected', 'checked', 'disabled' ) as $fh_helper ) {
-	if ( ! function_exists( $fh_helper ) ) {
-		eval( 'function ' . $fh_helper . '( $a, $b = true, $echo = true ) { $out = (string) $a === (string) $b ? \' ' . $fh_helper . '="' . $fh_helper . '"\' : \'\'; if ( $echo ) { echo $out; } return $out; }' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- three identical test stubs.
+/** selected() / checked() / disabled(): the attribute when the two values are the same. */
+function fh_form_attribute( $name, $a, $b, $echo ) {
+	$out = (string) $a === (string) $b ? ' ' . $name . '="' . $name . '"' : '';
+	if ( $echo ) {
+		echo $out; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- a fixed attribute.
+	}
+	return $out;
+}
+if ( ! function_exists( 'selected' ) ) {
+	function selected( $a, $b = true, $echo = true ) {
+		return fh_form_attribute( 'selected', $a, $b, $echo );
+	}
+}
+if ( ! function_exists( 'checked' ) ) {
+	function checked( $a, $b = true, $echo = true ) {
+		return fh_form_attribute( 'checked', $a, $b, $echo );
+	}
+}
+if ( ! function_exists( 'disabled' ) ) {
+	function disabled( $a, $b = true, $echo = true ) {
+		return fh_form_attribute( 'disabled', $a, $b, $echo );
 	}
 }
 if ( ! function_exists( 'wp_nonce_field' ) ) {

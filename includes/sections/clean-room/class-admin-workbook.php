@@ -634,6 +634,7 @@ class Admin_Workbook {
 					'hasFish'        => __( 'has fish', 'fishotel-misc-plugin' ),
 					'goneTank'       => __( '(no longer a tank for arrivals)', 'fishotel-misc-plugin' ),
 					'firstTank'      => __( 'first tank', 'fishotel-misc-plugin' ),
+					'theRest'        => __( 'rest', 'fishotel-misc-plugin' ),
 					'removePart'     => __( 'Take this tank out of the split', 'fishotel-misc-plugin' ),
 					'addTank'        => __( '+ tank', 'fishotel-misc-plugin' ),
 					'ones'           => __( '1 per tank', 'fishotel-misc-plugin' ),

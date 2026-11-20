@@ -7,7 +7,8 @@
  *
  * THE PLAN. In the order page's Entry view the Tank cell has a Split
  * button: rows of "how many → which tank". The first row is the line's
- * first tank; every further row is a part that goes on to a tank of its
+ * first tank (its count may be left empty: it keeps what is not placed
+ * elsewhere); every further row is a part that goes on to a tank of its
  * own. A tank must take arrivals (a Spa tank or a quarantine temporary
  * tank — Temp_Tanks::takes_arrivals()), a tank cannot be picked twice on
  * one line, and the parts may not add up to more than the line's live
@@ -192,9 +193,10 @@ class Splits {
 	}
 
 	/**
-	 * What is wrong with a plan (pure): a row without a count or without a
-	 * tank, a tank that takes no arrivals, a tank picked twice, more fish
-	 * placed than are alive.
+	 * What is wrong with a plan (pure): a row without a tank, a further row
+	 * without a count (the first tank needs none — it keeps what is not
+	 * placed elsewhere), a tank that takes no arrivals, a tank picked twice,
+	 * more fish placed than are alive.
 	 *
 	 * @param array[]  $parts The parts (parts_in()).
 	 * @param int|null $live  The line's live fish (received − DOA); null while nothing is received.
@@ -205,10 +207,11 @@ class Splits {
 		$s      = self::strings();
 		$errors = array();
 		$seen   = array();
-		foreach ( $parts as $part ) {
+		foreach ( array_values( $parts ) as $index => $part ) {
 			$qty  = (int) ( $part['qty'] ?? 0 );
 			$tank = (int) ( $part['tank_id'] ?? 0 );
-			if ( $qty < 1 ) {
+			// The first tank needs no count: what is not placed elsewhere stays there.
+			if ( $qty < 1 && $index > 0 ) {
 				$errors['qty'] = $s['noQty'];
 			}
 			if ( $tank < 1 ) {
