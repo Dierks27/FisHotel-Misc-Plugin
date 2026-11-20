@@ -777,6 +777,241 @@ supplier) — on request, never on its own. The box rates and the pick
 lists start empty; nothing is seeded in code — the workbook import fills
 them from the Data sheet.
 
+## Import lines
+
+"Line by line is better than nothing but it would be REALLY nice if we
+could import." An order is 150 fish. **Import lines…** under the lines
+of an order — a new one or a saved one — takes rows instead of typing
+them: pasted (copied out of a spreadsheet, or comma-separated text, with
+or without a header row) or a file (CSV, TSV, XLSX, XLSM). *New order
+from pasted lines / a file* on the Arrivals list is the same page with
+the panel already open.
+
+Nothing is saved before **confirm**. An import never removes a line,
+never changes a line that already became a stay, and never checks
+anything in.
+
+### Two moments
+
+"I have to fill out a spreadsheet for my order. So I will simply upload
+that. But the problem is I only get like 70% of my order." Two big
+buttons; the one that fits the order's status is on.
+
+- **This is what I ORDERED** — the owner's own order sheet, the day it
+  is sent. That sheet is usually the supplier's *whole price list* with
+  an ORDER column filled in: 300 to 1,200 rows, 20 to 80 of them
+  ordered, a few title and address rows above the header. So the header
+  row is *found* (the first row within the first 30 with two or more
+  recognised headings), a column headed "order" is the ordered quantity
+  and "stock" is **never** taken for one, and **only the rows with an
+  order quantity above 0 become lines** — the preview says "61 of 1,188
+  rows have an order quantity". Every row becomes a line with its
+  ordered count, **received left empty** (not 0), the per-box count and
+  the price when the sheet has them, and the supplier's code; a draft
+  order becomes *ordered*. A row that names a fish and size already on
+  the order (or the same code) is a **duplicate**: skipped unless set to
+  *add anyway*. The tick *These fish have arrived — use the quantity as
+  received too* is for an order that was never entered before it landed.
+- **This is what ARRIVED** — the supplier's invoice or packing list when
+  the boxes land. Every row is **paired with a line already on the
+  order**: as the owner says (a pairing made by hand wins), else by the
+  supplier's **code** when the row and a line both carry one, else by
+  fish — the same name, the same species-list fish, or what the line was
+  written as — and then by size when both have one. The preview is a
+  reconciliation in four groups:
+  - **Came as ordered**;
+  - **Came short / over** — "ordered 12 · arrived 8";
+  - **Did not come** — ordered lines no row matched: received becomes
+    **0** and the line **stays**, so the fill rate and the supplier's
+    record are true. A line that already holds a received count (an
+    earlier box of the same delivery) is left as it is unless the owner
+    says it did not come;
+  - **Extra / substituted** — rows no ordered line matched: a new line
+    with ordered 0, or *this came instead of …* an ordered line, which
+    then stays at 0 received; both carry a note.
+
+  The foot says it the way the owner does: "Ordered 150 · arrived 104 ·
+  69% filled · 11 kinds did not come". Confirm **writes received** on
+  the paired lines, and the price, the DOA count, the box number and the
+  percent of a box when the file has them **and the line's own field is
+  still empty** — a typed price is never overwritten without the tick
+  *use the file's price* — and appends the extras. A row whose line is
+  already checked in is set aside and said so. The same fish in two
+  boxes is two rows: added up on the one ordered line (the boxes noted),
+  or kept as separate lines at the owner's choice.
+
+*Stats* read ordered and received as they always did, so the fill rate
+of an order imported this way — its did-not-come lines at 0 included —
+comes out right by year and by supplier.
+
+### Columns, found by their headings
+
+A column is recognised by the **text** of its heading, never by its
+position: fish / species / name / common name / english name /
+description / item · scientific name / latin name · size · ordered /
+order · qty / quantity · received / shipped / filled · price / cost /
+unit price / each · total / amount · DOA / dead · per box / qty/box ·
+bags · box · percent of a box · tank · what the label said · code ·
+origin / section · stock (ignored) · check. The labels of the workbook's
+own "Recieved (N)" sheet are read from `class-import-map.php`, which
+already knows them, so rows copied straight out of that sheet map too.
+
+With no header row, or a header nobody recognises, the preview shows
+the first rows with a dropdown above each column — pre-guessed: the
+wordy column is the fish, the first whole-number column the quantity, a
+decimal column the price — and **nothing can be imported until a fish
+column and one quantity column are chosen**.
+
+Numbers: currency signs, thousands separators ("1,234.50") and a
+trailing "ea" are tolerated; **a decimal comma is not assumed** — "6,50"
+is flagged on its cell and left empty; a cell that looks like a formula
+("=…", "+…", "@…") is text, never a number. Left out, counted and
+listed: blank rows, a repeated header row, totals lines, section
+headings ("FISH", "INVERTS", "BOX NO 3 — …") and fee lines.
+
+**Sizes are inside the names** — "(L) (10-14 CM)", "M (6-9,5 cm)",
+"- S", "S/M", "LG/XL", or a size column of its own. A size is lifted out
+into the line's Size **only when it is one of the standard sizes**
+(*Sizes*); otherwise the name stays exactly as typed. "Mated Pair",
+"male", "female", "NEW", "RARE" and "(INV)" are no sizes and are never
+dropped from the name.
+
+### The preview
+
+One row per line: the fish as typed, the match — the same matching the
+phone's Arrival search and the voice parser use (learned aliases, the
+species list, the products, the scientific name, typos within two
+letters) — shown as *matched: …* with a dropdown of the best candidates,
+*use as typed (unlisted fish)* and *Unknown fish (??)*. **A weak or
+ambiguous match is flagged and never chosen**: the line is the text as
+typed until the owner picks. Numbers that would not parse are flagged on
+their cell; a row whose "check" column says "?" is flagged; rows can be
+unticked (*not a fish — always leave rows like this out* teaches the
+layout). Total lines and total fish at the foot.
+
+What is kept of a row:
+
+- **The supplier's code** — in the line's notes, `[code XA0020]`. There
+  is no column for it: the notes already travel with the line, show
+  under it on the order page and go into the exports; the invoice
+  carries the same code, which is how a row finds its ordered line.
+- **The name as written** — `[as written: …]` in the notes whenever the
+  line reads differently (a matched fish, a lifted size).
+- **What the label said** (`label_name`, *Unknown and mislabeled fish*)
+  — only when it says something about a mislabel: the file's own
+  "label" column names another fish than the line, or — for fish that
+  arrived — the text IS a fish the lists know and the owner said the
+  fish is another one. A name the lists do not know that the owner
+  matched by hand is an alias, not a mislabel: it is **learned** (the
+  phone's aliases) and next time it matches by itself.
+
+### Saved layouts
+
+"Is there a way to save it once it is mapped so I don't have to map it
+every time. Also will it be able to tell that it was imported from a
+different company so a different set of mapping rules can apply?" Yes to
+both. Whenever the columns were set or corrected by hand, a box ticked
+by default — *Remember this layout for <the order's supplier>* — saves a
+**layout** on confirm: the supplier (and the origin when the order has
+one), the moment (a supplier usually has one for the order sheet and
+one for the invoice), the row the header stands on, each column's role
+keyed by its heading's text (by position, with the column count, for a
+sheet without headings), the sheet's name for a workbook file, and the
+rows the owner said to leave out every time.
+
+The next paste or upload is recognised by itself, in this order:
+
+1. a layout of the order's supplier for this moment whose headings fit
+   the file → applied: "Using the layout saved for Example Aquatics ·
+   Change the columns";
+2. else a layout of **another** supplier that fits the file's headings
+   clearly better than any of this supplier's → never applied silently:
+   "This looks like Example Aquatics's sheet. Use that layout?" (on a
+   new order with no supplier yet, it offers to set the supplier too);
+3. else the header finder above; else the dropdowns.
+
+A layout that fits only partly — the sheet gained or lost a column — is
+applied to the columns that still fit, says which did not, and offers to
+update the saved layout. Two suppliers whose sheets have the same
+headings each keep their own; a file without headings can only be
+recognised through the order's supplier. *Settings → Saved import
+layouts* lists them (supplier · ordered / arrived · the columns in words
+· last used) with **Forget**. Nothing is seeded. They live in one option
+(`fishotel_cleanroom_import_layouts`, not autoloaded): at most 40
+layouts of at most 40 columns, sanitised on the way in and out.
+
+### Have an assistant read the invoice
+
+An invoice is a PDF, often a scan with handwriting and an air waybill in
+front — the site cannot read it. The panel beside the box has **Copy the
+instructions**: a short, plain text the owner pastes into a chat
+assistant together with the invoice. It asks for one tab-separated
+block, one row per fish kind per box, with exactly this header:
+
+`fish, scientific name, size, ordered, received, price, DOA, box, percent, label, code, origin, check`
+
+— the name as the invoice writes it, blank when unknown, no totals,
+nothing invented, a "?" in the last column on every row it is not sure
+about (a hand-written amount, a cell that collided with its neighbour),
+the box number and the origin repeated on every row of a box, waybill
+pages skipped — and, after an empty line, a second small part for
+everything that is not a fish:
+
+`fee, amount, origin`
+
+with the invoice's own "Livestock subtotal" and "Invoice total" rows.
+
+**Fee lines are never fish lines.** For the sections chosen, the arrived
+preview shows "Fees on this invoice: tariffs … · everything else …" with
+one tick, *put these on the order*: an **empty** Tariffs or Import &
+re-ox fees field takes the invoice's amount; a field that already holds
+a typed amount keeps it unless the second tick says to replace it;
+nothing is ever added to what is there. The domestic flight is the
+airline's and stays typed by hand. When the block gives the invoice's
+subtotal, the preview checks it: "The rows add up to … — the invoice
+says …".
+
+**One order per origin.** An invoice may hold boxes from different
+origins; the block's `origin` column says which, and the arrived preview
+asks *which sections of this invoice belong to this order* (all by
+default) — the others are left out and counted, fees included.
+
+### For the day there is no file
+
+**Received: all as ordered** fills every *empty* received field with its
+ordered count — then the owner corrects the few that differ and saves.
+In the received column, Enter and Tab move to the next line's received
+(Shift for the one above).
+
+### How it is built
+
+- `class-order-import.php` (pure): the reader, the column finder, the
+  numbers, the sizes, the matcher, the rows left out, the
+  reconciliation, the fees, the instruction text.
+- `class-import-layouts.php`: the saved layouts.
+- `class-admin-order-import.php`: one AJAX action
+  (`fishotel_cleanroom_order_import`), the order page's nonce and
+  `manage_woocommerce`. An uploaded **file** asks for what the workbook
+  import asks for (`manage_options`) and goes through the same upload
+  handling (`Admin_Import::move_upload()`: the private folder, the type
+  and size checks, the workbook reader with its limits); it is read once
+  and deleted before the reply is sent. Pasted rows work for everyone
+  who can edit orders.
+- Nothing is kept on the server between preview and confirm: the reply
+  carries the cleaned grid (at most 6,000 rows of 40 cells of 200
+  characters; 2 MB of text) and the page posts it back with what was
+  chosen. Every request carries the order form as it stands on the
+  page, so a **confirm is the page's own Save** (`save_order()`) with the
+  rows appended — an imported line takes exactly the path a typed line
+  takes: the costing, the box shares, the sizes, the "??" rule. A preview
+  made against an order that changed meanwhile, here or elsewhere, is
+  refused and drawn again.
+- The order form's lines travel as **one JSON field** (`lines_json`):
+  an order of 150 fish is some 2,500 form fields, more than PHP reads by
+  default (`max_input_vars`), and a Save that lost its last lines would
+  delete them. An order holds at most 400 lines; an import that would
+  not fit is refused whole.
+
 ## Sale dates
 
 "They should be ready to sell the day I mark them ready to sell." A
