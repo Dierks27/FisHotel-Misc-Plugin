@@ -715,14 +715,14 @@ What the workbook's "Recieved (N)" sheet held: one **order** per
 delivery (ref `YYYY-N`, supplier, origin, order and received dates,
 status draft → ordered → received → closed, the Spa building it lands in,
 the cost mode and the money: tariffs, domestic flight, import & re-ox
-fees, credit, the markup for the suggested price and the "worth it"
+fees, credit, the markup for the target price and the "worth it"
 margin threshold) with its **lines** (species — picked from the species
 list and the products, or typed, or ticked **??** for a fish nobody
 knows yet —, its **size**, ordered, received, per box or bags, the
 **box** it came out of and the **percent of a box** it took, the
-supplier's price, what it is worth at FisHotel's price, DOA,
-survived, the Spa tank). The costing replicates the sheet exactly
-(`class-costing.php`, pure):
+supplier's price, DOA, survived, the Spa tank — and what the fish sells
+for, which is no longer typed: see *The shop price is read*). The
+costing replicates the sheet exactly (`class-costing.php`, pure):
 
 - **box mode** — fraction = the line's percent of a box ÷ 100 when one
   is typed (see *Percent of a box*), else received ÷ per box (the
@@ -735,10 +735,14 @@ survived, the Spa tank). The costing replicates the sheet exactly
 - **bag mode** — units = bags when typed, else received; per bag =
   (flight + import + tariffs) ÷ Σ units; landed = units × price + units ×
   per bag;
-- per line: landed per fish = landed ÷ received; suggested price = per
-  fish × markup (4) to the nearest 5; profit = received × worth − landed;
-  margin = profit ÷ landed; worth it when the margin is above the
-  threshold (2.75); revenue = worth × survived; DOA cost = DOA × price;
+- per line: landed per fish = landed ÷ received; the target price = per
+  fish × markup (4) to the nearest 5 — the column the sheet heads
+  "400%"; profit = received × worth − landed; margin = profit ÷ landed;
+  worth it when the margin is above the threshold (2.75) — said plainly
+  on the page: **"Worth it when the shop price is more than 3.75× what
+  the fish cost landed"** (1 + the order's own threshold; the rule and
+  its 2.75 are the sheet's, only the wording is new); revenue = worth ×
+  survived; DOA cost = DOA × price;
 - per order: total = Σ landed; grand total = total − credit; revenue; up /
   down = revenue − grand total; fill = Σ received ÷ Σ ordered; survival =
   Σ survived ÷ (Σ received − Σ DOA), undefined until a survivor count is
@@ -749,6 +753,162 @@ survived, the Spa tank). The costing replicates the sheet exactly
 - every division is guarded (an undefined ratio shows "—"); full float
   precision inside, rounding only on display and when a figure is
   stored.
+
+### The order page: Entry and Numbers
+
+"You have a million things to fill in for the fish… the table is
+massive, I have to scroll to the right a bunch and I am on a 4k
+monitor." — "Anything I don't fill out I don't need here. Numbers are
+just the things you calculate and things I want to know from the
+business side. The entry is the working side. The day I am slammed I
+need an easy way to get these entered into the system and where they
+went."
+
+The order's lines are ONE table with **two views**, switched by two big
+tabs above it:
+
+- **Entry** — only what is typed: # · Fish · Sci name · Size · Ordered ·
+  Received · Cost (the supplier's price) · DOA · Box # · % of box · Tank
+  (bag mode: Bags in place of Box # and % of box). The number boxes are
+  as narrow as their numbers and the table has fixed widths, the fish
+  taking what is left: a whole row fits a 1280-px window without
+  sideways scrolling, and a 1024-px one too (the scientific name then
+  moves behind *More columns*). **More columns** — a small switch in
+  Entry's head — adds what is rarely typed: fish per box, the survivors
+  of an order that was never checked in, and the supplier's **code**
+  (kept in the line's notes as `[code …]`, where an import writes it;
+  the field edits it there). **Received: all as ordered** sits in
+  Entry's head too. **Enter goes down a column** in every number box and
+  never saves by accident; **Tab goes down** the receiving columns —
+  Received, then DOA, Box #, % of box (or Bags) — while Tab in Ordered
+  goes on to Cost and from Cost to the next line's fish. No key ever
+  lands in a column that is not shown.
+- **Numbers** — the fish and what the site works out, nothing to type:
+  shop price · landed per fish (the line's landed total and its part of
+  a box under it) · the target price, headed as the sheet heads it
+  ("400%" = the order's markup × 100) · profit · margin · Worth it? ·
+  revenue · survived · live · sold. At its head a **panel of boxes**:
+  grand total, up or down, revenue, fill rate, survival, DOA and its
+  cost, credit — and, under it, how many lines have no shop price yet
+  and the worth-it rule in words. The order's full list of figures
+  ("This order") sits under the lines in Numbers.
+
+**Which view opens**: Entry while the order is a draft, ordered or being
+received (fish still to check in); Numbers once it is closed or every
+line that received fish is a stay. A switch is **remembered per user**,
+separately for orders being worked on and for finished ones, with the
+*More columns* switch (user meta `fishotel_cleanroom_order_view`; the
+order's `view` op writes it and nothing else). *Import lines* sends the
+page back with `view=entry`, so the lines it wrote land in Entry
+whatever is remembered.
+
+**Nothing is lost by hiding.** Both views are the same rows of the same
+form: a cell says which view it belongs to (`fh-cr-c-entry`,
+`fh-cr-c-more`, `fh-cr-c-numbers`) and the stylesheet hides the others
+with `display: none` — which no browser reads when it posts a form. A
+Save from either view posts every field of both, exactly as before;
+`tests/order-view-test.php` renders the page in each view, posts what a
+browser would, and compares every stored line.
+
+### The shop price is read
+
+"I don't know what it's worth when I am importing the fish… I have the
+cost." So "Worth $" is no longer typed. What a line's fish sells for is
+**read** (`class-shop-price.php`), in this order:
+
+1. the line's **product** — the one its species-list row is linked to,
+   else the ONE fish product named exactly like the line: its current
+   price. A product with variations answers with the variation of the
+   line's **size** when exactly one price fits it, else with its lowest
+   price;
+2. else the **species list's** own price;
+3. else nothing.
+
+It is the same number *Stats → Prices to raise* shows
+(`Stats_Prices::fish_price()`, the product's active price read straight
+from the product tables), read again **every time the order is
+resolved** — the page, the Arrivals list, the Stats and the exports all
+see today's price — and never stored. Numbers shows it with where it
+came from in its tooltip. The **pencil** beside it types a price of the
+owner's own for that line ("I sometimes plan a new price"): that is the
+line's `worth` column, which now holds *only* such an override — it wins
+over the shop's price until the field is emptied again, and the tooltip
+then says both. A typed 0 is a price too.
+
+A line with **no shop price** — no product, no list price, nothing typed
+— says **"no shop price yet"** in its shop price, profit, margin and
+Worth it? cells: never "No", never −100%. It is not a fish that sells
+for nothing, so it is left out of the order's revenue and of "up or
+down" (which then compares the revenue with what the *priced* lines
+cost), and the panel says how many lines that is. An order whose lines
+all carry a typed worth — as the workbook's orders do wherever the sheet
+had a FisHotel price — is costed **to the cent as before**:
+`tests/shop-price-test.php` holds it to the worked example of
+`tests/costing-test.php`. A line that never had one (an old order's
+blank cell) now reads the shop's price like any other, so its estimate
+is no longer "sold for nothing".
+
+### Split
+
+"Maybe there could be a button to click that is a split button. For
+things like butterflyfish and angels I always have to split. But for
+anthias and damsels they almost always stay as a group."
+
+In Entry the Tank cell has a small **Split** button. It opens, under the
+line, rows of **"how many → which tank"**: the first row is the line's
+first tank, every further row a part that goes on to a tank of its own.
+Only tanks that take arrivals are offered — Spa tanks and quarantine
+temporary tanks —, the empty ones first, and a tank cannot be picked
+twice for one line. **1 per tank** lays the line's live fish (received −
+DOA) out one to a tank over the next empty Spa tanks of the order's
+building, skipping the tanks other lines of the page already use; when
+the empty tanks run out it says so. A running **"6 of 6 placed"** stands
+beside it: the parts may not add up to more than the live fish, and what
+is not placed stays in the first tank. **Keep together** takes the split
+away.
+
+The plan is the owner's *intent* until the check-in. It travels in the
+line's hidden `split` field (`[[count, tank id], …]`), is checked on
+Save — a plan that cannot work refuses the save and names the line, like
+a mistyped percent does — and is kept by line id in one option
+(`fishotel_cleanroom_splits`; no table), forgotten the moment the line
+is checked in or removed. A Save never moves a fish.
+
+**Check in received fish** then checks a split line in **through the
+same events a person would make by hand**: the arrival of the received
+count into the first tank on the received date, the DOA loss, then one
+`Store::split_stay()` per further part — the Front Desk's own Move of a
+smaller quantity, which creates the sister stay with its backdated
+arrival and its move. Nothing new is written, so the replay, Undo (each
+split is three events, undone like any move) and the Stats need nothing
+new; a second click still creates nothing. A part whose tank no longer
+takes arrivals, or that would take the last fish out of the first tank,
+is skipped and said — those fish stay where they are. A line that
+**already is a stay** cannot be split from the order page: a plan posted
+for it (a page loaded before the check-in) is refused plainly — "that
+line is already checked in: split the group from its tank instead (Move,
+with a smaller count)" — and the rest of the save goes on.
+
+**A split group is still one order line.** Its live, survived, sold and
+DOA figures add up over the line's own stay and its sister stays
+(`Orders::with_sisters()`, `Store::line_figures()`): the fish that left
+the first tank in a split are not lost, they are the sister's arrival —
+so the line arrived what its own stay arrived, and a loss or a sale in
+any of its tanks counts on the line. (Before 0.46.7 a line read its own
+stay only, so a group split by hand on the phone stopped counting the
+half that moved away.)
+
+**The site remembers per fish** whether its last order line was split at
+its check-in, and whether that was one per tank — under its species-list
+row and under its name, in the same option; nothing is seeded, and a
+fish checked in together again is forgotten. The next time that fish is
+on an order its line **offers the split, opened**: for a fish that went
+one per tank, "1 per tank" is laid out as soon as the received count is
+there; for one that was split some other way the rows are left to the
+owner. It is an offer the owner sees under the line and removes with
+*Keep together* (which that line then remembers); it is only ever laid
+out in the Entry view, never written into a field nobody is looking at,
+and a fish that still has to be identified is never remembered.
 
 **Goes on sale** — a card at the top of a saved order: the day every
 group checked in from this order goes on sale (see *Sale dates*).
@@ -762,13 +922,15 @@ the order's building, else any empty Spa tank, else the first Spa tank
 of the building, else the first Spa tank; `source = order`, the line id,
 its size, its "needs identifying" flag, the supplier, the ref and the
 landed cost per fish filled; then a `loss`
-of the DOA count noted `doa`. A line with a stay is skipped, so a second
-click creates nothing; the order becomes *received*. From then on the
-line's figures are **live**: survived = arrived − every loss (any
-reason), sold = the shipped events, DOA = the losses noted `doa` (undos
-honoured) — shown read-only on the line, which also cannot be removed
-and keeps its figures on re-save. Lines without stays (imported history,
-or fish not checked in) keep the typed survived / DOA numbers.
+of the DOA count noted `doa`; then, for a line with a split planned, one
+move of a smaller quantity per further tank (see *Split*). A line with a
+stay is skipped, so a second click creates nothing; the order becomes
+*received*. From then on the line's figures are **live**: survived =
+arrived − every loss (any reason), sold = the shipped events, DOA = the
+losses noted `doa` (undos honoured), over every tank of the line — shown
+read-only on the line, which also cannot be removed and keeps its
+figures on re-save. Lines without stays (imported history, or fish not
+checked in) keep the typed survived / DOA numbers.
 
 The **Suggest** button next to the import & re-ox fees fills boxes ×
 (per box + re-ox) from Settings → *Box rates* for the order's supplier
@@ -978,10 +1140,11 @@ default) — the others are left out and counted, fees included.
 
 ### For the day there is no file
 
-**Received: all as ordered** fills every *empty* received field with its
-ordered count — then the owner corrects the few that differ and saves.
-In the received column, Enter and Tab move to the next line's received
-(Shift for the one above).
+**Received: all as ordered** — in the head of the order's Entry view —
+fills every *empty* received field with its ordered count; then the
+owner corrects the few that differ and saves. Enter and Tab go down the
+received column (Shift for the line above), and Tab goes on from its
+last line to the top of DOA — see *The order page: Entry and Numbers*.
 
 ### How it is built
 
@@ -1326,8 +1489,12 @@ no `view` is *By year*, the tab as it always was).
 
 **Estimates and actuals.** Everything the first four views call revenue,
 "up or down", profit or margin is an ESTIMATE, as it was in the
-spreadsheet: survivors × the FisHotel price typed on the supplier order
-line (`worth`), less the landed cost. Only *Real sales* shows what
+spreadsheet: survivors × what the fish sells for — the price typed on the
+supplier order line (`worth`) when there is one, else the shop price as
+it is read today (see *The shop price is read*) —, less the landed cost.
+A line with no price at all adds no revenue; the order page leaves such
+a line out of its own "up or down", while the groupings here still count
+what it cost. Only *Real sales* shows what
 customers actually paid. Every view says which is which in a line at
 its top, and the estimate columns are headed "Est.".
 
@@ -1592,7 +1759,11 @@ by species*, *Not matched* — one row per kind, the kind under `group` —,
 *Sums*; without a search the revenue of the first two sections adds up
 to every paid line). An empty cell is "no figure": never
 a 0 for a fish without a price, a profit without a landed cost or an
-estimate without a survivor count. Columns added since are appended last,
+estimate without a survivor count — and, on the orders' Lines sheet,
+`worth` is what the fish sells for as the costing took it (the typed
+price, else the shop's as read at the export), with `profit`, `margin`
+and `worth_it` empty for a line without one; the orders' `up_down` and
+`ratio` are the page's, which leave such lines out. Columns added since are appended last,
 so a sheet built on the older positions keeps reading them: `size` and
 `needs_id` on the stays; `size`, `box_no`, `box_pct`, `needs_id` and
 `label_name` on the orders' Lines sheet; `received_lines`, `mislabeled`,
@@ -1776,7 +1947,11 @@ check-in fills them (see *Supplier orders*): one stay per order line
 through `Store::create_stay()` + an `arrival` event
 (`Store::record_event()`), exactly as the Front Desk does — the Replay,
 the facts and the board need nothing new, and the workbook import creates
-its orders, species and stays through the same Store methods.
+its orders, species and stays through the same Store methods. A line
+with a split planned goes on into its other tanks through
+`Store::split_stay()`, the Front Desk's own move of a smaller quantity:
+each sister stay carries the same order line, and the line counts them
+all.
 
 ## Data
 
@@ -1808,7 +1983,11 @@ about the permanent buildings, tanks, stays, events and logs changes.
 - `{prefix}fh_order_lines` — its lines: order_id, species_id, species, sci_name, needs_id (1.5), label_name (1.5: what the label called a corrected fish — the "??" name of one that arrived unknown —, NULL = never corrected), size_slug + size_label (1.4), qty_ordered, qty_received, per_box, box_no + box_pct (1.4), bags, unit_price, worth, qty_doa, qty_survived, landed_total (a cache of the costing), stay_id, tank_id, share_key (1.4: the remembered share the line counts in), sort, notes (the "part of this line" notes of a split group live here)
 - `{prefix}fh_box_shares` (1.4) — the remembered shares: share_key (unique: location + fish + size), location_key (supplier + origin), supplier, origin, fish_key (`s:<species id>` or `n:<name>`), species_id, species, size_slug, size_label, pct_per_fish, order_count, last_line_id + last_date (the line and the order date the value came from), updated_at
 
-Six options: `fishotel_cleanroom_import_layouts` (what *Import lines*
+Seven options: `fishotel_cleanroom_splits` (the splits planned on order
+lines that are not checked in yet, by line id, and the fish whose last
+line was split — see *Split*; absent until a split is planned or made,
+at most 1,000 plans and 2,000 fish, sanitised on every read and write,
+not autoloaded), `fishotel_cleanroom_import_layouts` (what *Import lines*
 remembers about each supplier's sheet — see *Saved layouts*; absent until
 the owner saves one, at most 40, not autoloaded),
 `fishotel_cleanroom_sales_statuses` (the order statuses that
@@ -1824,9 +2003,13 @@ words; absent until a word is first saved — until then only Trifecta
 has one, from the code — and not autoloaded). Two per-user transients carry the
 import's pending preview (with the file's path, ten minutes) and its last
 result; one more, `fishotel_cleanroom_sales`, keeps what *Real sales*
-read from WooCommerce (see *Stats*). Real sales and Prices to raise add
-no table and no column: they only read — WooCommerce's order tables and
-the products' prices.
+read from WooCommerce (see *Stats*). One user meta,
+`fishotel_cleanroom_order_view`, remembers which view of the order page
+each person left it in. Real sales, Prices to raise and the order page's
+shop price add no table and no column: they only read — WooCommerce's
+order tables and the products' prices. An order line's `worth` column
+holds only a price typed by hand (the pencil); the shop price beside it
+is read and never stored.
 
 `Store::record_event()` appends the event and replays the stay
 (`Replay::state()`); the row is only a cache, and the reply says when the
@@ -1903,8 +2086,16 @@ clean-room/
 │                           invoice lines, the exact-name matching, "not matched", the sales beside
 │                           the landed cost (pure but for the statuses option and the cache flush)
 ├── class-species.php       PURE: a species row normalised, the merge into the candidate list
-├── class-orders.php        header / lines from a form, live figures of a line, the check-in
-│                           (takes the store as a parameter, like Front_Desk::perform())
+├── class-orders.php        header / lines from a form, live figures of a line (its sister stays
+│                           counted in), the check-in — a planned split carried out through
+│                           Store::split_stay() (takes the store as a parameter, like
+│                           Front_Desk::perform())
+├── class-shop-price.php    what an order line's fish sells for, READ: the linked product (the
+│                           variation of the line's size, else its lowest price), else the species
+│                           list, else nothing — never stored (takes the store as a parameter)
+├── class-splits.php        a line laid out over tanks: the plan and its rules, the tanks a part may
+│                           go into, "1 per tank", the option that keeps the plans and the fish that
+│                           were split last time, the check-in's split-moves
 ├── class-xlsx.php          a dependency-free .xlsx writer (inline strings, never a formula)
 ├── class-workbook.php      PURE: a dependency-free .xlsx / .xlsm reader (cached values only, the PW
 │                           sheet never opened, a zip-bomb guard)
@@ -1925,8 +2116,9 @@ clean-room/
 ├── class-admin.php         the Room Board page, CSV, labels, stay edits + move + undo + identify, Coming
 │                           Soon release, the product meta box and its sale dates (save_post_product)
 ├── class-admin-workbook.php  the Arrivals / Species / Stats tabs, their AJAX (an order's save, check-in,
-│                           "Correct the fish…"), the Boxes card, the XLSX / CSV exports, the batch's
-│                           "Goes on sale" (admin-post)
+│                           "Correct the fish…", the view a user left the page in), the order page's
+│                           figures as text, its two views and Split panel, the Boxes card, the
+│                           XLSX / CSV exports, the batch's "Goes on sale" (admin-post)
 ├── class-admin-stats.php   the Stats tab's further views (Compare years, Species, Prices to raise,
 │                           Real sales): their data, the sales cache, Refresh and the Sales statuses
 │                           form (admin-post), their export sheets
@@ -1942,6 +2134,9 @@ clean-room/
 │                           the Board and Settings)
 ├── css/clean-room-admin.css, js/clean-room-admin.js
 ├── css/order-import.css, js/order-import.js   Import lines, "Received: all as ordered"
+├── js/order-entry.js       the order page's Entry / Numbers tabs and "More columns", Enter and Tab
+│                           down a column, the Split rows, the pencil beside a shop price (its
+│                           styles are the last block of css/clean-room-admin.css)
 ├── css/medications-admin.css, js/medications-admin.js   Settings → Medications, the Board's Calculator
 ├── css/temp-tanks-admin.css, js/temp-tanks-admin.js   the Temporary area and the To do tab
 ├── views/front-desk.php, board.php, stays.php, arrivals.php, order.php, species.php, stats.php,

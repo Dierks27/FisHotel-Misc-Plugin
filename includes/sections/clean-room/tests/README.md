@@ -66,12 +66,15 @@ php  includes/sections/clean-room/tests/order-view-test.php
 php  includes/sections/clean-room/tests/order-import-test.php
 php  includes/sections/clean-room/tests/order-import-layouts-test.php
 php  includes/sections/clean-room/tests/order-import-admin-test.php
+php  includes/sections/clean-room/tests/shop-price-test.php
+php  includes/sections/clean-room/tests/splits-test.php
 node includes/sections/clean-room/tests/front-desk.test.js
 node includes/sections/clean-room/tests/clean-room-admin.test.js
 node includes/sections/clean-room/tests/dose-math.test.js
 node includes/sections/clean-room/tests/front-desk-dose.test.js
 node includes/sections/clean-room/tests/medications-admin.test.js
 node includes/sections/clean-room/tests/order-import.test.js
+node includes/sections/clean-room/tests/order-entry.test.js
 node includes/sections/clean-room/tests/temp-tanks.test.js
 ```
 
@@ -584,10 +587,52 @@ system temp directory (`FH_TEST_TMP` overrides).
   buildings (its own lines, marked, not ticked by a building's dose);
   the guards of a tick; the pool, the overlay, `spread_logs()` and
   `merge_copper()` for a slot; the list on the phone's screens.
-- **order-view-test.php** — the supplier order screen read as text: the
-  "Goes on sale" card under the order's title, its fields posting to
+- **order-view-test.php** — the supplier order screen. Read as text:
+  the "Goes on sale" card under the order's title, its fields posting to
   their own form (no form inside a form), so the order's Save never
-  carries the sale date.
+  carries the sale date. **Rendered** on the in-memory store
+  (`Admin_Workbook::render()`), in both views: Entry's columns in their
+  order, what sits behind "More columns", Numbers' columns under the
+  panel of the order's summary, the shop price cell (typed, read, "no
+  shop price yet"); **nothing is lost by hiding** — the two renders post
+  exactly the same fields with the same values (gathered as a browser
+  gathers a form: what a stylesheet hides is still a field), and a Save
+  from Entry, from Numbers, and through the one `lines_json` field
+  leaves every stored line, the order's own fields and the planned
+  split as they were, while a value typed in one view is saved from the
+  other; which view an order opens in, remembered per user, and the
+  one-load `view=entry` an import comes back with; the Split field, the
+  tanks a part may go into, the offer for a fish that was split last
+  time; bag mode; the row template; and the stylesheet — what hides,
+  and the fixed widths that leave the fish its room at 1280 and at 1024
+  px. With `--harness=<dir>` it also writes static copies of the page
+  for a real browser (see *The order page in a browser* below).
+- **shop-price-test.php** — the shop price of an order line, read
+  (`Shop_Price`): the sources in their order (the variation of the
+  line's size, the lowest price, a simple product, the species list,
+  nothing), the product found by its name alone, two products with one
+  name, an unknown fish; the typed override, a typed 0, the refresh when
+  the shop's price moves; "no shop price yet" with the panel's count,
+  the revenue and "up or down" that leave such a line out; an order of
+  typed-worth lines held, bit for bit and to the cent, to the worked
+  examples of costing-test.php (box and bag mode); the worth-it rule in
+  words from the order's own threshold, and its edge (3.75× is not yet
+  worth it, a cent above it is).
+- **splits-test.php** — a line laid out over tanks (`Splits`,
+  `Orders::check_in()`): the plan as posted, the tanks a part may go
+  into (a quarantine temporary tank yes, a clean one and a Clean Room
+  tank no; the empty ones first), what is wrong with a plan, "1 per
+  tank", what a Save keeps and refuses; the check-in **event by event**
+  (the arrival of the received count, the DOA loss, one move per further
+  tank, each sister's backdated arrival and move, the sisters' link to
+  the line, its size and landed cost); the line's live / survived / sold
+  after a loss in the first tank, a loss in a sister's tank and a sale
+  out of a third; the Front Desk's Undo of one split; the second click;
+  a split posted for a line that is already checked in, refused plainly;
+  what is remembered per fish (one per tank, some other split, kept
+  together again, an unknown fish never, an import's check-in not at
+  all); bag mode; a tank that went away between the Save and the
+  check-in; the bounds of what is stored.
 - **order-import-test.php** — Import lines, the pure half
   (`Order_Import`): the reader (pasted tabs, commas with quoted cells, a
   header row or none, a sheet's rows, the bounds); the column finder
@@ -631,10 +676,16 @@ system temp directory (`FH_TEST_TMP` overrides).
   switched off.
 - **order-import.test.js** — the page's pure helpers
   (`js/order-import.js`): "Received: all as ordered" fills the empty
-  fields only, Enter / Tab in the received column, the ordered foot as
-  the ticks stand, what the page tells the server, the order form's
-  lines packed into one field (`packLines()`), and that the page code
-  never writes HTML from data.
+  fields only, the ordered foot as the ticks stand, what the page tells
+  the server, the order form's lines packed into one field
+  (`packLines()`), and that the page code never writes HTML from data.
+- **order-entry.test.js** — the Entry view's pure helpers
+  (`js/order-entry.js`), held to the same expectations as
+  splits-test.php: a line's `split` field read and written, what is
+  wrong with a plan, "1 per tank", the running "6 of 6 placed"; and
+  where Enter and Tab go — down a receiving column and on to the next
+  one, Ordered → Cost → the next line's fish, never a column of the
+  other view, never a Save by accident.
 - **temp-board-test.php** — the Board's side and the seams: the one
   AJAX write (`Admin_Temp::request()`: 403 without the capability or
   with a stale nonce, 400 for an act that is not a temporary-tank or
@@ -899,6 +950,32 @@ system temp directory (`FH_TEST_TMP` overrides).
 - **medications-admin.test.js** — the pure parts of
   `js/medications-admin.js`: what 100 gallons take at a rate (the
   editor's hint), the rates the Board's Calculator offers, its sum.
+
+## The order page in a browser
+
+The suite has no browser, so the widths are held two ways: the
+stylesheet's numbers are added up in order-view-test.php, and a real
+browser measures the page when somebody asks it to —
+
+```
+mkdir /tmp/order-page
+php includes/sections/clean-room/tests/order-view-test.php --harness=/tmp/order-page --jquery=/path/to/jquery.min.js
+google-chrome --headless=new --allow-file-access-from-files --window-size=1280,900 \
+    --virtual-time-budget=4000 --dump-dom file:///tmp/order-page/entry.html | grep -o '<pre id="fh-result">[^<]*'
+```
+
+(`entry.html`, `numbers.html` and `bag.html`: an invented order of 15
+lines with three-digit counts and a long name, inside a frame as wide as
+wp-admin's.) `tests/order-view-measure.js` — loaded by those pages, not
+run by the suite — writes what it found as JSON: for Entry, Numbers and
+Entry with "More columns", whether the table fits its wrapper and the
+page its window, the width every shown column got, which number boxes
+or column heads cut their own text off, and whether the form posts the
+same fields with the same values in every view (`same_fields`). As
+built: at 1280 px the table has 1045 px, Entry fits with 210 px for the
+fish (274 in bag mode); at 1024 px it has 789 px and Entry fits with
+171 px; nothing is cut off; "More columns" and Numbers at 1024 scroll,
+as the stylesheet says they may.
 
 ## By hand, once, on a real site
 
@@ -1178,3 +1255,32 @@ system temp directory (`FH_TEST_TMP` overrides).
     moves down the column. As a shop manager who is not an administrator:
     pasting works, the file picker is not offered. Save an order of 150
     lines, reload: all 150 are there.
+32. Entry and Numbers. Open an order that is *ordered*: it opens in
+    **Entry** — # · Fish · Sci name · Size · Ordered · Received · Cost ·
+    DOA · Box # · % of box · Tank — and at a 1280-px window nothing
+    scrolls sideways. Type a received count and press Enter: the next
+    line's received. Tab at the last line: the top of DOA. Tick *More
+    columns*: Per box, Srv'd and Code appear; reload — still ticked.
+    Switch to **Numbers**: the panel of boxes, then shop price · landed
+    per fish · 400% · profit · margin · Worth it? · revenue · survived ·
+    live · sold, nothing to type; a fish whose product has a price shows
+    it (hover: where it was read from), one without says "no shop price
+    yet" and the panel counts it. Click a pencil, type a price, Save: it
+    shows in italics and the profit follows; empty it, Save: the shop's
+    price is back. Change the product's price in the shop and reload the
+    order: the line follows. Save from Numbers, switch to Entry: every
+    count is as it was. Open the order as another user: their own view.
+33. Split. On a line with 6 received and 1 DOA click **Split**, then
+    **1 per tank**: five rows, one fish each, over the next empty Spa
+    tanks of the order's building; "5 of 5 placed"; Save. Try 2 + 2 + 2:
+    the Save is refused with the line and the reason. **Check in
+    received fish**: the message names the tanks the line was split on
+    into; the Board shows one fish in each; the Events tab shows the
+    arrival of 6, the DOA loss and one move per further tank. Lose a
+    fish in one of those tanks on the phone: the order line's live and
+    survived drop by one. Undo a split from the phone within the window:
+    the fish is back in the first tank's group. Click *Check in* again:
+    nothing is created. Put the same fish on the next order: its line
+    opens the split by itself, one per tank once the received count is
+    typed; *Keep together* takes it away, and after a check-in kept
+    together the offer is gone.
