@@ -335,6 +335,7 @@ button.fh-fd-occ:active {
 	padding: 0 0 0 6px;
 	border: 0;
 	background: none;
+	overflow: hidden;
 	color: inherit;
 	font: inherit;
 	font-weight: 600;
@@ -344,15 +345,22 @@ button.fh-fd-occ:active {
 
 .fh-fd-status__words {
 	flex: 0 1 auto;
-	min-width: 0;
+	min-width: 3em; /* On the narrowest phone the words still start; "· 2 min ago" is what runs out of the line. */
 	overflow: hidden;
 	text-overflow: ellipsis;
 	white-space: nowrap;
 }
 
+/* "· 2 min ago" after the last thing done: kept whole, the words before it are what is cut. */
 .fh-fd-status__ago {
 	flex: 0 0 auto;
+	font-size: 0.875em;
 	white-space: pre;
+}
+
+/* The line lets nothing out of its box: a keyboard's focus ring is drawn inside it. */
+.fh-fd-status button:focus-visible {
+	outline-offset: -3px;
 }
 
 /* The seconds of a message, running out along the lower edge. */
