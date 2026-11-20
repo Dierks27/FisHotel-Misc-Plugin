@@ -739,7 +739,8 @@ Stays tab, and from then on the stay behaves exactly as any other.
   (see *What the fish page will read*). Nothing for customers changes:
   the theme does not read these facts yet.
 - The Events tab says "2 added as already here in Tank 121 (arrival date
-  unknown)" and "cleared (date unknown)"; the exports leave the dates
+  unknown)" and "cleared (date unknown)" (a split half's arrival reads as
+  any split half's: "1 arrived in Tank 121 (arrival date unknown)"); the exports leave the dates
   and the day empty, with the source `existing`.
 
 ## To do — one list for the day, by water system

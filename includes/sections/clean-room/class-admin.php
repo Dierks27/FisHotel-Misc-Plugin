@@ -1649,8 +1649,8 @@ class Admin {
 
 		switch ( $type ) {
 			case 'arrival':
-				if ( Store::SOURCE_EXISTING === (string) ( $event['source'] ?? '' ) && (int) $qty > 0 ) {
-					// Added by hand: fish that were already here.
+				if ( Store::SOURCE_EXISTING === (string) ( $event['source'] ?? '' ) && (int) $qty > 0 && 0 === Replay::split_from( array( $event ) ) ) {
+					// Added by hand: fish that were already here (a split half's arrival is not: it reads as any split's).
 					return sprintf( '%d added as already here%s%s', (int) $qty, '' !== $to ? ' in ' . $to : '', Replay::is_arrived_unknown( $event ) ? ' (arrival date unknown)' : '' );
 				}
 				return sprintf( '%d arrived%s%s%s', abs( (int) $qty ), '' !== $to ? ' in ' . $to : '', Replay::is_arrived_unknown( $event ) && (int) $qty > 0 ? ' (arrival date unknown)' : '', $undo );

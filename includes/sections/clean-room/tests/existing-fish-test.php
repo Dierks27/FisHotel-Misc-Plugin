@@ -481,6 +481,8 @@ check( 'the Stays tab: "treatment day unknown — set the arrival date" on the S
 check( 'the check-in in words, and the source', 'arrival unknown' === Admin::checkin_text( $stay_spa ) && '2025-01-02' === Admin::checkin_text( array( 'checkin_date' => '2025-01-02' ) ) && 'already here' === Admin::source_label( 'existing' ) && 'order' === Admin::source_label( 'order' ) );
 $events = $store->events( 1 );
 check( 'the Events tab: "2 added as already here in Tank 121 (arrival date unknown)" and "cleared (date unknown)"', '2 added as already here in Tank 121 (arrival date unknown)' === Admin::event_text( $events[0] ) && 'cleared (date unknown)' === Admin::event_text( $events[1] ), Admin::event_text( $events[0] ) . ' / ' . Admin::event_text( $events[1] ) );
+$half = array( 'type' => 'arrival', 'qty' => 1, 'to_tank_number' => 111, 'source' => 'existing', 'note' => Replay::NOTE_ARRIVED_UNKNOWN . ' · split from #7' );
+check( 'the Events tab: a split half of fish already here "1 arrived in Tank 111 (arrival date unknown)", never "added as already here"', '1 arrived in Tank 111 (arrival date unknown)' === Admin::event_text( $half ), Admin::event_text( $half ) );
 $row = Admin::csv_row( $stay_clean );
 $hdr = array_flip( Admin::csv_header() );
 check( 'the CSV: the dates and the day empty, the state "cleared", the source "existing"', '' === $row[ $hdr['checkin_date'] ] && '' === $row[ $hdr['cleared_date'] ] && '' === $row[ $hdr['day'] ] && 'cleared' === $row[ $hdr['state'] ] && 'existing' === $row[ $hdr['source'] ] );

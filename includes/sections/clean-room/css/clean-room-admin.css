@@ -494,6 +494,11 @@ a.fh-cr-chip--muted {
 	margin-top: 10px;
 }
 
+/* The cleared hint for the other kind of tank: .fh-cr-sub's display would show it. */
+.fh-cr-existing [hidden] {
+	display: none;
+}
+
 .fh-cr-columns {
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr));
