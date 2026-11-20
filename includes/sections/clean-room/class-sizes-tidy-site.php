@@ -52,7 +52,16 @@ class Sizes_Tidy_Site implements Sizes_Tidy_Shop {
 	 * a time. A lock older than LOCK_SECONDS is one a timeout left behind.
 	 */
 	const LOCK_OPTION  = 'fishotel_cleanroom_sizes_tidy_lock';
-	const LOCK_SECONDS = 180;
+	const LOCK_SECONDS = 120;
+
+	/**
+	 * Whether this request holds the lock, and whether it already asked
+	 * PHP to give it back should the request die.
+	 *
+	 * @var bool
+	 */
+	private $locked   = false;
+	private $guarding = false;
 
 	/**
 	 * The other places that store a size: store name → table (without
@@ -651,7 +660,7 @@ class Sizes_Tidy_Site implements Sizes_Tidy_Shop {
 		);
 		foreach ( $this->variation_ids( $product_id ) as $vid ) {
 			$record['variations'][ $vid ] = array(
-				'post' => $wpdb->get_row( $wpdb->prepare( 'SELECT post_status, post_title, post_excerpt, post_name, post_modified, post_modified_gmt FROM ' . $wpdb->posts . ' WHERE ID = %d', $vid ), ARRAY_A ),
+				'post' => $wpdb->get_row( $wpdb->prepare( 'SELECT post_status, post_title, post_excerpt, post_name, guid, post_modified, post_modified_gmt FROM ' . $wpdb->posts . ' WHERE ID = %d', $vid ), ARRAY_A ),
 				'meta' => $this->meta_rows( $vid, array(), true ),
 			);
 		}
@@ -727,6 +736,8 @@ class Sizes_Tidy_Site implements Sizes_Tidy_Shop {
 			}
 			if ( (string) $key === $taxonomy || $attribute->get_name() === $taxonomy ) {
 				if ( ! $placed ) {
+					// A copy: WooCommerce only saves attributes it sees as changed, and the product holds this very object.
+					$attribute = clone $attribute;
 					$attribute->set_options( $term_ids );
 					$next[] = $attribute;
 					$placed = true;
@@ -832,6 +843,7 @@ class Sizes_Tidy_Site implements Sizes_Tidy_Shop {
 		}
 		wc_delete_product_transients( $product_id );
 		$this->refresh_lookup( $product_id );
+		$this->synced( $product_id );
 
 		// And the rows again, should the sync have read them differently from how they were.
 		$this->meta_restore( $product_id, self::PARENT_META, false, (array) ( $record['meta'] ?? array() ) );
@@ -855,6 +867,21 @@ class Sizes_Tidy_Site implements Sizes_Tidy_Shop {
 		clean_post_cache( $product_id );
 
 		return true;
+	}
+
+	/**
+	 * A product was just synced here: take it off WooCommerce's list of
+	 * products to sync again when the request ends (a variation's save
+	 * puts its product there). That second sync would save the product
+	 * once more — after its rows were put back exactly.
+	 *
+	 * @param int $product_id Product id.
+	 */
+	private function synced( $product_id ) {
+		global $wc_deferred_product_sync;
+		if ( is_array( $wc_deferred_product_sync ) ) {
+			$wc_deferred_product_sync = array_values( array_diff( array_map( 'intval', $wc_deferred_product_sync ), array( (int) $product_id ) ) );
+		}
 	}
 
 	/**
@@ -1373,10 +1400,17 @@ class Sizes_Tidy_Site implements Sizes_Tidy_Shop {
 		global $wpdb;
 
 		$now = time();
-		if ( 1 === (int) $wpdb->query( $wpdb->prepare( 'INSERT IGNORE INTO ' . $wpdb->options . " (option_name, option_value, autoload) VALUES (%s, %s, 'no')", self::LOCK_OPTION, (string) $now ) ) ) {
-			return true;
+		$got = 1 === (int) $wpdb->query( $wpdb->prepare( 'INSERT IGNORE INTO ' . $wpdb->options . " (option_name, option_value, autoload) VALUES (%s, %s, 'no')", self::LOCK_OPTION, (string) $now ) )
+			|| 1 === (int) $wpdb->query( $wpdb->prepare( 'UPDATE ' . $wpdb->options . ' SET option_value = %s WHERE option_name = %s AND CAST(option_value AS UNSIGNED) < %d', (string) $now, self::LOCK_OPTION, $now - self::LOCK_SECONDS ) );
+		if ( $got ) {
+			$this->locked = true;
+			if ( ! $this->guarding ) {
+				// A step that dies (a timeout, a fatal error) still gives the lock back, so the next click need not wait.
+				$this->guarding = true;
+				register_shutdown_function( array( $this, 'unlock_on_exit' ) );
+			}
 		}
-		return 1 === (int) $wpdb->query( $wpdb->prepare( 'UPDATE ' . $wpdb->options . ' SET option_value = %s WHERE option_name = %s AND CAST(option_value AS UNSIGNED) < %d', (string) $now, self::LOCK_OPTION, $now - self::LOCK_SECONDS ) );
+		return $got;
 	}
 
 	/**
@@ -1384,7 +1418,22 @@ class Sizes_Tidy_Site implements Sizes_Tidy_Shop {
 	 */
 	public function unlock() {
 		global $wpdb;
+		$this->locked = false;
 		$wpdb->delete( $wpdb->options, array( 'option_name' => self::LOCK_OPTION ) );
+	}
+
+	/**
+	 * At the end of the request: give the lock back if a step died
+	 * holding it.
+	 */
+	public function unlock_on_exit() {
+		if ( $this->locked ) {
+			try {
+				$this->unlock();
+			} catch ( \Throwable $e ) {
+				unset( $e );
+			}
+		}
 	}
 
 	/**
