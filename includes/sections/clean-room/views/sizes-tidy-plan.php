@@ -99,6 +99,9 @@ $fh_item = static function ( array $change ) {
 					$fh_notes[] = sprintf( _n( 'stays for now: %d product needs a look first', 'stays for now: %d products need a look first', max( 1, (int) ( $fh_row['stuck'] ?? 0 ) ), 'fishotel-misc-plugin' ), max( 1, (int) ( $fh_row['stuck'] ?? 0 ) ) );
 				}
 			}
+			if ( Sizes_Tidy::REMOVE === $fh_row['action'] && ! empty( $fh_row['stores']['invoice_lines'] ) ) {
+				$fh_notes[] = __( 'a draft invoice that lists it keeps the size but can no longer read its shop price — set the price on the invoice by hand', 'fishotel-misc-plugin' );
+			}
 			$fh_also = array();
 			foreach ( $fh_row['stores'] as $fh_store => $fh_count ) {
 				$fh_also[] = Admin_Sizes_Tidy::store_text( $fh_store, $fh_count );

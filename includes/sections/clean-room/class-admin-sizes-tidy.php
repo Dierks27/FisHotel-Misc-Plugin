@@ -349,6 +349,14 @@ class Admin_Sizes_Tidy {
 				/* translators: 1: done, 2: total */
 				return sprintf( __( 'Putting things back — %1$d of %2$d.', 'fishotel-misc-plugin' ), $done, $total );
 			case 'done':
+				$kept = 0;
+				foreach ( (array) ( $progress['skipped'] ?? array() ) as $skipped ) {
+					$kept += 'term_delete' === (string) ( $skipped['kind'] ?? '' ) ? 1 : 0;
+				}
+				if ( $kept > 0 ) {
+					/* translators: %d: count */
+					return sprintf( _n( 'Done. The sizes are tidied — %d old size turned out to be in use after all and was left in the list. Show what would change again to see it.', 'Done. The sizes are tidied — %d old sizes turned out to be in use after all and were left in the list. Show what would change again to see them.', $kept, 'fishotel-misc-plugin' ), $kept );
+				}
 				return __( 'Done. The sizes are tidied.', 'fishotel-misc-plugin' );
 			case 'undone':
 				return __( 'Done. Everything that tidy-up changed is back as it was.', 'fishotel-misc-plugin' );

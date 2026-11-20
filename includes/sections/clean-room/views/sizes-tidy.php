@@ -26,6 +26,12 @@ use FisHotel\Misc\Sections\Clean_Room\Admin_Sizes_Tidy;
 	<?php if ( '' === $taxonomy ) : ?>
 		<p class="fh-cr-muted"><?php esc_html_e( 'The shop has no product attribute with "size" in its name, so there is nothing to tidy.', 'fishotel-misc-plugin' ); ?></p>
 	<?php else : ?>
+		<p class="fh-cr-sub">
+			<?php
+			/* translators: %s: the attribute's taxonomy */
+			echo esc_html( sprintf( __( 'It works on the product attribute in use above (%s) — on every product that uses it, fish or not — and on sizes typed on a fish product. Other attributes are never touched.', 'fishotel-misc-plugin' ), $taxonomy ) );
+			?>
+		</p>
 		<form class="fh-tidy__form" method="post" action="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>" onsubmit="return false;">
 			<h3 class="fh-cr-h3"><?php esc_html_e( '1. The sizes the shop should have', 'fishotel-misc-plugin' ); ?></h3>
 			<p class="fh-cr-sub"><?php esc_html_e( 'One size per line, in the order they should be offered. Inch sizes first, then words — or however you like. A size that does not exist yet is created.', 'fishotel-misc-plugin' ); ?></p>

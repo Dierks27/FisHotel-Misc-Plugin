@@ -232,6 +232,9 @@ Admin_Sizes_Tidy::render( fh_tidy_store(), Settings::get() );
 $card = ob_get_clean();
 check( 'the card: the short list as it was saved, the buttons, the status', false !== strpos( $card, 'id="fh-sizes-tidy"' ) && false !== strpos( $card, 'name="short"' ) && false !== strpos( $card, "1-2&quot;\n2-3&quot;" ) && false !== strpos( $card, 'Show what would change' ) && false !== strpos( $card, 'Undo the last tidy-up' ) );
 
+check_same( 'a run that left a size in the list says so', 'Done. The sizes are tidied — 1 old size turned out to be in use after all and was left in the list. Show what would change again to see it.', Admin_Sizes_Tidy::progress_text( array( 'status' => 'done', 'done' => 3, 'total' => 3, 'skipped' => array( array( 'kind' => 'term_delete', 'id' => 0, 'key' => 'tiny', 'note' => 'used' ), array( 'kind' => 'product', 'id' => 9, 'key' => '', 'note' => 'gone' ) ) ) ) );
+check( 'the card names the attribute it works on', false !== strpos( $card, '(pa_size)' ) );
+
 echo "5. The \"Sizes to fill in\" list, and a past order's size\n";
 $tick = fh_tidy_click( array( 'op' => 'dismiss', 'product' => $ids['Opal Jawfish'] ) );
 check( 'a fish ticked off leaves the list', true === $tick->success && false === strpos( (string) $tick->data['status'], 'Opal Jawfish' ) && false !== strpos( (string) $tick->data['status'], 'Flame Hawk' ) );
