@@ -90,6 +90,13 @@ check( 'the first steps record every product as it is — still nothing written'
 check_same( 'four products recorded in a batch of four', 4, count( array_filter( $shop->items, static function ( $item ) { return 'product' === $item['kind'] && Sizes_Tidy_Run::RECORDED === $item['state']; } ) ) );
 $step = Sizes_Tidy_Run::step( $shop, $start['run'], 50 );
 check( 'the step that records the last product writes nothing either: the record is complete and saved first', 'applying' === $step['status'] && 0 === $shop->writes && $before === $shop->dump() );
+$recorded = array();
+foreach ( $shop->items as $item ) {
+	if ( 'product' === $item['kind'] ) {
+		$recorded[ $item['object_id'] ] = array( count( $item['before']['variations'] ), $item['before']['changing'] );
+	}
+}
+check_same( 'a product\'s record holds all its variations, and names the ones the run changes', array( array( 2, array( $shop->vids( $ids['Banded Goby'] )[1] ) ), array( 2, array( $shop->vids( $ids['Flame Hawk'] )[0] ) ) ), array( $recorded[ $ids['Banded Goby'] ], $recorded[ $ids['Flame Hawk'] ] ) );
 check( 'every item has its "before" by now', array() === array_filter( $shop->items, static function ( $item ) { return null === $item['before']; } ) );
 check( 'progress counts up', $first['done'] < $step['done'] && $step['done'] < $step['total'] );
 $again = Sizes_Tidy_Run::start( $shop, $plan, 'owner' );
@@ -195,6 +202,24 @@ foreach ( array( 'terms', 'products', 'tables', 'options' ) as $part ) {
 check( 'the record of an undone run is gone, with its items', array() === $shop->items );
 check_same( 'the pickers offer the long list again', 31, count( fh_tidy_picker( $shop ) ) );
 check_same( 'nothing left to undo', array( false, 'none' ), array( Sizes_Tidy_Run::undo( $shop )['ok'], Sizes_Tidy_Run::undo( $shop )['why'] ) );
+
+// Between a run and its Undo the owner reprices a variation the run did not touch: Undo leaves it alone.
+$shop  = fh_tidy_shop();
+$ids   = fh_tidy_ids( $shop );
+$zero  = $shop->dump();
+fh_tidy_run( $shop );
+$other = $shop->vids( $ids['Banded Goby'] )[0];
+$shop->products[ $ids['Banded Goby'] ]['variations'][ $other ]['price'] = '13.50';
+fh_tidy_undo( $shop );
+check_same( 'a variation the run did not touch keeps what the owner did to it since', '13.50', $shop->products[ $ids['Banded Goby'] ]['variations'][ $other ]['price'] );
+check_same( '…its summary line, which WooCommerce rewrote when its product\'s sizes changed, is back as it was', 'pa_size: 1-2', $shop->products[ $ids['Banded Goby'] ]['variations'][ $other ]['summary'] );
+$shop->products[ $ids['Banded Goby'] ]['variations'][ $other ]['price'] = '12.00';
+check( '…and everything else is back', $zero === $shop->dump() );
+fh_tidy_run( $shop );
+$shop->products[ $ids['Banded Goby'] ]['variations'][ $other ]['attrs']['pa_size'] = '3-4';
+$shop->products[ $ids['Banded Goby'] ]['variations'][ $other ]['summary']          = 'Size: 3-4';
+fh_tidy_undo( $shop );
+check_same( 'one the owner gave another size since is left exactly as the owner left it', array( '3-4', 'Size: 3-4' ), array( $shop->products[ $ids['Banded Goby'] ]['variations'][ $other ]['attrs']['pa_size'], $shop->products[ $ids['Banded Goby'] ]['variations'][ $other ]['summary'] ) );
 
 echo "8. Keeping one of two, converting a typed size, taking the fish in stock off — and Undo of all of it\n";
 $shop  = fh_tidy_shop();

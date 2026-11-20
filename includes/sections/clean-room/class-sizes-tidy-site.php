@@ -13,7 +13,8 @@
  * its default size through set_default_attributes(), then
  * WC_Product_Variable::sync() and wc_delete_product_transients(); a
  * term through wp_insert_term() / wp_delete_term(); the custom order
- * through wc_set_term_order() and wc_update_attribute().
+ * through wc_set_term_order(). (How the attribute sorts is one column
+ * written directly: see order_set().)
  *
  * "Switched off" is WooCommerce's own: the variation's Enabled box
  * unticked (post_status private). Nothing is ever deleted but an old
@@ -517,13 +518,18 @@ class Sizes_Tidy_Site implements Sizes_Tidy_Shop {
 			}
 		}
 
-		if ( function_exists( 'wc_attribute_orderby' ) && function_exists( 'wc_update_attribute' ) && function_exists( 'wc_attribute_taxonomy_id_by_name' ) && wc_attribute_orderby( (string) $taxonomy ) !== (string) $orderby ) {
-			$id = (int) wc_attribute_taxonomy_id_by_name( (string) $taxonomy );
-			if ( $id > 0 ) {
-				wc_update_attribute( $id, array( 'order_by' => (string) $orderby ) );
-			}
+		// How the attribute sorts: its one column, written directly. WooCommerce's own
+		// wc_update_attribute() would also rewrite the summary line of every variation in the shop
+		// that uses the attribute — far more than this tool was asked to touch, and nothing Undo
+		// could put back.
+		if ( function_exists( 'wc_attribute_orderby' ) && wc_attribute_orderby( (string) $taxonomy ) !== (string) $orderby && in_array( (string) $orderby, array( 'menu_order', 'name', 'name_num', 'id' ), true ) && 0 === strpos( (string) $taxonomy, 'pa_' ) ) {
+			global $wpdb;
+			$wpdb->update( $wpdb->prefix . 'woocommerce_attribute_taxonomies', array( 'attribute_orderby' => (string) $orderby ), array( 'attribute_name' => substr( (string) $taxonomy, 3 ) ) );
 		}
 		delete_transient( 'wc_attribute_taxonomies' );
+		if ( class_exists( 'WC_Cache_Helper' ) ) {
+			\WC_Cache_Helper::invalidate_cache_group( 'woocommerce-attributes' );
+		}
 		clean_taxonomy_cache( (string) $taxonomy );
 
 		return true;
@@ -632,14 +638,15 @@ class Sizes_Tidy_Site implements Sizes_Tidy_Shop {
 	}
 
 	/**
-	 * A product and its variations as stored — everything a run may
-	 * change, row by row.
+	 * A product and its variations as stored — everything the run, or
+	 * WooCommerce in its wake, may change, row by row.
 	 *
-	 * @param string $taxonomy   Taxonomy.
-	 * @param int    $product_id Product id.
+	 * @param string $taxonomy      Taxonomy.
+	 * @param int    $product_id    Product id.
+	 * @param int[]  $variation_ids The variations the run changes.
 	 * @return array|null
 	 */
-	public function product_get( $taxonomy, $product_id ) {
+	public function product_get( $taxonomy, $product_id, array $variation_ids ) {
 		global $wpdb;
 
 		$product_id = (int) $product_id;
@@ -658,8 +665,12 @@ class Sizes_Tidy_Site implements Sizes_Tidy_Shop {
 			),
 			'variations' => array(),
 		);
+		$changing = array_map( 'intval', $variation_ids );
 		foreach ( $this->variation_ids( $product_id ) as $vid ) {
+			// Every variation is recorded: when a product's sizes change, WooCommerce rewrites the
+			// summary line of ALL its variations. Only the ones the run changes are marked.
 			$record['variations'][ $vid ] = array(
+				'changed' => in_array( $vid, $changing, true ),
 				'post' => $wpdb->get_row( $wpdb->prepare( 'SELECT post_status, post_title, post_excerpt, post_name, guid, post_modified, post_modified_gmt FROM ' . $wpdb->posts . ' WHERE ID = %d', $vid ), ARRAY_A ),
 				'meta' => $this->meta_rows( $vid, array(), true ),
 			);
@@ -800,7 +811,10 @@ class Sizes_Tidy_Site implements Sizes_Tidy_Shop {
 		}
 
 		foreach ( (array) ( $record['variations'] ?? array() ) as $vid => $was ) {
-			$vid       = (int) $vid;
+			$vid = (int) $vid;
+			if ( isset( $was['changed'] ) && ! $was['changed'] ) {
+				continue; // A variation the run did not change: only its rows, at the end.
+			}
 			$variation = wc_get_product( $vid );
 			if ( ! $variation instanceof \WC_Product_Variation ) {
 				continue;
@@ -865,6 +879,33 @@ class Sizes_Tidy_Site implements Sizes_Tidy_Shop {
 			);
 		}
 		clean_post_cache( $product_id );
+
+		// The variations' own rows, last: WooCommerce rewrites the summary line of every variation of
+		// a product whose sizes change. One the run did not change gets its row back only if its
+		// sizes are still what they were — the owner may have given it another since.
+		$pairs = static function ( array $rows ) {
+			$out = array();
+			foreach ( $rows as $row ) {
+				$out[] = (string) $row['meta_key'] . '=' . (string) $row['meta_value'];
+			}
+			sort( $out );
+			return $out;
+		};
+		foreach ( (array) ( $record['variations'] ?? array() ) as $vid => $was ) {
+			$vid = (int) $vid;
+			if ( ! is_array( $was['post'] ?? null ) || ! $wpdb->get_var( $wpdb->prepare( 'SELECT ID FROM ' . $wpdb->posts . " WHERE ID = %d AND post_type = 'product_variation'", $vid ) ) ) {
+				continue;
+			}
+			$row = $was['post'];
+			if ( isset( $was['changed'] ) && ! $was['changed'] ) {
+				if ( $pairs( $this->meta_rows( $vid, array(), true ) ) !== $pairs( (array) ( $was['meta'] ?? array() ) ) ) {
+					continue;
+				}
+				unset( $row['post_status'], $row['post_name'] );
+			}
+			$wpdb->update( $wpdb->posts, $row, array( 'ID' => $vid ) );
+			clean_post_cache( $vid );
+		}
 
 		return true;
 	}

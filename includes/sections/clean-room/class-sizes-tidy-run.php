@@ -133,13 +133,14 @@ interface Sizes_Tidy_Shop {
 
 	/**
 	 * A product and its variations as they are stored — everything
-	 * product_apply() may change.
+	 * product_apply() may change, the ones the run changes marked.
 	 *
-	 * @param string $taxonomy   Taxonomy.
-	 * @param int    $product_id Product id.
+	 * @param string $taxonomy      Taxonomy.
+	 * @param int    $product_id    Product id.
+	 * @param int[]  $variation_ids The variations the run changes.
 	 * @return array|null
 	 */
-	public function product_get( $taxonomy, $product_id );
+	public function product_get( $taxonomy, $product_id, array $variation_ids );
 
 	/**
 	 * Apply one product of a plan (Sizes_Tidy::plan()['products'][id]).
@@ -734,7 +735,7 @@ class Sizes_Tidy_Run {
 						break; // The first write waits for the next step: the record is complete and saved.
 					}
 					foreach ( $items as $item ) {
-						$before = 'product' === $item['kind'] ? $shop->product_get( $taxonomy, (int) $item['object_id'] ) : array();
+						$before = 'product' === $item['kind'] ? $shop->product_get( $taxonomy, (int) $item['object_id'], array_map( 'intval', array_keys( (array) ( $item['after']['vars'] ?? array() ) ) ) ) : array();
 						if ( null === $before ) {
 							$shop->item_update(
 								(int) $item['id'],

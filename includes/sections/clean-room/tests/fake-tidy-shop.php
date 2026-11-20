@@ -109,6 +109,7 @@ class Fake_Tidy_Shop implements Sizes_Tidy_Shop {
 				'id'           => $vid,
 				'status'       => isset( $row['status'] ) ? $row['status'] : 'publish',
 				'title'        => $title . ' - ' . $slug,
+				'summary'      => 'pa_size: ' . $slug, // As an older WooCommerce wrote it.
 				'attrs'        => isset( $row['attrs'] ) ? $row['attrs'] : array( $this->taxonomy => $slug ),
 				'price'        => (string) ( $row[0] ?? '' ),
 				'stock'        => null === $stock || $stock < 0 ? null : (int) $stock,
@@ -271,9 +272,13 @@ class Fake_Tidy_Shop implements Sizes_Tidy_Shop {
 		return true;
 	}
 
-	public function product_get( $taxonomy, $product_id ) {
+	public function product_get( $taxonomy, $product_id, array $variation_ids ) {
 		++$this->loaded;
-		return isset( $this->products[ $product_id ] ) ? $this->products[ $product_id ] : null;
+		if ( ! isset( $this->products[ $product_id ] ) ) {
+			return null;
+		}
+		// The product with every variation; the ones the run changes are named.
+		return $this->products[ $product_id ] + array( 'changing' => array_values( $variation_ids ) );
 	}
 
 	public function product_apply( $taxonomy, $product_id, array $change ) {
@@ -302,6 +307,12 @@ class Fake_Tidy_Shop implements Sizes_Tidy_Shop {
 			$this->products[ $product_id ]['variations'][ $vid ] = $variation;
 		}
 		$this->write( 'parent ' . $product_id );
+		if ( array_values( (array) $change['sizes'] ) !== $this->products[ $product_id ]['sizes'] || null !== $convert ) {
+			// As WooCommerce does when a product's attributes change: the summary line of EVERY variation is written again.
+			foreach ( $this->products[ $product_id ]['variations'] as $vid => $variation ) {
+				$this->products[ $product_id ]['variations'][ $vid ]['summary'] = 'Size: ' . implode( ', ', $variation['attrs'] );
+			}
+		}
 		$this->products[ $product_id ]['sizes'] = array_values( (array) $change['sizes'] );
 		if ( null !== $change['default'] ) {
 			$this->products[ $product_id ]['default'] = (string) $change['default'];
@@ -314,7 +325,23 @@ class Fake_Tidy_Shop implements Sizes_Tidy_Shop {
 
 	public function product_restore( $taxonomy, $product_id, array $record ) {
 		$this->write( 'restore ' . $product_id );
-		$this->products[ $product_id ] = $record;
+		$changing   = (array) ( $record['changing'] ?? array() );
+		$variations = $this->products[ $product_id ]['variations'];
+		foreach ( $record['variations'] as $vid => $variation ) {
+			if ( ! isset( $variations[ $vid ] ) ) {
+				continue;
+			}
+			if ( in_array( (int) $vid, $changing, true ) ) {
+				$variations[ $vid ] = $variation;
+			} elseif ( $variations[ $vid ]['attrs'] === $variation['attrs'] ) {
+				// One the run did not change: only what WooCommerce rewrote in its wake.
+				$variations[ $vid ]['summary'] = $variation['summary'];
+				$variations[ $vid ]['title']   = $variation['title'];
+			}
+		}
+		unset( $record['changing'] );
+		$this->products[ $product_id ]               = $record;
+		$this->products[ $product_id ]['variations'] = $variations;
 		return true;
 	}
 
