@@ -190,6 +190,14 @@ $known = $ev( 1, 'arrival', array( 'qty' => 3, 'to_tank_id' => 1, 'note' => 'alr
 $s     = Replay::state( array(), array( $known ), $today, $opt );
 check( 'a known arrival date is the arrival\'s own (dated that day): day 41', Replay::add_days( $today, -40 ) === $s['checkin_date'] && 41 === $s['day'] && false === $s['checkin_unknown'] );
 check( 'the undo of a "cleared:unknown" clear is a clear −1; of the arrival an arrival −n', array( 'clear', -1 ) === array( Replay::compensating( $clear )['type'], Replay::compensating( $clear )['qty'] ) && -3 === Replay::compensating( $arrive )['qty'] );
+$unclear = $ev( 8, 'clear', array( 'qty' => -1 ) );
+$c       = Replay::compensating( $unclear, array( 'cleared_unknown' => true, 'cleared_date' => null ) );
+check( 'the undo of an un-clear of a "cleared: unknown" stay writes "cleared:unknown" back', 'clear' === $c['type'] && null === $c['qty'] && Replay::NOTE_CLEARED_UNKNOWN === $c['note'] );
+$c = Replay::compensating( $unclear, array( 'cleared_unknown' => false, 'cleared_date' => '2025-02-03' ) );
+check( '… of a dated one, its date', 'clear' === $c['type'] && null === $c['qty'] && Replay::NOTE_CLEARED . '2025-02-03' === $c['note'] );
+check( '… of one that was not cleared: nothing to give back', null === Replay::compensating( $unclear, array( 'cleared_unknown' => false, 'cleared_date' => null ) ) );
+$s = Replay::state( array(), array( $arrive, $clear, $unclear, $ev( 9, 'clear', Replay::compensating( $unclear, array( 'cleared_unknown' => true ) ) ) ), $today, $opt );
+check( '… and the replay of that round trip: cleared, the date unknown', 'cleared' === $s['status'] && $s['cleared_unknown'] && null === $s['cleared_date'] );
 check( 'is_arrived_unknown / is_cleared_unknown read the notes, not anything else', Replay::is_arrived_unknown( $arrive ) && ! Replay::is_arrived_unknown( $known ) && ! Replay::is_arrived_unknown( $ev( 9, 'note', array( 'note' => Replay::NOTE_ARRIVED_UNKNOWN ) ) ) && Replay::is_cleared_unknown( $clear ) && ! Replay::is_cleared_unknown( $ev( 9, 'clear', array( 'qty' => -1, 'note' => Replay::NOTE_CLEARED_UNKNOWN ) ) ) );
 $e = Replay::effective( array( 'status' => 'cleared', 'checkin_date' => '', 'cleared_date' => null ), $today );
 check( 'effective(): a stored "cleared" without a date stays cleared, its dates unknown, no day', 'cleared' === $e['status'] && $e['cleared_unknown'] && $e['checkin_unknown'] && null === $e['day'] && '' === $e['sale_ready_suggested'] );
@@ -330,6 +338,25 @@ check( 'the cleared date set later: that date', empty( $r['error'] ) && Replay::
 $r = act( $store, 123, 'clear', array( 'stay_id' => $first, 'unset' => 1 ) );
 $s = stay_of( $store, $first );
 check( '"Not cleared" by hand: in QT, no cleared date of any kind', empty( $r['error'] ) && 'in_qt' === $s['status'] && null === $s['cleared_date'] && ! $s['cleared_unknown'] );
+$r = act( $store, 123, 'undo', array( 'event_ids' => $r['event_ids'] ) );
+$s = stay_of( $store, $first );
+check( 'its undo gives the cleared date back (no longer "That can no longer be undone")', empty( $r['error'] ) && 'Undone' === $r['message'] && 'cleared' === $s['status'] && Replay::add_days( $today, -5 ) === $s['cleared_date'] && ! $s['cleared_unknown'], json_encode( $r ) );
+$r = act( $store, 123, 'clear', array( 'stay_id' => $first, 'unset' => 1 ) );
+check( '… and "Not cleared" again', empty( $r['error'] ) && 'in_qt' === stay_of( $store, $first )['status'] );
+
+// "Cleared: unknown" unset by mistake: Undo gives Unknown back, never a made-up date.
+$lone  = fh_existing_store();
+$added = act( $lone, 121, 'existing', array( 'species' => 'Test Goby', 'qty' => 1 ) );
+$lid   = (int) $added['stay_id'];
+$r     = act( $lone, 121, 'clear', array( 'stay_id' => $lid, 'unset' => 1 ) );
+check( 'a Clean Room fish cleared on an unknown date, "Not cleared" tapped: in QT', empty( $r['error'] ) && 'in_qt' === stay_of( $lone, $lid )['status'] );
+$r = act( $lone, 121, 'undo', array( 'event_ids' => $r['event_ids'] ) );
+$s = stay_of( $lone, $lid );
+check( '… its undo: cleared again, the date still unknown (empty in the row)', empty( $r['error'] ) && 'Undone' === $r['message'] && 'cleared' === $s['status'] && $s['cleared_unknown'] && null === $s['cleared_date'] && null === $lone->stays[ $lid ]['cleared_date'] && 'cleared' === $lone->stays[ $lid ]['status'], json_encode( $r ) );
+$last = $lone->events( $lid );
+$last = end( $last );
+check( '… written as a "cleared:unknown" clear, not a guessed date', 'clear' === $last['type'] && Replay::NOTE_CLEARED_UNKNOWN === $last['note'] );
+unset( $lone, $added, $lid, $last );
 $r = act( $store, 123, 'ready', array( 'stay_id' => $first, 'date' => $today ) );
 $s = stay_of( $store, $first );
 check( 'a sale date works without a check-in: for sale today', empty( $r['error'] ) && $today === $s['sale_ready_date'] && $s['sale_ready'] );
@@ -418,6 +445,16 @@ check( 'two groups, 8 fish added (the split and the undone one not counted twice
 check( 'alive 5 (2 + 3, the split half included), shipped 2, lost 1', 5 === $x['live'] && 2 === $x['sold'] && 1 === $x['lost'], json_encode( $x ) );
 check( 'of the groups in tanks: two have no arrival date (the original and its split half), one cleared on an unknown date … twice', 2 === $x['no_arrival'] && 2 === $x['cleared_unknown'] && 3 === $x['open'], json_encode( $x ) );
 check( 'left out of the batch figures, and it says so: 2 groups, 8 fish', 2 === $x['left_out_groups'] && 8 === $x['left_out_fish'] );
+foreach ( $store->stays as $sid => $row ) {
+	if ( Store::SOURCE_EXISTING === (string) $row['source'] ) {
+		// Edit can change the notes: the split half's say something else, a whole group's look like a split.
+		$store->stays[ $sid ]['notes'] = 0 === strpos( (string) $row['notes'], 'split from #' ) ? 'moved to the sump side' : 'split from #1 (typed by hand)';
+	}
+}
+$y = Stats::existing_stock( $store->existing_stays( $today, $settings ) );
+check( 'the notes edited: still two groups, 8 fish added — the split is read from its first arrival', 2 === $y['groups'] && 8 === $y['added'] && $x['live'] === $y['live'], json_encode( $y ) );
+$sp = array( 'id' => 5, 'type' => 'arrival', 'qty' => 1, 'event_at' => '2026-01-01 12:00:00' );
+check( 'split_from(): "split from #7", "arrived:unknown · split from #7"; an ordinary arrival 0; only the first arrival counts', 7 === Replay::split_from( array( array_merge( $sp, array( 'note' => 'split from #7' ) ) ) ) && 7 === Replay::split_from( array( array_merge( $sp, array( 'note' => Replay::NOTE_ARRIVED_UNKNOWN . ' · split from #7' ) ) ) ) && 0 === Replay::split_from( array( array_merge( $sp, array( 'note' => Replay::NOTE_ARRIVED_UNKNOWN . ' · already here' ) ) ) ) && 0 === Replay::split_from( array( array_merge( $sp, array( 'note' => 'already here' ) ), array_merge( $sp, array( 'id' => 6, 'event_at' => '2026-01-02 12:00:00', 'note' => 'split from #7' ) ) ) ) && 0 === Replay::split_from( array() ) );
 check( 'nothing at all: zeros', 0 === Stats::existing_stock( array() )['groups'] && 0 === Stats::existing_stock( array() )['live'] );
 $stats = Stats::build( array() );
 check( 'the yearly figures are built from the supplier orders alone — no order, nothing to count there', 0 === (int) ( $stats['totals']['received'] ?? 0 ) );

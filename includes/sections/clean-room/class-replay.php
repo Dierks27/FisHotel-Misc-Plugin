@@ -630,6 +630,25 @@ class Replay {
 	}
 
 	/**
+	 * The group a stay was split off (pure): its first arrival is noted
+	 * "split from #<id>" (after "arrived:unknown · " when nobody knows the
+	 * check-in) — Store::split_events() writes it and nothing edits it,
+	 * unlike the stay's notes. 0 for a group that came in on its own.
+	 *
+	 * @param array[] $events The stay's events (any order).
+	 * @return int
+	 */
+	public static function split_from( array $events ) {
+		foreach ( self::sort_events( $events ) as $event ) {
+			if ( 'arrival' !== (string) ( $event['type'] ?? '' ) ) {
+				continue;
+			}
+			return preg_match( '/^(?:' . preg_quote( self::NOTE_ARRIVED_UNKNOWN, '/' ) . ' · )?split from #(\d+)$/u', (string) ( $event['note'] ?? '' ), $m ) ? (int) $m[1] : 0;
+		}
+		return 0;
+	}
+
+	/**
 	 * Whether a clear says the stay is cleared on an unknown date.
 	 *
 	 * @param array $event Event.
@@ -725,7 +744,8 @@ class Replay {
 	 *
 	 * @param array $event        The event to undo (type, qty, from_tank_id, to_tank_id, note).
 	 * @param array $state_before The state just before that event (for a count's previous
-	 *                            qty_live and a sale-date note's previous own date).
+	 *                            qty_live, a sale-date note's previous own date and an
+	 *                            un-clear's previous cleared date or cleared_unknown).
 	 * @return array|null type, qty, from_tank_id, to_tank_id, note.
 	 */
 	public static function compensating( array $event, array $state_before = array() ) {
@@ -771,7 +791,23 @@ class Replay {
 
 			case 'clear':
 				if ( null !== $qty && $qty < 0 ) {
-					return null; // Un-clearing an un-clear would need the old date; not offered.
+					// The undo of an un-clear writes back what the stay held
+					// just before: cleared on an unknown date, or on its date.
+					// Nothing to give back when it was not cleared.
+					if ( ! empty( $state_before['cleared_unknown'] ) ) {
+						$back = self::NOTE_CLEARED_UNKNOWN;
+					} elseif ( self::is_date( (string) ( $state_before['cleared_date'] ?? '' ) ) ) {
+						$back = self::NOTE_CLEARED . $state_before['cleared_date'];
+					} else {
+						return null;
+					}
+					return array(
+						'type'         => 'clear',
+						'qty'          => null,
+						'from_tank_id' => null,
+						'to_tank_id'   => null,
+						'note'         => $back,
+					);
 				}
 				return array(
 					'type'         => 'clear',

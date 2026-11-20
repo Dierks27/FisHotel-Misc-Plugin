@@ -1423,8 +1423,9 @@ class Store {
 	/**
 	 * Every stay of fish that were already here, added by hand (source
 	 * 'existing'), open and closed, newest first — with its live figures
-	 * from its events (figures: Orders::figures_from_events()). What
-	 * Stats::existing_stock() counts.
+	 * from its events (figures: Orders::figures_from_events()) and the
+	 * group it was split off (split_from: Replay::split_from(), 0 for
+	 * none). What Stats::existing_stock() counts.
 	 *
 	 * @param string $today    Site date.
 	 * @param array  $settings Settings.
@@ -1451,9 +1452,11 @@ class Store {
 		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
 			$out[] = self::hydrate_stay( $row, $today, $settings );
 		}
-		$figures = $out ? $this->stay_figures( array_column( $out, 'id' ) ) : array();
+		$events = $out ? $this->events_by_stay( array_column( $out, 'id' ) ) : array();
 		foreach ( $out as $i => $stay ) {
-			$out[ $i ]['figures'] = $figures[ (int) $stay['id'] ] ?? null;
+			$own                     = $events[ (int) $stay['id'] ] ?? array();
+			$out[ $i ]['figures']    = Orders::figures_from_events( $own );
+			$out[ $i ]['split_from'] = Replay::split_from( $own );
 		}
 
 		return $out;
@@ -4583,6 +4586,23 @@ class Store {
 	 * @return array<int, array>
 	 */
 	public function stay_figures( array $stay_ids ) {
+		$out = array();
+		foreach ( $this->events_by_stay( $stay_ids ) as $id => $events ) {
+			$out[ $id ] = Orders::figures_from_events( $events );
+		}
+
+		return $out;
+	}
+
+	/**
+	 * The events of several stays in one query (only what the figures and
+	 * Replay::split_from() read), stay id → events; every id asked for is
+	 * a key, an unknown one with no events.
+	 *
+	 * @param int[] $stay_ids Stay ids.
+	 * @return array<int, array[]>
+	 */
+	private function events_by_stay( array $stay_ids ) {
 		$stay_ids = array_values( array_unique( array_filter( array_map( 'intval', $stay_ids ) ) ) );
 		if ( ! self::tables_exist() || ! $stay_ids ) {
 			return array();
@@ -4604,12 +4624,7 @@ class Store {
 			$by_stay[ (int) $row['stay_id'] ][] = self::hydrate_event( $row );
 		}
 
-		$out = array();
-		foreach ( $by_stay as $id => $events ) {
-			$out[ $id ] = Orders::figures_from_events( $events );
-		}
-
-		return $out;
+		return $by_stay;
 	}
 
 	/**

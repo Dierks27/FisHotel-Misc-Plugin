@@ -712,7 +712,13 @@ Stays tab, and from then on the stay behaves exactly as any other.
   source `existing`); a group cleared on an unknown date that goes to a
   hospital tank and back is never "cleared today"; one whose clearing is
   unset by hand is cleared by its next move out of the Spa as any group
-  is; the undo of a `checkin:` note takes it back to unknown.
+  is; the undo of a `checkin:` note takes it back to unknown. The undo of
+  "Not cleared" writes back what the group held just before — its
+  cleared date, or `cleared:unknown` — so a tap by mistake never forces a
+  made-up date (`Replay::compensating()`). On the phone's Dates sheet an
+  empty cleared box on a group cleared on an unknown date asks for the
+  date instead of unsetting it; the *Not cleared* chip is the deliberate
+  way.
 - **Sale dates** need no check-in: a group's own date or its batch's
   works as always; there is simply no "suggested" date.
 - **The To do list.** A Spa group with an unknown check-in has no
@@ -722,8 +728,9 @@ Stays tab, and from then on the stay behaves exactly as any other.
   arrival date" on the phone and the Stays tab.
 - **Stats** (*By year*) count these fish in a card of their own — *Fish
   already here (added by hand)*: the groups and fish added, what is
-  alive now, shipped and lost (a split half counted once, an addition
-  that was undone not at all), how many groups in tanks have no arrival
+  alive now, shipped and lost (a split half counted once — known by its
+  first arrival, "split from #…", never by the notes Edit can change —
+  an addition that was undone not at all), how many groups in tanks have no arrival
   or no cleared date — and say how many were **left out** of everything
   that needs a date or a batch: the yearly figures, survival per batch,
   landed cost and days in QT (`Stats::existing_stock()`). They belong to

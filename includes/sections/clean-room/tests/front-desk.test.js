@@ -179,6 +179,11 @@ ef = helpers.existingFields( { species: '?? goby', unknown: true, productId: 0, 
 check( 'answered: the dates, the names trimmed, the unknown fish and the size', '2025-05-01' === ef.arrived && '2025-05-20' === ef.cleared && 'Test Supplier' === ef.supplier && 'Testland' === ef.origin && 1 === ef.unknown && '1-2' === ef.size, JSON.stringify( ef ) );
 ef = helpers.existingFields( { species: 'x', arrived: 'last spring', cleared: '20/05/2025' }, 122, true );
 check( 'something that is not a date is Unknown, never sent as a date', 'unknown' === ef.arrived && 'unknown' === ef.cleared );
+check( 'Dates, cleared on an unknown date, the box left empty: no unset — ask for the date', null === helpers.clearedSaveFields( { stayId: 7, clearedUnknown: true }, '', 121 ) );
+var cs = helpers.clearedSaveFields( { stayId: 7, clearedUnknown: true }, '2025-03-04', 121 );
+check( '… a date typed: that date', 'clear' === cs.act && '2025-03-04' === cs.date && 7 === cs.stay_id && 121 === cs.tank && ! ( 'unset' in cs ), JSON.stringify( cs ) );
+cs = helpers.clearedSaveFields( { stayId: 7, clearedDate: '2025-03-04', clearedUnknown: false }, '', 121 );
+check( '… a dated group, the box emptied: unset, as before', 1 === cs.unset && ! ( 'date' in cs ), JSON.stringify( cs ) );
 
 console.log( '' );
 console.log( failures ? failures + ' of ' + checks + ' checks FAILED' : 'All ' + checks + ' checks passed' );

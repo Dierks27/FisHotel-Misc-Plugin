@@ -1021,7 +1021,8 @@ class Stats {
 	 * cleared date.
 	 *
 	 * A group split off another one counts once: its fish were added with
-	 * the group they came from.
+	 * the group they came from (split_from, read from its first arrival —
+	 * never from its notes, which Edit can change).
 	 *
 	 * @param array[] $stays Store::existing_stays() (hydrated, each with its figures).
 	 * @return array{groups: int, open: int, added: int, live: int, sold: int, lost: int,
@@ -1042,7 +1043,7 @@ class Stats {
 		);
 		foreach ( $stays as $stay ) {
 			$figures = is_array( $stay['figures'] ?? null ) ? $stay['figures'] : array();
-			$split   = 0 === strpos( (string) ( $stay['notes'] ?? '' ), 'split from #' );
+			$split   = ! empty( $stay['split_from'] ); // From its first arrival, not its notes (Edit can change those).
 			$arrived = (int) ( $figures['arrived'] ?? $stay['qty_arrived'] ?? 0 );
 			if ( $arrived <= 0 && 'closed' === (string) ( $stay['status'] ?? '' ) ) {
 				continue; // Added and taken back (Undo): nothing was ever here.

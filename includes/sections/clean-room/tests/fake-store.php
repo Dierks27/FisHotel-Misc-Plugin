@@ -622,8 +622,10 @@ class Fake_Store {
 				continue;
 			}
 			$stay            = Store::hydrate_stay( $this->joined_row( $row ), $today, $settings );
-			$stay['figures'] = Orders::figures_from_events( $this->events( (int) $row['id'] ) );
-			$out[]           = $stay;
+			$events             = $this->events( (int) $row['id'] );
+			$stay['figures']    = Orders::figures_from_events( $events );
+			$stay['split_from'] = Replay::split_from( $events );
+			$out[]              = $stay;
 		}
 		return $out;
 	}

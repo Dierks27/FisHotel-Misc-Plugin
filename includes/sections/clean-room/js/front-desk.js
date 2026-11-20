@@ -440,6 +440,25 @@
 	}
 
 	/**
+	 * What the Dates sheet's cleared Save posts (pure): the date typed; an
+	 * empty box unsets the date — except on a group cleared on an unknown
+	 * date, where an empty box is no answer (null: ask for the date). The
+	 * "Not cleared" chip stays the one deliberate way to unset that.
+	 *
+	 * @param {Object} o    Occupant (stayId, clearedUnknown).
+	 * @param {string} date The box ('' when empty).
+	 * @param {number} tank The page's tank number.
+	 * @return {Object|null}
+	 */
+	function clearedSaveFields(o, date, tank) {
+		o = o || {};
+		if (!date) {
+			return o.clearedUnknown ? null : { act: 'clear', tank: tank, stay_id: o.stayId, unset: 1, via: 'qr' };
+		}
+		return { act: 'clear', tank: tank, stay_id: o.stayId, date: date, via: 'qr' };
+	}
+
+	/**
 	 * What the "Add fish already here" sheet's Save posts (pure). Each of
 	 * the three questions is Unknown unless it was answered: arrived and
 	 * cleared are a date or 'unknown' — in quarantine "not cleared yet"
@@ -822,6 +841,7 @@
 		saleSummary: saleSummary,
 		datesText: datesText,
 		existingFields: existingFields,
+		clearedSaveFields: clearedSaveFields,
 		sizeText: sizeText,
 		unknownName: unknownName,
 		doseStart: doseStart,
@@ -2066,11 +2086,12 @@
 			el('div', { class: 'fh-fd-row' }, [
 				el('input', { id: 'fh-fd-cdate', class: 'fh-fd-input', type: 'date', value: f.cleared, max: state.screen.today, on: { change: function (e) { f.cleared = e.target.value; } } }),
 				button(t('save', 'Save'), 'fh-fd-btn--ok', function () {
-					if (!f.cleared) {
-						act({ act: 'clear', tank: tk.number, stay_id: o.stayId, unset: 1, via: 'qr' });
-					} else {
-						act({ act: 'clear', tank: tk.number, stay_id: o.stayId, date: f.cleared, via: 'qr' });
+					var fields = clearedSaveFields(o, f.cleared, tk.number);
+					if (!fields) {
+						toast(t('date', 'Date') + '?', null, true);
+						return;
 					}
+					act(fields);
 				})
 			]),
 			o.clearedUnknown ? el('p', { class: 'fh-fd-muted', text: t('clearedUnknown', 'cleared: unknown') }) : null,
