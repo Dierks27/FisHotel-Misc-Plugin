@@ -19,7 +19,11 @@
  *   Identify), clear (the cleared date by hand), checkin (the check-in
  *   date by hand), ready (the stay's own sale date; empty = back to the
  *   batch's), count (a full
- *   recount), note (on a stay, or on the tank), copper (a reading on the
+ *   recount), existing ("Add fish already here": fish that were in the
+ *   room before it was on the site go straight into THIS tank — any tank
+ *   that holds fish — with what is known of their arrival, their clearing
+ *   and where they came from, each of them Unknown when it is not known;
+ *   source 'existing'), note (on a stay, or on the tank), copper (a reading on the
  *   tank), dose (a medication on the whole system or on the tank — the
  *   one write without an undo; with the sheet's sum it carries the working
  *   as its note and, for the copper product, logs the "Now" reading too —
@@ -383,6 +387,24 @@ class Front_Desk {
 			'identify'    => __( 'Identify', 'fishotel-misc-plugin' ),
 			'correctFish' => __( 'Correct the fish', 'fishotel-misc-plugin' ),
 			'identifyHint' => __( 'Pick the real fish and its size: the tank row, its supplier order line and the remembered box share follow.', 'fishotel-misc-plugin' ),
+			'existingAdd'    => __( 'Add fish already here', 'fishotel-misc-plugin' ),
+			'existingShort'  => __( 'Already here', 'fishotel-misc-plugin' ),
+			/* translators: %d: tank number */
+			'existingSub'    => __( 'Fish that are already in Tank %d — straight in, no Spa step. Anything not known stays Unknown.', 'fishotel-misc-plugin' ),
+			'arrivedOn'      => __( 'Arrived on', 'fishotel-misc-plugin' ),
+			'clearedOnQ'     => __( 'Cleared on', 'fishotel-misc-plugin' ),
+			'cameFrom'       => __( 'Where it came from', 'fishotel-misc-plugin' ),
+			'supplier'       => __( 'Supplier', 'fishotel-misc-plugin' ),
+			'origin'         => __( 'Origin', 'fishotel-misc-plugin' ),
+			'unknownChoice'  => __( 'Unknown', 'fishotel-misc-plugin' ),
+			'aDate'          => __( 'A date', 'fishotel-misc-plugin' ),
+			'notClearedYet'  => __( 'Not cleared yet', 'fishotel-misc-plugin' ),
+			'cleanCounts'    => __( 'A fish in a clean tank counts as cleared.', 'fishotel-misc-plugin' ),
+			'arrivedUnknown' => __( 'arrived: unknown', 'fishotel-misc-plugin' ),
+			'clearedUnknown' => __( 'cleared: unknown', 'fishotel-misc-plugin' ),
+			'dayUnknown'     => __( 'day ?', 'fishotel-misc-plugin' ),
+			'treatUnknown'   => __( 'treatment day unknown — set the arrival date', 'fishotel-misc-plugin' ),
+			'alreadyHere'    => __( 'added as already here', 'fishotel-misc-plugin' ),
 		);
 	}
 
@@ -531,6 +553,10 @@ class Front_Desk {
 			'spaTanks'    => array(),
 			'recent'      => array(),
 			'sizes'       => array(),
+			'picks'       => array(
+				'suppliers' => array(),
+				'origins'   => array(),
+			),
 			'medications' => self::medications( $medications ),
 			'todoList'    => null,
 			'temp'        => null,
@@ -564,6 +590,7 @@ class Front_Desk {
 		$data['spaTanks'] = self::spa_tanks( $tanks );
 		$data['recent']   = $store->recent_species( 10 );
 		$data['sizes']    = Sizes::standard( $store, $settings )['sizes'];
+		$data['picks']    = self::picks( $store );
 		$data['todoList'] = is_array( $room['todo'] ) ? self::todo_screen( $room['todo'] ) : null;
 		$data['temp']     = self::temp_sheet( $tanks, $protocols, $today );
 
@@ -630,6 +657,25 @@ class Front_Desk {
 		);
 
 		return $data;
+	}
+
+	/**
+	 * The choices the "Add fish already here" sheet offers for where the
+	 * fish came from: the suppliers and the origins the supplier orders
+	 * already name (at most 12 of each; anything else is typed).
+	 *
+	 * @param object $store Store or stand-in.
+	 * @return array{suppliers: string[], origins: string[]}
+	 */
+	public static function picks( $store ) {
+		$lists = method_exists( $store, 'order_pick_lists' ) ? (array) $store->order_pick_lists() : array();
+		$clip  = static function ( $list ) {
+			return array_slice( array_values( array_filter( array_map( 'strval', (array) $list ), 'strlen' ) ), 0, 12 );
+		};
+		return array(
+			'suppliers' => $clip( $lists['suppliers'] ?? array() ),
+			'origins'   => $clip( $lists['origins'] ?? array() ),
+		);
 	}
 
 	/**
@@ -825,7 +871,10 @@ class Front_Desk {
 			'status'          => (string) $stay['status'],
 			'stateLabel'      => (string) $stay['state_label'],
 			'checkinDate'     => (string) $stay['checkin_date'],
+			'checkinUnknown'  => ! empty( $stay['checkin_unknown'] ),
 			'clearedDate'     => $stay['cleared_date'],
+			'clearedUnknown'  => ! empty( $stay['cleared_unknown'] ),
+			'existing'        => Store::SOURCE_EXISTING === (string) ( $stay['source'] ?? '' ),
 			'saleReadyDate'   => Replay::is_date( $stay['sale_ready_date'] ?? null ) ? (string) $stay['sale_ready_date'] : '',
 			'saleReadyManual' => $stay['sale_ready_override'] ?? null,
 			'saleSource'      => (string) ( $stay['sale_date_source'] ?? '' ),
@@ -1039,6 +1088,11 @@ class Front_Desk {
 			wp_send_json_error( array( 'message' => __( 'The Clean Room tables are missing — deactivate and reactivate the plugin.', 'fishotel-misc-plugin' ) ), 500 );
 		}
 
+		if ( 'existing' === $act && ! Store::schema_current() ) {
+			// An unknown check-in needs the 1.7 tables; the upgrade runs on the next page load.
+			wp_send_json_error( array( 'message' => __( 'The Clean Room tables are being upgraded — reload the page and try again.', 'fishotel-misc-plugin' ) ), 503 );
+		}
+
 		$store    = new Store();
 		$settings = Settings::get();
 		$today    = Clean_Room::today();
@@ -1107,6 +1161,9 @@ class Front_Desk {
 			switch ( (string) $act ) {
 				case 'arrival':
 					$result = self::act_arrival( $ctx, $raw );
+					break;
+				case 'existing':
+					$result = self::act_existing( $ctx, $raw );
 					break;
 				case 'identify':
 					$result = self::act_identify( $ctx, $raw );
@@ -1214,39 +1271,18 @@ class Front_Desk {
 			return array( 'error' => __( 'Arrivals go into a Spa tank. Pick one.', 'fishotel-misc-plugin' ) );
 		}
 
-		$species    = self::text( $raw, 'species', 120 );
-		$product_id = max( 0, self::int( $raw, 'product_id' ) );
-		$qty        = self::int( $raw, 'qty', 1 );
+		$fish = self::posted_fish( $ctx, $raw );
+		if ( ! empty( $fish['error'] ) ) {
+			return array( 'error' => (string) $fish['error'] );
+		}
+		$species    = $fish['species'];
+		$product_id = $fish['product_id'];
+		$unknown    = $fish['unknown'];
+		$qty        = $fish['qty'];
+		$size       = $fish['size'];
 		$date       = self::text( $raw, 'date', 10 );
-		$unknown    = ( ! empty( $raw['unknown'] ) && '0' !== (string) $raw['unknown'] ) || Identify::is_unknown_name( $species );
-		if ( $unknown ) {
-			$species    = Identify::unknown_name( $species );
-			$product_id = 0; // Nobody knows what it is: it is no product yet.
-		}
-
-		if ( $product_id > 0 ) {
-			$title = $store->product_title( $product_id );
-			if ( '' === $title ) {
-				$product_id = 0; // Never assume a product exists.
-			} elseif ( '' === $species ) {
-				$species = $title;
-			}
-		}
-		if ( '' === $species ) {
-			return array( 'error' => __( 'Which fish? Type or pick a species.', 'fishotel-misc-plugin' ) );
-		}
-		if ( $qty < 1 || $qty > self::MAX_QTY ) {
-			return array( 'error' => __( 'How many? 1–999.', 'fishotel-misc-plugin' ) );
-		}
 		if ( ! Replay::is_date( $date ) ) {
 			$date = $ctx['today'];
-		}
-		// The slug as posted (a term slug may hold percent-encoded characters, which
-		// sanitize_text_field() would strip): it is only ever compared with the list's own slugs.
-		$size = isset( $raw['size'] ) && is_scalar( $raw['size'] ) && ! is_bool( $raw['size'] ) ? trim( (string) $raw['size'] ) : '';
-		$size = Sizes::pick( $size, '' !== $size ? Sizes::standard( $store, (array) $ctx['settings'] )['sizes'] : array() );
-		if ( ! $size['ok'] ) {
-			return array( 'error' => __( 'That size is not in the list. Pick one, or none.', 'fishotel-misc-plugin' ) );
 		}
 
 		$stay_id = $store->create_stay(
@@ -1286,6 +1322,253 @@ class Front_Desk {
 			'message'   => sprintf( __( '%1$d × %2$s in Tank %3$d', 'fishotel-misc-plugin' ), $qty, $species . ( null !== $size['label'] ? ' · ' . $size['label'] : '' ), (int) $tank['number'] ),
 			'event_ids' => array( $written['event_id'] ),
 			'tank'      => (int) $tank['number'],
+		);
+	}
+
+	/**
+	 * The fish, the count and the size an Arrival or an "Add fish already
+	 * here" sheet posted — the same search: a product (which must exist),
+	 * a species-list fish or a typed name, or "Unknown fish (??)" with
+	 * what it looks like (linked to no product), how many (1–999) and an
+	 * optional size from the standard list.
+	 *
+	 * @param array $ctx Context.
+	 * @param array $raw Payload: species, product_id, unknown, qty, size.
+	 * @return array{species: string, product_id: int, unknown: bool, qty: int, size: array}|array{error: string}
+	 */
+	private static function posted_fish( array $ctx, array $raw ) {
+		$store      = $ctx['store'];
+		$species    = self::text( $raw, 'species', 120 );
+		$product_id = max( 0, self::int( $raw, 'product_id' ) );
+		$qty        = self::int( $raw, 'qty', 1 );
+		$unknown    = ( ! empty( $raw['unknown'] ) && '0' !== (string) $raw['unknown'] ) || Identify::is_unknown_name( $species );
+		if ( $unknown ) {
+			$species    = Identify::unknown_name( $species );
+			$product_id = 0; // Nobody knows what it is: it is no product yet.
+		}
+
+		if ( $product_id > 0 ) {
+			$title = $store->product_title( $product_id );
+			if ( '' === $title ) {
+				$product_id = 0; // Never assume a product exists.
+			} elseif ( '' === $species ) {
+				$species = $title;
+			}
+		}
+		if ( '' === $species ) {
+			return array( 'error' => __( 'Which fish? Type or pick a species.', 'fishotel-misc-plugin' ) );
+		}
+		if ( $qty < 1 || $qty > self::MAX_QTY ) {
+			return array( 'error' => __( 'How many? 1–999.', 'fishotel-misc-plugin' ) );
+		}
+		// The slug as posted (a term slug may hold percent-encoded characters, which
+		// sanitize_text_field() would strip): it is only ever compared with the list's own slugs.
+		$size = isset( $raw['size'] ) && is_scalar( $raw['size'] ) && ! is_bool( $raw['size'] ) ? trim( (string) $raw['size'] ) : '';
+		$size = Sizes::pick( $size, '' !== $size ? Sizes::standard( $store, (array) $ctx['settings'] )['sizes'] : array() );
+		if ( ! $size['ok'] ) {
+			return array( 'error' => __( 'That size is not in the list. Pick one, or none.', 'fishotel-misc-plugin' ) );
+		}
+
+		return array(
+			'species'    => $species,
+			'product_id' => $product_id,
+			'unknown'    => $unknown,
+			'qty'        => $qty,
+			'size'       => $size,
+		);
+	}
+
+	/**
+	 * What an "Add fish already here" sheet's three questions mean for a
+	 * tank (pure): when they arrived, whether and when they were cleared,
+	 * where they came from — each one may be Unknown, which is a state and
+	 * never a guessed date.
+	 *
+	 *   arrived  '' / 'unknown' = not known; else a date from
+	 *            Replay::SALE_DATE_MIN up to today.
+	 *   cleared  in a CLEAN tank (the Clean Room, or a clean temporary
+	 *            tank) a fish counts as cleared: '' / 'unknown' = its date
+	 *            is not known, else a date; "not cleared yet" is refused.
+	 *            In the Spa (or a quarantine temporary tank) '' / 'no' =
+	 *            not cleared yet (the default), else a date; "unknown" is
+	 *            refused there. A date is up to today and not before the
+	 *            arrival when that is known.
+	 *   supplier / origin  free text; '' or "unknown" = not known.
+	 *
+	 * @param string $area  The tank's area as it behaves: clean|spa.
+	 * @param array  $raw   Payload: arrived, cleared, supplier, origin.
+	 * @param string $today Site date.
+	 * @return array{arrived: string, cleared: string, cleared_unknown: bool, supplier: string, origin: string}|array{error: string}
+	 *         arrived / cleared: a date, or '' (unknown / not cleared).
+	 */
+	public static function existing_answers( $area, array $raw, $today ) {
+		$word = static function ( $key ) use ( $raw ) {
+			$value = isset( $raw[ $key ] ) && is_scalar( $raw[ $key ] ) ? trim( sanitize_text_field( (string) $raw[ $key ] ) ) : '';
+			return substr( $value, 0, 80 );
+		};
+		$in_range = static function ( $ymd ) use ( $today ) {
+			return Replay::is_date( $ymd ) && strcmp( $ymd, Replay::SALE_DATE_MIN ) >= 0 && strcmp( $ymd, (string) $today ) <= 0;
+		};
+		$clean   = Replay::CLEAN_AREA === (string) $area;
+		$arrived = strtolower( $word( 'arrived' ) );
+		$cleared = strtolower( $word( 'cleared' ) );
+
+		if ( 'unknown' === $arrived ) {
+			$arrived = '';
+		}
+		if ( '' !== $arrived && ! $in_range( $arrived ) ) {
+			/* translators: %s: earliest date */
+			return array( 'error' => sprintf( __( 'Arrived on: a date from %s up to today — or Unknown.', 'fishotel-misc-plugin' ), Replay::SALE_DATE_MIN ) );
+		}
+
+		$cleared_unknown = false;
+		if ( $clean ) {
+			if ( 'no' === $cleared ) {
+				return array( 'error' => __( 'A fish in a clean tank counts as cleared. Give the date it was cleared, or Unknown.', 'fishotel-misc-plugin' ) );
+			}
+			if ( '' === $cleared || 'unknown' === $cleared ) {
+				$cleared         = '';
+				$cleared_unknown = true;
+			}
+		} else {
+			if ( 'unknown' === $cleared ) {
+				return array( 'error' => __( 'In quarantine: Not cleared yet — or the date it was cleared.', 'fishotel-misc-plugin' ) );
+			}
+			if ( 'no' === $cleared ) {
+				$cleared = '';
+			}
+		}
+		if ( '' !== $cleared && ! $in_range( $cleared ) ) {
+			/* translators: %s: earliest date */
+			return array( 'error' => sprintf( __( 'Cleared on: a date from %s up to today — or Unknown.', 'fishotel-misc-plugin' ), Replay::SALE_DATE_MIN ) );
+		}
+		if ( '' !== $cleared && '' !== $arrived && strcmp( $cleared, $arrived ) < 0 ) {
+			return array( 'error' => __( 'Cleared before it arrived? Check the two dates.', 'fishotel-misc-plugin' ) );
+		}
+
+		$supplier = $word( 'supplier' );
+		$origin   = $word( 'origin' );
+
+		return array(
+			'arrived'         => $arrived,
+			'cleared'         => $cleared,
+			'cleared_unknown' => $cleared_unknown,
+			'supplier'        => 'unknown' === strtolower( $supplier ) ? '' : $supplier,
+			'origin'          => 'unknown' === strtolower( $origin ) ? '' : $origin,
+		);
+	}
+
+	/**
+	 * "Add fish already here" — fish that were in the room before it was
+	 * on the site (or slipped past the Arrival screen) go straight into
+	 * THIS tank, whatever its area: a Spa tank, a Clean Room tank, a
+	 * temporary tank that is set up. No Spa step. The stay's source is
+	 * 'existing' (Store::SOURCE_EXISTING), so every report can tell it
+	 * apart; it belongs to no supplier order.
+	 *
+	 * Written: the stay (check-in = the arrival date, or empty when
+	 * Unknown; the supplier; the origin as its note), an arrival of the
+	 * count (source 'existing'; dated on the arrival date — or now with
+	 * the note "arrived:unknown", which the Replay reads as "no check-in
+	 * date"), and, when the group is cleared, a clear carrying the date —
+	 * or "cleared:unknown". Undo takes all of it back, like an Arrival.
+	 */
+	private static function act_existing( array $ctx, array $raw ) {
+		$store = $ctx['store'];
+		$tank  = $ctx['tank'];
+		$area  = is_array( $tank ) ? Temp_Tanks::effective_area( $tank ) : '';
+		if ( ! is_array( $tank ) || ! in_array( $area, array( 'clean', 'spa' ), true ) || 'offline' === (string) ( $tank['building']['status'] ?? 'active' ) ) {
+			return array( 'error' => __( 'Fish can only be added to a tank that holds fish.', 'fishotel-misc-plugin' ) );
+		}
+
+		$fish = self::posted_fish( $ctx, $raw );
+		if ( ! empty( $fish['error'] ) ) {
+			return array( 'error' => (string) $fish['error'] );
+		}
+		$answers = self::existing_answers( $area, $raw, (string) $ctx['today'] );
+		if ( ! empty( $answers['error'] ) ) {
+			return array( 'error' => (string) $answers['error'] );
+		}
+
+		$stay_id = $store->create_stay(
+			array(
+				'product_id'   => $fish['product_id'] > 0 ? $fish['product_id'] : null,
+				'species'      => $fish['species'],
+				'size_slug'    => $fish['size']['slug'],
+				'size_label'   => $fish['size']['label'],
+				'needs_id'     => $fish['unknown'],
+				'checkin_date' => '' !== $answers['arrived'] ? $answers['arrived'] : null,
+				'tank_id'      => (int) $tank['id'],
+				'source'       => Store::SOURCE_EXISTING,
+				'supplier'     => $answers['supplier'],
+				/* translators: %s: where the fish came from (a country, a region) */
+				'notes'        => '' !== $answers['origin'] ? sprintf( __( 'Origin: %s', 'fishotel-misc-plugin' ), $answers['origin'] ) : '',
+			)
+		);
+		if ( ! $stay_id ) {
+			return array( 'error' => __( 'The stay could not be created.', 'fishotel-misc-plugin' ) );
+		}
+
+		$base    = array_merge( $ctx['base'], array( 'source' => Store::SOURCE_EXISTING ) );
+		$ids     = array();
+		$written = $store->record_event(
+			(int) $stay_id,
+			array_merge(
+				$base,
+				array(
+					'type'       => 'arrival',
+					'qty'        => $fish['qty'],
+					'to_tank_id' => (int) $tank['id'],
+					'note'       => '' !== $answers['arrived'] ? 'already here' : Replay::NOTE_ARRIVED_UNKNOWN . ' · already here',
+					'event_at'   => '' !== $answers['arrived'] ? self::event_at_for_date( $answers['arrived'], $ctx['today'] ) : gmdate( 'Y-m-d H:i:s' ),
+				)
+			),
+			$ctx['today'],
+			$ctx['settings']
+		);
+		if ( ! $written ) {
+			return array( 'error' => __( 'The fish could not be recorded.', 'fishotel-misc-plugin' ) );
+		}
+		$ids[] = $written['event_id'];
+
+		if ( '' !== $answers['cleared'] || $answers['cleared_unknown'] ) {
+			$written = $store->record_event(
+				(int) $stay_id,
+				array_merge(
+					$base,
+					array(
+						'type'     => 'clear',
+						'note'     => '' !== $answers['cleared'] ? Replay::NOTE_CLEARED . $answers['cleared'] : Replay::NOTE_CLEARED_UNKNOWN,
+						'event_at' => gmdate( 'Y-m-d H:i:s' ),
+					)
+				),
+				$ctx['today'],
+				$ctx['settings']
+			);
+			if ( $written ) {
+				$ids[] = $written['event_id'];
+			}
+		}
+
+		$what = $fish['species'] . ( null !== $fish['size']['label'] ? ' · ' . $fish['size']['label'] : '' );
+		$bits = array(
+			/* translators: %s: date */
+			'' !== $answers['arrived'] ? sprintf( __( 'arrived %s', 'fishotel-misc-plugin' ), $answers['arrived'] ) : __( 'arrived: unknown', 'fishotel-misc-plugin' ),
+		);
+		if ( '' !== $answers['cleared'] ) {
+			/* translators: %s: date */
+			$bits[] = sprintf( __( 'cleared %s', 'fishotel-misc-plugin' ), $answers['cleared'] );
+		} elseif ( $answers['cleared_unknown'] ) {
+			$bits[] = __( 'cleared: unknown', 'fishotel-misc-plugin' );
+		} else {
+			$bits[] = __( 'not cleared yet', 'fishotel-misc-plugin' );
+		}
+
+		return array(
+			/* translators: 1: quantity, 2: species (with its size), 3: tank number, 4: what is known */
+			'message'   => sprintf( __( '%1$d × %2$s added to Tank %3$d (already here) · %4$s', 'fishotel-misc-plugin' ), $fish['qty'], $what, (int) $tank['number'], implode( ' · ', $bits ) ),
+			'event_ids' => $ids,
+			'stay_id'   => (int) $stay_id,
 		);
 	}
 

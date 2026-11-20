@@ -213,7 +213,8 @@ class Admin_Workbook {
 
 			$years = $store->order_years();
 			$year  = isset( $_GET['year'] ) ? absint( wp_unslash( $_GET['year'] ) ) : ( $years ? (int) $years[0] : (int) substr( $today, 0, 4 ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-			$stats = self::stats_for_year( $store, $year );
+			$stats    = self::stats_for_year( $store, $year );
+			$existing = Stats::existing_stock( $store->existing_stays( $today, $ctx['settings'] ) ); // Fish already here: no year, no batch.
 			if ( $year > 0 && ! in_array( $year, $years, true ) ) {
 				$years[] = $year;
 				rsort( $years );

@@ -704,6 +704,21 @@ button.fh-fd-occ:active {
 	height: 12px;
 }
 
+/* "Add fish already here": a row of its own under the six, the whole width. */
+.fh-fd-btn--row {
+	grid-column: 1 / -1;
+	min-height: 48px;
+	font-size: 16px;
+}
+
+/* A part of one question (the supplier, the origin under "Where it came from"). */
+.fh-fd-sub-field {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin-top: 12px;
+}
+
 /* Six buttons in one row only once "Shipped" and "Arrival" fit (a 480 px phone in landscape overflowed). */
 @media (min-width: 640px) {
 	.fh-fd-bar__inner {

@@ -187,8 +187,8 @@ $fh_temp_done = false;
 														<span class="fh-cr-tank__species"><?php echo esc_html( $fh_stay['species'] ); ?></span>
 														<?php echo Admin::size_html( $fh_stay, $sizes ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by size_html(). ?>
 														· <?php echo esc_html( $fh_stay['qty_live'] ); ?>
-														<?php if ( null !== $fh_stay['day'] ) : ?>
-															· <?php echo esc_html( sprintf( /* translators: %d: day number */ __( 'day %d', 'fishotel-misc-plugin' ), $fh_stay['day'] ) ); ?>
+														<?php if ( '' !== Admin::day_text( $fh_stay ) ) : ?>
+															· <?php echo esc_html( Admin::day_text( $fh_stay ) ); ?>
 														<?php endif; ?>
 														<?php echo Admin::badge_html( $fh_stay ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by badge_html(). ?>
 														<?php $fh_sale = Admin::sale_words( $fh_stay ); ?>

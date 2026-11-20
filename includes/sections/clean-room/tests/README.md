@@ -63,6 +63,7 @@ php  includes/sections/clean-room/tests/temp-board-test.php
 php  includes/sections/clean-room/tests/temp-guards-test.php
 php  includes/sections/clean-room/tests/dose-temp-test.php
 php  includes/sections/clean-room/tests/order-view-test.php
+php  includes/sections/clean-room/tests/existing-fish-test.php
 node includes/sections/clean-room/tests/front-desk.test.js
 node includes/sections/clean-room/tests/clean-room-admin.test.js
 node includes/sections/clean-room/tests/dose-math.test.js
@@ -653,7 +654,11 @@ system temp directory (`FH_TEST_TMP` overrides).
   ask and the "Which fish?" prefix, `fmt()`, `escapeHtml()`,
   `saleSummary()` (a batch date, an own date, none with the suggestion,
   the "still in the Spa" warning, the page's strings), `sizeText()`,
-  `unknownName()` against `fixtures/unknown-names.json`.
+  `unknownName()` against `fixtures/unknown-names.json`; `datesText()`
+  ("day ?", "arrived: unknown", "cleared: unknown", the treatment day
+  unknown only while in quarantine) and `existingFields()` (what the
+  "Add fish already here" sheet posts: Unknown unless answered, "not
+  cleared yet" in a quarantine tank, never a non-date as a date).
 - **clean-room-admin.test.js** — `renumber()` with a prefix and a
   template row's `__i__`, `suggestImportFees()` (the exact pair, the
   origin-less fallback, nulls, cents); the order page's box helpers
@@ -663,7 +668,10 @@ system temp directory (`FH_TEST_TMP` overrides).
   or the name of a share kept under an id —, its suggestion and its
   text, "How full"); `unknownName()` /
   `knownName()` (the "??" box of an order line) against
-  `fixtures/unknown-names.json`.
+  `fixtures/unknown-names.json`; `existingPost()` (the Stays tab's
+  "Add fish already here": Unknown when empty, "not cleared yet" in a
+  quarantine tank, a picked product kept only while its name stands, an
+  unknown fish as "??").
 - **temp-tanks.test.js** — the phone's and the Board's pure helpers for
   the temporary tanks and the day's list, both scripts loaded without a
   DOM: `tankHeading()`, `offerTemplates()` / `offer()` and
@@ -845,6 +853,36 @@ system temp directory (`FH_TEST_TMP` overrides).
   is that tank; the Temporary area's "last dose" carries the working;
   and a new setup in the same slot starts with nothing read, dosed or
   due.
+- **existing-fish-test.php** — "Add fish already here" (0.46.6, schema
+  1.7), through `Front_Desk::perform( 'existing' )` and
+  `Admin::add_existing()` on the `Fake_Store`: with the section off no
+  AJAX action is registered and the facts are null; the schema (an empty
+  check-in, the source `existing` on the stays and their events, the
+  gate waiting for both ENUM values and for the NULL, the one
+  `ALTER … MODIFY checkin_date DATE NULL` that keeps every row and is
+  not run again, `schema_current()`); the Replay with an
+  "arrived:unknown" arrival and a "cleared:unknown" clear — no date
+  guessed, a move back out of the Spa never "cleared today", a date set
+  later wins, the undo of a "checkin:" note back to unknown;
+  `existing_answers()` for every combination of known / unknown answers
+  in a clean tank and in a quarantine one, and every refusal (a future
+  date, the year 0026, cleared before it arrived, "not cleared yet" in
+  a clean tank, "cleared, date unknown" in the Spa); the act on a Clean
+  Room tank, a Spa tank, a quarantine and a clean temporary tank and a
+  free slot, with a product, an unlisted name, an unknown fish (??) and
+  a size; then a loss, shipped, a recount, a Clean → Clean move, a split
+  (its sister as unknown as the original, source existing) and its
+  undo, the check-in and the cleared date set later and undone, a sale
+  date without a check-in, a Spa group of unknown arrival moved into
+  the Clean Room, Undo of the whole addition (once, and only by who
+  wrote it); the day's list (the feeding alone for an undated group,
+  the schedule as ever beside a dated one); the product facts (null,
+  never "unknown"; a known check-in sorts first); `Stats::existing_stock()`
+  (alive / shipped / lost, a split counted once, an undone addition not
+  at all, how many were left out); the phone's occupant and choices, the
+  Board's words, the Events tab's text and the CSV; the Stays tab's tank
+  list and form; and both AJAX endpoints — capability, nonce, the
+  missing tables, and 503 until the 1.7 upgrade is written.
 - **medications-admin.test.js** — the pure parts of
   `js/medications-admin.js`: what 100 gallons take at a rate (the
   editor's hint), the rates the Board's Calculator offers, its sum.
@@ -1102,3 +1140,19 @@ system temp directory (`FH_TEST_TMP` overrides).
     again at once. Settings → Sales statuses: untick "Shipped", Save —
     Real sales names the shorter list and its figures drop; "Back to
     the suggested list" restores it.
+31. Add fish already here. On the phone, open a Clean Room tank: the
+    bar has **+ Add fish already here** under its six buttons. Pick a
+    fish, 2, leave the three questions on **Unknown**, Save: the toast
+    says "… added to Tank 121 (already here) · arrived: unknown ·
+    cleared: unknown" with Undo; the row reads *cleared*, "day ?",
+    "arrived: unknown", and its sheet "added as already here". Dates →
+    set the check-in date: the row shows its day. Undo from the toast
+    takes the whole addition back. On a Spa tank the second question
+    offers **Not cleared yet** (the default) or a date, and the row says
+    "treatment day unknown — set the arrival date"; the building's To do
+    is as it was. The Stays tab's **Add fish already here** does the
+    same for the tank picked (its *Cleared on* hint follows the tank).
+    Stats → By year: the card *Fish already here (added by hand)* with
+    what is alive, shipped and lost and how many were left out. The
+    product's page in the shop shows nothing new.
+

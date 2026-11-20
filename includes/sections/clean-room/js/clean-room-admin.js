@@ -518,7 +518,40 @@
 		return String(name === null || typeof name === 'undefined' ? '' : name).replace(/^[? ]+/, '').replace(/^ +| +$/g, '');
 	}
 
+	/**
+	 * What the Stays tab's "Add fish already here" posts (pure): the same
+	 * fields as the phone's sheet. An empty date is Unknown; in a clean
+	 * tank an empty "Cleared on" is Unknown too (a fish there counts as
+	 * cleared), in a quarantine tank it is "not cleared yet".
+	 *
+	 * @param {Object} v tank, area (clean|spa), text, picked ({name, product_id}), unknown, qty, size,
+	 *                   arrived, cleared, supplier, origin.
+	 * @return {Object}
+	 */
+	function existingPost(v) {
+		v = v || {};
+		var trim = function (value) { return String(value === null || typeof value === 'undefined' ? '' : value).replace(/^\s+|\s+$/g, ''); };
+		var date = function (value) { return /^\d{4}-\d{2}-\d{2}$/.test(trim(value)) ? trim(value) : ''; };
+		var text = trim(v.text);
+		var unknown = !!v.unknown;
+		var qty = parseInt(v.qty, 10);
+		return {
+			action: 'fishotel_cleanroom_existing',
+			tank: parseInt(v.tank, 10) || 0,
+			species: unknown ? unknownName(text) : text,
+			product_id: !unknown && v.picked && v.picked.name === text ? (parseInt(v.picked.product_id, 10) || 0) : 0,
+			unknown: unknown ? 1 : 0,
+			qty: qty > 0 ? qty : 1,
+			size: trim(v.size),
+			arrived: date(v.arrived) || 'unknown',
+			cleared: date(v.cleared) || (v.area === 'clean' ? 'unknown' : 'no'),
+			supplier: trim(v.supplier) || 'unknown',
+			origin: trim(v.origin) || 'unknown'
+		};
+	}
+
 	var api = {
+		existingPost: existingPost,
 		renumber: renumber,
 		suggestImportFees: suggestImportFees,
 		unknownName: unknownName,
@@ -1588,6 +1621,69 @@
 				notice('fishotel-misc-notice--success', i18n.reloading || 'Saved. Reloading…');
 				root.setTimeout(function () { root.location.reload(); }, 600);
 			});
+		});
+
+		// Stays tab: "Add fish already here" — straight into the tank picked, every unknown stays Unknown.
+		function existingArea() {
+			return String($('.fh-cr-existing-tank option:selected').data('area') || 'clean');
+		}
+		function existingHints() {
+			var clean = existingArea() === 'clean';
+			$('.fh-cr-existing-cleared-clean').prop('hidden', !clean);
+			$('.fh-cr-existing-cleared-spa').prop('hidden', clean);
+		}
+		$(document).on('change', '.fh-cr-existing-tank', existingHints);
+		existingHints();
+
+		$(document).on('input', '.fh-cr-existing-search', function () {
+			var $box = $(this).closest('.fh-cr-existing');
+			var picked = $box.data('picked');
+			if (picked && picked.name !== this.value) {
+				$box.removeData('picked');
+			}
+		});
+		attachSuggest($(document), '.fh-cr-existing-search', 'suggest', function ($input, item) {
+			$input.val(item.name || '');
+			$input.closest('.fh-cr-existing').data('picked', { name: item.name || '', product_id: item.product_id || 0 });
+		});
+
+		$(document).on('click', '.fh-cr-existing-save', function () {
+			var $box = $(this).closest('.fh-cr-existing');
+			var $btn = $(this);
+			var fields = existingPost({
+				tank: $box.find('.fh-cr-existing-tank').val(),
+				area: existingArea(),
+				text: $box.find('.fh-cr-existing-search').val(),
+				picked: $box.data('picked'),
+				unknown: $box.find('.fh-cr-existing-unknown').prop('checked'),
+				qty: $box.find('.fh-cr-existing-qty').val(),
+				size: $box.find('.fh-cr-existing-size').val(),
+				arrived: $box.find('.fh-cr-existing-arrived').val(),
+				cleared: $box.find('.fh-cr-existing-cleared').val(),
+				supplier: $box.find('.fh-cr-existing-supplier').val(),
+				origin: $box.find('.fh-cr-existing-origin').val()
+			});
+			if (!fields.unknown && !fields.species) {
+				notice('fishotel-misc-notice--warning', i18n.whichFish || 'Which fish?');
+				return;
+			}
+			fields.nonce = cfg.nonce;
+			$btn.prop('disabled', true);
+			$.post(ajaxUrl(), fields)
+				.done(function (res) {
+					if (!res || !res.success) {
+						fail(res);
+						$btn.prop('disabled', false);
+						return;
+					}
+					notice('fishotel-misc-notice--success', (res.data && res.data.message) || (i18n.saved || 'Saved.'));
+					$('.fh-cr-status').first().removeClass('is-error').addClass('is-ok').text(i18n.reloading || 'Saved. Reloading…');
+					root.setTimeout(function () { root.location.reload(); }, 1200);
+				})
+				.fail(function (res) {
+					fail(res);
+					$btn.prop('disabled', false);
+				});
 		});
 
 		attachSuggest($(document), '.fh-cr-product-search', 'products', function ($input, item) {

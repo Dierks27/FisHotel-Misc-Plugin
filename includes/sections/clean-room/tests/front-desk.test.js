@@ -161,6 +161,25 @@ check( 'doseFields, per gallon: the rate, the named dose, the top-up', JSON.stri
 check( '…no sum (unknown gallons): a plain dose; a top-up without its number says only that it was one', ! ( 'calc' in helpers.doseFields( plain, { amount: '2', unit: 'g', whole: true, rate: 25 }, { state: 'no_gallons' } ) ) && 1 === helpers.doseFields( plain, { amount: '2', unit: 'g', topup: true, changed: '' }, { state: 'needs_changed' } ).topup && ! ( 'changed' in helpers.doseFields( plain, { amount: '2', unit: 'g', topup: true, changed: '' }, { state: 'needs_changed' } ) ) && 'gal' === helpers.doseFields( plain, { amount: '2', unit: 'g', topup: true, changed: '30', changedUnit: 'gal' }, { state: 'ok' } ).changed_unit );
 check( '…a typed medication: never a sum', ! ( 'calc' in helpers.doseFields( { key: 'salt', mode: 'typed' }, { amount: '6', unit: 'tsp', whole: true }, { state: 'typed' } ) ) );
 
+console.log( '11. Fish already here: Unknown dates in words, and what the sheet posts' );
+var d = helpers.datesText( { day: null, status: 'in_qt', checkinDate: '', checkinUnknown: true, clearedDate: null, clearedUnknown: false } );
+check( 'in quarantine, arrival unknown: "day ?", "arrived: unknown", and the treatment day unknown', 'day ?' === d.day && 'arrived: unknown' === d.arrived && '' === d.cleared && 'treatment day unknown — set the arrival date' === d.treatment, JSON.stringify( d ) );
+d = helpers.datesText( { day: null, status: 'cleared', checkinDate: '', checkinUnknown: true, clearedDate: null, clearedUnknown: true } );
+check( 'in the Clean Room, both unknown: "cleared: unknown", no treatment line', 'day ?' === d.day && 'cleared: unknown' === d.cleared && '' === d.treatment, JSON.stringify( d ) );
+d = helpers.datesText( { day: 12, status: 'in_qt', checkinDate: '2026-11-09', checkinUnknown: false, clearedDate: null } );
+check( 'an ordinary group reads as before', 'day 12' === d.day && 'in since 2026-11-09' === d.arrived && '' === d.cleared && '' === d.treatment, JSON.stringify( d ) );
+d = helpers.datesText( { day: 30, status: 'cleared', checkinDate: '2026-10-22', clearedDate: '2026-11-07' }, { day: 'Tag %d', clearedOn: 'frei %s' } );
+check( 'the page\'s own strings are used', 'Tag 30' === d.day && 'frei 2026-11-07' === d.cleared );
+check( 'nothing given: nothing said', '' === helpers.datesText( null ).day && '' === helpers.datesText( {} ).arrived );
+var ef = helpers.existingFields( { species: 'Test Goby', qty: 3 }, 121, true );
+check( 'a clean tank, nothing answered: every question Unknown', 'existing' === ef.act && 121 === ef.tank && 'unknown' === ef.arrived && 'unknown' === ef.cleared && 'unknown' === ef.supplier && 'unknown' === ef.origin && 3 === ef.qty && 'qr' === ef.via, JSON.stringify( ef ) );
+ef = helpers.existingFields( { species: 'Test Goby' }, 521, false );
+check( 'a quarantine tank, nothing answered: not cleared yet ("no"), one fish', 'no' === ef.cleared && 'unknown' === ef.arrived && 1 === ef.qty );
+ef = helpers.existingFields( { species: '?? goby', unknown: true, productId: 0, arrived: '2025-05-01', cleared: '2025-05-20', supplier: ' Test Supplier ', origin: 'Testland', size: '1-2' }, 122, true );
+check( 'answered: the dates, the names trimmed, the unknown fish and the size', '2025-05-01' === ef.arrived && '2025-05-20' === ef.cleared && 'Test Supplier' === ef.supplier && 'Testland' === ef.origin && 1 === ef.unknown && '1-2' === ef.size, JSON.stringify( ef ) );
+ef = helpers.existingFields( { species: 'x', arrived: 'last spring', cleared: '20/05/2025' }, 122, true );
+check( 'something that is not a date is Unknown, never sent as a date', 'unknown' === ef.arrived && 'unknown' === ef.cleared );
+
 console.log( '' );
 console.log( failures ? failures + ' of ' + checks + ' checks FAILED' : 'All ' + checks + ' checks passed' );
 process.exit( failures ? 1 : 0 );

@@ -16,8 +16,8 @@
  *     the Gate's list; every other wp_ajax_ action of the Clean Room — the
  *     Board's temporary-tank writes, the medications list, the layout, the
  *     settings — is not, and a shop session is a visitor there;
- *   - every act of the one write (readings, doses, ticks, arrivals,
- *     losses, moves, setting up and taking down a temporary tank, the
+ *   - every act of the one write (readings, doses, ticks, arrivals, fish
+ *     already here (added by hand), losses, moves, setting up and taking down a temporary tank, the
  *     day's list's ticks) gets past the Front Desk's guard under a PIN;
  *   - inside that handler the session holds the Front Desk's capability
  *     and not the Settings one: the medications editor refuses it even
@@ -100,6 +100,7 @@ $admin_only = array(
 	'fishotel_cleanroom_alias_delete' => 'Settings: forget a spoken name',
 	'fishotel_cleanroom_box_rates'    => 'Settings: box rates',
 	'fishotel_cleanroom_box_share'    => 'Settings: a remembered box share',
+	'fishotel_cleanroom_existing'     => 'Stays: add fish already here (the phone posts the same act through fishotel_cleanroom_act)',
 	'fishotel_cleanroom_layout'       => 'Settings: the layout',
 	'fishotel_cleanroom_medications'  => 'Settings: the medications list',
 	'fishotel_cleanroom_order'        => 'Arrivals: a supplier order',
@@ -120,7 +121,7 @@ $unsorted = array_values( array_diff( $room_actions, $desk['actions'], array_key
 check( 'every other AJAX action of the Clean Room is named here as wp-admin only — none is left unsorted', array() === $unsorted, implode( ', ', $unsorted ) );
 $gone = array_values( array_diff( array_keys( $admin_only ), $room_actions ) );
 check( '… and every name here is still one of its actions', array() === $gone, implode( ', ', $gone ) );
-check( 'the acts of the one write include the readings, doses, ticks, arrivals, losses, moves and the temporary tanks', array() === array_diff( array( 'arrival', 'identify', 'loss', 'sold', 'move', 'clear', 'checkin', 'ready', 'count', 'note', 'copper', 'dose', 'tick', 'undo', 'alias', 'setup', 'setup_edit', 'setup_steps', 'takedown', 'todo_tick' ), $acts ), implode( ', ', $acts ) );
+check( 'the acts of the one write include the readings, doses, ticks, arrivals (and fish already here), losses, moves and the temporary tanks', array() === array_diff( array( 'arrival', 'existing', 'identify', 'loss', 'sold', 'move', 'clear', 'checkin', 'ready', 'count', 'note', 'copper', 'dose', 'tick', 'undo', 'alias', 'setup', 'setup_edit', 'setup_steps', 'takedown', 'todo_tick' ), $acts ), implode( ', ', $acts ) );
 
 echo "\n2. Which addresses are shop-floor requests (pure)\n";
 $rules = Gate::rules();

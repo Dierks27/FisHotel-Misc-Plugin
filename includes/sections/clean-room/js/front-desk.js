@@ -404,6 +404,73 @@
 		return (text === '' ? '??' : '?? ' + text).substring(0, 120);
 	}
 
+	/**
+	 * A group's dates in words, with Unknown as a state of its own: the day
+	 * ("day 12", "day ?" when the check-in is not known, '' without one),
+	 * the arrival ("in since 2026-10-02" while in quarantine, "arrived:
+	 * unknown"), the clearing ("cleared 2026-10-20", "cleared: unknown")
+	 * and, for a group still in quarantine (not cleared) whose check-in is
+	 * not known, that its treatment day is unknown too.
+	 *
+	 * @param {Object} o       Occupant (day, status, checkinDate, checkinUnknown, clearedDate, clearedUnknown).
+	 * @param {Object} strings day, dayUnknown, inSince, arrivedUnknown, clearedOn, clearedUnknown, treatUnknown.
+	 * @return {{day: string, arrived: string, cleared: string, treatment: string}}
+	 */
+	function datesText(o, strings) {
+		var s = strings || {};
+		var get = function (key, fallback) { return s[key] ? s[key] : fallback; };
+		o = o || {};
+		var out = { day: '', arrived: '', cleared: '', treatment: '' };
+		if (o.checkinUnknown) {
+			out.day = get('dayUnknown', 'day ?');
+			out.arrived = get('arrivedUnknown', 'arrived: unknown');
+			if (o.status === 'in_qt') {
+				out.treatment = get('treatUnknown', 'treatment day unknown — set the arrival date');
+			}
+		} else {
+			out.day = (o.day === null || typeof o.day === 'undefined') ? '' : fmt(get('day', 'day %d'), o.day);
+			out.arrived = o.checkinDate ? fmt(get('inSince', 'in since %s'), o.checkinDate) : '';
+		}
+		if (o.clearedDate) {
+			out.cleared = fmt(get('clearedOn', 'cleared %s'), o.clearedDate);
+		} else if (o.clearedUnknown) {
+			out.cleared = get('clearedUnknown', 'cleared: unknown');
+		}
+		return out;
+	}
+
+	/**
+	 * What the "Add fish already here" sheet's Save posts (pure). Each of
+	 * the three questions is Unknown unless it was answered: arrived and
+	 * cleared are a date or 'unknown' — in quarantine "not cleared yet"
+	 * ('no') is the default and Unknown is not offered; in a clean tank a
+	 * fish counts as cleared, its date Unknown unless one is given.
+	 *
+	 * @param {Object}  f     The sheet: species, productId, unknown, qty, size, arrived, cleared, supplier, origin.
+	 * @param {number}  tank  The page's tank number.
+	 * @param {boolean} clean Whether the tank behaves as a clean tank.
+	 * @return {Object}
+	 */
+	function existingFields(f, tank, clean) {
+		f = f || {};
+		var date = function (value) { return /^\d{4}-\d{2}-\d{2}$/.test(String(value || '')) ? String(value) : ''; };
+		var text = function (value) { return String(value === null || typeof value === 'undefined' ? '' : value).replace(/^\s+|\s+$/g, ''); };
+		return {
+			act: 'existing',
+			tank: tank,
+			species: f.species || '',
+			product_id: f.productId || 0,
+			unknown: f.unknown ? 1 : 0,
+			qty: f.qty || 1,
+			size: f.size || '',
+			arrived: date(f.arrived) || 'unknown',
+			cleared: date(f.cleared) || (clean ? 'unknown' : 'no'),
+			supplier: text(f.supplier) || 'unknown',
+			origin: text(f.origin) || 'unknown',
+			via: 'qr'
+		};
+	}
+
 	/* Whether a value was given at all (0 counts; '', null and undefined do not). */
 	function present(value) {
 		return value !== null && typeof value !== 'undefined' && value !== '';
@@ -753,6 +820,8 @@
 		fmt: fmt,
 		escapeHtml: escapeHtml,
 		saleSummary: saleSummary,
+		datesText: datesText,
+		existingFields: existingFields,
 		sizeText: sizeText,
 		unknownName: unknownName,
 		doseStart: doseStart,
@@ -1136,6 +1205,7 @@
 		}
 		switch (state.view) {
 			case 'arrival': renderArrival(); break;
+			case 'existing': renderExisting(); break;
 			case 'pick': renderPick(); break;
 			case 'occupant': renderOccupant(); break;
 			case 'identify': renderIdentify(); break;
@@ -1183,10 +1253,6 @@
 		return bits;
 	}
 
-	function dayText(day) {
-		return (day === null || typeof day === 'undefined') ? '' : fmt(t('day', 'day %d'), day);
-	}
-
 	/* An occupant row; onClick opens it, quick adds a "−1 lost" button. */
 	function occupantNode(o, onClick, quick) {
 		var tag = onClick ? 'button' : 'div';
@@ -1196,12 +1262,15 @@
 			attrs.on = { click: onClick };
 		}
 		var sale = saleSummary(o, i18n);
+		var dates = datesText(o, i18n);
 		var meta = [
 			el('span', { class: 'fh-fd-badge fh-fd-badge--' + (o.saleReady ? 'ready' : o.status), text: o.stateLabel }),
 			sale.warning ? el('span', { class: 'fh-fd-warn', text: sale.warning }) : null,
 			o.needsId ? el('span', { class: 'fh-fd-warn', text: t('needsId', 'needs identifying') }) : null,
-			dayText(o.day) ? el('span', { text: dayText(o.day) }) : null,
-			o.status === 'in_qt' && o.checkinDate ? el('span', { text: fmt(t('inSince', 'in since %s'), o.checkinDate) }) : null,
+			dates.treatment ? el('span', { class: 'fh-fd-warn', text: dates.treatment }) : null,
+			dates.day ? el('span', { text: dates.day }) : null,
+			(o.status === 'in_qt' || o.checkinUnknown) && dates.arrived ? el('span', { text: dates.arrived }) : null,
+			o.status === 'cleared' && o.clearedUnknown ? el('span', { text: dates.cleared }) : null,
 			!o.saleReady ? el('span', { text: sale.short }) : null,
 			o.qtyArrived !== o.qtyLive ? el('span', { text: o.qtyLive + '/' + o.qtyArrived }) : null
 		];
@@ -1294,7 +1363,9 @@
 			button(t('move', 'Move'), '', startMove, !hasOcc),
 			button(t('arrival', 'Arrival'), 'fh-fd-btn--primary', function () { go('arrival'); }),
 			button(t('note', 'Note'), '', function () { go('note', { tank: true }); }),
-			voiceOn ? button(t('mic', 'Mic'), 'fh-fd-btn--mic', startVoice) : button(t('copper', 'Copper'), '', function () { go('copper'); })
+			voiceOn ? button(t('mic', 'Mic'), 'fh-fd-btn--mic', startVoice) : button(t('copper', 'Copper'), '', function () { go('copper'); }),
+			// Fish that are already in this tank: any tank, no Spa step (Arrival keeps its rules for new fish).
+			button('+ ' + t('existingAdd', 'Add fish already here'), 'fh-fd-btn--row', function () { go('existing'); })
 		]);
 	}
 
@@ -1522,6 +1593,115 @@
 		]);
 	}
 
+	/* ---------------------------------------------------------------- */
+	/*  Add fish already here                                            */
+	/* ---------------------------------------------------------------- */
+
+	/*
+	 * Two or more big chips, one of them on: the answer to one question.
+	 * choices: [{ value, label }]; the chip whose value is current is on.
+	 */
+	function choiceChips(choices, current, onPick) {
+		return el('div', { class: 'fh-fd-chips' }, choices.map(function (choice) {
+			return el('button', {
+				type: 'button',
+				class: 'fh-fd-chip' + (choice.value === current ? ' is-on' : ''),
+				text: choice.label,
+				on: { click: function () { onPick(choice.value); } }
+			});
+		}));
+	}
+
+	/*
+	 * One question with a date: [Unknown or Not cleared yet] [A date]; a
+	 * date picker under it once "A date" is picked. f[key] holds the date,
+	 * f[key + 'Mode'] the chip.
+	 */
+	function dateQuestion(f, key, label, firstChoice, hint) {
+		var mode = f[key + 'Mode'] || 'first';
+		var wrap = el('div', { class: 'fh-fd-field' }, [el('label', { class: 'fh-fd-label', text: label })]);
+		wrap.appendChild(choiceChips([firstChoice, { value: 'date', label: t('aDate', 'A date') }], mode, function (value) {
+			f[key + 'Mode'] = value;
+			if (value !== 'date') {
+				f[key] = '';
+			}
+			render();
+		}));
+		if (mode === 'date') {
+			wrap.appendChild(el('input', { class: 'fh-fd-input', type: 'date', value: f[key] || '', min: state.screen.saleDateMin || null, max: state.screen.today, on: { change: function (e) { f[key] = e.target.value; } } }));
+		}
+		if (hint) {
+			wrap.appendChild(el('p', { class: 'fh-fd-muted', text: hint }));
+		}
+		return wrap;
+	}
+
+	/* Supplier or origin: the names the supplier orders already use as chips, or typed; Unknown when empty. */
+	function pickQuestion(f, key, label, list) {
+		var wrap = el('div', { class: 'fh-fd-sub-field' }, [el('span', { class: 'fh-fd-label', text: label })]);
+		var input = el('input', { class: 'fh-fd-input', type: 'text', value: f[key] || '', placeholder: t('unknownChoice', 'Unknown'), autocomplete: 'off', autocapitalize: 'words', on: { input: function (e) { f[key] = e.target.value; } } });
+		if (list && list.length) {
+			wrap.appendChild(choiceChips(list.map(function (name) { return { value: name, label: name }; }), f[key] || '', function (value) {
+				f[key] = f[key] === value ? '' : value;
+				render();
+			}));
+		}
+		wrap.appendChild(input);
+		return wrap;
+	}
+
+	function renderExisting() {
+		var tk = tank();
+		var f = state.form;
+		var clean = !tk.isSpa;
+		if (typeof f.qty === 'undefined') {
+			f.qty = 1;
+		}
+		app.appendChild(header(t('existingAdd', 'Add fish already here'), [fmt(t('existingSub', 'Fish that are already in Tank %d — straight in, no Spa step. Anything not known stays Unknown.'), tk.number)]));
+
+		var screen = el('div', { class: 'fh-fd-screen' });
+		screen.appendChild(speciesField(f, function () { render(); }, { unknown: true }));
+		screen.appendChild(stepperField(t('howMany', 'How many?'), f, 'qty', 1, 999));
+		var sizes = sizeChooser(f);
+		if (sizes) {
+			screen.appendChild(sizes);
+		}
+		screen.appendChild(dateQuestion(f, 'arrived', t('arrivedOn', 'Arrived on'), { value: 'first', label: t('unknownChoice', 'Unknown') }, ''));
+		screen.appendChild(dateQuestion(
+			f,
+			'cleared',
+			t('clearedOnQ', 'Cleared on'),
+			clean ? { value: 'first', label: t('unknownChoice', 'Unknown') } : { value: 'first', label: t('notClearedYet', 'Not cleared yet') },
+			clean ? t('cleanCounts', 'A fish in a clean tank counts as cleared.') : ''
+		));
+		var picks = state.screen.picks || {};
+		var from = el('div', { class: 'fh-fd-field' }, [el('label', { class: 'fh-fd-label', text: t('cameFrom', 'Where it came from') })]);
+		from.appendChild(choiceChips([{ value: 'unknown', label: t('unknownChoice', 'Unknown') }], (f.supplier || f.origin) ? '' : 'unknown', function () {
+			f.supplier = '';
+			f.origin = '';
+			render();
+		}));
+		from.appendChild(pickQuestion(f, 'supplier', t('supplier', 'Supplier'), picks.suppliers || []));
+		from.appendChild(pickQuestion(f, 'origin', t('origin', 'Origin'), picks.origins || []));
+		screen.appendChild(from);
+		app.appendChild(screen);
+
+		bar([
+			button(t('cancel', 'Cancel'), 'fh-fd-btn--quiet', function () { go('tank'); }),
+			button(t('save', 'Save'), 'fh-fd-btn--primary', function () {
+				if (!f.species) {
+					toast(t('whichFish', 'Which fish?'), null, true);
+					return;
+				}
+				if ((f.arrivedMode === 'date' && !f.arrived) || (f.clearedMode === 'date' && !f.cleared)) {
+					toast(t('date', 'Date') + '?', null, true);
+					return;
+				}
+				act(existingFields(f, tk.number, clean));
+			})
+		]);
+	}
+
 	/*
 	 * The Size dropdown: the standard sizes, optional ("—" = none). Nothing
 	 * when the list is empty. `own` is the size a group already has ({slug,
@@ -1689,12 +1869,15 @@
 		app.appendChild(header(o.species, [(sizeText(o, i18n) ? sizeText(o, i18n) + ' · ' : '') + 'Tank ' + tk.number + ' · ' + o.qtyLive + ' ' + t('live', 'live') + ' / ' + o.qtyArrived]));
 		var screen = el('div', { class: 'fh-fd-screen' });
 		var sale = saleSummary(o, i18n);
+		var dates = datesText(o, i18n);
 		screen.appendChild(el('div', { class: 'fh-fd-facts' }, [
 			el('span', { class: 'fh-fd-badge fh-fd-badge--' + (o.saleReady ? 'ready' : o.status), text: o.stateLabel }),
 			sale.warning ? el('span', { class: 'fh-fd-warn', text: sale.warning }) : null,
-			el('span', { text: dayText(o.day) }),
-			el('span', { text: fmt(t('inSince', 'in since %s'), o.checkinDate) }),
-			o.clearedDate ? el('span', { text: fmt(t('clearedOn', 'cleared %s'), o.clearedDate) }) : null,
+			dates.treatment ? el('span', { class: 'fh-fd-warn', text: dates.treatment }) : null,
+			dates.day ? el('span', { text: dates.day }) : null,
+			dates.arrived ? el('span', { text: dates.arrived }) : null,
+			dates.cleared ? el('span', { text: dates.cleared }) : null,
+			o.existing ? el('span', { text: t('alreadyHere', 'added as already here') }) : null,
 			el('span', { text: sale.text })
 		]));
 		screen.appendChild(el('div', { class: 'fh-fd-grid2' }, [
@@ -1866,7 +2049,7 @@
 		app.appendChild(header(t('dates', 'Dates'), [o.species]));
 		var screen = el('div', { class: 'fh-fd-screen' });
 		screen.appendChild(el('div', { class: 'fh-fd-field' }, [
-			el('label', { class: 'fh-fd-label', for: 'fh-fd-idate', text: t('checkinDate', 'Check-in date') }),
+			el('label', { class: 'fh-fd-label', for: 'fh-fd-idate', text: t('checkinDate', 'Check-in date') + (o.checkinUnknown ? ' · ' + t('arrivedUnknown', 'arrived: unknown') : '') }),
 			el('div', { class: 'fh-fd-row' }, [
 				el('input', { id: 'fh-fd-idate', class: 'fh-fd-input', type: 'date', value: f.checkin, max: state.screen.today, on: { change: function (e) { f.checkin = e.target.value; } } }),
 				button(t('save', 'Save'), 'fh-fd-btn--ok', function () {
@@ -1890,7 +2073,8 @@
 					}
 				})
 			]),
-			o.clearedDate ? el('button', { type: 'button', class: 'fh-fd-chip fh-fd-chip--ghost', text: t('unsetDate', 'Not cleared'), on: { click: function () { act({ act: 'clear', tank: tk.number, stay_id: o.stayId, unset: 1, via: 'qr' }); } } }) : null
+			o.clearedUnknown ? el('p', { class: 'fh-fd-muted', text: t('clearedUnknown', 'cleared: unknown') }) : null,
+			o.clearedDate || o.clearedUnknown ? el('button', { type: 'button', class: 'fh-fd-chip fh-fd-chip--ghost', text: t('unsetDate', 'Not cleared'), on: { click: function () { act({ act: 'clear', tank: tk.number, stay_id: o.stayId, unset: 1, via: 'qr' }); } } }) : null
 		]));
 		// The suggestion (check-in + the setting) only fills the picker on a tap; Save writes it.
 		var readyInput = el('input', { id: 'fh-fd-rdate', class: 'fh-fd-input', type: 'date', value: f.ready, min: state.screen.saleDateMin || null, max: state.screen.saleDateMax || null, on: { change: function (e) { f.ready = e.target.value; } } });

@@ -138,6 +138,16 @@ names.known.forEach( function ( c ) {
 check( 'junk is no description; the name fits the column (120)', '??' === helpers.unknownName( [ 'x' ] ) && '??' === helpers.unknownName( true ) && '??' === helpers.unknownName() && 120 === helpers.unknownName( new Array( 301 ).join( 'x' ) ).length );
 check( 'ticked then unticked gives the description back', 'small wrasse' === helpers.knownName( helpers.unknownName( 'small wrasse' ) ) && '?? small wrasse' === helpers.unknownName( helpers.unknownName( 'small wrasse' ) ) );
 
+console.log( '8. The Stays tab\'s "Add fish already here"' );
+var ep = helpers.existingPost( { tank: '121', area: 'clean', text: ' Test Goby ', qty: '' } );
+check( 'a clean tank, nothing else known: Unknown everywhere, one fish, its own action', 'fishotel_cleanroom_existing' === ep.action && 121 === ep.tank && 'Test Goby' === ep.species && 1 === ep.qty && 'unknown' === ep.arrived && 'unknown' === ep.cleared && 'unknown' === ep.supplier && 'unknown' === ep.origin && 0 === ep.product_id, JSON.stringify( ep ) );
+ep = helpers.existingPost( { tank: 521, area: 'spa', text: 'Test Goby', picked: { name: 'Test Goby', product_id: 12 }, qty: '4', arrived: '2025-05-01' } );
+check( 'a quarantine tank: not cleared yet; a picked product carried', 'no' === ep.cleared && '2025-05-01' === ep.arrived && 12 === ep.product_id && 4 === ep.qty );
+ep = helpers.existingPost( { tank: 521, area: 'spa', text: 'Test Gobyx', picked: { name: 'Test Goby', product_id: 12 } } );
+check( 'typing after the pick drops the product', 0 === ep.product_id );
+ep = helpers.existingPost( { tank: 122, area: 'clean', text: 'small wrasse', unknown: true, picked: { name: 'small wrasse', product_id: 5 }, cleared: '2025-06-01', supplier: 'Test Supplier' } );
+check( 'an unknown fish: "?? small wrasse", no product; a cleared date and a supplier', '?? small wrasse' === ep.species && 1 === ep.unknown && 0 === ep.product_id && '2025-06-01' === ep.cleared && 'Test Supplier' === ep.supplier, JSON.stringify( ep ) );
+
 console.log( '' );
 console.log( failures ? failures + ' of ' + checks + ' checks FAILED' : 'All ' + checks + ' checks passed' );
 process.exit( failures ? 1 : 0 );
