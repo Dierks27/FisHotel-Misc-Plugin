@@ -8,7 +8,9 @@
  * label said once it was corrected, and "Identify…" / "Correct the fish…"
  * opens the panel of views/identify-panel.php under it. Every saved line
  * posts the token of the fish it was rendered with (Identify::seen()), so
- * a page loaded before a correction made elsewhere cannot undo it.
+ * a page loaded before a correction made elsewhere cannot undo it. Under
+ * the grid: "Import lines…" (views/order-import.php) and "Received: all
+ * as ordered".
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  *
@@ -375,8 +377,13 @@ $fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks,
 		<template id="fh-cr-line-template"><?php $fh_line_row( '__i__', array(), array() ); ?></template>
 		<p class="fh-cr-actions-row">
 			<button type="button" class="button fh-cr-line-add"><?php esc_html_e( 'Add line', 'fishotel-misc-plugin' ); ?></button>
+			<button type="button" class="button fh-cr-import-open" aria-expanded="false" aria-controls="fh-cr-import" title="<?php esc_attr_e( 'Paste the rows of your order sheet or of the supplier\'s invoice, or pick a file, instead of typing the lines one by one.', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'Import lines…', 'fishotel-misc-plugin' ); ?></button>
+			<button type="button" class="button fh-cr-received-all" title="<?php esc_attr_e( 'Fills every EMPTY received field with its ordered count — then correct the few that differ. Nothing is saved until Save.', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'Received: all as ordered', 'fishotel-misc-plugin' ); ?></button>
+			<span class="fh-cr-sub fh-cr-sub--inline fh-cr-received-all__said" aria-live="polite"></span>
 			<span class="fh-cr-sub fh-cr-sub--inline"><?php esc_html_e( 'Type a species for suggestions (products and the species list); picking one fills the scientific name, the per-box count and the worth from the list. Tick ?? for a fish nobody knows yet — what you type is then what it looks like. Computed columns update on Save; the Boxes card below adds the percents up as they are typed.', 'fishotel-misc-plugin' ); ?></span>
 		</p>
+
+		<?php include Clean_Room::path() . 'views/order-import.php'; ?>
 
 		<div class="fishotel-misc-card fh-cr-card fh-cr-boxes" id="fh-cr-boxes" data-shares="<?php echo esc_attr( (string) wp_json_encode( $boxes['shares'] ) ); ?>">
 			<div class="fishotel-misc-card-header">

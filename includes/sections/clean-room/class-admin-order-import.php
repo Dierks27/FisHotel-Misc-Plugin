@@ -68,6 +68,114 @@ class Admin_Order_Import {
 		add_action( 'wp_ajax_' . self::ACTION_LAYOUT, array( $this, 'ajax_layout' ) );
 	}
 
+	/**
+	 * What js/order-import.js is handed (wp_localize_script): the action,
+	 * the roles a column can have, and its words.
+	 *
+	 * @return array
+	 */
+	public static function js_config() {
+		return array(
+			'action'       => self::ACTION,
+			'layoutAction' => self::ACTION_LAYOUT,
+			'roles'        => Order_Import::roles(),
+			'i18n'         => array(
+				'error'          => __( 'Something went wrong. Please try again.', 'fishotel-misc-plugin' ),
+				'nothing'        => __( 'Paste the rows first, or pick a file.', 'fishotel-misc-plugin' ),
+				'reading'        => __( 'Reading…', 'fishotel-misc-plugin' ),
+				'saving'         => __( 'Saving…', 'fishotel-misc-plugin' ),
+				/* translators: %d: fields */
+				'filledOne'      => __( '%d empty received field filled — correct the ones that differ, then Save.', 'fishotel-misc-plugin' ),
+				/* translators: %d: fields */
+				'filledMany'     => __( '%d empty received fields filled — correct the ones that differ, then Save.', 'fishotel-misc-plugin' ),
+				'asTyped'        => __( 'use as typed (unlisted fish)', 'fishotel-misc-plugin' ),
+				'unknown'        => __( 'Unknown fish (??)', 'fishotel-misc-plugin' ),
+				'picked'         => __( 'picked by you', 'fishotel-misc-plugin' ),
+				'check'          => __( '? check', 'fishotel-misc-plugin' ),
+				'checkTitle'     => __( 'Whoever read the invoice was not sure about this row: compare it with the invoice.', 'fishotel-misc-plugin' ),
+				/* translators: %s: what the label said */
+				'label'          => __( 'label said: %s', 'fishotel-misc-plugin' ),
+				'badNumber'      => __( 'This cell could not be read as a number, so it is left empty. (A decimal comma is not assumed: write 6.50, not 6,50.)', 'fishotel-misc-plugin' ),
+				/* translators: %s: what the cell is */
+				'badCell'        => __( '%s could not be read', 'fishotel-misc-plugin' ),
+				'badRow'         => __( '? a number could not be read', 'fishotel-misc-plugin' ),
+				/* translators: %s: the supplier's code */
+				'code'           => __( 'code %s', 'fishotel-misc-plugin' ),
+				/* translators: %s: fish per box */
+				'perBox'         => __( '%s per box', 'fishotel-misc-plugin' ),
+				/* translators: %s: box number */
+				'box'            => __( 'box %s', 'fishotel-misc-plugin' ),
+				/* translators: %s: percent */
+				'pct'            => __( '%s%% of a box', 'fishotel-misc-plugin' ),
+				/* translators: %s: count */
+				'doa'            => __( '%s DOA', 'fishotel-misc-plugin' ),
+				'junk'           => __( 'not a fish — always leave rows like this out', 'fishotel-misc-plugin' ),
+				/* translators: 1: lines, 2: fish */
+				'foot'           => __( '%1$s lines · %2$s fish', 'fishotel-misc-plugin' ),
+				/* translators: %s: lines */
+				'addOne'         => __( 'Add %s line to the order', 'fishotel-misc-plugin' ),
+				/* translators: %s: lines */
+				'addMany'        => __( 'Add %s lines to the order', 'fishotel-misc-plugin' ),
+				'writeArrived'   => __( 'Write what arrived on the order', 'fishotel-misc-plugin' ),
+				'headerOn'       => __( 'The header row is', 'fishotel-misc-plugin' ),
+				'noHeader'       => __( 'none — the first row is already a fish', 'fishotel-misc-plugin' ),
+				/* translators: %d: row number */
+				'rowN'           => __( 'row %d', 'fishotel-misc-plugin' ),
+				/* translators: %d: column number */
+				'columnN'        => __( 'Column %d is…', 'fishotel-misc-plugin' ),
+				'thisColumn'     => __( 'this column is…', 'fishotel-misc-plugin' ),
+				'ignore'         => __( 'ignore', 'fishotel-misc-plugin' ),
+				'byHeaders'      => __( 'Columns found by their headings', 'fishotel-misc-plugin' ),
+				'byGuess'        => __( 'No header row found: the columns below are a guess — check them', 'fishotel-misc-plugin' ),
+				'byHand'         => __( 'Columns as you set them', 'fishotel-misc-plugin' ),
+				'change'         => __( 'Change the columns', 'fishotel-misc-plugin' ),
+				'useLayout'      => __( 'Use that layout', 'fishotel-misc-plugin' ),
+				'sheet'          => __( 'Sheet:', 'fishotel-misc-plugin' ),
+				'thFish'         => __( 'Fish as typed → on the order', 'fishotel-misc-plugin' ),
+				'thSize'         => __( 'Size', 'fishotel-misc-plugin' ),
+				'thOrdered'      => __( 'Ordered', 'fishotel-misc-plugin' ),
+				'thReceived'     => __( 'Received', 'fishotel-misc-plugin' ),
+				'thPrice'        => __( 'Price', 'fishotel-misc-plugin' ),
+				'thMore'         => __( 'Also read', 'fishotel-misc-plugin' ),
+				'thDup'          => __( 'Already on the order?', 'fishotel-misc-plugin' ),
+				/* translators: %s: the line already on the order */
+				'dup'            => __( 'already on the order: %s', 'fishotel-misc-plugin' ),
+				'dupSkip'        => __( 'skip', 'fishotel-misc-plugin' ),
+				'dupAdd'         => __( 'add anyway', 'fishotel-misc-plugin' ),
+				'pairAuto'       => __( 'pair it for me', 'fishotel-misc-plugin' ),
+				'pairThis'       => __( 'this line', 'fishotel-misc-plugin' ),
+				'pairNew'        => __( 'a new line (extra)', 'fishotel-misc-plugin' ),
+				'pairInsteadSet' => __( 'came instead of an ordered line', 'fishotel-misc-plugin' ),
+				/* translators: %s: an order line */
+				'pairLine'       => __( 'is: %s', 'fishotel-misc-plugin' ),
+				/* translators: %s: an order line */
+				'pairInstead'    => __( 'this came instead of: %s', 'fishotel-misc-plugin' ),
+				'sections'       => __( 'Which sections of this invoice belong to this order?', 'fishotel-misc-plugin' ),
+				/* translators: 1: section, 2: rows */
+				'sectionN'       => __( '%1$s (%2$s rows)', 'fishotel-misc-plugin' ),
+				'sameFish'       => __( 'The same fish in two boxes:', 'fishotel-misc-plugin' ),
+				'sameSum'        => __( 'add them up on the one ordered line (the boxes are noted)', 'fishotel-misc-plugin' ),
+				'sameSeparate'   => __( 'keep them as separate lines', 'fishotel-misc-plugin' ),
+				/* translators: %s: count */
+				'arrivedN'       => __( 'arrived %s', 'fishotel-misc-plugin' ),
+				/* translators: %s: price */
+				'priceN'         => __( 'price %s', 'fishotel-misc-plugin' ),
+				/* translators: %s: received count */
+				'kept'           => __( 'has %s received — left as it is', 'fishotel-misc-plugin' ),
+				'lineZero'       => __( 'did not come: received becomes 0', 'fishotel-misc-plugin' ),
+				'lineKeep'       => __( 'leave this line as it is', 'fishotel-misc-plugin' ),
+				/* translators: %d: rows */
+				'unticked'       => __( 'Left out by you (%d)', 'fishotel-misc-plugin' ),
+				'useFilePrice'   => __( 'Use the file\'s price where a line already has a typed price (otherwise a typed price is kept)', 'fishotel-misc-plugin' ),
+				'feeLines'       => __( 'The fee lines', 'fishotel-misc-plugin' ),
+				'putFees'        => __( 'Put these on the order (Tariffs and Import & re-ox fees; the domestic flight stays typed by hand)', 'fishotel-misc-plugin' ),
+				'replaceFees'    => __( 'Replace the amounts already typed on the order', 'fishotel-misc-plugin' ),
+				'copied'         => __( 'Copied. Paste it into your assistant together with the invoice.', 'fishotel-misc-plugin' ),
+				'confirmLayout'  => __( 'Forget this layout? The next file from this supplier will ask for its columns again.', 'fishotel-misc-plugin' ),
+			),
+		);
+	}
+
 	/* ============================================================== */
 	/*  AJAX                                                           */
 	/* ============================================================== */

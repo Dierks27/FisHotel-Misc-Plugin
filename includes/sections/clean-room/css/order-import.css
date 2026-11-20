@@ -1,0 +1,271 @@
+/**
+ * Clean Room — "Import lines" on the order page (views/order-import.php,
+ * js/order-import.js). Dark, on the --fh-* tokens of
+ * admin/css/admin-style.css like the rest of the section.
+ */
+
+.fh-cr-import {
+	margin-top: 16px;
+}
+
+/* The hidden attribute wins over the layout rules below. */
+.fh-cr-import[hidden],
+.fh-cr-import [hidden] {
+	display: none !important;
+}
+
+/* The two moments: two big buttons, the one that fits the order's status on. */
+.fh-cr-import__modes {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+	gap: 12px;
+	margin-bottom: 14px;
+}
+
+.fh-cr-import__mode {
+	display: block;
+	padding: 14px 16px;
+	text-align: left;
+	cursor: pointer;
+	color: var(--fh-text-secondary, #a0a0a0);
+	background: var(--fh-bg-primary, #1a1a1a);
+	border: 2px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	border-radius: var(--fh-radius, 8px);
+}
+
+.fh-cr-import__mode strong {
+	display: block;
+	margin-bottom: 4px;
+	font-size: 15px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-import__mode span {
+	display: block;
+	font-size: 12px;
+	line-height: 1.45;
+}
+
+.fh-cr-import__mode:hover,
+.fh-cr-import__mode:focus {
+	border-color: var(--fh-accent, #00a0d2);
+	outline: none;
+}
+
+.fh-cr-import__mode.is-on {
+	border-color: var(--fh-accent, #00a0d2);
+	box-shadow: inset 0 0 0 1px var(--fh-accent, #00a0d2);
+}
+
+.fh-cr-import__mode.is-on strong::before {
+	content: "\2713\00a0";
+	color: var(--fh-accent, #00a0d2);
+}
+
+/* The box and, beside it, the assistant panel. */
+.fh-cr-import__in {
+	display: grid;
+	grid-template-columns: minmax(0, 2fr) minmax(240px, 1fr);
+	gap: 16px;
+	align-items: start;
+}
+
+@media (max-width: 960px) {
+	.fh-cr-import__in {
+		grid-template-columns: 1fr;
+	}
+}
+
+.fh-cr-import__text,
+.fh-cr-import__instructions {
+	width: 100%;
+	font-family: Consolas, Monaco, monospace;
+	font-size: 12px;
+	white-space: pre;
+	overflow: auto;
+}
+
+.fh-cr-import__instructions {
+	white-space: pre-wrap;
+}
+
+.fh-cr-import__file-row {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px 12px;
+	align-items: center;
+}
+
+.fh-cr-import__assistant {
+	padding: 12px 14px;
+	background: var(--fh-bg-primary, #1a1a1a);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	border-radius: var(--fh-radius, 8px);
+}
+
+.fh-cr-import__assistant h3 {
+	margin: 0 0 6px;
+	font-size: 13px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-import__status {
+	min-height: 1.4em;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-import__status.is-error {
+	color: var(--fh-danger, #dc3232);
+}
+
+/* The preview. */
+.fh-cr-import__layout-line,
+.fh-cr-import__summary,
+.fh-cr-import__foot-text {
+	font-weight: 600;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-import__foot-text {
+	font-size: 14px;
+}
+
+.fh-cr-import__offer {
+	padding: 8px 12px;
+	border-left: 3px solid var(--fh-warning, #ffb900);
+	background: var(--fh-bg-primary, #1a1a1a);
+}
+
+.fh-cr-import__sample th {
+	min-width: 130px;
+	vertical-align: bottom;
+}
+
+.fh-cr-import__sample th .fh-cr-sub {
+	display: block;
+}
+
+.fh-cr-import__sample-head td {
+	font-weight: 600;
+}
+
+.fh-cr-import__sample td {
+	max-width: 220px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.fh-cr-import__rows td,
+.fh-cr-import__group td {
+	vertical-align: top;
+}
+
+.fh-cr-import__rows tr.is-off td,
+.fh-cr-import__group--off {
+	opacity: 0.55;
+}
+
+.fh-cr-import__rows tr.is-flagged td:first-child {
+	box-shadow: inset 3px 0 0 var(--fh-warning, #ffb900);
+}
+
+.fh-cr-import__typed {
+	display: block;
+	font-weight: 600;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-import__fish .fh-cr-sub {
+	display: block;
+}
+
+.fh-cr-import__match.is-flag,
+.fh-cr-import td.is-bad,
+.fh-cr-import__over {
+	font-weight: 600;
+	color: var(--fh-warning, #ffb900);
+}
+
+.fh-cr-import__pick,
+.fh-cr-import__pair {
+	max-width: 260px;
+}
+
+.fh-cr-import__junk-wrap {
+	display: block;
+	white-space: nowrap;
+}
+
+/* The reconciliation: four plainly coloured groups. */
+.fh-cr-import__group {
+	margin: 14px 0;
+	padding: 4px 12px 10px;
+	border-left: 4px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	background: var(--fh-bg-primary, #1a1a1a);
+	border-radius: 0 var(--fh-radius, 8px) var(--fh-radius, 8px) 0;
+}
+
+.fh-cr-import__group h3 {
+	margin: 8px 0 4px;
+	font-size: 14px;
+}
+
+.fh-cr-import__group--same {
+	border-left-color: var(--fh-success, #46b450);
+}
+
+.fh-cr-import__group--same h3 {
+	color: var(--fh-success, #46b450);
+}
+
+.fh-cr-import__group--diff {
+	border-left-color: var(--fh-warning, #ffb900);
+}
+
+.fh-cr-import__group--diff h3 {
+	color: var(--fh-warning, #ffb900);
+}
+
+.fh-cr-import__group--missing {
+	border-left-color: var(--fh-danger, #dc3232);
+}
+
+.fh-cr-import__group--missing h3 {
+	color: var(--fh-danger, #dc3232);
+}
+
+.fh-cr-import__group--extra {
+	border-left-color: var(--fh-accent, #00a0d2);
+}
+
+.fh-cr-import__group--extra h3 {
+	color: var(--fh-accent, #00a0d2);
+}
+
+.fh-cr-import__line .fh-cr-sub {
+	display: block;
+}
+
+.fh-cr-import__paired {
+	margin: 2px 0;
+}
+
+.fh-cr-import__section {
+	margin-right: 12px;
+	white-space: nowrap;
+}
+
+.fh-cr-import__fees {
+	margin: 14px 0;
+	padding: 8px 12px;
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	border-radius: var(--fh-radius, 8px);
+}
+
+.fh-cr-import__actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px 14px;
+	align-items: center;
+}

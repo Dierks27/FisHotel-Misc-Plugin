@@ -518,7 +518,38 @@
 		return String(name === null || typeof name === 'undefined' ? '' : name).replace(/^[? ]+/, '').replace(/^ +| +$/g, '');
 	}
 
+	/**
+	 * The order form's fields with its line rows packed into ONE field,
+	 * lines_json. An order of 150 fish is some 2,500 form fields — more
+	 * than PHP reads by default (max_input_vars) — and a save that lost
+	 * its last lines would delete them; one JSON field cannot be cut
+	 * short. Admin_Workbook::unpack_lines() turns it back into rows.
+	 *
+	 * @param {Object[]} fields serializeArray(): {name, value}.
+	 * @return {Object[]} The other fields, then {name: 'lines_json', value}.
+	 */
+	function packLines(fields) {
+		var rows = {};
+		var order = [];
+		var out = [];
+		(fields || []).forEach(function (field) {
+			var m = /^lines\[([^\]]+)\]\[([^\]]+)\]$/.exec(String(field.name));
+			if (!m) {
+				out.push(field);
+				return;
+			}
+			if (!Object.prototype.hasOwnProperty.call(rows, m[1])) {
+				rows[m[1]] = {};
+				order.push(m[1]);
+			}
+			rows[m[1]][m[2]] = field.value;
+		});
+		out.push({ name: 'lines_json', value: JSON.stringify(order.map(function (key) { return rows[key]; })) });
+		return out;
+	}
+
 	var api = {
+		packLines: packLines,
 		renumber: renumber,
 		suggestImportFees: suggestImportFees,
 		unknownName: unknownName,
@@ -1356,7 +1387,7 @@
 				data.push({ name: 'op', value: 'save' });
 				var $btn = $order.find('.fh-cr-order-save').prop('disabled', true);
 				$orderStatus.removeClass('is-error is-ok').text('…');
-				$.post(ajaxUrl(), $.param(data))
+				$.post(ajaxUrl(), $.param(packLines(data)))
 					.done(function (res) {
 						if (!res || !res.success) {
 							$orderStatus.addClass('is-error').text('');

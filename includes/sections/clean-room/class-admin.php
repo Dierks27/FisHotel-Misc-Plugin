@@ -213,6 +213,8 @@ class Admin {
 			$sizes     = self::sizes_panel( $store, $settings );
 			$shares    = $store->box_shares();
 
+			$import_layouts = Import_Layouts::all();
+
 			include Clean_Room::path() . 'views/settings.php';
 			return;
 		}
@@ -709,6 +711,24 @@ class Admin {
 				),
 			)
 		);
+
+		// The order page's "Import lines" and the Settings list of saved layouts.
+		if ( $on_page ) {
+			wp_enqueue_style(
+				'fishotel-cleanroom-order-import',
+				Clean_Room::url() . 'css/order-import.css',
+				array( 'fishotel-cleanroom-admin' ),
+				FISHOTEL_MISC_VERSION
+			);
+			wp_enqueue_script(
+				'fishotel-cleanroom-order-import',
+				Clean_Room::url() . 'js/order-import.js',
+				array( 'jquery', 'fishotel-cleanroom-admin' ),
+				FISHOTEL_MISC_VERSION,
+				true
+			);
+			wp_localize_script( 'fishotel-cleanroom-order-import', 'fhCleanRoomImport', Admin_Order_Import::js_config() );
+		}
 	}
 
 	/* ============================================================== */

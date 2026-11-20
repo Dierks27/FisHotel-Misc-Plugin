@@ -55,6 +55,7 @@ $tab = 'arrivals';
 		</form>
 		<div class="fh-cr-actions">
 			<a class="button button-primary" href="<?php echo esc_url( $new_url ); ?>"><?php esc_html_e( 'New order', 'fishotel-misc-plugin' ); ?></a>
+			<a class="button" href="<?php echo esc_url( add_query_arg( 'import', '1', $new_url ) ); ?>" title="<?php esc_attr_e( 'A new order with "Import lines" already open: paste your order sheet or pick the file.', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'New order from pasted lines / a file', 'fishotel-misc-plugin' ); ?></a>
 			<a class="button" href="<?php echo esc_url( $exports['xlsx'] ); ?>"><?php esc_html_e( 'Export XLSX', 'fishotel-misc-plugin' ); ?></a>
 			<a class="button" href="<?php echo esc_url( $exports['csv'] ); ?>"><?php esc_html_e( 'Export lines CSV', 'fishotel-misc-plugin' ); ?></a>
 		</div>
