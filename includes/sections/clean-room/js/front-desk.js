@@ -5,8 +5,9 @@
  * Every screen is built with the DOM API from the data the server sends
  * (never innerHTML from data); every write goes through the one AJAX
  * action fishotel_cleanroom_act and re-renders from the reply; every stay
- * change shows a toast whose Undo posts a compensating event — it stays
- * until the next action, and at least settings.undoSeconds.
+ * change shows a toast whose Undo posts a compensating event — whole for
+ * settings.undoSeconds, then folded to a small "↶ Undo" above the button
+ * bar until the next action, and never past settings.undoWindow.
  *
  * The fastest path is a loss (Jeff counts bodies): one tap on "−1 lost"
  * on the fish's row, or Lost → the row — so the fish rows come first and
@@ -893,6 +894,10 @@
 		timers: {},
 		toastShownAt: 0,
 		toastSticky: false,
+		toastPill: false,
+		toastView: '',
+		toastUndo: null,
+		toastTap: null,
 		openFeeds: {}
 	};
 
@@ -1060,7 +1065,7 @@
 			if (fields.act === 'undo') {
 				toast(data.message || t('undone', 'Undone'), null);
 			} else {
-				toast(data.message || t('saved', 'Saved'), data.undo && data.undo.eventIds && data.undo.eventIds.length ? data.undo.eventIds : null);
+				toast(data.message || t('saved', 'Saved'), data.undo && data.undo.eventIds && data.undo.eventIds.length ? data.undo.eventIds : null, false, null, data.undo && data.undo.label);
 			}
 			return data;
 		}).catch(function (err) {
@@ -1109,14 +1114,47 @@
 	/* ---------------------------------------------------------------- */
 
 	/*
-	 * A toast with Undo is sticky: it stays until the next action
-	 * (dismissToast(), called when a new screen opens or a new toast
-	 * replaces it) and at least settings.undoSeconds either way, so a wet
-	 * thumb can still undo after the server round trip. The bar shows that
-	 * minimum running out; the server honours the undo for its own window.
+	 * A toast with Undo is sticky. It is shown whole for
+	 * settings.undoSeconds (the bar running out), so a wet thumb can still
+	 * undo after the server round trip; then it folds to a small "↶ Undo"
+	 * in a strip of its own on top of the button bar (foldToast()). The
+	 * pill goes on the next action (dismissToast(): a new screen opens, a
+	 * new toast replaces it), never rides onto a sheet (render() closes it
+	 * when the view is no longer the one it came up on) and leaves by
+	 * itself before the server's own window (settings.undoWindow) ends.
+	 * An error, or a toast with nothing to undo, goes after its seconds
+	 * and never folds.
+	 *
+	 * place() measures the button bar and the toast as they are and hands
+	 * both heights to the stylesheet (--fd-bar-h, --fd-toast-h): the toast
+	 * sits above the bar that is really there — two rows, three, a sheet's
+	 * one — and the page keeps that much room at its foot.
 	 */
-	function toast(message, undoIds, isError, onTap) {
-		var seconds = isError ? 4 : Math.max(10, parseInt(settings().undoSeconds, 10) || 10);
+	function undoSeconds() {
+		return Math.max(10, parseInt(settings().undoSeconds, 10) || 10);
+	}
+
+	function undoButton(text, label) {
+		var undo = state.toastUndo;
+		return el('button', {
+			type: 'button',
+			text: text,
+			'aria-label': label || null,
+			on: {
+				click: function (e) {
+					e.stopPropagation();
+					if (state.sending) {
+						return; // A write is under way: the Undo stays for the next tap.
+					}
+					hideToast();
+					act({ act: 'undo', event_ids: undo.ids, tank: tank() ? tank().number : 0 });
+				}
+			}
+		});
+	}
+
+	function toast(message, undoIds, isError, onTap, undoLabel) {
+		var seconds = isError ? 4 : undoSeconds();
 		var sticky = !isError && !!(undoIds && undoIds.length);
 		root.clearTimeout(state.timers.toast);
 		root.clearInterval(state.timers.toastBar);
@@ -1126,25 +1164,12 @@
 		}
 		toastEl.className = 'fh-fd-toast' + (isError ? ' is-error' : '') + (sticky ? ' is-sticky' : '');
 		toastEl.appendChild(el('span', { text: message }));
-		if (undoIds && undoIds.length) {
-			toastEl.appendChild(el('button', {
-				type: 'button',
-				text: t('undo', 'Undo'),
-				on: {
-					click: function (e) {
-						e.stopPropagation();
-						hideToast();
-						act({ act: 'undo', event_ids: undoIds, tank: tank() ? tank().number : 0 });
-					}
-				}
-			}));
+		state.toastUndo = undoIds && undoIds.length ? { ids: undoIds, label: undoLabel || message } : null;
+		if (state.toastUndo) {
+			toastEl.appendChild(undoButton(t('undo', 'Undo')));
 		}
-		if (onTap) {
-			toastEl.addEventListener('click', onTap, { once: true });
-		} else if (sticky) {
-			// A tap on the message itself closes it — once the minimum has passed.
-			toastEl.addEventListener('click', function () { dismissToast(); });
-		}
+		// A tap on the message itself: what the caller asked for, or (with Undo) fold it now.
+		state.toastTap = onTap || null;
 		var bar = el('span', { class: 'fh-fd-toast__bar' });
 		bar.style.width = '100%';
 		toastEl.appendChild(bar);
@@ -1153,6 +1178,8 @@
 		var started = Date.now();
 		state.toastShownAt = started;
 		state.toastSticky = sticky;
+		state.toastPill = false;
+		state.toastView = state.view;
 		state.timers.toastBar = root.setInterval(function () {
 			var left = Math.max(0, 1 - (Date.now() - started) / (seconds * 1000));
 			bar.style.width = (left * 100) + '%';
@@ -1160,23 +1187,54 @@
 				root.clearInterval(state.timers.toastBar);
 			}
 		}, 200);
-		if (!sticky) {
-			state.timers.toast = root.setTimeout(hideToast, seconds * 1000);
-		}
+		state.timers.toast = root.setTimeout(sticky ? foldToast : hideToast, seconds * 1000);
+		place();
 	}
 
-	/* The next action happened: close a sticky toast, but never before its minimum. */
+	/*
+	 * The seconds are up (or the message was tapped): the toast folds to
+	 * the pill, which says what it undoes to a screen reader and counts
+	 * nothing down. It leaves undoSeconds before the server's window ends
+	 * — the round trip of the write, and of the undo — so it is not there
+	 * to offer an undo the server would refuse; with no window known there
+	 * is no pill.
+	 */
+	function foldToast() {
+		if (toastEl.hidden || !state.toastSticky || state.toastPill || !state.toastUndo) {
+			return;
+		}
+		var life = ((parseInt(settings().undoWindow, 10) || 0) - undoSeconds()) * 1000 - (Date.now() - state.toastShownAt);
+		if (life <= 0) {
+			hideToast();
+			return;
+		}
+		root.clearTimeout(state.timers.toast);
+		root.clearInterval(state.timers.toastBar);
+		while (toastEl.firstChild) {
+			toastEl.removeChild(toastEl.firstChild);
+		}
+		toastEl.className = 'fh-fd-toast is-pill';
+		toastEl.appendChild(undoButton('↶ ' + t('undo', 'Undo'), fmt(t('undoWhat', 'Undo: %s'), state.toastUndo.label)));
+		state.toastPill = true;
+		state.timers.toast = root.setTimeout(hideToast, life);
+		place();
+	}
+
+	/*
+	 * The next action happened: the pill goes at once; the whole toast is
+	 * from here a plain one — it ends with its seconds and does not fold.
+	 */
 	function dismissToast() {
 		if (toastEl.hidden || !state.toastSticky) {
 			return;
 		}
-		var minimum = Math.max(10, parseInt(settings().undoSeconds, 10) || 10) * 1000;
-		var left = minimum - (Date.now() - state.toastShownAt);
-		root.clearTimeout(state.timers.toast);
+		var left = state.toastPill ? 0 : undoSeconds() * 1000 - (Date.now() - state.toastShownAt);
 		if (left <= 0) {
 			hideToast();
 			return;
 		}
+		state.toastSticky = false;
+		root.clearTimeout(state.timers.toast);
 		state.timers.toast = root.setTimeout(hideToast, left);
 	}
 
@@ -1184,7 +1242,42 @@
 		root.clearTimeout(state.timers.toast);
 		root.clearInterval(state.timers.toastBar);
 		state.toastSticky = false;
+		state.toastPill = false;
+		state.toastUndo = null;
+		state.toastTap = null;
 		toastEl.hidden = true;
+		place();
+	}
+
+	toastEl.addEventListener('click', function () {
+		var tap = state.toastTap;
+		if (tap) {
+			state.toastTap = null;
+			tap();
+			return;
+		}
+		foldToast();
+	});
+
+	/* The height a thing takes on the screen now; nothing for one that is not there. */
+	function tall(node) {
+		return node && !node.hidden ? Math.ceil(node.getBoundingClientRect().height) || 0 : 0;
+	}
+
+	function place() {
+		document.body.style.setProperty('--fd-bar-h', tall(document.querySelector('.fh-fd-bar')) + 'px');
+		document.body.style.setProperty('--fd-toast-h', tall(toastEl) + 'px');
+	}
+
+	/*
+	 * The bar and the toast are measured again whenever either changes its
+	 * size by itself: larger text, a turned phone, a label that wraps. An
+	 * old browser without ResizeObserver measures at every render, at
+	 * every change of the toast and when the window changes.
+	 */
+	var sizes = typeof root.ResizeObserver === 'function' ? new root.ResizeObserver(place) : null;
+	if (!sizes && typeof root.addEventListener === 'function') {
+		root.addEventListener('resize', place);
 	}
 
 	/* ---------------------------------------------------------------- */
@@ -1192,6 +1285,24 @@
 	/* ---------------------------------------------------------------- */
 
 	function render() {
+		draw();
+		// A sheet never carries the Undo: a view other than the one it came up on counts as the next action.
+		if (state.toastSticky && state.view !== state.toastView) {
+			dismissToast();
+		}
+		// Each render makes its bar anew (or none): watch that one, and measure now.
+		var barNode = document.querySelector('.fh-fd-bar');
+		if (sizes) {
+			sizes.disconnect();
+			sizes.observe(toastEl);
+			if (barNode) {
+				sizes.observe(barNode);
+			}
+		}
+		place();
+	}
+
+	function draw() {
 		clearTimers();
 		while (app.firstChild) {
 			app.removeChild(app.firstChild);

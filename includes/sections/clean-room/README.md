@@ -300,9 +300,30 @@ like every other action. See *Fish already here*.
 Every write is one AJAX action (`fishotel_cleanroom_act`, nonce +
 `manage_woocommerce`); the reply carries the refreshed screen, and a
 toast offers **Undo** — a compensating event, never a delete. The toast
-stays until the next action (at least 10 seconds); the server honours the
-undo for 15 minutes, only for the user who wrote the event, and never
-twice for the same event. The temporary tanks ride on the same action
+is shown whole for 10 seconds (`Settings::UNDO_SECONDS`, the bar under
+it running out): the words, a big Undo. Then it folds to a small
+**↶ Undo** at the right, in a strip of its own on top of the button bar
+— no countdown, at least 44 px tall, and named for a screen reader by
+what it undoes ("Undo: 1 × … lost"). A tap on the message folds it at
+once. The small Undo stays until the next action (another write, a
+sheet opening — it never sits on a sheet) and leaves by itself ten
+seconds before the server's window ends: the server honours the undo
+for 15 minutes (`Front_Desk::UNDO_WINDOW`, handed to the page as
+`settings.undoWindow`), only for the user who wrote the event, and never
+twice for the same event, and it stays the judge — an undo that comes
+too late is answered "That can no longer be undone." A next action
+inside the 10 seconds lets the whole toast finish them and go; an error
+(4 seconds) and a "Saved" with nothing to undo go after their seconds
+and never fold. The toast never lies on a button: the script measures
+the button bar as it stands (`place()`, a `ResizeObserver` on the bar
+and the toast — three rows on a tank, one on a sheet, none on the
+picker; larger text, a turned phone) and hands the heights to the
+stylesheet as `--fd-bar-h` and `--fd-toast-h`, which puts the toast
+above the bar and keeps that much room at the foot of the page, so the
+last row scrolls clear of both; rows that scroll under the Undo's strip
+are behind it as they are behind the bar. The Shop App adds its bar at
+the head of the page and pins nothing to the foot; its keypad and its
+questions cover the whole screen, the toast included. The temporary tanks ride on the same action
 with five more acts — `setup`, `setup_edit`, `setup_steps`, `takedown`
 and `todo_tick` (one line of the day's list, for a whole building or
 for one tank) — which need no tank on the page and have no undo: a

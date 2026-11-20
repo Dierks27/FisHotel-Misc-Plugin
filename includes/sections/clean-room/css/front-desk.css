@@ -22,6 +22,9 @@
 	--fd-border: rgba(255, 255, 255, 0.12);
 	--fd-radius: 14px;
 	--fd-tap: 56px;
+	/* The button bar and the toast as they stand now: measured by the script (place()), nothing until it has. */
+	--fd-bar-h: 0px;
+	--fd-toast-h: 0px;
 	--fd-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
@@ -42,9 +45,10 @@ body {
 	-webkit-text-size-adjust: 100%;
 }
 
+/* Room at the foot for the bar as it really is and the toast above it: the last row scrolls clear of both. */
 body.fh-fd {
 	min-height: 100vh;
-	padding-bottom: calc(var(--fd-tap) * 2 + 40px + env(safe-area-inset-bottom, 0px));
+	padding-bottom: calc(max(var(--fd-bar-h), env(safe-area-inset-bottom, 0px)) + var(--fd-toast-h) + 24px);
 }
 
 .fh-fd-noscript,
@@ -629,7 +633,7 @@ button.fh-fd-occ:active {
 	position: fixed;
 	left: 12px;
 	right: 12px;
-	bottom: calc(var(--fd-tap) * 2 + 36px + env(safe-area-inset-bottom, 0px));
+	bottom: calc(max(var(--fd-bar-h), env(safe-area-inset-bottom, 0px)) + 10px); /* Above the measured bar, however many rows it has. */
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
@@ -769,9 +773,56 @@ button.fh-fd-occ:active {
 	color: var(--fd-accent);
 }
 
-/* A sticky toast (with Undo) stays until the next action. */
+/* A sticky toast (with Undo): whole while its bar runs out, then folded to the pill. */
 .fh-fd-toast.is-sticky {
 	border-color: rgba(53, 184, 255, 0.5);
+}
+
+/*
+ * The folded toast: a strip of its own on top of the button bar, as wide
+ * and as dark as the bar, with a small "↶ Undo" at the right. Rows that
+ * scroll under it are behind it as they are behind the bar, so nothing
+ * to tap ever shows beside the pill or under it.
+ */
+.fh-fd-toast.is-pill {
+	left: 0;
+	right: 0;
+	bottom: var(--fd-bar-h);
+	justify-content: flex-end;
+	max-width: none;
+	padding: 5px max(12px, calc(50% - 308px)) max(5px, calc(env(safe-area-inset-bottom, 0px) - var(--fd-bar-h)));
+	border: 0;
+	border-top: 1px solid var(--fd-border);
+	border-radius: 0;
+	background: rgba(15, 23, 32, 0.96);
+	backdrop-filter: blur(6px);
+	box-shadow: none;
+	animation: fh-fd-fold 0.2s ease-out;
+}
+
+.fh-fd-toast.is-pill button {
+	min-height: 44px;
+	padding: 6px 16px;
+	border-color: var(--fd-border);
+	background: var(--fd-card);
+	color: var(--fd-muted);
+	font-size: 16px;
+	font-weight: 700;
+}
+
+@keyframes fh-fd-fold {
+	from { opacity: 0; }
+	to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.fh-fd-toast.is-pill {
+		animation: none;
+	}
+
+	.fh-fd-toast .fh-fd-toast__bar {
+		transition: none;
+	}
 }
 
 .fh-fd-today__head {

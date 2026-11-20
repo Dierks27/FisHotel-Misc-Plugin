@@ -106,10 +106,10 @@ class Settings {
 	const BOX_RATE_MAX  = 99999.99;
 
 	/**
-	 * The least the undo toast stays (seconds): it then stays until the
-	 * next action on the phone, so a wet thumb has time to change its
-	 * mind. Fixed, not a setting; the server honours an undo for
-	 * Front_Desk::UNDO_WINDOW regardless.
+	 * How long the undo toast is shown whole (seconds): it then folds to
+	 * a small Undo that stays until the next action on the phone, so a
+	 * wet thumb has time to change its mind. Fixed, not a setting; the
+	 * server honours an undo for Front_Desk::UNDO_WINDOW regardless.
 	 *
 	 * @var int
 	 */

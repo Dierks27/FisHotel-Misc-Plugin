@@ -68,6 +68,7 @@ node includes/sections/clean-room/tests/front-desk.test.js
 node includes/sections/clean-room/tests/clean-room-admin.test.js
 node includes/sections/clean-room/tests/dose-math.test.js
 node includes/sections/clean-room/tests/front-desk-dose.test.js
+node includes/sections/clean-room/tests/front-desk-toast.test.js
 node includes/sections/clean-room/tests/medications-admin.test.js
 node includes/sections/clean-room/tests/temp-tanks.test.js
 ```
@@ -806,6 +807,26 @@ system temp directory (`FH_TEST_TMP` overrides).
   `fixtures/dose-maths.json`: the same tables and the same 51 sums as
   dose-test.php, plus the page's own spelling of the inputs and
   translated words.
+- **front-desk-toast.test.js** — the toast with Undo run for real:
+  `js/front-desk.js` started against a small stand-in DOM, a clock moved
+  by hand, a `ResizeObserver` the test fires and a `fetch` that records
+  what is posted. Shown whole with its Undo and its bar; the bar runs
+  out and it folds to the "↶ Undo" pill, named by what it undoes, no
+  countdown; the pill stays through a redraw of the same screen and goes
+  on the next action, when a sheet opens by any road (the Mic sheet does
+  not pass through `go()`), and ten seconds before the server's window
+  ends — and is never shown when the page was told no window; Undo from
+  the pill posts the very request the big Undo posts; a next action
+  inside the seconds lets the whole toast finish and go, unfolded; a tap
+  on the message folds it at once; an error and a plain "Saved" never
+  fold; an undo refused as too late says so; a tap on the pill while
+  another write is under way posts nothing and keeps the pill. And the
+  place: the bar measured at each render (three rows, a sheet's one,
+  none), again through the observer when it grows, without an observer
+  at each render and window change; the toast and the strip measured at
+  each change; and `css/front-desk.css` placing the toast and the page's
+  foot from `--fd-bar-h` and `--fd-toast-h` with no counted rows, the
+  pill at least 44 px, the fold a fade, reduced motion respected.
 - **front-desk-dose.test.js** — the Dose sheet, the Calculator and a
   dose phrase's preview run for real: `js/front-desk.js` started against
   a small stand-in DOM and a `fetch` that records what is posted. "Now"
@@ -901,9 +922,11 @@ system temp directory (`FH_TEST_TMP` overrides).
    login's cookie lasts about a year).
 3. Arrival → type "paj": suggestions from the quarantined-fish products;
    pick one, qty 4, Save. The row shows 4 live · in QT · day 1, above the
-   folded "Today · N to do ▸" line; the toast stays until the next tap (at
-   least 10 s) and its Undo removes the arrival (a compensating event,
-   visible on the Events tab); tapping Undo twice changes nothing more.
+   folded "Today · N to do ▸" line; the toast is whole for 10 s (above
+   the button bar, on none of its buttons), then folds to a small
+   "↶ Undo" at the right on top of the bar, which stays until the next
+   tap; its Undo removes the arrival (a compensating event, visible on
+   the Events tab); tapping Undo twice changes nothing more.
 4. Tap "−1 lost" on the row (the first button under the title): 3 live at
    once, Undo works. Mic → "lost one cardinal": the preview reads "1 × …
    lost in Tank 521" and confirms after the countdown.

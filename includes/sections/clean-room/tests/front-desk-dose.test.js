@@ -46,7 +46,7 @@ function El( tag ) {
 	this.children    = [];
 	this.attrs       = {};
 	this.listeners   = {};
-	this.style       = {};
+	this.style       = { setProperty: function ( name, value ) { this[ name ] = value; } };
 	this.className   = '';
 	this.value       = '';
 	this.hidden      = false;
@@ -90,6 +90,8 @@ El.prototype.addEventListener = function ( type, fn ) {
 	( this.listeners[ type ] = this.listeners[ type ] || [] ).push( fn );
 };
 El.prototype.focus = function () {};
+/* The page measures its button bar and its toast (place()): no layout here, so nothing tall. */
+El.prototype.getBoundingClientRect = function () { return { height: 0 }; };
 /* '.one-class' only — what the page asks for. */
 El.prototype.querySelectorAll = function ( selector ) {
 	var cls = String( selector ).replace( /^\./, '' );

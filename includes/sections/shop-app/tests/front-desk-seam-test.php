@@ -22,7 +22,12 @@
  *   - inside that handler the session holds the Front Desk's capability
  *     and not the Settings one: the medications editor refuses it even
  *     when called from there;
- *   - nothing on the act path asks for a capability of its own.
+ *   - nothing on the act path asks for a capability of its own;
+ *   - the screen: the Front Desk's toast and its folded Undo stand at the
+ *     foot of the page, above its button bar; this app adds its bar at
+ *     the head and pins nothing to the foot, and every layer it lays over
+ *     the whole screen (the keypad, a question, the scanner) lies over
+ *     the toast, never under it.
  *
  * Run from the plugin root:
  *   php includes/sections/shop-app/tests/front-desk-seam-test.php
@@ -348,5 +353,38 @@ check(
 	) === $asks,
 	implode( ' | ', $asks )
 );
+
+/* ------------------------------------------------------------------ */
+/*  The screen: this app's own parts and the Front Desk's toast         */
+/* ------------------------------------------------------------------ */
+
+// The toast (whole, or folded to the small Undo) is fixed above the Front
+// Desk's own button bar. What this app adds to that page must leave the
+// foot alone and, where it covers the screen, cover the toast too.
+$app_css   = (string) file_get_contents( FISHOTEL_MISC_PATH . 'includes/sections/shop-app/css/app.css' );
+$desk_css  = (string) file_get_contents( $room_dir . 'css/front-desk.css' );
+echo "\n7. The screen: nothing of the app under or on the Front Desk's toast\n";
+$toast_z   = preg_match( '/\n\.fh-fd-toast \{[^}]*?z-index:\s*(\d+);/', $desk_css, $z ) ? (int) $z[1] : -1;
+$fixed     = array();
+$under     = array();
+$at_foot   = array();
+preg_match_all( '/([^{}]+)\{([^{}]*)\}/', (string) preg_replace( '#/\*.*?\*/#s', '', $app_css ), $rules, PREG_SET_ORDER );
+foreach ( $rules as $rule ) {
+	$name = trim( $rule[1] );
+	if ( preg_match( '/(?:^|[\s;])bottom:/', $rule[2] ) ) {
+		$at_foot[] = $name;
+	}
+	if ( ! preg_match( '/position:\s*fixed;/', $rule[2] ) ) {
+		continue;
+	}
+	$fixed[] = $name;
+	if ( ! preg_match( '/inset:\s*0;/', $rule[2] ) || ! preg_match( '/z-index:\s*(\d+);/', $rule[2], $z ) || (int) $z[1] <= $toast_z ) {
+		$under[] = $name;
+	}
+}
+check( 'the Front Desk\'s toast has a place in the stack', $toast_z > 0, (string) $toast_z );
+check( 'the app\'s bar on a tank screen is at the head of the page (sticky, top), above the toast in the stack', 1 === preg_match( '/\n\.fh-sa-bar \{[^}]*position:\s*sticky;\s*top:\s*0;\s*z-index:\s*(\d+);/', $app_css, $z ) && (int) $z[1] > $toast_z );
+check( 'the app pins nothing to the foot of the page, where the toast and the Undo stand', array() === $at_foot, implode( ' | ', $at_foot ) );
+check( 'every layer the app fixes to the screen covers all of it and lies over the toast (the keypad, a question, the scanner)', count( $fixed ) >= 3 && array() === $under, implode( ' | ', $fixed ) . ' — under: ' . implode( ' | ', $under ) );
 
 fh_finish();

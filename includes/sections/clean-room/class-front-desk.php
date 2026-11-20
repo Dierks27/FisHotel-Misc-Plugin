@@ -39,8 +39,8 @@
  *
  * The reply carries the refreshed tank screen so the page re-renders
  * without a reload, and the ids of the stay events just written so the
- * toast (kept until the next action, at least Settings::UNDO_SECONDS) can
- * undo them — an undo is a compensating event (Replay::compensating),
+ * toast (whole for Settings::UNDO_SECONDS, then a small Undo until the
+ * next action, never past UNDO_WINDOW) can undo them — an undo is a compensating event (Replay::compensating),
  * never a delete, and posting the same ids twice writes nothing twice.
  *
  * The page also carries the medication list and, per tank, what the Dose
@@ -77,8 +77,11 @@ class Front_Desk {
 
 	/**
 	 * How long after an event the toast's undo is still honoured (seconds).
-	 * The toast stays until the next action (at least Settings::UNDO_SECONDS);
-	 * this is the server-side guard.
+	 * The toast is whole for Settings::UNDO_SECONDS, then folds to a small
+	 * Undo that stays until the next action; the page is told this window
+	 * (settings.undoWindow) so the Undo leaves before it ends. This is the
+	 * server-side guard: act_undo() refuses an older event whatever the
+	 * page shows.
 	 *
 	 * @var int
 	 */
@@ -263,6 +266,8 @@ class Front_Desk {
 			'cancel'      => __( 'Cancel', 'fishotel-misc-plugin' ),
 			'back'        => __( 'Back', 'fishotel-misc-plugin' ),
 			'undo'        => __( 'Undo', 'fishotel-misc-plugin' ),
+			/* translators: %s: what the Undo takes back, e.g. "1 × Pajama Cardinal lost" */
+			'undoWhat'    => __( 'Undo: %s', 'fishotel-misc-plugin' ),
 			'saved'       => __( 'Saved', 'fishotel-misc-plugin' ),
 			'undone'      => __( 'Undone', 'fishotel-misc-plugin' ),
 			'empty'       => __( 'No fish in this tank', 'fishotel-misc-plugin' ),
@@ -564,6 +569,7 @@ class Front_Desk {
 				'autoConfirmSeconds' => (int) $settings['auto_confirm_seconds'],
 				'voiceEnabled'       => ! empty( $settings['voice_enabled'] ),
 				'undoSeconds'        => Settings::UNDO_SECONDS,
+				'undoWindow'         => self::UNDO_WINDOW, // The folded Undo leaves the screen before this ends.
 				'saleReadyDays'      => (int) $settings['sale_ready_days'], // The suggestion only (occupants carry saleSuggested).
 				'copperFloor'        => (float) $settings['copper_floor'],
 				'copperTarget'       => (float) $settings['copper_target'],
