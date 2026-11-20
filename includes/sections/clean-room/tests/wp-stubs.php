@@ -314,6 +314,8 @@ require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-xlsx.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-workbook.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-import-map.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-import.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-order-import.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-import-layouts.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-store.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-settings.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-front-desk.php';
@@ -321,6 +323,7 @@ require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-admin.php'
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-admin-workbook.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-admin-stats.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-admin-import.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-admin-order-import.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-admin-temp.php';
 require_once __DIR__ . '/fake-store.php';
 

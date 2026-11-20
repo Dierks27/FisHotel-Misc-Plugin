@@ -211,6 +211,8 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 			require_once self::path() . 'class-workbook.php';
 			require_once self::path() . 'class-import-map.php';
 			require_once self::path() . 'class-import.php';
+			require_once self::path() . 'class-order-import.php';
+			require_once self::path() . 'class-import-layouts.php';
 			require_once self::path() . 'class-store.php';
 			require_once self::path() . 'class-settings.php';
 			require_once self::path() . 'class-front-desk.php';
@@ -278,6 +280,7 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 				require_once self::path() . 'class-admin-workbook.php';
 				require_once self::path() . 'class-admin-stats.php';
 				require_once self::path() . 'class-admin-import.php';
+				require_once self::path() . 'class-admin-order-import.php';
 				require_once self::path() . 'class-admin-temp.php';
 
 				$settings = new Settings();
@@ -294,6 +297,9 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 
 				$import = new Admin_Import();
 				$import->init();
+
+				$order_import = new Admin_Order_Import();
+				$order_import->init();
 			}
 		}
 
@@ -315,6 +321,7 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 			require_once self::path() . 'class-admin-workbook.php';
 			require_once self::path() . 'class-admin-stats.php';
 			require_once self::path() . 'class-admin-import.php';
+			require_once self::path() . 'class-admin-order-import.php';
 			require_once self::path() . 'class-admin-temp.php';
 
 			add_submenu_page(

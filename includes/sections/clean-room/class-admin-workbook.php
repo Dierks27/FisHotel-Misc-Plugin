@@ -778,7 +778,7 @@ class Admin_Workbook {
 	public function ajax_order() {
 		self::guard();
 
-		$raw      = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified in guard().
+		$raw      = self::unpack_lines( (array) wp_unslash( $_POST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified in guard().
 		$op       = isset( $raw['op'] ) ? sanitize_key( $raw['op'] ) : '';
 		$id       = isset( $raw['order_id'] ) ? absint( $raw['order_id'] ) : 0;
 		$store    = new Store();
@@ -848,6 +848,43 @@ class Admin_Workbook {
 		}
 
 		wp_send_json_success( $result );
+	}
+
+	/**
+	 * The order form's lines as one field. An order of 150 fish is some
+	 * 2,500 form fields — more than PHP reads by default (max_input_vars),
+	 * and a save that lost its last lines would delete them. So the page
+	 * posts the line rows as one JSON field, lines_json, which is unpacked
+	 * here into the lines[n][field] rows every reader of the form expects.
+	 * A request without it (an older page) is left as it is.
+	 *
+	 * @param array $raw Unslashed payload.
+	 * @return array
+	 */
+	public static function unpack_lines( array $raw ) {
+		if ( ! isset( $raw['lines_json'] ) || ! is_string( $raw['lines_json'] ) ) {
+			return $raw;
+		}
+		$rows  = json_decode( $raw['lines_json'], true );
+		$lines = array();
+		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+			$clean = array();
+			foreach ( $row as $field => $value ) {
+				if ( is_string( $field ) && ( is_scalar( $value ) || null === $value ) && ! is_bool( $value ) ) {
+					$clean[ $field ] = (string) $value;
+				}
+			}
+			$lines[] = $clean;
+			if ( count( $lines ) >= Orders::MAX_LINES + 50 ) {
+				break;
+			}
+		}
+		unset( $raw['lines_json'] );
+		$raw['lines'] = $lines;
+		return $raw;
 	}
 
 	/**

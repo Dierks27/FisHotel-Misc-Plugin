@@ -1153,6 +1153,21 @@ class Fake_Store {
 				'variants'   => $variants,
 			);
 		}
+		// Aliases: onto their product or their species, else a candidate of their own — as the real Store.
+		foreach ( $this->aliases as $alias => $row ) {
+			$variant = array( 'text' => (string) $alias, 'kind' => 'alias' );
+			foreach ( $out as $index => $entry ) {
+				if ( ( $row['product_id'] && (int) $entry['product_id'] === (int) $row['product_id'] ) || ( ! $row['product_id'] && Species::key( $entry['name'] ) === Species::key( $row['species'] ) ) ) {
+					$out[ $index ]['variants'][] = $variant;
+					continue 2;
+				}
+			}
+			$out[] = array(
+				'product_id' => $row['product_id'],
+				'name'       => '' !== $row['species'] ? $row['species'] : (string) $alias,
+				'variants'   => array( $variant ),
+			);
+		}
 		return $out;
 	}
 

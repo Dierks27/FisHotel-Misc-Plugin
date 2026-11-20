@@ -98,6 +98,18 @@ class Import_Map {
 	/* ------------------------------------------------------------------ */
 
 	/**
+	 * The column labels of a "Recieved (N)" sheet: output key => the
+	 * accepted normalised texts (norm()). Read by the order page's line
+	 * importer (Order_Import), so rows copied straight out of such a sheet
+	 * are mapped by the labels this file already knows — kept in one place.
+	 *
+	 * @return array<string, string[]>
+	 */
+	public static function batch_headers() {
+		return self::$batch_headers;
+	}
+
+	/**
 	 * Map an open workbook.
 	 *
 	 * @param Workbook $wb           Open workbook.
