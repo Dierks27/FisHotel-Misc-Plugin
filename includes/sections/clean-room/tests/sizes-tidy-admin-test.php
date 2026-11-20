@@ -1,6 +1,6 @@
 <?php
 /**
- * Tidy up the sizes — the tool on Settings → Sizes (Sizes_Tidy_Admin),
+ * Tidy up the sizes — the tool on Settings → Sizes (Admin_Sizes_Tidy),
  * on the invented shop of tidy-fixture.php: who may use it (an owner,
  * the tool's own nonce, WooCommerce active — else it is not there), the
  * owner's choices read from a posted form, the dry run as the page shows
@@ -16,7 +16,7 @@
 require_once __DIR__ . '/wp-stubs.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-sizes-tidy.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-sizes-tidy-run.php';
-require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-sizes-tidy-admin.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-admin-sizes-tidy.php';
 require_once __DIR__ . '/fake-tidy-shop.php';
 require_once __DIR__ . '/tidy-fixture.php';
 
@@ -24,7 +24,7 @@ use FisHotel\Misc\Sections\Clean_Room\Clean_Room;
 use FisHotel\Misc\Sections\Clean_Room\Settings;
 use FisHotel\Misc\Sections\Clean_Room\Sizes;
 use FisHotel\Misc\Sections\Clean_Room\Sizes_Tidy;
-use FisHotel\Misc\Sections\Clean_Room\Sizes_Tidy_Admin;
+use FisHotel\Misc\Sections\Clean_Room\Admin_Sizes_Tidy;
 use FisHotel\Misc\Sections\Clean_Room\Tests\Fake_Store;
 
 if ( ! function_exists( 'esc_html_e' ) ) {
@@ -75,9 +75,9 @@ function fh_tidy_store() {
  */
 function fh_tidy_click( array $post, $nonce = null ) {
 	$_POST    = $post;
-	$_REQUEST = $post + array( 'nonce' => null === $nonce ? wp_create_nonce( Sizes_Tidy_Admin::NONCE ) : $nonce );
+	$_REQUEST = $post + array( 'nonce' => null === $nonce ? wp_create_nonce( Admin_Sizes_Tidy::NONCE ) : $nonce );
 	try {
-		( new Sizes_Tidy_Admin() )->ajax();
+		( new Admin_Sizes_Tidy() )->ajax();
 	} catch ( Fh_Test_Json $reply ) {
 		return $reply;
 	}
@@ -93,7 +93,7 @@ $GLOBALS['fh_current_user'] = $owner;
 $shop = fh_tidy_shop();
 $ids  = fh_tidy_ids( $shop );
 $zero = $shop->dump();
-Sizes_Tidy_Admin::use_shop( $shop, fh_tidy_store() );
+Admin_Sizes_Tidy::use_shop( $shop, fh_tidy_store() );
 
 echo "1. Who may use it\n";
 $reply = fh_tidy_click( array( 'op' => 'preview' ), 'not-the-nonce' );
@@ -108,32 +108,32 @@ foreach ( array( 'apply', 'step', 'undo', 'dismiss', 'status' ) as $op ) {
 	check( "…for $op too", false === $reply->success && 403 === $reply->status );
 }
 ob_start();
-Sizes_Tidy_Admin::render( fh_tidy_store(), Settings::get() );
+Admin_Sizes_Tidy::render( fh_tidy_store(), Settings::get() );
 check_same( '…and the card is not printed for them', '', ob_get_clean() );
-check( '…the tool is not "allowed"', false === Sizes_Tidy_Admin::allowed() );
+check( '…the tool is not "allowed"', false === Admin_Sizes_Tidy::allowed() );
 $GLOBALS['fh_current_user'] = $owner;
 $shop->available            = false;
 $reply                      = fh_tidy_click( array( 'op' => 'preview' ) );
 check_same( 'WooCommerce is not active: refused, in plain words', array( false, 400, true ), array( $reply->success, $reply->status, false !== strpos( $reply->data['message'], 'WooCommerce is not active' ) ) );
 ob_start();
-Sizes_Tidy_Admin::render( fh_tidy_store(), Settings::get() );
+Admin_Sizes_Tidy::render( fh_tidy_store(), Settings::get() );
 check_same( '…and the card is absent', '', ob_get_clean() );
 $shop->available = true;
-check( 'an owner, with WooCommerce: allowed', true === Sizes_Tidy_Admin::allowed() );
+check( 'an owner, with WooCommerce: allowed', true === Admin_Sizes_Tidy::allowed() );
 check( 'nothing was written by any of that', 0 === $shop->writes && $zero === $shop->dump() && array() === $shop->runs );
-Sizes_Tidy_Admin::use_shop( $shop, new Fake_Store() );
+Admin_Sizes_Tidy::use_shop( $shop, new Fake_Store() );
 $reply = fh_tidy_click( array( 'op' => 'preview' ) );
 check_same( 'a shop without a size attribute: nothing to tidy', array( false, true ), array( $reply->success, false !== strpos( $reply->data['message'], 'nothing to tidy' ) ) );
 ob_start();
-Sizes_Tidy_Admin::render( new Fake_Store(), Settings::get() );
+Admin_Sizes_Tidy::render( new Fake_Store(), Settings::get() );
 $card = ob_get_clean();
 check( '…the card says so and offers no form', false !== strpos( $card, 'so there is nothing to tidy' ) && false === strpos( $card, 'fh-tidy__preview' ) );
-Sizes_Tidy_Admin::use_shop( $shop, fh_tidy_store() );
+Admin_Sizes_Tidy::use_shop( $shop, fh_tidy_store() );
 $reply = fh_tidy_click( array( 'op' => 'explode' ) );
 check_same( 'an op the tool does not have: refused', array( false, 400 ), array( $reply->success, $reply->status ) );
 
 echo "2. The owner's choices, from a posted form\n";
-$request = Sizes_Tidy_Admin::request(
+$request = Admin_Sizes_Tidy::request(
 	array(
 		'short'     => " 1-2\"\r\n<1\"\n\nSmall\n1-2\"",
 		'over'      => array( 'g:3-5' => 'to:4-5', 'g:x' => array( 'y' ), '' => 'keep', "g:\x07tiny" => " keep\n" ),
@@ -151,7 +151,7 @@ check_same( 'the options', array( true, 'move' ), array( $request['keep_plus'], 
 check_same( 'a size per fish: numbered variations with a pick', array( 1012 => 'medium' ), $request['move'] );
 check_same( 'the one to keep: numbered products and variations', array( 1005 => array( 'ab12' => 1007 ) ), $request['keep_one'] );
 check_same( 'the fish ticked for converting', array( 1020 => 1 ), $request['convert'] );
-check_same( 'an empty form is the default list and no choices', array( array(), array(), false, '', array(), array(), array() ), array_values( Sizes_Tidy_Admin::request( array() ) ) );
+check_same( 'an empty form is the default list and no choices', array( array(), array(), false, '', array(), array(), array() ), array_values( Admin_Sizes_Tidy::request( array() ) ) );
 
 echo "3. Show what would change (the dry run)\n";
 $reply = fh_tidy_click( array( 'op' => 'preview', 'short' => '' ) );
@@ -178,7 +178,7 @@ check( '…each product links to its edit screen', false !== strpos( $html, 'pos
 check_contains( 'the Packing clash is named', 'already has the bag "bag-m"', str_replace( '&quot;', '"', $html ) );
 check_contains( 'it says what is not touched', 'Past orders are not touched: an order line keeps the size text it was bought with.', $html );
 check_contains( 'the Apply box: a backup tick and a word to type', 'I have a backup of the site', $html );
-check_contains( '…the word', 'Type ' . Sizes_Tidy_Admin::CONFIRM_WORD . ' to go ahead', $html );
+check_contains( '…the word', 'Type ' . Admin_Sizes_Tidy::CONFIRM_WORD . ' to go ahead', $html );
 check( 'nothing in the page is unescaped: a size named <1" reads as text', false !== strpos( $html, '&lt;1&quot;' ) && false === strpos( $html, '<1"' ) );
 $moved = fh_tidy_click( array( 'op' => 'preview', 'instock' => 'move' ) );
 check( '"move": a dropdown per fish, pre-filled with nothing', 1 === preg_match( '/name="move\[' . $shop->vids( $ids['Golden Wrasse'] )[0] . '\]">\s*<option value="">— leave as it is —<\/option>/', (string) $moved->data['html'] ) && false === strpos( (string) $moved->data['html'], 'selected="selected">Medium</option>
@@ -227,7 +227,7 @@ check( 'the same choices again: nothing to tidy, and no Apply box', true === $ag
 $try = fh_tidy_click( array( 'op' => 'apply', 'token' => $again->data['token'], 'backup' => '1', 'confirm' => 'TIDY' ) );
 check( 'Apply on it: refused, nothing changed', false === $try->success && $after === $shop->dump() && 1 === count( $shop->runs ) );
 ob_start();
-Sizes_Tidy_Admin::render( fh_tidy_store(), Settings::get() );
+Admin_Sizes_Tidy::render( fh_tidy_store(), Settings::get() );
 $card = ob_get_clean();
 check( 'the card: the short list as it was saved, the buttons, the status', false !== strpos( $card, 'id="fh-sizes-tidy"' ) && false !== strpos( $card, 'name="short"' ) && false !== strpos( $card, "1-2&quot;\n2-3&quot;" ) && false !== strpos( $card, 'Show what would change' ) && false !== strpos( $card, 'Undo the last tidy-up' ) );
 
@@ -257,11 +257,11 @@ check_same( 'Undo with nothing to undo: refused', array( false, 'There is no tid
 check_same( 'a past order line reads as WooCommerce shows it again', '3-5&quot;', Sizes::order_size_name( '3-5&quot;', (object) array( 'key' => 'pa_size', 'value' => '3-5' ) ) );
 $gone = fh_tidy_click( array( 'op' => 'step', 'run' => 4242 ) );
 check( 'a step for a run that is not there is over at once', true === $gone->success && true === $gone->data['over'] && 'gone' === $gone->data['progress']['status'] );
-Sizes_Tidy_Admin::use_shop( null );
+Admin_Sizes_Tidy::use_shop( null );
 
 echo "7. Nothing runs on its own\n";
 $path  = Clean_Room::path();
-$files = array( 'class-sizes-tidy.php', 'class-sizes-tidy-run.php', 'class-sizes-tidy-site.php', 'class-sizes-tidy-admin.php', 'views/sizes-tidy.php', 'views/sizes-tidy-plan.php', 'views/sizes-tidy-status.php', 'js/sizes-tidy.js' );
+$files = array( 'class-sizes-tidy.php', 'class-sizes-tidy-run.php', 'class-sizes-tidy-site.php', 'class-admin-sizes-tidy.php', 'views/sizes-tidy.php', 'views/sizes-tidy-plan.php', 'views/sizes-tidy-status.php', 'js/sizes-tidy.js' );
 $code  = '';
 foreach ( $files as $file ) {
 	check( $file . ' is there', is_file( $path . $file ) );
@@ -273,7 +273,7 @@ foreach ( array( 'cron' => '/wp_schedule_|wp_cron|as_schedule_|as_enqueue_|wp_ne
 	check( 'the tool has no ' . $what, 0 === preg_match( $pattern, $code ) );
 }
 $hooks = array();
-preg_match_all( "/add_(?:action|filter)\(\s*([^,]+),/", (string) file_get_contents( $path . 'class-sizes-tidy-admin.php' ), $hooks );
+preg_match_all( "/add_(?:action|filter)\(\s*([^,]+),/", (string) file_get_contents( $path . 'class-admin-sizes-tidy.php' ), $hooks );
 check_same( 'its only hooks: its own AJAX action (logged-in users only) and the admin assets', array( "'wp_ajax_' . self::ACTION", "'admin_enqueue_scripts'" ), array_map( 'trim', $hooks[1] ) );
 $site = (string) file_get_contents( $path . 'class-sizes-tidy-site.php' );
 check_same( 'the record\'s tables are created in one place, called from one place: when a run is saved', array( 2, 1 ), array( substr_count( $site, 'CREATE TABLE IF NOT EXISTS' ), substr_count( $site, '$this->make_record()' ) ) );
@@ -281,7 +281,7 @@ check( '…and that place is run_create()', 1 === preg_match( '/function run_cre
 $main = (string) file_get_contents( $path . 'class-clean-room.php' );
 check( 'the section\'s activation callback does not know the tool', 1 === preg_match( '/public static function activate\(\) \{(.*?)\n\t\t\}/s', $main, $m ) && false === stripos( $m[1], 'tidy' ) );
 check( 'the section\'s table installer does not know the record', false === strpos( (string) file_get_contents( $path . 'class-store.php' ), 'sizes_tidy' ) );
-check( 'the tool is wired in wp-admin only', 1 === preg_match( '/if \( is_admin\(\) \) \{.*?new Sizes_Tidy_Admin\(\);.*?\n\t\t\t\}/s', $main ) && 1 === substr_count( $main, 'new Sizes_Tidy_Admin()' ) );
+check( 'the tool is wired in wp-admin only', 1 === preg_match( '/if \( is_admin\(\) \) \{.*?new Admin_Sizes_Tidy\(\);.*?\n\t\t\t\}/s', $main ) && 1 === substr_count( $main, 'new Admin_Sizes_Tidy()' ) );
 check( 'its state is never autoloaded', false !== strpos( $site, 'Sizes::STATE_OPTION === (string) $name ? false : null' ) );
 
 fh_finish();

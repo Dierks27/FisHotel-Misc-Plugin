@@ -2,7 +2,7 @@
 /**
  * "Tidy up the sizes": the dry run — what each size becomes (the map,
  * with a choice per row), what that does to the products, and the Apply
- * box (Sizes_Tidy_Admin::plan_html()). Showing it writes nothing.
+ * box (Admin_Sizes_Tidy::plan_html()). Showing it writes nothing.
  *
  * @var array  $plan    Sizes_Tidy::plan().
  * @var string $confirm The word to type before Apply.
@@ -14,7 +14,7 @@ defined( 'ABSPATH' ) || exit;
 
 use FisHotel\Misc\Sections\Clean_Room\Sizes;
 use FisHotel\Misc\Sections\Clean_Room\Sizes_Tidy;
-use FisHotel\Misc\Sections\Clean_Room\Sizes_Tidy_Admin;
+use FisHotel\Misc\Sections\Clean_Room\Admin_Sizes_Tidy;
 
 $fh_totals = $plan['totals'];
 $fh_labels = $plan['labels'];
@@ -52,8 +52,8 @@ $fh_item = static function ( array $change ) {
 	if ( 'left' === $change['why'] ) {
 		$to = __( 'left as it is', 'fishotel-misc-plugin' );
 	}
-	echo '<li><a href="' . esc_url( Sizes_Tidy_Admin::edit_url( $change['product'] ) ) . '">' . esc_html( $title ) . '</a> — ' . esc_html( (string) $change['from_label'] ) . ' → ' . esc_html( $to )
-		. ' <span class="fh-cr-muted">· ' . esc_html( Sizes_Tidy_Admin::money( $change['price'] ) ) . ' · ' . esc_html( (string) $change['stock_text'] )
+	echo '<li><a href="' . esc_url( Admin_Sizes_Tidy::edit_url( $change['product'] ) ) . '">' . esc_html( $title ) . '</a> — ' . esc_html( (string) $change['from_label'] ) . ' → ' . esc_html( $to )
+		. ' <span class="fh-cr-muted">· ' . esc_html( Admin_Sizes_Tidy::money( $change['price'] ) ) . ' · ' . esc_html( (string) $change['stock_text'] )
 		. ( '' !== (string) $change['sku'] ? ' · ' . esc_html( sprintf( /* translators: %s: SKU */ __( 'SKU %s', 'fishotel-misc-plugin' ), (string) $change['sku'] ) ) : '' )
 		. ( empty( $change['fish'] ) ? ' · ' . esc_html__( 'not in a fish category', 'fishotel-misc-plugin' ) : '' ) . '</span></li>';
 };
@@ -83,7 +83,7 @@ $fh_item = static function ( array $change ) {
 			$fh_stay  = Sizes_Tidy::STAY === $fh_row['action'];
 			$fh_notes = array();
 			foreach ( $fh_row['flags'] as $fh_flag ) {
-				$fh_text = Sizes_Tidy_Admin::flag_text( $fh_flag );
+				$fh_text = Admin_Sizes_Tidy::flag_text( $fh_flag );
 				if ( '' !== $fh_text ) {
 					$fh_notes[] = $fh_text;
 				}
@@ -101,7 +101,7 @@ $fh_item = static function ( array $change ) {
 			}
 			$fh_also = array();
 			foreach ( $fh_row['stores'] as $fh_store => $fh_count ) {
-				$fh_also[] = Sizes_Tidy_Admin::store_text( $fh_store, $fh_count );
+				$fh_also[] = Admin_Sizes_Tidy::store_text( $fh_store, $fh_count );
 			}
 			if ( $fh_row['orders'] > 0 ) {
 				/* translators: %d: count */
@@ -192,9 +192,9 @@ $fh_item = static function ( array $change ) {
 			<tbody>
 				<?php foreach ( $fh_sale as $fh_change ) : ?>
 					<tr>
-						<td><a href="<?php echo esc_url( Sizes_Tidy_Admin::edit_url( $fh_change['product'] ) ); ?>"><?php echo esc_html( '' !== $fh_change['title'] ? $fh_change['title'] : '#' . $fh_change['product'] ); ?></a></td>
+						<td><a href="<?php echo esc_url( Admin_Sizes_Tidy::edit_url( $fh_change['product'] ) ); ?>"><?php echo esc_html( '' !== $fh_change['title'] ? $fh_change['title'] : '#' . $fh_change['product'] ); ?></a></td>
 						<td><?php echo esc_html( $fh_change['from_label'] ); ?></td>
-						<td><?php echo esc_html( Sizes_Tidy_Admin::money( $fh_change['price'] ) ); ?></td>
+						<td><?php echo esc_html( Admin_Sizes_Tidy::money( $fh_change['price'] ) ); ?></td>
 						<td><?php echo esc_html( $fh_change['stock_text'] ); ?></td>
 						<td>
 							<?php if ( Sizes_Tidy::IN_STOCK_MOVE === $plan['instock'] ) : ?>
@@ -254,7 +254,7 @@ $fh_item = static function ( array $change ) {
 		<p class="fh-cr-sub"><?php esc_html_e( 'Two (or more) variations of one fish would end up with the same size. The tool never merges or deletes variations: such a fish is left exactly as it is, unless you pick the one variation to keep. The others then get the same size and are switched off — kept, with their stock shown so you can move it by hand.', 'fishotel-misc-plugin' ); ?></p>
 		<?php foreach ( $plan['two'] as $fh_product ) : ?>
 			<div class="fh-tidy__two">
-				<p><a href="<?php echo esc_url( Sizes_Tidy_Admin::edit_url( $fh_product['id'] ) ); ?>"><strong><?php echo esc_html( '' !== $fh_product['title'] ? $fh_product['title'] : '#' . $fh_product['id'] ); ?></strong></a></p>
+				<p><a href="<?php echo esc_url( Admin_Sizes_Tidy::edit_url( $fh_product['id'] ) ); ?>"><strong><?php echo esc_html( '' !== $fh_product['title'] ? $fh_product['title'] : '#' . $fh_product['id'] ); ?></strong></a></p>
 				<?php foreach ( $fh_product['groups'] as $fh_gkey => $fh_group ) : ?>
 					<?php
 					$fh_name   = 'keep_one[' . $fh_product['id'] . '][' . $fh_gkey . ']';
@@ -276,7 +276,7 @@ $fh_item = static function ( array $change ) {
 								<input type="radio" name="<?php echo esc_attr( $fh_name ); ?>" value="<?php echo esc_attr( (string) $fh_member['id'] ); ?>" <?php checked( (int) $fh_member['id'], $fh_picked ); ?>>
 								<?php
 								/* translators: 1: size label, 2: price, 3: stock, 4: SKU or a dash, 5: on / switched off */
-								echo esc_html( sprintf( __( 'Keep the one that is %1$s today — %2$s · %3$s · SKU %4$s%5$s', 'fishotel-misc-plugin' ), $fh_member['from_label'], Sizes_Tidy_Admin::money( $fh_member['price'] ), $fh_member['stock_text'], '' !== $fh_member['sku'] ? $fh_member['sku'] : '—', $fh_member['on'] ? '' : ' · ' . __( 'already switched off', 'fishotel-misc-plugin' ) ) );
+								echo esc_html( sprintf( __( 'Keep the one that is %1$s today — %2$s · %3$s · SKU %4$s%5$s', 'fishotel-misc-plugin' ), $fh_member['from_label'], Admin_Sizes_Tidy::money( $fh_member['price'] ), $fh_member['stock_text'], '' !== $fh_member['sku'] ? $fh_member['sku'] : '—', $fh_member['on'] ? '' : ' · ' . __( 'already switched off', 'fishotel-misc-plugin' ) ) );
 								?>
 							</label><br>
 						<?php endforeach; ?>
@@ -320,7 +320,7 @@ $fh_item = static function ( array $change ) {
 				<li>
 					<label>
 						<input type="checkbox" name="<?php echo esc_attr( 'convert[' . $fh_product['id'] . ']' ); ?>" value="1" <?php checked( $fh_product['ticked'] && $fh_product['ok'] ); ?> <?php disabled( ! $fh_product['ok'] ); ?>>
-						<a href="<?php echo esc_url( Sizes_Tidy_Admin::edit_url( $fh_product['id'] ) ); ?>"><?php echo esc_html( '' !== $fh_product['title'] ? $fh_product['title'] : '#' . $fh_product['id'] ); ?></a>
+						<a href="<?php echo esc_url( Admin_Sizes_Tidy::edit_url( $fh_product['id'] ) ); ?>"><?php echo esc_html( '' !== $fh_product['title'] ? $fh_product['title'] : '#' . $fh_product['id'] ); ?></a>
 					</label>
 					— <?php echo esc_html( implode( ' · ', $fh_reads ) ); ?>
 					<?php if ( '' !== $fh_why ) : ?>
@@ -343,7 +343,7 @@ $fh_item = static function ( array $change ) {
 		<p class="fh-cr-sub"><?php esc_html_e( 'Every size they sell is being taken off. The products themselves are not hidden, trashed or changed in any other way; they go on the "Sizes to fill in" list.', 'fishotel-misc-plugin' ); ?></p>
 		<ul class="fh-tidy__list">
 			<?php foreach ( $plan['unavailable'] as $fh_product ) : ?>
-				<li><a href="<?php echo esc_url( Sizes_Tidy_Admin::edit_url( $fh_product['id'] ) ); ?>"><?php echo esc_html( '' !== $fh_product['title'] ? $fh_product['title'] : '#' . $fh_product['id'] ); ?></a></li>
+				<li><a href="<?php echo esc_url( Admin_Sizes_Tidy::edit_url( $fh_product['id'] ) ); ?>"><?php echo esc_html( '' !== $fh_product['title'] ? $fh_product['title'] : '#' . $fh_product['id'] ); ?></a></li>
 			<?php endforeach; ?>
 		</ul>
 	</div>
@@ -380,7 +380,7 @@ $fh_item = static function ( array $change ) {
 	<li><?php esc_html_e( 'An old size is removed from the list only once no product and no variation uses it any more.', 'fishotel-misc-plugin' ); ?></li>
 </ul>
 
-<p class="fh-tidy__totals"><strong><?php echo esc_html( Sizes_Tidy_Admin::totals_text( $fh_totals ) ); ?></strong></p>
+<p class="fh-tidy__totals"><strong><?php echo esc_html( Admin_Sizes_Tidy::totals_text( $fh_totals ) ); ?></strong></p>
 
 <?php if ( ! empty( $plan['nothing'] ) ) : ?>
 	<p class="fh-cr-muted"><?php esc_html_e( 'There is nothing to tidy with these choices.', 'fishotel-misc-plugin' ); ?></p>

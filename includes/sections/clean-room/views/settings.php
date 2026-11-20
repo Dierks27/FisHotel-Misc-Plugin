@@ -413,8 +413,8 @@ $fh_from_attr = Sizes::SOURCE_ATTRIBUTE === $fh_standard['source'];
 
 		<?php
 		/* ── Tidy up the sizes (an owner's tool; needs WooCommerce) ── */
-		if ( class_exists( '\FisHotel\Misc\Sections\Clean_Room\Sizes_Tidy_Admin' ) ) {
-			\FisHotel\Misc\Sections\Clean_Room\Sizes_Tidy_Admin::render( $store, $settings );
+		if ( class_exists( '\FisHotel\Misc\Sections\Clean_Room\Admin_Sizes_Tidy' ) ) {
+			\FisHotel\Misc\Sections\Clean_Room\Admin_Sizes_Tidy::render( $store, $settings );
 		}
 		?>
 

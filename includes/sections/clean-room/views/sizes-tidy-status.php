@@ -2,16 +2,16 @@
 /**
  * "Tidy up the sizes": the status panel — a tidy-up that is not
  * finished, the ones Undo can take back, the sizes that are retiring,
- * and the "Sizes to fill in" list (Sizes_Tidy_Admin::status_html()).
+ * and the "Sizes to fill in" list (Admin_Sizes_Tidy::status_html()).
  *
- * @var array $status Sizes_Tidy_Admin::status().
+ * @var array $status Admin_Sizes_Tidy::status().
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  */
 
 defined( 'ABSPATH' ) || exit;
 
-use FisHotel\Misc\Sections\Clean_Room\Sizes_Tidy_Admin;
+use FisHotel\Misc\Sections\Clean_Room\Admin_Sizes_Tidy;
 
 $fh_open = $status['open'];
 $fh_runs = $status['runs'];
@@ -19,7 +19,7 @@ $fh_runs = $status['runs'];
 <?php if ( $fh_open ) : ?>
 	<div class="fh-tidy__box fh-tidy__box--warn">
 		<h3 class="fh-cr-h3"><?php echo esc_html( 'undoing' === $fh_open['status'] ? __( 'An undo stopped half-way', 'fishotel-misc-plugin' ) : __( 'A tidy-up stopped half-way', 'fishotel-misc-plugin' ) ); ?></h3>
-		<p><?php echo esc_html( Sizes_Tidy_Admin::progress_text( $fh_open['progress'] ) ); ?> <?php esc_html_e( 'Nothing is lost: carry on and it picks up where it stopped.', 'fishotel-misc-plugin' ); ?></p>
+		<p><?php echo esc_html( Admin_Sizes_Tidy::progress_text( $fh_open['progress'] ) ); ?> <?php esc_html_e( 'Nothing is lost: carry on and it picks up where it stopped.', 'fishotel-misc-plugin' ); ?></p>
 		<p class="fh-cr-actions-row">
 			<button type="button" class="button button-primary fh-tidy__continue" data-run="<?php echo esc_attr( (string) $fh_open['id'] ); ?>"><?php esc_html_e( 'Carry on', 'fishotel-misc-plugin' ); ?></button>
 			<?php if ( 'undoing' !== $fh_open['status'] ) : ?>
@@ -47,7 +47,7 @@ $fh_runs = $status['runs'];
 					/* translators: 1: date and time (UTC), 2: user login */
 					echo esc_html( sprintf( __( '%1$s (UTC), by %2$s', 'fishotel-misc-plugin' ), (string) $fh_run['created_at'], '' !== (string) $fh_run['created_by'] ? (string) $fh_run['created_by'] : '—' ) );
 					if ( isset( $fh_run['data']['totals'] ) && is_array( $fh_run['data']['totals'] ) ) {
-						echo ' — ' . esc_html( Sizes_Tidy_Admin::totals_text( $fh_run['data']['totals'] ) );
+						echo ' — ' . esc_html( Admin_Sizes_Tidy::totals_text( $fh_run['data']['totals'] ) );
 					}
 					?>
 					<?php if ( 0 === $fh_index && ! $fh_open ) : ?>
@@ -105,7 +105,7 @@ $fh_runs = $status['runs'];
 			<tbody>
 				<?php foreach ( $status['fill'] as $fh_fish ) : ?>
 					<tr>
-						<td><a href="<?php echo esc_url( Sizes_Tidy_Admin::edit_url( $fh_fish['id'] ) ); ?>"><?php echo esc_html( '' !== (string) $fh_fish['title'] ? (string) $fh_fish['title'] : '#' . (int) $fh_fish['id'] ); ?></a></td>
+						<td><a href="<?php echo esc_url( Admin_Sizes_Tidy::edit_url( $fh_fish['id'] ) ); ?>"><?php echo esc_html( '' !== (string) $fh_fish['title'] ? (string) $fh_fish['title'] : '#' . (int) $fh_fish['id'] ); ?></a></td>
 						<td><?php echo esc_html( implode( ', ', array_unique( array_map( 'strval', array_column( $fh_fish['sizes'], 'label' ) ) ) ) ); ?></td>
 						<td><button type="button" class="button-link fh-tidy__dismiss" data-product="<?php echo esc_attr( (string) $fh_fish['id'] ); ?>"><?php esc_html_e( 'Tick off — no size needed', 'fishotel-misc-plugin' ); ?></button></td>
 					</tr>

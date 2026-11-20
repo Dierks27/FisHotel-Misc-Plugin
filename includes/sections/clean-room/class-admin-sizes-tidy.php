@@ -27,9 +27,9 @@ namespace FisHotel\Misc\Sections\Clean_Room;
 defined( 'ABSPATH' ) || exit;
 
 /**
- * Class Sizes_Tidy_Admin
+ * Class Admin_Sizes_Tidy
  */
-class Sizes_Tidy_Admin {
+class Admin_Sizes_Tidy {
 
 	const ACTION       = 'fishotel_cleanroom_sizes_tidy';
 	const NONCE        = 'fishotel_cleanroom_sizes_tidy';

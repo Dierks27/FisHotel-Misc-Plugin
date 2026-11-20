@@ -301,8 +301,8 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 				$import->init();
 
 				// Settings → Sizes → "Tidy up the sizes": its AJAX and assets. It does nothing until a button is pressed.
-				require_once self::path() . 'class-sizes-tidy-admin.php';
-				$tidy = new Sizes_Tidy_Admin();
+				require_once self::path() . 'class-admin-sizes-tidy.php';
+				$tidy = new Admin_Sizes_Tidy();
 				$tidy->init();
 			}
 		}
@@ -326,7 +326,7 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 			require_once self::path() . 'class-admin-stats.php';
 			require_once self::path() . 'class-admin-import.php';
 			require_once self::path() . 'class-admin-temp.php';
-			require_once self::path() . 'class-sizes-tidy-admin.php';
+			require_once self::path() . 'class-admin-sizes-tidy.php';
 
 			add_submenu_page(
 				'fishotel-misc',

@@ -1,10 +1,10 @@
 <?php
 /**
- * Settings → Sizes: the "Tidy up the sizes" card (Sizes_Tidy_Admin::render()).
+ * Settings → Sizes: the "Tidy up the sizes" card (Admin_Sizes_Tidy::render()).
  * Only an owner sees it, and only while WooCommerce is active.
  *
  * @var string $taxonomy The size attribute's taxonomy ('' = the shop has none).
- * @var array  $status   Sizes_Tidy_Admin::status().
+ * @var array  $status   Admin_Sizes_Tidy::status().
  * @var string $nonce    The tool's nonce.
  *
  * @package FisHotel\Misc\Sections\Clean_Room
@@ -13,7 +13,7 @@
 defined( 'ABSPATH' ) || exit;
 
 use FisHotel\Misc\Sections\Clean_Room\Sizes_Tidy;
-use FisHotel\Misc\Sections\Clean_Room\Sizes_Tidy_Admin;
+use FisHotel\Misc\Sections\Clean_Room\Admin_Sizes_Tidy;
 
 ?>
 <div id="fh-sizes-tidy" class="fishotel-misc-card fh-cr-card fh-cr-card--wide fh-tidy">
@@ -44,6 +44,6 @@ use FisHotel\Misc\Sections\Clean_Room\Sizes_Tidy_Admin;
 	<?php endif; ?>
 
 	<div class="fh-tidy__status">
-		<?php echo Sizes_Tidy_Admin::status_html( $status ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in the view. ?>
+		<?php echo Admin_Sizes_Tidy::status_html( $status ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in the view. ?>
 	</div>
 </div>
