@@ -2,8 +2,11 @@
  * Clean Room front desk — the phone screen. Inlined into the page by
  * Front_Desk::maybe_render(); nothing here is loaded from anywhere.
  *
- * One thumb, wet hands: every target is at least 56px tall, high contrast
- * on a dark background, the action bar sits at the bottom.
+ * One thumb, wet hands: big targets (56px; 48px with the phone on its
+ * side; the Undo and the links 44px), high contrast on a dark
+ * background, the action bar sits at the bottom. Its first row is the
+ * status line: every message is said there, so nothing ever comes up
+ * over the page.
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  */
@@ -243,7 +246,7 @@ button.fh-fd-occ:active {
 
 .fh-fd-bar__inner {
 	max-width: 640px;
-	margin: 0 auto;
+	margin: 6px auto 0; /* Under the status line. */
 	display: grid;
 	grid-template-columns: repeat(3, 1fr);
 	gap: 8px;
@@ -276,10 +279,6 @@ button.fh-fd-occ:active {
 	color: var(--fd-text);
 	font-size: 16px;
 	line-height: 1.25;
-}
-
-.fh-fd-status + .fh-fd-bar__inner {
-	margin-top: 6px;
 }
 
 /* A message in its seconds: the green of a thing done, the red of one refused. Then the line is quiet again. */

@@ -1058,6 +1058,10 @@
 	 * with what went in, and saving again goes through), or a level to
 	 * confirm ("Bring it to" far above the copper target — saving the same
 	 * level again says it was meant).
+	 *
+	 * A write made on the tank screen itself ("−1 lost" on a row, a to-do
+	 * chip, the Undo) leaves the page where it was scrolled to: counting
+	 * bodies, the second tap must land on the row the first one did.
 	 */
 	function act(fields) {
 		if (state.sending) {
@@ -1066,6 +1070,7 @@
 		state.sending = true;
 		busy(true);
 		var before = tank() ? tank().number : 0;
+		var stayAt = state.view === 'tank' && !state.msg ? (root.pageYOffset || 0) : 0;
 		return post('fishotel_cleanroom_act', fields).then(function (data) {
 			state.sure = null;
 			if (data.screen) {
@@ -1082,6 +1087,9 @@
 			state.voice = null;
 			state.form = {};
 			render();
+			if (stayAt) {
+				root.scrollTo(0, stayAt);
+			}
 			if (fields.act === 'undo') {
 				say(data.message || t('undone', 'Undone'), null);
 			} else {

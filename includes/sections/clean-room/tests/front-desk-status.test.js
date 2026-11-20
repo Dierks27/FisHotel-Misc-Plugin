@@ -21,7 +21,8 @@
  *     again the Undo past its time has gone, and a tap on one answers
  *     plainly without a request;
  *   - an error keeps an Undo that is still good for after;
- *   - the tap guard, and that no tap elsewhere on the line undoes;
+ *   - the tap guard, and that no tap elsewhere on the line undoes; a
+ *     write on the tank screen leaves the page where it was scrolled to;
  *   - a tap on the words opens the whole message with its Undo, and Back
  *     shows the screen under it as it was, what was typed included;
  *   - the words for the last thing done;
@@ -330,6 +331,7 @@ function start( config ) {
 	var windowOn  = {};
 	var documentOn = {};
 	var reloads   = 0;
+	var scrolls   = [];
 	var reply     = config.reply || server;
 
 	app.attrs.id       = 'fh-fd-app';
@@ -352,7 +354,7 @@ function start( config ) {
 		body: body
 	};
 	global.sessionStorage = { getItem: function () { return '0'; }, setItem: function () {} };
-	global.scrollTo       = function () {};
+	global.scrollTo       = function ( x, y ) { scrolls.push( y ); global.pageYOffset = y; };
 	global.pageYOffset    = 0;
 	global.location       = { href: '', search: config.search || '', reload: function () { reloads++; } };
 	global.addEventListener = function ( type, fn ) { windowOn[ type ] = fn; };
@@ -419,6 +421,7 @@ function start( config ) {
 		documentOn: documentOn,
 		helpers: helpers,
 		reloads: function () { return reloads; },
+		scrolls: scrolls,
 		bar: function () { return find( body, function ( n ) { return 'fh-fd-bar' === n.className; } )[0] || null; },
 		bars: function () { return find( body, function ( n ) { return 'fh-fd-bar' === n.className; } ).length; },
 		inner: function () { return find( body, function ( n ) { return 'fh-fd-bar__inner' === n.className && ! n.hidden; } )[0] || null; },
@@ -695,6 +698,28 @@ async function run() {
 	page.tapWords();
 	await settle();
 	check( 'a tap on the words never undoes', 1 === page.posts.length );
+
+	console.log( '9a. A second tap lands where the first did: a write on the tank screen does not scroll the page' );
+	page = start( { screen: screen( true, 900 ) } );
+	global.pageYOffset = 340; // Scrolled down a long tank to the row being counted.
+	page.tap( '−1 lost' );
+	await settle();
+	check( 'after "−1 lost" on a row the page is where it was scrolled to, not back at the top', 340 === global.pageYOffset && 340 === page.scrolls[ page.scrolls.length - 1 ], JSON.stringify( page.scrolls ) );
+	pass( 1 );
+	page.tapUndo();
+	await settle();
+	check( '… and after its Undo too', 340 === global.pageYOffset && 2 === page.posts.length );
+	page.tap( 'Note' );
+	check( 'a sheet opens at its top, as before', 0 === global.pageYOffset );
+	global.pageYOffset = 120;
+	page.tap( 'Save' );
+	await settle();
+	check( '… and its Save comes back to the tank screen at the top', 0 === global.pageYOffset && 3 === page.posts.length && 'note' === page.posts[2].act, JSON.stringify( page.scrolls ) );
+	global.pageYOffset = 200;
+	page.tapWords();
+	check( 'the whole message opens at its top', null !== page.sheet() && 0 === global.pageYOffset );
+	page.tap( 'Back' );
+	check( '… and Back puts the screen under it where it was', 200 === global.pageYOffset );
 
 	console.log( '10. A phone that slept: the clock went on, its timers did not run' );
 	page = await lostOne( { screen: screen( true, 900 ) } );
