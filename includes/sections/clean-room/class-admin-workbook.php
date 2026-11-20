@@ -291,7 +291,9 @@ class Admin_Workbook {
 	/* ============================================================== */
 
 	/**
-	 * Orders with their lines resolved (live figures, costing).
+	 * Orders with their lines resolved (live figures — a split group's
+	 * sister stays counted in —, the shop price read for every line,
+	 * costing).
 	 *
 	 * @param Store $store   Store.
 	 * @param array $filters Store::orders() filters.
@@ -311,18 +313,21 @@ class Admin_Workbook {
 				}
 			}
 		}
-		$figures = $stay_ids ? $store->stay_figures( $stay_ids ) : array();
+		$figures = Orders::figures_for( $store, $stay_ids );
+
+		foreach ( $orders as $index => $order ) {
+			$orders[ $index ]['lines'] = isset( $lines[ (int) $order['id'] ] ) ? $lines[ (int) $order['id'] ] : array();
+		}
 
 		$out = array();
-		foreach ( $orders as $order ) {
-			$order['lines'] = isset( $lines[ (int) $order['id'] ] ) ? $lines[ (int) $order['id'] ] : array();
-			$out[]          = Orders::resolve( $order, $figures );
+		foreach ( Shop_Price::fill_orders( $store, $orders ) as $order ) {
+			$out[] = Orders::resolve( $order, $figures );
 		}
 		return $out;
 	}
 
 	/**
-	 * One order with its lines resolved.
+	 * One order with its lines resolved (as resolved_orders()).
 	 *
 	 * @param Store $store Store.
 	 * @param array $order Store::order().
@@ -335,7 +340,7 @@ class Admin_Workbook {
 				$stay_ids[] = (int) $line['stay_id'];
 			}
 		}
-		return Orders::resolve( $order, $stay_ids ? $store->stay_figures( $stay_ids ) : array() );
+		return Orders::resolve( Shop_Price::fill_order( $store, $order ), Orders::figures_for( $store, $stay_ids ) );
 	}
 
 	/**
@@ -587,11 +592,14 @@ class Admin_Workbook {
 	 * @return array{lines: array[], order: array}
 	 */
 	public static function figures( array $order ) {
-		$c     = (array) ( $order['costing'] ?? array() );
-		$mode  = (string) ( $c['mode'] ?? 'box' );
-		$lines = array();
+		$c       = (array) ( $order['costing'] ?? array() );
+		$mode    = (string) ( $c['mode'] ?? 'box' );
+		$none    = self::no_price_text();
+		$lines   = array();
 		foreach ( (array) ( $order['lines'] ?? array() ) as $line ) {
 			$linked  = ! empty( $line['linked'] );
+			$sells   = Costing::worth_of( $line );
+			$priced  = null !== $sells['price'];
 			$lines[] = array(
 				'id'              => (int) ( $line['id'] ?? 0 ),
 				'linked'          => $linked,
@@ -600,11 +608,15 @@ class Admin_Workbook {
 				'landed_total'    => Costing::money( $line['landed_total'] ?? null ),
 				'landed_per_fish' => Costing::money( $line['landed_per_fish'] ?? null ),
 				'suggested_price' => Costing::num( $line['suggested_price'] ?? null, '—', 0 ),
-				'profit'          => Costing::money( $line['profit'] ?? null ),
-				'margin'          => Costing::pct( $line['margin'] ?? null ),
-				'worth_it'        => ! empty( $line['worth_it'] ) ? __( 'Yes', 'fishotel-misc-plugin' ) : __( 'No', 'fishotel-misc-plugin' ),
-				'worth_flag'      => ! empty( $line['worth_it'] ),
-				'revenue'         => Costing::money( $line['revenue'] ?? null ),
+				'shop_price'      => $priced ? Costing::money( $sells['price'] ) : $none,
+				'shop_from'       => $sells['from'],
+				'shop_note'       => Shop_Price::source_text( array_merge( $line, array( 'worth_from' => $sells['from'] ) ) ),
+				'priced'          => $priced,
+				'profit'          => $priced ? Costing::money( $line['profit'] ?? null ) : $none,
+				'margin'          => $priced ? Costing::pct( $line['margin'] ?? null ) : $none,
+				'worth_it'        => ! $priced ? $none : ( ! empty( $line['worth_it'] ) ? __( 'Yes', 'fishotel-misc-plugin' ) : __( 'No', 'fishotel-misc-plugin' ) ),
+				'worth_flag'      => $priced && ! empty( $line['worth_it'] ),
+				'revenue'         => $priced ? Costing::money( $line['revenue'] ?? null ) : '—',
 				'doa_cost'        => Costing::money( $line['doa_cost'] ?? null ),
 				'live'            => $linked && null !== ( $line['live'] ?? null ) ? (string) (int) $line['live'] : '—',
 				'sold'            => $linked && null !== ( $line['sold'] ?? null ) ? (string) (int) $line['sold'] : '—',
@@ -613,7 +625,11 @@ class Admin_Workbook {
 			);
 		}
 
-		$up_down = (float) ( $c['up_down'] ?? 0 );
+		// "Up or down" compares the revenue with what the lines that HAVE a price cost: a fish with
+		// no shop price yet is not a fish that sells for nothing.
+		$unpriced = (int) ( $c['unpriced'] ?? 0 );
+		$up_down  = (float) ( $c['up_down_priced'] ?? ( $c['up_down'] ?? 0 ) );
+		$ratio    = array_key_exists( 'ratio_priced', $c ) ? $c['ratio_priced'] : ( $c['ratio'] ?? null );
 
 		return array(
 			'lines' => $lines,
@@ -634,14 +650,67 @@ class Admin_Workbook {
 				'revenue'           => Costing::money( $c['revenue'] ?? null ),
 				'up_down'           => ( $up_down > 0 ? '+' : '' ) . Costing::money( $up_down ),
 				'up_down_flag'      => $up_down >= 0 ? 'up' : 'down',
-				'ratio'             => Costing::num( $c['ratio'] ?? null ),
+				'ratio'             => Costing::num( $ratio ),
 				'fill_rate'         => Costing::pct( $c['fill_rate'] ?? null ),
 				'survival_rate'     => Costing::pct( $c['survival_rate'] ?? null ),
 				'doa_rate'          => Costing::pct( $c['doa_rate'] ?? null ),
 				'doa_cost_sheet'    => Costing::money( $c['doa_cost_sheet'] ?? null ),
 				'doa_cost_per_fish' => Costing::money( $c['doa_cost_per_fish'] ?? null ),
+				'unpriced'          => (string) $unpriced,
+				'no_price'          => self::unpriced_text( $unpriced ),
+				'worth_rule'        => self::worth_rule_text( $c['worth_threshold'] ?? null ),
+				'target_head'       => self::target_head( $c['markup'] ?? null ),
 			),
 		);
+	}
+
+	/**
+	 * What a line without a shop price shows in its shop price, profit,
+	 * margin and "Worth it?" cells.
+	 *
+	 * @return string
+	 */
+	public static function no_price_text() {
+		return __( 'no shop price yet', 'fishotel-misc-plugin' );
+	}
+
+	/**
+	 * The Numbers panel's line about the fish without a shop price ('' when
+	 * every line has one).
+	 *
+	 * @param int $count Lines without a price.
+	 * @return string
+	 */
+	public static function unpriced_text( $count ) {
+		$count = (int) $count;
+		if ( $count < 1 ) {
+			return '';
+		}
+		/* translators: %d: order lines */
+		return sprintf( _n( '%d line has no shop price yet: it is left out of the revenue and of "up or down".', '%d lines have no shop price yet: they are left out of the revenue and of "up or down".', $count, 'fishotel-misc-plugin' ), $count );
+	}
+
+	/**
+	 * The worth-it rule in plain words, from the order's own threshold: a
+	 * margin above 2.75 is a shop price above 3.75× the landed cost.
+	 *
+	 * @param mixed $threshold The order's worth-it margin.
+	 * @return string
+	 */
+	public static function worth_rule_text( $threshold ) {
+		/* translators: %s: a multiple, e.g. 3.75 */
+		return sprintf( __( 'Worth it when the shop price is more than %s× what the fish cost landed.', 'fishotel-misc-plugin' ), Costing::num( Costing::worth_times( $threshold ) ) );
+	}
+
+	/**
+	 * The head of the target-price column as the owner's sheet heads it:
+	 * the order's markup × 100 ("400%").
+	 *
+	 * @param mixed $markup The order's markup.
+	 * @return string
+	 */
+	public static function target_head( $markup ) {
+		return Costing::num( Costing::money_in( $markup, Costing::DEFAULT_MARKUP ) * 100, '', 0 ) . '%';
 	}
 
 	/* ============================================================== */
@@ -822,6 +891,7 @@ class Admin_Workbook {
 						wp_send_json_error( array( 'message' => __( 'The order could not be deleted.', 'fishotel-misc-plugin' ) ), 500 );
 					}
 					Box_Shares::release_lines( $store, (array) ( $current['lines'] ?? array() ) ); // Its percents are no longer remembered.
+					Splits::forget( array_column( (array) ( $current['lines'] ?? array() ), 'id' ) );
 					$result = array(
 						'message'  => __( 'Order deleted.', 'fishotel-misc-plugin' ),
 						'redirect' => Admin::page_url( 'arrivals' ),
@@ -1043,7 +1113,23 @@ class Admin_Workbook {
 			$before[ (int) $line['id'] ] = $line;
 		}
 
+		// The splits planned in the Tank cells: a plan that cannot work refuses the save like a
+		// mistyped percent does; a plan on a line that already is a stay is refused plainly, the
+		// rest of the save goes on.
+		$splits   = Orders::posted_splits( $raw_lines );
+		$warnings = array();
+		$planned  = self::split_plans( $store, $splits, $before, $today, $warnings );
+		if ( ! empty( $planned['errors'] ) ) {
+			return array( 'error' => implode( ' ', $planned['errors'] ) . ' ' . __( 'Nothing was saved.', 'fishotel-misc-plugin' ) );
+		}
+
 		$lines = Identify::flag_lines( Orders::normalize_lines( $raw_lines ) );
+		foreach ( $planned['plans'] as $index => $plan ) {
+			// A split line arrives in the first tank of its plan.
+			if ( is_array( $plan ) && isset( $lines[ $index ] ) && empty( $before[ (int) $lines[ $index ]['id'] ]['stay_id'] ) ) {
+				$lines[ $index ]['tank_id'] = (int) $plan[0]['tank_id'];
+			}
+		}
 		foreach ( $lines as $index => $line ) {
 			if ( '' === $line['notes'] && isset( $before[ (int) $line['id'] ] ) ) {
 				$lines[ $index ]['notes'] = (string) $before[ (int) $line['id'] ]['notes'];
@@ -1067,8 +1153,9 @@ class Admin_Workbook {
 				return null !== $line['size_slug'];
 			}
 		);
-		$warnings = array();
-		$lines    = Sizes::apply_to_lines( $lines, $sized ? Sizes::standard( $store, Settings::get() )['sizes'] : array(), $before, $warnings );
+		$unsized  = array();
+		$lines    = Sizes::apply_to_lines( $lines, $sized ? Sizes::standard( $store, Settings::get() )['sizes'] : array(), $before, $unsized );
+		$warnings = array_merge( $warnings, $unsized );
 
 		$saved_id = $store->save_order( $header );
 		if ( ! $saved_id ) {
@@ -1079,6 +1166,17 @@ class Admin_Workbook {
 		if ( false === $saved ) {
 			return array( 'error' => __( 'The lines could not be saved.', 'fishotel-misc-plugin' ) );
 		}
+
+		// Keep the plans by the ids the lines have now; a line the save removed takes its plan along.
+		$by_line = array();
+		$aligned = count( (array) $saved['ids'] ) >= count( $lines ); // Every posted row was written, in order.
+		foreach ( $planned['plans'] as $index => $plan ) {
+			$line_id = isset( $lines[ $index ] ) && (int) $lines[ $index ]['id'] > 0 ? (int) $lines[ $index ]['id'] : ( $aligned && isset( $lines[ $index ], $saved['ids'][ $index ] ) ? (int) $saved['ids'][ $index ] : 0 );
+			if ( $line_id > 0 ) {
+				$by_line[ $line_id ] = $plan;
+			}
+		}
+		Splits::keep( $by_line, array_diff( array_keys( $before ), array_map( 'intval', (array) $saved['ids'] ) ) );
 
 		// A line that became a stay and whose fish or size was changed in the grid: one
 		// correction — its stays follow, the line keeps what the label said.
@@ -1166,6 +1264,59 @@ class Admin_Workbook {
 			'kept'        => count( $kept ),
 			'reload'      => $followed > 0 || $labeled > 0 || count( $kept ) > 0,
 		);
+	}
+
+	/**
+	 * What a save keeps of the posted split plans (the testable half of the
+	 * save's split step). A line that is not a stay yet: a plan with one
+	 * part is only its tank, a plan with more is checked (Splits::errors())
+	 * — a mistake refuses the whole save —, NONE and "nothing said" are
+	 * kept as they are. A line that already IS a stay cannot be split from
+	 * the order page: a plan posted for it (a page loaded before the
+	 * check-in) is refused plainly — the warning says how that group is
+	 * split now — and nothing is kept for it.
+	 *
+	 * @param object $store    Store or stand-in.
+	 * @param array  $splits   Orders::posted_splits().
+	 * @param array  $before   The lines as stored, by id.
+	 * @param string $today    Site date.
+	 * @param array  $warnings What was not saved (by reference).
+	 * @return array{plans: array, errors: string[]} plans: line index → parts | NONE | null.
+	 */
+	public static function split_plans( $store, array $splits, array $before, $today, array &$warnings ) {
+		$out = array(
+			'plans'  => array(),
+			'errors' => array(),
+		);
+
+		$tanks = null;
+		foreach ( $splits as $index => $posted ) {
+			$plan   = $posted['plan'];
+			$linked = $posted['id'] > 0 && ! empty( $before[ $posted['id'] ]['stay_id'] );
+			if ( $linked ) {
+				if ( is_array( $plan ) && Splits::is_split( $plan ) ) {
+					/* translators: %s: species */
+					$warnings[] = sprintf( __( 'the split of %s — that line is already checked in: split the group from its tank instead (Move, with a smaller count)', 'fishotel-misc-plugin' ), $posted['species'] );
+				}
+				$out['plans'][ $index ] = null;
+				continue;
+			}
+			if ( ! is_array( $plan ) ) {
+				$out['plans'][ $index ] = $plan; // NONE, or nothing said.
+				continue;
+			}
+
+			if ( null === $tanks ) {
+				$tanks = Splits::by_id( Splits::tanks( $store, $today, Settings::get() ) );
+			}
+			foreach ( Splits::errors( $plan, $posted['live'], $tanks ) as $mistake ) {
+				/* translators: 1: line number, 2: species, 3: what is wrong */
+				$out['errors'][] = sprintf( __( 'Line %1$d (%2$s): %3$s.', 'fishotel-misc-plugin' ), $index + 1, $posted['species'], $mistake );
+			}
+			$out['plans'][ $index ] = $plan; // One part is only the line's first tank — kept so the Tank cell shows it.
+		}
+
+		return $out;
 	}
 
 	/**
@@ -1628,7 +1779,7 @@ class Admin_Workbook {
 				(float) ( $c['total'] ?? 0 ),
 				(float) ( $c['grand_total'] ?? 0 ),
 				(float) ( $c['revenue'] ?? 0 ),
-				(float) ( $c['up_down'] ?? 0 ),
+				(float) ( $c['up_down_priced'] ?? ( $c['up_down'] ?? 0 ) ),
 				self::rate( $c['ratio'] ?? null ),
 				(float) ( $c['doa_cost_sheet'] ?? 0 ),
 				(float) ( $c['doa_cost_per_fish'] ?? 0 ),
@@ -1651,10 +1802,10 @@ class Admin_Workbook {
 					self::rate( $line['landed_total'] ?? null ),
 					self::rate( $line['landed_per_fish'] ?? null ),
 					self::rate( $line['suggested_price'] ?? null ),
-					$line['worth'],
+					Costing::worth_of( $line )['price'], // The typed price, else the shop's as it is read now; blank = none.
 					self::rate( $line['profit'] ?? null ),
 					self::rate( $line['margin'] ?? null ),
-					! empty( $line['worth_it'] ),
+					isset( $line['worth_it'] ) && null !== $line['worth_it'] ? (bool) $line['worth_it'] : null,
 					isset( $line['survived'] ) ? $line['survived'] : null,
 					(int) ( $line['doa'] ?? 0 ),
 					self::rate( $line['revenue'] ?? null ),

@@ -1743,6 +1743,23 @@ class Fake_Store {
 		return $out;
 	}
 
+	/** As Store::line_figures(): each own stay with the sister stays of its order line counted in. */
+	public function line_figures( array $stay_ids ) {
+		$stay_ids = array_values( array_unique( array_filter( array_map( 'intval', $stay_ids ) ) ) );
+		$out      = array();
+		foreach ( $this->stay_figures( $stay_ids ) as $id => $figures ) {
+			$line    = isset( $this->stays[ $id ] ) ? (int) $this->stays[ $id ]['order_line_id'] : 0;
+			$sisters = array();
+			foreach ( $this->stays as $row ) {
+				if ( $line > 0 && (int) $row['order_line_id'] === $line && ! in_array( (int) $row['id'], $stay_ids, true ) ) {
+					$sisters[] = Orders::figures_from_events( $this->events( (int) $row['id'] ) );
+				}
+			}
+			$out[ $id ] = Orders::with_sisters( $figures, $sisters );
+		}
+		return $out;
+	}
+
 	/* ---- aliases as rows ------------------------------------------- */
 
 	public function aliases() {

@@ -288,7 +288,7 @@ function wp_generate_password( $length = 12, $special_chars = true, $extra_speci
 }
 
 // The files Clean_Room::load() names, in its order (the store's stand-in reads the temporary tanks' setups).
-foreach ( array( 'clean-room', 'layout', 'replay', 'protocol', 'temp-tanks', 'todo', 'parser', 'qr', 'costing', 'sizes', 'box-shares', 'stats', 'stats-prices', 'stats-sales', 'species', 'identify', 'orders', 'xlsx', 'workbook', 'import-map', 'import', 'store', 'settings' ) as $fh_class ) {
+foreach ( array( 'clean-room', 'layout', 'replay', 'protocol', 'temp-tanks', 'todo', 'parser', 'qr', 'costing', 'sizes', 'box-shares', 'stats', 'stats-prices', 'stats-sales', 'species', 'identify', 'orders', 'shop-price', 'splits', 'xlsx', 'workbook', 'import-map', 'import', 'store', 'settings' ) as $fh_class ) {
 	require_once $room . 'class-' . $fh_class . '.php';
 }
 require_once $room . 'tests/fake-store.php';

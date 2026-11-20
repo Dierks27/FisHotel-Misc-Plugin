@@ -24,8 +24,20 @@
  * Per line: landed per fish = landed ÷ received; the suggested price =
  * landed per fish × markup (4) rounded to the nearest 5; profit =
  * received × worth − landed; margin = profit ÷ landed; "worth it" when
- * the margin is above the threshold (2.75); revenue = worth × survived;
- * DOA cost = DOA × price.
+ * the margin is above the threshold (2.75) — which is the same as: the
+ * shop price is more than (1 + threshold) × the landed cost per fish
+ * (3.75× with 2.75); revenue = worth × survived; DOA cost = DOA × price.
+ *
+ * "Worth" is what the fish sells for (worth_of()): the price typed on the
+ * line when there is one (an override — a 0 is a price too), else the
+ * shop price the caller read for it (shop_price: Shop_Price — the linked
+ * product, else the species list), else NOTHING. A line with no price is
+ * not a line that sells for 0: its profit, margin and "worth it" are
+ * null (the page says "no shop price yet", never "No" and never −100%),
+ * its revenue is 0, and the order counts those lines (unpriced) and what
+ * they cost landed (unpriced_landed) so the order page can leave them
+ * out of "up or down" (up_down_priced, ratio_priced). An order whose
+ * lines all carry a typed worth is costed exactly as before.
  *
  * Per order: total = Σ landed; grand total = total − credit; revenue =
  * Σ revenue; up/down = revenue − grand total; ratio = revenue ÷ grand
@@ -122,7 +134,8 @@ class Costing {
 	 * @param array   $order           cost_mode (box|bag), tariffs, domestic_flight, import_fees, credit,
 	 *                                 markup, worth_threshold.
 	 * @param array[] $lines           qty_ordered, qty_received, per_box, box_pct (null = use per box),
-	 *                                 bags, unit_price, worth, qty_survived (null = unknown), qty_doa,
+	 *                                 bags, unit_price, worth (typed; null = none), shop_price (read;
+	 *                                 null = none), qty_survived (null = unknown), qty_doa,
 	 *                                 species_per_box.
 	 * @param int     $default_per_box Fish per box when nothing says.
 	 * @return array{mode: string, lines: array[], order: array}
@@ -152,7 +165,8 @@ class Costing {
 			$doa      = max( 0, (int) ( $line['qty_doa'] ?? 0 ) );
 			$survived = isset( $line['qty_survived'] ) && null !== $line['qty_survived'] && '' !== $line['qty_survived'] ? max( 0, (int) $line['qty_survived'] ) : null;
 			$price    = self::money_in( $line['unit_price'] ?? 0 );
-			$worth    = self::money_in( $line['worth'] ?? 0 );
+			$sells    = self::worth_of( $line );
+			$worth    = null === $sells['price'] ? 0.0 : $sells['price'];
 			$bags     = max( 0, (int) ( $line['bags'] ?? 0 ) );
 			$per_box  = (int) ( $line['per_box'] ?? 0 );
 			if ( $per_box < 1 ) {
@@ -182,6 +196,8 @@ class Costing {
 				'qty_survived' => $survived,
 				'unit_price'   => $price,
 				'worth'        => $worth,
+				'priced'       => null !== $sells['price'],
+				'worth_from'   => $sells['from'],
 				'per_box'      => $per_box,
 				'box_pct'      => $box_pct,
 				'bags'         => $bags,
@@ -210,6 +226,8 @@ class Costing {
 		$out_lines         = array();
 		$total             = 0.0;
 		$revenue           = 0.0;
+		$unpriced          = 0;
+		$unpriced_landed   = 0.0;
 		$doa_cost_lines    = 0.0;
 		$doa_cost_per_fish = 0.0;
 
@@ -226,11 +244,21 @@ class Costing {
 
 			$per_fish  = $received > 0 ? $landed / $received : null;
 			$suggested = null !== $per_fish ? self::round_to( $per_fish * $markup, self::PRICE_STEP ) : null;
-			$profit    = $received * $row['worth'] - $landed;
-			$margin    = $landed > 0 ? $profit / $landed : null;
-			$worth_it  = null !== $margin && $margin > $threshold;
 			$survived  = null === $row['qty_survived'] ? 0 : $row['qty_survived'];
-			$line_rev  = $row['worth'] * $survived;
+			if ( $row['priced'] ) {
+				$profit   = $received * $row['worth'] - $landed;
+				$margin   = $landed > 0 ? $profit / $landed : null;
+				$worth_it = null !== $margin && $margin > $threshold;
+				$line_rev = $row['worth'] * $survived;
+			} else {
+				// No price is not a price of 0: nothing is said about profit, and the line is left out of the revenue.
+				$profit           = null;
+				$margin           = null;
+				$worth_it         = null;
+				$line_rev         = 0.0;
+				$unpriced_landed += $landed;
+				$unpriced++;
+			}
 			$doa_cost  = $row['qty_doa'] * $price;
 			if ( 'bag' === $mode ) {
 				$fee_share = $fee_rate;
@@ -264,7 +292,8 @@ class Costing {
 			$doa_cost_per_fish += $doa_fish;
 		}
 
-		$grand = $total - $credit;
+		$grand  = $total - $credit;
+		$priced = $grand - $unpriced_landed; // What the lines WITH a price cost: the base "up or down" compares the revenue with.
 
 		return array(
 			'mode'  => $mode,
@@ -295,6 +324,10 @@ class Costing {
 				'revenue'           => $revenue,
 				'up_down'           => $revenue - $grand,
 				'ratio'             => abs( $grand ) > 1e-9 ? $revenue / $grand : null,
+				'unpriced'          => $unpriced,
+				'unpriced_landed'   => $unpriced_landed,
+				'up_down_priced'    => $revenue - $priced,
+				'ratio_priced'      => abs( $priced ) > 1e-9 ? $revenue / $priced : null,
 				'fill_rate'         => $sum_ordered > 0 ? $sum_received / $sum_ordered : null,
 				'survival_rate'     => $known && ( $sum_received - $sum_doa ) > 0 ? $sum_survived / ( $sum_received - $sum_doa ) : null,
 				'doa_rate'          => $sum_received > 0 ? $sum_doa / $sum_received : null,
@@ -303,6 +336,51 @@ class Costing {
 				'doa_cost_per_fish' => $doa_cost_per_fish,
 			),
 		);
+	}
+
+	/**
+	 * What a line's fish sells for, and where that comes from: the price
+	 * typed on the line ('typed' — an override, a 0 included), else the
+	 * shop price read for it (shop_price above 0, with its shop_price_from:
+	 * variation | product | list), else none.
+	 *
+	 * @param array $line worth, shop_price, shop_price_from.
+	 * @return array{price: float|null, from: string}
+	 */
+	public static function worth_of( array $line ) {
+		$typed = $line['worth'] ?? null;
+		if ( null !== $typed && ! is_bool( $typed ) && is_scalar( $typed ) ) {
+			$text = str_replace( array( '$', ',', ' ' ), '', (string) $typed );
+			if ( '' !== $text && is_numeric( $text ) ) {
+				return array(
+					'price' => (float) $text,
+					'from'  => 'typed',
+				);
+			}
+		}
+		$read = $line['shop_price'] ?? null;
+		if ( null !== $read && ! is_bool( $read ) && is_numeric( $read ) && (float) $read > 0 ) {
+			return array(
+				'price' => (float) $read,
+				'from'  => '' !== (string) ( $line['shop_price_from'] ?? '' ) ? (string) $line['shop_price_from'] : 'product',
+			);
+		}
+		return array(
+			'price' => null,
+			'from'  => '',
+		);
+	}
+
+	/**
+	 * How many times its landed cost a fish must sell for to be "worth it":
+	 * 1 + the threshold (a margin above 2.75 is a price above 3.75× the
+	 * landed cost per fish).
+	 *
+	 * @param mixed $threshold The order's worth-it margin.
+	 * @return float
+	 */
+	public static function worth_times( $threshold ) {
+		return 1 + self::money_in( $threshold, self::DEFAULT_THRESHOLD );
 	}
 
 	/**

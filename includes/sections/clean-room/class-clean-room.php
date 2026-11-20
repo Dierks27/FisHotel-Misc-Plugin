@@ -60,6 +60,10 @@
  *   - class-stats.php       PURE: the yearly figures, weighted and as the
  *                           spreadsheet averaged them; years side by side;
  *                           one row per fish and year.
+ *   - class-shop-price.php    what an order line's fish sells for, READ from the shop (the
+ *                             linked product, else the species list) instead of typed
+ *   - class-splits.php        a line split over tanks at check-in: the plan, "1 per tank",
+ *                             and the species that were split last time
  *   - class-stats-prices.php  PURE: the fish priced under what their latest
  *                           supplier order suggests (read-only).
  *   - class-stats-sales.php   what customers actually paid per fish and year,
@@ -207,6 +211,8 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 			require_once self::path() . 'class-species.php';
 			require_once self::path() . 'class-identify.php';
 			require_once self::path() . 'class-orders.php';
+			require_once self::path() . 'class-shop-price.php';
+			require_once self::path() . 'class-splits.php';
 			require_once self::path() . 'class-xlsx.php';
 			require_once self::path() . 'class-workbook.php';
 			require_once self::path() . 'class-import-map.php';

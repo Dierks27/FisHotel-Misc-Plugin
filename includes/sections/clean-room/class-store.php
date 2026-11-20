@@ -4397,6 +4397,54 @@ class Store {
 	}
 
 	/**
+	 * The live figures of order lines by their own stay — each with its
+	 * SISTER stays counted in: a group that was split (at check-in, or by a
+	 * move of a smaller quantity later) lives on in several stays of the
+	 * same order line, and a fish lost or sold in any of those tanks is
+	 * lost or sold on the line (Orders::with_sisters()). A stay without an
+	 * order line, or the only stay of its line, reads exactly as
+	 * stay_figures() gives it.
+	 *
+	 * @param int[] $stay_ids The lines' own stays (order_lines.stay_id).
+	 * @return array<int, array> stay id → arrived, lost, sold, doa, live, survived, stays.
+	 */
+	public function line_figures( array $stay_ids ) {
+		$stay_ids = array_values( array_unique( array_filter( array_map( 'intval', $stay_ids ) ) ) );
+		$own      = $this->stay_figures( $stay_ids );
+		if ( ! $own ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		$in = implode( ',', $stay_ids );
+		try {
+			$rows = $wpdb->get_results( 'SELECT o.id AS own_id, s.id AS sister_id FROM ' . self::table( 'stays' ) . ' o INNER JOIN ' . self::table( 'stays' ) . ' s ON s.order_line_id = o.order_line_id AND s.id <> o.id WHERE o.id IN (' . $in . ') AND o.order_line_id IS NOT NULL AND s.id NOT IN (' . $in . ')', ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- ids cast to int above.
+		} catch ( \Throwable $e ) {
+			$rows = array();
+		}
+
+		$sisters = array();
+		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
+			$sisters[ (int) $row['own_id'] ][] = (int) $row['sister_id'];
+		}
+		$theirs = $sisters ? $this->stay_figures( array_merge( ...array_values( $sisters ) ) ) : array();
+
+		$out = array();
+		foreach ( $own as $id => $figures ) {
+			$list = array();
+			foreach ( isset( $sisters[ $id ] ) ? $sisters[ $id ] : array() as $sister ) {
+				if ( isset( $theirs[ $sister ] ) ) {
+					$list[] = $theirs[ $sister ];
+				}
+			}
+			$out[ $id ] = Orders::with_sisters( $figures, $list );
+		}
+
+		return $out;
+	}
+
+	/**
 	 * Per supplier order, its open stays (groups still in tanks) and how
 	 * many of them carry their own sale date — the Arrivals list's "On
 	 * sale" column, in one query.

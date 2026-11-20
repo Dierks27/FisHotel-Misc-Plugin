@@ -310,6 +310,8 @@ require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-stats-sale
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-species.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-identify.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-orders.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-shop-price.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-splits.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-xlsx.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-workbook.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-import-map.php';
