@@ -117,6 +117,8 @@ $fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks,
 	$offer   = ! $linked && $id > 0 && isset( $split['offers'][ $id ] ) ? (string) $split['offers'][ $id ] : '';
 	$priced  = ! empty( $fig['priced'] );
 	$typed   = 'typed' === (string) ( $fig['shop_from'] ?? '' );
+	// The notes under the fish, without the supplier's code: that has its own field behind "More columns".
+	$notes   = Order_Import::note_with( $value( 'notes' ), Order_Import::NOTE_CODE, '' );
 	?>
 	<tr class="fh-cr-line<?php echo $linked ? ' is-linked' : ''; ?><?php echo $unknown ? ' is-unknown' : ''; ?>" data-line="<?php echo esc_attr( $id ); ?>"<?php echo '' !== $offer ? ' data-split-offer="' . esc_attr( $offer ) . '"' : ''; ?>>
 		<td class="fh-cr-num fh-cr-line__n"><span class="fh-cr-line__num"><?php echo esc_html( is_int( $i ) ? (string) ( $i + 1 ) : '' ); ?></span><input type="hidden" name="<?php echo esc_attr( $name( 'id' ) ); ?>" value="<?php echo esc_attr( $id ); ?>"><input type="hidden" name="<?php echo esc_attr( $name( 'species_id' ) ); ?>" value="<?php echo esc_attr( $value( 'species_id' ) ); ?>"><input type="hidden" name="<?php echo esc_attr( $name( 'seen' ) ); ?>" value="<?php echo esc_attr( $id > 0 ? Identify::seen( $line ) : '' ); ?>"><?php if ( ! $linked ) : ?><input type="hidden" class="fh-cr-split-field" name="<?php echo esc_attr( $name( 'split' ) ); ?>" value="<?php echo esc_attr( $plan ); ?>"><?php endif; ?></td>
@@ -135,8 +137,8 @@ $fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks,
 			<?php if ( '' !== Identify::label_shown( $line ) ) : ?>
 				<span class="fh-cr-sub fh-cr-label-name" title="<?php esc_attr_e( 'What the supplier\'s label or invoice called this fish before it was corrected. Kept for the mislabel stats; a later correction never replaces it.', 'fishotel-misc-plugin' ); ?>"><?php echo esc_html( sprintf( /* translators: %s: what the label called the fish */ __( 'arrived labeled: %s', 'fishotel-misc-plugin' ), Identify::label_shown( $line ) ) ); ?></span>
 			<?php endif; ?>
-			<?php if ( '' !== $value( 'notes' ) ) : ?>
-				<span class="fh-cr-sub fh-cr-line__notes fh-cr-c-entry"><?php echo esc_html( $value( 'notes' ) ); ?></span>
+			<?php if ( '' !== $notes ) : ?>
+				<span class="fh-cr-sub fh-cr-line__notes fh-cr-c-entry"><?php echo esc_html( $notes ); ?></span>
 			<?php endif; ?>
 			<?php do_action( 'fishotel_cleanroom_order_line', $line ); // Other sections add a line under the fish (Requests: "Requested by: …"). ?>
 			<?php if ( $correct ) : ?>

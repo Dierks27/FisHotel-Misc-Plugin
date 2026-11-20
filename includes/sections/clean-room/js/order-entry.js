@@ -261,21 +261,24 @@
 
 	/**
 	 * The running count under a split: "6 of 6 placed", and whether that
-	 * is all of them ('full'), too many ('over') or neither.
+	 * is all of them ('full'), too many ('over') or neither. A fish is
+	 * placed once its row has a tank: a count typed beside "— tank —" is
+	 * not in a tank yet.
 	 *
 	 * @param {Object[]}    parts The parts.
 	 * @param {number|null} live  The live fish; null while nothing is received.
 	 * @param {Object}      t     Templates: placed, placedOnly.
-	 * @return {{text: string, state: string}}
+	 * @return {{text: string, state: string, placed: number}}
 	 */
 	function splitCount(parts, live, t) {
-		var placed = splitPlaced(parts);
+		var placed = splitPlaced((Array.isArray(parts) ? parts : []).filter(function (part) { return whole(part.tank_id) > 0; }));
 		if (live === null || typeof live === 'undefined') {
-			return { text: fmt(t.placedOnly, placed), state: '' };
+			return { text: fmt(t.placedOnly, placed), state: '', placed: placed };
 		}
 		return {
 			text: fmt(t.placed, placed, live),
-			state: placed > live ? 'over' : (placed === live && live > 0 ? 'full' : '')
+			state: placed > live ? 'over' : (placed === live && live > 0 ? 'full' : ''),
+			placed: placed
 		};
 	}
 
@@ -374,6 +377,32 @@
 		}
 		var byId = tanksById(tanks);
 
+		/*
+		 * A row that opens under a line (the split rows, the Identify panel)
+		 * spans the columns that are SHOWN — in a table of fixed widths a
+		 * colspan wider than that would add empty columns and squeeze the
+		 * fish. Kept right whenever such a row appears or the columns change.
+		 */
+		function shownColumns() {
+			return $table.find('thead th').filter(function () { return this.offsetParent !== null; }).length || cols;
+		}
+
+		function fitRows() {
+			var n = shownColumns();
+			$grid.children('tr.fh-cr-split-row, tr.fh-cr-identify').children('td').each(function () {
+				if (parseInt(this.getAttribute('colspan'), 10) !== n) {
+					this.setAttribute('colspan', n);
+				}
+			});
+		}
+
+		if (root.MutationObserver) {
+			new root.MutationObserver(fitRows).observe($grid[0], { childList: true });
+		}
+		$order.on('change', '[name="cost_mode"]', function () {
+			root.setTimeout(fitRows, 0); // After the page has switched the mode's columns.
+		});
+
 		/* ---- The two views ---- */
 
 		function remember(what) {
@@ -394,6 +423,7 @@
 			if (view === 'entry' && !offered) {
 				offerSplits();
 			}
+			fitRows();
 		}
 
 		$order.on('click', '.fh-cr-view-tab', function () {
@@ -407,6 +437,7 @@
 
 		$order.on('change', '.fh-cr-more-toggle', function () {
 			$order.attr('data-more', this.checked ? '1' : '0');
+			fitRows();
 			remember({ more: this.checked ? 1 : 0 });
 		});
 
@@ -568,7 +599,7 @@
 			var errors = splitErrors(parts.filter(function (part) { return whole(part.qty) > 0 || whole(part.tank_id) > 0; }), live, byId, {
 				noQty: t.noQty || '', noTank: t.noTank || '', area: t.area || '', twice: t.twice || '%s', live: t.live || ''
 			});
-			var rest = live !== null && splitPlaced(parts) < live ? ' — ' + fmt(t.rest || '%d stay in the first tank', live - splitPlaced(parts)) : '';
+			var rest = live !== null && count.placed > 0 && count.placed < live ? ' — ' + fmt(t.rest || '%d stay in the first tank', live - count.placed) : '';
 			$panel.find('.fh-cr-split__count').text(count.text + rest).removeClass('is-full is-over').addClass(count.state ? 'is-' + count.state : '');
 			$panel.find('.fh-cr-split__errors').text(errors.join(' · '));
 		}
@@ -577,7 +608,7 @@
 			var $panel = panelOf($row);
 			if (!$panel) {
 				$panel = $('<tr class="fh-cr-split-row"><td></td></tr>');
-				$panel.find('td').attr('colspan', cols);
+				$panel.find('td').attr('colspan', shownColumns());
 				$row.after($panel);
 			}
 			if (typeof why === 'string') {
@@ -638,6 +669,9 @@
 		function onesNote(parts, live) {
 			if (live === null) {
 				return t.onesNoCount || 'Type the received count first.';
+			}
+			if (!parts.length && live > 0) {
+				return t.onesNone || 'No empty Spa tank is left for this line.';
 			}
 			if (parts.length < Math.min(live, MAX_PARTS)) {
 				return fmt(t.onesShort || 'Only %1$d empty Spa tanks: the other %2$d stay in the first tank.', parts.length, live - parts.length);

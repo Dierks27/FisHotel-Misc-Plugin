@@ -268,6 +268,7 @@ class Admin_Workbook {
 				$batch       = self::batch_sale_panel( $order, $batch_stays, self::product_titles( $store, array_column( $batch_stays, 'product_id' ) ), $settings );
 			}
 			$view  = self::order_view( $order, self::view_prefs( get_user_meta( get_current_user_id(), self::VIEW_META, true ) ) );
+			$view  = self::view_asked( $view, wp_unslash( $_GET ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- which view to draw, nothing more.
 			$split = self::split_panel( $store, $order, $today, $settings );
 
 			include Clean_Room::path() . 'views/order.php';
@@ -522,6 +523,27 @@ class Admin_Workbook {
 	}
 
 	/**
+	 * The view a link asks for, over the remembered one, for this one page
+	 * load (pure; nothing is stored): `view=entry` or `view=numbers` — what
+	 * "Import lines" sends the page back with, so the lines it just wrote
+	 * land in Entry —, and `import=1` (a new order from pasted lines), which
+	 * is Entry's panel.
+	 *
+	 * @param array $view order_view().
+	 * @param array $get  Unslashed query.
+	 * @return array
+	 */
+	public static function view_asked( array $view, array $get ) {
+		$asked = isset( $get['view'] ) && is_string( $get['view'] ) ? strtolower( trim( $get['view'] ) ) : '';
+		if ( in_array( $asked, self::VIEWS, true ) ) {
+			$view['view'] = $asked;
+		} elseif ( isset( $get['import'] ) && '1' === (string) ( is_scalar( $get['import'] ) ? $get['import'] : '' ) ) {
+			$view['view'] = 'entry';
+		}
+		return $view;
+	}
+
+	/**
 	 * Remember the view a user switched to (the testable half of the "view"
 	 * op): the view of the stage the order is in, and the "More columns"
 	 * switch. Returns what is stored now.
@@ -629,6 +651,7 @@ class Admin_Workbook {
 					/* translators: %d: tanks */
 					'saidTanks'      => __( '%d tanks', 'fishotel-misc-plugin' ),
 					'onesNoCount'    => __( 'Type the received count first: one fish goes to each tank.', 'fishotel-misc-plugin' ),
+					'onesNone'       => __( 'No empty Spa tank is left for this line in the order\'s building (the lines above took them, or they hold fish): nothing is laid out.', 'fishotel-misc-plugin' ),
 					/* translators: 1: empty tanks, 2: fish */
 					'onesShort'      => __( 'Only %1$d empty Spa tanks: the other %2$d stay in the first tank.', 'fishotel-misc-plugin' ),
 					'offerOnes'      => __( 'This fish was split one per tank last time, so the same is laid out here. Change it, or "Keep together" if this group stays as one.', 'fishotel-misc-plugin' ),

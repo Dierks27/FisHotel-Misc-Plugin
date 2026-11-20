@@ -168,6 +168,7 @@ $done = fh_ask( $store, fh_form( $store, 0 ), 'confirm', array( 'grid' => $grid,
 $id   = (int) $done['order_id'];
 $o    = $store->order( $id );
 check( 'the order is saved — as ORDERED, no longer a draft — with its four lines, and the page is sent to it', empty( $done['error'] ) && $id > 0 && 4 === $done['imported'] && 'ordered' === $o['status'] && 4 === count( $o['lines'] ) && false !== strpos( $done['redirect'], 'order=' . $id ) && '4 lines imported.' === $done['message'] );
+check( '… in the Entry view, where the lines that were just written are typed on', false !== strpos( $done['redirect'], 'view=entry' ) );
 check_same( 'every line has its ordered count and received left EMPTY (not 0)', array( array( 4, 6, 2, 3 ), array( null, null, null, null ) ), array( array_column( $o['lines'], 'qty_ordered' ), array_column( $o['lines'], 'qty_received' ) ) );
 $w = $o['lines'][0];
 check( 'the matched line: the species-list fish, its scientific name, the standard size, QTY/BOX as its per box, the price, the list\'s worth', 'Blue Test Wrasse' === $w['species'] && 1 === $w['species_id'] && 'Testus caeruleus' === $w['sci_name'] && 'large' === $w['size_slug'] && 'Large' === $w['size_label'] && 12 === $w['per_box'] && 2.5 === $w['unit_price'] && 40.0 === $w['worth'] && false === $w['needs_id'] );

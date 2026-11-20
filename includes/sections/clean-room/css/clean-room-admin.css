@@ -1507,7 +1507,7 @@ a.fh-cr-unknown {
 .fh-cr-order .fh-cr-grid .fh-cr-w-n     { width: 30px; }
 .fh-cr-order .fh-cr-grid .fh-cr-w-sci   { width: 15%; }
 .fh-cr-order .fh-cr-grid .fh-cr-w-size  { width: 92px; }
-.fh-cr-order .fh-cr-grid .fh-cr-w-qty   { width: 56px; }
+.fh-cr-order .fh-cr-grid .fh-cr-w-qty   { width: 62px; }
 .fh-cr-order .fh-cr-grid .fh-cr-w-pct   { width: 64px; }
 .fh-cr-order .fh-cr-grid .fh-cr-w-money { width: 82px; }
 .fh-cr-order .fh-cr-grid .fh-cr-w-tank  { width: 132px; }
@@ -1724,8 +1724,12 @@ a.fh-cr-unknown {
 	}
 
 	.fh-cr-order .fh-cr-grid .fh-cr-w-size  { width: 80px; }
-	.fh-cr-order .fh-cr-grid .fh-cr-w-qty   { width: 50px; }
+	.fh-cr-order .fh-cr-grid .fh-cr-w-qty   { width: 56px; }
 	.fh-cr-order .fh-cr-grid .fh-cr-w-pct   { width: 58px; }
+
+	.fh-cr-order .fh-cr-grid thead th {
+		font-size: 11px;
+	}
 	.fh-cr-order .fh-cr-grid .fh-cr-w-money { width: 72px; }
 	.fh-cr-order .fh-cr-grid .fh-cr-w-tank  { width: 124px; }
 

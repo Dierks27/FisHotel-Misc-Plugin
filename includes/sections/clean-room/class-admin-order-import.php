@@ -1565,7 +1565,8 @@ class Admin_Order_Import {
 		$result['learned']  = $learned;
 		$result['message']  = $message;
 		$result['flash']    = $message;
-		$result['redirect'] = '' !== (string) $result['redirect'] ? $result['redirect'] : Admin_Workbook::order_url( (int) $result['order_id'] );
+		// Back to the order, in Entry: that is where the lines that were just written are typed on.
+		$result['redirect'] = add_query_arg( array( 'view' => 'entry' ), '' !== (string) $result['redirect'] ? $result['redirect'] : Admin_Workbook::order_url( (int) $result['order_id'] ) );
 		return $result;
 	}
 

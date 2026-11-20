@@ -33,7 +33,7 @@ use FisHotel\Misc\Sections\Clean_Room\Tests\Fake_Store;
 update_option( Clean_Room::OPTION_KEY, array( 'size_list' => array( 'Small', 'Medium', 'Large' ) ) );
 $today    = Replay::date_in_zone( time(), wp_timezone() ); // The acts stamp their events with the real clock (the Undo window).
 $settings = Settings::get();
-$actor    = 1; // wp-stubs' current user: the one who clicks Check in — and who may undo it.
+$actor    = 1; // The one who clicks Check in — and who may undo it.
 
 function fh_store() {
 	$store = new Fake_Store( array( 12 => 'Copper Test Butterfly', 13 => 'Lilac Test Anthias', 14 => 'Plain Test Damsel' ) );
