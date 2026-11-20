@@ -456,7 +456,8 @@ class Sizes_Tidy {
 	 * @param array   $shop    Sizes_Tidy_Site::read_shop().
 	 * @param array[] $short   short_list().
 	 * @param array   $request over (row key → action: the rows the owner set by hand), keep_plus (bool).
-	 * @return array[] key, slug, label, typed, orphan, products, variations, stores (name → n), orders, kind, auto, action, explicit, flags.
+	 * @return array[] key, slug, label, typed, orphan, products, variations, stores (name → n), orders, kind, lo, hi, auto,
+	 *                 action, explicit, flags — the inch sizes first, by where they start, then the words by name, then the typed ones.
 	 */
 	public static function rows( array $shop, array $short, array $request = array() ) {
 		$taxonomy = (string) ( $shop['taxonomy'] ?? '' );
@@ -533,7 +534,10 @@ class Sizes_Tidy {
 				$row['orders'] = (int) ( $shop['orders'][ $row['slug'] ] ?? 0 );
 			}
 
-			$row['kind'] = self::parse( $row['label'] )['kind'];
+			$read        = self::parse( $row['label'] );
+			$row['kind'] = $read['kind'];
+			$row['lo']   = null === $read['lo'] ? 0.0 : (float) $read['lo'];
+			$row['hi']   = null === $read['hi'] ? PHP_FLOAT_MAX : (float) $read['hi'];
 			$suggested   = self::suggest(
 				array(
 					'slug'     => $row['slug'],
@@ -580,6 +584,10 @@ class Sizes_Tidy {
 				if ( 0 !== $words ) {
 					return $words;
 				}
+				// Inch sizes by where they start, then where they end: <1" first, 1-2" before 1-2.5", 3-4" before 3"+.
+				if ( 'word' !== $a['kind'] && ( $a['lo'] !== $b['lo'] || $a['hi'] !== $b['hi'] ) ) {
+					return $a['lo'] !== $b['lo'] ? $a['lo'] <=> $b['lo'] : $a['hi'] <=> $b['hi'];
+				}
 				$by_label = strnatcasecmp( $a['label'], $b['label'] );
 				return 0 !== $by_label ? $by_label : strcmp( $a['key'], $b['key'] );
 			}
@@ -609,6 +617,8 @@ class Sizes_Tidy {
 			'stores'     => array(),
 			'orders'     => 0,
 			'kind'       => 'word',
+			'lo'         => 0.0,
+			'hi'         => 0.0,
 			'auto'       => self::KEEP,
 			'action'     => self::KEEP,
 			'explicit'   => false,
@@ -653,7 +663,7 @@ class Sizes_Tidy {
 		$status = (string) ( $variation['stock_status'] ?? 'instock' );
 		$stock  = isset( $variation['stock'] ) && is_numeric( $variation['stock'] ) ? (int) $variation['stock'] : null;
 		if ( 'onbackorder' === $status ) {
-			return null !== $stock ? sprintf( /* translators: %d: stock */ __( 'on backorder (%d)', 'fishotel-misc-plugin' ), $stock ) : __( 'on backorder', 'fishotel-misc-plugin' );
+			return null !== $stock && 0 !== $stock ? sprintf( /* translators: %d: stock */ __( 'on backorder (%d)', 'fishotel-misc-plugin' ), $stock ) : __( 'on backorder', 'fishotel-misc-plugin' );
 		}
 		if ( 'outofstock' === $status ) {
 			return null !== $stock && 0 !== $stock ? sprintf( /* translators: %d: stock */ __( 'out of stock (%d)', 'fishotel-misc-plugin' ), $stock ) : __( 'out of stock', 'fishotel-misc-plugin' );

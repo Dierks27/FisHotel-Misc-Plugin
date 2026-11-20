@@ -118,8 +118,10 @@ $fh_item = static function ( array $change ) {
 				</th>
 				<td>
 					<?php
-					/* translators: 1: products, 2: variations */
-					$fh_uses = sprintf( __( '%1$d products · %2$d variations', 'fishotel-misc-plugin' ), (int) $fh_row['products'], (int) $fh_row['variations'] );
+					/* translators: %d: count */
+					$fh_uses = sprintf( _n( '%d product', '%d products', (int) $fh_row['products'], 'fishotel-misc-plugin' ), (int) $fh_row['products'] )
+						/* translators: %d: count */
+						. ' · ' . sprintf( _n( '%d variation', '%d variations', (int) $fh_row['variations'], 'fishotel-misc-plugin' ), (int) $fh_row['variations'] );
 					?>
 					<?php if ( $fh_changes ) : ?>
 						<details>

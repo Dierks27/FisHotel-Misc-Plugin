@@ -163,6 +163,7 @@ check_contains( 'the short list\'s real length is shown, not a fixed one', 'The 
 check_contains( 'a row with its dropdown, pre-filled by the rule', 'data-key="g:3-5" data-shown="to:3-4"', $html );
 check( 'a size of the short list has no dropdown: it stays', 1 === preg_match( '/<th scope="row">\s*Medium\s*<\/th>.*?stays — it is in the short list/s', $html ) && false === strpos( $html, 'data-key="g:medium"' ) );
 check_contains( 'an in-between word starts on "take off the products"', 'data-key="g:medium-large" data-shown="remove"', $html );
+check_contains( 'a row counts in plain words', '1 product · 1 variation', $html );
 check_contains( 'an "and up" size is marked quietly', 'was open-ended (“and up”)', $html );
 check_contains( 'where else a size is stored', '2 stays · 1 supplier order line · 1 fish request · 2 lost-fish cases · 1 draft invoice line · 1 box share · 14 past order lines', $html );
 check_contains( 'the fish for sale today, counted', '3 fish for sale today carry a size that is being taken off', $html );

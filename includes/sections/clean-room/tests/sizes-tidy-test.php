@@ -39,6 +39,7 @@ check_same( 'under a number', 'under 0-1', $read( '<1"' ) );
 check_same( 'under a number, as it is stored', 'under 0-1', $read( '&lt;1&quot;' ) );
 check_same( 'a lone number is a range of itself', 'range 3-3', $read( '3"' ) );
 check_same( 'a range written "to", backwards', 'range 2-4', $read( '4 to 2 in' ) );
+check_same( 'a fish on backorder reads so; one with stock counted reads its number', array( 'on backorder', 'on backorder (-2)', '3 in stock', 'in stock', 'out of stock' ), array( Sizes_Tidy::stock_text( array( 'stock' => 0, 'stock_status' => 'onbackorder' ) ), Sizes_Tidy::stock_text( array( 'stock' => -2, 'stock_status' => 'onbackorder' ) ), Sizes_Tidy::stock_text( array( 'stock' => 3, 'stock_status' => 'instock' ) ), Sizes_Tidy::stock_text( array( 'stock' => null, 'stock_status' => 'instock' ) ), Sizes_Tidy::stock_text( array( 'stock' => 0, 'stock_status' => 'outofstock' ) ) ) );
 check_same( 'a word has no numbers the rule can read', array( 'word', 'word', 'word', 'word' ), array( $read( 'Show size' ), $read( 'Medium' ), $read( 'Size 3 or so' ), $read( '' ) ) );
 check( 'a word between two size words', Sizes_Tidy::between( 'Small-Medium' ) && Sizes_Tidy::between( 'Medium-Large' ) && Sizes_Tidy::between( 'Large-XL' ) && Sizes_Tidy::between( 'Large / X-Large' ) && Sizes_Tidy::between( 'small to medium' ) );
 check( 'one word is not between two: Medium, X-Large, Show size, Pair, Large-Large', ! Sizes_Tidy::between( 'Medium' ) && ! Sizes_Tidy::between( 'X-Large' ) && ! Sizes_Tidy::between( 'Show size' ) && ! Sizes_Tidy::between( 'Pair' ) && ! Sizes_Tidy::between( 'Large-Large' ) && ! Sizes_Tidy::between( '2-3"' ) );
@@ -98,6 +99,7 @@ $expected = array(
 	'XL'           => 'remove',
 );
 check_same( 'the shop has 31 sizes', 31, count( $shop->terms ) );
+check_same( 'the rows read in order: the inch sizes by where they start (then where they end, "and up" last), then the words by name', array( '<1"', '1-2"', '1-2.5"', '1-3"', '2-3"', '2-3.5"', '2-4"', '2"+', '2.5-4"', '3-4"', '3-5"', '3"+', '3.5"+', '4-5"', '4-6"', '4"+', '5-6"', '5-7"', '5"+', '6"+', '7"+', 'All', 'Large', 'Large-XL', 'Medium', 'Medium-Large', 'Pair', 'Small', 'Small-Medium', 'Tiny', 'XL' ), array_keys( $got ) );
 foreach ( $expected as $label => $action ) {
 	check_same( $label . ' → ' . $action, $action, isset( $got[ $label ] ) ? $got[ $label ] : '(no row)' );
 }
