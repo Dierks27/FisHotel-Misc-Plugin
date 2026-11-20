@@ -1039,6 +1039,9 @@ class Admin_Order_Import {
 		if ( ! $plan['complete'] ) {
 			$notes[] = __( 'Say which column is the fish and which one is the quantity: nothing can be imported before that.', 'fishotel-misc-plugin' );
 		}
+		if ( $by_hand && $plan['complete'] && '' === $header['supplier'] ) {
+			$notes[] = __( 'Type the order\'s supplier above and these columns can be remembered for the next sheet from them.', 'fishotel-misc-plugin' );
+		}
 
 		$rows = array();
 		foreach ( $plan['rows'] as $row ) {

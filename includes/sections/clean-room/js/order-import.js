@@ -950,6 +950,13 @@
 				refresh();
 			}
 		});
+		// A saved layout belongs to a supplier: when the order's supplier or origin changes, look again.
+		$order.on('change', '[name="supplier"], [name="origin"]', function () {
+			if (state && state.grid && !state.hand) {
+				state.useLayout = '';
+				refresh();
+			}
+		});
 		$panel.on('click', '.fh-cr-import__read', function () { readNew(''); });
 		$panel.on('change', '.fh-cr-import__file', function () {
 			if (this.files && this.files.length) {

@@ -1365,6 +1365,8 @@ class Order_Import {
 					'origin' => isset( $fee_map['origin'], $row[ $fee_map['origin'] ] ) ? (string) $row[ $fee_map['origin'] ] : '',
 					'check'  => 'ok' !== $amount['state'] || 1 === preg_match( '/\?|\bcheck\b/i', $name ),
 				);
+				$text          = $name;
+				$leave( 'fee' );
 				continue;
 			}
 
@@ -1420,6 +1422,7 @@ class Order_Import {
 					'origin' => '' !== $own ? $own : $origin,
 					'check'  => null === $value,
 				);
+				$leave( 'fee' );
 				continue;
 			}
 
@@ -1487,8 +1490,9 @@ class Order_Import {
 			$bad_qty  = ! empty( $flags['ordered'] ) || ! empty( $flags['qty'] ) || ! empty( $flags['received'] );
 
 			if ( ( null === $counted || $counted < 1 ) && ! $bad_qty ) {
-				// A price-list row nobody ordered — or, on an invoice, a row with no count.
-				if ( 'arrived' === $mode && ( '' !== $fish || $others ) && $quantity_typed ) {
+				// A price-list row nobody ordered (counted, not listed) — or, on an invoice, a fish
+				// with no count: left out, and named so the owner can look at the invoice.
+				if ( 'arrived' === $mode && '' !== $fish ) {
 					$leave( 'zero' );
 				}
 				continue;
@@ -1575,6 +1579,8 @@ class Order_Import {
 				return __( 'left out as last time', 'fishotel-misc-plugin' );
 			case 'zero':
 				return __( 'no count', 'fishotel-misc-plugin' );
+			case 'fee':
+				return __( 'a fee line, not a fish', 'fishotel-misc-plugin' );
 			case 'section':
 				return __( 'another section', 'fishotel-misc-plugin' );
 		}
