@@ -186,7 +186,7 @@ foreach ( $store->order( $saved['order_id'] )['lines'] as $line ) {
 }
 $rows[0]['worth'] = '50';   // The owner plans a new price for the wrasse.
 $rows[6]['worth'] = '15.5'; // … and types one for the fish the shop does not have.
-$rows[7]['worth'] = '0';    // A 0 is a price too: this one is given away.
+$rows[7]['worth'] = '0';    // A 0 is no price: it says nothing.
 $again = fh_save( $store, $rows, array(), $saved['order_id'] );
 check( 'saved again', empty( $again['error'] ), json_encode( $again ) );
 $order = Admin_Workbook::resolve_order( $store, $store->order( $saved['order_id'] ) );
@@ -195,8 +195,9 @@ $f     = Admin_Workbook::figures( $order );
 check( 'the typed price wins over the shop\'s (50.00, not 28.00) — and the shop\'s is still read', near( $l[0]['worth'], 50 ) && 'typed' === $l[0]['worth_from'] && near( $l[0]['shop_price'], 28 ) && near( $l[0]['profit'], 460 ) && '50.00' === $f['lines'][0]['shop_price'] && 'typed' === $f['lines'][0]['shop_from'] );
 check( '… the tooltip says both', false !== strpos( $f['lines'][0]['shop_note'], 'Typed by hand' ) && false !== strpos( $f['lines'][0]['shop_note'], '28.00' ) );
 check( 'a price typed where the shop has none prices the line', true === $l[6]['priced'] && near( $l[6]['profit'], 115 ) && '15.50' === $f['lines'][6]['shop_price'] && false !== strpos( $f['lines'][6]['shop_note'], 'The shop has no price' ) );
-check( 'a typed 0 is a price: the line is priced and makes a loss', true === $l[7]['priced'] && near( $l[7]['profit'], -40 ) && near( $l[7]['margin'], -1 ) && 'No' === $f['lines'][7]['worth_it'] );
-check( 'one line is left without a price (the unknown fish)', 1 === $order['costing']['unpriced'] && '1' === $f['order']['unpriced'] );
+check( 'a 0 is no price — typed to clear the field, or an empty "worth" cell of the workbook that came in as 0: the line reads "no shop price yet", never "No" and −100%', false === $l[7]['priced'] && '' === $l[7]['worth_from'] && null === $l[7]['profit'] && null === $l[7]['margin'] && $none === $f['lines'][7]['worth_it'] && $none === $f['lines'][7]['margin'] && null === Costing::worth_of( array( 'worth' => 0 ) )['price'] && null === Costing::worth_of( array( 'worth' => '0.00' ) )['price'] );
+check_same( '… and on a fish the shop has a price for, a 0 follows the shop again', array( 'price' => 28.0, 'from' => 'product' ), Costing::worth_of( array( 'worth' => 0, 'shop_price' => 28.0, 'shop_price_from' => 'product' ) ) );
+check( 'two lines are left without a price (that one and the unknown fish)', 2 === $order['costing']['unpriced'] && '2' === $f['order']['unpriced'] );
 
 echo "5. Refreshed on every load while nothing is typed\n";
 $store->product_prices[21] = array( 'prices' => array( 31.0 ), 'variations' => array() );
@@ -274,5 +275,81 @@ $edge = static function ( $worth ) {
 };
 check( 'landed 4.00 a fish: 15.00 (3.75×) is not worth it, 15.01 is', false === $edge( 15 ) && true === $edge( 15.01 ) );
 check( 'the target price is headed as the sheet heads it: the markup × 100', '400%' === Admin_Workbook::target_head( 4 ) && '350%' === Admin_Workbook::target_head( 3.5 ) && '400%' === Admin_Workbook::target_head( null ) );
+
+echo "8. The regular price, never the sale price; a product in the trash\n";
+$sale                     = fh_shop();
+$sale->product_prices[21] = array( 'prices' => array( 20.0 ), 'regular' => array( 28.0 ), 'variations' => array() ); // On sale this week: 20 instead of 28.
+$sale->product_prices[22] = array(
+	'prices'     => array( 30.0, 60.0 ),
+	'regular'    => array(),
+	'variations' => array(
+		array( 'id' => 221, 'price' => 30.0, 'regular' => 35.0, 'attributes' => array( 'pa_size' => 'small' ) ), // The small one is on sale.
+		array( 'id' => 222, 'price' => 45.0, 'regular' => 45.0, 'attributes' => array( 'pa_size' => 'medium' ) ),
+		array( 'id' => 223, 'price' => 60.0, 'regular' => null, 'attributes' => array( 'pa_size' => 'large' ) ),
+	),
+);
+$on_sale = fh_save( $sale, array( fh_row( 'Blue Test Wrasse', array( 'species_id' => '1', 'unit_price' => '7' ) ), fh_row( 'Green Test Blenny', array( 'species_id' => '2', 'size_slug' => 'small' ) ), fh_row( 'Green Test Blenny', array( 'species_id' => '2' ) ), fh_row( 'Green Test Blenny', array( 'species_id' => '2', 'size_slug' => 'large' ) ) ) );
+$o8      = Admin_Workbook::resolve_order( $sale, $sale->order( $on_sale['order_id'] ) );
+check( 'a product on sale: the order reads its REGULAR price (28.00), not the sale\'s 20.00', near( $o8['lines'][0]['shop_price'], 28 ) && 'product' === $o8['lines'][0]['shop_price_from'] );
+check( '… so a sale does not turn "Worth it?" over: 7.00 landed × 3.75 = 26.25 — worth it at 28.00, not at 20.00', true === $o8['lines'][0]['worth_it'] && 20.0 < 7 * Costing::worth_times( 2.75 ) );
+check( 'a variation on sale: its regular price (small 35.00); the lowest REGULAR price without a size (35.00, not 30.00); a variation without a regular price keeps its own (large 60.00)', near( $o8['lines'][1]['shop_price'], 35 ) && 'variation' === $o8['lines'][1]['shop_price_from'] && near( $o8['lines'][2]['shop_price'], 35 ) && true === $o8['lines'][2]['shop_price_range'] && near( $o8['lines'][3]['shop_price'], 60 ) );
+check( 'the "Prices to raise" view still shows the ACTIVE price, as the shop sells today (20.00)', near( \FisHotel\Misc\Sections\Clean_Room\Stats_Prices::fish_price( array( 'product_id' => 21, 'my_price' => null ), $sale->product_prices )['price'], 20 ) );
+check_same( 'the pure half: a product without a regular price keeps its own', array( 9 => array( 'prices' => array( 5.0 ), 'variations' => array() ) ), Shop_Price::regular_view( array( 9 => array( 'prices' => array( 5.0 ), 'variations' => array() ) ) ) );
+$sql = (string) file_get_contents( Clean_Room::path() . 'class-store.php' );
+check( 'the store reads _regular_price beside _price, and a product in the trash answers with nothing', false !== strpos( $sql, "p.post_status NOT IN ('trash', 'auto-draft')" ) && false !== strpos( $sql, "'_price', '_regular_price'," ) );
+unset( $sale->product_prices[21] ); // The product went to the trash: the store has no price for it.
+$o8 = Admin_Workbook::resolve_order( $sale, $sale->order( $on_sale['order_id'] ) );
+check( '… the line then falls back to the species list\'s price, said so', near( $o8['lines'][0]['shop_price'], 99 ) && 'list' === $o8['lines'][0]['shop_price_from'] );
+
+echo "9. A closed order is frozen\n";
+$shop  = fh_shop();
+$open  = fh_save( $shop, array( fh_row( 'Blue Test Wrasse', array( 'species_id' => '1', 'qty_ordered' => '6', 'qty_received' => '6', 'qty_survived' => '6', 'unit_price' => '10', 'per_box' => '6' ) ), fh_row( 'Grey Test Dartfish', array( 'species_id' => '5' ) ), fh_row( 'Red Test Goby', array( 'species_id' => '4', 'worth' => '25' ) ) ) );
+$oid   = (int) $open['order_id'];
+$shop->product_prices[21] = array( 'prices' => array( 60.0 ), 'variations' => array() );
+$form9 = static function () use ( $shop, $oid ) {
+	$rows = array();
+	foreach ( $shop->order( $oid )['lines'] as $line ) {
+		$rows[] = fh_row( $line['species'], array( 'id' => (string) $line['id'], 'species_id' => (string) $line['species_id'], 'qty_ordered' => (string) $line['qty_ordered'], 'qty_received' => (string) $line['qty_received'], 'qty_survived' => (string) $line['qty_survived'], 'unit_price' => (string) $line['unit_price'], 'per_box' => (string) $line['per_box'], 'worth' => null !== $line['worth'] ? (string) $line['worth'] : '' ) );
+	}
+	return $rows;
+};
+$while_open = Admin_Workbook::resolve_order( $shop, $shop->order( $oid ) );
+check( 'while the order is open the wrasse follows the shop (60.00): revenue 360, profit 300 — and nothing is stored', near( $while_open['lines'][0]['revenue'], 360 ) && near( $while_open['lines'][0]['profit'], 300 ) && null === $shop->order( $oid )['lines'][0]['worth'] );
+$closed = fh_save( $shop, $form9(), array( 'status' => 'closed' ), $oid );
+$stored = $shop->order( $oid )['lines'];
+check( 'the save that CLOSES the order writes the price read at that moment on every line that has none of its own', empty( $closed['error'] ) && 'closed' === $shop->order( $oid )['status'] && near( $stored[0]['worth'], 60 ) );
+check( '… a line the shop has no price for stays without one; a typed price is not touched', null === $stored[1]['worth'] && near( $stored[2]['worth'], 25 ) );
+$shop->product_prices[21] = array( 'prices' => array( 20.0 ), 'variations' => array() ); // The shop's price drops to a third.
+$shop->save_species( array_merge( $shop->species( 5 ), array( 'my_price' => 44 ) ) );   // … and the dartfish gets a list price.
+$later = Admin_Workbook::resolve_order( $shop, $shop->order( $oid ) );
+check( 'the shop\'s price moves (60.00 → 20.00): the closed order does not — profit 300, revenue 360, as on the day it was closed', near( $later['lines'][0]['profit'], 300 ) && near( $later['lines'][0]['revenue'], 360 ) && near( $later['costing']['revenue'], $while_open['costing']['revenue'] ) && near( $later['costing']['up_down_priced'], $while_open['costing']['up_down_priced'] ) );
+check( '… a closed order is not read for at all: its unpriced line stays "no shop price" though the list has one now', null === $later['lines'][0]['shop_price'] && true === $later['lines'][0]['shop_frozen'] && false === $later['lines'][1]['priced'] && 1 === $later['costing']['unpriced'] );
+$f9 = Admin_Workbook::figures( $later );
+check( '… and the tooltip says why', false !== strpos( $f9['lines'][0]['shop_note'], 'The price this order was closed with' ) && false !== strpos( $f9['lines'][1]['shop_note'], 'a closed order does not follow the shop' ) );
+$year = Admin_Workbook::resolved_orders( $shop, array() );
+check( 'the Arrivals list and the Stats read the same frozen figures', near( $year[0]['costing']['revenue'], $later['costing']['revenue'] ) && near( \FisHotel\Misc\Sections\Clean_Room\Stats::build( $year )['totals']['revenue'], $later['costing']['revenue'] ) );
+fh_save( $shop, $form9(), array( 'status' => 'closed' ), $oid );
+check( 'saving a closed order again freezes nothing anew: the line that had no price still has none', null === $shop->order( $oid )['lines'][1]['worth'] && near( $shop->order( $oid )['lines'][0]['worth'], 60 ) );
+$history = fh_shop();
+$old     = fh_save( $history, array( fh_row( 'Blue Test Wrasse', array( 'species_id' => '1' ) ) ), array( 'status' => 'received' ) );
+$history->update_order_fields( (int) $old['order_id'], array( 'status' => 'closed' ) ); // As the workbook import files a past batch: closed, no worth on the line.
+$past = Admin_Workbook::resolve_order( $history, $history->order( (int) $old['order_id'] ) );
+check( 'history that was closed without a price is not priced by today\'s shop either: it reads "no shop price", and stays so', null === $history->order( (int) $old['order_id'] )['lines'][0]['worth'] && false === $past['lines'][0]['priced'] && near( $past['costing']['revenue'], 0 ) && 1 === $past['costing']['unpriced'] );
+fh_save( $shop, $form9(), array( 'status' => 'received' ), $oid );
+$reopened = Admin_Workbook::resolve_order( $shop, $shop->order( $oid ) );
+check( 'reopened, the lines keep the prices they were closed with (now typed prices the owner can empty), and the line without one follows the shop again', near( $reopened['lines'][0]['worth'], 60 ) && 'typed' === $reopened['lines'][0]['worth_from'] && near( $reopened['lines'][1]['shop_price'], 44 ) && true === $reopened['lines'][1]['priced'] );
+
+echo "10. The Stats say what the order page says\n";
+$mixed = fh_shop();
+$m     = fh_save( $mixed, array( fh_row( 'Blue Test Wrasse', array( 'species_id' => '1', 'qty_ordered' => '6', 'qty_received' => '6', 'qty_survived' => '6', 'unit_price' => '10', 'per_box' => '6', 'worth' => '60' ) ), fh_row( 'Grey Test Dartfish', array( 'species_id' => '5', 'qty_ordered' => '6', 'qty_received' => '6', 'qty_survived' => '6', 'unit_price' => '10', 'per_box' => '6' ) ) ) );
+$mo    = Admin_Workbook::resolved_orders( $mixed, array() );
+$ms    = \FisHotel\Misc\Sections\Clean_Room\Stats::build( $mo );
+$mf    = Admin_Workbook::figures( $mo[0] );
+/* Two lines of 60.00 landed. The wrasse sells for 6 × 60 = 360: up 300 on its own 60. The dartfish has no price: its 60 is not a loss yet. */
+check( 'one priced line (+300.00) and one without a shop price: the order page says +300.00 …', '+300.00' === $mf['order']['up_down'] && near( $mo[0]['costing']['up_down_priced'], 300 ) && near( $mo[0]['costing']['up_down'], 240 ) );
+check( '… and so do the Stats — the order\'s row, the totals, the supplier and the origin (not +240.00)', near( $ms['orders'][0]['up_down'], 300 ) && near( $ms['totals']['up_down'], 300 ) && near( $ms['by_supplier'][0]['up_down'], 300 ) && near( $ms['by_origin'][0]['up_down'], 300 ) && near( Orders::summary( $mo[0] )['up_down'], 300 ) );
+check( '… which say how many lines that is, and what they cost', 1 === $ms['orders'][0]['unpriced'] && near( $ms['orders'][0]['unpriced_landed'], 60 ) && 1 === $ms['totals']['unpriced'] && near( $ms['totals']['unpriced_landed'], 60 ) && near( $ms['totals']['total'], 120 ) && near( $ms['totals']['ratio'], 6 ) );
+$all_priced = \FisHotel\Misc\Sections\Clean_Room\Stats::build( array( Admin_Workbook::resolve_order( $shop, $shop->order( $oid ) ) ) );
+check( 'an order whose lines all have a price reads in the Stats as it always did: revenue − landed', 0 === $all_priced['totals']['unpriced'] && near( $all_priced['totals']['up_down'], $all_priced['totals']['revenue'] - $all_priced['totals']['total'] ) );
 
 fh_finish();

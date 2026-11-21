@@ -395,8 +395,8 @@ class Splits {
 
 	/**
 	 * The option as it may be stored (pure): unknown keys dropped, every
-	 * plan cleaned by parts_in(), every remembered fish a key, a flag and a
-	 * date, both lists bounded (the oldest entries go first).
+	 * plan cleaned by parts_in(), every remembered fish a key, a flag, a
+	 * date and a bounded count, both lists bounded (the oldest entries go first).
 	 *
 	 * @param mixed $raw The stored value.
 	 * @return array{plans: array, species: array}
@@ -429,6 +429,7 @@ class Splits {
 			$out['species'][ $key ] = array(
 				'ones' => ! empty( $entry['ones'] ),
 				'on'   => Replay::is_date( $entry['on'] ?? null ) ? (string) $entry['on'] : '',
+				'n'    => ! empty( $entry['ones'] ) && isset( $entry['n'] ) && is_numeric( $entry['n'] ) ? max( 0, min( self::MAX_PARTS, (int) $entry['n'] ) ) : 0,
 			);
 		}
 		if ( count( $out['species'] ) > self::MAX_SPECIES ) {
@@ -538,14 +539,17 @@ class Splits {
 
 	/**
 	 * Remember how a fish's line was checked in: split (and whether one per
-	 * tank), or kept together — which forgets it.
+	 * tank — then also over how many tanks, so the next line's offer never
+	 * lays out more than that by itself), or kept together — which forgets
+	 * it.
 	 *
 	 * @param array  $line  The order line.
 	 * @param bool   $split Whether it was split.
 	 * @param bool   $ones  Whether that was one fish per tank.
 	 * @param string $today Site date.
+	 * @param int    $count One per tank: how many fish (tanks) that was.
 	 */
-	public static function remember( array $line, $split, $ones, $today ) {
+	public static function remember( array $line, $split, $ones, $today, $count = 0 ) {
 		$keys = self::species_keys( $line );
 		if ( ! $keys ) {
 			return;
@@ -558,6 +562,7 @@ class Splits {
 				$all['species'][ $key ] = array(
 					'ones' => (bool) $ones,
 					'on'   => Replay::is_date( $today ) ? (string) $today : '',
+					'n'    => $ones ? max( 0, min( self::MAX_PARTS, (int) $count ) ) : 0,
 				);
 			}
 		}
@@ -568,11 +573,12 @@ class Splits {
 
 	/**
 	 * What is remembered for a line's fish: null when its last line was not
-	 * split (or nothing is known), else ones (bool) and on (the date).
+	 * split (or nothing is known), else ones (bool), on (the date) and n
+	 * (one per tank: over how many tanks; 0 = not known).
 	 *
 	 * @param array      $line   The order line.
 	 * @param array|null $memory all()['species'] (null = read it).
-	 * @return array{ones: bool, on: string}|null
+	 * @return array{ones: bool, on: string, n: int}|null
 	 */
 	public static function remembered( array $line, $memory = null ) {
 		$memory = is_array( $memory ) ? $memory : self::all()['species'];

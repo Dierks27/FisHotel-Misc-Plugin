@@ -115,18 +115,21 @@ $fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks,
 	// The split planned for the line (its hidden field), or the offer of one because its fish was split last time.
 	$plan    = ! $linked && $id > 0 && isset( $split['fields'][ $id ] ) ? (string) $split['fields'][ $id ] : '';
 	$offer   = ! $linked && $id > 0 && isset( $split['offers'][ $id ] ) ? (string) $split['offers'][ $id ] : '';
+	$last    = '' !== $offer && isset( $split['last'][ $id ] ) ? (int) $split['last'][ $id ] : 0;
 	$priced  = ! empty( $fig['priced'] );
 	$typed   = 'typed' === (string) ( $fig['shop_from'] ?? '' );
 	// The notes under the fish, without the supplier's code: that has its own field behind "More columns".
 	$notes   = Order_Import::note_with( $value( 'notes' ), Order_Import::NOTE_CODE, '' );
 	?>
-	<tr class="fh-cr-line<?php echo $linked ? ' is-linked' : ''; ?><?php echo $unknown ? ' is-unknown' : ''; ?>" data-line="<?php echo esc_attr( $id ); ?>"<?php echo '' !== $offer ? ' data-split-offer="' . esc_attr( $offer ) . '"' : ''; ?>>
+	<tr class="fh-cr-line<?php echo $linked ? ' is-linked' : ''; ?><?php echo $unknown ? ' is-unknown' : ''; ?>" data-line="<?php echo esc_attr( $id ); ?>"<?php echo '' !== $offer ? ' data-split-offer="' . esc_attr( $offer ) . '" data-split-last="' . esc_attr( $last ) . '"' : ''; ?>>
 		<td class="fh-cr-num fh-cr-line__n"><span class="fh-cr-line__num"><?php echo esc_html( is_int( $i ) ? (string) ( $i + 1 ) : '' ); ?></span><input type="hidden" name="<?php echo esc_attr( $name( 'id' ) ); ?>" value="<?php echo esc_attr( $id ); ?>"><input type="hidden" name="<?php echo esc_attr( $name( 'species_id' ) ); ?>" value="<?php echo esc_attr( $value( 'species_id' ) ); ?>"><input type="hidden" name="<?php echo esc_attr( $name( 'seen' ) ); ?>" value="<?php echo esc_attr( $id > 0 ? Identify::seen( $line ) : '' ); ?>"><?php if ( ! $linked ) : ?><input type="hidden" class="fh-cr-split-field" name="<?php echo esc_attr( $name( 'split' ) ); ?>" value="<?php echo esc_attr( $plan ); ?>"><?php endif; ?></td>
 		<td class="fh-cr-line__fish">
 			<span class="fh-cr-line__name fh-cr-suggest-wrap fh-cr-c-entry">
 				<input type="text" class="fh-cr-input fh-cr-species" name="<?php echo esc_attr( $name( 'species' ) ); ?>" value="<?php echo esc_attr( $value( 'species' ) ); ?>" placeholder="<?php esc_attr_e( 'fish', 'fishotel-misc-plugin' ); ?>" autocomplete="off" maxlength="120">
 				<label class="fh-cr-unknown-box" title="<?php esc_attr_e( 'Nobody knows what this fish is yet: it reads "??" and what you type here (what it looks like). It still gets its tank, count, size, percent of the box and landed cost.', 'fishotel-misc-plugin' ); ?>"><input type="checkbox" name="<?php echo esc_attr( $name( 'needs_id' ) ); ?>" value="1" <?php checked( $unknown ); ?>> ??</label>
 			</span>
+			<?php // On a window too narrow for its column the scientific name reads here, under the fish (its field: "More columns"). ?>
+			<span class="fh-cr-sub fh-cr-line__sci fh-cr-c-entry"><?php echo esc_html( $value( 'sci_name' ) ); ?></span>
 			<span class="fh-cr-line__read fh-cr-c-numbers"><?php echo esc_html( $value( 'species' ) ); ?><?php if ( '' !== $value( 'size_label' ) ) : ?> <span class="fh-cr-sub fh-cr-sub--inline"><?php echo esc_html( $value( 'size_label' ) ); ?></span><?php endif; ?></span>
 			<?php if ( $linked ) : ?>
 				<span class="fh-cr-sub"><a href="<?php echo esc_url( Admin::page_url( 'stays', array( 's' => $value( 'species' ) ) ) ); ?>"><?php echo esc_html( sprintf( /* translators: %d: stay id */ __( 'stay #%d', 'fishotel-misc-plugin' ), (int) $line['stay_id'] ) ); ?></a></span>

@@ -66,8 +66,24 @@
 		var numbers = measure('numbers', false);
 		var more = measure('entry', true);
 		out.same_fields = entry.posted === numbers.posted && entry.posted === more.posted;
+		function splitFields() {
+			return Array.prototype.map.call(table.querySelectorAll('tbody input.fh-cr-split-field'), function (el) { return el.value; }).filter(function (value) { return value !== ''; });
+		}
 		out.split_rows = table.querySelectorAll('tbody tr.fh-cr-split-row').length;
-		out.split_fields = Array.prototype.map.call(table.querySelectorAll('tbody input.fh-cr-split-field'), function (el) { return el.value; }).filter(function (value) { return value !== ''; });
+		out.split_fields = splitFields();
+		// An offered split is a proposal: laid out (dashed), nothing in any field — until "Use this split" is pressed.
+		out.offer = {
+			panels: table.querySelectorAll('tbody tr.fh-cr-split-row.is-offer').length,
+			proposed: Array.prototype.map.call(table.querySelectorAll('tbody tr.fh-cr-split-row.is-offer'), function (row) { return row.querySelectorAll('.fh-cr-split__part').length; }),
+			said: Array.prototype.map.call(table.querySelectorAll('tbody tr.fh-cr-split-row.is-offer .fh-cr-split__why'), function (el) { return el.textContent.slice(0, 70); }),
+			fields_before: splitFields()
+		};
+		var use = table.querySelector('tbody tr.fh-cr-split-row.is-offer .fh-cr-split__use');
+		if (use) {
+			use.click();
+		}
+		out.offer.fields_after_use = splitFields();
+		out.offer.panels_after_use = table.querySelectorAll('tbody tr.fh-cr-split-row.is-offer').length;
 		[entry, numbers, more].forEach(function (view) { delete view.posted; });
 		out.views = { entry: entry, numbers: numbers, entry_more: more };
 		// A head that cuts its own word off ("Recei…") is a column too narrow for its name.
@@ -76,6 +92,14 @@
 		out.heads_cut = Array.prototype.filter.call(table.querySelectorAll('thead th'), function (th) {
 			return shown(th) && th.scrollWidth > th.clientWidth + 1;
 		}).map(function (th) { return th.textContent.replace(/\s+/g, ' ').replace(/^ | $/g, ''); });
+		form.setAttribute('data-more', '1');
+		out.heads_cut_more = Array.prototype.filter.call(table.querySelectorAll('thead th'), function (th) {
+			return shown(th) && th.scrollWidth > th.clientWidth + 1;
+		}).map(function (th) { return th.textContent.replace(/\s+/g, ' ').replace(/^ | $/g, ''); });
+		// The scientific name is never out of sight: its column, or — on a narrow window — under the fish.
+		form.setAttribute('data-more', '0');
+		var firstRow = table.querySelector('tbody tr.fh-cr-line');
+		out.sci_seen = !!firstRow && (shown(firstRow.querySelector('input[name$="[sci_name]"]')) || (shown(firstRow.querySelector('.fh-cr-line__sci')) && firstRow.querySelector('.fh-cr-line__sci').textContent !== ''));
 		form.setAttribute('data-view', was.view);
 		form.setAttribute('data-more', was.more);
 

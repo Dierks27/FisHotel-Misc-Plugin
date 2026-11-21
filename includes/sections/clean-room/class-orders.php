@@ -257,10 +257,12 @@ class Orders {
 	 * nothing is received), the supplier's code when the row posts one
 	 * (the Entry view's "More columns"; null when the row has no such
 	 * field — an older page —, so a stored code is then left alone), its
-	 * name and its id.
+	 * name and its id — and whether the row posts a split field at all
+	 * (said): an older page does not, and its save must not forget a plan
+	 * made elsewhere.
 	 *
 	 * @param mixed $raw lines[n][…] (split, code, qty_received, qty_doa, species, id).
-	 * @return array[] plan, live, code, species, id.
+	 * @return array[] plan, said, live, code, species, id.
 	 */
 	public static function posted_extras( $raw ) {
 		$out = array();
@@ -274,6 +276,7 @@ class Orders {
 			}
 			$out[] = array(
 				'plan'    => Splits::parts_in( $row['split'] ?? null ),
+				'said'    => array_key_exists( 'split', $row ), // An emptied field forgets the plan; a missing one says nothing.
 				'live'    => Splits::live_of( $line ),
 				'code'    => isset( $row['code'] ) && is_scalar( $row['code'] ) && ! is_bool( $row['code'] ) ? (string) substr( trim( preg_replace( '/\s+/', ' ', preg_replace( '/[\x00-\x1F\x7F<>]/', ' ', (string) $row['code'] ) ) ), 0, 40 ) : null,
 				'species' => $line['species'],
@@ -624,6 +627,24 @@ class Orders {
 		// The splits planned on the order page (the workbook import has none).
 		$plans = 'order' === $source ? Splits::plans( array_column( $order['lines'], 'id' ) ) : array();
 
+		// The tanks this check-in has already promised — every tank of every split plan, and the tank
+		// typed on a line — are taken before the first line looks for an empty one: a line left on
+		// "auto" never lands in a tank a later line was planned into while empty tanks stand beside it.
+		foreach ( $order['lines'] as $line ) {
+			if ( ! empty( $line['stay_id'] ) || (int) ( $line['qty_received'] ?? 0 ) < 1 ) {
+				continue;
+			}
+			$parts = isset( $plans[ (int) $line['id'] ] ) && is_array( $plans[ (int) $line['id'] ] ) ? $plans[ (int) $line['id'] ] : array();
+			foreach ( $parts as $part ) {
+				if ( (int) ( $part['tank_id'] ?? 0 ) > 0 ) {
+					$occupied[] = (int) $part['tank_id'];
+				}
+			}
+			if ( ! $parts && (int) ( $line['tank_id'] ?? 0 ) > 0 ) {
+				$occupied[] = (int) $line['tank_id'];
+			}
+		}
+
 		foreach ( $order['lines'] as $line ) {
 			if ( ! empty( $line['stay_id'] ) ) {
 				$result['skipped']++;
@@ -731,7 +752,7 @@ class Orders {
 					$left = $store->stay( $stay_id, $today, $settings );
 					$ones = $left && 1 === (int) $left['qty_live'];
 				}
-				Splits::remember( $line, (bool) $split['made'], $ones, $today );
+				Splits::remember( $line, (bool) $split['made'], $ones, $today, $ones ? count( $split['made'] ) + 1 : 0 );
 			}
 
 			$result['created'][] = array(

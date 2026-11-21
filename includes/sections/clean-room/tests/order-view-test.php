@@ -482,6 +482,9 @@ Splits::remember( array( 'species' => 'Plain Test Damsel' ), true, true, $today 
 Splits::remember( array( 'species_id' => 2, 'species' => 'Lilac Test Anthias' ), true, false, $today );
 $offer = fh_dom( fh_page( $store, $order_id ) );
 check( 'a fish that was split one per tank last time: its line offers it — and only a line that is no stay and has no plan', 1 === $offer->query( '//tr[@data-split-offer]' )->length && 'ones' === $offer->query( '//table[@id="fh-cr-lines"]/tbody/tr[contains(@class,"fh-cr-line")][3]' )->item( 0 )->getAttribute( 'data-split-offer' ) );
+check( '… with over how many tanks it went last time (not known here: nothing is laid out by itself)', '0' === $offer->query( '//table[@id="fh-cr-lines"]/tbody/tr[contains(@class,"fh-cr-line")][3]' )->item( 0 )->getAttribute( 'data-split-last' ) );
+Splits::remember( array( 'species' => 'Plain Test Damsel' ), true, true, $today, 4 );
+check( '… four tanks last time: the line says so, and the page lays out no more than that as a proposal', '4' === fh_dom( fh_page( $store, $order_id ) )->query( '//tr[@data-split-offer="ones"]' )->item( 0 )->getAttribute( 'data-split-last' ) );
 check( 'an offer is no plan: the field is empty until the page lays it out in front of the owner', '' === $offer->query( '//input[@name="lines[2][split]"]' )->item( 0 )->getAttribute( 'value' ) && fh_posted( $offer ) === $post_entry );
 Splits::keep( array( (int) $saved['line_ids'][2] => Splits::NONE ) );
 $declined = fh_dom( fh_page( $store, $order_id ) );
@@ -545,8 +548,17 @@ check( 'at 1280 px the typed columns take ' . $at_1280['fixed'] . ' px and leave
 /* At 1024 px the scientific name moves behind "More columns". */
 $at_1024 = $entry_px( $small, $main, 789, false );
 check( 'at 1024 px the scientific name goes behind "More columns" and the fish still has ' . $at_1024['fish'] . ' px', 1 === preg_match( '/\.fh-cr-order\[data-view="entry"\]:not\(\[data-more="1"\]\) \.fh-cr-c-sci \{\s*display: none;/', $small ) && $at_1024['fish'] >= 160, json_encode( $at_1024 ) );
+$fh_rows = $entry->query( '//table[@id="fh-cr-lines"]/tbody/tr[contains(@class,"fh-cr-line")]' )->length;
+check( '… where it is never out of sight: it reads under the fish instead (every line has the place for it), and follows its field', 1 === preg_match( '/\[data-view="entry"\]:not\(\[data-more="1"\]\) \.fh-cr-grid \.fh-cr-line__sci:not\(:empty\) \{\s*display: block;/', $small ) && 1 === preg_match( '/\.fh-cr-order \.fh-cr-grid \.fh-cr-line__sci \{\s*display: none;/', $main ) && $fh_rows > 0 && $fh_rows === $entry->query( '//table[@id="fh-cr-lines"]/tbody/tr[contains(@class,"fh-cr-line")]/td[contains(@class,"fh-cr-line__fish")]/span[contains(@class,"fh-cr-line__sci")]' )->length && false !== strpos( (string) file_get_contents( dirname( __DIR__ ) . '/js/order-entry.js' ), "\$row.find('.fh-cr-line__sci').text(" ) );
+/* "More columns" is remembered, so it must fit 1280 px too: # · Size · Ordered · Received · Cost · DOA · Box # · % of box · Tank · Per box · Srv'd · Code · × */
+$more_w = static function ( $class ) use ( $main ) {
+	return 1 === preg_match( '/\[data-view="entry"\]\[data-more="1"\] \.fh-cr-grid \.' . preg_quote( $class, '/' ) . '\s*\{ width: (\d+)(px|%); \}/', $main, $m ) ? (int) $m[1] : 0;
+};
+$more_fixed = $width( 'fh-cr-w-n', $main )[0] + $more_w( 'fh-cr-w-size' ) + 6 * $more_w( 'fh-cr-w-qty' ) + $more_w( 'fh-cr-w-money' ) + $more_w( 'fh-cr-w-pct' ) + $more_w( 'fh-cr-w-tank' ) + $more_w( 'fh-cr-w-code' ) + $width( 'fh-cr-w-x', $main )[0];
+$more_fish  = 1045 - $more_fixed - (int) round( 1045 * $more_w( 'fh-cr-w-sci' ) / 100 );
+check( 'with "More columns" on a whole row STILL fits a 1280-px window: the fourteen columns take ' . $more_fixed . ' px and leave the fish ' . $more_fish . ' px', $more_w( 'fh-cr-w-qty' ) > 0 && $more_w( 'fh-cr-w-code' ) > 0 && $more_fish >= 130 && 0 === preg_match( '/\[data-view="entry"\]\[data-more="1"\] \.fh-cr-grid \{\s*min-width/', substr( $css, 0, strpos( $css, '@media (max-width: 1279px)' ) ) ), json_encode( array( $more_fixed, $more_fish ) ) );
 check( 'the number boxes are as wide as their numbers: 62 px for a count (and its column\'s name), 82 px for a price, no spin buttons', array( 62, 'px' ) === $width( 'fh-cr-w-qty', $main ) && array( 82, 'px' ) === $width( 'fh-cr-w-money', $main ) && false !== strpos( $css, '.fh-cr-order .fh-cr-grid input[type="number"]::-webkit-inner-spin-button' ) && 1 === preg_match( '/\.fh-cr-order \.fh-cr-grid \.fh-cr-input \{[^}]*width: 100%;[^}]*min-width: 0;/', $css ) );
-check( '"More columns" and Numbers may be wider than a small window — they say so and scroll', 1 === preg_match( '/\[data-view="entry"\]\[data-more="1"\] \.fh-cr-grid \{\s*min-width: \d+px;/', $css ) && 1 === preg_match( '/\[data-view="numbers"\] \.fh-cr-grid \{\s*min-width: \d+px;/', $css ) && false !== strpos( $css, ".fh-cr-grid-wrap {\n\toverflow-x: auto;" ) );
+check( 'only on a window narrower than 1280 px may "More columns" be wider than the page — and Numbers on a small one: they scroll', 1 === preg_match( '/\[data-view="entry"\]\[data-more="1"\] \.fh-cr-grid \{\s*min-width: \d+px;/', $css ) && 1 === preg_match( '/\[data-view="numbers"\] \.fh-cr-grid \{\s*min-width: \d+px;/', $css ) && false !== strpos( $css, ".fh-cr-grid-wrap {\n\toverflow-x: auto;" ) );
 
 /* ------------------------------------------------------------------ */
 /*  The harness: static copies of the page for a real browser          */
@@ -585,7 +597,15 @@ if ( ! empty( $fh_opts['harness'] ) && is_dir( (string) $fh_opts['harness'] ) ) 
 		}
 	}
 	$long_saved = Admin_Workbook::save_order( $long, array( 'ref' => '', 'supplier' => 'Example Aquatics', 'origin' => 'Northland', 'status' => 'ordered', 'cost_mode' => 'box', 'tariffs' => '30', 'domestic_flight' => '100', 'import_fees' => '200', 'building_id' => '5', 'lines' => $rows ), 0, $today );
-	Splits::remember( array( 'species' => 'Copper Test Butterfly' ), true, true, $today );
+	// The plans of the orders above are theirs, not this order's (the option is one for the whole site).
+	delete_option( Splits::OPTION );
+	// Two fish that went one per tank last time: three butterflies — this line has 93 alive, so nothing
+	// may be laid out by itself — and three anthias, whose line has three alive again (a proposal).
+	Splits::remember( array( 'species' => 'Copper Test Butterfly' ), true, true, $today, 3 );
+	Splits::remember( array( 'species' => 'Lilac Test Anthias' ), true, true, $today, 3 );
+	$anthias = $long->order( (int) $long_saved['order_id'] )['lines'][3];
+	$long->lines[ (int) $anthias['id'] ]['qty_received'] = 4;
+	$long->lines[ (int) $anthias['id'] ]['qty_doa']      = 1;
 	$GLOBALS['fh_user_meta'] = array();
 	file_put_contents( $dir . '/entry.html', $wrap( fh_page( $long, (int) $long_saved['order_id'] ) ) );
 	update_user_meta( 1, Admin_Workbook::VIEW_META, Admin_Workbook::remember_view( '', array( 'stage' => 'working', 'view' => 'numbers' ) ) );
@@ -594,6 +614,7 @@ if ( ! empty( $fh_opts['harness'] ) && is_dir( (string) $fh_opts['harness'] ) ) 
 	$long->update_order_fields( (int) $long_saved['order_id'], array( 'cost_mode' => 'bag' ) );
 	file_put_contents( $dir . '/bag.html', $wrap( fh_page( $long, (int) $long_saved['order_id'] ) ) );
 	Splits::remember( array( 'species' => 'Copper Test Butterfly' ), false, false, $today );
+	Splits::remember( array( 'species' => 'Lilac Test Anthias' ), false, false, $today );
 	echo "\nHarness written to $dir (entry.html, numbers.html, bag.html)\n";
 }
 

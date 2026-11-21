@@ -138,6 +138,15 @@ check( 'no key ever names a column of the other view', [ 'qty_received', 'qty_do
 console.log( '6. What the page does with them' );
 check( 'the keys only walk in Entry, and a field counts only while it is shown', source.indexOf( "$order.attr('data-view') !== 'entry'" ) > 0 && source.indexOf( 'this.offsetParent !== null' ) > 0 );
 check( 'an offered split is laid out only in the Entry view — never written into a field the owner is not looking at', /if \(view === 'entry' && !offered\) \{\s*offerSplits\(\);/.test( source ) && /if \(\$order\.attr\('data-view'\) === 'entry'\) \{\s*offerSplits\(\);/.test( source ) );
+var body = function ( name ) {
+	var at = source.indexOf( 'function ' + name + '(' );
+	var end = source.indexOf( '\n\t\t}\n', at );
+	return at > 0 && end > at ? source.slice( at, end ) : '';
+};
+check( 'an offered split is a PROPOSAL: drawing it never writes the line\'s field — neither when the page loads nor when the received count moves under it', body( 'offerSplits' ).indexOf( 'propose($row);' ) > 0 && body( 'offerSplits' ).indexOf( 'commit(' ) === -1 && body( 'propose' ) !== '' && body( 'propose' ).indexOf( 'commit(' ) === -1 && /if \(\$row\.data\('auto'\) && \$panel\.data\('offer'\)\) \{\s*propose\(\$row\);/.test( source ) );
+check( '… it becomes a plan on a press: "Use this split" commits what is laid out, and so does changing a row', /\$order\.on\('click', '\.fh-cr-split__use', function \(\) \{[\s\S]{0,260}commit\(\$row, parts\);/.test( source ) && body( 'commit' ).indexOf( "removeData('offer')" ) > 0 );
+check( '… and "1 per tank" lays itself out only for as many fish as went one per tank last time: 3 last time lay out 3, never 93', helpers.offerLaysOut( 'ones', 3, 3 ) === true && helpers.offerLaysOut( 'ones', 3, 2 ) === true && helpers.offerLaysOut( 'ones', 3, 93 ) === false && helpers.offerLaysOut( 'ones', 3, 4 ) === false );
+check( '… not without a received count, not for one fish, not when last time\'s count is not known, not for a fish that was only split somehow', helpers.offerLaysOut( 'ones', 3, null ) === false && helpers.offerLaysOut( 'ones', 3, 1 ) === false && helpers.offerLaysOut( 'ones', 0, 3 ) === false && helpers.offerLaysOut( 'some', 5, 3 ) === false && helpers.offerLaysOut( '', 5, 3 ) === false );
 check( '"Keep together" on an offered line posts "none"; on any other line it posts nothing', source.indexOf( "commit($row, $row.attr('data-split-offer') ? 'none' : null);" ) > 0 );
 check( 'a hidden column is never disabled or taken out of the form to hide it', ! /fh-cr-c-(entry|numbers|more)[^\n]*(remove|detach|disabled)/.test( source ) && source.indexOf( ".prop('disabled', true); // A tank cannot be picked twice for one line." ) > 0 && ( source.match( /\.prop\('disabled'/g ) || [] ).length === 1 );
 check( 'nothing the page builds is set as HTML but the × of a part', ( source.match( /\.html\(/g ) || [] ).length === 0 && ( source.match( /\$\('<[^']*'\)/g ) || [] ).every( function ( tag ) { return ! /\+/.test( tag ); } ) );

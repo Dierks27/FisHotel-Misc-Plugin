@@ -1906,6 +1906,7 @@ class Front_Desk {
 
 		$written_ids = array();
 		$already     = 0;
+		$split       = 0;
 		$tank_number = 0;
 		foreach ( $ids as $id ) {
 			$event = $store->event( $id );
@@ -1927,6 +1928,13 @@ class Front_Desk {
 				$already++;
 				continue;
 			}
+			// An arrival whose group was split on into other tanks is not taken back on its own:
+			// the fish that moved on would be left standing as stays of a line that never arrived.
+			// The splits are undone first (each has its own Undo), then the arrival.
+			if ( 'arrival' === (string) $event['type'] && self::split_on( (array) ( $stay['events'] ?? array() ) ) ) {
+				$split++;
+				continue;
+			}
 			$written = $store->undo_event( $stay, $event, $ctx['base'], $ctx['today'], $ctx['settings'] );
 			if ( $written ) {
 				$written_ids[] = $written['event_id'];
@@ -1942,6 +1950,9 @@ class Front_Desk {
 				'event_ids' => array(),
 			);
 		}
+		if ( ! $written_ids && $split > 0 ) {
+			return array( 'error' => __( 'Some of these fish were split on into other tanks. Undo those moves first, then the arrival.', 'fishotel-misc-plugin' ) );
+		}
 		if ( ! $written_ids ) {
 			return array( 'error' => __( 'That can no longer be undone.', 'fishotel-misc-plugin' ) );
 		}
@@ -1954,6 +1965,22 @@ class Front_Desk {
 			$out['tank'] = $tank_number;
 		}
 		return $out;
+	}
+
+	/**
+	 * Whether a stay's group was split on into another tank and that split
+	 * still stands: a move noted "split to #…" that was not undone.
+	 *
+	 * @param array[] $events The stay's events.
+	 * @return bool
+	 */
+	public static function split_on( array $events ) {
+		foreach ( $events as $event ) {
+			if ( 'move' === (string) ( $event['type'] ?? '' ) && 0 === strpos( (string) ( $event['note'] ?? '' ), 'split to #' ) && ! Replay::is_undone( $events, (int) ( $event['id'] ?? 0 ) ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	private static function act_alias( array $ctx, array $raw ) {

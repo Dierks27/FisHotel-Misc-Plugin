@@ -336,7 +336,23 @@
 		return undefined;
 	}
 
+	/**
+	 * Whether an offered "1 per tank" may be laid out by itself — as a
+	 * proposal, never as a plan: only for a fish that went one per tank
+	 * last time, with a received count typed, and for no more fish than
+	 * that was. Three butterflies last time do not lay out 93 this time.
+	 *
+	 * @param {string} kind The line's offer: 'ones' | 'some' | ''.
+	 * @param {number} last Over how many tanks it went last time (0 = not known).
+	 * @param {?number} live The line's live fish (null = no count typed).
+	 * @return {boolean}
+	 */
+	function offerLaysOut(kind, last, live) {
+		return kind === 'ones' && live !== null && whole(live) > 1 && whole(last) > 0 && whole(live) <= whole(last);
+	}
+
 	var api = {
+		offerLaysOut: offerLaysOut,
 		whole: whole,
 		splitParts: splitParts,
 		splitField: splitField,
@@ -515,6 +531,13 @@
 			}
 		});
 
+		// On a narrow window the scientific name reads under the fish (its field is behind "More
+		// columns" there): it follows whatever fills the field — typing, or a fish picked from the list.
+		$order.on('input change', 'tr.fh-cr-line', function () {
+			var $row = $(this);
+			$row.find('.fh-cr-line__sci').text($.trim(String($row.find('input[name$="[sci_name]"]').val() || '')));
+		});
+
 		/* ---- Split ---- */
 
 		function fieldEl($row) {
@@ -556,6 +579,11 @@
 		/* The line as its plan stands: the hidden field, the Tank cell, the Split button. */
 		function commit($row, parts) {
 			var value = splitField(parts);
+			var $open = panelOf($row);
+			if ($open && $open.data('offer')) {
+				// Pressed, typed or picked: the owner has had it in front of them — it is their plan now.
+				$open.removeData('offer').removeClass('is-offer').find('.fh-cr-split__use').remove();
+			}
 			fieldEl($row).val(value);
 			var list = Array.isArray(parts) ? parts.filter(function (part) { return whole(part.tank_id) > 0; }) : [];
 			var split = list.length > 1 || (list.length === 1 && value !== '' && !$row.find('select[name$="[tank_id]"] option[value="' + list[0].tank_id + '"]').length);
@@ -617,6 +645,7 @@
 				$panel.data('why', why);
 			}
 			var $td = $panel.find('td').empty();
+			$panel.toggleClass('is-offer', !!$panel.data('offer'));
 			var $box = $('<div class="fh-cr-split"></div>').appendTo($td);
 			$('<span class="fh-cr-split__title"></span>').text(fmt(t.title || 'Split %s over tanks:', $.trim($row.find('.fh-cr-species').val()) || (t.thisLine || 'this line'))).appendTo($box);
 			var $parts = $('<span class="fh-cr-split__parts"></span>').appendTo($box);
@@ -633,6 +662,10 @@
 			});
 			$('<button type="button" class="button button-small fh-cr-split__add"></button>').text(t.addTank || '+ tank').appendTo($box);
 			$('<button type="button" class="button button-small fh-cr-split__ones"></button>').text(t.ones || '1 per tank').attr('title', t.onesTitle || '').appendTo($box);
+			if ($panel.data('offer') && parts.length > 1) {
+				// An offer is a proposal: the line's field stays empty until this is pressed (or a row is changed).
+				$('<button type="button" class="button button-small button-primary fh-cr-split__use"></button>').text(t.use || 'Use this split').attr('title', t.useTitle || '').appendTo($box);
+			}
 			$('<button type="button" class="button button-small fh-cr-split__none"></button>').text(t.keep || 'Keep together').attr('title', t.keepTitle || '').appendTo($box);
 			$('<span class="fh-cr-split__count" aria-live="polite"></span>').appendTo($box);
 			$('<span class="fh-cr-split__errors fh-cr-warn" aria-live="polite"></span>').appendTo($box);
@@ -737,6 +770,15 @@
 			}
 		});
 
+		$order.on('click', '.fh-cr-split__use', function () {
+			var $panel = $(this).closest('tr.fh-cr-split-row');
+			var $row = $panel.prev('tr.fh-cr-line');
+			var parts = read($panel);
+			$row.removeData('auto');
+			commit($row, parts);
+			draw($row, parts);
+		});
+
 		$order.on('click', '.fh-cr-split__none', function () {
 			var $row = $(this).closest('tr.fh-cr-split-row').prev('tr.fh-cr-line');
 			// An offered split that is declined is not offered again on this line.
@@ -774,16 +816,8 @@
 			if (!$panel) {
 				return;
 			}
-			if ($row.data('auto')) {
-				var parts = layOnes($row);
-				if (parts !== null) {
-					draw($row, parts);
-					commit($row, parts);
-					var note = onesNote(parts, liveOf($row));
-					if (note) {
-						panelOf($row).find('.fh-cr-split__errors').text(note);
-					}
-				}
+			if ($row.data('auto') && $panel.data('offer')) {
+				propose($row); // Still only a proposal: it follows the count, and nothing is planned.
 				return;
 			}
 			drawCount($row, $panel, read($panel));
@@ -822,20 +856,38 @@
 				if (fieldEl($row).val() !== '' || panelOf($row) || !fieldEl($row).length) {
 					return;
 				}
-				var ones = $row.attr('data-split-offer') === 'ones';
-				var parts = ones ? layOnes($row) : null;
-				$row.data('auto', ones);
-				if (parts === null || !parts.length) {
-					draw($row, [], ones ? (t.offerOnesLater || '') : (t.offerSome || ''));
-					return;
-				}
-				draw($row, parts, t.offerOnes || '');
-				commit($row, parts);
-				var note = onesNote(parts, liveOf($row));
-				if (note) {
-					panelOf($row).find('.fh-cr-split__errors').text(note);
-				}
+				$row.data('auto', $row.attr('data-split-offer') === 'ones');
+				propose($row);
 			});
+		}
+
+		/*
+		 * Draw a line's offer. It is a PROPOSAL: the rows are laid out for
+		 * the owner to look at, the line's field stays empty, and Save and
+		 * Check in keep the line together until "Use this split" is pressed
+		 * or a row is changed. "1 per tank" is laid out by itself only for
+		 * as many fish as went one per tank last time (offerLaysOut()).
+		 */
+		function propose($row) {
+			var kind = String($row.attr('data-split-offer') || '');
+			var last = whole($row.attr('data-split-last'));
+			var live = liveOf($row);
+			var parts = offerLaysOut(kind, last, live) ? layOnes($row) : null;
+			var why = kind !== 'ones' ? (t.offerSome || '') : (live !== null && last > 0 && live > last ? fmt(t.offerOnesMore || '', last, live) : (t.offerOnesLater || ''));
+			var $panel = panelOf($row);
+			if (!$panel) {
+				$panel = draw($row, [], '');
+			}
+			$panel.data('offer', true);
+			if (parts === null || parts.length < 2) {
+				draw($row, [], why);
+				return;
+			}
+			draw($row, parts, t.offerOnes || '');
+			var note = onesNote(parts, live);
+			if (note) {
+				panelOf($row).find('.fh-cr-split__errors').text(note);
+			}
 		}
 
 		// The plans that came with the page: the Tank cell says what each is.

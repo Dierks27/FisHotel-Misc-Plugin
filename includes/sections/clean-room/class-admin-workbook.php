@@ -574,9 +574,11 @@ class Admin_Workbook {
 	 * @param array  $order    The order with its lines.
 	 * @param string $today    Site date.
 	 * @param array  $settings Settings.
-	 * @return array{tanks: array[], fields: array<int, string>, offers: array<int, string>}
+	 * @return array{tanks: array[], fields: array<int, string>, offers: array<int, string>, last: array<int, int>}
 	 *               fields: line id → 'none' | the JSON of [[qty, tank id], …];
-	 *               offers: line id → 'ones' | 'some'.
+	 *               offers: line id → 'ones' | 'some';
+	 *               last: line id → over how many tanks "one per tank" went last time (the
+	 *               offer lays out no more than that by itself).
 	 */
 	public static function split_panel( $store, array $order, $today, array $settings ) {
 		$all = Splits::all();
@@ -584,6 +586,7 @@ class Admin_Workbook {
 			'tanks'  => Splits::tanks( $store, $today, $settings ),
 			'fields' => array(),
 			'offers' => array(),
+			'last'   => array(),
 		);
 		foreach ( (array) ( $order['lines'] ?? array() ) as $line ) {
 			$id = (int) ( $line['id'] ?? 0 );
@@ -606,6 +609,7 @@ class Admin_Workbook {
 			$memory = Splits::remembered( $line, $all['species'] );
 			if ( null !== $memory ) {
 				$out['offers'][ $id ] = $memory['ones'] ? 'ones' : 'some';
+				$out['last'][ $id ]   = $memory['ones'] ? (int) ( $memory['n'] ?? 0 ) : 0;
 			}
 		}
 		return $out;
@@ -655,8 +659,12 @@ class Admin_Workbook {
 					'onesNone'       => __( 'No empty Spa tank is left for this line in the order\'s building (the lines above took them, or they hold fish): nothing is laid out.', 'fishotel-misc-plugin' ),
 					/* translators: 1: empty tanks, 2: fish */
 					'onesShort'      => __( 'Only %1$d empty Spa tanks: the other %2$d stay in the first tank.', 'fishotel-misc-plugin' ),
-					'offerOnes'      => __( 'This fish was split one per tank last time, so the same is laid out here. Change it, or "Keep together" if this group stays as one.', 'fishotel-misc-plugin' ),
-					'offerOnesLater' => __( 'This fish was split one per tank last time: once the received count is typed, one goes to each empty tank. "Keep together" if this group stays as one.', 'fishotel-misc-plugin' ),
+					'offerOnes'      => __( 'This fish was split one per tank last time, so the same is laid out here — a proposal: nothing is planned until you press "Use this split" (or change a row). "Keep together" if this group stays as one.', 'fishotel-misc-plugin' ),
+					'offerOnesLater' => __( 'This fish was split one per tank last time. Once the received count is typed, "1 per tank" lays it out — or "Keep together" if this group stays as one.', 'fishotel-misc-plugin' ),
+					/* translators: 1: fish last time, 2: fish on this line */
+					'offerOnesMore'  => __( 'This fish was split one per tank last time — %1$d of them. This line has %2$d, so nothing is laid out by itself: press "1 per tank", add the tanks yourself, or "Keep together".', 'fishotel-misc-plugin' ),
+					'use'            => __( 'Use this split', 'fishotel-misc-plugin' ),
+					'useTitle'       => __( 'Plan the split as it is laid out here. Until then it is only a proposal: the line stays together.', 'fishotel-misc-plugin' ),
 					'offerSome'      => __( 'This fish was split over tanks last time. Add the tanks, or "Keep together" if this group stays as one.', 'fishotel-misc-plugin' ),
 					'worthTyped'     => __( 'A price of your own for this line — kept on Save.', 'fishotel-misc-plugin' ),
 					'worthCleared'   => __( 'No price of your own: the shop price is read again on Save.', 'fishotel-misc-plugin' ),
@@ -1467,6 +1475,13 @@ class Admin_Workbook {
 			$labeled  += null !== $done['label'] ? 1 : 0;
 		}
 
+		// The save that CLOSES an order freezes it: every line without a price of its own takes the
+		// shop price as it is read now, and a closed order is never read for again — its numbers,
+		// and the past years of the Stats, stay what they were when the shop's prices move.
+		if ( 'closed' === (string) $header['status'] && 'closed' !== (string) ( $current['status'] ?? '' ) ) {
+			Shop_Price::freeze( $store, (array) $store->order( $saved_id ) );
+		}
+
 		$order = self::resolve_order( $store, $store->order( $saved_id ) );
 		self::cache_landed_totals( $store, $order );
 		Box_Shares::remember( $store, $order, array_values( $before ), $today );
@@ -1551,6 +1566,9 @@ class Admin_Workbook {
 				}
 				$out['plans'][ $index ] = null;
 				continue;
+			}
+			if ( empty( $posted['said'] ) ) {
+				continue; // The row has no split field (a page loaded before Split existed): the stored plan is not this save's to forget.
 			}
 			if ( ! is_array( $plan ) ) {
 				$out['plans'][ $index ] = $plan; // NONE, or nothing said.

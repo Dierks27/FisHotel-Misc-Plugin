@@ -340,9 +340,12 @@ class Costing {
 
 	/**
 	 * What a line's fish sells for, and where that comes from: the price
-	 * typed on the line ('typed' — an override, a 0 included), else the
-	 * shop price read for it (shop_price above 0, with its shop_price_from:
-	 * variation | product | list), else none.
+	 * typed on the line ('typed' — an override), else the shop price read
+	 * for it (shop_price, with its shop_price_from: variation | product |
+	 * list), else none. Only a price above 0 is a price: a 0 — an empty
+	 * "worth" cell of the workbook that came in as 0, a 0 typed to clear
+	 * the field — says nothing, so the line reads "no shop price yet"
+	 * instead of "No" and −100%.
 	 *
 	 * @param array $line worth, shop_price, shop_price_from.
 	 * @return array{price: float|null, from: string}
@@ -351,7 +354,7 @@ class Costing {
 		$typed = $line['worth'] ?? null;
 		if ( null !== $typed && ! is_bool( $typed ) && is_scalar( $typed ) ) {
 			$text = str_replace( array( '$', ',', ' ' ), '', (string) $typed );
-			if ( '' !== $text && is_numeric( $text ) ) {
+			if ( '' !== $text && is_numeric( $text ) && (float) $text > 0 ) {
 				return array(
 					'price' => (float) $text,
 					'from'  => 'typed',

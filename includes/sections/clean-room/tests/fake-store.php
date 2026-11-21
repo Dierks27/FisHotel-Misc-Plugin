@@ -1623,6 +1623,10 @@ class Fake_Store {
 			$row['notes'] = (string) $fields['notes'];
 			$changed      = true;
 		}
+		if ( array_key_exists( 'worth', $fields ) ) {
+			$row['worth'] = null !== $fields['worth'] && is_numeric( $fields['worth'] ) ? round( (float) $fields['worth'], 2 ) : null;
+			$changed      = true;
+		}
 		unset( $row );
 		return $changed;
 	}
