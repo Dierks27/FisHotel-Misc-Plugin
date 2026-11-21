@@ -950,7 +950,8 @@ system temp directory (`FH_TEST_TMP` overrides).
   the phone's tank screen: the same order, eight rows for eight groups;
   and the stylesheet's columns — on a narrow card the name has the first
   two columns up to the badge, on a wide one its own; a long size is cut
-  in its column.
+  in its column; the ▸ that says a line opens hangs in the card's margin
+  and takes no room from the name.
 - **medications-admin.test.js** — the pure parts of
   `js/medications-admin.js`: what 100 gallons take at a rate (the
   editor's hint), the rates the Board's Calculator offers, its sum.

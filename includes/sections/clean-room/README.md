@@ -460,7 +460,9 @@ badge, over size · count · day. The name never wraps into the numbers,
 saying ("needs identifying", "not a standard size", "still in the Spa",
 "on sale 2026-12-12") stands under the line — a gathered line lends its
 date to no group without one: "on sale 2026-12-12 · 1 not set". A click or
-a tap on a line opens it (no hover): the name and the size in full and its
+a tap on a line opens it (no hover; a small ▸ in the card's margin, beside
+the line, says it opens — the name itself starts at the card's edge and
+keeps the whole width of its columns): the name and the size in full and its
 groups one by one, each with its count, its day, the quarantine tank it was
 cleared from when its moves say so ("cleared from 521"), its sale date and a
 link to its row on the Stays tab. "Sale date not set" is said once per card, in its

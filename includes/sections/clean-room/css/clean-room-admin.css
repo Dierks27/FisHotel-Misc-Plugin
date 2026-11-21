@@ -377,6 +377,7 @@ a.fh-cr-chip--muted {
 }
 
 .fh-cr-cardline {
+	position: relative;
 	display: grid;
 	grid-column: 1 / -1;
 	grid-template-columns: subgrid;
@@ -421,12 +422,17 @@ a.fh-cr-chip--muted {
 	cursor: pointer;
 }
 
-/* It opens: a small mark says so (a tooltip is invisible on a tablet). */
+/* It opens: a small mark says so (a tooltip is invisible on a tablet).
+   The mark hangs in the card's own margin, beside the line: the name
+   starts at the card's edge, under the tank's number, and keeps every
+   pixel of its columns ("Sample Flame Angel" is whole at 228 px). */
 .fh-cr-cardline__name::before {
 	content: "\25B8";
-	display: inline-block;
+	position: absolute;
+	left: -11px;
 	width: 10px;
 	font-weight: 400;
+	text-align: center;
 	color: var(--fh-text-secondary, #a0a0a0);
 }
 
@@ -459,7 +465,6 @@ a.fh-cr-chip--muted {
 	grid-column: 1;
 	grid-row: 2;
 	min-width: 0;
-	padding-left: 10px;
 }
 
 /* A long size ("Jumbo show size") is cut in its own column, never laid
@@ -497,7 +502,6 @@ a.fh-cr-chip--muted {
 	display: flex;
 	flex-wrap: wrap;
 	gap: 0 8px;
-	padding-left: 10px;
 	font-size: 11px;
 }
 
@@ -565,7 +569,6 @@ a.fh-cr-chip--muted {
 	.fh-cr-cardline__size {
 		grid-column: 2;
 		grid-row: 1;
-		padding-left: 0;
 	}
 
 	.fh-cr-cardline__qty {
