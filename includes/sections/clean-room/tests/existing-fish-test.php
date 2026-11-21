@@ -163,7 +163,8 @@ $at  = static function ( $days_ago, $time = '12:00:00' ) use ( $today ) {
 $ev  = static function ( $id, $type, array $more = array() ) {
 	return array_merge( array( 'id' => $id, 'type' => $type, 'qty' => null, 'note' => '', 'event_at' => gmdate( 'Y-m-d H:i:s' ), 'source' => 'existing' ), $more );
 };
-$opt = array( 'tz' => wp_timezone(), 'tank_areas' => array( 1 => 'clean', 2 => 'clean', 10 => 'spa' ) ); // The site's zone, as $today is: an event of now is dated today at any hour.
+// The zone $today is in: these events are stamped with the real clock, and from midnight UTC until midnight in the site's zone a UTC date is a day ahead of it.
+$opt = array( 'tz' => wp_timezone(), 'tank_areas' => array( 1 => 'clean', 2 => 'clean', 10 => 'spa' ) );
 
 $arrive = $ev( 1, 'arrival', array( 'qty' => 3, 'to_tank_id' => 1, 'note' => Replay::NOTE_ARRIVED_UNKNOWN . ' · already here' ) );
 $s      = Replay::state( array( 'checkin_date' => '2024-01-01' ), array( $arrive ), $today, $opt );

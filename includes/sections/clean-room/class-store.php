@@ -4958,9 +4958,10 @@ class Store {
 
 	/**
 	 * The terms of one attribute taxonomy with their custom order (the
-	 * "order_<taxonomy>" term meta WooCommerce's drag-and-drop writes),
-	 * unsorted — Sizes::order_terms() sorts them the way the attribute is
-	 * set to.
+	 * "order" term meta WooCommerce's drag-and-drop writes — it was
+	 * "order_<taxonomy>" before WooCommerce 3.6, read here when the newer
+	 * one is not there), unsorted — Sizes::order_terms() sorts them the
+	 * way the attribute is set to.
 	 *
 	 * @param string $taxonomy Taxonomy ("pa_size").
 	 * @return array[] term_id, name, slug, menu_order.
@@ -4975,7 +4976,7 @@ class Store {
 
 		try {
 			$rows = $wpdb->get_results(
-				$wpdb->prepare( 'SELECT t.term_id, t.name, t.slug, tm.meta_value AS menu_order FROM ' . $wpdb->terms . ' t INNER JOIN ' . $wpdb->term_taxonomy . ' tt ON tt.term_id = t.term_id LEFT JOIN ' . $wpdb->termmeta . ' tm ON tm.term_id = t.term_id AND tm.meta_key = %s WHERE tt.taxonomy = %s ORDER BY t.term_id ASC LIMIT %d', 'order_' . $taxonomy, $taxonomy, self::SIZES_LIMIT ), // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				$wpdb->prepare( 'SELECT t.term_id, t.name, t.slug, tm.meta_value AS menu_order FROM ' . $wpdb->terms . ' t INNER JOIN ' . $wpdb->term_taxonomy . ' tt ON tt.term_id = t.term_id LEFT JOIN ' . $wpdb->termmeta . " tm ON tm.term_id = t.term_id AND tm.meta_key IN ('order', %s) WHERE tt.taxonomy = %s ORDER BY t.term_id ASC, (tm.meta_key = 'order') DESC LIMIT %d", 'order_' . $taxonomy, $taxonomy, self::SIZES_LIMIT ), // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 				ARRAY_A
 			);
 		} catch ( \Throwable $e ) {

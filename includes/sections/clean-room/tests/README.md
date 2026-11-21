@@ -50,6 +50,9 @@ php  includes/sections/clean-room/tests/import-map-test.php
 php  includes/sections/clean-room/tests/import-test.php
 php  includes/sections/clean-room/tests/sale-dates-test.php
 php  includes/sections/clean-room/tests/sizes-test.php
+php  includes/sections/clean-room/tests/sizes-tidy-test.php
+php  includes/sections/clean-room/tests/sizes-tidy-run-test.php
+php  includes/sections/clean-room/tests/sizes-tidy-admin-test.php
 php  includes/sections/clean-room/tests/box-shares-test.php
 php  includes/sections/clean-room/tests/identify-test.php
 php  includes/sections/clean-room/tests/medications-test.php
@@ -67,6 +70,7 @@ php  includes/sections/clean-room/tests/existing-fish-test.php
 php  includes/sections/clean-room/tests/board-lines-test.php
 node includes/sections/clean-room/tests/front-desk.test.js
 node includes/sections/clean-room/tests/clean-room-admin.test.js
+node includes/sections/clean-room/tests/sizes-tidy.test.js
 node includes/sections/clean-room/tests/dose-math.test.js
 node includes/sections/clean-room/tests/front-desk-dose.test.js
 node includes/sections/clean-room/tests/front-desk-status.test.js
@@ -470,6 +474,42 @@ system temp directory (`FH_TEST_TMP` overrides).
   when the batch has a date), "ready (still in the Spa)" in the CSV and
   XLSX state column, the order card's Spa count and own-date flag, and
   the Board's building line counting as its summary does.
+- **sizes-tidy-test.php** — "Tidy up the sizes", the thinking
+  (`Sizes_Tidy`, pure), on the invented shop of `tidy-fixture.php` (the
+  31 sizes, a dozen fish that between them show every case, a row or two
+  in each other place that stores a size) held by `fake-tidy-shop.php`:
+  how a label is read (`2 - 3.5"`, `3”-4”`, `10"+`, `<1"`, "Show size"),
+  the short list, the rule on all 31 sizes — the expected map written
+  out row by row —, odd labels and other short lists, the list edited (a
+  size added, reordered, removed while rows point at it), the owner's
+  own choices, and the dry run: Clean, Two become one (and resolved by
+  keeping one), Typed on the product, the in-between words taken off
+  (out of stock now; for sale today left, moved or taken off), a fish
+  left with nothing to buy, the totals, the terms that go, wait or
+  retire, and the other stores (rows, a lost-fish kind key, box shares
+  that become one, the Packing map).
+- **sizes-tidy-run-test.php** — Apply and Undo (`Sizes_Tidy_Run`) on the
+  same shop: the record saved before the first write, what Apply did to
+  every kind of product, a size retiring and then finished, the Clean
+  Room's stays keeping a retired size, the "Sizes to fill in" list
+  filling and emptying, the other stores, old terms deleted only when
+  unused (one that came into use between the preview and Apply is left,
+  and named), a second click, a batch cut off at six different writes
+  and finished — or undone — afterwards, two clicks at once, Undo (a
+  full dump before and after, compared part by part), a second run
+  undone, the stack of three, and a shop of 2,000 variations (no step
+  over its batch, time and memory per step).
+- **sizes-tidy-admin-test.php** — the tool itself (`Admin_Sizes_Tidy`):
+  a wrong nonce, the Settings tab's nonce, a shop manager, WooCommerce
+  absent, a shop without a size attribute; the owner's choices read from
+  a posted form; the dry run as the page shows it (the real numbers,
+  everything escaped, nothing written); Apply behind the backup tick,
+  the typed word and the token; the steps; Undo; the "Sizes to fill in"
+  list; the name a past order line keeps; and that nothing runs on its
+  own — no cron, no activation or upgrade hook, the record's tables made
+  by Apply only, the state never autoloaded. The real shop
+  (`Sizes_Tidy_Site`) needs WooCommerce and a database: it is proved on
+  a site, not here.
 - **sizes-test.php** — the one list of fish sizes: what counts as a
   size (an attribute key matching "size"), slugs and a typed list, an
   attribute's terms in the order the attribute is set to (custom, name,
@@ -674,6 +714,11 @@ system temp directory (`FH_TEST_TMP` overrides).
   "Add fish already here": Unknown when empty, "not cleared yet" in a
   quarantine tank, a picked product kept only while its name stands, an
   unknown fish as "??").
+- **sizes-tidy.test.js** — the tidy-up page's helpers (`js/sizes-tidy.js`):
+  which rows count as set by hand, the fields of a request, and the loop
+  that steps a run — to the end, through a failed step that is asked
+  again, past another click that holds the lock, and stopping when the
+  steps keep failing.
 - **temp-tanks.test.js** — the phone's and the Board's pure helpers for
   the temporary tanks and the day's list, both scripts loaded without a
   DOM: `tankHeading()`, `offerTemplates()` / `offer()` and
@@ -836,6 +881,11 @@ system temp directory (`FH_TEST_TMP` overrides).
   (its seconds, or another screen opened), not one whose time ran out
   meanwhile; an undo the server refuses is over, one that never reached
   it keeps its Undo; an expired session stays in the line until tapped.
+  A request that got no answer (fetch itself rejects — Chrome's,
+  Safari's and Firefox's words, a request given up on) is said in the
+  page's plain words, "not saved" for a write only, never the browser's;
+  the Shop App guard's own sentence and a refusal from the server are
+  said as they came.
   A tap on the words opens the whole message with its Undo, and Back
   shows the screen under it as it was — the very field, what was typed
   in it. The words for the last thing done (`agoText()`). And the place:
