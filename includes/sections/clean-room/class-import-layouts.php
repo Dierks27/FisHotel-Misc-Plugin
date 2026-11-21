@@ -340,7 +340,9 @@ class Import_Layouts {
 	 * role when it is still free.
 	 *
 	 * Without headings: the layout fits a grid of the same width, by
-	 * position.
+	 * position — unless that grid has a header row of its own that the
+	 * importer reads (a fish and a quantity heading): then it is no sheet
+	 * without headings, and the layout does not fit it.
 	 *
 	 * @param array      $layout A layout.
 	 * @param string[][] $grid   The grid.
@@ -359,7 +361,9 @@ class Import_Layouts {
 		}
 
 		if ( empty( $layout['header'] ) ) {
-			if ( count( reset( $grid ) ) !== count( $layout['columns'] ) ) {
+			// By position — for a sheet WITHOUT headings only. A sheet of the same width whose own
+			// headings already say which column is the fish and which the quantity is read by them.
+			if ( count( reset( $grid ) ) !== count( $layout['columns'] ) || Order_Import::map_complete( Order_Import::find_header( $grid )['map'] ) ) {
 				return $none;
 			}
 			$map = array();

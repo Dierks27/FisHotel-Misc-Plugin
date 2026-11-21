@@ -71,6 +71,9 @@ check_same( 'recognised through the order\'s supplier, when the column count is 
 check( '… not with another column count', null === L::recognise( L::all(), array( array( 'Green Test Chromis', '12', '0.75' ) ), 'Sample Reef Supply', '', 'ordered' )['applied'] );
 $nobody = L::recognise( L::all(), array( array( 'Green Test Chromis', 'XA9', '12', '0.75' ) ), 'Somebody Else', '', 'ordered' );
 check( 'a file without headers can only be recognised through the order\'s supplier: never offered to another', null === $nobody['applied'] && null === $nobody['offer'] );
+$headed = array( array( 'Item', 'Quantity', 'Cost', 'Size' ), array( 'Green Test Chromis', '12', '0.75', 'M' ) );
+check( 'a sheet of the same width that HAS headings the importer reads is not a sheet without headings: the by-position layout is not laid over it', 0.0 === L::fit( $no_head, $headed )['score'] && null === L::recognise( L::all(), $headed, 'Sample Reef Supply', '', 'ordered' )['applied'] );
+check( '… while headings nobody recognises leave it to the position, as before', array( 0 => 'fish', 2 => 'qty', 3 => 'price' ) === L::recognise( L::all(), array( array( 'Critter', 'Our no.', 'Wanted', 'Tag $' ), array( 'Green Test Chromis', 'XA9', '12', '0.75' ) ), 'Sample Reef Supply', '', 'ordered' )['fit']['map'] );
 check_same( 'in words: by position', 'column 1 → the fish · column 3 → quantity · column 4 → price each', L::describe( $no_head ) );
 
 echo "4. An ordered and an arrived layout side by side\n";

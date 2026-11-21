@@ -1168,7 +1168,9 @@ update the saved layout. Two suppliers whose sheets have the same
 headings each keep their own; a file without headings can only be
 recognised through the order's supplier — by its width alone, so its
 columns are always shown for a look ("this sheet has no headings, so the
-columns go by their position: check them"). *Settings → Saved import
+columns go by their position: check them"). A by-position layout is
+never laid over a sheet of the same width that *has* headings the
+importer reads: that one is read by its headings. *Settings → Saved import
 layouts* lists them (supplier · ordered / arrived · the columns in words
 · last used) with **Forget**. Nothing is seeded. They live in one option
 (`fishotel_cleanroom_import_layouts`, not autoloaded): at most 40

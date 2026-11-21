@@ -62,6 +62,7 @@ check( 'the lines that would be added and the fish on them: unticked rows and sk
 check( 'no rows, no lines', same( helpers.orderedFoot( [] ), { lines: 0, fish: 0 } ) );
 check( 'thousands separators, as the server writes them', helpers.thousands( 1188 ) === '1,188' && helpers.thousands( 61 ) === '61' && helpers.thousands( 1234567 ) === '1,234,567' );
 check( 'the page fills the server\'s sentences', helpers.fmt( '%1$s lines · %2$s fish', '61', '412' ) === '61 lines · 412 fish' && helpers.fmt( 'code %s', 'XA1' ) === 'code XA1' && helpers.fmt( '%d fields', 3 ) === '3 fields' );
+check( '… and a doubled percent sign is one, as in sprintf ("7% of a box", never "7%% of a box")', helpers.fmt( '%s%% of a box', 7 ) === '7% of a box' && helpers.fmt( '100%%' ) === '100%' && helpers.fmt( '%1$s%% · %2$d', '12.5', 3 ) === '12.5% · 3' );
 
 console.log( '3. What the page tells the server' );
 var plain = helpers.payloadOf( { mode: 'ordered', hand: false, too: false, rows: {}, lines: {}, remember: true, token: 'abc' } );

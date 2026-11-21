@@ -76,7 +76,7 @@
 	}
 
 	/**
-	 * sprintf for "%1$s" and "%s" placeholders.
+	 * sprintf for "%1$s" and "%s" placeholders, and "%%" for a percent sign.
 	 *
 	 * @param {string} text Template.
 	 * @return {string}
@@ -84,7 +84,10 @@
 	function fmt(text) {
 		var args = Array.prototype.slice.call(arguments, 1);
 		var next = 0;
-		return String(text || '').replace(/%(?:(\d+)\$)?[sd]/g, function (all, position) {
+		return String(text || '').replace(/%%|%(?:(\d+)\$)?[sd]/g, function (all, position) {
+			if (all === '%%') {
+				return '%'; // As sprintf: the strings are written for both sides ("%s%% of a box").
+			}
 			var value = position ? args[parseInt(position, 10) - 1] : args[next++];
 			return typeof value === 'undefined' ? '' : String(value);
 		});
