@@ -97,7 +97,11 @@ $empty->size_attributes = array( array( 'taxonomy' => 'pa_size', 'name' => 'size
 $std                    = Sizes::standard( $empty, Settings::normalize( array( 'size_list' => array( 'Small' ) ) ) );
 check( 'an attribute without terms is still the list (an empty one)', Sizes::SOURCE_ATTRIBUTE === $std['source'] && array() === $std['sizes'] );
 check( 'resolve() is pure: a term twice, or without a slug, is one size or none', array( 'a' ) === array_column( Sizes::resolve( array( array( 'taxonomy' => 'pa_size', 'label' => 'Size' ) ), array( array( 'term_id' => 1, 'name' => 'A', 'slug' => 'a' ), array( 'term_id' => 2, 'name' => 'A again', 'slug' => 'a' ), array( 'term_id' => 3, 'name' => 'No slug', 'slug' => '' ) ), array() )['sizes'], 'slug' ) );
-check( 'an object that is not a store gives the plain list', Sizes::SOURCE_LIST === Sizes::standard( new \stdClass(), Settings::get() )['source'] );
+$std = Sizes::resolve( array( array( 'taxonomy' => 'pa_size', 'label' => 'Size' ) ), array( array( 'term_id' => 1, 'name' => '&lt;1&quot;', 'slug' => 'under-1' ), array( 'term_id' => 2, 'name' => 'S &amp; M', 'slug' => 's-m' ), array( 'term_id' => 3, 'name' => '1-2"', 'slug' => '1-2' ) ), array() );
+check( 'a term name is stored with entities ("&lt;1&quot;"): the list reads it as plain text (<1")', array( 'under-1' => '<1"', 's-m' => 'S & M', '1-2' => '1-2"' ) == array_column( $std['sizes'], 'label', 'slug' ) );
+check( 'a stored snapshot that still carries entities is shown as plain text too', '<1"' === Sizes::of( array( 'size_slug' => 'gone', 'size_label' => '&lt;1&quot;' ) )['label'] && '<1" (not a standard size)' === Sizes::text( array( 'size_slug' => 'gone', 'size_label' => '&lt;1&quot;' ), array() ) );
+check( 'the "Sizes in use" report reads a term\'s stored name the same way', '<1"' === Sizes::report( array( array( 'key' => 'pa_size', 'global' => true, 'value' => 'under-1', 'label' => '&lt;1&quot;', 'products' => 2 ) ), $std )[0]['label'] );
+check( 'an object that is not a store gives the plain list',Sizes::SOURCE_LIST === Sizes::standard( new \stdClass(), Settings::get() )['source'] );
 
 echo "4. A picked size, and a stored size that is no longer in the list\n";
 $sizes = Sizes::standard( fh_sized_store(), Settings::get() )['sizes'];

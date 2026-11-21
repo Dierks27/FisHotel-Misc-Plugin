@@ -75,6 +75,20 @@ class Sizes {
 	}
 
 	/**
+	 * A label as plain text. WordPress stores a term's name with its
+	 * special characters as entities (a term named <1" is stored as
+	 * "&lt;1&quot;"), and the terms are read straight from the tables —
+	 * so the entities are turned back here, once, and the label is
+	 * escaped wherever it is shown like any other text.
+	 *
+	 * @param string $label Label as stored.
+	 * @return string
+	 */
+	public static function plain( $label ) {
+		return trim( html_entity_decode( (string) $label, ENT_QUOTES | ENT_HTML5, 'UTF-8' ) );
+	}
+
+	/**
 	 * The labels of a typed list — lines of a textarea or an array — as
 	 * plain text: control characters dropped, trimmed, empty and repeated
 	 * ones (by slug) dropped, at most MAX_SIZES. A label keeps its inch
@@ -219,7 +233,7 @@ class Sizes {
 		$seen  = array();
 		foreach ( self::order_terms( $terms, (string) ( $attribute['orderby'] ?? 'menu_order' ) ) as $term ) {
 			$slug  = trim( (string) ( $term['slug'] ?? '' ) );
-			$label = trim( (string) ( $term['name'] ?? '' ) );
+			$label = self::plain( (string) ( $term['name'] ?? '' ) );
 			if ( '' === $slug || isset( $seen[ $slug ] ) ) {
 				continue;
 			}
@@ -345,7 +359,7 @@ class Sizes {
 		if ( '' === $slug ) {
 			return null;
 		}
-		$label = isset( $row['size_label'] ) && '' !== trim( (string) $row['size_label'] ) ? (string) $row['size_label'] : $slug;
+		$label = isset( $row['size_label'] ) && '' !== trim( (string) $row['size_label'] ) ? self::plain( (string) $row['size_label'] ) : $slug;
 		$found = is_array( $sizes ) ? self::find( $sizes, $slug ) : null;
 
 		return array(
@@ -436,7 +450,7 @@ class Sizes {
 			}
 			$key    = (string) ( $row['key'] ?? '' );
 			$value  = (string) ( $row['value'] ?? '' );
-			$label  = isset( $row['label'] ) && '' !== (string) $row['label'] ? (string) $row['label'] : $value;
+			$label  = isset( $row['label'] ) && '' !== (string) $row['label'] ? self::plain( (string) $row['label'] ) : $value;
 			$global = ! empty( $row['global'] );
 			$why    = '';
 
