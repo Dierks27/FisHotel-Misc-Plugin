@@ -223,7 +223,7 @@ class Admin {
 		if ( 'stays' === $tab ) {
 			$show_closed  = isset( $_GET['closed'] ) && '1' === (string) wp_unslash( $_GET['closed'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 			$filters      = self::filters_from_request( $_GET ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-			$stays        = $store->open_stays( $filters, $today, $settings );
+			$stays        = self::narrow_stays( $store->open_stays( $filters, $today, $settings ), $filters );
 			$closed_stays = $show_closed ? $store->closed_stays( $today, $settings ) : array();
 			$csv_url      = self::csv_url( $show_closed );
 			$xlsx_url     = Admin_Workbook::export_url( 'stays', 'xlsx', $show_closed ? array( 'closed' => '1' ) : array() );
@@ -255,16 +255,19 @@ class Admin {
 		$doses     = Dose::board_doses( $store->latest_doses() ); // "last dose" with the amount and its working.
 		$sizes     = Sizes::standard( $store, $settings )['sizes'];
 		$temp      = Admin_Temp::board( $store, $tanks, $protocols, $today );
+		$origins   = self::origins( $store, $tanks ); // The quarantine tank each cleared group came out of.
 
 		include Clean_Room::path() . 'views/board.php';
 	}
 
 	/**
 	 * area / species / ready (for sale today) / needs_id (the fish still to
-	 * identify) from a request array.
+	 * identify) / no_sale (the groups without a sale date) / tank (one
+	 * tank's groups, by its number — what a Board card links with) from a
+	 * request array.
 	 *
 	 * @param array $request $_GET-like.
-	 * @return array{area: string, species: string, ready: bool, needs_id: bool}
+	 * @return array{area: string, species: string, ready: bool, needs_id: bool, no_sale: bool, tank: int}
 	 */
 	public static function filters_from_request( $request ) {
 		$request = is_array( $request ) ? $request : array();
@@ -280,7 +283,78 @@ class Admin {
 			'species'  => substr( $species, 0, 120 ),
 			'ready'    => isset( $request['ready'] ) && is_scalar( $request['ready'] ) && '1' === (string) wp_unslash( $request['ready'] ),
 			'needs_id' => isset( $request['needs_id'] ) && is_scalar( $request['needs_id'] ) && '1' === (string) wp_unslash( $request['needs_id'] ),
+			'no_sale'  => isset( $request['no_sale'] ) && is_scalar( $request['no_sale'] ) && '1' === (string) wp_unslash( $request['no_sale'] ),
+			'tank'     => isset( $request['tank'] ) && is_scalar( $request['tank'] ) ? min( 99999, absint( wp_unslash( $request['tank'] ) ) ) : 0,
 		);
+	}
+
+	/**
+	 * The Stays tab's two filters a Board card links with, over stays
+	 * already read (pure): one tank's groups, and the groups without a
+	 * sale date — the same test the Board counts them with.
+	 *
+	 * @param array[] $stays   Hydrated stays.
+	 * @param array   $filters tank (number), no_sale.
+	 * @return array[]
+	 */
+	public static function narrow_stays( array $stays, array $filters ) {
+		$tank    = (int) ( $filters['tank'] ?? 0 );
+		$no_sale = ! empty( $filters['no_sale'] );
+		if ( $tank <= 0 && ! $no_sale ) {
+			return $stays;
+		}
+		$out = array();
+		foreach ( $stays as $stay ) {
+			if ( $tank > 0 && (int) ( $stay['tank_number'] ?? 0 ) !== $tank ) {
+				continue;
+			}
+			if ( $no_sale && ! empty( $stay['sale_ready_date'] ) ) {
+				continue;
+			}
+			$out[] = $stay;
+		}
+		return $out;
+	}
+
+	/**
+	 * The Stays tab filtered to one tank's groups — all of them, or those
+	 * without a sale date —, and to one group's row when $stay_id is given.
+	 *
+	 * @param int  $tank_number Tank number.
+	 * @param bool $no_sale     Only the groups without a sale date.
+	 * @param int  $stay_id     A stay whose row the link lands on (0 = none).
+	 * @return string
+	 */
+	public static function tank_stays_url( $tank_number, $no_sale = false, $stay_id = 0 ) {
+		$args = array( 'tank' => (int) $tank_number );
+		if ( $no_sale ) {
+			$args['no_sale'] = '1';
+		}
+		return self::page_url( 'stays', $args ) . ( (int) $stay_id > 0 ? '#fh-cr-stay-' . (int) $stay_id : '' );
+	}
+
+	/**
+	 * The quarantine tank each cleared group on the Board came out of:
+	 * stay id → tank number (Board_Lines::origins() over their moves — one
+	 * read for the whole room). Empty when the store cannot say.
+	 *
+	 * @param object  $store Store (or the tests' stand-in).
+	 * @param array[] $tanks Tanks with occupants.
+	 * @return array<int, int>
+	 */
+	public static function origins( $store, array $tanks ) {
+		if ( ! is_object( $store ) || ! method_exists( $store, 'move_events' ) ) {
+			return array();
+		}
+		$ids = array();
+		foreach ( $tanks as $tank ) {
+			foreach ( (array) ( $tank['occupants'] ?? array() ) as $stay ) {
+				if ( 'cleared' === (string) ( $stay['status'] ?? '' ) ) {
+					$ids[] = (int) $stay['id'];
+				}
+			}
+		}
+		return $ids ? Board_Lines::origins( (array) $store->move_events( $ids ), (array) $store->tank_areas() ) : array();
 	}
 
 	/**
@@ -1530,17 +1604,18 @@ class Admin {
 	 * The state badge of a stay, with the "still in the Spa" warning when
 	 * it is for sale but not cleared yet.
 	 *
-	 * @param array $stay Hydrated stay.
+	 * @param array $stay    Hydrated stay.
+	 * @param bool  $warning Add the warning (a Board line prints it under the badge's row instead).
 	 * @return string Escaped HTML.
 	 */
-	public static function badge_html( array $stay ) {
+	public static function badge_html( array $stay, $warning = true ) {
 		$status = (string) ( $stay['status'] ?? 'in_qt' );
 		$key    = ! empty( $stay['sale_ready'] ) ? 'ready' : $status;
 		$key    = in_array( $key, array( 'in_qt', 'cleared', 'ready', 'closed' ), true ) ? $key : 'in_qt';
 		$words  = self::sale_words( $stay );
 
 		$html = '<span class="fh-cr-badge fh-cr-badge--' . esc_attr( $key ) . '">' . esc_html( (string) ( $stay['state_label'] ?? $status ) ) . '</span>';
-		if ( '' !== $words['warning'] ) {
+		if ( $warning && '' !== $words['warning'] ) {
 			$html .= ' <span class="fh-cr-warn" title="' . esc_attr__( 'Its sale date has come but it has not moved to the Clean Room yet.', 'fishotel-misc-plugin' ) . '">' . esc_html( $words['warning'] ) . '</span>';
 		}
 		return $html;

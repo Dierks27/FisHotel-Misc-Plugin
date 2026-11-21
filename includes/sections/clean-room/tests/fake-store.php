@@ -718,6 +718,16 @@ class Fake_Store {
 		return Replay::sort_events( $out );
 	}
 
+	public function move_events( array $stay_ids ) {
+		$out = array();
+		foreach ( $this->events as $row ) {
+			if ( 'move' === (string) $row['type'] && in_array( (int) $row['stay_id'], array_map( 'intval', $stay_ids ), true ) ) {
+				$out[] = $this->event_row( $row );
+			}
+		}
+		return Replay::sort_events( $out );
+	}
+
 	public function event( $id ) {
 		return isset( $this->events[ (int) $id ] ) ? $this->event_row( $this->events[ (int) $id ] ) : null;
 	}

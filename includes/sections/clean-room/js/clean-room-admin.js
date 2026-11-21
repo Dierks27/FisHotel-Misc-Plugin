@@ -12,7 +12,8 @@
  * the sale-date pickers (order page, product page), and the "Identify… /
  * Correct the fish…" panel under a stay (Stays tab) or an order line (the
  * real fish from the species search, its size, or still unknown), with
- * the "??" box of an order line.
+ * the "??" box of an order line, and the Board's card lines, which open
+ * to their groups on a click or a tap.
  *
  * The server renders every row; this file posts and fills in. The pure
  * helpers are exported for the node test; the rest needs jQuery and the
@@ -644,6 +645,21 @@
 			target.value = String($(this).data('date') || '');
 			$(target).trigger('change');
 		}
+	});
+
+	// The Board: a click or a tap anywhere on a tank card's line opens it
+	// — the name in full and its groups one by one — and closes it again.
+	// The name is the button, so the keyboard opens it too; a link inside
+	// the opened part is followed, not swallowed.
+	$(document).on('click', '.fh-cr-cardline', function (e) {
+		if ($(e.target).closest('a, .fh-cr-cardline__more').length) {
+			return;
+		}
+		var $line = $(this);
+		var $more = $line.children('.fh-cr-cardline__more');
+		var open = !!$more.prop('hidden');
+		$more.prop('hidden', !open);
+		$line.toggleClass('is-open', open).children('.fh-cr-cardline__name').attr('aria-expanded', open ? 'true' : 'false');
 	});
 
 	function notice(cls, msg) {

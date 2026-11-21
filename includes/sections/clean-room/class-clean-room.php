@@ -75,6 +75,9 @@
  *   - class-identify.php    unknown ("??") and mislabeled fish: the one
  *                           correction of a stay and its order line together,
  *                           what the label said, the split rule.
+ *   - class-board-lines.php PURE: a tank's stays → the lines of its card (the
+ *                           order, the same fish gathered) — the Board's
+ *                           cards and, the order only, the phone's tank screen.
  *   - class-orders.php      the order from a form, the live figures of a
  *                           checked-in line, the check-in that creates stays.
  *   - class-xlsx.php        a dependency-free .xlsx writer.
@@ -213,6 +216,7 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 			require_once self::path() . 'class-stats-sales.php';
 			require_once self::path() . 'class-species.php';
 			require_once self::path() . 'class-identify.php';
+			require_once self::path() . 'class-board-lines.php';
 			require_once self::path() . 'class-orders.php';
 			require_once self::path() . 'class-shop-price.php';
 			require_once self::path() . 'class-splits.php';
