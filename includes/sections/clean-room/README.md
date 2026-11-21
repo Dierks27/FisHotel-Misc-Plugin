@@ -1267,11 +1267,21 @@ quantity anywhere: the preview says so and offers the other button
   supplier's **code** when the row and a line both carry one ("0059" on
   the sheet and 59 on the invoice are one code), else by
   fish — the same name, the same species-list fish, or what the line was
-  written as — and then by size when both have one. Two things are never
-  decided silently: a row that IS another line's fish goes to that line
-  whatever its code says, with a note to check it; and a row without a
+  written as — and then by size when both have one. Three things are
+  never decided silently: a row that IS another line's fish goes to that
+  line whatever its code says, with a note to check it; a row without a
   size against lines of two sizes (and none without) is paired with
-  neither — it waits among the extras, naming the lines it could be. An
+  neither — it waits among the extras, naming the lines it could be; and
+  so does a row that fits **two lines of the same fish in the same
+  size** — one fish ordered twice, or in two sizes that *Tidy up the
+  sizes* has made one since the order was sent. Such lines are never
+  told apart by their place on the order: the row goes to the line that
+  was written as it is, else to the line with **its price** (to the
+  cent — two boxes of the cheaper one add up on the cheaper line), else
+  to the one line no row has taken once the owner has said where the
+  other row goes; while nothing tells them apart the row waits, and the
+  lines are named with their ordered count and price ("ordered 4 · 6.00
+  each") there and in the dropdown that pairs a row with a line. An
   invoice's code is kept on a line that had none, so the next invoice
   pairs by it. The preview is a
   reconciliation in four groups:

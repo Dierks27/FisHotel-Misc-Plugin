@@ -458,7 +458,42 @@ check_same( 'a size after "(INV)" or "(RARE)" is lifted: the last size word coun
 check_same( 'without a header, a column that counts 1, 2, 3 … is the sheet\'s row number, never the quantity', array( 1 => 'fish', 2 => 'qty', 3 => 'price' ), OI::guess_columns( array( array( '1', 'Blue Test Wrasse', '4', '2.50' ), array( '2', 'Red Test Goby', '6', '3.00' ), array( '3', 'Green Test Chromis', '2', '1.25' ) ) ) );
 check_same( '… a quantity column that happens to start 1, 2 is still one', array( 0 => 'fish', 1 => 'qty' ), OI::guess_columns( array( array( 'Blue Test Wrasse', '1' ), array( 'Red Test Goby', '2' ), array( 'Green Test Chromis', '2' ) ) ) );
 
-echo "17. Sizes that share a slug, and a bare number\n";
+echo "17. Two lines of one fish in one size\n";
+// One fish ordered in two sizes, and a tidy-up of the sizes has made the two sizes one since: the
+// lines now read alike. The invoice lists the dearer one first, under a size that is no size any more.
+$twins = array(
+	$line( 0, 'Banded Test Goby', 4, array( 'size_slug' => '2-3', 'unit_price' => 6.0 ) ),
+	$line( 1, 'Banded Test Goby', 2, array( 'size_slug' => '2-3', 'unit_price' => 7.0 ) ),
+);
+$sized = array( 'slug' => '2-3' );
+$rows_of = static function ( array $r ) {
+	return array_map( static function ( $entry ) { return $entry['rows']; }, $r['lines'] );
+};
+$t1 = OI::reconcile( array( $row( 10, 'Banded Test Goby', 2, array( 'price' => 7.0 ) ), $row( 11, 'Banded Test Goby', 4, array( 'size' => $sized, 'price' => 6.0 ) ) ), $twins );
+check( 'the row goes to the line with ITS price, not to the first line nobody took: both came as ordered', array( '0' => array( 11 ), '1' => array( 10 ) ) === $rows_of( $t1 ) && array( '0', '1' ) === $of( $t1['groups']['same'] ) && array() === $t1['groups']['diff'] && array() === $t1['extra'] );
+$t2 = OI::reconcile( array( $row( 10, 'Banded Test Goby', 2, array( 'size' => $sized, 'price' => 6.9966 ) ), $row( 11, 'Banded Test Goby', 4, array( 'price' => 6.0 ) ) ), $twins );
+check( '… the other way round too (the row that still has its size comes first), a price compared to the cent', array( '0' => array( 11 ), '1' => array( 10 ) ) === $rows_of( $t2 ) && array( '0', '1' ) === $of( $t2['groups']['same'] ) );
+$t3 = OI::reconcile( array( $row( 10, 'Banded Test Goby', 2, array( 'size' => $sized, 'price' => 6.0, 'box' => 1 ) ), $row( 11, 'Banded Test Goby', 2, array( 'size' => $sized, 'price' => 6.0, 'box' => 2 ) ), $row( 12, 'Banded Test Goby', 2, array( 'size' => $sized, 'price' => 7.0, 'box' => 2 ) ) ), $twins );
+check( '… and two boxes of the cheaper one are added up on its line: the second box does not go to the dearer line because that one is still free', array( '0' => array( 10, 11 ), '1' => array( 12 ) ) === $rows_of( $t3 ) && 4 === $t3['lines']['0']['arrived'] && array( 1, 2 ) === $t3['lines']['0']['boxes'] );
+$bare = array( $row( 10, 'Banded Test Goby', 2 ), $row( 11, 'Banded Test Goby', 4, array( 'size' => $sized ) ) );
+$t4   = OI::reconcile( $bare, $twins );
+$x4   = array_column( $t4['groups']['extra'], null, 'row' );
+check( 'with no price to go by, nothing tells the two lines apart: each row is paired with NEITHER and waits among the extras, naming both lines', array( 10, 11 ) === $t4['extra'] && array( '0', '1' ) === $x4[10]['could'] && array( '0', '1' ) === $x4[11]['could'] && 0 === $t4['lines']['0']['arrived'] && 0 === $t4['lines']['1']['arrived'] );
+$t5 = OI::reconcile( $bare, $twins, array( 'pairs' => array( 10 => 'line:1' ) ) );
+check( '… the owner says which line one row is, and the other row takes the line that is left', array( '0' => array( 11 ), '1' => array( 10 ) ) === $rows_of( $t5 ) && array() === $t5['extra'] && 'hand' === $t5['lines']['1']['how'] );
+$same_price = array( $line( 0, 'Banded Test Goby', 4, array( 'unit_price' => 6.0 ) ), $line( 1, 'Banded Test Goby', 2, array( 'unit_price' => 6.0 ) ) );
+check( 'one fish typed twice at one price, without a size: a price both lines carry settles nothing', array( 10, 11 ) === OI::reconcile( array( $row( 10, 'Banded Test Goby', 2, array( 'price' => 6.0 ) ), $row( 11, 'Banded Test Goby', 4, array( 'price' => 6.0 ) ) ), $same_price )['extra'] );
+$as_written = array(
+	$line( 0, 'Banded Test Goby', 4, array( 'size_slug' => '2-3', 'notes' => '[as written: Banded Test Goby 2-3"]' ) ),
+	$line( 1, 'Banded Test Goby', 2, array( 'size_slug' => '2-3', 'notes' => '[as written: Banded Test Goby 2-3.5"]' ) ),
+);
+$t6 = OI::reconcile( array( $row( 10, 'Banded Test Goby 2-3.5"', 2, array( 'keys' => array( 'banded test goby', 'banded test goby 2-3.5"' ) ) ), $row( 11, 'Banded Test Goby 2-3"', 4, array( 'keys' => array( 'banded test goby', 'banded test goby 2-3"' ), 'size' => $sized ) ) ), $as_written );
+check( 'a line that was WRITTEN as the row is takes it, price or no price', array( '0' => array( 11 ), '1' => array( 10 ) ) === $rows_of( $t6 ) && array() === $t6['extra'] );
+$stays = array( $line( 0, 'Banded Test Goby', 4, array( 'stay_id' => 70, 'qty_received' => 4 ) ), $line( 1, 'Banded Test Goby', 2, array( 'stay_id' => 71, 'qty_received' => 2 ) ) );
+$t7    = OI::reconcile( array( $row( 10, 'Banded Test Goby', 2 ) ), $stays );
+check( 'two such lines that already became stays: the row is set aside as before — it is no extra, and nothing is written', array() === $t7['extra'] && array( '0' ) === $of( $t7['groups']['stay'] ) && array() === $t7['lines'] );
+
+echo "18. Sizes that share a slug, and a bare number\n";
 // The shop's own long list holds 3-5" and 3.5"+ — one slug once the dot and the inch mark are dashes.
 $long = array(
 	array( 'slug' => '3', 'label' => '3"+' ),

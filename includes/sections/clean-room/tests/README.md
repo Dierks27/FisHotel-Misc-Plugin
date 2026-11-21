@@ -71,6 +71,7 @@ php  includes/sections/clean-room/tests/board-lines-test.php
 php  includes/sections/clean-room/tests/order-import-test.php
 php  includes/sections/clean-room/tests/order-import-layouts-test.php
 php  includes/sections/clean-room/tests/order-import-admin-test.php
+php  includes/sections/clean-room/tests/order-import-tidy-test.php
 php  includes/sections/clean-room/tests/shop-price-test.php
 php  includes/sections/clean-room/tests/splits-test.php
 node includes/sections/clean-room/tests/front-desk.test.js
@@ -708,7 +709,10 @@ system temp directory (`FH_TEST_TMP` overrides).
   name alone, a code that contradicts the fish, lost leading zeros, a
   row without a size against two sizes, a Markdown table, columns set
   apart by spaces, a block whose tabs were lost, words after the fee
-  table, a size after "(INV)", a column that only counts, two sizes
+  table, a size after "(INV)", a column that only counts, two lines of
+  one fish in one size (the row to the line with its price or written
+  as it is, two boxes on one line, both rows left for the owner when
+  nothing tells the lines apart, lines with stays as before), two sizes
   that share a slug (3-5" and 3.5"+) and a bare number that is no size.
 - **order-import-layouts-test.php** — the saved layouts
   (`Import_Layouts`): built from a hand-set mapping, recognised the next
@@ -736,6 +740,18 @@ system temp directory (`FH_TEST_TMP` overrides).
   an ordered order (the button that fits, the offer to switch), an
   invoice's code kept on a line that had none, a price compared to the
   cent, "1 line".
+- **order-import-tidy-test.php** — the order import and "Tidy up the
+  sizes" on one shop (the shop of `tidy-fixture.php`, its fish as the
+  in-memory store's products): an order sheet on the long list of sizes
+  (3-5" read as itself, a bare "5" kept as written); the real
+  `Sizes_Tidy_Run` run over the store's own order lines — two lines of
+  one order now read alike; the invoice afterwards with the dearer line
+  first under a size that is no size any more, each row on the line
+  with its price and the goods costing what the invoice says; a packing
+  list without prices, where both rows wait, the lines are told apart
+  by their price in the note and in the dropdown, and one word from the
+  owner settles both; an order closed before the tidy-up, whose size's
+  name follows while not one of its numbers moves; Undo.
 - **order-import.test.js** — the page's pure helpers
   (`js/order-import.js`): "Received: all as ordered" fills the empty
   fields only, the ordered foot as the ticks stand, what the page tells

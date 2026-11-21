@@ -957,6 +957,24 @@ class Admin_Order_Import {
 		return (string) $line['species'] . ( '' !== $size ? ' · ' . $size : '' );
 	}
 
+	/**
+	 * A line as the owner picks it for a row: "Banded Goby · 2-3" —
+	 * ordered 4", with its price when two lines would read the same.
+	 *
+	 * @param array $line  A line.
+	 * @param bool  $price Whether to say its price too.
+	 * @return string
+	 */
+	private static function line_choice( array $line, $price ) {
+		/* translators: %d: ordered */
+		$text = self::line_text( $line ) . ' — ' . sprintf( __( 'ordered %d', 'fishotel-misc-plugin' ), (int) ( $line['qty_ordered'] ?? 0 ) );
+		if ( $price && isset( $line['unit_price'] ) && is_numeric( $line['unit_price'] ) ) {
+			/* translators: %s: a price */
+			$text .= ' · ' . sprintf( __( '%s each', 'fishotel-misc-plugin' ), Costing::money( $line['unit_price'] ) );
+		}
+		return $text;
+	}
+
 	/* ============================================================== */
 	/*  The preview, as the page reads it                              */
 	/* ============================================================== */
@@ -1303,18 +1321,32 @@ class Admin_Order_Import {
 		}
 		$extras = array();
 		foreach ( $r['groups']['extra'] as $e ) {
+			// Lines of two sizes and a row without one — or lines of ONE size that nothing tells apart
+			// (ordered twice, or two sizes a tidy-up made one): those are named with what differs.
 			$could = array();
+			$sizes = array();
 			foreach ( $e['could'] as $key ) {
 				if ( isset( $by_key[ $key ] ) ) {
-					$could[] = self::line_text( $by_key[ $key ] );
+					$could[ $key ]                                           = self::line_text( $by_key[ $key ] );
+					$sizes[ (string) ( $by_key[ $key ]['size_slug'] ?? '' ) ] = true;
 				}
+			}
+			$note = '';
+			if ( $could && count( $sizes ) > 1 ) {
+				/* translators: %s: order lines */
+				$note = sprintf( __( 'Could be %s — the row has no size. Say which line it is.', 'fishotel-misc-plugin' ), implode( ' / ', $could ) );
+			} elseif ( $could ) {
+				foreach ( $could as $key => $text ) {
+					$could[ $key ] = self::line_choice( $by_key[ $key ], true );
+				}
+				/* translators: %s: order lines */
+				$note = sprintf( __( 'Could be %s — lines of the same fish in the same size. Say which line it is.', 'fishotel-misc-plugin' ), implode( ' / ', $could ) );
 			}
 			$extras[] = array(
 				'row'     => $e['row'],
 				'arrived' => $e['arrived'],
 				'instead' => $e['instead'],
-				/* translators: %s: order lines */
-				'note'    => $could ? sprintf( __( 'Could be %s — the row has no size. Say which line it is.', 'fishotel-misc-plugin' ), implode( ' / ', $could ) ) : '',
+				'note'    => $note,
 			);
 		}
 		array_splice(
@@ -1332,12 +1364,21 @@ class Admin_Order_Import {
 		);
 
 		$options = array();
+		$times   = array();
 		foreach ( $plan['lines'] as $line ) {
 			if ( empty( $line['stay_id'] ) ) {
+				$text      = self::line_choice( $line, false );
 				$options[] = array(
 					'key'  => $line['key'],
-					'text' => self::line_text( $line ) . ' — ' . sprintf( /* translators: %d: ordered */ __( 'ordered %d', 'fishotel-misc-plugin' ), (int) $line['qty_ordered'] ),
+					'text' => $text,
 				);
+				$times[ $text ] = ( $times[ $text ] ?? 0 ) + 1;
+			}
+		}
+		// Two lines that read the same are told apart by their price.
+		foreach ( $options as $i => $option ) {
+			if ( $times[ $option['text'] ] > 1 ) {
+				$options[ $i ]['text'] = self::line_choice( $by_key[ $option['key'] ], true );
 			}
 		}
 

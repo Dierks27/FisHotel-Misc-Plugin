@@ -1940,7 +1940,9 @@ class Order_Import {
 	 * by fish — the same name, the line's species-list fish or what the
 	 * line was written as — and then by size when both have one. A row
 	 * without a size against lines of two sizes is paired with neither:
-	 * it waits among the extras for the owner to say which. A line that
+	 * it waits among the extras for the owner to say which — and so does
+	 * a row that fits two lines of one fish in one size which neither
+	 * what they were written as nor its price tells apart. A line that
 	 * already became a stay is never changed: a row that pairs with it is
 	 * set aside and said so.
 	 *
@@ -2049,7 +2051,12 @@ class Order_Import {
 						}
 					}
 					if ( $among ) {
-						$found = self::best_line( $row, $among, $by_key, $taken, $separate );
+						// Two lines of this fish in this size that nothing on the row tells apart: the owner says.
+						$twins = array();
+						$found = self::best_line( $row, $among, $by_key, $taken, $separate, $twins );
+						if ( null === $found && $twins ) {
+							$could[ $n ] = $twins;
+						}
 					}
 				}
 			}
@@ -2194,27 +2201,45 @@ class Order_Import {
 	}
 
 	/**
-	 * Among the lines a row may pair with: the one of its size, then one
-	 * no other row has taken yet, then the first.
+	 * Among the lines a row may pair with: the one of its size; then the
+	 * one that was written as the row is; then the one with the row's
+	 * price, to the cent; then one no other row has taken yet. Two lines
+	 * that are still level after that — one fish ordered twice in one
+	 * size, or in two sizes a tidy-up of the sizes made one — are not
+	 * told apart by their place on the order: the row gets neither, and
+	 * $twins names them.
 	 *
 	 * @param array    $row      The row.
 	 * @param string[] $keys     Candidate line keys.
 	 * @param array[]  $by_key   The lines.
 	 * @param array    $taken    line key → rows.
 	 * @param bool     $separate Whether a line takes one row only.
+	 * @param string[] $twins    Set to the lines the row could be, when nothing tells them apart.
 	 * @return string|null
 	 */
-	private static function best_line( array $row, array $keys, array $by_key, array $taken, $separate ) {
-		$size = isset( $row['size']['slug'] ) ? (string) $row['size']['slug'] : '';
-		$best = null;
-		$rank = -1;
+	private static function best_line( array $row, array $keys, array $by_key, array $taken, $separate, &$twins = array() ) {
+		$size  = isset( $row['size']['slug'] ) ? (string) $row['size']['slug'] : '';
+		$price = isset( $row['price'] ) && is_numeric( $row['price'] ) ? round( (float) $row['price'], 2 ) : null;
+		$names = isset( $row['keys'] ) && is_array( $row['keys'] ) ? $row['keys'] : array();
+		$twins = array();
+		$level = array();
+		$best  = null;
+		$rank  = -1;
 		foreach ( $keys as $key ) {
 			$line  = $by_key[ $key ];
 			$score = 0;
 			if ( '' !== $size && (string) ( $line['size_slug'] ?? '' ) === $size ) {
-				$score += 4;
+				$score += 16;
 			} elseif ( '' !== $size && '' !== (string) ( $line['size_slug'] ?? '' ) ) {
 				continue; // Another size of the same fish: another line.
+			}
+			$as = self::written_of( (string) ( $line['notes'] ?? '' ) );
+			if ( '' !== $as && in_array( Species::key( $as ), $names, true ) ) {
+				$score += 8;
+			}
+			// A price list's 0.2291666 and the invoice's 0.23 are one price: compared to the cent.
+			if ( null !== $price && isset( $line['unit_price'] ) && is_numeric( $line['unit_price'] ) && round( (float) $line['unit_price'], 2 ) === $price ) {
+				$score += 4;
 			}
 			if ( empty( $taken[ $key ] ) ) {
 				$score += 2;
@@ -2223,9 +2248,17 @@ class Order_Import {
 				$score += 1;
 			}
 			if ( $score > $rank ) {
-				$rank = $score;
-				$best = $key;
+				$rank  = $score;
+				$best  = $key;
+				$level = array( $key );
+			} elseif ( $score === $rank ) {
+				$level[] = $key;
 			}
+		}
+		// Lines that already became stays are never changed, whichever of them the row is set aside for.
+		if ( count( $level ) > 1 && empty( $by_key[ $best ]['stay_id'] ) ) {
+			$twins = $level;
+			return null;
 		}
 		if ( null !== $best && $separate && ! empty( $taken[ $best ] ) ) {
 			return null;
