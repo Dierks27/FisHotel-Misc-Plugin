@@ -444,9 +444,37 @@ letters); an ambiguous or weak match asks "Which fish?" with the top three.
 Tabs: **Board · To do · Stays · Arrivals · Species · Stats · Events ·
 Settings**.
 
-**Board** — Area → Building → Level grid of tank cards (occupants with
-species · size · live · day N · badge; empty tanks dimmed; coming-soon buildings
-greyed), a header per building with its system gallons ("205 gal
+**Board** — Area → Building → Level grid of tank cards (empty tanks dimmed;
+coming-soon buildings greyed). A card lists its fish **in order and gathered**
+(`Board_Lines`, pure — the one function the rack cards, the temporary cards
+and, for the order alone, the phone's tank screen share): by name (natural
+and case-blind, an unknown "??" fish last), then by size (the standard
+sizes' own order, then a size that is no longer standard, then none), then
+by check-in (oldest first, an unknown one last). The stays of the same fish
+(the same name, case and spacing aside), the same size and the same state
+badge are ONE line — the counts summed ("× 2"), the day one number or a
+range ("day 15–20"; "day ?" for an unknown check-in) and "2 groups" under
+it; the same fish in another size or state is a line of its own right
+under it, its name said quietly. The name printed is the product's when
+one of the groups is linked to one, else the first group's as typed. A fish
+nobody knows yet ("??", "needs identifying") is never gathered: two
+"?? small wrasse" may be two fish, so each group keeps its own line. Each
+line is a row of columns that line up down the card — name · size · count ·
+day · badge on a wide card; on a narrow one (most are) the name, up to its
+badge, over size · count · day. The name never wraps into the numbers,
+"day 15" never breaks, a long size is cut in its own column, and what needs
+saying ("needs identifying", "not a standard size", "still in the Spa",
+"on sale 2026-12-12") stands under the line — a gathered line lends its
+date to no group without one: "on sale 2026-12-12 · 1 not set". A click or
+a tap on a line opens it (no hover; a small ▸ in the card's margin, beside
+the line, says it opens — the name itself starts at the card's edge and
+keeps the whole width of its columns): the name and the size in full and its
+groups one by one, each with its count, its day, the quarantine tank it was
+cleared from when its moves say so ("cleared from 521"), its sale date and a
+link to its row on the Stays tab. "Sale date not set" is said once per card, in its
+foot ("Sale date not set: 6 →", to the Stays tab filtered to that tank's
+groups without one). The building's header and the summary count stays,
+never lines. Then: a header per building with its system gallons ("205 gal
 system"), its schedule, the count in QT and the last dose per medication
 (a system dose or a tank dose in that building, with its amount, its
 working and its time — "Copper Power 16.6 ml (2.16 → 2.40 ppm, 100 gal)
@@ -474,7 +502,8 @@ own date: pre-filled with it, else empty when the batch has a date — OK
 then keeps the batch's —, else the suggestion; empty = the batch's; the
 date it already has writes nothing) / Move… / Coming Soon / **Identify…** (*Correct fish…* on a named fish: the real fish, its size, or still unknown) / Edit (species, size, product, check-in date, supplier,
 order ref, landed cost, a note — a changed species or size is the same
-correction as Identify…), a *For sale now* and a *Needs identifying* filter, **Add fish
+correction as Identify…), a *For sale now*, a *Needs identifying* and a *No sale date* filter
+(and, from a Board card's links, *Tank N only* — `tank=N`, with every row an anchor `#fh-cr-stay-<id>`), **Add fish
 already here** (a small form above the table: the tank — every tank that holds fish,
 a temporary one with the kind it was set up as —, the fish, how many, the size and the
 three questions, an empty date being Unknown; it posts `fishotel_cleanroom_existing`,
@@ -2092,6 +2121,10 @@ clean-room/
 │                           invoice lines, the exact-name matching, "not matched", the sales beside
 │                           the landed cost (pure but for the statuses option and the cache flush)
 ├── class-species.php       PURE: a species row normalised, the merge into the candidate list
+├── class-board-lines.php   PURE: a tank's stays → the lines of its Board card — the order (name,
+│                           size, check-in), the same fish, size and state gathered, the day as a
+│                           number or a range, the foot's "Sale date not set" count, the quarantine
+│                           tank a group came out of; the phone's tank screen takes its order
 ├── class-orders.php        header / lines from a form, live figures of a line, the check-in
 │                           (takes the store as a parameter, like Front_Desk::perform())
 ├── class-xlsx.php          a dependency-free .xlsx writer (inline strings, never a formula)
@@ -2131,7 +2164,8 @@ clean-room/
 │          events.php, settings.php, import.php, tabs.php, labels.php, meta-box.php,
 │          identify-panel.php (the Identify… panel of the Stays tab and the order page),
 │          medications.php + medication-form.php (Settings → Medications),
-│          board-temp.php (the Board's Temporary area), todo.php (the To do tab),
+│          board-temp.php (the Board's Temporary area), board-lines.php (the lines of one tank
+│          card, rack or temporary), todo.php (the To do tab),
 │          temp-history.php (the setups taken down, or one in full), settings-temp.php (the slots),
 │          stats-nav.php + stats-head.php (the strip of Stats views), stats-compare.php,
 │          stats-species.php, stats-prices.php, stats-sales.php, settings-sales.php (the Sales

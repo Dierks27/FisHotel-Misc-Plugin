@@ -11,12 +11,14 @@
  * @var array[] $sizes    The standard sizes (slug, label).
  * @var string  $today    Site date.
  * @var string  $fh_species The Board's species filter.
+ * @var array   $origins  Admin::origins(): stay id => the quarantine tank a cleared group came out of.
  */
 
 defined( 'ABSPATH' ) || exit;
 
 use FisHotel\Misc\Sections\Clean_Room\Admin;
 use FisHotel\Misc\Sections\Clean_Room\Admin_Temp;
+use FisHotel\Misc\Sections\Clean_Room\Board_Lines;
 use FisHotel\Misc\Sections\Clean_Room\Clean_Room;
 use FisHotel\Misc\Sections\Clean_Room\Layout;
 use FisHotel\Misc\Sections\Clean_Room\Protocol;
@@ -153,6 +155,7 @@ foreach ( $temp['slots'] as $fh_slot ) {
 				}
 
 				$fh_occupants = (array) ( $fh_tank['occupants'] ?? array() );
+				$fh_card      = Board_Lines::card( $fh_occupants, $sizes ); // In order, the same fish gathered.
 				$fh_todo      = (array) ( $fh_tank['todo'] ?? array() );
 				$fh_due       = array_values( array_filter( $fh_todo, static function ( $i ) { return empty( $i['done'] ); } ) );
 				$fh_labels    = array_values( array_unique( array_map( static function ( $i ) { return (string) $i['label']; }, $fh_due ) ) );
@@ -191,19 +194,10 @@ foreach ( $temp['slots'] as $fh_slot ) {
 					<?php endif; ?>
 
 					<?php if ( $fh_occupants ) : ?>
-						<ul class="fh-cr-tank__list">
-							<?php foreach ( $fh_occupants as $fh_stay ) : ?>
-								<li class="<?php echo ( '' !== $fh_species && Admin::matches_species( $fh_stay, $fh_species ) ) ? 'is-hit' : ''; ?><?php echo ! empty( $fh_stay['needs_id'] ) ? ' is-unknown' : ''; ?>">
-									<span class="fh-cr-tank__species"><?php echo esc_html( $fh_stay['species'] ); ?></span>
-									<?php echo Admin::size_html( $fh_stay, $sizes ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by size_html(). ?>
-									· <?php echo esc_html( $fh_stay['qty_live'] ); ?>
-									<?php if ( '' !== Admin::day_text( $fh_stay, true ) ) : ?>
-										· <?php echo esc_html( Admin::day_text( $fh_stay, true ) ); ?>
-									<?php endif; ?>
-									<?php echo Admin::badge_html( $fh_stay ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by badge_html(). ?>
-								</li>
-							<?php endforeach; ?>
-						</ul>
+						<?php
+						$fh_qt = true; // The fish's own day, beside the tank's.
+						include Clean_Room::path() . 'views/board-lines.php';
+						?>
 					<?php else : ?>
 						<p class="fh-cr-tank__empty"><?php esc_html_e( 'no fish in it', 'fishotel-misc-plugin' ); ?></p>
 					<?php endif; ?>
@@ -228,6 +222,9 @@ foreach ( $temp['slots'] as $fh_slot ) {
 								echo esc_html( __( 'last dose:', 'fishotel-misc-plugin' ) . ' ' . implode( ' · ', $fh_parts ) );
 								?>
 							</span>
+						<?php endif; ?>
+						<?php if ( $fh_card['no_sale'] > 0 ) : ?>
+							<a class="fh-cr-tank__nosale" href="<?php echo esc_url( Admin::tank_stays_url( (int) $fh_tank['number'], true ) ); ?>"><?php echo esc_html( sprintf( /* translators: %d: groups in this tank without a sale date */ __( 'Sale date not set: %d', 'fishotel-misc-plugin' ), $fh_card['no_sale'] ) ); ?> &rarr;</a>
 						<?php endif; ?>
 						<a class="fh-cr-tank__link" href="<?php echo esc_url( Clean_Room::front_desk_url( (int) $fh_tank['number'] ) ); ?>" target="_blank" rel="noopener"><?php esc_html_e( 'Front Desk', 'fishotel-misc-plugin' ); ?> &rarr;</a>
 					</div>
