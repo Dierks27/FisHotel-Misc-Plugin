@@ -809,7 +809,7 @@
 			$(this).closest('.fh-cr-split__part').next('.fh-cr-split__part').find('.fh-cr-split__qty').trigger('focus').trigger('select');
 		});
 
-		// The counts move: the running "placed" follows, and an offered "1 per tank" lays itself out again.
+		// The counts move: the running "placed" follows, and a proposal that is still only a proposal is drawn again.
 		$order.on('input change', 'tr.fh-cr-line input[name$="[qty_received]"], tr.fh-cr-line input[name$="[qty_doa]"]', function () {
 			var $row = $(this).closest('tr.fh-cr-line');
 			var $panel = panelOf($row);
@@ -845,9 +845,9 @@
 		});
 
 		/*
-		 * A fish that was split last time: its line offers the split, opened.
-		 * Only in the Entry view — a plan the owner has not had in front of
-		 * them is never written into the field.
+		 * A fish that was split last time: its line offers the split, opened
+		 * — a proposal (propose()), and only in the Entry view. Nothing is
+		 * written into the line's field by drawing it.
 		 */
 		function offerSplits() {
 			offered = true;

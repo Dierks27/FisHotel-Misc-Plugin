@@ -33,11 +33,13 @@
  * smaller quantity).
  *
  * THE MEMORY. Per fish, whether its last order line was split at its
- * check-in — and whether that was one fish per tank. The next time that
- * fish is on an order, its line offers the split opened (with "1 per
- * tank" laid out once the received count is there). It is an OFFER the
- * owner sees under the line and can remove with one click: nothing is
- * ever split without having been shown. Nothing is seeded.
+ * check-in — and whether that was one fish per tank, and then over how
+ * many tanks. The next time that fish is on an order, its line offers
+ * the split opened — as a PROPOSAL: the page draws the rows (for a fish
+ * that went one per tank, "1 per tank" for no more fish than last time)
+ * and writes nothing into the line's field until the owner presses "Use
+ * this split" or changes a row. A proposal nobody pressed is no plan:
+ * Save and Check in keep the group together. Nothing is seeded.
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  */

@@ -772,12 +772,16 @@ tabs above it:
   (bag mode: Bags in place of Box # and % of box). The number boxes are
   as narrow as their numbers and the table has fixed widths, the fish
   taking what is left: a whole row fits a 1280-px window without
-  sideways scrolling, and a 1024-px one too (the scientific name then
-  moves behind *More columns*). **More columns** — a small switch in
+  sideways scrolling, and a 1024-px one too (also a 1280-px window
+  zoomed to 125%: the scientific name then gives up its column and
+  **reads under the fish** — never out of sight —, its field behind
+  *More columns*). **More columns** — a small switch in
   Entry's head — adds what is rarely typed: fish per box, the survivors
   of an order that was never checked in, and the supplier's **code**
   (kept in the line's notes as `[code …]`, where an import writes it;
-  the field edits it there). **Received: all as ordered** sits in
+  the field edits it there). The switch is remembered, so a row **still
+  fits 1280 px with it on** (the other columns tighten); only on a
+  narrower window does the table then scroll. **Received: all as ordered** sits in
   Entry's head too. **Enter goes down a column** in every number box and
   never saves by accident; **Tab goes down** the receiving columns —
   Received, then DOA, Box #, % of box (or Bags) — while Tab in Ordered
@@ -817,36 +821,54 @@ cost." So "Worth $" is no longer typed. What a line's fish sells for is
 **read** (`class-shop-price.php`), in this order:
 
 1. the line's **product** — the one its species-list row is linked to,
-   else the ONE fish product named exactly like the line: its current
+   else the ONE fish product named exactly like the line: its **regular**
    price. A product with variations answers with the variation of the
    line's **size** when exactly one price fits it, else with its lowest
-   price;
+   regular price. A product in the trash has no price;
 2. else the **species list's** own price;
 3. else nothing.
 
-It is the same number *Stats → Prices to raise* shows
-(`Stats_Prices::fish_price()`, the product's active price read straight
-from the product tables), read again **every time the order is
-resolved** — the page, the Arrivals list, the Stats and the exports all
-see today's price — and never stored. Numbers shows it with where it
-came from in its tooltip. The **pencil** beside it types a price of the
-owner's own for that line ("I sometimes plan a new price"): that is the
-line's `worth` column, which now holds *only* such an override — it wins
-over the shop's price until the field is emptied again, and the tooltip
-then says both. A typed 0 is a price too.
+The rule is the one *Stats → Prices to raise* uses
+(`Stats_Prices::fish_price()`, read straight from the product tables) —
+but where that view shows the *active* price, an order is judged by the
+**regular** one: a week's sale must not turn "Worth it?" over.
+
+**While an order is open** the price is read again **every time the
+order is resolved** — the page, the Arrivals list, the Stats and the
+exports all see today's price — and nothing is stored. Numbers shows it
+with where it came from in its tooltip. The **pencil** beside it types a
+price of the owner's own for that line ("I sometimes plan a new price"):
+that is the line's `worth` column — it wins over the shop's price until
+the field is emptied again, and the tooltip then says both. Only a price
+above 0 is a price: a 0 (typed to clear the field, or an empty "worth"
+cell of the workbook that came in as 0) says nothing.
+
+**A closed order is frozen.** The save that sets an order to *closed*
+writes the price read at that moment on every line that has none of its
+own (`Shop_Price::freeze()`), and a closed order is never read for
+again: its profit and revenue, and the past years of the Stats, stay
+what they were when the shop's prices move. A closed line the shop had
+no price for stays "no shop price"; history that was closed without a
+price is not priced by today's shop either. Reopened, the lines keep the
+prices they were closed with as typed prices the owner can empty.
 
 A line with **no shop price** — no product, no list price, nothing typed
 — says **"no shop price yet"** in its shop price, profit, margin and
 Worth it? cells: never "No", never −100%. It is not a fish that sells
 for nothing, so it is left out of the order's revenue and of "up or
 down" (which then compares the revenue with what the *priced* lines
-cost), and the panel says how many lines that is. An order whose lines
+cost), and the panel says how many lines that is. **The Stats count the
+same way** — an order's row, the totals, by supplier, by origin, by
+group and by species all compare the revenue with what the priced lines
+cost, and the totals say how many lines have no shop price and what they
+cost —, so the Stats, the order page, the Arrivals list and the export
+give one figure. An order whose lines
 all carry a typed worth — as the workbook's orders do wherever the sheet
 had a FisHotel price — is costed **to the cent as before**:
 `tests/shop-price-test.php` holds it to the worked example of
-`tests/costing-test.php`. A line that never had one (an old order's
-blank cell) now reads the shop's price like any other, so its estimate
-is no longer "sold for nothing".
+`tests/costing-test.php`. A line of an OPEN order that never had one (a
+blank cell) reads the shop's price like any other, so its estimate is no
+longer "sold for nothing".
 
 ### Split
 
@@ -884,7 +906,13 @@ arrival and its move. Nothing new is written, so the replay, Undo (each
 split is three events, undone like any move) and the Stats need nothing
 new; a second click still creates nothing. A part whose tank no longer
 takes arrivals, or that would take the last fish out of the first tank,
-is skipped and said — those fish stay where they are. A line that
+is skipped and said — those fish stay where they are. Every tank a split
+was planned into (and a tank typed on a line) is **taken before the
+first line looks for an empty one**: a line left on "auto" never lands
+in a tank a later line was planned into while empty tanks stand beside
+it. The arrival of a split line is not undone on its own — its splits
+are undone first, or the fish that moved on would be left as stays of a
+line that never arrived. A line that
 **already is a stay** cannot be split from the order page: a plan posted
 for it (a page loaded before the check-in) is refused plainly — "that
 line is already checked in: split the group from its tank instead (Move,
@@ -900,16 +928,23 @@ stay only, so a group split by hand on the phone stopped counting the
 half that moved away.)
 
 **The site remembers per fish** whether its last order line was split at
-its check-in, and whether that was one per tank — under its species-list
-row and under its name, in the same option; nothing is seeded, and a
-fish checked in together again is forgotten. The next time that fish is
-on an order its line **offers the split, opened**: for a fish that went
-one per tank, "1 per tank" is laid out as soon as the received count is
-there; for one that was split some other way the rows are left to the
-owner. It is an offer the owner sees under the line and removes with
-*Keep together* (which that line then remembers); it is only ever laid
-out in the Entry view, never written into a field nobody is looking at,
-and a fish that still has to be identified is never remembered.
+its check-in, whether that was one per tank and over how many tanks —
+under its species-list row and under its name, in the same option;
+nothing is seeded, and a fish checked in together again is forgotten.
+The next time that fish is on an order its line **offers the split,
+opened — as a proposal**: the rows are drawn dashed under the line and
+the line's field stays EMPTY, so Save and Check in keep the group
+together until the owner presses **Use this split** (or changes a row,
+which makes it theirs). For a fish that went one per tank, "1 per tank"
+is laid out in the proposal only for **as many fish as went one per tank
+last time** — three butterflies last time never lay out a line of 93;
+such a line says so and leaves the rows to the owner, as does a fish
+that was split some other way. *Keep together* removes the offer (which
+that line then remembers); it is only ever drawn in the Entry view, and
+a fish that still has to be identified is never remembered. A save from
+a page that has no split field at all (a tab opened before Split
+existed) leaves a plan made elsewhere alone; an emptied field takes it
+away.
 
 **Goes on sale** — a card at the top of a saved order: the day every
 group checked in from this order goes on sale (see *Sale dates*).
@@ -958,14 +993,21 @@ anything in.
 
 "I have to fill out a spreadsheet for my order. So I will simply upload
 that. But the problem is I only get like 70% of my order." Two big
-buttons; the one that fits the order's status is on.
+buttons; the one that fits the order is on: *ARRIVED* once the order is
+received or closed — and already for a **saved order that is ordered and
+has ordered lines**, because the next file that comes for it is the
+invoice. A sheet of received counts read as *ORDERED* has no order
+quantity anywhere: the preview says so and offers the other button
+("this looks like what ARRIVED").
 
 - **This is what I ORDERED** — the owner's own order sheet, the day it
   is sent. That sheet is usually the supplier's *whole price list* with
   an ORDER column filled in: 300 to 1,200 rows, 20 to 80 of them
   ordered, a few title and address rows above the header. So the header
-  row is *found* (the first row within the first 30 with two or more
-  recognised headings), a column headed "order" is the ordered quantity
+  row is *found*: of the first 30 rows the one with the MOST recognised
+  headings — a row with a fish and a quantity before one without —, so
+  a letterhead line ("Customer Name: … Order No: …") is never taken for
+  it; a column headed "order" is the ordered quantity
   and "stock" is **never** taken for one, and **only the rows with an
   order quantity above 0 become lines** — the preview says "61 of 1,188
   rows have an order quantity". Every row becomes a line with its
@@ -978,9 +1020,16 @@ buttons; the one that fits the order's status is on.
 - **This is what ARRIVED** — the supplier's invoice or packing list when
   the boxes land. Every row is **paired with a line already on the
   order**: as the owner says (a pairing made by hand wins), else by the
-  supplier's **code** when the row and a line both carry one, else by
+  supplier's **code** when the row and a line both carry one ("0059" on
+  the sheet and 59 on the invoice are one code), else by
   fish — the same name, the same species-list fish, or what the line was
-  written as — and then by size when both have one. The preview is a
+  written as — and then by size when both have one. Two things are never
+  decided silently: a row that IS another line's fish goes to that line
+  whatever its code says, with a note to check it; and a row without a
+  size against lines of two sizes (and none without) is paired with
+  neither — it waits among the extras, naming the lines it could be. An
+  invoice's code is kept on a line that had none, so the next invoice
+  pairs by it. The preview is a
   reconciliation in four groups:
   - **Came as ordered**;
   - **Came short / over** — "ordered 12 · arrived 8";
@@ -998,7 +1047,9 @@ buttons; the one that fits the order's status is on.
   the paired lines, and the price, the DOA count, the box number and the
   percent of a box when the file has them **and the line's own field is
   still empty** — a typed price is never overwritten without the tick
-  *use the file's price* — and appends the extras. A row whose line is
+  *use the file's price*, offered when a price differs by a cent or more
+  (a price list's 0.2291666 and the invoice's 0.23 are one price) — and
+  appends the extras. A row whose line is
   already checked in is set aside and said so. The same fish in two
   boxes is two rows: added up on the one ordered line (the boxes noted),
   or kept as separate lines at the owner's choice.
@@ -1021,21 +1072,30 @@ already knows them, so rows copied straight out of that sheet map too.
 
 With no header row, or a header nobody recognises, the preview shows
 the first rows with a dropdown above each column — pre-guessed: the
-wordy column is the fish, the first whole-number column the quantity, a
+wordy column is the fish, the first whole-number column the quantity (a
+column that only counts 1, 2, 3 … is the sheet's row number, not one), a
 decimal column the price — and **nothing can be imported until a fish
-column and one quantity column are chosen**.
+column and one quantity column are chosen**. A packing list that names
+its fish by **scientific name alone** has its fish column there: the
+scientific name stands in, and is matched exactly.
 
 Numbers: currency signs, thousands separators ("1,234.50") and a
 trailing "ea" are tolerated; **a decimal comma is not assumed** — "6,50"
 is flagged on its cell and left empty; a cell that looks like a formula
 ("=…", "+…", "@…") is text, never a number. Left out, counted and
 listed: blank rows, a repeated header row, totals lines, section
-headings ("FISH", "INVERTS", "BOX NO 3 — …") and fee lines.
+headings ("FISH", "INVERTS", "BOX NO 3 — …") and fee lines — under
+whichever heading a fee's words stand (an invoice writes "Freight (kg)"
+in any column). A row that carries a supplier's code, or a scientific
+name beside its fish, is a fish whatever its name says: it stays, with a
+flag when its name holds a word fee lines use. Words a fish's own name
+may carry ("CITES", "Pallet") are no fee words.
 
 **Sizes are inside the names** — "(L) (10-14 CM)", "M (6-9,5 cm)",
 "- S", "S/M", "LG/XL", or a size column of its own. A size is lifted out
 into the line's Size **only when it is one of the standard sizes**
-(*Sizes*); otherwise the name stays exactly as typed. "Mated Pair",
+(*Sizes*) — the last size word of the name counts, so "… (INV) M" is a
+Medium —; otherwise the name stays exactly as typed. "Mated Pair",
 "male", "female", "NEW", "RARE" and "(INV)" are no sizes and are never
 dropped from the name.
 
@@ -1060,6 +1120,9 @@ What is kept of a row:
   carries the same code, which is how a row finds its ordered line.
 - **The name as written** — `[as written: …]` in the notes whenever the
   line reads differently (a matched fish, a lifted size).
+- **No worth.** The shop price of an imported line is read like any
+  other line's (*The shop price is read*); only a "worth" column of the
+  file's own — the owner's workbook sheet has one — is a typed price.
 - **What the label said** (`label_name`, *Unknown and mislabeled fish*)
   — only when it says something about a mislabel: the file's own
   "label" column names another fish than the line, or — for fish that
@@ -1097,7 +1160,9 @@ A layout that fits only partly — the sheet gained or lost a column — is
 applied to the columns that still fit, says which did not, and offers to
 update the saved layout. Two suppliers whose sheets have the same
 headings each keep their own; a file without headings can only be
-recognised through the order's supplier. *Settings → Saved import
+recognised through the order's supplier — by its width alone, so its
+columns are always shown for a look ("this sheet has no headings, so the
+columns go by their position: check them"). *Settings → Saved import
 layouts* lists them (supplier · ordered / arrived · the columns in words
 · last used) with **Forget**. Nothing is seeded. They live in one option
 (`fishotel_cleanroom_import_layouts`, not autoloaded): at most 40
@@ -1109,7 +1174,8 @@ An invoice is a PDF, often a scan with handwriting and an air waybill in
 front — the site cannot read it. The panel beside the box has **Copy the
 instructions**: a short, plain text the owner pastes into a chat
 assistant together with the invoice. It asks for one tab-separated
-block, one row per fish kind per box, with exactly this header:
+block — inside a code block, so the tabs survive the copying —, one row
+per fish kind per box, with exactly this header:
 
 `fish, scientific name, size, ordered, received, price, DOA, box, percent, label, code, origin, check`
 
@@ -1123,6 +1189,14 @@ everything that is not a fish:
 `fee, amount, origin`
 
 with the invoice's own "Livestock subtotal" and "Invoice total" rows.
+
+What comes back is read generously: the lines of a code fence go; an
+answer drawn as a **Markdown table** (`| fish | … |`) is read cell by
+cell; columns set apart by runs of spaces are read when every row is as
+wide as the header — and NOT otherwise, because a blank cell leaves no
+trace there and a number must never slide into its neighbour's column:
+such a text is said to have **run together**, with what to ask for
+instead. Whatever is written after the fee table is not a fee.
 
 **Fee lines are never fish lines.** For the sections chosen, the arrived
 preview shows "Fees on this invoice: tariffs … · everything else …" with
@@ -1173,8 +1247,11 @@ last line to the top of DOA — see *The order page: Entry and Numbers*.
 - The order form's lines travel as **one JSON field** (`lines_json`):
   an order of 150 fish is some 2,500 form fields, more than PHP reads by
   default (`max_input_vars`), and a Save that lost its last lines would
-  delete them. An order holds at most 400 lines; an import that would
-  not fit is refused whole.
+  delete them. A `lines_json` the server cannot read (half an emoji in a
+  name — the page replaces such a half character before it packs the
+  lines) is **never** taken for an order without lines: the save, and an
+  import, are refused and no line is touched. An order holds at most 400
+  lines; an import that would not fit is refused whole.
 
 ## Sale dates
 
