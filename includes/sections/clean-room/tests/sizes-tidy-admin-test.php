@@ -189,6 +189,15 @@ $moved = fh_tidy_click( array( 'op' => 'preview', 'instock' => 'move' ) );
 check( '"move": a dropdown per fish, pre-filled with nothing', 1 === preg_match( '/name="move\[' . $shop->vids( $ids['Golden Wrasse'] )[0] . '\]">\s*<option value="">— leave as it is —<\/option>/', (string) $moved->data['html'] ) && false === strpos( (string) $moved->data['html'], 'selected="selected">Medium</option>
 								</select>' ) );
 check( '…and moving no fish is the same plan as leaving them', $moved->data['token'] === $reply->data['token'] );
+// A pick that lands on a size the fish already sells: the fish goes to "Two become one" — and its pick with it.
+$wr      = $shop->vids( $ids['Golden Wrasse'] );
+$clash   = fh_tidy_click( array( 'op' => 'preview', 'instock' => 'move', 'move' => array( $wr[0] => 'large' ) ) );
+$clashed = (string) $clash->data['html'];
+check( 'a pick that lands on a size the fish already sells: the fish needs a look, and its pick stays on the page — once, in that box, Large selected', 1 === substr_count( $clashed, 'name="move[' . $wr[0] . ']"' ) && 1 === preg_match( '/class="fh-tidy__moved">.*?you picked Large for it — a size this fish already sells.*?name="move\[' . $wr[0] . '\]">.*?<option value="large"\s+selected="selected">Large<\/option>/s', $clashed ), substr( $clashed, (int) strpos( $clashed, 'fh-tidy__moved' ), 900 ) );
+$gk      = array_keys( Sizes_Tidy::plan( $shop->read_shop( 'pa_size' ), array( 'instock' => 'move', 'move' => array( $wr[0] => 'large' ) ) )['two'][ $ids['Golden Wrasse'] ]['groups'] )[0];
+$solved  = fh_tidy_click( array( 'op' => 'preview', 'instock' => 'move', 'move' => array( $wr[0] => 'large' ), 'keep_one' => array( $ids['Golden Wrasse'] => array( $gk => $wr[1] ) ) ) );
+check( '…the one to keep picked and shown again: still there, once — so the next click sends the same choices and the token holds', 1 === substr_count( (string) $solved->data['html'], 'name="move[' . $wr[0] . ']"' ) && $solved->data['token'] !== $clash->data['token'] && false !== strpos( (string) $solved->data['html'], 'Golden Wrasse</a> — Medium-Large → Large, switched off' ) );
+check( 'a fish that simply moves is listed among the fish for sale, with its one dropdown, and nowhere else', 1 === substr_count( (string) fh_tidy_click( array( 'op' => 'preview', 'instock' => 'move', 'move' => array( $wr[0] => 'medium' ) ) )->data['html'], 'name="move[' . $wr[0] . ']"' ) );
 $kept = fh_tidy_click( array( 'op' => 'preview', 'keep_plus' => '1' ) );
 check( '"keep every and-up size": those rows show "keep as it is"', false !== strpos( (string) $kept->data['html'], 'data-key="g:3" data-shown="keep"' ) && $kept->data['token'] !== $reply->data['token'] );
 $own = fh_tidy_click( array( 'op' => 'preview', 'over' => array( 'g:3-5' => 'to:4-5' ) ) );

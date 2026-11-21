@@ -234,6 +234,12 @@ check_same( '"move them to a size I pick": the one with a size picked moves', ar
 check( '…one without a pick (or with a size that is not in the list) is left as it is', ! isset( $move['products'][ $ids['Harlequin Tusk'] ] ) && array( 'large-xl' => 'Large-XL' ) === $move['retiring'] );
 $move = Sizes_Tidy::plan( $data, array( 'instock' => 'move', 'move' => array( $wrasse[0] => 'large' ) ) );
 check( 'a fish moved onto a size its product already sells: two become one, the product waits', isset( $move['two'][ $ids['Golden Wrasse'] ] ) && ! $move['two'][ $ids['Golden Wrasse'] ]['resolved'] && ! isset( $move['products'][ $ids['Golden Wrasse'] ] ) );
+$members = array_values( $move['two'][ $ids['Golden Wrasse'] ]['groups'] )[0]['members'];
+check_same( '…the plan marks which of the two is there by the owner\'s pick (the page has to carry that pick along)', array( $wrasse[0] => true, $wrasse[1] => false ), array_column( $members, 'moved', 'id' ) );
+$gkey = array_keys( $move['two'][ $ids['Golden Wrasse'] ]['groups'] )[0];
+$both = Sizes_Tidy::plan( $data, array( 'instock' => 'move', 'move' => array( $wrasse[0] => 'large' ), 'keep_one' => array( $ids['Golden Wrasse'] => array( $gkey => $wrasse[1] ) ) ) );
+check_same( '…with the one to keep picked — the Large it sold already — the moved one becomes Large too and is switched off, kept', array( true, array( 'from' => 'medium-large', 'to' => 'large', 'off' => true, 'why' => 'dupe_off' ) ), array( $both['two'][ $ids['Golden Wrasse'] ]['resolved'], $both['products'][ $ids['Golden Wrasse'] ]['vars'][ $wrasse[0] ] ) );
+check( '…and without the pick the same "keep one" means nothing: there is no clash to resolve', ! isset( Sizes_Tidy::plan( $data, array( 'instock' => 'move', 'keep_one' => array( $ids['Golden Wrasse'] => array( $gkey => $wrasse[1] ) ) ) )['two'][ $ids['Golden Wrasse'] ] ) );
 check_same( 'a wrong choice for the fish in stock falls back to "leave"', 'leave', Sizes_Tidy::plan( $data, array( 'instock' => 'sell' ) )['instock'] );
 
 echo "8. Two become one, resolved by keeping one\n";

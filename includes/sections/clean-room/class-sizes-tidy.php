@@ -858,6 +858,8 @@ class Sizes_Tidy {
 							'from'       => $next[ $vid ]['from'],
 							'from_label' => isset( $labels[ $next[ $vid ]['from'] ] ) ? $labels[ $next[ $vid ]['from'] ] : $next[ $vid ]['from'],
 							'picked'     => $group['picked'] === $vid,
+							// Here because the owner picked, for this fish for sale, a size its product already sells.
+							'moved'      => 'move' === $next[ $vid ]['why'],
 						);
 					}
 					$view['groups'][ $gkey ] = array(

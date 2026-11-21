@@ -27,11 +27,13 @@ $fh_off_out = array();
 $fh_off_hid = array();
 $fh_sale    = array();
 $fh_dupes   = array();
+$fh_listed  = array();
 foreach ( $plan['changes'] as $fh_change ) {
 	$fh_key                 = 'convert' === $fh_change['why'] ? 't:' . Sizes::slug( $fh_change['from'] ) : 'g:' . $fh_change['from'];
 	$fh_by_row[ $fh_key ][] = $fh_change;
 	if ( in_array( $fh_change['why'], array( 'left', 'off_now', 'move' ), true ) ) {
-		$fh_sale[] = $fh_change;
+		$fh_sale[]                             = $fh_change;
+		$fh_listed[ (int) $fh_change['id'] ] = true;
 	} elseif ( 'off_out' === $fh_change['why'] && empty( $fh_change['out'] ) ) {
 		// Not out of stock: nobody can buy it because its product is not on the shop (a draft), or it is switched off.
 		$fh_off_hid[] = $fh_change;
@@ -300,6 +302,11 @@ $fh_item = static function ( array $change ) use ( $fh_mark ) {
 	</div>
 <?php endif; ?>
 
+<?php if ( ! $fh_sale && Sizes_Tidy::IN_STOCK_MOVE === $plan['instock'] ) : ?>
+	<?php // No fish for sale is listed above, so its three choices are not on the page: a size picked for a fish (below) still counts. ?>
+	<input type="hidden" name="instock" value="<?php echo esc_attr( Sizes_Tidy::IN_STOCK_MOVE ); ?>">
+<?php endif; ?>
+
 <?php if ( $plan['two'] ) : ?>
 	<div class="fh-tidy__box">
 		<h4 class="fh-tidy__h4">
@@ -337,6 +344,29 @@ $fh_item = static function ( array $change ) use ( $fh_mark ) {
 								echo esc_html( sprintf( __( 'Keep the one that is %1$s today — %2$s · %3$s · SKU %4$s%5$s', 'fishotel-misc-plugin' ), $fh_member['from_label'], Admin_Sizes_Tidy::money( $fh_member['price'] ), $fh_member['stock_text'], '' !== $fh_member['sku'] ? $fh_member['sku'] : '—', $fh_member['on'] ? '' : ' · ' . __( 'already switched off', 'fishotel-misc-plugin' ) ) );
 								?>
 							</label><br>
+						<?php endforeach; ?>
+						<?php foreach ( $fh_group['members'] as $fh_member ) : ?>
+							<?php
+							// A fish for sale that the owner moved onto a size its product already sells is listed here, not
+							// among the fish for sale — its pick comes along, or the next preview would forget it.
+							if ( empty( $fh_member['moved'] ) || isset( $fh_listed[ (int) $fh_member['id'] ] ) ) {
+								continue;
+							}
+							?>
+							<p class="fh-tidy__moved">
+								<label for="<?php echo esc_attr( 'fh-tidy-move-' . $fh_member['id'] ); ?>">
+									<?php
+									/* translators: 1: the size the variation has today, 2: the size picked for it */
+									echo esc_html( sprintf( __( 'The one that is %1$s today is for sale, and you picked %2$s for it — a size this fish already sells. Keep one of the two above, or change the pick:', 'fishotel-misc-plugin' ), $fh_member['from_label'], $fh_group['to_label'] ) );
+									?>
+								</label>
+								<select id="<?php echo esc_attr( 'fh-tidy-move-' . $fh_member['id'] ); ?>" class="fh-cr-input fh-tidy__move" name="<?php echo esc_attr( 'move[' . $fh_member['id'] . ']' ); ?>">
+									<option value=""><?php esc_html_e( '— leave as it is —', 'fishotel-misc-plugin' ); ?></option>
+									<?php foreach ( $plan['short'] as $fh_size ) : ?>
+										<option value="<?php echo esc_attr( $fh_size['slug'] ); ?>" <?php selected( $fh_group['to'], $fh_size['slug'] ); ?>><?php echo esc_html( $fh_size['label'] ); ?></option>
+									<?php endforeach; ?>
+								</select>
+							</p>
 						<?php endforeach; ?>
 					</fieldset>
 				<?php endforeach; ?>

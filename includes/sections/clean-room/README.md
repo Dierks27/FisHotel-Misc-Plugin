@@ -1094,7 +1094,10 @@ its buttons do anything.
    until they sell out** (the default — the size stays in the shop,
    *retiring — N fish left*, until a later run or **Finish retiring…**
    takes it off; nothing does so by itself), **move them to a size I
-   pick** (a dropdown per fish), or **take them off the shop now**. A
+   pick** (a dropdown per fish — a pick that lands on a size the fish
+   already sells makes it a fish that needs a look, and the pick is
+   shown in that box, where it can be changed or the one to keep
+   picked), or **take them off the shop now**. A
    fish that lost a size goes on the **Sizes to fill in** list of
    Settings → Sizes, with a link to its product, until the variation is
    given a size again (or the row is ticked off).

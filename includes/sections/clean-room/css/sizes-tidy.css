@@ -98,6 +98,15 @@
 	border: 0;
 }
 
+.fh-tidy .fh-tidy__moved {
+	margin: 6px 0 0;
+}
+
+.fh-tidy .fh-tidy__moved select {
+	min-width: 11em;
+	margin-left: 4px;
+}
+
 .fh-tidy .fh-tidy__pick legend {
 	padding: 0;
 	font-weight: 600;
