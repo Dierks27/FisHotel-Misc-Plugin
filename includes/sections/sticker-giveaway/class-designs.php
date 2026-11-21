@@ -99,12 +99,16 @@ class Designs {
 			return true;
 		}
 
-		$parent = wc_get_product( $variation->get_parent_id() );
-		if ( ! $parent instanceof \WC_Product ) {
-			return false;
+		// Asked on every totals pass for every sticker line: read the product once a request.
+		static $known = array();
+		$id           = (int) $variation->get_id();
+
+		if ( ! isset( $known[ $id ] ) ) {
+			$parent       = wc_get_product( $variation->get_parent_id() );
+			$known[ $id ] = $parent instanceof \WC_Product && Rules::variation_is_fixed( self::attribute_keys( $parent ), (array) $variation->get_variation_attributes() );
 		}
 
-		return Rules::variation_is_fixed( self::attribute_keys( $parent ), (array) $variation->get_variation_attributes() );
+		return $known[ $id ];
 	}
 
 	/**
