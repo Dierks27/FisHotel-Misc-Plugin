@@ -84,7 +84,7 @@ $eligible_slugs = \FisHotel\Misc\Sections\Sticker_Giveaway\Rules::eligible_slugs
 					<h2 class="fishotel-misc-card-title"><?php esc_html_e( 'Stickers in stock', 'fishotel-misc-plugin' ); ?></h2>
 				</div>
 				<p class="fishotel-misc-card-desc">
-					<?php esc_html_e( 'The number on each row IS the stock number on the product\'s own page in WooCommerce. Shop sales and giveaway stickers both come out of it, and WooCommerce counts it down when an order is placed. Nothing is counted separately here.', 'fishotel-misc-plugin' ); ?>
+					<?php esc_html_e( 'The number on each row IS the stock number on the product\'s own page in WooCommerce. Shop sales and giveaway stickers both come out of it, and WooCommerce counts it down with every order, as for any product. Nothing is counted separately here.', 'fishotel-misc-plugin' ); ?>
 				</p>
 				<input type="hidden" name="stock_table" value="1">
 

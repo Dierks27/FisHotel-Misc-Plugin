@@ -338,6 +338,7 @@ Everything is saved by **Save Settings** except *Add stickers* and
 php includes/sections/sticker-giveaway/tests/rules-test.php
 php includes/sections/sticker-giveaway/tests/designs-test.php
 php includes/sections/sticker-giveaway/tests/stock-test.php
+php includes/sections/sticker-giveaway/tests/cart-stock-test.php
 php includes/sections/sticker-giveaway/tests/reorder-test.php
 php includes/sections/sticker-giveaway/tests/category-warning-test.php
 ```
@@ -353,6 +354,11 @@ php includes/sections/sticker-giveaway/tests/category-warning-test.php
   backorders, the product managing stock for its variations), what fits
   beside the other lines of the same count and which line gives way, the
   status, and the email armed, sent and armed again.
+- `cart-stock-test` — the cart class on stand-ins for WooCommerce's cart
+  and products: a variation design added as a variation line, and the
+  sticker line giving way on a totals pass and just before WooCommerce's
+  own cart check (stock run out, a normal purchase of the same design,
+  stock held for an unpaid order).
 - `reorder-test` — the sentences (what is left, the Today line, the email,
   the answers to a typed count, why a design is not offered, the preset
   warning), and a stock change played through stand-ins for WooCommerce's
