@@ -275,3 +275,15 @@
 	width: auto;
 	max-width: 100%;
 }
+
+/* A sheet of received counts under "This is what I ORDERED": the other button, one press away. */
+.fh-cr-import__switch .button {
+	margin-left: 6px;
+	vertical-align: baseline;
+}
+
+/* A row that could be one of two lines (no size on the row): said under its pairing dropdown. */
+.fh-cr-import__could {
+	display: block;
+	margin-top: 4px;
+}

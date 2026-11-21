@@ -330,7 +330,7 @@ check_same( '… with nothing ordered there is no percent, and with nothing miss
 $sep = OI::reconcile( $came, $order, array( 'same_fish' => 'separate' ) );
 check( 'the same fish in two boxes, kept as two lines at the owner\'s choice: the first row fills the ordered line, the second is an extra', array( 11 ) === $sep['lines']['1']['rows'] && 6 === $sep['lines']['1']['arrived'] && array( 12, 14 ) === $sep['extra'] );
 $hand = OI::reconcile( $came, $order, array( 'pairs' => array( 14 => 'instead:3', 13 => 'new', 10 => 'line:2' ), 'lines' => array( '5' => 'zero', '3' => 'zero' ) ) );
-check( 'a substitution paired by hand: the row is an extra "instead of" the ordered line, which stays at 0', array( 'row' => 14, 'arrived' => 7, 'instead' => '3' ) === $hand['groups']['extra'][1] && 0 === $hand['lines']['3']['arrived'] );
+check( 'a substitution paired by hand: the row is an extra "instead of" the ordered line, which stays at 0', array( 'row' => 14, 'arrived' => 7, 'instead' => '3', 'could' => array() ) === $hand['groups']['extra'][1] && 0 === $hand['lines']['3']['arrived'] );
 check( 'an owner-corrected pairing wins over the matcher\'s; "a new line" takes a row away from its line', array( 10 ) === $hand['lines']['2']['rows'] && 'hand' === $hand['lines']['2']['how'] && in_array( 13, $hand['extra'], true ) && 0 === $hand['lines']['0']['arrived'] );
 check( 'a line the owner says did not come goes to 0 even when it held a count', 0 === $hand['lines']['5']['arrived'] );
 check( 'never ordered and nothing matched (an extra of an earlier import): left alone', ! isset( OI::reconcile( array(), array( $line( 0, 'Old Extra', 0, array( 'qty_received' => 3 ) ), $line( 1, 'Never Came', 0 ) ) )['lines']['0'] ) && ! isset( OI::reconcile( array(), array( $line( 1, 'Never Came', 0 ) ) )['lines']['1'] ) );
@@ -349,5 +349,112 @@ check_same( '… fish, scientific name, size, ordered, received, price, DOA, box
 check( '… and the importer maps its own header without a dropdown', OI::map_complete( OI::roles_of_row( OI::BLOCK_HEADER ) ) && count( OI::BLOCK_HEADER ) === count( OI::roles_of_row( OI::BLOCK_HEADER ) ) );
 check( 'it covers what these invoices hold: several boxes, the origin, waybill pages, hand-written amounts, collided cells, the fees and the subtotal; nothing invented, no totals', 1 === preg_match( '/BOX NO 3/', $text ) && false !== stripos( $text, 'air waybill' ) && false !== stripos( $text, 'hand-written' ) && false !== stripos( $text, 'ran into the cell' ) && false !== stripos( $text, 'Never invent' ) && false !== stripos( $text, 'No totals' ) && false !== stripos( $text, 'Livestock subtotal' ) && false !== stripos( $text, 'two boxes is two rows' ) );
 check( 'it names no product and no model', 0 === preg_match( '/claude|chatgpt|gpt|gemini|copilot|openai|anthropic|llm|\bAI\b/i', $text ) );
+
+echo "12. A letterhead above the header, fee lines under any heading, fish with a fee's word\n";
+$letter = array( array( 'Customer Name:', 'Test Shop', 'Order No:', '1234' ), array( 'CODE', 'STOCK', 'ORDER', 'ENGLISH NAME', 'PRICE US$' ), array( 'A2', '2m', '6', 'Blue Test Wrasse', '2.5' ), array( 'A3', '40', '', 'Red Test Goby', '1' ) );
+$lh     = OI::find_header( $letter );
+check( 'a letterhead row ("Customer Name: … Order No: …") is no header: the header is the row with the most headings', 1 === $lh['row'] && array( 'code', 'stock', 'ordered', 'fish', 'price' ) === array_values( $lh['map'] ) );
+check( '… "Customer Name" is not the fish column and "Order No" not the order quantity', '' === OI::header_role( 'Customer Name:' ) && '' === OI::header_role( 'Order No:' ) && '' === OI::header_role( 'Order Date' ) && '' === OI::header_role( 'Ship to' ) && 'ordered' === OI::header_role( 'Order Qty' ) && 'fish' === OI::header_role( 'Common Name' ) && 'code' === OI::header_role( 'Supplier Code' ) );
+$lh2 = OI::find_header( array( array( 'Name', 'Order' ), array( 'Test Shop', '1234' ), array( 'CODE', 'STOCK', 'ORDER', 'ENGLISH NAME' ), array( 'A2', '2m', '6', 'Blue Test Wrasse' ) ) );
+check( '… and two letterhead cells that DO read as "fish" and "order" lose to the real header under them — the stock column is never the quantity', 2 === $lh2['row'] && 'stock' === $lh2['map'][1] && 'ordered' === $lh2['map'][2] );
+$la = OI::analyse( $letter, array( 'mode' => 'ordered', 'map' => $lh['map'], 'header_row' => $lh['row'], 'sizes' => $sizes ) );
+check( '… so the line is the fish with its order quantity: "Blue Test Wrasse × 6", one of two rows', 1 === count( $la['rows'] ) && 'Blue Test Wrasse' === $la['rows'][0]['name'] && 6 === $la['rows'][0]['ordered'] && 'A2' === $la['rows'][0]['code'] && 2 === $la['data_rows'] );
+check( 'a complete header (a fish and a quantity) wins over a row with more headings that has neither', 1 === OI::find_header( array( array( 'Code', 'Stock', 'Price', 'Box' ), array( 'Fish', 'Qty' ), array( 'Blue Test Wrasse', '4' ) ) )['row'] );
+
+$inv_head = array( 'BOX', 'CODE', 'QTY', 'Scientific', 'Common', 'Unit', 'Amt' );
+$inv_map  = OI::roles_of_row( $inv_head );
+$inv      = OI::analyse(
+	array(
+		$inv_head,
+		array( '1', 'XA1', '4', 'Testus caeruleus', 'Blue Test Wrasse', '2.50', '10.00' ),
+		array( '', '', '38', 'Freight (kg)', '', '4.50', '171.00' ),
+		array( '', '', '', '', 'Box charge', '', '12.00' ),
+		array( '', '', '1', 'Fuel surcharge', '', '', '' ),
+	),
+	array( 'mode' => 'arrived', 'map' => $inv_map, 'header_row' => 0, 'sizes' => $sizes )
+);
+check( 'a fee line is NEVER a fish, under whichever heading its words stand: "Freight (kg)" in the scientific-name column with 38 in QTY makes no line', 1 === count( $inv['rows'] ) && 'Blue Test Wrasse' === $inv['rows'][0]['name'] && 1 === $inv['with_qty'] );
+check_same( '… it is a fee, with the line\'s own amount; one without an amount is kept apart to be checked', array( array( 'Freight (kg)', 171.0, false ), array( 'Box charge', 12.0, false ), array( 'Fuel surcharge', null, true ) ), array_map( static function ( $f ) { return array( $f['name'], $f['amount'], $f['check'] ); }, $inv['fees'] ) );
+check( '… and the rows left out name it', 3 === count( preg_grep( '/a fee line/', array_map( static function ( $l ) { return OI::reason_text( $l['reason'] ); }, $inv['left_out'] ) ) ) && 'Freight (kg)' === $inv['left_out'][0]['text'] );
+
+$block_map = OI::roles_of_row( OI::BLOCK_HEADER );
+$named     = OI::analyse(
+	array(
+		OI::BLOCK_HEADER,
+		array( 'Opal Mock Clam (INV) CITES', '', '', '', '5', '9.00', '', '3', '', '', '', '', '' ),
+		array( 'Blue Pallet Test Tang', '', '', '', '2', '30', '', '3', '', '', '', '', '' ),
+		array( 'Sample Seahorse (handling stock)', 'Testus equus', '', '', '4', '12', '', '3', '', '', '', '', '' ),
+		array( 'Clearance Test Goby', '', '', '', '6', '1', '', '3', '', '', 'XC9', '', '' ),
+		array( 'Heat packs', '', '', '', '2', '9.00', '', '3', '', '', '', '', '' ),
+	),
+	array( 'mode' => 'arrived', 'map' => $block_map, 'header_row' => 0, 'sizes' => $sizes )
+);
+check_same( 'a fish is not dropped for a word in its name: "CITES" and "Pallet" are no fee words; a row with a scientific name or a supplier\'s code is a fish whatever its name says', array( 'Opal Mock Clam (INV) CITES', 'Blue Pallet Test Tang', 'Sample Seahorse (handling stock)', 'Clearance Test Goby' ), array_column( $named['rows'], 'typed' ) );
+check_same( '… the two that carry a fee\'s word are flagged for the owner to look at, the others are not', array( false, false, true, true ), array_column( $named['rows'], 'fee_word' ) );
+check( '… and a real fee among them is worth its price × its quantity — never its box number', 1 === count( $named['fees'] ) && 'Heat packs' === $named['fees'][0]['name'] && 18.0 === $named['fees'][0]['amount'] );
+check( 'the fee words still catch the fees', null === OI::fee_kind( 'Opal Mock Clam CITES' ) && null === OI::fee_kind( 'Blue Pallet Test Tang' ) && 'import' === OI::fee_kind( 'Clearance / handling' ) && 'import' === OI::fee_kind( 'Health certificate' ) );
+
+echo "13. A packing list by scientific name alone\n";
+$sci_head = array( 'Scientific', 'Qty', 'Unit' );
+check( 'a scientific-name column and a quantity can be saved from: the scientific name stands in for the fish', OI::map_complete( OI::roles_of_row( $sci_head ) ) && ! OI::map_complete( array( 0 => 'sci' ) ) && ! OI::map_complete( array( 0 => 'code', 1 => 'qty' ) ) );
+$sci_rows = OI::analyse( array( $sci_head, array( 'Testus caeruleus', '4', '2.50' ), array( 'Testus pallidus', '2', '30' ) ), array( 'mode' => 'arrived', 'map' => OI::roles_of_row( $sci_head ), 'header_row' => 0, 'sizes' => $sizes ) );
+check_same( '… each row is that fish, typed as the list writes it', array( array( 'Testus caeruleus', 'Testus caeruleus', 4 ), array( 'Testus pallidus', 'Testus pallidus', 2 ) ), array_map( static function ( $r ) { return array( $r['typed'], $r['sci'], $r['arrived'] ); }, $sci_rows['rows'] ) );
+$blank = OI::analyse( array( OI::BLOCK_HEADER, array( '', 'Testus caeruleus', '', '', '4', '2.50', '', '1', '', '', '', '', '' ), array( 'Red Test Goby', '', '', '', '6', '1', '', '1', '', '', '', '', '' ) ), array( 'mode' => 'arrived', 'map' => $block_map, 'header_row' => 0, 'sizes' => $sizes ) );
+check_same( '… and in the assistant\'s block a blank fish with a scientific name is that fish, not "??"', array( 'Testus caeruleus', 'Red Test Goby' ), array_column( $blank['rows'], 'name' ) );
+$sci_index = OI::index_candidates( array( array( 'product_id' => 0, 'name' => 'Blue Test Wrasse', 'variants' => array( array( 'text' => 'Blue Test Wrasse', 'kind' => 'common' ), array( 'text' => 'Testus caeruleus', 'kind' => 'sci' ) ) ) ) );
+$sci_match = OI::match( 'Testus caeruleus', 'Testus caeruleus', $sci_index );
+check( '… which the matcher then finds exactly', null !== $sci_match['pick'] && 'Blue Test Wrasse' === $sci_match['candidates'][ $sci_match['pick'] ]['name'] && false === $sci_match['flag'] );
+
+echo "14. Codes that contradict the fish, lost leading zeros, a row without a size\n";
+$lines2 = array(
+	$line( 0, 'Red Test Goby', 7, array( 'notes' => '[code XA2]' ) ),
+	$line( 1, 'Green Test Chromis', 20, array( 'notes' => '[code XA4]' ) ),
+	$line( 2, 'Pale Test Tang', 3, array( 'size_slug' => 'small', 'notes' => '[code 0058]' ) ),
+	$line( 3, 'Pale Test Tang', 2, array( 'size_slug' => 'large', 'notes' => '[code 0059]' ) ),
+	$line( 4, 'Dusky Test Angel', 1, array( 'size_slug' => 'small' ) ),
+	$line( 5, 'Dusky Test Angel', 1, array( 'size_slug' => 'large' ) ),
+	$line( 6, 'Banded Test Hawk', 2 ),
+	$line( 7, 'Banded Test Hawk', 2, array( 'size_slug' => 'large' ) ),
+);
+$r2 = OI::reconcile(
+	array(
+		$row( 10, 'Green Test Chromis', 7, array( 'code' => 'XA2' ) ),
+		$row( 11, 'Pale Test Tang', 2, array( 'code' => '59' ) ),
+		$row( 12, 'Dusky Test Angel', 1 ),
+		$row( 13, 'Banded Test Hawk', 2 ),
+		$row( 14, 'Goby as the invoice spells it', 7, array( 'code' => 'xa2' ) ),
+	),
+	$lines2
+);
+check( 'a row that IS another line\'s fish goes to that line whatever its code says: the chromis is not added onto the goby, and it is said', array( 10 ) === $r2['lines']['1']['rows'] && 'fish' === $r2['lines']['1']['how'] && true === $r2['lines']['1']['clash'] && 7 === $r2['lines']['1']['arrived'] );
+check( '… while a row whose name is on no line is still paired by its code', array( 14 ) === $r2['lines']['0']['rows'] && 'code' === $r2['lines']['0']['how'] && false === $r2['lines']['0']['clash'] );
+check_same( 'a code is one code with or without its leading zeros ("0059" on the sheet, 59 on the invoice)', array( '59', '59', 'xa0020', '000', '' ), array( OI::code_key( '0059' ), OI::code_key( 59 ), OI::code_key( ' XA0020 ' ), OI::code_key( '000' ), OI::code_key( null ) ) );
+check( '… so the size-less invoice row goes to the Large line its code names, not to the Small one', array( 11 ) === $r2['lines']['3']['rows'] && 'code' === $r2['lines']['3']['how'] && 0 === $r2['lines']['2']['arrived'] );
+$extra2 = array_column( $r2['groups']['extra'], null, 'row' );
+check( 'a row without a size against lines of two sizes is paired with NEITHER: it waits among the extras, with the lines it could be', isset( $extra2[12] ) && array( '4', '5' ) === $extra2[12]['could'] && 0 === $r2['lines']['4']['arrived'] && 0 === $r2['lines']['5']['arrived'] );
+check( '… a row without a size takes the line without a size when there is one', array( 13 ) === $r2['lines']['6']['rows'] && ! isset( $extra2[13] ) );
+check( '… and the owner\'s word settles it', array( 12 ) === OI::reconcile( array( $row( 12, 'Dusky Test Angel', 1 ) ), $lines2, array( 'pairs' => array( 12 => 'line:5' ) ) )['lines']['5']['rows'] );
+
+echo "15. What a chat assistant does to a table\n";
+$fence = "Here is the block:\n\n```text\nfish\treceived\tprice\nBlue Test Wrasse\t4\t2.50\n```\n";
+check_same( 'the lines of a code fence go', array( array( 'Here is the block:', '', '' ), array( 'fish', 'received', 'price' ), array( 'Blue Test Wrasse', '4', '2.50' ) ), OI::grid_from_text( $fence )['grid'] );
+$md = "| fish | scientific name | received | price |\n|:---|---|:-:|---:|\n| Blue Test Wrasse | Testus caeruleus | 4 | 2.50 |\n| Red Test Goby |  | 6 | 1 |\n";
+check_same( 'a Markdown table is read cell by cell, a blank cell kept, its ruler line dropped', array( array( 'fish', 'scientific name', 'received', 'price' ), array( 'Blue Test Wrasse', 'Testus caeruleus', '4', '2.50' ), array( 'Red Test Goby', '', '6', '1' ) ), OI::grid_from_text( $md )['grid'] );
+check_same( 'columns set apart by runs of spaces are read when every row is as wide as the header', array( array( 'fish', 'received', 'price' ), array( 'Blue Test Wrasse', '4', '2.50' ), array( 'Red Test Goby', '6', '1' ) ), OI::grid_from_text( "fish    received    price\nBlue Test Wrasse    4       2.50\nRed Test Goby       6       1\n" )['grid'] );
+$ran = OI::grid_from_text( "fish    scientific name    received    price\nBlue Test Wrasse    4    2.50\n" )['grid'];
+check( '… and NOT when a cell is missing somewhere — a number must never slide into its neighbour\'s column: the text stays one column, and that is noticed', 1 === count( $ran[0] ) && true === OI::run_together( $ran ) && true === OI::run_together( OI::grid_from_text( implode( ' ', OI::BLOCK_HEADER ) . "\nBlue Test Wrasse 4 2.50\n" )['grid'] ) );
+check( '… a plain list of names, or a title, did not run together', false === OI::run_together( array( array( 'Blue Test Wrasse' ), array( 'Red Test Goby' ) ) ) && false === OI::run_together( array( array( 'Fish Price List', '' ), array( 'fish', 'qty' ) ) ) );
+check( 'a text with tabs is taken as it stands, pipes and all', array( array( 'fish', 'qty' ), array( 'Blue | Test | Wrasse', '4' ) ) === OI::grid_from_text( "fish\tqty\nBlue | Test | Wrasse\t4\n" )['grid'] );
+check( 'the instructions ask for a code block and for real tabs', false !== stripos( OI::instructions(), 'inside one code block' ) && false !== stripos( OI::instructions(), 'Real tabs between the columns' ) );
+$tail = OI::analyse(
+	OI::grid_from_text( implode( "\n", array( OI::block_header(), "Blue Test Wrasse\t\t\t\t4\t2.50\t\t1\t\t\t\t\t", '', OI::fee_header(), "Packing charge\t24.00\t", "Fuel surcharge (check)\t\t", 'Let me know if anything looks off.', '```' ) ) )['grid'],
+	array( 'mode' => 'arrived', 'map' => $block_map, 'header_row' => 0, 'sizes' => $sizes )
+);
+check_same( 'what is written after the fee table is no fee: the two fees, and the closing words left out as not part of the table', array( array( 'Packing charge', 'Fuel surcharge (check)' ), 'not part of the table' ), array( array_column( $tail['fees'], 'name' ), OI::reason_text( end( $tail['left_out'] )['reason'] ) ) );
+
+echo "16. The last size word, and a column that only counts\n";
+check_same( 'a size after "(INV)" or "(RARE)" is lifted: the last size word counts, and the name keeps its mark', array( array( 'Opal Mock Clam (INV)', 'medium' ), array( 'Test Tang (RARE)', 'large' ), array( 'Test Clam (INV)', null ) ), array_map( static function ( $n ) use ( $sizes ) { $o = OI::lift_size( $n, '', $sizes ); return array( $o['name'], $o['slug'] ); }, array( 'Opal Mock Clam (INV) M', 'Test Tang (RARE) - L', 'Test Clam (INV)' ) ) );
+check_same( 'without a header, a column that counts 1, 2, 3 … is the sheet\'s row number, never the quantity', array( 1 => 'fish', 2 => 'qty', 3 => 'price' ), OI::guess_columns( array( array( '1', 'Blue Test Wrasse', '4', '2.50' ), array( '2', 'Red Test Goby', '6', '3.00' ), array( '3', 'Green Test Chromis', '2', '1.25' ) ) ) );
+check_same( '… a quantity column that happens to start 1, 2 is still one', array( 0 => 'fish', 1 => 'qty' ), OI::guess_columns( array( array( 'Blue Test Wrasse', '1' ), array( 'Red Test Goby', '2' ), array( 'Green Test Chromis', '2' ) ) ) );
 
 fh_finish();

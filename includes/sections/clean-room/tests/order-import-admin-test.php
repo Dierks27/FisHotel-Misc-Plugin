@@ -171,7 +171,7 @@ check( 'the order is saved — as ORDERED, no longer a draft — with its four l
 check( '… in the Entry view, where the lines that were just written are typed on', false !== strpos( $done['redirect'], 'view=entry' ) );
 check_same( 'every line has its ordered count and received left EMPTY (not 0)', array( array( 4, 6, 2, 3 ), array( null, null, null, null ) ), array( array_column( $o['lines'], 'qty_ordered' ), array_column( $o['lines'], 'qty_received' ) ) );
 $w = $o['lines'][0];
-check( 'the matched line: the species-list fish, its scientific name, the standard size, QTY/BOX as its per box, the price, the list\'s worth', 'Blue Test Wrasse' === $w['species'] && 1 === $w['species_id'] && 'Testus caeruleus' === $w['sci_name'] && 'large' === $w['size_slug'] && 'Large' === $w['size_label'] && 12 === $w['per_box'] && 2.5 === $w['unit_price'] && 40.0 === $w['worth'] && false === $w['needs_id'] );
+check( 'the matched line: the species-list fish, its scientific name, the standard size, QTY/BOX as its per box, the price — and NO worth: the shop price is read, never stamped on the line as if it were typed', 'Blue Test Wrasse' === $w['species'] && 1 === $w['species_id'] && 'Testus caeruleus' === $w['sci_name'] && 'large' === $w['size_slug'] && 'Large' === $w['size_label'] && 12 === $w['per_box'] && 2.5 === $w['unit_price'] && null === $w['worth'] && false === $w['needs_id'] );
 check( 'the supplier\'s CODE is kept on the line, with the name as the sheet writes it', '[as written: Blue Test Wrasse (L) (10-14 CM)] [code XA1]' === $w['notes'] && 'XA1' === OI::code_of( $w['notes'] ) && 'XA2' === OI::code_of( $o['lines'][1]['notes'] ) && 'Red Test Gobi' === OI::written_of( $o['lines'][1]['notes'] ) );
 check( 'a long-float price is stored to four decimals; an unlisted fish keeps its typed name and only its code', 1.2917 === $o['lines'][1]['unit_price'] && 'Zzyzx Whatsit' === $o['lines'][2]['species'] && '[code XA3]' === $o['lines'][2]['notes'] && null === $o['lines'][2]['species_id'] );
 check( 'no label is invented for a name that was only spelled differently, and nothing was checked in', array( null, null, null, null ) === array_column( $o['lines'], 'label_name' ) && array() === $store->stays && array( null, null, null, null ) === array_column( $o['lines'], 'stay_id' ) );
@@ -311,7 +311,7 @@ $l7 = Import_Layouts::all();
 check( 'confirmed with "Remember this layout" ticked: ONE layout saved — for the supplier, the ordered moment, by position (no header), four columns', empty( $d7['error'] ) && 1 === count( $l7 ) && 'Sample Reef Supply' === $l7[0]['supplier'] && 'ordered' === $l7[0]['moment'] && false === $l7[0]['header'] && array( 'code', 'fish', '', 'ordered' ) === array_column( $l7[0]['columns'], 'role' ) && $today === $l7[0]['used'] && false !== strpos( $d7['message'], 'remembered for Sample Reef Supply' ) );
 check( '… with the row the owner said to leave out every time', array( 'red test goby' ) === $l7[0]['junk'] && 2 === $d7['imported'] );
 $p7c = fh_ask( $store7, fh_form( $store7, 0, array( 'supplier' => 'sample reef supply', 'origin' => '', 'ref' => '2026-50' ) ), 'preview', array( 'text' => "XB1\tPale Test Tang\tfresh\t2\nXB2\tRed Test Goby\tfresh\t9\n", 'mode' => 'ordered' ) );
-check( 'the next paste from that supplier is recognised by itself — without a header — and says so in one plain line', 'layout' === $p7c['columns']['source'] && 'Using the layout saved for Sample Reef Supply' === $p7c['layout']['line'] && false === $p7c['columns']['open'] && 'XB1' === $p7c['rows'][0]['code'] && 2 === $p7c['rows'][0]['ordered'] && '' === $p7c['layout']['remember'] );
+check( 'the next paste from that supplier is recognised by itself — without a header — and says so in one plain line — with the columns shown, for a sheet without headings goes by position alone', 'layout' === $p7c['columns']['source'] && 0 === strpos( $p7c['layout']['line'], 'Using the layout saved for Sample Reef Supply — this sheet has no headings' ) && true === $p7c['columns']['open'] && 'XB1' === $p7c['rows'][0]['code'] && 2 === $p7c['rows'][0]['ordered'] && '' === $p7c['layout']['remember'] );
 check( '… and the learned row is left out, "as last time"', 1 === count( $p7c['rows'] ) && false !== strpos( $p7c['left_out']['items'][0], 'left out as last time' ) );
 check( 'an unticked "Remember" box saves nothing', 1 === count( Import_Layouts::all() ) && empty( fh_ask( $store7, fh_form( $store7, 0, array( 'supplier' => 'Nobody Remembered', 'ref' => '2026-51' ) ), 'confirm', array_merge( $hand, array( 'rows' => array(), 'token' => fh_ask( $store7, fh_form( $store7, 0, array( 'supplier' => 'Nobody Remembered', 'ref' => '2026-51' ) ), 'preview', $hand )['token'] ) ) )['error'] ) && 1 === count( Import_Layouts::all() ) );
 
@@ -402,7 +402,7 @@ check( 'Came short / over: the goby 5 of 6 — the same fish in two boxes, added
 check( 'Did not come: the blenny and the tang — ordered lines no row matched', array( 'Sample Blenny', 'Pale Test Tang' ) === array_column( $miss, 'text' ) && 'ordered 3 · arrived 0' === $miss[0]['detail'] && 'zero' === $miss[0]['choice'] );
 check( 'Extra / substituted: the damsel and the hawk — rows no ordered line matched', array( 7, 2 ) === array_column( $xtra, 'arrived' ) && array( '', '' ) === array_column( $xtra, 'instead' ) );
 check( 'a line with a stay is skipped and said so: the angel\'s row is set aside', 1 === count( $stay ) && 'Dusky Test Angel' === $stay[0]['text'] );
-check( 'the price the wrasse already has (2.50) differs from the file\'s (2.75): shown, and a tick is offered', true === $pn['arrived']['differs'] && in_array( 'price typed 2.5 · the file says 2.75', $same[0]['notes'], true ) );
+check( 'the price the wrasse already has (2.50) differs from the file\'s (2.75): shown, and a tick is offered', true === $pn['arrived']['differs'] && in_array( 'price on the order 2.50 · the file says 2.75', $same[0]['notes'], true ) );
 check_same( 'the foot, the way the owner says it — the checked-in angel counts with its 3', 'Ordered 20 · arrived 24 · 120% filled · 2 kinds did not come', $pn['foot'] );
 check( 'the fees of this section: its own, and the one that names no section; the other section\'s left out', 'Fees on this invoice: tariffs 5.25 · everything else 204.00' === $pn['arrived']['fees']['text'] && 1 === count( preg_grep( '/1 fee of another section is left out/', $pn['arrived']['fees']['notes'] ) ) && '' === $pn['arrived']['sum'] );
 check( 'a row marked "?" by whoever read the invoice is flagged', true === fh_row( $pn, 'Goby merah' )['check'] );
@@ -544,6 +544,15 @@ $r6 = Admin_Workbook::save_order( $s6, Admin_Workbook::unpack_lines( $one ), 0, 
 check( 'an order of 150 fish is one field, not 2,550 — more than PHP reads by default: all 150 lines are saved', count( $one ) < 20 && 150 * 17 > 1000 && 150 === count( $s6->order( (int) $r6['order_id'] )['lines'] ) );
 $pj = AOI::request( $s6, array( 'order_id' => (int) $r6['order_id'], 'ref' => '2026-1', 'supplier' => 'Example Aquatics', 'lines_json' => wp_json_encode( fh_form( $s6, (int) $r6['order_id'] )['lines'] ), 'op' => 'preview', 'import' => wp_json_encode( array( 'text' => "fish\tqty\nMany Test Fish 7\t1\nNew Test Fish\t1\n", 'mode' => 'ordered' ) ) ), $ctx );
 check( 'the importer reads the page\'s lines from that field too', 'Many Test Fish 7' === $pj['rows'][0]['dup'] && '' === $pj['rows'][1]['dup'] );
+// Half an emoji in a name: JSON writes a lone "\ud83d", which PHP cannot read back.
+$broken = fh_form( $s6, (int) $r6['order_id'] );
+unset( $broken['lines'] );
+$broken['lines_json'] = '[{"id":"1","species":"Many Test Fish \\ud83d","qty_ordered":"1"}]';
+$unread               = Admin_Workbook::unpack_lines( $broken );
+$rb                   = Admin_Workbook::save_order( $s6, $unread, (int) $r6['order_id'], $today );
+check( 'a lines_json PHP cannot read is NOT an order without lines: the save is refused, said plainly, and all 150 lines are still there', null === json_decode( $broken['lines_json'], true ) && ! empty( $unread['lines_unread'] ) && ! empty( $rb['error'] ) && false !== strpos( $rb['error'], 'nothing was saved and no line was touched' ) && 150 === count( $s6->order( (int) $r6['order_id'] )['lines'] ) );
+check( '… the importer refuses it too, and a posted field of that name is nobody\'s word', false !== strpos( AOI::request( $s6, array_merge( $broken, array( 'op' => 'preview', 'import' => wp_json_encode( array( 'text' => "fish\tqty\nNew Test Fish\t1\n" ) ) ) ), $ctx )['error'], 'did not arrive in one piece' ) && ! isset( Admin_Workbook::unpack_lines( array( 'lines_unread' => '1', 'lines' => array() ) )['lines_unread'] ) );
+check( '… "[]" is still an order whose last line was removed', array() === Admin_Workbook::unpack_lines( array( 'lines_json' => '[]' ) )['lines'] && ! isset( Admin_Workbook::unpack_lines( array( 'lines_json' => '[]' ) )['lines_unread'] ) );
 
 echo "19. The nonce and the capabilities\n";
 $GLOBALS['fh_user_caps']    = array( Clean_Room::CAPABILITY => array( 2, 3 ), Clean_Room::SETTINGS_CAPABILITY => array( 3 ) );
@@ -613,5 +622,68 @@ check( 'the instructions are printed escaped, from the one text the test above r
 check( 'the Arrivals list offers the same page with the panel open — no second screen', false !== strpos( (string) file_get_contents( Clean_Room::path() . 'views/arrivals.php' ), "add_query_arg( 'import', '1', \$new_url )" ) );
 $config = AOI::js_config();
 check( 'what the page is handed: the action, every role with its words, and a word for every thing the page says', AOI::ACTION === $config['action'] && array_keys( OI::roles() ) === array_keys( $config['roles'] ) && count( $config['i18n'] ) > 50 && array() === array_filter( $config['i18n'], static function ( $text ) { return ! is_string( $text ) || '' === $text; } ) );
+
+echo "21. Arrival day on an ordered order; an invoice's code; a row without a size; small things\n";
+$s9    = fh_store();
+$d9    = fh_ask( $s9, fh_form( $s9, 0 ), 'confirm', array( 'grid' => $grid, 'mode' => 'ordered', 'token' => $p['token'] ) );
+$id9   = (int) $d9['order_id'];
+$block = implode( "\n", array( OI::block_header(), "Blue Test Wrasse\t\t\t\t4\t2.50\t\t1\t\t\tXA1\t\t", "Red Test Gobi\t\t\t\t5\t1.29\t\t1\t\t\t\t\t", "Zzyzx Whatsit\t\t\t\t2\t9.00\t\t1\t\t\tXA3\t\t" ) );
+$auto  = fh_ask( $s9, fh_form( $s9, $id9 ), 'preview', array( 'text' => $block ) );
+check( 'a saved order that is ORDERED and has ordered lines: the button that fits is "This is what ARRIVED" — the next file is the invoice', 'arrived' === $auto['mode'] && 'arrived' === $auto['default'] && 3 === count( $auto['rows'] ) );
+check_same( '… a new order, a draft, an ordered order without lines: ORDERED; received or closed: ARRIVED', array( 'arrived', 'ordered', 'ordered', 'ordered', 'ordered', 'arrived', 'arrived' ), array( AOI::default_mode( 'ordered', array( array( 'qty_ordered' => 4 ) ), true ), AOI::default_mode( 'ordered', array( array( 'qty_ordered' => 4 ) ), false ), AOI::default_mode( 'draft', array( array( 'qty_ordered' => 4 ) ), true ), AOI::default_mode( 'ordered', array(), true ), AOI::default_mode( 'ordered', array( array( 'qty_ordered' => 0 ) ), true ), AOI::default_mode( 'received', array(), false ), AOI::default_mode( 'closed', array(), true ) ) );
+check( '… and the panel draws its two buttons from the same rule', false !== strpos( (string) file_get_contents( Clean_Room::path() . 'views/order-import.php' ), "Admin_Order_Import::default_mode( (string) \$order['status'], (array) ( \$order['lines'] ?? array() ), ! \$is_new )" ) );
+$as_ordered = fh_ask( $s9, fh_form( $s9, $id9 ), 'preview', array( 'text' => $block, 'mode' => 'ordered' ) );
+check( 'the assistant\'s block read as "what I ORDERED" has no order quantity anywhere: it says so and offers the other button', '0 of 3 rows have an order quantity' === $as_ordered['summary'] && array() === $as_ordered['rows'] && is_array( $as_ordered['switch'] ) && 'arrived' === $as_ordered['switch']['mode'] && false !== strpos( $as_ordered['switch']['text'], '3 have a received count: this looks like what ARRIVED' ) && 'Read it as what ARRIVED' === $as_ordered['switch']['button'] );
+check( '… a price list with order quantities gets no such offer', null === $p['switch'] && null === $auto['switch'] );
+$goby9 = array_values( array_filter( fh_group( $auto, 'diff' ), static function ( $e ) { return 0 === strpos( $e['text'], 'Red Test Goby' ); } ) );
+check( 'a price list\'s 1.2917 against the invoice\'s 1.29 is one price: compared to the cent, no note on the line and no tick offered', 1 === count( $goby9 ) && array() === preg_grep( '/price/', $goby9[0]['notes'] ) && false === $goby9[0]['differs'] && false === $auto['arrived']['differs'] );
+
+$s10            = fh_store();
+$f10            = fh_form( $s10, 0, array( 'status' => 'ordered' ) );
+$f10['lines'][] = array( 'species' => 'Blue Test Wrasse', 'species_id' => '1', 'qty_ordered' => '4', 'qty_received' => '', 'unit_price' => '', 'worth' => '', 'code' => '' );
+$f10['lines'][] = array( 'species' => 'Pale Test Tang', 'species_id' => '2', 'size_slug' => 'small', 'qty_ordered' => '2', 'qty_received' => '', 'unit_price' => '', 'worth' => '', 'code' => '' );
+$f10['lines'][] = array( 'species' => 'Pale Test Tang', 'species_id' => '2', 'size_slug' => 'large', 'qty_ordered' => '1', 'qty_received' => '', 'unit_price' => '', 'worth' => '', 'code' => '' );
+$id10           = (int) Admin_Workbook::save_order( $s10, $f10, 0, $today )['order_id'];
+$page10         = static function () use ( $s10, $id10 ) {
+	$form = fh_form( $s10, $id10 );
+	foreach ( $form['lines'] as $i => $row ) {
+		$form['lines'][ $i ]['code'] = OI::code_of( (string) fh_line_by_id( $s10, $id10, (int) $row['id'] )['notes'] ); // As the page posts it: its own code field.
+	}
+	return $form;
+};
+function fh_line_by_id( $store, $id, $line_id ) {
+	foreach ( $store->order( $id )['lines'] as $line ) {
+		if ( (int) $line['id'] === (int) $line_id ) {
+			return $line;
+		}
+	}
+	return null;
+}
+$inv10 = implode( "\n", array( OI::block_header(), "Blue Test Wrasse\t\t\t\t4\t2.50\t\t1\t\t\tXT7\t\t", "Pale Test Tang\t\t\t\t3\t30\t\t1\t\t\t\t\t", "Clearance Test Goby\t\t\t\t6\t1\t\t1\t\t\tXC9\t\t" ) );
+$p10   = fh_ask( $s10, $page10(), 'preview', array( 'text' => $inv10, 'mode' => 'arrived' ) );
+$x10   = array_column( fh_group( $p10, 'extra' ), null, 'row' );
+$tang  = fh_row( $p10, 'Pale Test Tang' );
+check( 'a row without a size against a Small and a Large line is paired with neither — it waits among the extras and says which lines it could be', isset( $x10[ $tang['n'] ] ) && 'Could be Pale Test Tang · Small / Pale Test Tang · Large — the row has no size. Say which line it is.' === $x10[ $tang['n'] ]['note'] && 2 === count( fh_group( $p10, 'missing' ) ) );
+check( 'a fish with a supplier\'s code whose name holds a fee\'s word stays a fish, flagged', true === fh_row( $p10, 'Clearance Test Goby' )['fee_word'] && false === $tang['fee_word'] && 0 === $p10['arrived']['fees']['count'] );
+$large_k = (string) array_search( 'large', array_column( $page10()['lines'], 'size_slug' ), true );
+$said10  = array( 'grid' => $p10['grid'], 'mode' => 'arrived', 'rows' => array( $tang['n'] => array( 'pair' => 'line:' . $large_k ), fh_row( $p10, 'Clearance Test Goby' )['n'] => array( 'on' => 0 ) ) );
+$p10b    = fh_ask( $s10, $page10(), 'preview', $said10 );
+$d10     = fh_ask( $s10, $page10(), 'confirm', array_merge( $said10, array( 'token' => $p10b['token'] ) ) );
+$after10 = $s10->order( $id10 )['lines'];
+check( '… the owner says "the Large line": 3 land there, the Small line did not come', empty( $d10['error'] ) && array( 4, 0, 3 ) === array_column( $after10, 'qty_received' ) );
+check( 'the invoice\'s code is KEPT on a line that had none — the page\'s own empty code field does not take it out again', 'XT7' === OI::code_of( $after10[0]['notes'] ) && '' === OI::code_of( $after10[1]['notes'] ) );
+$p10c = fh_ask( $s10, $page10(), 'preview', array( 'text' => $inv10, 'mode' => 'arrived' ) );
+check( '… and the next invoice pairs that line by the code it learned', in_array( 'paired by the supplier\'s code', fh_group( $p10c, 'same' )[0]['notes'], true ) );
+
+$sci10 = fh_ask( $s10, $page10(), 'preview', array( 'text' => "Scientific\tQty\tUnit\nTestus caeruleus\t4\t2.50\n", 'mode' => 'arrived' ) );
+check( 'a packing list by scientific name alone needs no dropdown: the name stands in for the fish, is matched exactly, and pairs with its ordered line', true === $sci10['columns']['complete'] && 'headers' === $sci10['columns']['source'] && 'Blue Test Wrasse' === $sci10['rows'][0]['name'] && 'Testus caeruleus' === $sci10['rows'][0]['typed'] && false === $sci10['rows'][0]['match']['flag'] && array() === fh_group( $sci10, 'extra' ) );
+
+$ran10 = fh_ask( $s10, $page10(), 'preview', array( 'text' => implode( ' ', OI::BLOCK_HEADER ) . "\nBlue Test Wrasse 4 2.50\n", 'mode' => 'arrived' ) );
+check( 'a block whose tabs were lost says so plainly instead of offering dropdowns nobody can use', false === $ran10['columns']['complete'] && 1 === count( preg_grep( '/ran together.*code block/', $ran10['notes'] ) ) && array() === preg_grep( '/which column is the fish/', $ran10['notes'] ) && false === $ran10['can_confirm'] );
+$md10 = fh_ask( $s10, $page10(), 'preview', array( 'text' => "| fish | received | price |\n|---|---|---|\n| Blue Test Wrasse | 4 | 2.50 |\n", 'mode' => 'arrived' ) );
+check( '… and an answer drawn as a Markdown table is read', true === $md10['columns']['complete'] && 1 === count( $md10['rows'] ) && 4 === $md10['rows'][0]['received'] );
+$one = fh_ask( fh_store(), fh_form( fh_store(), 0 ), 'preview', array( 'text' => "fish\tqty\nBlue Test Wrasse\t3\n", 'mode' => 'ordered' ) );
+check_same( 'one line is "1 line", not "1 lines"', '1 line · 3 fish', $one['foot'] );
+check( '… on the page too', isset( AOI::js_config()['i18n']['footOne'], AOI::js_config()['i18n']['feeWord'] ) && false !== strpos( (string) file_get_contents( Clean_Room::path() . 'js/order-import.js' ), 'footText(foot, t)' ) );
 
 fh_finish();

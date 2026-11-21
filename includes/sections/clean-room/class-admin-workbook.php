@@ -1150,17 +1150,26 @@ class Admin_Workbook {
 	 * and a save that lost its last lines would delete them. So the page
 	 * posts the line rows as one JSON field, lines_json, which is unpacked
 	 * here into the lines[n][field] rows every reader of the form expects.
-	 * A request without it (an older page) is left as it is.
+	 * A request without it (an older page) is left as it is. A lines_json
+	 * that cannot be read (half a character in a name, a field cut short)
+	 * is marked lines_unread — the save is refused, never taken for an
+	 * order whose lines were all removed.
 	 *
 	 * @param array $raw Unslashed payload.
 	 * @return array
 	 */
 	public static function unpack_lines( array $raw ) {
+		unset( $raw['lines_unread'] ); // Ours to set, never the page's.
 		if ( ! isset( $raw['lines_json'] ) || ! is_string( $raw['lines_json'] ) ) {
 			return $raw;
 		}
 		$rows  = json_decode( $raw['lines_json'], true );
 		$lines = array();
+		if ( ! is_array( $rows ) ) {
+			// A field that cannot be read is NOT an order without lines: every reader of the form
+			// refuses it (lines_unread), or a Save would delete every line that has no stay.
+			$raw['lines_unread'] = true;
+		}
 		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
 			if ( ! is_array( $row ) ) {
 				continue;
@@ -1179,6 +1188,15 @@ class Admin_Workbook {
 		unset( $raw['lines_json'] );
 		$raw['lines'] = $lines;
 		return $raw;
+	}
+
+	/**
+	 * What a save says when the page's lines could not be read.
+	 *
+	 * @return string
+	 */
+	public static function lines_unread_text() {
+		return __( 'The lines of this order did not arrive in one piece, so nothing was saved and no line was touched. Reload the page and try again; if it happens again, look for an odd character (half an emoji) in a name or a note.', 'fishotel-misc-plugin' );
 	}
 
 	/**
@@ -1308,6 +1326,9 @@ class Admin_Workbook {
 	 *               stays or fish that changed) — or error.
 	 */
 	public static function save_order( $store, array $raw, $id, $today ) {
+		if ( ! empty( $raw['lines_unread'] ) ) {
+			return array( 'error' => self::lines_unread_text() );
+		}
 		$header = Orders::normalize_order( array_merge( $raw, array( 'id' => $id ) ) );
 		if ( '' === $header['ref'] ) {
 			$year          = Stats::order_year( $header );

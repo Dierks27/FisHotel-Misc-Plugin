@@ -126,9 +126,43 @@
 		return out;
 	}
 
+	/**
+	 * The words of the ordered foot: "1 line · 3 fish", "2 lines · 9 fish".
+	 *
+	 * @param {{lines: number, fish: number}} foot orderedFoot().
+	 * @param {Object} t The page's words (foot, footOne).
+	 * @return {string}
+	 */
+	function footText(foot, t) {
+		return fmt(foot.lines === 1 && t.footOne ? t.footOne : t.foot, thousands(foot.lines), thousands(foot.fish));
+	}
+
+	/**
+	 * Where the preview's keyboard focus goes back to after it is drawn
+	 * again: the control with the same key (what it is + the row or line it
+	 * belongs to), wherever the row now stands.
+	 *
+	 * @param {Object[]} controls {key} of the controls of the new preview, in order.
+	 * @param {string} key The key of the control that had the focus ('' = none).
+	 * @return {number} Its index, or -1.
+	 */
+	function focusIndex(controls, key) {
+		if (!key) {
+			return -1;
+		}
+		for (var i = 0; i < (controls || []).length; i++) {
+			if (controls[i] && controls[i].key === key) {
+				return i;
+			}
+		}
+		return -1;
+	}
+
 	var helpers = {
 		receivedAsOrdered: receivedAsOrdered,
 		orderedFoot: orderedFoot,
+		footText: footText,
+		focusIndex: focusIndex,
 		thousands: thousands,
 		fmt: fmt,
 		payloadOf: payloadOf
@@ -295,7 +329,41 @@
 				state.mode = p.mode;
 				setMode(p.mode);
 			}
+			// Drawing again must not throw the owner out of the row they are correcting: the control
+			// that had the focus gets it back, and stays where it stood on the screen.
+			var was = held();
 			render(p);
+			giveBack(was);
+		}
+
+		function held() {
+			var active = root.document.activeElement;
+			var out = { y: root.pageYOffset || 0, key: '', top: 0 };
+			if (active && $preview[0] && $.contains($preview[0], active) && active.getAttribute('data-fk')) {
+				out.key = active.getAttribute('data-fk');
+				out.top = active.getBoundingClientRect().top;
+			}
+			return out;
+		}
+
+		function giveBack(was) {
+			var $controls = $preview.find('[data-fk]');
+			var at = focusIndex($controls.map(function () { return { key: this.getAttribute('data-fk') }; }).get(), was.key);
+			if (at < 0) {
+				if (typeof root.scrollTo === 'function' && Math.abs((root.pageYOffset || 0) - was.y) > 1) {
+					root.scrollTo(root.pageXOffset || 0, was.y);
+				}
+				return;
+			}
+			var target = $controls[at];
+			try {
+				target.focus({ preventScroll: true });
+			} catch (e) {
+				target.focus();
+			}
+			if (typeof root.scrollTo === 'function') {
+				root.scrollTo(root.pageXOffset || 0, (root.pageYOffset || 0) + target.getBoundingClientRect().top - was.top);
+			}
 		}
 
 		/** Read a new paste or file: everything chosen before is forgotten. */
@@ -385,7 +453,7 @@
 
 		/** The dropdown of a row's fish: the candidates, as typed, unknown. */
 		function fishSelect(row) {
-			var $select = el('select', 'fh-cr-input fh-cr-import__pick');
+			var $select = el('select', 'fh-cr-input fh-cr-import__pick').attr('data-fk', 'pick:' + row.n);
 			var chosen = false;
 			(row.match.candidates || []).forEach(function (candidate, i) {
 				var $o = el('option', '', candidate.name).val('c:' + i);
@@ -426,6 +494,9 @@
 			if (row.check) {
 				$cell.append(' ').append(el('span', 'fh-cr-warn fh-cr-import__check', t.check).attr('title', t.checkTitle));
 			}
+			if (row.fee_word) {
+				$cell.append(' ').append(el('span', 'fh-cr-warn fh-cr-import__check', t.feeWord).attr('title', t.feeWordTitle));
+			}
 			$cell.append(el('span', 'fh-cr-sub fh-cr-import__match' + (row.match.flag ? ' is-flag' : ''), row.match.text + (row.kind === 'fish' && !row.match.flag ? ': ' + row.name : '')));
 			$cell.append(fishSelect(row));
 			if (row.size && row.size.note) {
@@ -464,7 +535,7 @@
 		}
 
 		function tick(row) {
-			var $box = $('<input type="checkbox">').prop('checked', !!row.on);
+			var $box = $('<input type="checkbox">').prop('checked', !!row.on).attr('data-fk', 'tick:' + row.n);
 			$box.on('change', function () {
 				var said = rowSaid(row.n);
 				said.on = this.checked ? 1 : 0;
@@ -496,7 +567,7 @@
 				return;
 			}
 			var foot = orderedFoot(p.rows);
-			$preview.find('.fh-cr-import__foot-text').text(fmt(t.foot, thousands(foot.lines), thousands(foot.fish)));
+			$preview.find('.fh-cr-import__foot-text').text(footText(foot, t));
 			$confirm.prop('disabled', !p.columns.complete || foot.lines < 1).text(fmt(foot.lines === 1 ? t.addOne : t.addMany, thousands(foot.lines)));
 		}
 
@@ -508,7 +579,7 @@
 
 			var $row = el('p', 'fh-cr-import__header-row');
 			$row.append(el('span', '', t.headerOn + ' '));
-			var $pick = el('select', 'fh-cr-input');
+			var $pick = el('select', 'fh-cr-input').attr('data-fk', 'head');
 			$pick.append(el('option', '', t.noHeader).val(''));
 			for (var r = 0; r < Math.min(30, (state.grid || []).length); r++) {
 				$pick.append(el('option', '', fmt(t.rowN, r + 1) + ' — ' + (state.grid[r] || []).filter(function (c) { return c !== ''; }).slice(0, 4).join(' · ').slice(0, 60)).val(String(r)));
@@ -537,7 +608,7 @@
 				refresh();
 			}
 			for (var c = 0; c < width; c++) {
-				var $select = el('select', 'fh-cr-input fh-cr-import__role').attr('aria-label', fmt(t.columnN, c + 1));
+				var $select = el('select', 'fh-cr-input fh-cr-import__role').attr('aria-label', fmt(t.columnN, c + 1)).attr('data-fk', 'role:' + c);
 				$select.append(el('option', '', t.ignore).val(''));
 				Object.keys(cfg.roles || {}).forEach(function (role) {
 					$select.append(el('option', '', cfg.roles[role]).val(role));
@@ -645,7 +716,7 @@
 			$table.append(el('thead').append($head));
 			var $body = el('tbody');
 			p.rows.forEach(function (row) {
-				var $tr = el('tr', (row.on ? '' : 'is-off') + (row.match.flag || row.check || (row.flags || []).length ? ' is-flagged' : ''));
+				var $tr = el('tr', (row.on ? '' : 'is-off') + (row.match.flag || row.check || row.fee_word || (row.flags || []).length ? ' is-flagged' : ''));
 				$tr.append(el('td', 'fh-cr-import__tick').append(tick(row)).append(junkBox(row)));
 				$tr.append(matchCell(row));
 				$tr.append(el('td', '', row.size.label || ''));
@@ -656,7 +727,7 @@
 				var $dup = el('td', 'fh-cr-import__dup');
 				if (row.dup) {
 					$dup.append(el('span', 'fh-cr-warn', fmt(t.dup, row.dup)));
-					var $choice = el('select', 'fh-cr-input');
+					var $choice = el('select', 'fh-cr-input').attr('data-fk', 'dup:' + row.n);
 					$choice.append(el('option', '', t.dupSkip).val('skip'));
 					$choice.append(el('option', '', t.dupAdd).val('add'));
 					$choice.val(row.dup_choice || 'skip').on('change', function () {
@@ -675,7 +746,7 @@
 
 		/** A pairing dropdown, filled when it is first opened (an order has up to 400 lines). */
 		function pairSelect(row, a, current) {
-			var $select = el('select', 'fh-cr-input fh-cr-import__pair');
+			var $select = el('select', 'fh-cr-input fh-cr-import__pair').attr('data-fk', 'pair:' + row.n);
 			var said = (state.rows[row.n] || {}).pair || '';
 			$select.append(el('option', '', current).val(said));
 			var filled = false;
@@ -713,7 +784,7 @@
 				var $sections = el('p', 'fh-cr-import__sections');
 				$sections.append(el('strong', '', t.sections + ' '));
 				a.sections.forEach(function (section) {
-					var $box = $('<input type="checkbox">').prop('checked', !!section.on).on('change', function () {
+					var $box = $('<input type="checkbox">').prop('checked', !!section.on).attr('data-fk', 'section:' + section.name).on('change', function () {
 						var chosen = [];
 						$sections.find('input').each(function (i) {
 							if (this.checked) {
@@ -730,7 +801,7 @@
 
 			var $same = el('p', 'fh-cr-import__same');
 			$same.append(el('span', '', t.sameFish + ' '));
-			var $sameSel = el('select', 'fh-cr-input');
+			var $sameSel = el('select', 'fh-cr-input').attr('data-fk', 'same');
 			$sameSel.append(el('option', '', t.sameSum).val('sum'));
 			$sameSel.append(el('option', '', t.sameSeparate).val('separate'));
 			$sameSel.val(a.same_fish).on('change', function () {
@@ -759,7 +830,11 @@
 						$tr.append(el('td', '', row.size.label || ''));
 						$tr.append(el('td', 'fh-cr-num', fmt(t.arrivedN, entry.arrived)));
 						$tr.append(el('td', 'fh-cr-sub', extrasText(row) + (row.price !== null ? ' · ' + fmt(t.priceN, row.price) : '')));
-						$tr.append(el('td').append(pairSelect(row, a, entry.instead ? t.pairInsteadSet : t.pairNew)));
+						var $pair = el('td').append(pairSelect(row, a, entry.instead ? t.pairInsteadSet : t.pairNew));
+						if (entry.note) {
+							$pair.append(el('span', 'fh-cr-warn fh-cr-import__could', entry.note));
+						}
+						$tr.append($pair);
 						$body.append($tr);
 						return;
 					}
@@ -771,7 +846,7 @@
 					$tr.append(el('td', entry.over ? 'fh-cr-import__over' : '', detail));
 					var $rows = el('td');
 					if (group.key === 'missing') {
-						var $what = el('select', 'fh-cr-input');
+						var $what = el('select', 'fh-cr-input').attr('data-fk', 'line:' + entry.line);
 						$what.append(el('option', '', t.lineZero).val('zero'));
 						$what.append(el('option', '', t.lineKeep).val('keep'));
 						$what.val(entry.choice).on('change', function () {
@@ -859,6 +934,15 @@
 			});
 			if (p.summary) {
 				$preview.append(el('p', 'fh-cr-import__summary', p.summary));
+			}
+			if (p['switch']) {
+				// A sheet of received counts under "This is what I ORDERED": the other button, one press away.
+				var $switch = el('p', 'fh-cr-warn fh-cr-import__switch');
+				$switch.append(el('span', '', p['switch'].text + ' '));
+				$switch.append(el('button', 'button button-primary', p['switch'].button).attr('type', 'button').on('click', function () {
+					$panel.find('.fh-cr-import__mode[data-mode="' + (p['switch'].mode === 'arrived' ? 'arrived' : 'ordered') + '"]').trigger('click');
+				}));
+				$preview.append($switch);
 			}
 			if (p.left_out && p.left_out.count > 0) {
 				var $left = el('details', 'fh-cr-import__left');

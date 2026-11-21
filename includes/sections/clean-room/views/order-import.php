@@ -15,9 +15,14 @@
 
 defined( 'ABSPATH' ) || exit;
 
+use FisHotel\Misc\Sections\Clean_Room\Admin_Order_Import;
 use FisHotel\Misc\Sections\Clean_Room\Order_Import;
 
+// The fish have arrived (the "use the quantity as received too" tick) — and which of the two big
+// buttons fits: ARRIVED already for a saved order that is ordered and has ordered lines, because
+// the next file that comes for such an order is the invoice.
 $fh_arrived = in_array( (string) $order['status'], array( 'received', 'closed' ), true );
+$fh_invoice = 'arrived' === Admin_Order_Import::default_mode( (string) $order['status'], (array) ( $order['lines'] ?? array() ), ! $is_new );
 $fh_open    = isset( $_GET['import'] ) && '1' === (string) wp_unslash( $_GET['import'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- opens a panel, nothing more.
 ?>
 <div class="fishotel-misc-card fh-cr-card fh-cr-import" id="fh-cr-import" data-open="<?php echo $fh_open ? '1' : '0'; ?>" hidden>
@@ -27,11 +32,11 @@ $fh_open    = isset( $_GET['import'] ) && '1' === (string) wp_unslash( $_GET['im
 	</div>
 
 	<div class="fh-cr-import__modes" role="group" aria-label="<?php esc_attr_e( 'What is this file?', 'fishotel-misc-plugin' ); ?>">
-		<button type="button" class="fh-cr-import__mode<?php echo $fh_arrived ? '' : ' is-on'; ?>" data-mode="ordered" aria-pressed="<?php echo $fh_arrived ? 'false' : 'true'; ?>">
+		<button type="button" class="fh-cr-import__mode<?php echo $fh_invoice ? '' : ' is-on'; ?>" data-mode="ordered" aria-pressed="<?php echo $fh_invoice ? 'false' : 'true'; ?>">
 			<strong><?php esc_html_e( 'This is what I ORDERED', 'fishotel-misc-plugin' ); ?></strong>
 			<span><?php esc_html_e( 'My order sheet — the supplier\'s price list with my order quantities filled in. Every row with an order quantity becomes a line; received stays empty.', 'fishotel-misc-plugin' ); ?></span>
 		</button>
-		<button type="button" class="fh-cr-import__mode<?php echo $fh_arrived ? ' is-on' : ''; ?>" data-mode="arrived" aria-pressed="<?php echo $fh_arrived ? 'true' : 'false'; ?>">
+		<button type="button" class="fh-cr-import__mode<?php echo $fh_invoice ? ' is-on' : ''; ?>" data-mode="arrived" aria-pressed="<?php echo $fh_invoice ? 'true' : 'false'; ?>">
 			<strong><?php esc_html_e( 'This is what ARRIVED', 'fishotel-misc-plugin' ); ?></strong>
 			<span><?php esc_html_e( 'The supplier\'s invoice or packing list. Every row is matched against the lines on this order: what came, what came short, what did not come, what is extra.', 'fishotel-misc-plugin' ); ?></span>
 		</button>
@@ -50,11 +55,11 @@ $fh_open    = isset( $_GET['import'] ) && '1' === (string) wp_unslash( $_GET['im
 				<?php endif; ?>
 				<button type="button" class="button button-primary fh-cr-import__read"><?php esc_html_e( 'Read it', 'fishotel-misc-plugin' ); ?></button>
 			</p>
-			<p class="fh-cr-import__too-wrap" <?php echo $fh_arrived ? 'hidden' : ''; ?>>
+			<p class="fh-cr-import__too-wrap" <?php echo $fh_invoice ? 'hidden' : ''; ?>>
 				<label><input type="checkbox" class="fh-cr-import__too" <?php checked( $fh_arrived ); ?>> <?php esc_html_e( 'These fish have arrived — use the quantity as received too', 'fishotel-misc-plugin' ); ?></label>
 			</p>
-			<p class="fh-cr-sub" data-for-mode="ordered" <?php echo $fh_arrived ? 'hidden' : ''; ?>><?php esc_html_e( 'A whole price list is fine: only the rows with an order quantity above 0 become lines, and the supplier\'s stock column is never taken for a quantity. Nothing is saved before you confirm, and nothing already on the order is changed.', 'fishotel-misc-plugin' ); ?></p>
-			<p class="fh-cr-sub" data-for-mode="arrived" <?php echo $fh_arrived ? '' : 'hidden'; ?>><?php esc_html_e( 'Nothing is saved before you confirm. Confirming writes the received counts on the order; it never removes a line, never changes a line that is already checked in, and never checks anything in.', 'fishotel-misc-plugin' ); ?></p>
+			<p class="fh-cr-sub" data-for-mode="ordered" <?php echo $fh_invoice ? 'hidden' : ''; ?>><?php esc_html_e( 'A whole price list is fine: only the rows with an order quantity above 0 become lines, and the supplier\'s stock column is never taken for a quantity. Nothing is saved before you confirm, and nothing already on the order is changed.', 'fishotel-misc-plugin' ); ?></p>
+			<p class="fh-cr-sub" data-for-mode="arrived" <?php echo $fh_invoice ? '' : 'hidden'; ?>><?php esc_html_e( 'Nothing is saved before you confirm. Confirming writes the received counts on the order; it never removes a line, never changes a line that is already checked in, and never checks anything in.', 'fishotel-misc-plugin' ); ?></p>
 		</div>
 
 		<aside class="fh-cr-import__assistant">

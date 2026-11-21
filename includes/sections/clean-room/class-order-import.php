@@ -170,6 +170,7 @@ class Order_Import {
 			$text = substr( $text, 3 );
 		}
 		$text = str_replace( array( "\r\n", "\r" ), "\n", $text );
+		$text = self::untable( $text );
 
 		$delimiter = self::delimiter_of( $text );
 		$rows      = array();
@@ -228,6 +229,143 @@ class Order_Import {
 			'truncated' => $truncated || $clean['truncated'],
 			'delimiter' => $delimiter,
 		);
+	}
+
+	/**
+	 * What a chat assistant's answer does to a table, undone — the text
+	 * comes back tab-separated when it safely can:
+	 *
+	 *   - the lines of a code fence ("```") go;
+	 *   - a Markdown table ("| fish | qty |" with its "|---|---|" line)
+	 *     is read cell by cell;
+	 *   - columns set apart by runs of two or more spaces (tabs that were
+	 *     turned into spaces) are read ONLY when every row has as many
+	 *     cells as the header — a blank cell leaves no trace in such a
+	 *     text, and a number must never slide into its neighbour's column.
+	 *     Otherwise the text is left as it is, and the preview says the
+	 *     columns ran together (run_together()).
+	 *
+	 * A text that has a tab anywhere is taken as it stands.
+	 *
+	 * @param string $text Text with "\n" line ends.
+	 * @return string
+	 */
+	public static function untable( $text ) {
+		$lines = array();
+		foreach ( explode( "\n", (string) $text ) as $line ) {
+			if ( 1 !== preg_match( '/^\s*(```|~~~)[\w-]*\s*$/', $line ) ) {
+				$lines[] = $line;
+			}
+		}
+		$text = implode( "\n", $lines );
+		if ( false !== strpos( $text, "\t" ) ) {
+			return $text;
+		}
+
+		// A Markdown table.
+		$filled = 0;
+		$piped  = 0;
+		foreach ( $lines as $line ) {
+			if ( '' === trim( $line ) ) {
+				continue;
+			}
+			$filled++;
+			if ( substr_count( $line, '|' ) >= 2 ) {
+				$piped++;
+			}
+		}
+		if ( $piped >= 2 && $piped * 2 >= $filled ) {
+			$out = array();
+			foreach ( $lines as $line ) {
+				$bare = trim( $line );
+				if ( substr_count( $bare, '|' ) < 2 ) {
+					$out[] = $line;
+					continue;
+				}
+				if ( 1 === preg_match( '/^[\s|:-]+$/', $bare ) && false !== strpos( $bare, '-' ) ) {
+					continue; // The "|---|---|" line under the header.
+				}
+				$bare  = (string) preg_replace( '/^\||\|$/', '', $bare );
+				$cells = array();
+				foreach ( (array) preg_split( '/(?<!\\\\)\|/', $bare ) as $cell ) {
+					$cells[] = str_replace( '\\|', '|', trim( (string) $cell ) );
+				}
+				$out[] = implode( "\t", $cells );
+			}
+			return implode( "\n", $out );
+		}
+
+		// Columns set apart by runs of spaces: only when no cell can have gone missing.
+		$split  = static function ( $line ) {
+			return (array) preg_split( '/ {2,}/', trim( $line ) );
+		};
+		$width  = 0;
+		$head   = null;
+		$seen   = 0;
+		foreach ( $lines as $i => $line ) {
+			if ( '' === trim( $line ) ) {
+				continue;
+			}
+			if ( ++$seen > self::HEADER_SEARCH_ROWS ) {
+				break;
+			}
+			$cells = $split( $line );
+			if ( count( $cells ) >= 3 && count( self::roles_of_row( $cells ) ) >= 2 && count( self::roles_of_row( explode( ',', $line ) ) ) < 2 ) {
+				$head  = $i;
+				$width = count( $cells );
+				break;
+			}
+		}
+		if ( null === $head ) {
+			return $text;
+		}
+		$out  = $lines;
+		$fees = false;
+		foreach ( $lines as $i => $line ) {
+			if ( $i < $head || '' === trim( $line ) ) {
+				continue;
+			}
+			$cells = $split( $line );
+			if ( count( $cells ) < 2 ) {
+				continue;
+			}
+			$keys = array_map( array( self::class, 'header_key' ), $cells );
+			$fees = $fees || ( in_array( 'fee', $keys, true ) && in_array( 'amount', $keys, true ) );
+			if ( ! $fees && count( $cells ) !== $width ) {
+				return $text; // A cell is missing somewhere: not read by guessing.
+			}
+			$out[ $i ] = implode( "\t", $cells );
+		}
+		return implode( "\n", $out );
+	}
+
+	/**
+	 * Whether the columns of a text ran together: a row whose one cell
+	 * holds four or more column headings in a row ("fish scientific name
+	 * size ordered received price …") — a block whose tabs were lost on
+	 * the way. Nothing can be read from that safely.
+	 *
+	 * @param string[][] $grid The grid.
+	 * @return bool
+	 */
+	public static function run_together( array $grid ) {
+		foreach ( array_slice( $grid, 0, self::HEADER_SEARCH_ROWS ) as $row ) {
+			$filled = array_values( array_filter( $row, 'strlen' ) );
+			if ( 1 !== count( $filled ) ) {
+				continue;
+			}
+			$roles = array();
+			foreach ( (array) preg_split( '/\s+/', $filled[0] ) as $word ) {
+				$role = self::header_role( $word );
+				if ( '' !== $role ) {
+					$roles[ $role ] = true;
+				}
+			}
+			if ( count( $roles ) >= 4 ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -470,7 +608,7 @@ class Order_Import {
 	 */
 	public static function header_role( $text ) {
 		$key = self::header_key( $text );
-		if ( '' === $key || strlen( $key ) > 40 || self::is_formula( $key ) || is_numeric( $key ) ) {
+		if ( '' === $key || strlen( $key ) > 40 || self::is_formula( $key ) || is_numeric( $key ) || self::is_letterhead( $key ) ) {
 			return '';
 		}
 		$rules = self::header_rules();
@@ -485,6 +623,17 @@ class Order_Import {
 			}
 		}
 		return '';
+	}
+
+	/**
+	 * A label of a sheet's letterhead — "Customer Name:", "Order No:",
+	 * "Ship to", "Date" — which names the paper, not a column of fish.
+	 *
+	 * @param string $key header_key().
+	 * @return bool
+	 */
+	public static function is_letterhead( $key ) {
+		return 1 === preg_match( '/\b(customer|client|company|contact|consignee|shipper|buyer|attn|attention|address|phone|tel|fax|e-?mail)\b|\b(supplier|vendor|your|my)(\'s)? name\b|\b(ship|bill|sold|deliver)(ped)? to\b|\b(order|invoice|po|p\.o|awb|ref|reference|account|acct)\s*(no|number|nr|num|#|id|date|ref)(\b|$)/', (string) $key );
 	}
 
 	/**
@@ -509,27 +658,38 @@ class Order_Import {
 	}
 
 	/**
-	 * Find the header row: the first row within the first
-	 * HEADER_SEARCH_ROWS with two or more recognised headings — a price
-	 * list has one to five title and address rows above it.
+	 * Find the header row within the first HEADER_SEARCH_ROWS — a price
+	 * list has one to five title and address rows above it, and a
+	 * letterhead row ("Customer Name: … Order No: …") can look like two
+	 * headings. So it is not the first row with two recognised headings
+	 * but the BEST one: a row the importer can save from (a fish and a
+	 * quantity) before one it cannot, then the row with the most
+	 * headings, then the one higher up.
 	 *
 	 * @param string[][] $grid The grid.
 	 * @return array{row: int|null, map: array<int, string>}
 	 */
 	public static function find_header( array $grid ) {
+		$best = array(
+			'row' => null,
+			'map' => array(),
+		);
+		$rank = array( -1, 0 );
 		foreach ( array_slice( $grid, 0, self::HEADER_SEARCH_ROWS, true ) as $index => $row ) {
 			$map = self::roles_of_row( $row );
-			if ( count( $map ) >= 2 ) {
-				return array(
+			if ( count( $map ) < 2 ) {
+				continue;
+			}
+			$mine = array( self::map_complete( $map ) ? 1 : 0, count( $map ) );
+			if ( $mine[0] > $rank[0] || ( $mine[0] === $rank[0] && $mine[1] > $rank[1] ) ) {
+				$rank = $mine;
+				$best = array(
 					'row' => (int) $index,
 					'map' => $map,
 				);
 			}
 		}
-		return array(
-			'row' => null,
-			'map' => array(),
-		);
+		return $best;
 	}
 
 	/**
@@ -552,6 +712,8 @@ class Order_Import {
 						'dec'    => 0,
 						'words'  => 0,
 						'length' => 0,
+						'last'   => null,
+						'steps'  => 0,
 					);
 				}
 				if ( '' === $text ) {
@@ -560,6 +722,11 @@ class Order_Import {
 				$stats[ $index ]['filled']++;
 				$number = self::number( $text );
 				if ( 'ok' === $number['state'] ) {
+					// A column that counts 1, 2, 3 … is the sheet's own row number, never a quantity.
+					if ( null !== $stats[ $index ]['last'] && $number['value'] === $stats[ $index ]['last'] + 1 ) {
+						$stats[ $index ]['steps']++;
+					}
+					$stats[ $index ]['last'] = $number['value'];
 					$stats[ $index ]['number']++;
 					if ( false !== strpos( $text, '.' ) || 1 === preg_match( '/[$€£]/u', $text ) ) {
 						$stats[ $index ]['dec']++;
@@ -588,6 +755,9 @@ class Order_Import {
 		}
 		foreach ( $stats as $index => $s ) {
 			if ( isset( $map[ $index ] ) || $s['filled'] < 1 ) {
+				continue;
+			}
+			if ( $s['filled'] >= 3 && $s['steps'] === $s['filled'] - 1 ) {
 				continue;
 			}
 			if ( ! in_array( 'qty', $map, true ) && $s['whole'] * 10 >= $s['filled'] * 6 ) {
@@ -624,13 +794,15 @@ class Order_Import {
 	}
 
 	/**
-	 * Whether a map can be saved from: a fish column and one quantity.
+	 * Whether a map can be saved from: a fish column and one quantity. A
+	 * packing list that names its fish by scientific name alone has its
+	 * fish column there: the scientific name stands in.
 	 *
 	 * @param array<int, string> $map column → role.
 	 * @return bool
 	 */
 	public static function map_complete( array $map ) {
-		return in_array( 'fish', $map, true ) && (bool) array_intersect( self::QTY_ROLES, $map );
+		return ( in_array( 'fish', $map, true ) || in_array( 'sci', $map, true ) ) && (bool) array_intersect( self::QTY_ROLES, $map );
 	}
 
 	/* ============================================================== */
@@ -847,10 +1019,14 @@ class Order_Import {
 			}
 		}
 
-		// 2. A size word at the end of the name, or right before a parenthesis.
-		if ( 1 === preg_match( '#(?:\s+[-\x{2013}\x{2014}]\s*|,\s*|\s+)([A-Za-z]{1,8}(?:\s*/\s*[A-Za-z]{1,8})?)\s*(?=\(|$)#u', $name, $m, PREG_OFFSET_CAPTURE ) ) {
-			$word = $m[1][0];
-			if ( '' !== self::size_word( $word ) && ! self::is_name_word( $word ) ) {
+		// 2. A size word at the end of the name, or right before a parenthesis — the LAST one that is a
+		// size: in "Opal Mock Clam (INV) M" the word before "(INV)" is "Clam", and the size stands after it.
+		if ( preg_match_all( '#(?:\s+[-\x{2013}\x{2014}]\s*|,\s*|\s+)([A-Za-z]{1,8}(?:\s*/\s*[A-Za-z]{1,8})?)\s*(?=\(|$)#u', $name, $words, PREG_SET_ORDER | PREG_OFFSET_CAPTURE ) ) {
+			foreach ( array_reverse( $words ) as $m ) {
+				$word = $m[1][0];
+				if ( '' === self::size_word( $word ) || self::is_name_word( $word ) ) {
+					continue;
+				}
 				$found = self::standard_size( $word, $sizes );
 				if ( $found ) {
 					return self::lifted( $name, (int) $m[0][1], strlen( $m[0][0] ), $found, $word );
@@ -858,6 +1034,7 @@ class Order_Import {
 				if ( '' === $out['written'] || self::is_measure( $out['written'] ) ) {
 					$out['written'] = trim( $word );
 				}
+				break;
 			}
 		}
 
@@ -1194,7 +1371,9 @@ class Order_Import {
 	 * Whether a text is a fee line of an invoice — packing, freight,
 	 * clearance, re-oxygen, heat packs, a surcharge, a tariff — and which
 	 * of the order's two fee fields it belongs to: 'tariffs', or 'import'
-	 * for everything else. Null for a fish.
+	 * for everything else. Null for a fish. Words a fish's own name may
+	 * carry ("CITES", "Pallet") are no fee words; and analyse() never takes
+	 * a row with a supplier's code or a scientific name for a fee.
 	 *
 	 * @param string $text A row's text.
 	 * @return string|null
@@ -1207,7 +1386,7 @@ class Order_Import {
 		if ( 1 === preg_match( '/\b(tariffs?|dut(y|ies)|customs duty)\b/', $text ) ) {
 			return 'tariffs';
 		}
-		if ( 1 === preg_match( '/\b(packing|box charges?|boxes? fee|carton charges?|freight|air ?freight|clearance|handling|re-?ox(ygen(ation)?)?|re-?water|heat ?packs?|ice ?packs?|cool ?packs?|fuel|surcharge|documentation|documents? fee|health cert(ificate)?|cites|inspection|broker(age)?|awb|air waybill|service fee|bank charges?|wire fee|pallet|styro(foam)?)\b/', $text ) ) {
+		if ( 1 === preg_match( '/\b(packing|box charges?|boxes? fee|carton charges?|freight|air ?freight|clearance|handling|re-?ox(ygen(ation)?)?|re-?water|heat ?packs?|ice ?packs?|cool ?packs?|fuel|surcharge|documentation|documents? fee|health cert(ificate)?|inspection|broker(age)?|awb|air waybill|service fee|bank charges?|wire fee|styro(foam)?)\b/', $text ) ) {
 			return 'import';
 		}
 		return null;
@@ -1264,7 +1443,7 @@ class Order_Import {
 	 * @param string[][] $grid The grid.
 	 * @param array      $opts mode, map (column → role), header_row (int|null), junk (string[]),
 	 *                         sizes (the standard list).
-	 * @return array rows, left_out, fees, subtotal, total, sections, data_rows, with_qty, columns.
+	 * @return array rows, left_out, fees, subtotal, total, sections, data_rows, with_qty, received.
 	 */
 	public static function analyse( array $grid, array $opts ) {
 		$mode   = isset( $opts['mode'] ) && 'arrived' === $opts['mode'] ? 'arrived' : 'ordered';
@@ -1289,6 +1468,7 @@ class Order_Import {
 			'sections'  => array(),
 			'data_rows' => 0,
 			'with_qty'  => 0,
+			'received'  => 0, // Rows with a received count above 0 — a sheet of what ARRIVED has those.
 		);
 
 		$box     = '';
@@ -1310,8 +1490,10 @@ class Order_Import {
 			}
 			$first = (string) reset( $filled );
 			$fish  = $get( $row, 'fish' );
+			$sci   = $get( $row, 'sci' );
+			$code  = $get( $row, 'code' );
 			$text  = '' !== $fish ? $fish : $first;
-			$leave = static function ( $reason ) use ( &$out, $n, $text ) {
+			$leave = static function ( $reason ) use ( &$out, $n, &$text ) {
 				$out['left_out'][] = array(
 					'n'      => (int) $n,
 					'reason' => $reason,
@@ -1357,6 +1539,12 @@ class Order_Import {
 				if ( '' === $name ) {
 					continue;
 				}
+				$text = $name;
+				if ( 'ok' !== $amount['state'] && null === self::fee_kind( $name ) ) {
+					// Neither an amount nor a fee's words: whatever was written after the table.
+					$leave( 'other' );
+					continue;
+				}
 				$out['fees'][] = array(
 					'n'      => (int) $n,
 					'name'   => $name,
@@ -1365,7 +1553,6 @@ class Order_Import {
 					'origin' => isset( $fee_map['origin'], $row[ $fee_map['origin'] ] ) ? (string) $row[ $fee_map['origin'] ] : '',
 					'check'  => 'ok' !== $amount['state'] || 1 === preg_match( '/\?|\bcheck\b/i', $name ),
 				);
-				$text          = $name;
 				$leave( 'fee' );
 				continue;
 			}
@@ -1408,11 +1595,60 @@ class Order_Import {
 				continue;
 			}
 
-			$fee = self::fee_kind( $text );
+			// A fee line: its words stand in the fish column — or, on a row without a fish, in whichever
+			// cell holds text (an invoice writes "Freight (kg)" under any heading). A row that carries the
+			// supplier's code, or a scientific name beside its fish, is a fish whatever its name says
+			// ("… (CITES)"): it stays, with a flag.
+			$fee      = null;
+			$fee_word = false;
+			foreach ( '' !== $fish ? array( $fish ) : $filled as $value ) {
+				if ( 'ok' === self::number( $value )['state'] ) {
+					continue;
+				}
+				$fee = self::fee_kind( $value );
+				if ( null !== $fee ) {
+					$text = '' !== $fish ? $fish : (string) $value;
+					break;
+				}
+			}
+			if ( null !== $fee && ( '' !== $code || ( '' !== $fish && '' !== $sci && null === self::fee_kind( $sci ) ) ) ) {
+				$fee      = null;
+				$fee_word = true;
+				$text     = '' !== $fish ? $fish : $first;
+			}
 			if ( null !== $fee ) {
+				$own = $get( $row, 'origin' );
+
+				// The amount: the line total; else price × quantity; else the last number that is not a
+				// count, a box or a percent.
 				$amount = self::number( $get( $row, 'amount' ) );
-				$value  = 'ok' === $amount['state'] ? $amount['value'] : $last_number();
-				$own    = $get( $row, 'origin' );
+				$value  = 'ok' === $amount['state'] ? $amount['value'] : null;
+				if ( null === $value ) {
+					$price = self::number( $get( $row, 'price' ) );
+					if ( 'ok' === $price['state'] ) {
+						$times = 1;
+						foreach ( self::QTY_ROLES as $role ) {
+							$read = self::quantity( $get( $row, $role ) );
+							if ( 'ok' === $read['state'] && $read['value'] > 0 ) {
+								$times = $read['value'];
+								break;
+							}
+						}
+						$value = round( $price['value'] * $times, 2 );
+					}
+				}
+				if ( null === $value ) {
+					foreach ( array_reverse( $filled, true ) as $index => $cell ) {
+						if ( isset( $map[ $index ] ) && ! in_array( $map[ $index ], array( 'fish', 'sci', 'label' ), true ) ) {
+							continue;
+						}
+						$number = self::number( $cell );
+						if ( 'ok' === $number['state'] ) {
+							$value = $number['value'];
+							break;
+						}
+					}
+				}
 
 				$out['fees'][] = array(
 					'n'      => (int) $n,
@@ -1424,6 +1660,14 @@ class Order_Import {
 				);
 				$leave( 'fee' );
 				continue;
+			}
+
+			// A packing list that names its fish by scientific name alone: that name is the fish.
+			$stood_in = false;
+			if ( '' === $fish && '' !== $sci ) {
+				$fish     = $sci;
+				$text     = $sci;
+				$stood_in = true;
 			}
 
 			if ( '' !== $fish && isset( $junk[ Species::key( $fish ) ] ) ) {
@@ -1461,7 +1705,7 @@ class Order_Import {
 					$quantity_typed = true;
 				}
 			}
-			$others = '' !== $get( $row, 'code' ) || '' !== $get( $row, 'sci' ) || isset( $cells['price'] ) || isset( $cells['amount'] );
+			$others = '' !== $code || ( '' !== $sci && ! $stood_in ) || isset( $cells['price'] ) || isset( $cells['amount'] );
 
 			// A text and nothing else: a section heading ("FISH", "INVERTS").
 			if ( ! $quantity_typed && ! $others ) {
@@ -1472,6 +1716,9 @@ class Order_Import {
 			}
 
 			$out['data_rows']++;
+			if ( isset( $cells['received'] ) && $cells['received'] >= 1 ) {
+				$out['received']++;
+			}
 
 			// An "order" column, when the sheet has one, is the only ordered count — a "qty" beside it may
 			// be anything (the supplier's stock as a number); likewise "received" for what arrived.
@@ -1535,8 +1782,8 @@ class Order_Import {
 				'typed'    => $fish,
 				'name'     => $size['name'],
 				'size'     => $size,
-				'sci'      => self::cut( $get( $row, 'sci' ), 120 ),
-				'code'     => self::cut( $get( $row, 'code' ), 40 ),
+				'sci'      => self::cut( $sci, 120 ),
+				'code'     => self::cut( $code, 40 ),
 				'ordered'  => null !== $ordered ? (int) $ordered : null,
 				'received' => null !== $received ? (int) $received : null,
 				'arrived'  => null !== $arrived ? (int) $arrived : null,
@@ -1553,6 +1800,7 @@ class Order_Import {
 				'label'    => self::cut( $get( $row, 'label' ), Identify::MAX_NAME ),
 				'origin'   => $origin,
 				'check'    => '' !== $check && 1 === preg_match( '/\?|check|unsure|uncertain/i', $check ),
+				'fee_word' => $fee_word,
 				'flags'    => array_keys( $flags ),
 				'bad_qty'  => $bad_qty,
 			);
@@ -1583,6 +1831,8 @@ class Order_Import {
 				return __( 'a fee line, not a fish', 'fishotel-misc-plugin' );
 			case 'section':
 				return __( 'another section', 'fishotel-misc-plugin' );
+			case 'other':
+				return __( 'not part of the table', 'fishotel-misc-plugin' );
 		}
 		return __( 'left out', 'fishotel-misc-plugin' );
 	}
@@ -1599,6 +1849,20 @@ class Order_Import {
 	 */
 	public static function code_of( $notes ) {
 		return 1 === preg_match( '/' . preg_quote( self::NOTE_CODE, '/' ) . '([^\]]{1,40})\]/', (string) $notes, $m ) ? trim( $m[1] ) : '';
+	}
+
+	/**
+	 * A supplier's code as it is compared: lower case, without spaces and
+	 * without leading zeros — a spreadsheet turns "0059" into 59 on its
+	 * own, and both are the same code.
+	 *
+	 * @param mixed $code A code as written.
+	 * @return string
+	 */
+	public static function code_key( $code ) {
+		$key  = strtolower( (string) preg_replace( '/\s+/', '', is_scalar( $code ) ? (string) $code : '' ) );
+		$bare = ltrim( $key, '0' );
+		return '' !== $bare ? $bare : $key;
 	}
 
 	/**
@@ -1639,10 +1903,14 @@ class Order_Import {
 	 *
 	 * A row is paired, in turn: as the owner said (a pairing made by hand
 	 * wins); by the supplier's code when the row and a line both carry
-	 * one; by fish — the same name, the line's species-list fish or what
-	 * the line was written as — and then by size when both have one. A
-	 * line that already became a stay is never changed: a row that pairs
-	 * with it is set aside and said so.
+	 * one (code_key(): "0059" and "59" are one code) — unless the row's
+	 * fish IS another line of the order, which then takes it, said so;
+	 * by fish — the same name, the line's species-list fish or what the
+	 * line was written as — and then by size when both have one. A row
+	 * without a size against lines of two sizes is paired with neither:
+	 * it waits among the extras for the owner to say which. A line that
+	 * already became a stay is never changed: a row that pairs with it is
+	 * set aside and said so.
 	 *
 	 * The same fish in two boxes is two rows: summed onto the one ordered
 	 * line (the boxes noted) unless $opts['same_fish'] is 'separate' — the
@@ -1679,7 +1947,7 @@ class Order_Import {
 		foreach ( $lines as $line ) {
 			$key            = (string) $line['key'];
 			$by_key[ $key ] = $line;
-			$code           = strtolower( self::code_of( (string) ( $line['notes'] ?? '' ) ) );
+			$code           = self::code_key( self::code_of( (string) ( $line['notes'] ?? '' ) ) );
 			if ( '' !== $code ) {
 				$by_code[ $code ][] = $key;
 			}
@@ -1689,6 +1957,8 @@ class Order_Import {
 		$extra   = array(); // rows no line matched.
 		$instead = array(); // row n → line key.
 		$how     = array();
+		$clash   = array(); // row n → true: paired by its fish although its code is another line's.
+		$could   = array(); // row n → the lines it could be (a row without a size, lines of two sizes).
 
 		foreach ( $rows as $row ) {
 			if ( empty( $row['on'] ) ) {
@@ -1711,27 +1981,49 @@ class Order_Import {
 				$how[ $n ] = 'hand';
 			}
 			if ( null === $found ) {
-				$code = strtolower( (string) ( $row['code'] ?? '' ) );
-				if ( '' !== $code && isset( $by_code[ $code ] ) ) {
-					$found     = self::best_line( $row, $by_code[ $code ], $by_key, $taken, $separate );
-					$how[ $n ] = 'code';
-				}
-			}
-			if ( null === $found ) {
 				$same = array();
 				foreach ( $lines as $line ) {
 					if ( self::same_fish( $row, $line ) ) {
 						$same[] = (string) $line['key'];
 					}
 				}
-				if ( $same ) {
-					$found     = self::best_line( $row, $same, $by_key, $taken, $separate );
+				$code  = self::code_key( $row['code'] ?? '' );
+				$coded = '' !== $code && isset( $by_code[ $code ] ) ? $by_code[ $code ] : array();
+				$both  = array_values( array_intersect( $coded, $same ) );
+				$among = array();
+				if ( $coded && ( $both || ! $same ) ) {
+					// The supplier's code — and nothing on the row says another line.
+					$among     = $both ? $both : $coded;
+					$how[ $n ] = 'code';
+				} elseif ( $same ) {
+					// By fish. A row that IS another line's fish goes to that line, whatever its code says.
+					$among     = $same;
 					$how[ $n ] = 'fish';
+					if ( $coded ) {
+						$clash[ $n ] = true;
+					}
+				}
+				if ( $among ) {
+					// A row without a size: the line without a size is its line. Against lines of two
+					// sizes and none without, nobody can say which — the owner does.
+					$slugs = array();
+					foreach ( $among as $key ) {
+						$slugs[ (string) ( $by_key[ $key ]['size_slug'] ?? '' ) ][] = $key;
+					}
+					if ( '' === (string) ( $row['size']['slug'] ?? '' ) && count( $slugs ) > 1 ) {
+						$among = isset( $slugs[''] ) ? $slugs[''] : array();
+						if ( ! $among ) {
+							$could[ $n ] = call_user_func_array( 'array_merge', array_values( $slugs ) );
+						}
+					}
+					if ( $among ) {
+						$found = self::best_line( $row, $among, $by_key, $taken, $separate );
+					}
 				}
 			}
 			if ( null === $found || ( $separate && ! empty( $taken[ $found ] ) ) ) {
 				$extra[] = $n;
-				unset( $how[ $n ] );
+				unset( $how[ $n ], $clash[ $n ] );
 				continue;
 			}
 			$taken[ $found ][] = $n;
@@ -1766,6 +2058,7 @@ class Order_Import {
 				'ordered' => $want,
 				'was'     => $have,
 				'how'     => $mine && isset( $how[ $mine[0] ] ) ? $how[ $mine[0] ] : '',
+				'clash'   => (bool) array_intersect_key( $clash, array_flip( $mine ) ),
 			);
 			$ordered += $want;
 
@@ -1816,6 +2109,7 @@ class Order_Import {
 				'row'     => $n,
 				'arrived' => (int) ( $row_of[ $n ]['arrived'] ?? 0 ),
 				'instead' => isset( $instead[ $n ] ) ? $instead[ $n ] : '',
+				'could'   => isset( $could[ $n ] ) ? $could[ $n ] : array(),
 			);
 			$arrived          += $entry['arrived'];
 			$groups['extra'][] = $entry;
@@ -2030,14 +2324,14 @@ class Order_Import {
 	 */
 	public static function instructions() {
 		$lines = array(
-			__( 'I am attaching a supplier\'s invoice or packing list for live fish. Please read it and give me back ONE block of plain text I can paste into my order system. Nothing else: no explanation before or after it.', 'fishotel-misc-plugin' ),
+			__( 'I am attaching a supplier\'s invoice or packing list for live fish. Please read it and give me back ONE block of plain text I can paste into my order system. Put the whole block inside one code block, so the tabs between the columns survive when I copy it. Nothing else: no explanation before or after it.', 'fishotel-misc-plugin' ),
 			'',
 			__( 'PART 1 — the fish. Tab-separated, one row per fish kind per box, with exactly this header row:', 'fishotel-misc-plugin' ),
 			'',
 			self::block_header(),
 			'',
 			__( 'What goes in each column:', 'fishotel-misc-plugin' ),
-			__( '- fish: the common name exactly as the invoice writes it, with any size or note that is part of the name. Do not tidy it up or translate it.', 'fishotel-misc-plugin' ),
+			__( '- fish: the common name exactly as the invoice writes it, with any size or note that is part of the name. Do not tidy it up or translate it. Blank when the invoice gives only a scientific name.', 'fishotel-misc-plugin' ),
 			__( '- scientific name: as the invoice writes it; blank when it gives none.', 'fishotel-misc-plugin' ),
 			__( '- size: only when the invoice has a size column of its own (S, M, M/L …); otherwise blank.', 'fishotel-misc-plugin' ),
 			__( '- ordered: only when the invoice shows an ordered quantity next to the shipped one; otherwise blank.', 'fishotel-misc-plugin' ),
@@ -2055,6 +2349,7 @@ class Order_Import {
 			__( '- One row per fish kind per box. The same fish in two boxes is two rows.', 'fishotel-misc-plugin' ),
 			__( '- Leave a cell blank when the invoice does not say. Never invent a name, a number or a price.', 'fishotel-misc-plugin' ),
 			__( '- No totals, no subtotals, no headings and no fee lines in this part.', 'fishotel-misc-plugin' ),
+			__( '- Real tabs between the columns, also for a blank cell — not spaces, and not a table drawn with | characters.', 'fishotel-misc-plugin' ),
 			__( '- Skip pages that are not the invoice itself, such as an air waybill.', 'fishotel-misc-plugin' ),
 			__( '- Read hand-written amounts too, and mark those rows with ? in the check column.', 'fishotel-misc-plugin' ),
 			__( '- When a price or a total ran into the cell next to it and cannot be read for certain, put your best reading and a ? in the check column rather than guessing silently.', 'fishotel-misc-plugin' ),

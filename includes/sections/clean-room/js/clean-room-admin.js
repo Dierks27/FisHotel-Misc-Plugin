@@ -519,6 +519,22 @@
 	}
 
 	/**
+	 * A text without half a character in it. Half an emoji (a lone
+	 * surrogate — the other half was cut off by a field's length limit or
+	 * a paste) is written by JSON as "\\ud83d", which PHP cannot read
+	 * back: the whole lines_json would be refused. It becomes the
+	 * replacement character instead.
+	 *
+	 * @param {*} value A field's value.
+	 * @return {string}
+	 */
+	function wellFormed(value) {
+		return String(value === null || typeof value === 'undefined' ? '' : value)
+			.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g, '\uFFFD')
+			.replace(/(^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '$1\uFFFD');
+	}
+
+	/**
 	 * The order form's fields with its line rows packed into ONE field,
 	 * lines_json. An order of 150 fish is some 2,500 form fields — more
 	 * than PHP reads by default (max_input_vars) — and a save that lost
@@ -542,7 +558,7 @@
 				rows[m[1]] = {};
 				order.push(m[1]);
 			}
-			rows[m[1]][m[2]] = field.value;
+			rows[m[1]][m[2]] = wellFormed(field.value);
 		});
 		out.push({ name: 'lines_json', value: JSON.stringify(order.map(function (key) { return rows[key]; })) });
 		return out;
@@ -550,6 +566,7 @@
 
 	var api = {
 		packLines: packLines,
+		wellFormed: wellFormed,
 		renumber: renumber,
 		suggestImportFees: suggestImportFees,
 		unknownName: unknownName,

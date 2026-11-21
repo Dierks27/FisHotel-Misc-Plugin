@@ -93,6 +93,16 @@ for ( var i = 0; i < 150; i++ ) {
 check( 'an order of 150 fish: 2,550 form fields become one — it cannot be cut short by max_input_vars', many.length === 2550 && admin.packLines( many ).length === 1 && JSON.parse( admin.packLines( many )[0].value ).length === 150 );
 check( 'an order without lines posts an empty list, so a Save that removed the last line still removes it', same( admin.packLines( [ { name: 'ref', value: 'x' } ] ), [ { name: 'ref', value: 'x' }, { name: 'lines_json', value: '[]' } ] ) );
 
+var half = admin.packLines( [ { name: 'lines[0][species]', value: 'Blue Test Wrasse \ud83d' }, { name: 'lines[0][notes]', value: '\udc1f tail' }, { name: 'lines[1][species]', value: 'Whole \ud83d\udc1f fish' } ] )[0].value;
+check( 'half an emoji in a name (a lone surrogate) never reaches the field: PHP could not read it back, and the whole order would be refused', half.indexOf( '\\ud83d' ) === -1 && half.indexOf( '\\udc1f' ) === -1 && same( JSON.parse( half ), [ { species: 'Blue Test Wrasse \ufffd', notes: '\ufffd tail' }, { species: 'Whole \ud83d\udc1f fish' } ] ) );
+check( '… a whole one is left alone', admin.wellFormed( 'a \ud83d\udc1f b' ) === 'a \ud83d\udc1f b' && admin.wellFormed( null ) === '' && admin.wellFormed( 12 ) === '12' );
+
+console.log( '4b. The foot, and where the focus goes back to' );
+check( 'one line is "1 line"', helpers.footText( { lines: 1, fish: 3 }, { foot: '%1$s lines · %2$s fish', footOne: '%1$s line · %2$s fish' } ) === '1 line · 3 fish' && helpers.footText( { lines: 1200, fish: 3400 }, { foot: '%1$s lines · %2$s fish', footOne: '%1$s line · %2$s fish' } ) === '1,200 lines · 3,400 fish' );
+check( 'after the preview is drawn again the control that had the focus gets it back by what it is and whose row it is — wherever the row now stands', helpers.focusIndex( [ { key: 'tick:4' }, { key: 'pick:9' }, { key: 'pair:4' } ], 'pair:4' ) === 2 && helpers.focusIndex( [ { key: 'pick:9' } ], 'pick:4' ) === -1 && helpers.focusIndex( [ { key: 'pick:9' } ], '' ) === -1 && helpers.focusIndex( null, 'x' ) === -1 );
+var page = fs.readFileSync( path.join( __dirname, '..', 'js', 'order-import.js' ), 'utf8' );
+check( '… every control of the arrived preview that redraws it carries such a key, and take() hands the focus back', [ "'pick:' + row.n", "'tick:' + row.n", "'pair:' + row.n", "'line:' + entry.line", "'same'", "'section:' + section.name" ].every( function ( key ) { return page.indexOf( ".attr('data-fk', " + key + ')' ) !== -1; } ) && /var was = held\(\);\s*render\(p\);\s*giveBack\(was\);/.test( page ) );
+
 console.log( '5. Nothing is ever set as HTML' );
 var source = fs.readFileSync( path.join( __dirname, '..', 'js', 'order-import.js' ), 'utf8' );
 check( 'the page code never writes HTML from data: no .html( … ), no innerHTML, no insertAdjacentHTML', ! /\.html\s*\(\s*[^)\s]/.test( source ) && source.indexOf( 'innerHTML' ) === -1 && source.indexOf( 'insertAdjacentHTML' ) === -1 );

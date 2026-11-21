@@ -112,6 +112,10 @@ class Admin_Order_Import {
 				'junk'           => __( 'not a fish — always leave rows like this out', 'fishotel-misc-plugin' ),
 				/* translators: 1: lines, 2: fish */
 				'foot'           => __( '%1$s lines · %2$s fish', 'fishotel-misc-plugin' ),
+				/* translators: 1: lines (one), 2: fish */
+				'footOne'        => __( '%1$s line · %2$s fish', 'fishotel-misc-plugin' ),
+				'feeWord'        => __( '? a fee\'s word in a fish\'s name', 'fishotel-misc-plugin' ),
+				'feeWordTitle'   => __( 'This row carries a supplier\'s code or a scientific name, so it is kept as a fish — but its name holds a word fee lines use. Untick it if it is a fee after all.', 'fishotel-misc-plugin' ),
 				/* translators: %s: lines */
 				'addOne'         => __( 'Add %s line to the order', 'fishotel-misc-plugin' ),
 				/* translators: %s: lines */
@@ -288,6 +292,9 @@ class Admin_Order_Import {
 	 */
 	public static function request( $store, array $raw, array $ctx ) {
 		$raw = Admin_Workbook::unpack_lines( $raw );
+		if ( ! empty( $raw['lines_unread'] ) ) {
+			return array( 'error' => Admin_Workbook::lines_unread_text() );
+		}
 		$op  = isset( $raw['op'] ) && is_scalar( $raw['op'] ) ? sanitize_key( (string) $raw['op'] ) : 'preview';
 		$id  = isset( $raw['order_id'] ) && is_scalar( $raw['order_id'] ) ? absint( $raw['order_id'] ) : 0;
 
@@ -563,6 +570,31 @@ class Admin_Order_Import {
 		);
 	}
 
+	/**
+	 * Which of the two buttons fits an order: "This is what ARRIVED" once
+	 * the order is received or closed — and already once it is saved as
+	 * ordered with ordered lines on it, for the next file that comes for
+	 * such an order is the invoice. Else "This is what I ORDERED".
+	 *
+	 * @param string $status The order's status.
+	 * @param array  $lines  Its lines (qty_ordered).
+	 * @param bool   $saved  Whether the order is saved.
+	 * @return string ordered|arrived
+	 */
+	public static function default_mode( $status, array $lines, $saved ) {
+		if ( in_array( (string) $status, array( 'received', 'closed' ), true ) ) {
+			return 'arrived';
+		}
+		if ( $saved && 'ordered' === (string) $status ) {
+			foreach ( $lines as $line ) {
+				if ( is_array( $line ) && (int) ( $line['qty_ordered'] ?? 0 ) > 0 ) {
+					return 'arrived';
+				}
+			}
+		}
+		return 'ordered';
+	}
+
 	/* ============================================================== */
 	/*  The plan                                                       */
 	/* ============================================================== */
@@ -584,8 +616,8 @@ class Admin_Order_Import {
 		$settings = isset( $ctx['settings'] ) && is_array( $ctx['settings'] ) ? $ctx['settings'] : array();
 		$header   = Orders::normalize_order( $raw );
 		$lines    = self::page_lines( $raw, $stored );
-		$arrived  = in_array( $header['status'], array( 'received', 'closed' ), true );
-		$mode     = isset( $in['mode'] ) && in_array( $in['mode'], Order_Import::MODES, true ) ? $in['mode'] : ( $arrived ? 'arrived' : 'ordered' );
+		$fitting  = self::default_mode( $header['status'], (array) ( $stored['lines'] ?? array() ), (bool) $stored );
+		$mode     = isset( $in['mode'] ) && in_array( $in['mode'], Order_Import::MODES, true ) ? $in['mode'] : $fitting;
 		$width    = $grid ? count( $grid[0] ) : 0;
 
 		/* ---- the columns ---- */
@@ -728,6 +760,7 @@ class Admin_Order_Import {
 			'lines'     => $lines,
 			'stored'    => $stored,
 			'token'     => self::token( $header, $lines, $stored ),
+			'fitting'   => $fitting,
 			'columns'   => $columns,
 			'complete'  => $complete,
 			'hand'      => $hand,
@@ -847,7 +880,7 @@ class Admin_Order_Import {
 			$dup = null;
 			foreach ( $plan['lines'] as $line ) {
 				$code = Order_Import::code_of( $line['notes'] );
-				if ( ( '' !== $row['code'] && '' !== $code && 0 === strcasecmp( $code, $row['code'] ) ) || ( (string) ( $row['size']['slug'] ?? '' ) === (string) ( $line['size_slug'] ?? '' ) && Order_Import::same_fish( $row, $line ) ) ) {
+				if ( ( '' !== $row['code'] && '' !== $code && Order_Import::code_key( $code ) === Order_Import::code_key( $row['code'] ) ) || ( (string) ( $row['size']['slug'] ?? '' ) === (string) ( $line['size_slug'] ?? '' ) && Order_Import::same_fish( $row, $line ) ) ) {
 					$dup = $line;
 					break;
 				}
@@ -864,7 +897,7 @@ class Admin_Order_Import {
 		}
 		$plan['new_lines'] = $lines;
 		/* translators: 1: lines, 2: fish */
-		$plan['foot'] = sprintf( __( '%1$s lines · %2$s fish', 'fishotel-misc-plugin' ), number_format( $lines ), number_format( $fish ) );
+		$plan['foot'] = sprintf( _n( '%1$s line · %2$s fish', '%1$s lines · %2$s fish', $lines, 'fishotel-misc-plugin' ), number_format( $lines ), number_format( $fish ) );
 		return $plan;
 	}
 
@@ -956,6 +989,8 @@ class Admin_Order_Import {
 			}
 		}
 
+		$positional = $columns['layout'] && empty( $columns['layout']['header'] );
+
 		$layout = array(
 			'line'     => '',
 			'applied'  => $columns['layout'] ? $columns['layout']['id'] : '',
@@ -967,6 +1002,11 @@ class Admin_Order_Import {
 		if ( $columns['layout'] ) {
 			/* translators: %s: supplier (and origin) */
 			$layout['line'] = sprintf( __( 'Using the layout saved for %s', 'fishotel-misc-plugin' ), Import_Layouts::owner_text( $columns['layout'] ) );
+			if ( $positional ) {
+				// A sheet without headings is recognised by its supplier and its width alone: the columns
+				// may have moved, and nothing in the file would say so.
+				$layout['line'] .= ' — ' . __( 'this sheet has no headings, so the columns go by their position: check them', 'fishotel-misc-plugin' );
+			}
 			if ( $columns['partial'] ) {
 				$parts = array();
 				if ( $columns['partial']['missing'] ) {
@@ -1036,8 +1076,22 @@ class Admin_Order_Import {
 			/* translators: 1: new lines, 2: lines on the order, 3: the most lines an order holds */
 			$notes[] = sprintf( __( 'These %1$d new lines do not fit: the order has %2$d and holds at most %3$d. Untick some rows.', 'fishotel-misc-plugin' ), $plan['new_lines'], count( $plan['lines'] ), Orders::MAX_LINES );
 		}
-		if ( ! $plan['complete'] ) {
+		if ( ! $plan['complete'] && Order_Import::run_together( $grid ) ) {
+			$notes[] = __( 'The columns of this text ran together: the tabs between them were lost on the way, so nothing can be read from it safely. Ask for the block again inside a code block (or as comma-separated text), copy it from there and paste it here.', 'fishotel-misc-plugin' );
+		} elseif ( ! $plan['complete'] ) {
 			$notes[] = __( 'Say which column is the fish and which one is the quantity: nothing can be imported before that.', 'fishotel-misc-plugin' );
+		}
+
+		// A sheet of received counts read as "what I ORDERED" has no order quantity anywhere: say so,
+		// and offer the other button.
+		$switch = null;
+		if ( 'ordered' === $mode && $plan['complete'] && 0 === (int) $a['with_qty'] && (int) $a['received'] > 0 ) {
+			$switch = array(
+				'mode'   => 'arrived',
+				/* translators: %s: rows */
+				'text'   => sprintf( _n( 'No row has an order quantity, but %s has a received count: this looks like what ARRIVED.', 'No row has an order quantity, but %s have a received count: this looks like what ARRIVED.', (int) $a['received'], 'fishotel-misc-plugin' ), number_format( (int) $a['received'] ) ),
+				'button' => __( 'Read it as what ARRIVED', 'fishotel-misc-plugin' ),
+			);
 		}
 		if ( $by_hand && $plan['complete'] && '' === $header['supplier'] ) {
 			$notes[] = __( 'Type the order\'s supplier above and these columns can be remembered for the next sheet from them.', 'fishotel-misc-plugin' );
@@ -1051,7 +1105,8 @@ class Admin_Order_Import {
 		$out = array(
 			'token'       => $plan['token'],
 			'mode'        => $mode,
-			'default'     => in_array( $header['status'], array( 'received', 'closed' ), true ) ? 'arrived' : 'ordered',
+			'default'     => $plan['fitting'],
+			'switch'      => $switch,
 			'grid'        => $read['fresh'] ? $grid : null,
 			'truncated'   => (bool) $read['truncated'],
 			'sheet'       => $read['sheet'],
@@ -1064,7 +1119,7 @@ class Admin_Order_Import {
 				'headers'  => null !== $columns['row'] && isset( $grid[ $columns['row'] ] ) ? $grid[ $columns['row'] ] : array(),
 				'sample'   => $sample,
 				'width'    => $grid ? count( $grid[0] ) : 0,
-				'open'     => ! $plan['complete'] || 'guess' === $columns['source'],
+				'open'     => ! $plan['complete'] || 'guess' === $columns['source'] || $positional,
 			),
 			'layout'      => $layout,
 			'summary'     => $summary,
@@ -1140,6 +1195,7 @@ class Admin_Order_Import {
 			'label'      => $row['label'],
 			'flags'      => array_values( array_unique( $row['flags'] ) ),
 			'check'      => (bool) $row['check'],
+			'fee_word'   => ! empty( $row['fee_word'] ),
 			'on'         => (bool) $row['on'],
 			'junk'       => (bool) $row['junk'],
 			'dup'        => isset( $row['dup'] ) ? $row['dup'] : '',
@@ -1188,9 +1244,14 @@ class Admin_Order_Import {
 				/* translators: %s: box numbers */
 				$notes[] = sprintf( _n( 'box %s', 'boxes %s', count( $e['boxes'] ), 'fishotel-misc-plugin' ), implode( ', ', $e['boxes'] ) );
 			}
-			if ( null !== $price && null !== $line['unit_price'] && abs( (float) $line['unit_price'] - $price ) > 0.00005 ) {
-				/* translators: 1: the price typed on the line, 2: the file's price */
-				$notes[] = sprintf( __( 'price typed %1$s · the file says %2$s', 'fishotel-misc-plugin' ), Costing::num( $line['unit_price'], '', 4 ), Costing::num( $price, '', 4 ) );
+			if ( 'fish' === $e['how'] && ! empty( $e['clash'] ) ) {
+				$notes[] = __( 'paired by its name — the code on the invoice row is another line\'s: check it', 'fishotel-misc-plugin' );
+			}
+			// A price list's 0.2291666 and the invoice's 0.23 are one price: compared to the cent.
+			$differs = null !== $price && null !== $line['unit_price'] && round( (float) $line['unit_price'], 2 ) !== round( $price, 2 );
+			if ( $differs ) {
+				/* translators: 1: the price on the order's line, 2: the file's price */
+				$notes[] = sprintf( __( 'price on the order %1$s · the file says %2$s', 'fishotel-misc-plugin' ), Costing::money( $line['unit_price'] ), Costing::money( $price ) );
 			}
 			return array(
 				'line'    => $e['line'],
@@ -1203,7 +1264,7 @@ class Admin_Order_Import {
 				'keep'    => ! empty( $e['keep'] ),
 				'was'     => $e['was'],
 				'choice'  => ! empty( $e['keep'] ) ? 'keep' : 'zero',
-				'differs' => null !== $price && null !== $line['unit_price'] && abs( (float) $line['unit_price'] - $price ) > 0.00005,
+				'differs' => $differs,
 			);
 		};
 
@@ -1237,10 +1298,18 @@ class Admin_Order_Import {
 		}
 		$extras = array();
 		foreach ( $r['groups']['extra'] as $e ) {
+			$could = array();
+			foreach ( $e['could'] as $key ) {
+				if ( isset( $by_key[ $key ] ) ) {
+					$could[] = self::line_text( $by_key[ $key ] );
+				}
+			}
 			$extras[] = array(
 				'row'     => $e['row'],
 				'arrived' => $e['arrived'],
 				'instead' => $e['instead'],
+				/* translators: %s: order lines */
+				'note'    => $could ? sprintf( __( 'Could be %s — the row has no size. Say which line it is.', 'fishotel-misc-plugin' ), implode( ' / ', $could ) ) : '',
 			);
 		}
 		array_splice(
@@ -1333,20 +1402,17 @@ class Admin_Order_Import {
 	/**
 	 * A new line's row, as the order form would post it.
 	 *
-	 * @param object $store    Store.
 	 * @param array  $row      A planned row.
 	 * @param int    $ordered  Ordered count.
 	 * @param mixed  $received Received count (null = left empty).
 	 * @param string $notes    Notes to start from.
 	 * @return array
 	 */
-	private static function new_row( $store, array $row, $ordered, $received, $notes = '' ) {
+	private static function new_row( array $row, $ordered, $received, $notes = '' ) {
 		$fish  = $row['fish'];
+		// The shop price is READ (Shop_Price), never stamped on the line: only a "worth" column of the
+		// file's own — the owner's sheet has one — is a typed worth.
 		$worth = $row['worth'];
-		if ( null === $worth && ! empty( $fish['species_id'] ) && method_exists( $store, 'species' ) ) {
-			$species = $store->species( (int) $fish['species_id'] );
-			$worth   = $species && isset( $species['my_price'] ) && null !== $species['my_price'] ? (float) $species['my_price'] : null;
-		}
 		if ( '' !== $row['code'] ) {
 			$notes = Order_Import::note_with( $notes, Order_Import::NOTE_CODE, $row['code'] );
 		}
@@ -1376,6 +1442,7 @@ class Admin_Order_Import {
 			'qty_survived' => null !== $row['survived'] ? (string) $row['survived'] : '',
 			'tank_id'      => null !== $row['tank_id'] ? (string) $row['tank_id'] : '',
 			'notes'        => $notes,
+			'code'         => (string) $row['code'], // The page's own code field (More columns) says the same.
 		);
 	}
 
@@ -1460,6 +1527,9 @@ class Admin_Order_Import {
 				}
 				if ( '' !== $code && '' === Order_Import::code_of( $notes ) ) {
 					$notes = Order_Import::note_with( $notes, Order_Import::NOTE_CODE, $code );
+					// The page posts its own (empty) code field with the line: it says the same now, or the
+					// save would take the code out of the notes again.
+					$form[ $key ]['code'] = $code;
 				}
 				if ( $notes !== (string) $line['notes'] ) {
 					$form[ $key ]['notes'] = $notes;
@@ -1477,7 +1547,7 @@ class Admin_Order_Import {
 
 					$form[ $e['instead'] ]['notes'] = Order_Import::note_with( isset( $form[ $e['instead'] ]['notes'] ) && '' !== (string) $form[ $e['instead'] ]['notes'] ? (string) $form[ $e['instead'] ]['notes'] : (string) $other['notes'], Order_Import::NOTE_SUBBED, $row['fish']['name'] );
 				}
-				$form[]  = self::new_row( $store, $row, 0, $e['arrived'], $notes );
+				$form[]  = self::new_row( $row, 0, $e['arrived'], $notes );
 				$added[] = $row;
 			}
 
@@ -1494,7 +1564,7 @@ class Admin_Order_Import {
 				if ( empty( $row['take'] ) ) {
 					continue;
 				}
-				$form[]  = self::new_row( $store, $row, (int) $row['ordered'], $row['received'] );
+				$form[]  = self::new_row( $row, (int) $row['ordered'], $row['received'] );
 				$added[] = $row;
 			}
 			// "This is what I ORDERED": the order is ordered now (a draft no longer).
