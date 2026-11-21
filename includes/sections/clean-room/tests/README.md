@@ -835,6 +835,11 @@ system temp directory (`FH_TEST_TMP` overrides).
   (its seconds, or another screen opened), not one whose time ran out
   meanwhile; an undo the server refuses is over, one that never reached
   it keeps its Undo; an expired session stays in the line until tapped.
+  A request that got no answer (fetch itself rejects — Chrome's,
+  Safari's and Firefox's words, a request given up on) is said in the
+  page's plain words, "not saved" for a write only, never the browser's;
+  the Shop App guard's own sentence and a refusal from the server are
+  said as they came.
   A tap on the words opens the whole message with its Undo, and Back
   shows the screen under it as it was — the very field, what was typed
   in it. The words for the last thing done (`agoText()`). And the place:
