@@ -1182,7 +1182,8 @@ last time** — three butterflies last time never lay out a line of 93;
 such a line says so and leaves the rows to the owner, as does a fish
 that was split some other way, a line whose count is not typed yet, and
 a line for which two empty Spa tanks are not left (each with its own
-sentence). *Keep together* removes the offer (which
+sentence). A line that did not come — received typed as 0 — is offered
+nothing. *Keep together* removes the offer (which
 that line then remembers); it is only ever drawn in the Entry view, and
 a fish that still has to be identified is never remembered. A save from
 a page that has no split field at all (a tab opened before Split

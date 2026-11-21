@@ -572,8 +572,9 @@ class Admin_Workbook {
 	/**
 	 * What the order page needs for its Split buttons: the tanks a part may
 	 * go into (Splits::tanks(): the empty ones first), each line's plan as
-	 * its hidden field posts it, and — for a line that is no stay yet and
-	 * has no plan — whether its fish was split last time (the offer).
+	 * its hidden field posts it, and — for a line that is no stay yet, has
+	 * no plan and did not come empty (received typed as 0) — whether its
+	 * fish was split last time (the offer).
 	 *
 	 * @param object $store    Store or stand-in.
 	 * @param array  $order    The order with its lines.
@@ -609,6 +610,10 @@ class Admin_Workbook {
 			}
 			if ( Splits::NONE === $plan ) {
 				$out['fields'][ $id ] = Splits::NONE;
+				continue;
+			}
+			// A line that did not come — received typed, and 0 — has no fish to lay out: no offer.
+			if ( isset( $line['qty_received'] ) && '' !== (string) $line['qty_received'] && (int) $line['qty_received'] < 1 ) {
 				continue;
 			}
 			$memory = Splits::remembered( $line, $all['species'] );

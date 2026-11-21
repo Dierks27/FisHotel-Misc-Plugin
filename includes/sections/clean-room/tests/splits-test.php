@@ -404,6 +404,13 @@ foreach ( array( 'the split line first' => false, 'the split line last' => true 
 	}
 	delete_option( Splits::OPTION );
 }
+// The offer on the order page: for a line that may still be split — not for one that did not come.
+Splits::remember( array( 'species_id' => 1, 'species' => 'Copper Test Butterfly' ), true, false, $today );
+$came  = save( $store, array( row( 'Copper Test Butterfly', array( 'species_id' => '1', 'size_slug' => 'small', 'qty_received' => '' ) ), row( 'Copper Test Butterfly', array( 'species_id' => '1', 'size_slug' => 'medium', 'qty_received' => '3' ) ), row( 'Copper Test Butterfly', array( 'species_id' => '1', 'size_slug' => 'large', 'qty_ordered' => '2', 'qty_received' => '0' ) ) ) );
+$panel = Admin_Workbook::split_panel( $store, $store->order( (int) $came['order_id'] ), $today, $settings );
+check( 'the split is offered on the line still to arrive and on the one that came — not on the one that did not come (received 0)', empty( $came['error'] ) && array( (int) $came['line_ids'][0] => 'some', (int) $came['line_ids'][1] => 'some' ) === $panel['offers'], json_encode( array( $came['error'] ?? '', $panel['offers'] ) ) );
+$store->delete_order( (int) $came['order_id'] );
+delete_option( Splits::OPTION );
 // The workbook import checks history in: it neither reads a plan nor teaches the memory.
 Splits::remember( array( 'species_id' => 2, 'species' => 'Lilac Test Anthias' ), true, true, $today );
 $hist = save( $store, array( row( 'Lilac Test Anthias', array( 'species_id' => '2', 'qty_received' => '4', 'split' => plan( $store, array( array( 2, 522 ), array( 2, 523 ) ) ) ) ) ) );
