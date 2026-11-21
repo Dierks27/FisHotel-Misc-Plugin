@@ -153,6 +153,9 @@ check( 'above the number, nothing sent: nothing', '' === Piles::alert_step( 151,
 check( 'the number removed after an email: clear', 'clear' === Piles::alert_step( 10, null, true ) );
 check( 'no number: never send', '' === Piles::alert_step( 0, null, false ) );
 check( 'nothing counted: never send', '' === Piles::alert_step( null, 50, false ) );
+check( 'a giveaway pile nothing was ever put into has not dropped: no email', '' === Piles::alert_step( 4, 50, false, false ) );
+check( '... once it was counted, the same numbers write', 'send' === Piles::alert_step( 4, 50, false, true ) );
+check( '... and an old mark is still cleared when it is back above the number', 'clear' === Piles::alert_step( 60, 50, true, false ) );
 
 // One drop, many orders: exactly one "send" until a restock.
 $alerted = false;
@@ -191,6 +194,8 @@ $row = Piles::summary(
 	)
 );
 check( 'giveaway pile: 50 on paper, 20 held back, about 30 really there', 50 === $row['paper'] && 20 === $row['reserve'] && 30 === $row['really_there'] );
+check( 'it was filled (200 put in)', true === $row['filled'] );
+check( 'a pile nobody counted yet is not filled; a design without a pile has nothing to fill', false === Piles::summary( array( 'keeps_pile' => true, 'shop' => 4, 'reorder_at' => 50 ) )['filled'] && true === Piles::summary( array( 'keeps_pile' => false, 'shop' => 4 ) )['filled'] );
 check( 'left = 30 + 12 in the shop = 42, at a reorder number of 50: Reorder', 42 === $row['left'] && Piles::STATUS_REORDER === $row['status'] );
 check( 'offered by the giveaway pile, whatever the shop says', true === $row['offered'] );
 check( 'pace: 36 went, 9 a week, 30 last about 3.3 weeks', 36 === $row['went'] && 9.0 === $row['per_week'] && abs( $row['weeks'] - 30 / 9 ) < 0.0001 );

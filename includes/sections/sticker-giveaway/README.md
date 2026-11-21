@@ -215,7 +215,10 @@ what is left is at or below the reorder number the design reads
   (default on) switches the emails off; the table and the Today line stay.
 
 A design that keeps no giveaway pile can have a reorder number too; what
-is left of it is its shop pile alone.
+is left of it is its shop pile alone. A giveaway pile that was never
+filled (a design picked a minute ago, not counted yet) reads Out in the
+table but writes no email and is left off the Today line: it needs
+counting, not reordering, and the warnings on the page say so.
 
 ### The moments
 

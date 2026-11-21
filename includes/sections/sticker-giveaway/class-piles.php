@@ -386,16 +386,23 @@ class Piles {
 	 *           the next drop may write again
 	 *   ''      nothing — still fine, or already written about
 	 *
+	 * A giveaway pile that was never filled (nothing counted, nothing
+	 * added) has not "dropped" to anything: a design picked a minute ago,
+	 * given a reorder number before its pile was counted, writes no email.
+	 * The stock table still reads Out for it.
+	 *
 	 * @param int|null $left       left().
 	 * @param int|null $reorder_at The reorder number.
 	 * @param bool     $alerted    Whether the email for this drop was sent.
+	 * @param bool     $filled     False for a giveaway pile nothing was
+	 *                             ever put into.
 	 * @return string
 	 */
-	public static function alert_step( $left, $reorder_at, $alerted ) {
+	public static function alert_step( $left, $reorder_at, $alerted, $filled = true ) {
 		$due = self::needs_reorder( $left, $reorder_at );
 
 		if ( $due ) {
-			return $alerted ? '' : 'send';
+			return $alerted || ! $filled ? '' : 'send';
 		}
 
 		return $alerted ? 'clear' : '';
@@ -464,7 +471,7 @@ class Piles {
 	 *   @type int      $went       How many went in the last PACE_DAYS.
 	 *   @type int|null $reorder_at The reorder number.
 	 * }
-	 * @return array{keeps_pile: bool, paper: int, reserve: int, really_there: int|null, shop: int|null, left: int|null, offered: bool, went: int, per_week: float, weeks: float|null, reorder_at: int|null, status: string}
+	 * @return array{keeps_pile: bool, filled: bool, paper: int, reserve: int, really_there: int|null, shop: int|null, left: int|null, offered: bool, went: int, per_week: float, weeks: float|null, reorder_at: int|null, status: string}
 	 */
 	public static function summary( array $facts ) {
 		$keeps   = ! empty( $facts['keeps_pile'] );
@@ -481,6 +488,8 @@ class Piles {
 
 		return array(
 			'keeps_pile'   => $keeps,
+			// Whether anything was ever put into the giveaway pile (a design without one has nothing to fill).
+			'filled'       => ! $keeps || $basis > 0,
 			'paper'        => $keeps ? $paper : 0,
 			'reserve'      => $keeps ? self::reserve( $basis, $percent ) : 0,
 			'really_there' => $really,

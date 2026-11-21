@@ -85,7 +85,10 @@ class Reorder {
 	}
 
 	/**
-	 * The designs that are down to their reorder number (rows()).
+	 * The designs that are down to their reorder number (rows()), for the
+	 * Today line. A giveaway pile that was never filled is left out, as it
+	 * is for the email: it needs counting, not reordering, and the
+	 * settings page says so.
 	 *
 	 * @param array|null $settings Settings.
 	 * @return array<int, array>
@@ -94,7 +97,7 @@ class Reorder {
 		$due = array();
 
 		foreach ( self::rows( $settings ) as $id => $row ) {
-			if ( Piles::needs_reorder( $row['left'], $row['reorder_at'] ) ) {
+			if ( $row['filled'] && Piles::needs_reorder( $row['left'], $row['reorder_at'] ) ) {
 				$due[ $id ] = $row;
 			}
 		}
@@ -130,7 +133,7 @@ class Reorder {
 			$fresh = array();
 
 			foreach ( self::rows( $settings ) as $id => $row ) {
-				$step = Piles::alert_step( $row['left'], $row['reorder_at'], $row['alerted'] );
+				$step = Piles::alert_step( $row['left'], $row['reorder_at'], $row['alerted'], $row['filled'] );
 
 				if ( 'clear' === $step ) {
 					$store->clear_alert( $id );
