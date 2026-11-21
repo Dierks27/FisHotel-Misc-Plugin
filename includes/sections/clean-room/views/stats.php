@@ -182,6 +182,9 @@ $fh_group_table = static function ( array $groups, $label, $labels = false ) use
 				<div><dt><?php esc_html_e( 'Estimated revenue (survivors × FisHotel prices)', 'fishotel-misc-plugin' ); ?></dt><dd><?php echo esc_html( Costing::money( $fh_t['revenue'] ) ); ?></dd></div>
 				<div><dt><?php esc_html_e( 'Estimated up or down', 'fishotel-misc-plugin' ); ?></dt><dd class="<?php echo $fh_t['up_down'] >= 0 ? 'fh-cr-up' : 'fh-cr-down'; ?>"><?php echo esc_html( ( $fh_t['up_down'] > 0 ? '+' : '' ) . Costing::money( $fh_t['up_down'] ) ); ?></dd></div>
 				<div><dt><?php esc_html_e( 'Estimated revenue ÷ landed', 'fishotel-misc-plugin' ); ?></dt><dd><?php echo esc_html( Costing::num( $fh_t['ratio'] ) ); ?></dd></div>
+				<?php if ( (int) ( $fh_t['unpriced'] ?? 0 ) > 0 ) : ?>
+					<div><dt><?php esc_html_e( 'Lines with no shop price yet (left out of revenue and of up or down, as on the order page)', 'fishotel-misc-plugin' ); ?></dt><dd><?php echo esc_html( number_format_i18n( (int) $fh_t['unpriced'] ) . ' · ' . Costing::money( (float) ( $fh_t['unpriced_landed'] ?? 0 ) ) ); ?></dd></div>
+				<?php endif; ?>
 				<div><dt><?php esc_html_e( 'Mislabeled (of the lines that received fish)', 'fishotel-misc-plugin' ); ?></dt><dd><?php echo esc_html( $fh_mislabeled( $fh_t ) ); ?></dd></div>
 				<div><dt><?php esc_html_e( 'Not identified yet', 'fishotel-misc-plugin' ); ?></dt><dd><?php echo esc_html( (int) ( $fh_t['unidentified'] ?? 0 ) ); ?></dd></div>
 			</dl>

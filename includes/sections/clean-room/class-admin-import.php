@@ -394,37 +394,51 @@ class Admin_Import {
 	}
 
 	/**
-	 * admin-post: the upload → the private folder → the preview.
+	 * Move an uploaded file into the private folder under a random name
+	 * — the upload handling of the workbook import, shared with the order
+	 * page's line importer (Admin_Order_Import): the size and the type are
+	 * checked, the folder refuses every request, and what outlived an
+	 * earlier preview is cleaned up first. The caller deletes the file
+	 * when it is done with it.
+	 *
+	 * @param array                 $file    One $_FILES entry.
+	 * @param array<string, string> $mimes   The types taken: extension => MIME type.
+	 * @param bool                  $replace Whether this user's pending workbook preview gives way.
+	 * @return array{path: string, name: string}|array{error: string, code: string}
 	 */
-	public function handle_upload() {
-		self::guard();
-		check_admin_referer( self::NONCE_UPLOAD );
-
-		$file = isset( $_FILES['workbook'] ) && is_array( $_FILES['workbook'] ) ? $_FILES['workbook'] : null; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- handed to wp_handle_upload below.
+	public static function move_upload( array $file, array $mimes = self::MIMES, $replace = false ) {
+		$fail = static function ( $code, $message ) {
+			return array(
+				'error' => $message,
+				'code'  => $code,
+			);
+		};
 		if ( ! $file || ! isset( $file['error'] ) || UPLOAD_ERR_NO_FILE === (int) $file['error'] ) {
-			self::fail( __( 'Pick the workbook file first.', 'fishotel-misc-plugin' ) );
+			return $fail( 'none', __( 'Pick the workbook file first.', 'fishotel-misc-plugin' ) );
 		}
 		if ( UPLOAD_ERR_OK !== (int) $file['error'] ) {
 			/* translators: %d: PHP upload error code */
-			self::fail( sprintf( __( 'The upload failed (error %d). A file over the server\'s upload limit?', 'fishotel-misc-plugin' ), (int) $file['error'] ) );
+			return $fail( 'upload', sprintf( __( 'The upload failed (error %d). A file over the server\'s upload limit?', 'fishotel-misc-plugin' ), (int) $file['error'] ) );
 		}
-		if ( (int) $file['size'] > self::MAX_BYTES ) {
-			self::fail( __( 'The file is larger than 20 MB.', 'fishotel-misc-plugin' ) );
+		if ( (int) ( $file['size'] ?? 0 ) > self::MAX_BYTES ) {
+			return $fail( 'size', __( 'The file is larger than 20 MB.', 'fishotel-misc-plugin' ) );
 		}
 		$client_name = sanitize_file_name( (string) ( $file['name'] ?? '' ) );
 		$ext         = strtolower( pathinfo( $client_name, PATHINFO_EXTENSION ) );
-		if ( ! isset( self::MIMES[ $ext ] ) ) {
-			self::fail( __( 'Only an .xlsx or .xlsm workbook can be imported.', 'fishotel-misc-plugin' ) );
+		if ( ! isset( $mimes[ $ext ] ) ) {
+			return $fail( 'type', __( 'Only an .xlsx or .xlsm workbook can be imported.', 'fishotel-misc-plugin' ) );
 		}
 
 		self::cleanup();
 		$dir = self::private_dir();
 		if ( '' === $dir ) {
-			self::fail( __( 'The private upload folder could not be created under the uploads directory.', 'fishotel-misc-plugin' ) );
+			return $fail( 'dir', __( 'The private upload folder could not be created under the uploads directory.', 'fishotel-misc-plugin' ) );
 		}
-		$previous = self::pending();
-		if ( $previous && is_file( $previous['path'] ) ) {
-			unlink( $previous['path'] ); // phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink -- the last preview's file.
+		if ( $replace ) {
+			$previous = self::pending();
+			if ( $previous && is_file( $previous['path'] ) ) {
+				unlink( $previous['path'] ); // phpcs:ignore WordPress.WP.AlternativeFunctions.unlink_unlink -- the last preview's file.
+			}
 		}
 
 		require_once ABSPATH . 'wp-admin/includes/file.php';
@@ -447,7 +461,7 @@ class Admin_Import {
 			$file,
 			array(
 				'test_form'                => false,
-				'mimes'                    => self::MIMES,
+				'mimes'                    => $mimes,
 				'unique_filename_callback' => array( self::class, 'file_name' ),
 			)
 		);
@@ -455,9 +469,28 @@ class Admin_Import {
 		remove_filter( 'upload_dir', $into );
 
 		if ( ! is_array( $moved ) || isset( $moved['error'] ) || empty( $moved['file'] ) ) {
-			self::fail( is_array( $moved ) && isset( $moved['error'] ) ? (string) $moved['error'] : __( 'The file could not be stored.', 'fishotel-misc-plugin' ) );
+			return $fail( 'store', is_array( $moved ) && isset( $moved['error'] ) ? (string) $moved['error'] : __( 'The file could not be stored.', 'fishotel-misc-plugin' ) );
 		}
-		$path = (string) $moved['file'];
+		return array(
+			'path' => (string) $moved['file'],
+			'name' => $client_name,
+		);
+	}
+
+	/**
+	 * admin-post: the upload → the private folder → the preview.
+	 */
+	public function handle_upload() {
+		self::guard();
+		check_admin_referer( self::NONCE_UPLOAD );
+
+		$file  = isset( $_FILES['workbook'] ) && is_array( $_FILES['workbook'] ) ? $_FILES['workbook'] : array(); // phpcs:ignore WordPress.Security.ValidatedSanitizedInput -- handed to wp_handle_upload in move_upload().
+		$moved = self::move_upload( $file, self::MIMES, true );
+		if ( isset( $moved['error'] ) ) {
+			self::fail( $moved['error'] );
+		}
+		$client_name = $moved['name'];
+		$path        = $moved['path'];
 		// The file goes even when nobody comes back to the preview.
 		wp_schedule_single_event( time() + self::TTL + MINUTE_IN_SECONDS, Clean_Room::IMPORT_CLEANUP_HOOK, array( basename( $path ) ) );
 

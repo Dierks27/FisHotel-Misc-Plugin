@@ -197,6 +197,15 @@ function current_user_can( $capability, ...$args ) {
 /**
  * The current user: ID and user_login ($GLOBALS['fh_user_logins'][ id ], else "user<id>").
  */
+function get_user_meta( $user_id, $key = '', $single = false ) {
+	return $GLOBALS['fh_user_meta'][ (int) $user_id ][ (string) $key ] ?? ( $single ? '' : array() );
+}
+
+function update_user_meta( $user_id, $key, $value ) {
+	$GLOBALS['fh_user_meta'][ (int) $user_id ][ (string) $key ] = $value;
+	return true;
+}
+
 function wp_get_current_user() {
 	$id = get_current_user_id();
 	return (object) array(
@@ -311,10 +320,14 @@ require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-species.ph
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-identify.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-board-lines.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-orders.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-shop-price.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-splits.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-xlsx.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-workbook.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-import-map.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-import.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-order-import.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-import-layouts.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-store.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-settings.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-front-desk.php';
@@ -322,6 +335,7 @@ require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-admin.php'
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-admin-workbook.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-admin-stats.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-admin-import.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-admin-order-import.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-admin-temp.php';
 require_once __DIR__ . '/fake-store.php';
 

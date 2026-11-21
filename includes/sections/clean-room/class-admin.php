@@ -214,6 +214,8 @@ class Admin {
 			$sizes     = self::sizes_panel( $store, $settings );
 			$shares    = $store->box_shares();
 
+			$import_layouts = Import_Layouts::all();
+
 			include Clean_Room::path() . 'views/settings.php';
 			return;
 		}
@@ -786,6 +788,34 @@ class Admin {
 				),
 			)
 		);
+
+		// The order page's "Import lines" and the Settings list of saved layouts.
+		if ( $on_page ) {
+			wp_enqueue_style(
+				'fishotel-cleanroom-order-import',
+				Clean_Room::url() . 'css/order-import.css',
+				array( 'fishotel-cleanroom-admin' ),
+				FISHOTEL_MISC_VERSION
+			);
+			wp_enqueue_script(
+				'fishotel-cleanroom-order-import',
+				Clean_Room::url() . 'js/order-import.js',
+				array( 'jquery', 'fishotel-cleanroom-admin' ),
+				FISHOTEL_MISC_VERSION,
+				true
+			);
+			wp_localize_script( 'fishotel-cleanroom-order-import', 'fhCleanRoomImport', Admin_Order_Import::js_config() );
+
+			// The order page's Entry / Numbers views, the keys that walk down a column, Split.
+			wp_enqueue_script(
+				'fishotel-cleanroom-order-entry',
+				Clean_Room::url() . 'js/order-entry.js',
+				array( 'jquery', 'fishotel-cleanroom-admin' ),
+				FISHOTEL_MISC_VERSION,
+				true
+			);
+			wp_localize_script( 'fishotel-cleanroom-order-entry', 'fhCleanRoomEntry', Admin_Workbook::entry_js_config() );
+		}
 	}
 
 	/* ============================================================== */
@@ -895,6 +925,10 @@ class Admin {
 					if ( Replay::is_undone( (array) $stay['events'], (int) $event['id'] ) ) {
 						wp_send_json_error( array( 'message' => __( 'Already undone.', 'fishotel-misc-plugin' ) ), 400 );
 					}
+					$refused = self::undo_refusal( $stay, $event );
+					if ( '' !== $refused ) {
+						wp_send_json_error( array( 'message' => $refused ), 400 );
+					}
 					$ok = $store->undo_event( $stay, $event, $base, $today, $settings );
 					if ( null === $ok ) {
 						wp_send_json_error( array( 'message' => __( 'Nothing to undo there.', 'fishotel-misc-plugin' ) ), 400 );
@@ -962,6 +996,24 @@ class Admin {
 		}
 
 		wp_send_json_success( array( 'message' => $msg ) );
+	}
+
+	/**
+	 * Why the Stays tab's Undo refuses an event — '' when it does not.
+	 * The phone's rule (Front_Desk::act_undo()), kept here too: an arrival
+	 * whose group was split on into other tanks is not taken back on its
+	 * own — the fish that moved on would be left standing as stays of a
+	 * line that never arrived. The splits are undone first.
+	 *
+	 * @param array $stay  The stay, with its events.
+	 * @param array $event The event to undo.
+	 * @return string
+	 */
+	public static function undo_refusal( array $stay, array $event ) {
+		if ( 'arrival' === (string) ( $event['type'] ?? '' ) && Front_Desk::split_on( (array) ( $stay['events'] ?? array() ) ) ) {
+			return __( 'Some of these fish were split on into other tanks. Undo those moves first, then the arrival.', 'fishotel-misc-plugin' );
+		}
+		return '';
 	}
 
 	/**

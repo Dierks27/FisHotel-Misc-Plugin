@@ -520,6 +520,52 @@
 	}
 
 	/**
+	 * A text without half a character in it. Half an emoji (a lone
+	 * surrogate — the other half was cut off by a field's length limit or
+	 * a paste) is written by JSON as "\\ud83d", which PHP cannot read
+	 * back: the whole lines_json would be refused. It becomes the
+	 * replacement character instead.
+	 *
+	 * @param {*} value A field's value.
+	 * @return {string}
+	 */
+	function wellFormed(value) {
+		return String(value === null || typeof value === 'undefined' ? '' : value)
+			.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g, '\uFFFD')
+			.replace(/(^|[^\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '$1\uFFFD');
+	}
+
+	/**
+	 * The order form's fields with its line rows packed into ONE field,
+	 * lines_json. An order of 150 fish is some 2,500 form fields — more
+	 * than PHP reads by default (max_input_vars) — and a save that lost
+	 * its last lines would delete them; one JSON field cannot be cut
+	 * short. Admin_Workbook::unpack_lines() turns it back into rows.
+	 *
+	 * @param {Object[]} fields serializeArray(): {name, value}.
+	 * @return {Object[]} The other fields, then {name: 'lines_json', value}.
+	 */
+	function packLines(fields) {
+		var rows = {};
+		var order = [];
+		var out = [];
+		(fields || []).forEach(function (field) {
+			var m = /^lines\[([^\]]+)\]\[([^\]]+)\]$/.exec(String(field.name));
+			if (!m) {
+				out.push(field);
+				return;
+			}
+			if (!Object.prototype.hasOwnProperty.call(rows, m[1])) {
+				rows[m[1]] = {};
+				order.push(m[1]);
+			}
+			rows[m[1]][m[2]] = wellFormed(field.value);
+		});
+		out.push({ name: 'lines_json', value: JSON.stringify(order.map(function (key) { return rows[key]; })) });
+		return out;
+	}
+
+	/**
 	 * What the Stays tab's "Add fish already here" posts (pure): the same
 	 * fields as the phone's sheet. An empty date is Unknown; in a clean
 	 * tank an empty "Cleared on" is Unknown too (a fish there counts as
@@ -553,6 +599,8 @@
 
 	var api = {
 		existingPost: existingPost,
+		packLines: packLines,
+		wellFormed: wellFormed,
 		renumber: renumber,
 		suggestImportFees: suggestImportFees,
 		unknownName: unknownName,
@@ -1378,12 +1426,19 @@
 						$row.find('[data-f="' + key + '"]').text(f[key]);
 					});
 					$row.find('.fh-cr-worth').toggleClass('is-yes', !!f.worth_flag);
+					// The shop price: where it came from, and whether the line has one at all.
+					$row.find('[data-f="shop_price"]').attr('title', f.shop_note || '');
+					$row.find('.fh-cr-shop').toggleClass('is-typed', f.shop_from === 'typed');
+					$row.find('.fh-cr-shop, .fh-cr-priced').toggleClass('is-none', !f.priced);
 					$row.find('input[name$="[per_box]"]').attr('placeholder', f.per_box_used || '');
 				});
 				Object.keys(fig.order || {}).forEach(function (key) {
 					$order.find('[data-t="' + key + '"]').text(fig.order[key]);
 				});
 				$order.find('[data-t="up_down"]').removeClass('fh-cr-up fh-cr-down').addClass('fh-cr-' + (fig.order.up_down_flag || 'up'));
+				// The Numbers panel's line about the fish without a shop price; the worth-it rule on its column.
+				$order.find('[data-t="no_price"]').prop('hidden', !(fig.order && fig.order.no_price));
+				$order.find('[data-rule="worth_rule"]').attr('title', (fig.order && fig.order.worth_rule) || '');
 			}
 
 			/**
@@ -1395,6 +1450,7 @@
 				$lines.find('tr.fh-cr-line').not('.is-linked').each(function () {
 					// A line without a species goes — unless it is ticked "??": an unknown fish needs no description.
 					if (!$.trim($(this).find('.fh-cr-species').val()) && !$(this).find('input[name$="[needs_id]"]').prop('checked')) {
+						$(this).next('tr.fh-cr-split-row').remove(); // Its split rows go with it.
 						$(this).remove();
 					}
 				});
@@ -1405,7 +1461,7 @@
 				data.push({ name: 'op', value: 'save' });
 				var $btn = $order.find('.fh-cr-order-save').prop('disabled', true);
 				$orderStatus.removeClass('is-error is-ok').text('…');
-				$.post(ajaxUrl(), $.param(data))
+				$.post(ajaxUrl(), $.param(packLines(data)))
 					.done(function (res) {
 						if (!res || !res.success) {
 							$orderStatus.addClass('is-error').text('');
@@ -1474,6 +1530,7 @@
 			});
 
 			$order.on('click', '.fh-cr-line-remove', function () {
+				$(this).closest('tr').next('tr.fh-cr-split-row').remove(); // Its split rows go with it.
 				$(this).closest('tr').remove();
 				renumberLines();
 				refreshBoxes();
@@ -1554,10 +1611,8 @@
 				if (item.per_box) {
 					$tr.find('input[name$="[per_box]"]').attr('placeholder', item.per_box);
 				}
-				var $worth = $tr.find('input[name$="[worth]"]');
-				if (!$.trim($worth.val()) && item.my_price !== null && item.my_price !== undefined) {
-					$worth.val(Number(item.my_price).toFixed(2));
-				}
+				// What the fish sells for is no longer filled in here: the shop price is read on Save
+				// (Shop_Price), and the line's own field holds only a price typed with the pencil.
 				refreshBoxes(); // The line has its fish: its remembered share, if any, is offered.
 			});
 		}

@@ -34,8 +34,9 @@
  *
  * Once a line is linked, its figures are live: survived = arrived − every
  * loss (any reason), sold = the shipped events, DOA = the losses noted
- * "doa" (undos honoured). Imported history (lines without stays) keeps
- * the typed survived / DOA numbers.
+ * "doa" (undos honoured) — over the line's own stay AND its sister stays
+ * (with_sisters(): a group split over tanks is still one line). Imported
+ * history (lines without stays) keeps the typed survived / DOA numbers.
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  */
@@ -248,6 +249,46 @@ class Orders {
 		return $errors;
 	}
 
+	/**
+	 * What a form's rows carry beside the line itself (pure), in the order
+	 * normalize_lines() keeps the lines (a row without a species is
+	 * skipped): per line its posted split plan (Splits::parts_in(): parts,
+	 * NONE or null), its live fish as typed (received − DOA; null while
+	 * nothing is received), the supplier's code when the row posts one
+	 * (the Entry view's "More columns"; null when the row has no such
+	 * field — an older page —, so a stored code is then left alone), its
+	 * name and its id — and whether the row posts a split field at all
+	 * (said): an older page does not, and its save must not forget a plan
+	 * made elsewhere.
+	 *
+	 * @param mixed $raw lines[n][…] (split, code, qty_received, qty_doa, species, id).
+	 * @return array[] plan, said, live, code, species, id.
+	 */
+	public static function posted_extras( $raw ) {
+		$out = array();
+		foreach ( (array) $raw as $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+			$line = self::normalize_line( $row );
+			if ( '' === $line['species'] ) {
+				continue;
+			}
+			$out[] = array(
+				'plan'    => Splits::parts_in( $row['split'] ?? null ),
+				'said'    => array_key_exists( 'split', $row ), // An emptied field forgets the plan; a missing one says nothing.
+				'live'    => Splits::live_of( $line ),
+				'code'    => isset( $row['code'] ) && is_scalar( $row['code'] ) && ! is_bool( $row['code'] ) ? (string) substr( trim( preg_replace( '/\s+/', ' ', preg_replace( '/[\x00-\x1F\x7F<>]/', ' ', (string) $row['code'] ) ) ), 0, 40 ) : null,
+				'species' => $line['species'],
+				'id'      => (int) $line['id'],
+			);
+			if ( count( $out ) >= self::MAX_LINES ) {
+				break;
+			}
+		}
+		return $out;
+	}
+
 	/* ============================================================== */
 	/*  Figures                                                        */
 	/* ============================================================== */
@@ -298,6 +339,56 @@ class Orders {
 	}
 
 	/**
+	 * A line's figures with its sister stays counted in (pure). A group
+	 * that was split lives on in several stays of one order line: the fish
+	 * that left the line's own stay in a split are not lost — they are the
+	 * sister's arrival — so the line ARRIVED what its own stay arrived,
+	 * while what is alive, lost, sold and DOA is the sum over every stay.
+	 * Survived = arrived − every loss, as for one stay.
+	 *
+	 * @param array   $own     figures_from_events() of the line's own stay.
+	 * @param array[] $sisters figures_from_events() of each sister stay.
+	 * @return array{arrived: int, lost: int, sold: int, doa: int, live: int, survived: int, stays: int}
+	 */
+	public static function with_sisters( array $own, array $sisters ) {
+		$out = array(
+			'arrived' => (int) ( $own['arrived'] ?? 0 ),
+			'lost'    => (int) ( $own['lost'] ?? 0 ),
+			'sold'    => (int) ( $own['sold'] ?? 0 ),
+			'doa'     => (int) ( $own['doa'] ?? 0 ),
+			'live'    => (int) ( $own['live'] ?? 0 ),
+			'stays'   => 1,
+		);
+		foreach ( $sisters as $sister ) {
+			if ( ! is_array( $sister ) ) {
+				continue;
+			}
+			foreach ( array( 'lost', 'sold', 'doa', 'live' ) as $key ) {
+				$out[ $key ] += (int) ( $sister[ $key ] ?? 0 );
+			}
+			$out['stays']++;
+		}
+		$out['survived'] = max( 0, $out['arrived'] - $out['lost'] );
+		return $out;
+	}
+
+	/**
+	 * The live figures of the lines' stays from a store: with the sister
+	 * stays counted in where the store can (line_figures()), else each
+	 * stay on its own.
+	 *
+	 * @param object $store    Store or stand-in.
+	 * @param int[]  $stay_ids The lines' own stays.
+	 * @return array<int, array>
+	 */
+	public static function figures_for( $store, array $stay_ids ) {
+		if ( ! $stay_ids ) {
+			return array();
+		}
+		return method_exists( $store, 'line_figures' ) ? (array) $store->line_figures( $stay_ids ) : (array) $store->stay_figures( $stay_ids );
+	}
+
+	/**
 	 * An order with its lines' figures resolved and costed: a linked line
 	 * reads survived / DOA / live / sold from its stay, an unlinked one
 	 * keeps what was typed. Adds 'costing' (Costing::compute()) and, on
@@ -334,7 +425,7 @@ class Orders {
 
 		$costing = Costing::compute( $order, $lines, $default_per_box );
 		foreach ( $costing['lines'] as $index => $costed ) {
-			foreach ( array( 'fraction', 'units', 'landed_total', 'landed_per_fish', 'suggested_price', 'profit', 'margin', 'worth_it', 'revenue', 'doa_cost', 'doa_cost_per_fish' ) as $key ) {
+			foreach ( array( 'fraction', 'units', 'landed_total', 'landed_per_fish', 'suggested_price', 'profit', 'margin', 'worth_it', 'revenue', 'doa_cost', 'doa_cost_per_fish', 'priced', 'worth_from' ) as $key ) {
 				$lines[ $index ][ $key ] = $costed[ $key ];
 			}
 			$lines[ $index ]['per_box_used'] = $costed['per_box'];
@@ -366,7 +457,9 @@ class Orders {
 			'total'         => (float) ( $c['total'] ?? 0 ),
 			'grand_total'   => (float) ( $c['grand_total'] ?? 0 ),
 			'revenue'       => (float) ( $c['revenue'] ?? 0 ),
-			'up_down'       => (float) ( $c['up_down'] ?? 0 ),
+			// A fish with no shop price yet is left out of "up or down", as on the order page.
+			'up_down'       => (float) ( $c['up_down_priced'] ?? ( $c['up_down'] ?? 0 ) ),
+			'unpriced'      => (int) ( $c['unpriced'] ?? 0 ),
 		);
 	}
 
@@ -496,7 +589,8 @@ class Orders {
 	 * @param array  $settings        Settings.
 	 * @param array  $base            actor_id, source ('import' for the workbook import, 'order' otherwise).
 	 * @param int    $default_per_box Fish per box when nothing says.
-	 * @return array{created: array[], skipped: int, errors: string[], date: string}
+	 * @return array{created: array[], skipped: int, errors: string[], date: string} created: line_id, stay_id,
+	 *               species, qty, doa, tank, tank_id, event_id, splits (Splits::apply()['made']).
 	 */
 	public static function check_in( $store, array $order, $today, array $settings, array $base, $default_per_box = Costing::DEFAULT_PER_BOX ) {
 		$result = array(
@@ -512,7 +606,7 @@ class Orders {
 				$stay_ids[] = (int) $line['stay_id'];
 			}
 		}
-		$order = self::resolve( $order, $stay_ids ? $store->stay_figures( $stay_ids ) : array(), $default_per_box );
+		$order = self::resolve( $order, self::figures_for( $store, $stay_ids ), $default_per_box );
 
 		$date = Replay::is_date( $order['received_date'] ?? null ) ? (string) $order['received_date'] : (string) $today;
 		if ( strcmp( $date, (string) $today ) > 0 ) {
@@ -530,7 +624,28 @@ class Orders {
 		// The Arrivals button writes source 'order'; the workbook import 'import'.
 		$source = 'import' === (string) ( $base['source'] ?? '' ) ? 'import' : 'order';
 		$base   = array_merge( $base, array( 'source' => $source ) );
+		// The splits planned on the order page (the workbook import has none).
+		$plans = 'order' === $source ? Splits::plans( array_column( $order['lines'], 'id' ) ) : array();
 
+		// The tanks this check-in has already promised — every tank of every split plan, and the tank
+		// typed on a line — are taken before the first line looks for an empty one: a line left on
+		// "auto" never lands in a tank a later line was planned into while empty tanks stand beside it.
+		foreach ( $order['lines'] as $line ) {
+			if ( ! empty( $line['stay_id'] ) || (int) ( $line['qty_received'] ?? 0 ) < 1 ) {
+				continue;
+			}
+			$parts = isset( $plans[ (int) $line['id'] ] ) && is_array( $plans[ (int) $line['id'] ] ) ? $plans[ (int) $line['id'] ] : array();
+			foreach ( $parts as $part ) {
+				if ( (int) ( $part['tank_id'] ?? 0 ) > 0 ) {
+					$occupied[] = (int) $part['tank_id'];
+				}
+			}
+			if ( ! $parts && (int) ( $line['tank_id'] ?? 0 ) > 0 ) {
+				$occupied[] = (int) $line['tank_id'];
+			}
+		}
+
+		$taught = array(); // The fish this check-in has split (Splits::species_keys()).
 		foreach ( $order['lines'] as $line ) {
 			if ( ! empty( $line['stay_id'] ) ) {
 				$result['skipped']++;
@@ -542,7 +657,12 @@ class Orders {
 				continue;
 			}
 
-			$tank = self::pick_tank( $spa, $occupied, $order['building_id'] ?? null, $line['tank_id'] ?? null );
+			// A split line arrives in the first tank of its plan; any other line where pick_tank() says.
+			$parts = isset( $plans[ (int) $line['id'] ] ) && is_array( $plans[ (int) $line['id'] ] ) ? $plans[ (int) $line['id'] ] : array();
+			$tank  = Splits::first_tank( $store, $parts );
+			if ( ! $tank ) {
+				$tank = self::pick_tank( $spa, $occupied, $order['building_id'] ?? null, $line['tank_id'] ?? null );
+			}
 			if ( ! $tank ) {
 				/* translators: %s: species */
 				$result['errors'][] = sprintf( __( '%s: no active Spa tank to check in to.', 'fishotel-misc-plugin' ), (string) $line['species'] );
@@ -611,7 +731,39 @@ class Orders {
 			}
 
 			$store->set_line_stay( (int) $line['id'], $stay_id, (int) $tank['id'] );
-			$occupied[]          = (int) $tank['id'];
+			$occupied[] = (int) $tank['id'];
+
+			// The rest of the plan, exactly as by hand: one move of a smaller quantity per further tank.
+			$split = array(
+				'made'   => array(),
+				'errors' => array(),
+			);
+			if ( Splits::is_split( $parts ) ) {
+				$split = Splits::apply( $store, $stay_id, $parts, $base, $today, $settings );
+				foreach ( $split['made'] as $made ) {
+					$occupied[] = (int) $made['tank_id'];
+				}
+				$result['errors'] = array_merge( $result['errors'], $split['errors'] );
+			}
+			if ( 'order' === $source ) {
+				// What this fish did this time is what its next line offers: split, and whether that
+				// came out as one fish in every tank (the first tank's count may have been "the rest").
+				$ones = false;
+				if ( $split['made'] && count( $split['made'] ) === count( $parts ) - 1 && array( 1 ) === array_values( array_unique( array_map( 'intval', array_column( $split['made'], 'qty' ) ) ) ) ) {
+					$left = $store->stay( $stay_id, $today, $settings );
+					$ones = $left && 1 === (int) $left['qty_live'];
+				}
+				// The same fish on two lines of one order — two sizes — is one fish to the memory: a line
+				// kept together does not take away what a split line of this very check-in taught.
+				$keys = Splits::species_keys( $line );
+				if ( $split['made'] ) {
+					$taught = array_merge( $taught, $keys );
+				}
+				if ( $split['made'] || ! array_intersect( $keys, $taught ) ) {
+					Splits::remember( $line, (bool) $split['made'], $ones, $today, $ones ? count( $split['made'] ) + 1 : 0 );
+				}
+			}
+
 			$result['created'][] = array(
 				'line_id'  => (int) $line['id'],
 				'stay_id'  => (int) $stay_id,
@@ -621,7 +773,12 @@ class Orders {
 				'tank'     => (int) $tank['number'],
 				'tank_id'  => (int) $tank['id'],
 				'event_id' => (int) $written['event_id'],
+				'splits'   => $split['made'],
 			);
+		}
+
+		if ( $plans ) {
+			Splits::forget( array_column( $result['created'], 'line_id' ) ); // A plan is an intent: once the line is a stay it is done.
 		}
 
 		if ( $result['created'] ) {
@@ -655,6 +812,23 @@ class Orders {
 		} else {
 			/* translators: 1: stays created, 2: tank numbers */
 			$text = sprintf( __( '%1$d stays created in Tank %2$s.', 'fishotel-misc-plugin' ), $n, implode( ', ', $tanks ) );
+
+			$split_lines = 0;
+			$more        = array();
+			foreach ( (array) $result['created'] as $row ) {
+				if ( ! empty( $row['splits'] ) ) {
+					$split_lines++;
+					foreach ( (array) $row['splits'] as $made ) {
+						$more[ (int) $made['tank'] ] = true;
+					}
+				}
+			}
+			if ( $split_lines > 0 ) {
+				$more = array_keys( $more );
+				sort( $more );
+				/* translators: 1: lines split, 2: tank numbers */
+				$text .= ' ' . sprintf( _n( '%1$d line split on into Tank %2$s.', '%1$d lines split on into Tank %2$s.', $split_lines, 'fishotel-misc-plugin' ), $split_lines, implode( ', ', $more ) );
+			}
 		}
 		if ( (int) $result['skipped'] > 0 ) {
 			/* translators: %d: lines skipped */

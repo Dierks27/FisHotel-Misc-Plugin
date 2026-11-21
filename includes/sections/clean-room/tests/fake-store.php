@@ -1153,6 +1153,21 @@ class Fake_Store {
 				'variants'   => $variants,
 			);
 		}
+		// Aliases: onto their product or their species, else a candidate of their own — as the real Store.
+		foreach ( $this->aliases as $alias => $row ) {
+			$variant = array( 'text' => (string) $alias, 'kind' => 'alias' );
+			foreach ( $out as $index => $entry ) {
+				if ( ( $row['product_id'] && (int) $entry['product_id'] === (int) $row['product_id'] ) || ( ! $row['product_id'] && Species::key( $entry['name'] ) === Species::key( $row['species'] ) ) ) {
+					$out[ $index ]['variants'][] = $variant;
+					continue 2;
+				}
+			}
+			$out[] = array(
+				'product_id' => $row['product_id'],
+				'name'       => '' !== $row['species'] ? $row['species'] : (string) $alias,
+				'variants'   => array( $variant ),
+			);
+		}
 		return $out;
 	}
 
@@ -1608,6 +1623,10 @@ class Fake_Store {
 			$row['notes'] = (string) $fields['notes'];
 			$changed      = true;
 		}
+		if ( array_key_exists( 'worth', $fields ) ) {
+			$row['worth'] = null !== $fields['worth'] && is_numeric( $fields['worth'] ) ? round( (float) $fields['worth'], 2 ) : null;
+			$changed      = true;
+		}
 		unset( $row );
 		return $changed;
 	}
@@ -1724,6 +1743,23 @@ class Fake_Store {
 			if ( $id > 0 ) {
 				$out[ $id ] = Orders::figures_from_events( $this->events( $id ) );
 			}
+		}
+		return $out;
+	}
+
+	/** As Store::line_figures(): each own stay with the sister stays of its order line counted in. */
+	public function line_figures( array $stay_ids ) {
+		$stay_ids = array_values( array_unique( array_filter( array_map( 'intval', $stay_ids ) ) ) );
+		$out      = array();
+		foreach ( $this->stay_figures( $stay_ids ) as $id => $figures ) {
+			$line    = isset( $this->stays[ $id ] ) ? (int) $this->stays[ $id ]['order_line_id'] : 0;
+			$sisters = array();
+			foreach ( $this->stays as $row ) {
+				if ( $line > 0 && (int) $row['order_line_id'] === $line && ! in_array( (int) $row['id'], $stay_ids, true ) ) {
+					$sisters[] = Orders::figures_from_events( $this->events( (int) $row['id'] ) );
+				}
+			}
+			$out[ $id ] = Orders::with_sisters( $figures, $sisters );
 		}
 		return $out;
 	}

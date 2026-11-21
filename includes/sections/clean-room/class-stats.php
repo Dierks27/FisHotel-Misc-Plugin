@@ -166,6 +166,8 @@ class Stats {
 							'survived'      => $survived,
 							'total'         => (float) $costed['landed_total'],
 							'revenue'       => (float) $costed['revenue'],
+							'unpriced'        => empty( $costed['priced'] ) ? 1 : 0,
+							'unpriced_landed' => empty( $costed['priced'] ) ? (float) $costed['landed_total'] : 0.0,
 							'lines'         => 1,
 							'orders'        => 0,
 							'survival_rate' => null === $survived ? null : 0.0,
@@ -256,8 +258,13 @@ class Stats {
 			'total'           => (float) $costing['total'],
 			'grand_total'     => (float) $costing['grand_total'],
 			'revenue'         => (float) $costing['revenue'],
-			'up_down'         => (float) $costing['up_down'],
-			'ratio'           => $costing['ratio'],
+			// "Up or down" as the order page, the Arrivals list and the export say it: the revenue
+			// against what the lines WITH a price cost. A line without a shop price has no revenue
+			// yet, and its cost is not counted as a loss (unpriced_landed says how much that is).
+			'up_down'         => (float) ( $costing['up_down_priced'] ?? $costing['up_down'] ),
+			'ratio'           => array_key_exists( 'ratio_priced', $costing ) ? $costing['ratio_priced'] : $costing['ratio'],
+			'unpriced'        => (int) ( $costing['unpriced'] ?? 0 ),
+			'unpriced_landed' => (float) ( $costing['unpriced_landed'] ?? 0 ),
 			'received_lines'  => $received_lines,
 			'mislabeled'      => $mislabeled,
 			'mislabeled_rate' => $received_lines > 0 ? $mislabeled / $received_lines : null,
@@ -285,6 +292,8 @@ class Stats {
 					'survived'      => ! empty( $row['survived_known'] ) ? (int) $row['survived'] : null,
 					'total'         => (float) $row['total'],
 					'revenue'       => (float) $row['revenue'],
+					'unpriced'        => (int) ( $row['unpriced'] ?? 0 ),
+					'unpriced_landed' => (float) ( $row['unpriced_landed'] ?? 0 ),
 					'lines'          => (int) $row['lines'],
 					'orders'         => 1,
 					'survival_rate'  => ! empty( $row['survived_known'] ) ? 0.0 : null,
@@ -371,6 +380,8 @@ class Stats {
 					'survived'      => ! empty( $row['survived_known'] ) ? (int) $row['survived'] : null,
 					'total'         => (float) $row['total'],
 					'revenue'       => (float) $row['revenue'],
+					'unpriced'        => (int) ( $row['unpriced'] ?? 0 ),
+					'unpriced_landed' => (float) ( $row['unpriced_landed'] ?? 0 ),
 					'lines'          => (int) $row['lines'],
 					'orders'         => 1,
 					'survival_rate'  => ! empty( $row['survived_known'] ) ? 0.0 : null,
@@ -400,6 +411,8 @@ class Stats {
 			'doa'            => 0,
 			'total'          => 0.0,
 			'revenue'        => 0.0,
+			'unpriced'       => 0,
+			'unpriced_landed' => 0.0,
 			'surv_received'  => 0,
 			'surv_doa'       => 0,
 			'survived_known' => false,
@@ -424,6 +437,9 @@ class Stats {
 		$bucket['doa']      += (int) $add['doa'];
 		$bucket['total']    += (float) $add['total'];
 		$bucket['revenue']  += (float) $add['revenue'];
+		// Lines without a shop price: counted, and their cost kept apart from "up or down".
+		$bucket['unpriced']        += (int) ( $add['unpriced'] ?? 0 );
+		$bucket['unpriced_landed'] += (float) ( $add['unpriced_landed'] ?? 0 );
 		foreach ( array( 'received_lines', 'mislabeled', 'unidentified' ) as $key ) {
 			$bucket[ $key ] += (int) ( $add[ $key ] ?? 0 );
 		}
@@ -443,6 +459,7 @@ class Stats {
 	 */
 	private static function finish_bucket( array $bucket ) {
 		$denominator = $bucket['surv_received'] - $bucket['surv_doa'];
+		$priced      = $bucket['total'] - $bucket['unpriced_landed']; // What the lines with a price cost.
 		return array(
 			'name'            => $bucket['name'],
 			'orders'          => $bucket['orders'],
@@ -457,8 +474,10 @@ class Stats {
 			'doa_rate'        => $bucket['received'] > 0 ? $bucket['doa'] / $bucket['received'] : null,
 			'total'           => $bucket['total'],
 			'revenue'         => $bucket['revenue'],
-			'up_down'         => $bucket['revenue'] - $bucket['total'],
-			'ratio'           => abs( $bucket['total'] ) > 1e-9 ? $bucket['revenue'] / $bucket['total'] : null,
+			'up_down'         => $bucket['revenue'] - $priced,
+			'ratio'           => abs( $priced ) > 1e-9 ? $bucket['revenue'] / $priced : null,
+			'unpriced'        => $bucket['unpriced'],
+			'unpriced_landed' => $bucket['unpriced_landed'],
 			'received_lines'  => $bucket['received_lines'],
 			'mislabeled'      => $bucket['mislabeled'],
 			'mislabeled_rate' => $bucket['received_lines'] > 0 ? $bucket['mislabeled'] / $bucket['received_lines'] : null,
@@ -851,6 +870,8 @@ class Stats {
 						'survived' => $survived,
 						'total'    => (float) $costed['landed_total'],
 						'revenue'  => (float) $costed['revenue'],
+						'unpriced'        => empty( $costed['priced'] ) ? 1 : 0,
+						'unpriced_landed' => empty( $costed['priced'] ) ? (float) $costed['landed_total'] : 0.0,
 						'lines'    => 1,
 						'orders'   => 0,
 					)
@@ -868,7 +889,7 @@ class Stats {
 				$meta[ $slot ],
 				array(
 					'profit'          => $row['up_down'],
-					'margin'          => $row['total'] > 1e-9 ? $row['up_down'] / $row['total'] : null,
+					'margin'          => $row['total'] - $row['unpriced_landed'] > 1e-9 ? $row['up_down'] / ( $row['total'] - $row['unpriced_landed'] ) : null,
 					'landed_per_fish' => $row['received'] > 0 ? $row['total'] / $row['received'] : null,
 				)
 			);

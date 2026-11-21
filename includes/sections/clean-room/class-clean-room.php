@@ -60,6 +60,11 @@
  *   - class-stats.php       PURE: the yearly figures, weighted and as the
  *                           spreadsheet averaged them; years side by side;
  *                           one row per fish and year.
+ *   - class-shop-price.php  what an order line's fish sells for, READ from the
+ *                           shop (the linked product, else the species list)
+ *                           instead of typed.
+ *   - class-splits.php      a line laid out over tanks at its check-in: the
+ *                           plan, "1 per tank", the fish split last time.
  *   - class-stats-prices.php  PURE: the fish priced under what their latest
  *                           supplier order suggests (read-only).
  *   - class-stats-sales.php   what customers actually paid per fish and year,
@@ -213,6 +218,8 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 			require_once self::path() . 'class-identify.php';
 			require_once self::path() . 'class-board-lines.php';
 			require_once self::path() . 'class-orders.php';
+			require_once self::path() . 'class-shop-price.php';
+			require_once self::path() . 'class-splits.php';
 			require_once self::path() . 'class-xlsx.php';
 			require_once self::path() . 'class-workbook.php';
 			require_once self::path() . 'class-import-map.php';
@@ -287,6 +294,10 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 				require_once self::path() . 'class-admin-workbook.php';
 				require_once self::path() . 'class-admin-stats.php';
 				require_once self::path() . 'class-admin-import.php';
+				// The order page's line importer: admin only, so nothing of it is read on a shop request.
+				require_once self::path() . 'class-order-import.php';
+				require_once self::path() . 'class-import-layouts.php';
+				require_once self::path() . 'class-admin-order-import.php';
 				require_once self::path() . 'class-admin-temp.php';
 
 				$settings = new Settings();
@@ -303,6 +314,9 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 
 				$import = new Admin_Import();
 				$import->init();
+
+				$order_import = new Admin_Order_Import();
+				$order_import->init();
 
 				// Settings → Sizes → "Tidy up the sizes": its AJAX and assets. It does nothing until a button is pressed.
 				require_once self::path() . 'class-admin-sizes-tidy.php';
@@ -329,6 +343,9 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 			require_once self::path() . 'class-admin-workbook.php';
 			require_once self::path() . 'class-admin-stats.php';
 			require_once self::path() . 'class-admin-import.php';
+			require_once self::path() . 'class-order-import.php';
+			require_once self::path() . 'class-import-layouts.php';
+			require_once self::path() . 'class-admin-order-import.php';
 			require_once self::path() . 'class-admin-temp.php';
 			require_once self::path() . 'class-admin-sizes-tidy.php';
 

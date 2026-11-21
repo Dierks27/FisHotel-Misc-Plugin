@@ -21,6 +21,7 @@
  * @var array[] $box_rates    Settings::box_rates().
  * @var array   $sizes        Admin::sizes_panel(): standard, report, list_text, attributes_url, terms_url.
  * @var array[] $shares       Store::box_shares() — every remembered share.
+ * @var array[] $import_layouts Import_Layouts::all() — what "Import lines" remembers per supplier.
  * @var array   $import       Admin_Import::panel_data().
  * @var string  $flash        A one-time notice.
  * @var string  $labels_url   Printable labels URL.
@@ -464,6 +465,9 @@ $fh_from_attr = Sizes::SOURCE_ATTRIBUTE === $fh_standard['source'];
 
 		<?php /* ── Import workbook ───────────────────────────────── */ ?>
 		<?php include Clean_Room::path() . 'views/import.php'; ?>
+
+		<?php /* ── Saved import layouts (the order page's Import lines) ── */ ?>
+		<?php include Clean_Room::path() . 'views/settings-import-layouts.php'; ?>
 
 		<?php /* ── Sales statuses (Stats → Real sales) ───────────── */ ?>
 		<?php include Clean_Room::path() . 'views/settings-sales.php'; ?>

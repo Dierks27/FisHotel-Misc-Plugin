@@ -92,6 +92,15 @@ class Admin_Workbook {
 	const SALE_DATE_ACTION = 'fishotel_cleanroom_sale_date';
 
 	/**
+	 * The order page's two views of its lines, and the user meta that
+	 * remembers which one each person left it in.
+	 *
+	 * @var string[]
+	 */
+	const VIEWS     = array( 'entry', 'numbers' );
+	const VIEW_META = 'fishotel_cleanroom_order_view';
+
+	/**
 	 * Register hooks.
 	 */
 	public function init() {
@@ -259,6 +268,9 @@ class Admin_Workbook {
 				$batch_stays = $store->open_stays( array( 'order_id' => (int) $order['id'] ), $today, $settings );
 				$batch       = self::batch_sale_panel( $order, $batch_stays, self::product_titles( $store, array_column( $batch_stays, 'product_id' ) ), $settings );
 			}
+			$view  = self::order_view( $order, self::view_prefs( get_user_meta( get_current_user_id(), self::VIEW_META, true ) ) );
+			$view  = self::view_asked( $view, wp_unslash( $_GET ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- which view to draw, nothing more.
+			$split = self::split_panel( $store, $order, $today, $settings );
 
 			include Clean_Room::path() . 'views/order.php';
 			return;
@@ -292,7 +304,9 @@ class Admin_Workbook {
 	/* ============================================================== */
 
 	/**
-	 * Orders with their lines resolved (live figures, costing).
+	 * Orders with their lines resolved (live figures — a split group's
+	 * sister stays counted in —, the shop price read for every line,
+	 * costing).
 	 *
 	 * @param Store $store   Store.
 	 * @param array $filters Store::orders() filters.
@@ -312,18 +326,21 @@ class Admin_Workbook {
 				}
 			}
 		}
-		$figures = $stay_ids ? $store->stay_figures( $stay_ids ) : array();
+		$figures = Orders::figures_for( $store, $stay_ids );
+
+		foreach ( $orders as $index => $order ) {
+			$orders[ $index ]['lines'] = isset( $lines[ (int) $order['id'] ] ) ? $lines[ (int) $order['id'] ] : array();
+		}
 
 		$out = array();
-		foreach ( $orders as $order ) {
-			$order['lines'] = isset( $lines[ (int) $order['id'] ] ) ? $lines[ (int) $order['id'] ] : array();
-			$out[]          = Orders::resolve( $order, $figures );
+		foreach ( Shop_Price::fill_orders( $store, $orders ) as $order ) {
+			$out[] = Orders::resolve( $order, $figures );
 		}
 		return $out;
 	}
 
 	/**
-	 * One order with its lines resolved.
+	 * One order with its lines resolved (as resolved_orders()).
 	 *
 	 * @param Store $store Store.
 	 * @param array $order Store::order().
@@ -336,7 +353,7 @@ class Admin_Workbook {
 				$stay_ids[] = (int) $line['stay_id'];
 			}
 		}
-		return Orders::resolve( $order, $stay_ids ? $store->stay_figures( $stay_ids ) : array() );
+		return Orders::resolve( Shop_Price::fill_order( $store, $order ), Orders::figures_for( $store, $stay_ids ) );
 	}
 
 	/**
@@ -442,6 +459,230 @@ class Admin_Workbook {
 			}
 		}
 		return false;
+	}
+
+	/**
+	 * Which stage an order is in for its page's default view (pure):
+	 * 'working' while it is a draft, ordered, or being received — fish still
+	 * to check in, or none checked in yet —, 'done' once it is closed or
+	 * every line that received fish is a stay.
+	 *
+	 * @param array $order The order with its lines.
+	 * @return string working|done
+	 */
+	public static function order_stage( array $order ) {
+		$status = (string) ( $order['status'] ?? 'draft' );
+		if ( 'closed' === $status ) {
+			return 'done';
+		}
+		if ( 'received' !== $status || self::can_check_in( $order ) ) {
+			return 'working';
+		}
+		foreach ( (array) ( $order['lines'] ?? array() ) as $line ) {
+			if ( ! empty( $line['stay_id'] ) ) {
+				return 'done';
+			}
+		}
+		return 'working';
+	}
+
+	/**
+	 * What a user remembers of the order page, cleaned (pure): the view
+	 * they left a working order in, the one they left a finished order in,
+	 * and whether "More columns" was on. Anything else is the default —
+	 * Entry for an order being worked on, Numbers for one that is done.
+	 *
+	 * @param mixed $raw The stored user meta.
+	 * @return array{working: string, done: string, more: bool}
+	 */
+	public static function view_prefs( $raw ) {
+		$raw  = is_array( $raw ) ? $raw : array();
+		$view = static function ( $key, $default ) use ( $raw ) {
+			return isset( $raw[ $key ] ) && is_string( $raw[ $key ] ) && in_array( $raw[ $key ], self::VIEWS, true ) ? $raw[ $key ] : $default;
+		};
+		return array(
+			'working' => $view( 'working', 'entry' ),
+			'done'    => $view( 'done', 'numbers' ),
+			'more'    => ! empty( $raw['more'] ),
+		);
+	}
+
+	/**
+	 * The view an order page opens in (pure).
+	 *
+	 * @param array $order The order with its lines.
+	 * @param array $prefs view_prefs().
+	 * @return array{view: string, stage: string, more: bool}
+	 */
+	public static function order_view( array $order, array $prefs ) {
+		$stage = self::order_stage( $order );
+		// An order being worked on that has no line yet has nothing to read in Numbers, and "Add line"
+		// and "Import lines" are Entry's: it opens in Entry whatever was left on (what is remembered
+		// stays as it is).
+		$empty = 'working' === $stage && empty( $order['lines'] );
+		return array(
+			'view'  => $empty ? 'entry' : $prefs[ $stage ],
+			'stage' => $stage,
+			'more'  => ! empty( $prefs['more'] ),
+		);
+	}
+
+	/**
+	 * The view a link asks for, over the remembered one, for this one page
+	 * load (pure; nothing is stored): `view=entry` or `view=numbers` — what
+	 * "Import lines" sends the page back with, so the lines it just wrote
+	 * land in Entry —, and `import=1` (a new order from pasted lines), which
+	 * is Entry's panel.
+	 *
+	 * @param array $view order_view().
+	 * @param array $get  Unslashed query.
+	 * @return array
+	 */
+	public static function view_asked( array $view, array $get ) {
+		$asked = isset( $get['view'] ) && is_string( $get['view'] ) ? strtolower( trim( $get['view'] ) ) : '';
+		if ( in_array( $asked, self::VIEWS, true ) ) {
+			$view['view'] = $asked;
+		} elseif ( isset( $get['import'] ) && '1' === (string) ( is_scalar( $get['import'] ) ? $get['import'] : '' ) ) {
+			$view['view'] = 'entry';
+		}
+		return $view;
+	}
+
+	/**
+	 * Remember the view a user switched to (the testable half of the "view"
+	 * op): the view of the stage the order is in, and the "More columns"
+	 * switch. Returns what is stored now.
+	 *
+	 * @param mixed $stored The user meta as stored.
+	 * @param array $raw    Unslashed payload: stage, view, more.
+	 * @return array view_prefs().
+	 */
+	public static function remember_view( $stored, array $raw ) {
+		$prefs = self::view_prefs( $stored );
+		$stage = isset( $raw['stage'] ) && 'done' === $raw['stage'] ? 'done' : 'working';
+		if ( isset( $raw['view'] ) && is_string( $raw['view'] ) && in_array( $raw['view'], self::VIEWS, true ) ) {
+			$prefs[ $stage ] = $raw['view'];
+		}
+		if ( isset( $raw['more'] ) && is_scalar( $raw['more'] ) ) {
+			$prefs['more'] = in_array( (string) $raw['more'], array( '1', 'true', 'on' ), true );
+		}
+		return $prefs;
+	}
+
+	/**
+	 * What the order page needs for its Split buttons: the tanks a part may
+	 * go into (Splits::tanks(): the empty ones first), each line's plan as
+	 * its hidden field posts it, and — for a line that is no stay yet, has
+	 * no plan and did not come empty (received typed as 0) — whether its
+	 * fish was split last time (the offer).
+	 *
+	 * @param object $store    Store or stand-in.
+	 * @param array  $order    The order with its lines.
+	 * @param string $today    Site date.
+	 * @param array  $settings Settings.
+	 * @return array{tanks: array[], fields: array<int, string>, offers: array<int, string>, last: array<int, int>}
+	 *               fields: line id → 'none' | the JSON of [[qty, tank id], …];
+	 *               offers: line id → 'ones' | 'some';
+	 *               last: line id → over how many tanks "one per tank" went last time (the
+	 *               offer lays out no more than that by itself).
+	 */
+	public static function split_panel( $store, array $order, $today, array $settings ) {
+		$all = Splits::all();
+		$out = array(
+			'tanks'  => Splits::tanks( $store, $today, $settings ),
+			'fields' => array(),
+			'offers' => array(),
+			'last'   => array(),
+		);
+		foreach ( (array) ( $order['lines'] ?? array() ) as $line ) {
+			$id = (int) ( $line['id'] ?? 0 );
+			if ( $id < 1 || ! empty( $line['stay_id'] ) ) {
+				continue;
+			}
+			$plan = isset( $all['plans'][ $id ] ) ? $all['plans'][ $id ] : null;
+			if ( is_array( $plan ) ) {
+				$rows = array();
+				foreach ( $plan as $part ) {
+					$rows[] = array( (int) $part['qty'], (int) $part['tank_id'] );
+				}
+				$out['fields'][ $id ] = (string) wp_json_encode( $rows );
+				continue;
+			}
+			if ( Splits::NONE === $plan ) {
+				$out['fields'][ $id ] = Splits::NONE;
+				continue;
+			}
+			// A line that did not come — received typed, and 0 — has no fish to lay out: no offer.
+			if ( isset( $line['qty_received'] ) && '' !== (string) $line['qty_received'] && (int) $line['qty_received'] < 1 ) {
+				continue;
+			}
+			$memory = Splits::remembered( $line, $all['species'] );
+			if ( null !== $memory ) {
+				$out['offers'][ $id ] = $memory['ones'] ? 'ones' : 'some';
+				$out['last'][ $id ]   = $memory['ones'] ? (int) ( $memory['n'] ?? 0 ) : 0;
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * What js/order-entry.js says on the order page: the Split rows, their
+	 * running count and mistakes (Splits::strings()), the offers, the
+	 * pencil.
+	 *
+	 * @return array{i18n: array<string, string>}
+	 */
+	public static function entry_js_config() {
+		return array(
+			'i18n' => array_merge(
+				Splits::strings(),
+				array(
+					'split'          => __( 'Split', 'fishotel-misc-plugin' ),
+					'edit'           => __( 'Edit split', 'fishotel-misc-plugin' ),
+					/* translators: %s: species */
+					'title'          => __( 'Split %s — how many go into which tank:', 'fishotel-misc-plugin' ),
+					'thisLine'       => __( 'this line', 'fishotel-misc-plugin' ),
+					'howMany'        => __( 'How many', 'fishotel-misc-plugin' ),
+					'whichTank'      => __( 'Which tank', 'fishotel-misc-plugin' ),
+					'pickTank'       => __( '— tank —', 'fishotel-misc-plugin' ),
+					'hasFish'        => __( 'has fish', 'fishotel-misc-plugin' ),
+					'goneTank'       => __( '(no longer a tank for arrivals)', 'fishotel-misc-plugin' ),
+					'firstTank'      => __( 'first tank', 'fishotel-misc-plugin' ),
+					'theRest'        => __( 'rest', 'fishotel-misc-plugin' ),
+					'removePart'     => __( 'Take this tank out of the split', 'fishotel-misc-plugin' ),
+					'addTank'        => __( '+ tank', 'fishotel-misc-plugin' ),
+					'ones'           => __( '1 per tank', 'fishotel-misc-plugin' ),
+					'onesTitle'      => __( 'One fish to a tank over the next empty Spa tanks of the order\'s building (received − DOA).', 'fishotel-misc-plugin' ),
+					'keep'           => __( 'Keep together', 'fishotel-misc-plugin' ),
+					'keepTitle'      => __( 'No split: the whole line goes into one tank.', 'fishotel-misc-plugin' ),
+					/* translators: 1: fish placed, 2: fish alive */
+					'placed'         => __( '%1$d of %2$d placed', 'fishotel-misc-plugin' ),
+					/* translators: %1$d: fish placed */
+					'placedOnly'     => __( '%1$d placed — the received count is not typed yet', 'fishotel-misc-plugin' ),
+					/* translators: %d: fish */
+					'rest'           => __( '%d stay in the first tank', 'fishotel-misc-plugin' ),
+					/* translators: 1: fish, 2: the tank */
+					'part'           => __( '%1$s → %2$s', 'fishotel-misc-plugin' ),
+					/* translators: %d: tanks */
+					'saidTanks'      => __( '%d tanks', 'fishotel-misc-plugin' ),
+					'onesNoCount'    => __( 'Type the received count first: one fish goes to each tank.', 'fishotel-misc-plugin' ),
+					'onesNone'       => __( 'No empty Spa tank is left for this line in the order\'s building (the lines above took them, or they hold fish): nothing is laid out.', 'fishotel-misc-plugin' ),
+					/* translators: 1: empty tanks, 2: fish */
+					'onesShort'      => __( 'Only %1$d empty Spa tanks: the other %2$d stay in the first tank.', 'fishotel-misc-plugin' ),
+					'offerOnes'      => __( 'This fish was split one per tank last time, so the same is laid out here — a proposal: nothing is planned until you press "Use this split" (or change a row). "Keep together" if this group stays as one.', 'fishotel-misc-plugin' ),
+					'offerOnesLater' => __( 'This fish was split one per tank last time. Once the received count is typed, "1 per tank" lays it out — or "Keep together" if this group stays as one.', 'fishotel-misc-plugin' ),
+					'offerOnesOne'   => __( 'This fish was split one per tank last time. This line has fewer than two live fish, so there is nothing to split.', 'fishotel-misc-plugin' ),
+					'offerOnesTanks' => __( 'This fish was split one per tank last time, but two empty Spa tanks are not left for it in the order\'s building (the lines above took them, or they hold fish): nothing is laid out. Add the tanks yourself, or "Keep together".', 'fishotel-misc-plugin' ),
+					/* translators: 1: fish last time, 2: fish on this line */
+					'offerOnesMore'  => __( 'This fish was split one per tank last time — %1$d of them. This line has %2$d, so nothing is laid out by itself: press "1 per tank", add the tanks yourself, or "Keep together".', 'fishotel-misc-plugin' ),
+					'use'            => __( 'Use this split', 'fishotel-misc-plugin' ),
+					'useTitle'       => __( 'Plan the split as it is laid out here. Until then it is only a proposal: the line stays together.', 'fishotel-misc-plugin' ),
+					'offerSome'      => __( 'This fish was split over tanks last time. Add the tanks, or "Keep together" if this group stays as one.', 'fishotel-misc-plugin' ),
+					'worthTyped'     => __( 'A price of your own for this line — kept on Save.', 'fishotel-misc-plugin' ),
+					'worthCleared'   => __( 'No price of your own: the shop price is read again on Save.', 'fishotel-misc-plugin' ),
+				)
+			),
+		);
 	}
 
 	/**
@@ -588,11 +829,14 @@ class Admin_Workbook {
 	 * @return array{lines: array[], order: array}
 	 */
 	public static function figures( array $order ) {
-		$c     = (array) ( $order['costing'] ?? array() );
-		$mode  = (string) ( $c['mode'] ?? 'box' );
-		$lines = array();
+		$c       = (array) ( $order['costing'] ?? array() );
+		$mode    = (string) ( $c['mode'] ?? 'box' );
+		$none    = self::no_price_text();
+		$lines   = array();
 		foreach ( (array) ( $order['lines'] ?? array() ) as $line ) {
 			$linked  = ! empty( $line['linked'] );
+			$sells   = Costing::worth_of( $line );
+			$priced  = null !== $sells['price'];
 			$lines[] = array(
 				'id'              => (int) ( $line['id'] ?? 0 ),
 				'linked'          => $linked,
@@ -601,11 +845,15 @@ class Admin_Workbook {
 				'landed_total'    => Costing::money( $line['landed_total'] ?? null ),
 				'landed_per_fish' => Costing::money( $line['landed_per_fish'] ?? null ),
 				'suggested_price' => Costing::num( $line['suggested_price'] ?? null, '—', 0 ),
-				'profit'          => Costing::money( $line['profit'] ?? null ),
-				'margin'          => Costing::pct( $line['margin'] ?? null ),
-				'worth_it'        => ! empty( $line['worth_it'] ) ? __( 'Yes', 'fishotel-misc-plugin' ) : __( 'No', 'fishotel-misc-plugin' ),
-				'worth_flag'      => ! empty( $line['worth_it'] ),
-				'revenue'         => Costing::money( $line['revenue'] ?? null ),
+				'shop_price'      => $priced ? Costing::money( $sells['price'] ) : $none,
+				'shop_from'       => $sells['from'],
+				'shop_note'       => Shop_Price::source_text( array_merge( $line, array( 'worth_from' => $sells['from'] ) ) ),
+				'priced'          => $priced,
+				'profit'          => $priced ? Costing::money( $line['profit'] ?? null ) : $none,
+				'margin'          => $priced ? Costing::pct( $line['margin'] ?? null ) : $none,
+				'worth_it'        => ! $priced ? $none : ( ! empty( $line['worth_it'] ) ? __( 'Yes', 'fishotel-misc-plugin' ) : __( 'No', 'fishotel-misc-plugin' ) ),
+				'worth_flag'      => $priced && ! empty( $line['worth_it'] ),
+				'revenue'         => $priced ? Costing::money( $line['revenue'] ?? null ) : '—',
 				'doa_cost'        => Costing::money( $line['doa_cost'] ?? null ),
 				'live'            => $linked && null !== ( $line['live'] ?? null ) ? (string) (int) $line['live'] : '—',
 				'sold'            => $linked && null !== ( $line['sold'] ?? null ) ? (string) (int) $line['sold'] : '—',
@@ -614,7 +862,11 @@ class Admin_Workbook {
 			);
 		}
 
-		$up_down = (float) ( $c['up_down'] ?? 0 );
+		// "Up or down" compares the revenue with what the lines that HAVE a price cost: a fish with
+		// no shop price yet is not a fish that sells for nothing.
+		$unpriced = (int) ( $c['unpriced'] ?? 0 );
+		$up_down  = (float) ( $c['up_down_priced'] ?? ( $c['up_down'] ?? 0 ) );
+		$ratio    = array_key_exists( 'ratio_priced', $c ) ? $c['ratio_priced'] : ( $c['ratio'] ?? null );
 
 		return array(
 			'lines' => $lines,
@@ -635,14 +887,67 @@ class Admin_Workbook {
 				'revenue'           => Costing::money( $c['revenue'] ?? null ),
 				'up_down'           => ( $up_down > 0 ? '+' : '' ) . Costing::money( $up_down ),
 				'up_down_flag'      => $up_down >= 0 ? 'up' : 'down',
-				'ratio'             => Costing::num( $c['ratio'] ?? null ),
+				'ratio'             => Costing::num( $ratio ),
 				'fill_rate'         => Costing::pct( $c['fill_rate'] ?? null ),
 				'survival_rate'     => Costing::pct( $c['survival_rate'] ?? null ),
 				'doa_rate'          => Costing::pct( $c['doa_rate'] ?? null ),
 				'doa_cost_sheet'    => Costing::money( $c['doa_cost_sheet'] ?? null ),
 				'doa_cost_per_fish' => Costing::money( $c['doa_cost_per_fish'] ?? null ),
+				'unpriced'          => (string) $unpriced,
+				'no_price'          => self::unpriced_text( $unpriced ),
+				'worth_rule'        => self::worth_rule_text( $c['worth_threshold'] ?? null ),
+				'target_head'       => self::target_head( $c['markup'] ?? null ),
 			),
 		);
+	}
+
+	/**
+	 * What a line without a shop price shows in its shop price, profit,
+	 * margin and "Worth it?" cells.
+	 *
+	 * @return string
+	 */
+	public static function no_price_text() {
+		return __( 'no shop price yet', 'fishotel-misc-plugin' );
+	}
+
+	/**
+	 * The Numbers panel's line about the fish without a shop price ('' when
+	 * every line has one).
+	 *
+	 * @param int $count Lines without a price.
+	 * @return string
+	 */
+	public static function unpriced_text( $count ) {
+		$count = (int) $count;
+		if ( $count < 1 ) {
+			return '';
+		}
+		/* translators: %d: order lines */
+		return sprintf( _n( '%d line has no shop price yet: it is left out of the revenue and of "up or down".', '%d lines have no shop price yet: they are left out of the revenue and of "up or down".', $count, 'fishotel-misc-plugin' ), $count );
+	}
+
+	/**
+	 * The worth-it rule in plain words, from the order's own threshold: a
+	 * margin above 2.75 is a shop price above 3.75× the landed cost.
+	 *
+	 * @param mixed $threshold The order's worth-it margin.
+	 * @return string
+	 */
+	public static function worth_rule_text( $threshold ) {
+		/* translators: %s: a multiple, e.g. 3.75 */
+		return sprintf( __( 'Worth it when the shop price is more than %s× what the fish cost landed.', 'fishotel-misc-plugin' ), Costing::num( Costing::worth_times( $threshold ) ) );
+	}
+
+	/**
+	 * The head of the target-price column as the owner's sheet heads it:
+	 * the order's markup × 100 ("400%").
+	 *
+	 * @param mixed $markup The order's markup.
+	 * @return string
+	 */
+	public static function target_head( $markup ) {
+		return Costing::num( Costing::money_in( $markup, Costing::DEFAULT_MARKUP ) * 100, '', 0 ) . '%';
 	}
 
 	/* ============================================================== */
@@ -774,12 +1079,13 @@ class Admin_Workbook {
 	 * (the stays), delete (a draft without stays), identify (correct the
 	 * fish of one line that received fish — and its stays), shares (the
 	 * remembered box shares of a supplier + origin — read only, for the
-	 * suggestion chips when either field changes on the page).
+	 * suggestion chips when either field changes on the page), view (which
+	 * of Entry / Numbers this user left the page in — nothing of the order).
 	 */
 	public function ajax_order() {
 		self::guard();
 
-		$raw      = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified in guard().
+		$raw      = self::unpack_lines( (array) wp_unslash( $_POST ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified in guard().
 		$op       = isset( $raw['op'] ) ? sanitize_key( $raw['op'] ) : '';
 		$id       = isset( $raw['order_id'] ) ? absint( $raw['order_id'] ) : 0;
 		$store    = new Store();
@@ -823,6 +1129,7 @@ class Admin_Workbook {
 						wp_send_json_error( array( 'message' => __( 'The order could not be deleted.', 'fishotel-misc-plugin' ) ), 500 );
 					}
 					Box_Shares::release_lines( $store, (array) ( $current['lines'] ?? array() ) ); // Its percents are no longer remembered.
+					Splits::forget( array_column( (array) ( $current['lines'] ?? array() ), 'id' ) );
 					$result = array(
 						'message'  => __( 'Order deleted.', 'fishotel-misc-plugin' ),
 						'redirect' => Admin::page_url( 'arrivals' ),
@@ -837,6 +1144,12 @@ class Admin_Workbook {
 				case 'shares':
 					$result = array( 'shares' => self::shares_for( $store, $raw ) );
 					break;
+				case 'view':
+					// Which view (and "More columns") this user left the order page in.
+					$prefs = self::remember_view( get_user_meta( get_current_user_id(), self::VIEW_META, true ), $raw );
+					update_user_meta( get_current_user_id(), self::VIEW_META, $prefs );
+					$result = array( 'prefs' => $prefs );
+					break;
 				default:
 					wp_send_json_error( array( 'message' => __( 'Unknown action.', 'fishotel-misc-plugin' ) ), 400 );
 			}
@@ -849,6 +1162,61 @@ class Admin_Workbook {
 		}
 
 		wp_send_json_success( $result );
+	}
+
+	/**
+	 * The order form's lines as one field. An order of 150 fish is some
+	 * 2,500 form fields — more than PHP reads by default (max_input_vars),
+	 * and a save that lost its last lines would delete them. So the page
+	 * posts the line rows as one JSON field, lines_json, which is unpacked
+	 * here into the lines[n][field] rows every reader of the form expects.
+	 * A request without it (an older page) is left as it is. A lines_json
+	 * that cannot be read (half a character in a name, a field cut short)
+	 * is marked lines_unread — the save is refused, never taken for an
+	 * order whose lines were all removed.
+	 *
+	 * @param array $raw Unslashed payload.
+	 * @return array
+	 */
+	public static function unpack_lines( array $raw ) {
+		unset( $raw['lines_unread'] ); // Ours to set, never the page's.
+		if ( ! isset( $raw['lines_json'] ) || ! is_string( $raw['lines_json'] ) ) {
+			return $raw;
+		}
+		$rows  = json_decode( $raw['lines_json'], true );
+		$lines = array();
+		if ( ! is_array( $rows ) ) {
+			// A field that cannot be read is NOT an order without lines: every reader of the form
+			// refuses it (lines_unread), or a Save would delete every line that has no stay.
+			$raw['lines_unread'] = true;
+		}
+		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+			$clean = array();
+			foreach ( $row as $field => $value ) {
+				if ( is_string( $field ) && ( is_scalar( $value ) || null === $value ) && ! is_bool( $value ) ) {
+					$clean[ $field ] = (string) $value;
+				}
+			}
+			$lines[] = $clean;
+			if ( count( $lines ) >= Orders::MAX_LINES + 50 ) {
+				break;
+			}
+		}
+		unset( $raw['lines_json'] );
+		$raw['lines'] = $lines;
+		return $raw;
+	}
+
+	/**
+	 * What a save says when the page's lines could not be read.
+	 *
+	 * @return string
+	 */
+	public static function lines_unread_text() {
+		return __( 'The lines of this order did not arrive in one piece, so nothing was saved and no line was touched. Reload the page and try again; if it happens again, look for an odd character (half an emoji) in a name or a note.', 'fishotel-misc-plugin' );
 	}
 
 	/**
@@ -944,7 +1312,9 @@ class Admin_Workbook {
 	 * longer in the list leaves that line without one and is named in the
 	 * message. A line typed with a leading "??" is an unknown fish
 	 * (Identify::flag_lines()); a line's notes are kept as stored (the
-	 * grid has no field for them). On a line that already became a stay, a
+	 * grid has no field for them — only for the supplier's code in them).
+	 * A split planned in a Tank cell is checked and kept by line id
+	 * (split_plans(), Splits::keep()); it is never carried out here. On a line that already became a stay, a
 	 * changed species, "??" box or size is a correction: its stays follow
 	 * and the line keeps what the label said (Identify::line()). A line
 	 * without a stay is the order as typed: retyping its species records
@@ -976,6 +1346,9 @@ class Admin_Workbook {
 	 *               stays or fish that changed) — or error.
 	 */
 	public static function save_order( $store, array $raw, $id, $today ) {
+		if ( ! empty( $raw['lines_unread'] ) ) {
+			return array( 'error' => self::lines_unread_text() );
+		}
 		$header = Orders::normalize_order( array_merge( $raw, array( 'id' => $id ) ) );
 		if ( '' === $header['ref'] ) {
 			$year          = Stats::order_year( $header );
@@ -1007,10 +1380,30 @@ class Admin_Workbook {
 			$before[ (int) $line['id'] ] = $line;
 		}
 
+		// The splits planned in the Tank cells: a plan that cannot work refuses the save like a
+		// mistyped percent does; a plan on a line that already is a stay is refused plainly, the
+		// rest of the save goes on.
+		$extras   = Orders::posted_extras( $raw_lines );
+		$warnings = array();
+		$planned  = self::split_plans( $store, $extras, $before, $today, $warnings );
+		if ( ! empty( $planned['errors'] ) ) {
+			return array( 'error' => implode( ' ', $planned['errors'] ) . ' ' . __( 'Nothing was saved.', 'fishotel-misc-plugin' ) );
+		}
+
 		$lines = Identify::flag_lines( Orders::normalize_lines( $raw_lines ) );
+		foreach ( $planned['plans'] as $index => $plan ) {
+			// A split line arrives in the first tank of its plan.
+			if ( is_array( $plan ) && isset( $lines[ $index ] ) && empty( $before[ (int) $lines[ $index ]['id'] ]['stay_id'] ) ) {
+				$lines[ $index ]['tank_id'] = (int) $plan[0]['tank_id'];
+			}
+		}
 		foreach ( $lines as $index => $line ) {
 			if ( '' === $line['notes'] && isset( $before[ (int) $line['id'] ] ) ) {
 				$lines[ $index ]['notes'] = (string) $before[ (int) $line['id'] ]['notes'];
+			}
+			// The supplier's code typed (or emptied) under "More columns" lives in the notes, as an import writes it.
+			if ( isset( $extras[ $index ] ) && null !== $extras[ $index ]['code'] && $extras[ $index ]['code'] !== Order_Import::code_of( $lines[ $index ]['notes'] ) ) {
+				$lines[ $index ]['notes'] = Order_Import::note_with( $lines[ $index ]['notes'], Order_Import::NOTE_CODE, $extras[ $index ]['code'] );
 			}
 		}
 
@@ -1031,8 +1424,9 @@ class Admin_Workbook {
 				return null !== $line['size_slug'];
 			}
 		);
-		$warnings = array();
-		$lines    = Sizes::apply_to_lines( $lines, $sized ? Sizes::standard( $store, Settings::get() )['sizes'] : array(), $before, $warnings );
+		$unsized  = array();
+		$lines    = Sizes::apply_to_lines( $lines, $sized ? Sizes::standard( $store, Settings::get() )['sizes'] : array(), $before, $unsized );
+		$warnings = array_merge( $warnings, $unsized );
 
 		$saved_id = $store->save_order( $header );
 		if ( ! $saved_id ) {
@@ -1043,6 +1437,17 @@ class Admin_Workbook {
 		if ( false === $saved ) {
 			return array( 'error' => __( 'The lines could not be saved.', 'fishotel-misc-plugin' ) );
 		}
+
+		// Keep the plans by the ids the lines have now; a line the save removed takes its plan along.
+		$by_line = array();
+		$aligned = count( (array) $saved['ids'] ) >= count( $lines ); // Every posted row was written, in order.
+		foreach ( $planned['plans'] as $index => $plan ) {
+			$line_id = isset( $lines[ $index ] ) && (int) $lines[ $index ]['id'] > 0 ? (int) $lines[ $index ]['id'] : ( $aligned && isset( $lines[ $index ], $saved['ids'][ $index ] ) ? (int) $saved['ids'][ $index ] : 0 );
+			if ( $line_id > 0 ) {
+				$by_line[ $line_id ] = $plan;
+			}
+		}
+		Splits::keep( $by_line, array_diff( array_keys( $before ), array_map( 'intval', (array) $saved['ids'] ) ) );
 
 		// A line that became a stay and whose fish or size was changed in the grid: one
 		// correction — its stays follow, the line keeps what the label said.
@@ -1080,6 +1485,13 @@ class Admin_Workbook {
 
 			$followed += count( (array) $done['stays'] );
 			$labeled  += null !== $done['label'] ? 1 : 0;
+		}
+
+		// The save that CLOSES an order freezes it: every line without a price of its own takes the
+		// shop price as it is read now, and a closed order is never read for again — its numbers,
+		// and the past years of the Stats, stay what they were when the shop's prices move.
+		if ( 'closed' === (string) $header['status'] && 'closed' !== (string) ( $current['status'] ?? '' ) ) {
+			Shop_Price::freeze( $store, (array) $store->order( $saved_id ) );
 		}
 
 		$order = self::resolve_order( $store, $store->order( $saved_id ) );
@@ -1130,6 +1542,62 @@ class Admin_Workbook {
 			'kept'        => count( $kept ),
 			'reload'      => $followed > 0 || $labeled > 0 || count( $kept ) > 0,
 		);
+	}
+
+	/**
+	 * What a save keeps of the posted split plans (the testable half of the
+	 * save's split step). A line that is not a stay yet: a plan with one
+	 * part is only its tank, a plan with more is checked (Splits::errors())
+	 * — a mistake refuses the whole save —, NONE and "nothing said" are
+	 * kept as they are. A line that already IS a stay cannot be split from
+	 * the order page: a plan posted for it (a page loaded before the
+	 * check-in) is refused plainly — the warning says how that group is
+	 * split now — and nothing is kept for it.
+	 *
+	 * @param object $store    Store or stand-in.
+	 * @param array  $splits   Orders::posted_extras().
+	 * @param array  $before   The lines as stored, by id.
+	 * @param string $today    Site date.
+	 * @param array  $warnings What was not saved (by reference).
+	 * @return array{plans: array, errors: string[]} plans: line index → parts | NONE | null.
+	 */
+	public static function split_plans( $store, array $splits, array $before, $today, array &$warnings ) {
+		$out = array(
+			'plans'  => array(),
+			'errors' => array(),
+		);
+
+		$tanks = null;
+		foreach ( $splits as $index => $posted ) {
+			$plan   = $posted['plan'];
+			$linked = $posted['id'] > 0 && ! empty( $before[ $posted['id'] ]['stay_id'] );
+			if ( $linked ) {
+				if ( is_array( $plan ) && Splits::is_split( $plan ) ) {
+					/* translators: %s: species */
+					$warnings[] = sprintf( __( 'the split of %s — that line is already checked in: split the group from its tank instead (Move, with a smaller count)', 'fishotel-misc-plugin' ), $posted['species'] );
+				}
+				$out['plans'][ $index ] = null;
+				continue;
+			}
+			if ( empty( $posted['said'] ) ) {
+				continue; // The row has no split field (a page loaded before Split existed): the stored plan is not this save's to forget.
+			}
+			if ( ! is_array( $plan ) ) {
+				$out['plans'][ $index ] = $plan; // NONE, or nothing said.
+				continue;
+			}
+
+			if ( null === $tanks ) {
+				$tanks = Splits::by_id( Splits::tanks( $store, $today, Settings::get() ) );
+			}
+			foreach ( Splits::errors( $plan, $posted['live'], $tanks ) as $mistake ) {
+				/* translators: 1: line number, 2: species, 3: what is wrong */
+				$out['errors'][] = sprintf( __( 'Line %1$d (%2$s): %3$s.', 'fishotel-misc-plugin' ), $index + 1, $posted['species'], $mistake );
+			}
+			$out['plans'][ $index ] = $plan; // One part is only the line's first tank — kept so the Tank cell shows it.
+		}
+
+		return $out;
 	}
 
 	/**
@@ -1592,7 +2060,7 @@ class Admin_Workbook {
 				(float) ( $c['total'] ?? 0 ),
 				(float) ( $c['grand_total'] ?? 0 ),
 				(float) ( $c['revenue'] ?? 0 ),
-				(float) ( $c['up_down'] ?? 0 ),
+				(float) ( $c['up_down_priced'] ?? ( $c['up_down'] ?? 0 ) ),
 				self::rate( $c['ratio'] ?? null ),
 				(float) ( $c['doa_cost_sheet'] ?? 0 ),
 				(float) ( $c['doa_cost_per_fish'] ?? 0 ),
@@ -1615,10 +2083,10 @@ class Admin_Workbook {
 					self::rate( $line['landed_total'] ?? null ),
 					self::rate( $line['landed_per_fish'] ?? null ),
 					self::rate( $line['suggested_price'] ?? null ),
-					$line['worth'],
+					Costing::worth_of( $line )['price'], // The typed price, else the shop's as it is read now; blank = none.
 					self::rate( $line['profit'] ?? null ),
 					self::rate( $line['margin'] ?? null ),
-					! empty( $line['worth_it'] ),
+					isset( $line['worth_it'] ) && null !== $line['worth_it'] ? (bool) $line['worth_it'] : null,
 					isset( $line['survived'] ) ? $line['survived'] : null,
 					(int) ( $line['doa'] ?? 0 ),
 					self::rate( $line['revenue'] ?? null ),

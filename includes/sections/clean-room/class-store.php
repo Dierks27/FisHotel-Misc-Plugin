@@ -4591,6 +4591,10 @@ class Store {
 		if ( array_key_exists( 'notes', $fields ) ) {
 			$data['notes'] = (string) $fields['notes'];
 		}
+		if ( array_key_exists( 'worth', $fields ) ) {
+			// The price an order is closed with (Shop_Price::freeze()).
+			$data['worth'] = null !== $fields['worth'] && is_numeric( $fields['worth'] ) ? round( (float) $fields['worth'], 2 ) : null;
+		}
 		if ( ! $data ) {
 			return false;
 		}
@@ -4652,6 +4656,54 @@ class Store {
 		}
 
 		return $by_stay;
+	}
+
+	/**
+	 * The live figures of order lines by their own stay — each with its
+	 * SISTER stays counted in: a group that was split (at check-in, or by a
+	 * move of a smaller quantity later) lives on in several stays of the
+	 * same order line, and a fish lost or sold in any of those tanks is
+	 * lost or sold on the line (Orders::with_sisters()). A stay without an
+	 * order line, or the only stay of its line, reads exactly as
+	 * stay_figures() gives it.
+	 *
+	 * @param int[] $stay_ids The lines' own stays (order_lines.stay_id).
+	 * @return array<int, array> stay id → arrived, lost, sold, doa, live, survived, stays.
+	 */
+	public function line_figures( array $stay_ids ) {
+		$stay_ids = array_values( array_unique( array_filter( array_map( 'intval', $stay_ids ) ) ) );
+		$own      = $this->stay_figures( $stay_ids );
+		if ( ! $own ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		$in = implode( ',', $stay_ids );
+		try {
+			$rows = $wpdb->get_results( 'SELECT o.id AS own_id, s.id AS sister_id FROM ' . self::table( 'stays' ) . ' o INNER JOIN ' . self::table( 'stays' ) . ' s ON s.order_line_id = o.order_line_id AND s.id <> o.id WHERE o.id IN (' . $in . ') AND o.order_line_id IS NOT NULL AND s.id NOT IN (' . $in . ')', ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- ids cast to int above.
+		} catch ( \Throwable $e ) {
+			$rows = array();
+		}
+
+		$sisters = array();
+		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
+			$sisters[ (int) $row['own_id'] ][] = (int) $row['sister_id'];
+		}
+		$theirs = $sisters ? $this->stay_figures( array_merge( ...array_values( $sisters ) ) ) : array();
+
+		$out = array();
+		foreach ( $own as $id => $figures ) {
+			$list = array();
+			foreach ( isset( $sisters[ $id ] ) ? $sisters[ $id ] : array() as $sister ) {
+				if ( isset( $theirs[ $sister ] ) ) {
+					$list[] = $theirs[ $sister ];
+				}
+			}
+			$out[ $id ] = Orders::with_sisters( $figures, $list );
+		}
+
+		return $out;
 	}
 
 	/**
@@ -5424,10 +5476,14 @@ class Store {
 	 * own active price (_price — the sale price while a sale runs; a
 	 * product with variations carries its lowest and highest there) and,
 	 * for each of its enabled variations, that variation's active price
-	 * with its attributes. Read-only: nothing here ever writes a price.
+	 * with its attributes. Beside each active price stands the REGULAR one
+	 * (_regular_price: 'regular' on the product, 'regular' on a variation)
+	 * — what the order page reads, so a sale never turns "Worth it?" over.
+	 * A product in the trash has no price. Read-only: nothing here ever
+	 * writes a price.
 	 *
 	 * @param int[] $ids Product ids (a variation id answers with its own price).
-	 * @return array<int, array{prices: float[], variations: array[]}> variations: id, price, attributes (key → value).
+	 * @return array<int, array{prices: float[], regular: float[], variations: array[]}> variations: id, price, regular, attributes (key → value).
 	 */
 	public function product_prices( array $ids ) {
 		$ids = array_slice( array_values( array_unique( array_filter( array_map( 'intval', $ids ) ) ) ), 0, self::PRICE_IDS_LIMIT );
@@ -5442,11 +5498,11 @@ class Store {
 			$in  = implode( ',', $chunk );
 			$sql = 'SELECT p.ID AS id, p.post_parent AS parent, p.post_type AS type, pm.meta_key AS meta_key, pm.meta_value AS meta_value'
 				. ' FROM ' . $wpdb->posts . ' p INNER JOIN ' . $wpdb->postmeta . ' pm ON pm.post_id = p.ID'
-				. " WHERE ((p.ID IN ({$in}) AND p.post_type IN ('product', 'product_variation')) OR (p.post_parent IN ({$in}) AND p.post_type = 'product_variation' AND p.post_status = 'publish'))"
-				. ' AND (pm.meta_key = %s OR pm.meta_key LIKE %s) ORDER BY p.ID ASC, pm.meta_id ASC LIMIT %d';
+				. " WHERE ((p.ID IN ({$in}) AND p.post_type IN ('product', 'product_variation') AND p.post_status NOT IN ('trash', 'auto-draft')) OR (p.post_parent IN ({$in}) AND p.post_type = 'product_variation' AND p.post_status = 'publish'))"
+				. ' AND (pm.meta_key = %s OR pm.meta_key = %s OR pm.meta_key LIKE %s) ORDER BY p.ID ASC, pm.meta_id ASC LIMIT %d';
 
 			try {
-				$rows = $wpdb->get_results( $wpdb->prepare( $sql, '_price', $wpdb->esc_like( 'attribute_' ) . '%', self::PRICE_ROWS_LIMIT ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- ids cast to int above.
+				$rows = $wpdb->get_results( $wpdb->prepare( $sql, '_price', '_regular_price', $wpdb->esc_like( 'attribute_' ) . '%', self::PRICE_ROWS_LIMIT ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- ids cast to int above.
 			} catch ( \Throwable $e ) {
 				continue;
 			}
@@ -5457,16 +5513,21 @@ class Store {
 				$key    = (string) $row['meta_key'];
 				$value  = (string) $row['meta_value'];
 				$price  = '_price' === $key && '' !== $value && is_numeric( $value ) ? (float) $value : null;
+				$list   = '_regular_price' === $key && '' !== $value && is_numeric( $value ) ? (float) $value : null;
 
 				if ( in_array( $id, $chunk, true ) ) {
 					if ( ! isset( $out[ $id ] ) ) {
 						$out[ $id ] = array(
 							'prices'     => array(),
+							'regular'    => array(),
 							'variations' => array(),
 						);
 					}
 					if ( null !== $price ) {
 						$out[ $id ]['prices'][] = $price;
+					}
+					if ( null !== $list ) {
+						$out[ $id ]['regular'][] = $list;
 					}
 					continue;
 				}
@@ -5476,6 +5537,7 @@ class Store {
 				if ( ! isset( $out[ $parent ] ) ) {
 					$out[ $parent ] = array(
 						'prices'     => array(),
+						'regular'    => array(),
 						'variations' => array(),
 					);
 				}
@@ -5483,12 +5545,17 @@ class Store {
 					$out[ $parent ]['variations'][ $id ] = array(
 						'id'         => $id,
 						'price'      => null,
+						'regular'    => null,
 						'attributes' => array(),
 					);
 				}
 				if ( '_price' === $key ) {
 					if ( null !== $price && null === $out[ $parent ]['variations'][ $id ]['price'] ) {
 						$out[ $parent ]['variations'][ $id ]['price'] = $price;
+					}
+				} elseif ( '_regular_price' === $key ) {
+					if ( null !== $list && null === $out[ $parent ]['variations'][ $id ]['regular'] ) {
+						$out[ $parent ]['variations'][ $id ]['regular'] = $list;
 					}
 				} elseif ( '' !== $value ) {
 					$out[ $parent ]['variations'][ $id ]['attributes'][ substr( $key, strlen( 'attribute_' ) ) ] = $value;
