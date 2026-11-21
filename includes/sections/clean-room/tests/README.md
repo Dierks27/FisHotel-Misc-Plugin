@@ -930,8 +930,11 @@ system temp directory (`FH_TEST_TMP` overrides).
   order); the gathering by fish + size + state badge, the summed count,
   the day as a number, a range, "?" and "9 / ?", another size or state
   kept apart but adjacent (`repeat`), for sale / not for sale never
-  mixed, an unknown and a known fish of one name never mixed; the foot's
-  "Sale date not set" count and what a line says of its own dates; the
+  mixed, an unknown and a known fish of one name never mixed, two
+  unknown fish of one description never gathered (each keyed by its own
+  stay), the name printed the product's before a typed one; the foot's
+  "Sale date not set" count and what a line says of its own dates ("on
+  sale … · 1 not set" when a gathered line has a group without one); the
   species filter on a gathered line; then a room on the `Fake_Store`
   with a tank of eight groups moved in out of four Spa tanks — six
   lines, `Admin::totals()` for the room and the building still counting
@@ -944,7 +947,10 @@ system temp directory (`FH_TEST_TMP` overrides).
   dimming, the summary chips and the building header, and a temporary
   setup's card through the same lines; the Stays tab's `tank` /
   `no_sale` filters (`Admin::narrow_stays()`, `tank_stays_url()`); and
-  the phone's tank screen: the same order, eight rows for eight groups.
+  the phone's tank screen: the same order, eight rows for eight groups;
+  and the stylesheet's columns — on a narrow card the name has the first
+  two columns up to the badge, on a wide one its own; a long size is cut
+  in its column.
 - **medications-admin.test.js** — the pure parts of
   `js/medications-admin.js`: what 100 gallons take at a rate (the
   editor's hint), the rates the Board's Calculator offers, its sum.

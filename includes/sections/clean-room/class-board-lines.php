@@ -12,13 +12,17 @@
  *             first, an unknown check-in last; then by id.
  *
  *   gathered  card(): the stays of the same fish (the same name, case and
- *             spacing aside, and as unknown — Identify::is()'s rule), the
- *             same size and the same state badge are ONE line: their
- *             counts summed, their days as one number or a range. The
- *             same fish in another size or state is a line of its own,
- *             next to it ('repeat' = the line above is the same fish). A
- *             line keeps its stays, so nothing is lost: the card lists
- *             them when the line is opened.
+ *             spacing aside — Identify::same_fish()'s rule), the same
+ *             size and the same state badge are ONE line: their counts
+ *             summed, their days as one number or a range. The same fish
+ *             in another size or state is a line of its own, next to it
+ *             ('repeat' = the line above is the same fish). A fish nobody
+ *             knows yet is never gathered: two "?? small wrasse" may be
+ *             two fish, so each group keeps its line. A line keeps its
+ *             stays, so nothing is lost: the card lists them when the
+ *             line is opened. The name printed is the catalogue's when
+ *             one of the fish's groups is linked to a product, else the
+ *             first group's as it was typed.
  *
  *   counted   the card's 'stays' and 'no_sale' count stays, never lines —
  *             as Admin::totals() does for the building and the room.
@@ -50,15 +54,17 @@ class Board_Lines {
 	}
 
 	/**
-	 * Which fish a stay is: its name, case and spacing aside, and whether
-	 * it is still unknown — two stays are the same fish as Identify::is()
-	 * says a row is a fish.
+	 * Which fish a stay is: its name, case and spacing aside — two stays
+	 * are the same fish as Identify::same_fish() says two names are. A
+	 * fish nobody knows yet is only ever itself: what two groups look
+	 * like does not make them one fish, so its key carries the stay's id.
 	 *
-	 * @param array $stay species, needs_id.
+	 * @param array $stay species, needs_id, id.
 	 * @return string
 	 */
 	public static function fish_key( array $stay ) {
-		return ( ! empty( $stay['needs_id'] ) ? 'u:' : 'n:' ) . Species::key( (string) ( $stay['species'] ?? '' ) );
+		$name = Species::key( (string) ( $stay['species'] ?? '' ) );
+		return self::is_unknown( $stay ) ? 'u:' . (int) ( $stay['id'] ?? 0 ) . ':' . $name : 'n:' . $name;
 	}
 
 	/**
@@ -174,6 +180,7 @@ class Board_Lines {
 	public static function card( array $stays, $sizes = null ) {
 		$lines = array();
 		$slots = array();
+		$names = array();
 		$none  = 0;
 
 		foreach ( self::sort( $stays, $sizes ) as $stay ) {
@@ -183,6 +190,14 @@ class Board_Lines {
 			$fish  = self::fish_key( $stay );
 			$key   = $fish . '|' . ( $size ? $size['slug'] : '' ) . '|' . $state . '|' . ( $spa ? '1' : '0' );
 			$date  = Replay::is_date( $stay['sale_ready_date'] ?? null ) ? (string) $stay['sale_ready_date'] : '';
+
+			// The name printed: a product's spelling before a typed one.
+			if ( ! isset( $names[ $fish ] ) || ( ! $names[ $fish ]['product'] && ! empty( $stay['product_id'] ) ) ) {
+				$names[ $fish ] = array(
+					'name'    => (string) ( $stay['species'] ?? '' ),
+					'product' => ! empty( $stay['product_id'] ),
+				);
+			}
 
 			if ( ! isset( $slots[ $key ] ) ) {
 				$slots[ $key ] = count( $lines );
@@ -227,7 +242,8 @@ class Board_Lines {
 
 		foreach ( $lines as $at => $line ) {
 			sort( $lines[ $at ]['sale_dates'] );
-			$lines[ $at ]['repeat'] = $at > 0 && $lines[ $at - 1 ]['key'] === $line['key'];
+			$lines[ $at ]['species'] = $names[ $line['key'] ]['name'];
+			$lines[ $at ]['repeat']  = $at > 0 && $lines[ $at - 1 ]['key'] === $line['key'];
 		}
 
 		return array(
@@ -267,9 +283,11 @@ class Board_Lines {
 	 * What a line says about its sale date: nothing once it is for sale
 	 * (its badge says so) or while none of its stays has a date (the
 	 * card's foot counts those); else "on sale 2026-12-12", or the first
-	 * and the last date when its stays differ.
+	 * and the last date when its stays differ. A gathered line never
+	 * lends a date to a group that has none: "on sale 2026-12-12 · 1 not
+	 * set" when some of its stays have a date and some do not.
 	 *
-	 * @param array $line state, sale_dates.
+	 * @param array $line state, sale_dates, no_sale.
 	 * @return string
 	 */
 	public static function sale_text( array $line ) {
@@ -279,10 +297,17 @@ class Board_Lines {
 		}
 		if ( 1 === count( $dates ) ) {
 			/* translators: %s: date */
-			return sprintf( __( 'on sale %s', 'fishotel-misc-plugin' ), $dates[0] );
+			$text = sprintf( __( 'on sale %s', 'fishotel-misc-plugin' ), $dates[0] );
+		} else {
+			/* translators: 1: the first sale date, 2: the last */
+			$text = sprintf( __( 'on sale %1$s – %2$s', 'fishotel-misc-plugin' ), $dates[0], $dates[ count( $dates ) - 1 ] );
 		}
-		/* translators: 1: the first sale date, 2: the last */
-		return sprintf( __( 'on sale %1$s – %2$s', 'fishotel-misc-plugin' ), $dates[0], $dates[ count( $dates ) - 1 ] );
+		$none = (int) ( $line['no_sale'] ?? 0 );
+		if ( $none > 0 ) {
+			/* translators: 1: "on sale <date>", 2: how many groups of the line have no sale date */
+			$text = sprintf( __( '%1$s · %2$d not set', 'fishotel-misc-plugin' ), $text, $none );
+		}
+		return $text;
 	}
 
 	/**

@@ -445,20 +445,25 @@ and, for the order alone, the phone's tank screen share): by name (natural
 and case-blind, an unknown "??" fish last), then by size (the standard
 sizes' own order, then a size that is no longer standard, then none), then
 by check-in (oldest first, an unknown one last). The stays of the same fish
-(the same name, case and spacing aside, and as unknown), the same size and
-the same state badge are ONE line — the counts summed ("× 2"), the day one
-number or a range ("day 15–20"; "day ?" for an unknown check-in) and
-"2 groups" under it; the same fish in another size or state is a line of
-its own right under it, its name said quietly. Each line is a row of
-columns that line up down the card — name · size · count · day · badge on
-a wide card, the name with its badge over size · count · day on a narrow
-one (most are); the name never wraps into the numbers, "day 15" never
-breaks, and what needs saying ("needs identifying", "not a standard size",
-"still in the Spa", "on sale 2026-12-12") stands under the line. A click or
-a tap on a line opens it (no hover): the name in full and its groups one by
-one, each with its count, its day, the quarantine tank it was cleared from
-when its moves say so ("cleared from 521"), its sale date and a link to its
-row on the Stays tab. "Sale date not set" is said once per card, in its
+(the same name, case and spacing aside), the same size and the same state
+badge are ONE line — the counts summed ("× 2"), the day one number or a
+range ("day 15–20"; "day ?" for an unknown check-in) and "2 groups" under
+it; the same fish in another size or state is a line of its own right
+under it, its name said quietly. The name printed is the product's when
+one of the groups is linked to one, else the first group's as typed. A fish
+nobody knows yet ("??", "needs identifying") is never gathered: two
+"?? small wrasse" may be two fish, so each group keeps its own line. Each
+line is a row of columns that line up down the card — name · size · count ·
+day · badge on a wide card; on a narrow one (most are) the name, up to its
+badge, over size · count · day. The name never wraps into the numbers,
+"day 15" never breaks, a long size is cut in its own column, and what needs
+saying ("needs identifying", "not a standard size", "still in the Spa",
+"on sale 2026-12-12") stands under the line — a gathered line lends its
+date to no group without one: "on sale 2026-12-12 · 1 not set". A click or
+a tap on a line opens it (no hover): the name and the size in full and its
+groups one by one, each with its count, its day, the quarantine tank it was
+cleared from when its moves say so ("cleared from 521"), its sale date and a
+link to its row on the Stays tab. "Sale date not set" is said once per card, in its
 foot ("Sale date not set: 6 →", to the Stays tab filtered to that tank's
 groups without one). The building's header and the summary count stays,
 never lines. Then: a header per building with its system gallons ("205 gal

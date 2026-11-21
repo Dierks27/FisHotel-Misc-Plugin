@@ -8,8 +8,10 @@
  * day a number, a range or "?"), the same fish in another size kept apart
  * but next to it, the foot's "Sale date not set" count, the quarantine
  * tank a cleared group came out of, the species filter on a gathered
- * line — and that the building's and the room's counts still count
- * stays, never lines. Then the two screens: the Board as it renders
+ * line — that a fish nobody knows yet is never gathered, that a gathered
+ * line lends its sale date to no group without one, that the name
+ * printed is the product's — and that the building's and the room's
+ * counts still count stays, never lines. Then the two screens: the Board as it renders
  * (views/board.php over the stand-in store), the Stays tab's two filters
  * a card links with, and the phone's tank screen, which takes the order
  * and nothing else (every group keeps its own row).
@@ -179,6 +181,37 @@ check( 'for sale and not for sale are two lines; the two for sale are one', 2 ==
 check( 'an unknown fish and a known one of the same name are not gathered', 2 === count( Board_Lines::card( array( fh_stay( 1, 'Test Goby' ), fh_stay( 2, 'Test Goby', array( 'needs_id' => true ) ) ), $sizes )['lines'] ) );
 check( 'an empty tank: no line', array( 'lines' => array(), 'stays' => 0, 'no_sale' => 0 ) === Board_Lines::card( array(), $sizes ) );
 
+// A fish nobody knows yet: what two groups look like does not make them one fish.
+$wrasses = Board_Lines::card(
+	array(
+		fh_stay( 61, '?? small wrasse', array( 'needs_id' => true, 'qty_live' => 2, 'day' => 20 ) ),
+		fh_stay( 62, '?? small wrasse', array( 'needs_id' => true, 'qty_live' => 3, 'day' => 5, 'checkin_date' => '2026-11-16' ) ),
+		fh_stay( 63, 'Test Goby', array( 'qty_live' => 1 ) ),
+		fh_stay( 64, 'Test Goby', array( 'qty_live' => 1 ) ),
+	),
+	$sizes
+);
+check_same( 'two unknown fish of one description are two lines, never "× 5"', array( 'Test Goby', '?? small wrasse', '?? small wrasse' ), array_column( $wrasses['lines'], 'species' ) );
+check( '… each with its own count, its own day and its own group', array( 2, 2, 3 ) === array_column( $wrasses['lines'], 'qty' ) && array( 61 ) === fh_ids( $wrasses['lines'][1]['stays'] ) && array( 62 ) === fh_ids( $wrasses['lines'][2]['stays'] ) && 'day 20' === Board_Lines::day_text( $wrasses['lines'][1] ) && 'day 5' === Board_Lines::day_text( $wrasses['lines'][2] ) );
+check( '… each marked, and neither read as "the same fish again"', true === $wrasses['lines'][1]['unknown'] && true === $wrasses['lines'][2]['unknown'] && false === $wrasses['lines'][1]['repeat'] && false === $wrasses['lines'][2]['repeat'] && $wrasses['lines'][1]['key'] !== $wrasses['lines'][2]['key'] );
+check( '… the known fish beside them are gathered as ever, and the card still counts four groups', array( 63, 64 ) === fh_ids( $wrasses['lines'][0]['stays'] ) && 4 === $wrasses['stays'] );
+check( 'a fish named with "??" but not flagged is no more known: not gathered either', 2 === count( Board_Lines::card( array( fh_stay( 65, '?? grey thing' ), fh_stay( 66, '?? grey thing' ) ), $sizes )['lines'] ) );
+check( 'the key of a known fish is its name alone; of an unknown one, its own', Board_Lines::fish_key( fh_stay( 1, 'Test  GOBY' ) ) === Board_Lines::fish_key( fh_stay( 2, 'test goby' ) ) && Board_Lines::fish_key( fh_stay( 1, '?? x', array( 'needs_id' => true ) ) ) !== Board_Lines::fish_key( fh_stay( 2, '?? x', array( 'needs_id' => true ) ) ) );
+
+// The name printed: the product's spelling before a typed one, on every line of the fish.
+$spelled = Board_Lines::card(
+	array(
+		fh_stay( 71, 'test yellow tang', array_merge( fh_size( '2-3' ), array( 'checkin_date' => '2026-10-01' ) ) ),
+		fh_stay( 72, 'Test Yellow Tang', array_merge( fh_size( '2-3' ), array( 'product_id' => 12 ) ) ),
+		fh_stay( 73, 'TEST YELLOW TANG', fh_size( '3-4' ) ),
+		fh_stay( 74, 'test anthias' ),
+		fh_stay( 75, 'Test Anthias' ),
+	),
+	$sizes
+);
+check_same( 'a group linked to a product gives the line its name, whichever group comes first; without one, the first group\'s', array( 'test anthias', 'Test Yellow Tang', 'Test Yellow Tang' ), array_column( $spelled['lines'], 'species' ) );
+check( '… and the groups are all still there, as they were typed', array( 71, 72 ) === fh_ids( $spelled['lines'][1]['stays'] ) && 'test yellow tang' === $spelled['lines'][1]['stays'][0]['species'] && true === $spelled['lines'][2]['repeat'] );
+
 /* ------------------------------------------------------------------ */
 echo "3. \"Sale date not set\": once, in the card's foot\n";
 
@@ -196,9 +229,12 @@ $sale = Board_Lines::card(
 );
 check_same( 'the foot counts the stays without a date, gathered or not', 3, $sale['no_sale'] );
 check_same( 'a line whose stays have none says nothing itself', '', Board_Lines::sale_text( $sale['lines'][0] ) );
-check_same( 'a line that has a sale date keeps saying it', 'on sale 2026-12-12', Board_Lines::sale_text( $sale['lines'][2] ) );
+check_same( 'a line that has a sale date keeps saying it — and lends it to no group without one', 'on sale 2026-12-12 · 1 not set', Board_Lines::sale_text( $sale['lines'][2] ) );
 check( '… and still counts its stay without one', 1 === $sale['lines'][2]['no_sale'] && 2 === $sale['lines'][0]['no_sale'] );
 check_same( 'two dates in one line: the first and the last', 'on sale 2026-12-12 – 2026-12-19', Board_Lines::sale_text( $sale['lines'][3] ) );
+check_same( 'every group of the line has the date: the date alone', 'on sale 2026-12-12', Board_Lines::sale_text( Board_Lines::card( array( fh_stay( 1, 'Test Tang', array( 'sale_ready_date' => '2026-12-12' ) ), fh_stay( 2, 'Test Tang', array( 'sale_ready_date' => '2026-12-12' ) ) ), $sizes )['lines'][0] ) );
+check_same( 'two dates and two groups without: all three said', 'on sale 2026-12-12 – 2026-12-19 · 2 not set', Board_Lines::sale_text( array( 'state' => 'cleared', 'sale_dates' => array( '2026-12-12', '2026-12-19' ), 'no_sale' => 2 ) ) );
+check( 'what the lines say is missing adds up to the foot', $sale['no_sale'] === array_sum( array_column( $sale['lines'], 'no_sale' ) ) );
 check_same( 'a line for sale says so with its badge alone', '', Board_Lines::sale_text( $sale['lines'][1] ) );
 
 /* ------------------------------------------------------------------ */
@@ -304,7 +340,7 @@ check( 'the anthias from two Spa tanks: one line × 5', 5 === $card['lines'][0][
 check( 'the two tangs of one size from two Spa tanks: one line × 2, day 15–20; the larger one under it', 2 === $card['lines'][3]['qty'] && 'day 15–20' === Board_Lines::day_text( $card['lines'][3] ) && '2-3"' === $card['lines'][3]['size']['label'] && '3-4"' === $card['lines'][4]['size']['label'] && true === $card['lines'][4]['repeat'] );
 check( 'the wrasse for sale wears READY; the rest are cleared', 'ready' === $card['lines'][1]['state'] && 'cleared' === $card['lines'][0]['state'] && 'cleared' === $card['lines'][3]['state'] );
 check_same( 'the foot: six of the eight have no sale date', 6, $card['no_sale'] );
-check_same( 'the tangs\' line keeps the one date it has', 'on sale ' . $in_a_week, Board_Lines::sale_text( $card['lines'][3] ) );
+check_same( 'the tangs\' line keeps the one date it has, and says the other group has none', 'on sale ' . $in_a_week . ' · 1 not set', Board_Lines::sale_text( $card['lines'][3] ) );
 check( 'the card did not touch the tank\'s own list', $before === $by_no[121]['occupants'] );
 
 $totals = Admin::totals( $tanks );
@@ -392,10 +428,11 @@ check_same( '"Sale date not set" is said once, in the foot, with the count', 1, 
 check( '… as a link to the Stays tab filtered to that tank\'s groups without one', false !== strpos( $c121, 'class="fh-cr-tank__nosale" href="' . esc_url( Admin::tank_stays_url( 121, true ) ) . '"' ) && false !== strpos( Admin::tank_stays_url( 121, true ), 'tab=stays' ) && false !== strpos( Admin::tank_stays_url( 121, true ), 'tank=121' ) && false !== strpos( Admin::tank_stays_url( 121, true ), 'no_sale=1' ) );
 $rows = (string) preg_replace( '/<div class="fh-cr-cardline__more".*?<\/div>/s', '', $c121 );
 check( '… and on no line: only the opened groups say it, each for itself', 1 === substr_count( $rows, 'Sale date not set' ) && 7 === substr_count( $c121, 'Sale date not set' ) );
-check( 'the line that has a sale date keeps saying it', false !== strpos( $rows, '<span class="fh-cr-tank__sale">on sale ' . $in_a_week . '</span>' ) );
+check( 'the line that has a sale date keeps saying it — for the one group that has it', false !== strpos( $rows, '<span class="fh-cr-tank__sale">on sale ' . $in_a_week . ' · 1 not set</span>' ) );
 check( 'the badges are the Board\'s own', 1 === substr_count( $c121, 'fh-cr-badge--ready' ) && 5 === substr_count( $c121, 'fh-cr-badge--cleared' ) );
 check( 'the unknown fish says "needs identifying" on its line', 1 === substr_count( $rows, 'needs identifying' ) && false !== strpos( $c121, 'fh-cr-cardline is-unknown' ) );
 check( 'an opened line names the tank each group was cleared from, its own date and its row on the Stays tab', false !== strpos( $c121, 'cleared from 521' ) && false !== strpos( $c121, 'cleared from 522' ) && false !== strpos( $c121, 'on sale ' . $in_a_week . ' (own date)' ) && false !== strpos( $c121, esc_url( Admin::tank_stays_url( 121, false, $g['tang_b'] ) ) ) );
+check( 'an opened line says the name and the size in full, whatever the row had room for', false !== strpos( $c121, '<strong class="fh-cr-cardline__full">' . esc_html( 'Test Yellow Tang · 2-3"' ) . '</strong>' ) && false !== strpos( $c121, '<strong class="fh-cr-cardline__full">Test Anthias</strong>' ) );
 check( 'the opened part starts closed and its name is the button that opens it', 6 === substr_count( $c121, 'class="fh-cr-cardline__more" id="fh-cr-cardline-121-' ) && 6 === preg_match_all( '/<div class="fh-cr-cardline__more" id="[^"]+" hidden>/', $c121 ) && 6 === substr_count( $c121, 'aria-expanded="false" aria-controls="fh-cr-cardline-121-' ) );
 check( 'the second tang line is marked as the same fish again', 1 === substr_count( $c121, 'fh-cr-cardline is-repeat' ) );
 check( 'the Front Desk link and the to-do stay in the foot', false !== strpos( $c121, 'Front Desk' ) && false !== strpos( $c121, 'class="fh-cr-tank__foot"' ) );
@@ -410,6 +447,13 @@ check( '… keeps that card bright and dims the tanks without the fish', 0 !== s
 check( 'an empty tank is dimmed as before', 0 === strpos( fh_card_html( $html, 122 ), ' is-dim' ) && false !== strpos( fh_card_html( $html, 122 ), 'fh-cr-tank__empty' ) );
 $area = fh_board_html( $store, array( 'area' => 'spa' ) );
 check( 'the area filter still shows that area alone', '' === fh_card_html( $area, 121 ) && '' !== fh_card_html( $area, 511 ) );
+
+// Two unknown fish that look alike, out of two Spa tanks: two lines on the card.
+$two = fh_room_store();
+$u1  = fh_group( $two, 521, 121, array( 'species' => 'small wrasse', 'unknown' => '1', 'qty' => 2 ), 9 );
+$u2  = fh_group( $two, 522, 121, array( 'species' => 'small wrasse', 'unknown' => '1', 'qty' => 3 ), 5 );
+$c2  = fh_card_html( fh_board_html( $two ), 121 );
+check( 'two unknown fish of one description are two lines on the card, each "needs identifying" with its own count', $u1 > 0 && $u2 > 0 && 2 === substr_count( $c2, '<li class="fh-cr-cardline is-unknown">' ) && false !== strpos( $c2, '&times;&nbsp;2' ) && false !== strpos( $c2, '&times;&nbsp;3' ) && false === strpos( $c2, '&times;&nbsp;5' ) && false === strpos( $c2, '2 groups' ) && 2 === substr_count( (string) preg_replace( '/<div class="fh-cr-cardline__more".*?<\/div>/s', '', $c2 ), 'needs identifying' ) );
 
 // A temporary setup's card runs through the same lines.
 fh_act( $store, 0, 'setup', array( 'slot' => 901, 'name' => 'Test Hospital', 'purpose' => 'watching', 'kind' => 'quarantine', 'gallons' => '10', 'template' => '' ) );
@@ -447,5 +491,25 @@ check_same( '… the tangs by size, then by check-in', array( $g['tang_a'], $g['
 check( '… eight rows for eight groups, each with its own id and count — nothing gathered', 8 === count( $occ ) && 8 === count( array_unique( array_column( $occ, 'stayId' ) ) ) && array( 3, 2, 1, 1, 1, 1, 1, 1 ) === array_column( $occ, 'qtyLive' ) );
 check_same( 'the order is the one function\'s', fh_ids( Board_Lines::sort( $by_no[121]['occupants'], $std ) ), array_column( $occ, 'stayId' ) );
 check( 'the phone\'s script and styles are not part of this', false === strpos( (string) file_get_contents( dirname( __DIR__ ) . '/js/front-desk.js' ), 'cardline' ) && false === strpos( (string) file_get_contents( dirname( __DIR__ ) . '/css/front-desk.css' ), 'cardline' ) );
+
+/* ------------------------------------------------------------------ */
+echo "10. The card's columns (the stylesheet)\n";
+
+$css    = (string) file_get_contents( dirname( __DIR__ ) . '/css/clean-room-admin.css' );
+$wide   = strpos( $css, '@container (min-width: 400px)' );
+$narrow = false === $wide ? '' : substr( $css, 0, $wide );
+$rule   = static function ( $sheet, $selector ) {
+	$at = strpos( $sheet, "\n" . $selector . " {\n" );
+	if ( false === $at ) {
+		return '';
+	}
+	$from = $at + strlen( $selector ) + 3;
+	return substr( $sheet, $from, (int) strpos( $sheet, '}', $from ) - $from );
+};
+check( 'a narrow card: the name has the first two columns, up to the badge — the room beside a short badge is the name\'s', false !== strpos( $rule( $narrow, '.fh-cr-wrap .fh-cr-cardline__name' ), 'grid-column: 1 / 3;' ) && false !== strpos( $rule( $narrow, '.fh-cr-cardline__state' ), 'grid-column: 3;' ) );
+check( '… and never wraps into the numbers', false !== strpos( $rule( $narrow, '.fh-cr-wrap .fh-cr-cardline__name' ), 'white-space: nowrap;' ) && false !== strpos( $rule( $narrow, '.fh-cr-wrap .fh-cr-cardline__name' ), 'text-overflow: ellipsis;' ) );
+check( 'a wide card: one row, the name back in its own column', false !== $wide && 1 === preg_match( '/\.fh-cr-wrap \.fh-cr-cardline__name\s*\{\s*grid-column: 1;\s*\}/', substr( $css, (int) $wide ) ) );
+check( '"day 15" and "× 2" never break', false !== strpos( $rule( $narrow, ".fh-cr-cardline__qty,\n.fh-cr-cardline__day" ), 'white-space: nowrap;' ) );
+check( 'a long size is cut in its own column, not laid over the count', false !== strpos( $rule( $narrow, '.fh-cr-cardline__size .fh-cr-size' ), 'max-width: 100%;' ) && false !== strpos( $rule( $narrow, '.fh-cr-cardline__size .fh-cr-size' ), 'text-overflow: ellipsis;' ) );
 
 fh_finish();

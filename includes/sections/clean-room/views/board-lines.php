@@ -4,9 +4,10 @@
  * setup's): the fish in alphabetical order, the same fish of the same
  * size and state gathered into one line (Board_Lines::card()), each line
  * one row of columns — name · size · count · day · badge — with what
- * needs saying under it. A click or a tap on a line opens it: the full
- * name and its groups, each with its count, its day, the quarantine tank
- * it came out of, its sale date and its row on the Stays tab.
+ * needs saying under it. A click or a tap on a line opens it: the name
+ * and the size in full and its groups, each with its count, its day, the
+ * quarantine tank it came out of, its sale date and its row on the Stays
+ * tab.
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  *
@@ -63,7 +64,7 @@ $fh_origins = isset( $origins ) && is_array( $origins ) ? $origins : array();
 				</span>
 			<?php endif; ?>
 			<div class="fh-cr-cardline__more" id="<?php echo esc_attr( $fh_more ); ?>" hidden>
-				<strong class="fh-cr-cardline__full"><?php echo esc_html( $fh_line['species'] ); ?></strong>
+				<strong class="fh-cr-cardline__full"><?php echo esc_html( $fh_line['species'] . ( $fh_line['size'] ? ' · ' . $fh_line['size']['label'] : '' ) ); ?></strong>
 				<ul class="fh-cr-cardline__groups">
 					<?php foreach ( $fh_line['stays'] as $fh_stay ) : ?>
 						<?php

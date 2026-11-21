@@ -398,9 +398,12 @@ a.fh-cr-chip--muted {
 	padding-top: 0;
 }
 
-/* The name is the button that opens the line; it never wraps into the numbers. */
+/* The name is the button that opens the line; it never wraps into the
+   numbers. On a narrow card it has the first two columns, up to the
+   badge: the day column under the badge is as wide as its widest day
+   ("QT day 15–20"), and that room is the name's, not empty. */
 .fh-cr-wrap .fh-cr-cardline__name {
-	grid-column: 1;
+	grid-column: 1 / 3;
 	grid-row: 1;
 	min-width: 0;
 	margin: 0;
@@ -447,7 +450,7 @@ a.fh-cr-chip--muted {
 }
 
 .fh-cr-cardline__state {
-	grid-column: 2 / 4;
+	grid-column: 3;
 	grid-row: 1;
 	justify-self: end;
 }
@@ -459,8 +462,15 @@ a.fh-cr-chip--muted {
 	padding-left: 10px;
 }
 
+/* A long size ("Jumbo show size") is cut in its own column, never laid
+   over the count; the opened line says it in full. */
 .fh-cr-cardline__size .fh-cr-size {
+	box-sizing: border-box;
+	max-width: 100%;
 	margin-left: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	vertical-align: middle;
 }
 
 .fh-cr-cardline__qty {
@@ -540,20 +550,16 @@ a.fh-cr-chip--muted {
 		grid-template-columns: minmax(0, 1fr) 3.4em 6.6em;
 		column-gap: 8px;
 	}
-
-	.fh-cr-wrap .fh-cr-cardline__name {
-		grid-column: 1 / 3;
-	}
-
-	.fh-cr-cardline__state {
-		grid-column: 3;
-	}
 }
 
 /* A wide card: the whole line in one row. */
 @container (min-width: 400px) {
 	.fh-cr-cardlines {
 		grid-template-columns: minmax(0, 1fr) auto auto auto auto;
+	}
+
+	.fh-cr-wrap .fh-cr-cardline__name {
+		grid-column: 1;
 	}
 
 	.fh-cr-cardline__size {
@@ -580,14 +586,6 @@ a.fh-cr-chip--muted {
 	@supports not (grid-template-columns: subgrid) {
 		.fh-cr-cardline {
 			grid-template-columns: minmax(0, 1fr) 6.5em 3.4em 6.6em 6.4em;
-		}
-
-		.fh-cr-wrap .fh-cr-cardline__name {
-			grid-column: 1;
-		}
-
-		.fh-cr-cardline__state {
-			grid-column: 5;
 		}
 	}
 }
