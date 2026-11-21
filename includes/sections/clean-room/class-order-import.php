@@ -934,10 +934,15 @@ class Order_Import {
 	}
 
 	/**
-	 * The ONE standard size a text names, or null: the same slug as a
-	 * size of the list (a label in inches or centimetres as it stands),
-	 * or the same size word ("LG" for a list that says "Large"). Two
-	 * sizes that would both fit are no clean match.
+	 * The ONE standard size a text names, or null. A text that reads as
+	 * a size's own label does (size_plain(): the inch mark, spaces and
+	 * capitals aside) is that size — a list may hold both 3-5" and 3.5"+,
+	 * and those two share a slug. Only then: the same slug as a size of
+	 * the list (a label in inches or centimetres as it stands), or the
+	 * same size word ("LG" for a list that says "Large"). Two sizes that
+	 * would both fit are no clean match, and a bare number is no size —
+	 * "5" is a count or a measure nobody named, never 5"+ — unless the
+	 * list holds a size written exactly so.
 	 *
 	 * @param string  $text  A size as written.
 	 * @param array[] $sizes The standard list (slug, label).
@@ -948,8 +953,11 @@ class Order_Import {
 		if ( '' === $text ) {
 			return null;
 		}
-		$slug  = Sizes::slug( $text );
+		$plain = self::size_plain( $text );
+		$bare  = 1 === preg_match( '/^\d+$/', $text );
+		$slug  = $bare ? '' : Sizes::slug( $text );
 		$word  = self::size_word( $text );
+		$exact = array();
 		$found = array();
 		foreach ( $sizes as $size ) {
 			$label = (string) ( $size['label'] ?? '' );
@@ -957,14 +965,34 @@ class Order_Import {
 			if ( '' === $own ) {
 				continue;
 			}
+			$one = array(
+				'slug'  => $own,
+				'label' => '' !== $label ? $label : $own,
+			);
+			if ( '' !== $plain && self::size_plain( $label ) === $plain && ( ! $bare || trim( $label ) === $text ) ) {
+				$exact[ $own ] = $one;
+			}
 			if ( ( '' !== $slug && ( $own === $slug || Sizes::slug( $label ) === $slug ) ) || ( '' !== $word && self::size_word( $label ) === $word ) ) {
-				$found[ $own ] = array(
-					'slug'  => $own,
-					'label' => '' !== $label ? $label : $own,
-				);
+				$found[ $own ] = $one;
 			}
 		}
+		if ( $exact ) {
+			return 1 === count( $exact ) ? reset( $exact ) : null;
+		}
 		return 1 === count( $found ) ? reset( $found ) : null;
+	}
+
+	/**
+	 * A size as it reads once the inch mark, spaces and capitals are set
+	 * aside: '3-5"', '3 - 5"' and "3-5" read alike, and unlike '3.5"+'.
+	 *
+	 * @param string $text A size as written, or a label.
+	 * @return string
+	 */
+	private static function size_plain( $text ) {
+		$text = strtolower( trim( (string) $text ) );
+		$text = str_replace( array( "\xE2\x80\x9D", "\xE2\x80\xB3", "''" ), '"', $text );
+		return (string) preg_replace( '/[\s"]+/', '', $text );
 	}
 
 	/**

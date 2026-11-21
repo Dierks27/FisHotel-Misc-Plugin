@@ -708,7 +708,8 @@ system temp directory (`FH_TEST_TMP` overrides).
   name alone, a code that contradicts the fish, lost leading zeros, a
   row without a size against two sizes, a Markdown table, columns set
   apart by spaces, a block whose tabs were lost, words after the fee
-  table, a size after "(INV)", a column that only counts.
+  table, a size after "(INV)", a column that only counts, two sizes
+  that share a slug (3-5" and 3.5"+) and a bare number that is no size.
 - **order-import-layouts-test.php** — the saved layouts
   (`Import_Layouts`): built from a hand-set mapping, recognised the next
   time with and without a header, an ordered and an arrived layout side

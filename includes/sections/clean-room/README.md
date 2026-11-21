@@ -1343,7 +1343,14 @@ Medium —; otherwise the name stays exactly as typed, and a size that
 stood in a **column of its own** is kept in the line's notes
 (`[size as written: M]`) — it is nowhere in the name. "Mated Pair",
 "male", "female", "NEW", "RARE" and "(INV)" are no sizes and are never
-dropped from the name.
+dropped from the name. A text that reads as a size's own label does —
+the inch mark, spaces and capitals aside — is that size before anything
+else is tried: the shop's long list holds both `3-5"` and `3.5"+`, which
+make one slug, and each is read as itself. **A bare number is no size**:
+"5" in a size column, or "(5)" after a name, is a count or a measure
+nobody named — never `5"+` — and stays where it was written. And a size
+that *Tidy up the sizes* has turned into another is no standard size any
+more: a sheet that still writes `2-3.5"` gets no size, and says so.
 
 ### The preview
 

@@ -458,4 +458,26 @@ check_same( 'a size after "(INV)" or "(RARE)" is lifted: the last size word coun
 check_same( 'without a header, a column that counts 1, 2, 3 … is the sheet\'s row number, never the quantity', array( 1 => 'fish', 2 => 'qty', 3 => 'price' ), OI::guess_columns( array( array( '1', 'Blue Test Wrasse', '4', '2.50' ), array( '2', 'Red Test Goby', '6', '3.00' ), array( '3', 'Green Test Chromis', '2', '1.25' ) ) ) );
 check_same( '… a quantity column that happens to start 1, 2 is still one', array( 0 => 'fish', 1 => 'qty' ), OI::guess_columns( array( array( 'Blue Test Wrasse', '1' ), array( 'Red Test Goby', '2' ), array( 'Green Test Chromis', '2' ) ) ) );
 
+echo "17. Sizes that share a slug, and a bare number\n";
+// The shop's own long list holds 3-5" and 3.5"+ — one slug once the dot and the inch mark are dashes.
+$long = array(
+	array( 'slug' => '3', 'label' => '3"+' ),
+	array( 'slug' => '3-4', 'label' => '3-4"' ),
+	array( 'slug' => '3-5', 'label' => '3-5"' ),
+	array( 'slug' => '3-5-2', 'label' => '3.5"+' ),
+	array( 'slug' => '5', 'label' => '5"+' ),
+	array( 'slug' => 'all', 'label' => 'All' ),
+	array( 'slug' => 'large', 'label' => 'Large' ),
+);
+$slug_of = static function ( $text ) use ( $long ) {
+	$found = OI::standard_size( $text, $long );
+	return $found ? $found['slug'] : null;
+};
+check_same( 'a text that reads as a size\'s own label is that size, whatever other label makes the same slug', array( '3-5', '3-5-2', '3-5', '3-5-2', '3-5' ), array_map( $slug_of, array( '3-5"', '3.5"+', '3-5', '3.5+', "3 - 5\xE2\x80\x9D" ) ) );
+check_same( '… in a size column, in the name\'s parenthesis and at the name\'s end', array( array( 'Blue Test Chromis', '3-5' ), array( 'Blue Test Chromis', '3-5' ), array( 'Blue Test Chromis', '3-5' ) ), array_map( static function ( $in ) use ( $long ) { $o = OI::lift_size( $in[0], $in[1], $long ); return array( $o['name'], $o['slug'] ); }, array( array( 'Blue Test Chromis', '3-5"' ), array( 'Blue Test Chromis (3-5")', '' ), array( 'Blue Test Chromis 3-5"', '' ) ) ) );
+check_same( 'a bare number is no size: "5" is not 5"+, in a size column or in a parenthesis — the name keeps it', array( null, null, array( 'Blue Test Chromis (5)', null ), array( 'Blue Test Chromis', null, '5' ) ), array( $slug_of( '5' ), $slug_of( '3' ), array_values( array_intersect_key( OI::lift_size( 'Blue Test Chromis (5)', '', $long ), array( 'name' => 1, 'slug' => 1 ) ) ), array_values( array_intersect_key( OI::lift_size( 'Blue Test Chromis', '5', $long ), array( 'name' => 1, 'slug' => 1, 'written' => 1 ) ) ) ) );
+check_same( '… the size written out still is one, and so are a size word and a size named in full', array( '5', '5', 'large', 'large', 'all' ), array_map( $slug_of, array( '5"+', '5+', 'LG', 'large', 'All' ) ) );
+check_same( '… and a list that holds a size written as a bare number has it', '6', OI::standard_size( '6', array( array( 'slug' => '6', 'label' => '6' ), array( 'slug' => '6-2', 'label' => '6"+' ) ) )['slug'] );
+check_same( 'a text two sizes fit equally is still no clean match', null, OI::standard_size( 'M', array( array( 'slug' => 'medium', 'label' => 'Medium' ), array( 'slug' => 'med', 'label' => 'Med' ) ) ) );
+
 fh_finish();
