@@ -2,11 +2,20 @@
 /**
  * Sticker Giveaway admin — the settings page under FisHotel Tools.
  *
- * WHY a product search instead of a dropdown: Jeff adds sticker designs
- * as ordinary simple products, so the pool is picked with WooCommerce's
- * own product search (wc-enhanced-select) rather than a hand-maintained
- * list. Eligible categories come from the live product_cat tree so a
+ * WHY a product search instead of a dropdown: sticker designs are
+ * ordinary products, so the pool is picked with WooCommerce's own product
+ * search (wc-enhanced-select) rather than a hand-maintained list. The
+ * search finds simple products and variable products; a variable product
+ * lists its variations underneath, each with a tick — one variation, one
+ * design. Eligible categories come from the live product_cat tree so a
  * renamed or added category never needs a code change.
+ *
+ * The page is one page: the pool, a stock table with one row per design
+ * (the giveaway pile, the shop pile, the pace, the reorder number, and
+ * the two acts "Add stickers" and "Recount"), then who gets a sticker,
+ * the add-ons and the wording. Everything is saved by the one Save
+ * button EXCEPT the two acts, which change a count the moment their
+ * button is pressed (a count is not a setting — see class-store.php).
  *
  * @package FisHotel\Misc\Sections\Sticker_Giveaway
  */
@@ -21,6 +30,14 @@ defined( 'ABSPATH' ) || exit;
 class Admin {
 
 	/**
+	 * The most stickers one "Add stickers" or "Recount" takes — a typo
+	 * guard, far above any real pile.
+	 *
+	 * @var int
+	 */
+	const MAX_COUNT = 100000;
+
+	/**
 	 * Register hooks.
 	 *
 	 * Priority 20 on admin_enqueue_scripts: WooCommerce registers
@@ -29,6 +46,8 @@ class Admin {
 	 */
 	public function init() {
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ), 20 );
+		add_action( 'wp_ajax_fishotel_sticker_giveaway_pile', array( $this, 'ajax_pile' ) );
+		add_action( 'wp_ajax_fishotel_sticker_giveaway_variations', array( $this, 'ajax_variations' ) );
 	}
 
 	/**
@@ -50,11 +69,16 @@ class Admin {
 			wp_die( esc_html__( 'You do not have permission to access this page.', 'fishotel-misc-plugin' ) );
 		}
 
-		$settings      = Settings::get();
-		$pool_products = $this->pool_products( $settings );
-		$categories    = $this->category_tree();
-		$summary       = self::summary( $settings, count( $pool_products ) );
-		$warnings      = $this->pool_warnings( $pool_products );
+		// A table that could not be made on boot gets another try when the owner opens the page.
+		if ( ! Store::installed() ) {
+			Store::install( true );
+		}
+
+		$settings   = Settings::get();
+		$picked     = $this->picked_products( $settings );
+		$categories = $this->category_tree();
+		$fragments  = $this->fragments( $settings );
+		$summary    = $fragments['summary'];
 
 		include Sticker_Giveaway::path() . 'views/settings.php';
 	}
@@ -99,10 +123,10 @@ class Admin {
 				'ajaxUrl'        => admin_url( 'admin-ajax.php' ),
 				'currencySymbol' => Sticker_Giveaway::plain_symbol(),
 				'i18n'           => array(
-					'saved'     => __( 'Settings saved.', 'fishotel-misc-plugin' ),
-					'error'     => __( 'Something went wrong. Please try again.', 'fishotel-misc-plugin' ),
-					'stickers'  => __( '%d stickers in pool', 'fishotel-misc-plugin' ),
-					'sticker'   => __( '%d sticker in pool', 'fishotel-misc-plugin' ),
+					'saved'         => __( 'Settings saved.', 'fishotel-misc-plugin' ),
+					'error'         => __( 'Something went wrong. Please try again.', 'fishotel-misc-plugin' ),
+					'stickers'      => __( '%d stickers in pool', 'fishotel-misc-plugin' ),
+					'sticker'       => __( '%d sticker in pool', 'fishotel-misc-plugin' ),
 					'noPool'        => __( 'no stickers in pool — picker hidden', 'fishotel-misc-plugin' ),
 					'freeWith'      => __( 'free with: %s', 'fishotel-misc-plugin' ),
 					'freeNone'      => __( 'no categories ticked — no free stickers', 'fishotel-misc-plugin' ),
@@ -111,24 +135,56 @@ class Admin {
 					'addonsOff'     => __( 'add-ons off', 'fishotel-misc-plugin' ),
 					'max'           => __( 'max %d', 'fishotel-misc-plugin' ),
 					'priceRequired' => __( 'Enter a price per add-on sticker (0 is allowed).', 'fishotel-misc-plugin' ),
+					'countRequired' => __( 'Type a number first.', 'fishotel-misc-plugin' ),
 				),
 			)
 		);
 	}
 
+	/* ============================================================== */
+	/*  The pool                                                       */
+	/* ============================================================== */
+
 	/**
-	 * Resolve the saved pool to products for pre-rendering the select.
+	 * The products picked in the search, for pre-rendering the select:
+	 * each simple-product design, and each variable product whose
+	 * variations are listed — in pool order, a variable product where its
+	 * first ticked variation stands.
 	 *
 	 * @param array $settings Settings.
 	 * @return array<int, \WC_Product>
 	 */
-	private function pool_products( array $settings ) {
+	private function picked_products( array $settings ) {
+		$parents  = Rules::ids( $settings['sticker_parent_ids'] ?? array() );
 		$products = array();
 
-		foreach ( Rules::pool( $settings ) as $pid ) {
-			$product = wc_get_product( $pid );
-			if ( $product instanceof \WC_Product ) {
-				$products[ $pid ] = $product;
+		foreach ( Rules::pool( $settings ) as $id ) {
+			$product = wc_get_product( $id );
+			if ( ! $product instanceof \WC_Product ) {
+				continue;
+			}
+
+			if ( $product->is_type( 'variation' ) ) {
+				$parent_id = (int) $product->get_parent_id();
+				if ( isset( $products[ $parent_id ] ) || ! in_array( $parent_id, $parents, true ) ) {
+					continue;
+				}
+				$product = wc_get_product( $parent_id );
+				if ( ! $product instanceof \WC_Product ) {
+					continue;
+				}
+			}
+
+			$products[ (int) $product->get_id() ] = $product;
+		}
+
+		// A variable product with nothing ticked is still picked.
+		foreach ( $parents as $parent_id ) {
+			if ( ! isset( $products[ $parent_id ] ) ) {
+				$product = wc_get_product( $parent_id );
+				if ( $product instanceof \WC_Product ) {
+					$products[ $parent_id ] = $product;
+				}
 			}
 		}
 
@@ -136,40 +192,334 @@ class Admin {
 	}
 
 	/**
-	 * Per-product warnings shown under the pool field: anything that would
-	 * stop the picker from handing the sticker out.
+	 * A variable product's variations as the page lists them.
 	 *
-	 * @param array<int, \WC_Product> $products Pool products.
+	 * @param \WC_Product $parent   The variable product.
+	 * @param array       $settings Settings.
+	 * @param bool        $saved    Whether the product is in the saved
+	 *                              settings (false: picked just now — every
+	 *                              variation that can be a design is ticked
+	 *                              and none is marked new).
+	 * @return array{parent: \WC_Product, rows: array[]}
+	 */
+	private function variation_group( \WC_Product $parent, array $settings, $saved ) {
+		$pool = Rules::pool( $settings );
+		$seen = Rules::ids( $settings['sticker_seen_ids'] ?? array() );
+		$rows = array();
+
+		foreach ( Rules::ids( $parent->get_children() ) as $child_id ) {
+			$child = wc_get_product( $child_id );
+			if ( ! $child instanceof \WC_Product ) {
+				continue;
+			}
+
+			$fixed  = Designs::is_fixed( $child );
+			$rows[] = array(
+				'id'     => $child_id,
+				'name'   => Designs::name( $child ),
+				'image'  => $child->get_image( 'thumbnail' ),
+				'fixed'  => $fixed,
+				'ticked' => $fixed && ( $saved ? in_array( $child_id, $pool, true ) : true ),
+				'new'    => $saved && ! in_array( $child_id, $seen, true ) && ! in_array( $child_id, $pool, true ),
+			);
+		}
+
+		return array(
+			'parent' => $parent,
+			'rows'   => $rows,
+		);
+	}
+
+	/**
+	 * The variation lists of every picked variable product.
+	 *
+	 * @param array $settings Settings.
+	 * @return array[]
+	 */
+	private function variation_groups( array $settings ) {
+		$groups = array();
+
+		foreach ( Rules::ids( $settings['sticker_parent_ids'] ?? array() ) as $parent_id ) {
+			$parent = wc_get_product( $parent_id );
+			if ( $parent instanceof \WC_Product && $parent->is_type( 'variable' ) ) {
+				$groups[] = $this->variation_group( $parent, $settings, true );
+			}
+		}
+
+		return $groups;
+	}
+
+	/**
+	 * The parts of the page that change with a save or a count, as HTML:
+	 * the variation lists, the stock table, the warnings — and the summary
+	 * line. Rendered here for the first paint and sent back by every AJAX
+	 * answer, so the page never shows anything the server did not store.
+	 *
+	 * @param array|null $settings Settings (defaults to the saved ones).
+	 * @return array{variations: string, stock: string, warnings: string, summary: string}
+	 */
+	public function fragments( $settings = null ) {
+		$settings = is_array( $settings ) ? $settings : Settings::get();
+
+		Store::forget();
+
+		$groups     = $this->variation_groups( $settings );
+		$stock_rows = Reorder::rows( $settings, true );
+		$warnings   = $this->pool_warnings( $settings, $stock_rows, $groups );
+
+		return array(
+			'variations' => self::capture( 'variations', compact( 'groups' ) ),
+			'stock'      => self::capture( 'stock-table', compact( 'stock_rows', 'settings' ) ),
+			'warnings'   => self::capture( 'warnings', compact( 'warnings' ) ),
+			'summary'    => self::summary( $settings, count( array_filter( array_column( $stock_rows, 'product' ) ) ) ),
+		);
+	}
+
+	/**
+	 * Render a view into a string.
+	 *
+	 * @param string $view View name (views/<name>.php).
+	 * @param array  $vars Variables for the view.
+	 * @return string
+	 */
+	private static function capture( $view, array $vars ) {
+		ob_start();
+		// phpcs:ignore WordPress.PHP.DontExtract.extract_extract -- a view's own variables, named by this class.
+		extract( $vars, EXTR_SKIP );
+		include Sticker_Giveaway::path() . 'views/' . $view . '.php';
+
+		return (string) ob_get_clean();
+	}
+
+	/* ============================================================== */
+	/*  AJAX                                                           */
+	/* ============================================================== */
+
+	/**
+	 * AJAX — the variations of a product picked in the search just now,
+	 * as the list the page shows under the search (empty for a simple
+	 * product).
+	 */
+	public function ajax_variations() {
+		if ( ! current_user_can( Sticker_Giveaway::SETTINGS_CAP ) ) {
+			wp_send_json_error( array( 'message' => __( 'Unauthorized.', 'fishotel-misc-plugin' ) ), 403 );
+		}
+
+		check_ajax_referer( Settings::NONCE_ACTION, '_wpnonce' );
+
+		$product_id = isset( $_POST['product_id'] ) ? absint( $_POST['product_id'] ) : 0;
+		$product    = $product_id ? wc_get_product( $product_id ) : null;
+
+		if ( ! $product instanceof \WC_Product || ! $product->is_type( 'variable' ) ) {
+			wp_send_json_success(
+				array(
+					'html'    => '',
+					'designs' => $product instanceof \WC_Product && $product->is_type( 'simple' ) ? 1 : 0,
+				)
+			);
+		}
+
+		$settings = Settings::get();
+		$saved    = in_array( $product_id, Rules::ids( $settings['sticker_parent_ids'] ?? array() ), true );
+		$groups   = array( $this->variation_group( $product, $settings, $saved ) );
+
+		wp_send_json_success(
+			array(
+				'html' => self::capture( 'variations', compact( 'groups' ) ),
+			)
+		);
+	}
+
+	/**
+	 * AJAX — "Add stickers" and "Recount" for one design's giveaway pile.
+	 * Done at once; nothing is asked twice. A wrong number is put right
+	 * with another Recount.
+	 */
+	public function ajax_pile() {
+		if ( ! current_user_can( Sticker_Giveaway::SETTINGS_CAP ) ) {
+			wp_send_json_error( array( 'message' => __( 'Unauthorized.', 'fishotel-misc-plugin' ) ), 403 );
+		}
+
+		check_ajax_referer( Settings::NONCE_ACTION, '_wpnonce' );
+
+		$settings  = Settings::get();
+		$design_id = isset( $_POST['design_id'] ) ? absint( $_POST['design_id'] ) : 0;
+		$act       = isset( $_POST['act'] ) ? sanitize_key( wp_unslash( $_POST['act'] ) ) : '';
+		$typed     = isset( $_POST['n'] ) && is_scalar( $_POST['n'] ) ? trim( (string) wp_unslash( $_POST['n'] ) ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- checked by count_error() below.
+		$product   = Designs::product( $design_id );
+		$name      = $product ? Designs::name( $product ) : '';
+
+		if ( ! $product || ! Rules::in_pool( $design_id, $settings ) ) {
+			wp_send_json_error( array( 'message' => __( 'That design is not in the pool. Save the settings first, then count its pile.', 'fishotel-misc-plugin' ) ), 400 );
+		}
+		if ( ! Rules::keeps_pile( $design_id, $settings ) ) {
+			/* translators: %s: design name */
+			wp_send_json_error( array( 'message' => sprintf( __( '%s does not keep a giveaway pile. Tick "Keeps a giveaway pile" on its row and save the settings first.', 'fishotel-misc-plugin' ), $name ) ), 400 );
+		}
+
+		$error = self::count_error( $act, $typed );
+		if ( '' !== $error ) {
+			wp_send_json_error( array( 'message' => $error ), 400 );
+		}
+
+		$n     = (int) $typed;
+		$store = Designs::store();
+		$done  = 'add' === $act ? $store->add( $design_id, $n ) : $store->recount( $design_id, $n );
+
+		if ( ! $done ) {
+			wp_send_json_error( array( 'message' => __( 'The count could not be saved (the database refused it). Nothing was changed.', 'fishotel-misc-plugin' ) ), 500 );
+		}
+
+		// Back above its reorder number, or (a recount downwards) under it.
+		Reorder::check( true );
+		Store::forget();
+
+		$pile = Designs::pile( $design_id, $settings );
+
+		wp_send_json_success(
+			array(
+				'message'   => self::count_message( $act, $name, $n, $pile['paper'], Piles::really_there( $pile['paper'], $pile['basis'], Piles::loss_percent( $settings ) ) ),
+				'fragments' => $this->fragments( $settings ),
+			)
+		);
+	}
+
+	/**
+	 * What is wrong with a typed count, in plain words ('' = nothing).
+	 * Pure.
+	 *
+	 * @param string $act   'add' or 'recount'.
+	 * @param string $typed What was typed.
+	 * @return string
+	 */
+	public static function count_error( $act, $typed ) {
+		if ( 'add' !== $act && 'recount' !== $act ) {
+			return __( 'Unknown action.', 'fishotel-misc-plugin' );
+		}
+
+		$typed = trim( (string) $typed );
+
+		if ( '' === $typed ) {
+			return __( 'Type a number first.', 'fishotel-misc-plugin' );
+		}
+		if ( ! preg_match( '/^\d+$/', $typed ) ) {
+			return __( 'Type a whole number, without a sign or a decimal point.', 'fishotel-misc-plugin' );
+		}
+
+		$n = (int) $typed;
+
+		if ( 'add' === $act && $n < 1 ) {
+			return __( 'Type how many stickers you are adding (1 or more). To put a wrong count right, use Recount.', 'fishotel-misc-plugin' );
+		}
+		if ( strlen( $typed ) > 7 || $n > self::MAX_COUNT ) {
+			/* translators: %s: the largest count accepted */
+			return sprintf( __( 'That is more than %s stickers. Check the number.', 'fishotel-misc-plugin' ), number_format( self::MAX_COUNT ) );
+		}
+
+		return '';
+	}
+
+	/**
+	 * What an act did, in one sentence. Pure.
+	 *
+	 * @param string $act    'add' or 'recount'.
+	 * @param string $name   Design name.
+	 * @param int    $n      The typed number.
+	 * @param int    $paper  The paper count now.
+	 * @param int    $really "Really there" now.
+	 * @return string
+	 */
+	public static function count_message( $act, $name, $n, $paper, $really ) {
+		if ( 'add' === $act ) {
+			/* translators: 1: design, 2: added, 3: paper count, 4: really there */
+			return sprintf( __( '%1$s: %2$d added. %3$d on paper · about %4$d really there.', 'fishotel-misc-plugin' ), $name, $n, $paper, $really );
+		}
+
+		/* translators: 1: design, 2: counted, 3: really there */
+		return sprintf( __( '%1$s: counted %2$d. %2$d on paper · about %3$d really there.', 'fishotel-misc-plugin' ), $name, $n, $really );
+	}
+
+	/* ============================================================== */
+	/*  Warnings                                                       */
+	/* ============================================================== */
+
+	/**
+	 * Warnings shown under the pool: every ticked design that cannot be
+	 * handed out and why, and anything about its product that will look
+	 * wrong in the cart.
+	 *
+	 * @param array   $settings   Settings.
+	 * @param array[] $stock_rows Reorder::rows().
+	 * @param array[] $groups     variation_groups().
 	 * @return string[]
 	 */
-	private function pool_warnings( array $products ) {
-		$warnings    = array();
+	private function pool_warnings( array $settings, array $stock_rows, array $groups ) {
+		$warnings = array();
+
+		if ( ! Store::installed() ) {
+			$warnings[] = __( 'The giveaway piles could not be set up in the database, so a design that keeps a giveaway pile is not offered. Reload this page to try again; if this stays, the database user may not be allowed to create tables.', 'fishotel-misc-plugin' );
+		}
+
+		if ( ! empty( $settings['pile_ids'] ) && 'yes' !== get_option( 'woocommerce_manage_stock' ) ) {
+			$warnings[] = __( 'WooCommerce\'s stock management is switched off (WooCommerce → Settings → Products → Inventory). The giveaway piles are counted down when WooCommerce reduces stock for a paid order, and it does not do that while this is off — the piles will not move.', 'fishotel-misc-plugin' );
+		}
+
+		// Per design: why it is not offered.
+		foreach ( $stock_rows as $row ) {
+			$is_variation = $row['product'] instanceof \WC_Product && $row['product']->is_type( 'variation' );
+
+			foreach ( (array) $row['blockers'] as $code ) {
+				$text = self::blocker_text( $code, (string) $row['name'], $is_variation );
+				if ( '' !== $text ) {
+					$warnings[] = $text;
+				}
+			}
+		}
+
+		// Per variable product: nothing ticked, or variations added since.
+		foreach ( $groups as $group ) {
+			$name   = $group['parent']->get_name();
+			$ticked = count( array_filter( array_column( $group['rows'], 'ticked' ) ) );
+			$new    = count( array_filter( array_column( $group['rows'], 'new' ) ) );
+
+			if ( ! $group['rows'] ) {
+				/* translators: %s: product name */
+				$warnings[] = sprintf( __( '%s has no variations yet — add them on the product page, then tick them here.', 'fishotel-misc-plugin' ), $name );
+			} elseif ( $ticked < 1 ) {
+				/* translators: %s: product name */
+				$warnings[] = sprintf( __( '%s: no variation is ticked, so none of its designs is offered.', 'fishotel-misc-plugin' ), $name );
+			}
+			if ( $new > 0 ) {
+				/* translators: 1: product name, 2: number of variations */
+				$warnings[] = sprintf( _n( '%1$s has %2$d new variation. It is not offered until you tick it and save.', '%1$s has %2$d new variations. They are not offered until you tick them and save.', $new, 'fishotel-misc-plugin' ), $name, $new );
+			}
+		}
+
+		// Per product (a variable product once, not once per variation):
+		// what will look wrong in the cart.
 		$preset_cats = self::theme_preset_category_slugs();
+		$theme_skips = self::theme_skips_sticker_lines();
+		$seen        = array();
 
-		foreach ( $products as $product ) {
-			$name      = $product->get_name();
-			$published = 'publish' === $product->get_status();
-			$has_price = '' !== (string) $product->get_price();
+		foreach ( $stock_rows as $row ) {
+			$design = $row['product'];
+			if ( ! $design instanceof \WC_Product ) {
+				continue;
+			}
 
-			if ( ! $product->is_type( 'simple' ) ) {
-				/* translators: %s: product name */
-				$warnings[] = sprintf( __( '%s is not a simple product — the picker only offers simple products.', 'fishotel-misc-plugin' ), $name );
+			$product_id = Designs::parent_id( $design );
+			if ( isset( $seen[ $product_id ] ) ) {
+				continue;
 			}
-			if ( ! $published ) {
-				/* translators: %s: product name */
-				$warnings[] = sprintf( __( '%s is not published — it will not appear in the picker.', 'fishotel-misc-plugin' ), $name );
+			$seen[ $product_id ] = true;
+
+			$product = $product_id === (int) $design->get_id() ? $design : wc_get_product( $product_id );
+			if ( ! $product instanceof \WC_Product ) {
+				continue;
 			}
-			if ( ! $has_price ) {
-				/* translators: %s: product name */
-				$warnings[] = sprintf( __( '%s has no price — give it a regular price (the picker overrides it) so WooCommerce treats it as purchasable.', 'fishotel-misc-plugin' ), $name );
-			} elseif ( $published && ! $product->is_purchasable() ) {
-				/* translators: %s: product name */
-				$warnings[] = sprintf( __( '%s is not purchasable (another plugin is blocking it) — it will not appear in the picker.', 'fishotel-misc-plugin' ), $name );
-			}
-			if ( ! $product->is_in_stock() ) {
-				/* translators: %s: product name */
-				$warnings[] = sprintf( __( '%s is out of stock — it will not appear in the picker.', 'fishotel-misc-plugin' ), $name );
-			}
+
+			$name = $product->get_name();
+
 			if ( $product->is_sold_individually() ) {
 				/* translators: %s: product name */
 				$warnings[] = sprintf( __( '%s is marked "Sold individually" — add-on quantity for it is capped at 1.', 'fishotel-misc-plugin' ), $name );
@@ -187,25 +537,64 @@ class Admin {
 				$warnings[] = $category_warning;
 			}
 
-			if ( $preset_cats ) {
-				$in_preset = array_intersect( $preset_cats, Cart::category_slugs( $product->get_id() ) );
-				if ( $in_preset ) {
-					/* translators: 1: product name, 2: comma-separated category slugs */
-					$warnings[] = sprintf(
-						__( '%1$s is in the %2$s category, which the theme uses to pick cart/checkout wording. A sticker line in that category makes every fish order fall back to the generic wording — move the sticker products to a category the theme does not map (e.g. "stickers").', 'fishotel-misc-plugin' ),
-						$name,
-						implode( ', ', $in_preset )
-					);
-				}
+			$preset_warning = self::preset_warning( $name, array_values( array_intersect( $preset_cats, Cart::category_slugs( $product_id ) ) ), $theme_skips );
+			if ( '' !== $preset_warning ) {
+				$warnings[] = $preset_warning;
 			}
 
-			if ( '' !== trim( (string) $product->get_short_description() ) ) {
+			if ( ! $theme_skips && '' !== trim( (string) $product->get_short_description() ) ) {
 				/* translators: %s: product name */
-				$warnings[] = sprintf( __( '%s has a short description — the theme prints a line\'s short description as its italic scientific name in the cart. Leave it empty for stickers.', 'fishotel-misc-plugin' ), $name );
+				$warnings[] = sprintf( __( '%s has a short description — this theme version prints a line\'s short description as its italic scientific name in the cart. Leave it empty for stickers, or update the FisHotel theme (a newer one leaves it off sticker lines).', 'fishotel-misc-plugin' ), $name );
 			}
 		}
 
 		return $warnings;
+	}
+
+	/**
+	 * Why a design is not offered, as a sentence (pure). '' for a code
+	 * that needs no words.
+	 *
+	 * @param string $code         One of Rules::blockers()'s codes.
+	 * @param string $name         The design's name.
+	 * @param bool   $is_variation Whether the design is a variation.
+	 * @return string
+	 */
+	public static function blocker_text( $code, $name, $is_variation = false ) {
+		switch ( $code ) {
+			case 'type':
+				/* translators: %s: design name */
+				return sprintf( __( '%s is not a simple product or a variation — the picker only offers those. Take it out of the pool.', 'fishotel-misc-plugin' ), $name );
+			case 'unpublished':
+				return $is_variation
+					/* translators: %s: design name */
+					? sprintf( __( '%s is not enabled (the "Enabled" tick on the variation) — it will not appear in the picker.', 'fishotel-misc-plugin' ), $name )
+					/* translators: %s: design name */
+					: sprintf( __( '%s is not published — it will not appear in the picker.', 'fishotel-misc-plugin' ), $name );
+			case 'parent_unpublished':
+				/* translators: %s: design name */
+				return sprintf( __( '%s: its product is not published — it will not appear in the picker.', 'fishotel-misc-plugin' ), $name );
+			case 'no_price':
+				/* translators: %s: design name */
+				return sprintf( __( '%s has no price — give it a regular price (the picker overrides it) so WooCommerce treats it as purchasable.', 'fishotel-misc-plugin' ), $name );
+			case 'not_purchasable':
+				/* translators: %s: design name */
+				return sprintf( __( '%s is not purchasable (another plugin is blocking it) — it will not appear in the picker.', 'fishotel-misc-plugin' ), $name );
+			case 'any_attribute':
+				/* translators: %s: design name */
+				return sprintf( __( '%s leaves an attribute on "Any". A design has to be one exact variation — choose a value for every attribute on the product page. Until then it will not appear in the picker.', 'fishotel-misc-plugin' ), $name );
+			case 'pile_empty':
+				/* translators: %s: design name */
+				return sprintf( __( '%s: its giveaway pile is empty — it will not appear in the picker. Count the stickers you have set aside for the giveaway and type the number under Recount.', 'fishotel-misc-plugin' ), $name );
+			case 'pile_reserve':
+				/* translators: %s: design name */
+				return sprintf( __( '%s: its giveaway pile is down to its "go missing" reserve — it no longer appears in the picker. Add stickers, or recount the pile if more are really there.', 'fishotel-misc-plugin' ), $name );
+			case 'out_of_stock':
+				/* translators: %s: design name */
+				return sprintf( __( '%s is out of stock — it will not appear in the picker.', 'fishotel-misc-plugin' ), $name );
+		}
+
+		return '';
 	}
 
 	/**
@@ -235,10 +624,46 @@ class Admin {
 	}
 
 	/**
+	 * The warning for a sticker product in a category the theme maps to a
+	 * cart preset (pure). The theme picks its cart and checkout wording
+	 * from the categories of the cart's lines. A theme that skips sticker
+	 * lines there is not thrown by a sticker in "Merchandise" — then there
+	 * is nothing to warn about, and nothing to re-categorise. Only a theme
+	 * that still counts sticker lines gets the warning.
+	 *
+	 * @param string   $name        Product name.
+	 * @param string[] $in_preset   The preset-mapped categories it is in.
+	 * @param bool     $theme_skips Whether the theme skips sticker lines.
+	 * @return string
+	 */
+	public static function preset_warning( $name, array $in_preset, $theme_skips ) {
+		if ( $theme_skips || ! $in_preset ) {
+			return '';
+		}
+
+		/* translators: 1: product name, 2: comma-separated category slugs */
+		return sprintf(
+			__( '%1$s is in the %2$s category, which the theme uses to pick cart/checkout wording. This theme version counts sticker lines too, so a sticker in that category makes a fish order fall back to the generic wording. A newer FisHotel theme skips sticker lines — update the theme and this goes away by itself; otherwise move the product to a category the theme does not map (e.g. "stickers").', 'fishotel-misc-plugin' ),
+			(string) $name,
+			implode( ', ', $in_preset )
+		);
+	}
+
+	/**
+	 * Whether the active theme skips sticker lines when it reads the cart
+	 * (its preset wording, its "N fish" count, the italic scientific
+	 * name). `fishotel_cart_display_count()` arrived in the theme with
+	 * exactly that skip, so its presence is the sign.
+	 *
+	 * @return bool
+	 */
+	private static function theme_skips_sticker_lines() {
+		return function_exists( 'fishotel_cart_display_count' );
+	}
+
+	/**
 	 * Category slugs the FisHotel theme maps to a cart preset (fish, meds,
-	 * food, merch). Sticker products should stay out of these; the theme
-	 * resolves its cart copy from every cart line and falls back to the
-	 * generic preset as soon as two presets match.
+	 * food, merch).
 	 *
 	 * @return string[]
 	 */

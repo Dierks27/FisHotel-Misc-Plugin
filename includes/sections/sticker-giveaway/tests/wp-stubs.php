@@ -2,10 +2,10 @@
 /**
  * Just enough WordPress to load the Sticker Giveaway rules headless.
  *
- * Rules is pure by design — it touches no WordPress function at all — so
- * the only things needed here are the constants the files guard on and
- * the translation helpers the Settings defaults file may call. Nothing
- * here talks to WooCommerce or a database.
+ * Rules and Piles are pure by design — they touch no WordPress function
+ * at all — so the only things needed here are the constants the files
+ * guard on and the translation helpers the Settings defaults file may
+ * call. Nothing here talks to WooCommerce or a database.
  *
  * @package FisHotel\Misc\Sections\Sticker_Giveaway
  */
@@ -34,3 +34,4 @@ function get_option( $key, $default = false ) {
 require_once FISHOTEL_MISC_PATH . 'includes/sections/sticker-giveaway/class-sticker-giveaway.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/sticker-giveaway/class-settings.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/sticker-giveaway/class-rules.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/sticker-giveaway/class-piles.php';

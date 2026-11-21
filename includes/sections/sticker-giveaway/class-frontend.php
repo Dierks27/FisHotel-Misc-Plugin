@@ -59,22 +59,26 @@ class Frontend {
 	}
 
 	/**
-	 * Pool products that can actually be given away right now.
+	 * Pool designs that can actually be given away right now: a simple
+	 * product or a variation, published and purchasable, and with
+	 * stickers to hand out — in its giveaway pile when it keeps one
+	 * (whatever the shop's own stock says), else in the product's own
+	 * stock.
 	 *
 	 * @param array $settings Settings.
-	 * @return \WC_Product[] Keyed by product ID, in pool order.
+	 * @return \WC_Product[] Keyed by design ID, in pool order.
 	 */
 	public static function available_pool( array $settings ) {
 		$products = array();
 
 		foreach ( Rules::pool( $settings ) as $pid ) {
-			$product = wc_get_product( $pid );
+			$product = Designs::product( $pid );
 
 			if ( ! $product instanceof \WC_Product ) {
 				continue;
 			}
 
-			if ( ! Cart::is_sellable( $product ) ) {
+			if ( ! Designs::can_hand_out( $product, $settings ) ) {
 				continue;
 			}
 

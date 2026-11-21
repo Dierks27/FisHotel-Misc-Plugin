@@ -11,14 +11,34 @@
  * checkout <form> so the choice rides along with WooCommerce's own
  * update_order_review AJAX; no custom endpoints are needed on checkout.
  *
+ * A DESIGN is what the customer picks: a simple product, or one
+ * variation of a variable product (the shop's stickers are one variable
+ * product with a variation per design). A design can keep a GIVEAWAY
+ * PILE — a count of this section's own, separate from the product's
+ * WooCommerce stock (the SHOP pile) — with a reserve for the stickers
+ * that go missing and a reorder reminder.
+ *
  * Architecture:
- *   - class-rules.php     pure eligibility / clamping / pricing — no WP
+ *   - class-rules.php     pure eligibility / clamping / pricing, what a
+ *                         design is and when it can be handed out — no WP
  *                         calls, unit-tested headless.
+ *   - class-piles.php     pure numbers of a giveaway pile: the reserve,
+ *                         "really there", restock and recount, the
+ *                         once-per-order-line ledger, reorder, pace.
+ *   - class-store.php     the piles and the ledger in two small tables;
+ *                         every change is one statement inside the database.
+ *   - class-designs.php   a design id → product, name, picture, piles.
+ *   - class-pile-products.php  what a giveaway line shows WooCommerce so
+ *                         the shop pile neither refuses it nor is reduced.
  *   - class-cart.php      keeps the cart in step with the picker: adds and
  *                         removes sticker lines (flagged with cart item
  *                         data `fh_sticker` = free|extra), zeroes the free
  *                         line's price, keeps stickers out of the shipping
  *                         package so table rates never change.
+ *   - class-orders.php    the moments a giveaway pile moves (order paid,
+ *                         cancelled, refunded with restock).
+ *   - class-reorder.php   the stock table's rows and the reorder email.
+ *   - class-today-line.php  "Stickers to reorder" on the Today page.
  *   - class-frontend.php  renders the picker card and the tiny JS bridge.
  *   - class-settings.php  option storage, defaults, AJAX save.
  *   - class-admin.php     settings page under FisHotel Tools.
@@ -131,25 +151,73 @@ class Sticker_Giveaway {
 		// The plugin autoloader maps namespace segments to directories
 		// verbatim; our directory is dashed (`sticker-giveaway`) while the
 		// namespace is underscored, so require the files explicitly.
-		require_once self::path() . 'class-settings.php';
-		require_once self::path() . 'class-rules.php';
-		require_once self::path() . 'class-cart.php';
+		self::load();
 		require_once self::path() . 'class-frontend.php';
+
+		// The giveaway piles' two tables: created on the first boot only —
+		// the version gate is an autoloaded option, so every later request
+		// pays no query here — and wrapped so a database hiccup never takes
+		// the site down.
+		try {
+			Store::maybe_install( is_admin() );
+		} catch ( \Throwable $e ) {
+			unset( $e );
+		}
 
 		$cart = new Cart();
 		$cart->init();
+
+		// On every kind of request: an order is paid from a gateway's
+		// callback, cancelled from wp-admin, refunded from the order screen.
+		$orders = new Orders();
+		$orders->init();
 
 		$frontend = new Frontend();
 		$frontend->init();
 
 		if ( is_admin() ) {
 			require_once self::path() . 'class-admin.php';
+			require_once self::path() . 'class-today-line.php';
 
 			$settings = new Settings();
 			$settings->init();
 
 			$admin = new Admin();
 			$admin->init();
+
+			// Its line on the Today page: designs that are down to their reorder number.
+			Today_Line::register();
+		}
+	}
+
+	/**
+	 * Require the classes every part of the section needs. (The classes
+	 * that extend WooCommerce's products, class-pile-products.php, are
+	 * loaded on first use by Designs::pile_product().)
+	 */
+	private static function load() {
+		require_once self::path() . 'class-settings.php';
+		require_once self::path() . 'class-rules.php';
+		require_once self::path() . 'class-piles.php';
+		require_once self::path() . 'class-store.php';
+		require_once self::path() . 'class-designs.php';
+		require_once self::path() . 'class-reorder.php';
+		require_once self::path() . 'class-orders.php';
+		require_once self::path() . 'class-cart.php';
+	}
+
+	/**
+	 * Plugin-activation callback (run for a switched-on section): install
+	 * the tables, forced past the version gate so a deactivate /
+	 * reactivate recreates a dropped one.
+	 */
+	public static function activate() {
+		require_once self::path() . 'class-store.php';
+
+		try {
+			Store::install( true );
+		} catch ( \Throwable $e ) {
+			unset( $e );
 		}
 	}
 
@@ -193,9 +261,7 @@ class Sticker_Giveaway {
 			return;
 		}
 
-		require_once self::path() . 'class-settings.php';
-		require_once self::path() . 'class-rules.php';
-		require_once self::path() . 'class-cart.php'; // Admin::pool_warnings() resolves category ancestry through Cart.
+		self::load(); // Admin::pool_warnings() resolves category ancestry through Cart.
 		require_once self::path() . 'class-admin.php';
 
 		add_submenu_page(

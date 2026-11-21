@@ -4,7 +4,10 @@
  *
  * WHY a separate class: the pool, the eligibility rule and the upsell
  * price all live in one option so a single AJAX save (nonce + capability
- * checked, every field sanitised) keeps them consistent. Reading goes
+ * checked, every field sanitised) keeps them consistent. The giveaway
+ * piles' COUNTS are not in here — a count saved with the page would be
+ * overwritten by whatever the page was opened with (see class-store.php);
+ * only which designs keep a pile, and their reorder numbers, are settings. Reading goes
  * through `Settings::get()` so defaults always fill in missing keys —
  * the rules engine never has to null-check a setting.
  *
@@ -41,7 +44,21 @@ class Settings {
 	 * @var array
 	 */
 	const DEFAULTS = array(
+		// The pool: design ids — a simple product's id, or a variation's.
 		'sticker_product_ids'     => array(),
+		// The variable products picked on the page, and the variations it
+		// has listed so far (ticked or not): one that is not in here was
+		// added to the product later and is shown unticked, marked new.
+		'sticker_parent_ids'      => array(),
+		'sticker_seen_ids'        => array(),
+		// Designs that keep a giveaway pile. Empty by default: a simple
+		// product that was in the pool before giveaway piles existed keeps
+		// using its own WooCommerce stock until it is switched on.
+		'pile_ids'                => array(),
+		// design id => "Reorder at" number (absent = no reminder).
+		'reorder_at'              => array(),
+		'loss_percent'            => 10,
+		'reorder_email'           => true,
 		'eligible_category_slugs' => array( 'quarantined-fish' ),
 		'min_subtotal'            => 0.0,
 		'free_count'              => 1,
@@ -108,6 +125,9 @@ class Settings {
 
 		update_option( Sticker_Giveaway::OPTION_KEY, $settings );
 
+		// A reorder number may have been typed, changed or removed.
+		Reorder::check( true );
+
 		$message = __( 'Settings saved.', 'fishotel-misc-plugin' );
 		if ( $dropped ) {
 			/* translators: %s: comma-separated list of what was not saved */
@@ -116,9 +136,11 @@ class Settings {
 
 		wp_send_json_success(
 			array(
-				'message'  => $message,
-				'settings' => $settings,
-				'dropped'  => $dropped,
+				'message'   => $message,
+				'settings'  => $settings,
+				'dropped'   => $dropped,
+				// The page's lists as they now are: a design picked just now gets its row in the stock table without a reload.
+				'fragments' => class_exists( __NAMESPACE__ . '\\Admin' ) ? ( new Admin() )->fragments( $settings ) : array(),
 			)
 		);
 	}
@@ -135,33 +157,74 @@ class Settings {
 	 * the same way the copy fields do. Without that, clearing the add-on
 	 * price field and saving would store 0.00 and make every add-on free.
 	 *
-	 * @param array    $raw     Raw request data.
-	 * @param string[] $dropped Filled with human-readable reasons for
-	 *                          anything left out of the saved settings.
+	 * The pool: the form posts the PRODUCTS picked in the search — simple
+	 * products and variable products — and, for each variable product
+	 * whose variations the page listed, which of them are ticked. What is
+	 * stored is the flat list of DESIGNS: each simple product, and each
+	 * ticked variation (Rules::variation_ticks() decides; a variation with
+	 * an attribute on "Any" is never one).
+	 *
+	 * @param array      $raw      Raw request data.
+	 * @param string[]   $dropped  Filled with human-readable reasons for
+	 *                             anything left out of the saved settings.
+	 * @param array|null $previous The settings before this save (defaults
+	 *                             to the stored ones): a design already in
+	 *                             the pool keeps its giveaway-pile switch
+	 *                             and its reorder number when the form did
+	 *                             not show them.
 	 * @return array
 	 */
-	public static function sanitize( array $raw, &$dropped = array() ) {
-		$d       = self::DEFAULTS;
-		$dropped = array();
+	public static function sanitize( array $raw, &$dropped = array(), $previous = null ) {
+		$d        = self::DEFAULTS;
+		$dropped  = array();
+		$previous = is_array( $previous ) ? wp_parse_args( $previous, $d ) : self::get();
 
-		// Pool — simple products only; keep IDs that resolve to a product.
-		$pool = array();
-		foreach ( (array) ( $raw['sticker_product_ids'] ?? array() ) as $id ) {
-			$id = absint( $id );
-			if ( $id < 1 || in_array( $id, $pool, true ) ) {
-				continue;
-			}
+		$old_pool    = Rules::pool( $previous );
+		$old_parents = Rules::ids( $previous['sticker_parent_ids'] );
+		$old_seen    = Rules::ids( $previous['sticker_seen_ids'] );
+		$ticked      = Rules::ids( $raw['sticker_variation_ids'] ?? array() );
+		$shown       = Rules::ids( $raw['sticker_variation_shown'] ?? array() );
+		$listed      = Rules::ids( $raw['sticker_variations_listed'] ?? array() );
+
+		// Pool — simple products, and the ticked variations of variable products.
+		$pool    = array();
+		$parents = array();
+		$seen    = array();
+		foreach ( Rules::ids( $raw['sticker_product_ids'] ?? array() ) as $id ) {
 			$product = function_exists( 'wc_get_product' ) ? wc_get_product( $id ) : null;
 			if ( $product && $product->is_type( 'simple' ) ) {
 				$pool[] = $id;
+			} elseif ( $product && $product->is_type( 'variable' ) ) {
+				$children = Rules::ids( $product->get_children() );
+				$fixed    = array();
+				foreach ( $children as $child_id ) {
+					$child = wc_get_product( $child_id );
+					if ( $child && Designs::is_fixed( $child ) ) {
+						$fixed[] = $child_id;
+					}
+				}
+
+				$ticks     = Rules::variation_ticks( $children, $fixed, in_array( $id, $listed, true ), $ticked, $shown, in_array( $id, $old_parents, true ), $old_pool, $old_seen );
+				$parents[] = $id;
+				$pool      = array_merge( $pool, $ticks['ticked'] );
+				$seen      = array_merge( $seen, $ticks['seen'] );
+			} elseif ( $product && $product->is_type( 'variation' ) ) {
+				/* translators: %s: product name */
+				$dropped[] = sprintf( __( '%s is one variation — pick its product instead, then tick the variations to offer', 'fishotel-misc-plugin' ), $product->get_name() );
 			} elseif ( $product ) {
 				/* translators: %s: product name */
-				$dropped[] = sprintf( __( '%s is not a simple product (the picker only offers simple products)', 'fishotel-misc-plugin' ), $product->get_name() );
+				$dropped[] = sprintf( __( '%s is not a simple or a variable product (the picker offers simple products and the variations of variable products)', 'fishotel-misc-plugin' ), $product->get_name() );
 			} else {
 				/* translators: %d: product ID */
 				$dropped[] = sprintf( __( 'product #%d does not exist', 'fishotel-misc-plugin' ), $id );
 			}
 		}
+		$pool = Rules::ids( $pool );
+
+		// Giveaway piles and reorder numbers, per design.
+		$stock_listed = Rules::ids( $raw['stock_listed'] ?? array() );
+		$pile_ids     = Rules::pile_ids( $pool, $old_pool, (array) $previous['pile_ids'], Rules::ids( $raw['pile_ids'] ?? array() ), $stock_listed );
+		$reorder_at   = Rules::reorder_numbers( $pool, isset( $raw['reorder_at'] ) && is_array( $raw['reorder_at'] ) ? $raw['reorder_at'] : array(), $stock_listed, (array) $previous['reorder_at'] );
 
 		// Categories — keep slugs that exist as product_cat terms.
 		$slugs = array();
@@ -184,8 +247,26 @@ class Settings {
 			? absint( $raw['upsell_max_qty'] )
 			: $d['upsell_max_qty'];
 
+		// The "go missing" percent and the email switch. A form that carried
+		// neither (a page opened before this version, saved after) changes
+		// neither; a blank or junk percent restores the default, as the
+		// money fields do.
+		if ( array_key_exists( 'loss_percent', $raw ) ) {
+			$loss_percent  = Piles::loss_percent( array( 'loss_percent' => is_scalar( $raw['loss_percent'] ) ? trim( (string) $raw['loss_percent'] ) : '' ) );
+			$reorder_email = ! empty( $raw['reorder_email'] );
+		} else {
+			$loss_percent  = Piles::loss_percent( $previous );
+			$reorder_email = ! empty( $previous['reorder_email'] );
+		}
+
 		return array(
 			'sticker_product_ids'     => $pool,
+			'sticker_parent_ids'      => $parents,
+			'sticker_seen_ids'        => Rules::ids( $seen ),
+			'pile_ids'                => $pile_ids,
+			'reorder_at'              => $reorder_at,
+			'loss_percent'            => $loss_percent,
+			'reorder_email'           => $reorder_email,
 			'eligible_category_slugs' => $slugs,
 			'min_subtotal'            => $min_subtotal,
 			'free_count'              => 1, // UI fixes this at one; stored for a future "pick two" option.
