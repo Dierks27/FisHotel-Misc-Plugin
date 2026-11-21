@@ -1,12 +1,12 @@
 <?php
 /**
  * The Sticker line on the Today page and its widget (the Today section's
- * `fishotel_today_lines` filter): "Stickers to reorder: Blue Tang (about
- * 40 left)", linking to the Sticker Giveaway page.
+ * `fishotel_today_lines` filter): "Stickers to reorder: Night Glow (40
+ * left)", linking to the Sticker Giveaway page.
  *
  * Shown only while this section is switched on (boot() hooks it, in
  * wp-admin only), for a user who may open the section, and only when a
- * design is down to its reorder number. The Today section itself knows
+ * design's stock is down to its "Reorder at" number. The Today section itself knows
  * nothing about stickers: this is one more line through its seam, as
  * Packing's is.
  *

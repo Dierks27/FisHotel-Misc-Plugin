@@ -4,10 +4,9 @@
  *
  * WHY a separate class: the pool, the eligibility rule and the upsell
  * price all live in one option so a single AJAX save (nonce + capability
- * checked, every field sanitised) keeps them consistent. The giveaway
- * piles' COUNTS are not in here — a count saved with the page would be
- * overwritten by whatever the page was opened with (see class-store.php);
- * only which designs keep a pile, and their reorder numbers, are settings. Reading goes
+ * checked, every field sanitised) keeps them consistent. No count of
+ * stickers is in here — a design's count is its product's WooCommerce
+ * stock; only the "Reorder at" numbers are settings. Reading goes
  * through `Settings::get()` so defaults always fill in missing keys —
  * the rules engine never has to null-check a setting.
  *
@@ -51,13 +50,9 @@ class Settings {
 		// added to the product later and is shown unticked, marked new.
 		'sticker_parent_ids'      => array(),
 		'sticker_seen_ids'        => array(),
-		// Designs that keep a giveaway pile. Empty by default: a simple
-		// product that was in the pool before giveaway piles existed keeps
-		// using its own WooCommerce stock until it is switched on.
-		'pile_ids'                => array(),
-		// design id => "Reorder at" number (absent = no reminder).
+		// count id => "Reorder at" number (absent = no reminder). A count is
+		// the product that holds a design's stock number in WooCommerce.
 		'reorder_at'              => array(),
-		'loss_percent'            => 10,
 		'reorder_email'           => true,
 		'eligible_category_slugs' => array( 'quarantined-fish' ),
 		'min_subtotal'            => 0.0,
@@ -126,7 +121,7 @@ class Settings {
 		update_option( Sticker_Giveaway::OPTION_KEY, $settings );
 
 		// A reorder number may have been typed, changed or removed.
-		Reorder::check( true );
+		Reorder::check( $settings );
 
 		$message = __( 'Settings saved.', 'fishotel-misc-plugin' );
 		if ( $dropped ) {
@@ -168,10 +163,9 @@ class Settings {
 	 * @param string[]   $dropped  Filled with human-readable reasons for
 	 *                             anything left out of the saved settings.
 	 * @param array|null $previous The settings before this save (defaults
-	 *                             to the stored ones): a design already in
-	 *                             the pool keeps its giveaway-pile switch
-	 *                             and its reorder number when the form did
-	 *                             not show them.
+	 *                             to the stored ones): a count keeps its
+	 *                             "Reorder at" number when the form did not
+	 *                             show its row.
 	 * @return array
 	 */
 	public static function sanitize( array $raw, &$dropped = array(), $previous = null ) {
@@ -221,10 +215,13 @@ class Settings {
 		}
 		$pool = Rules::ids( $pool );
 
-		// Giveaway piles and reorder numbers, per design.
-		$stock_listed = Rules::ids( $raw['stock_listed'] ?? array() );
-		$pile_ids     = Rules::pile_ids( $pool, $old_pool, (array) $previous['pile_ids'], Rules::ids( $raw['pile_ids'] ?? array() ), $stock_listed );
-		$reorder_at   = Rules::reorder_numbers( $pool, isset( $raw['reorder_at'] ) && is_array( $raw['reorder_at'] ) ? $raw['reorder_at'] : array(), $stock_listed, (array) $previous['reorder_at'] );
+		// "Reorder at", per count: the product each design's stock number is on.
+		$counts = array();
+		foreach ( $pool as $id ) {
+			$design   = Designs::product( $id );
+			$counts[] = $design ? Designs::count_id( $design ) : $id;
+		}
+		$reorder_at = Rules::reorder_numbers( $counts, isset( $raw['reorder_at'] ) && is_array( $raw['reorder_at'] ) ? $raw['reorder_at'] : array(), Rules::ids( $raw['stock_listed'] ?? array() ), (array) $previous['reorder_at'] );
 
 		// Categories — keep slugs that exist as product_cat terms.
 		$slugs = array();
@@ -247,25 +244,16 @@ class Settings {
 			? absint( $raw['upsell_max_qty'] )
 			: $d['upsell_max_qty'];
 
-		// The "go missing" percent and the email switch. A form that carried
-		// neither (a page opened before this version, saved after) changes
-		// neither; a blank or junk percent restores the default, as the
-		// money fields do.
-		if ( array_key_exists( 'loss_percent', $raw ) ) {
-			$loss_percent  = Piles::loss_percent( array( 'loss_percent' => is_scalar( $raw['loss_percent'] ) ? trim( (string) $raw['loss_percent'] ) : '' ) );
-			$reorder_email = ! empty( $raw['reorder_email'] );
-		} else {
-			$loss_percent  = Piles::loss_percent( $previous );
-			$reorder_email = ! empty( $previous['reorder_email'] );
-		}
+		// The email switch is a tick beside the stock table. A form that
+		// did not carry the table (a page opened before this version,
+		// saved after) leaves it as it was.
+		$reorder_email = array_key_exists( 'stock_table', $raw ) ? ! empty( $raw['reorder_email'] ) : ! empty( $previous['reorder_email'] );
 
 		return array(
 			'sticker_product_ids'     => $pool,
 			'sticker_parent_ids'      => $parents,
 			'sticker_seen_ids'        => Rules::ids( $seen ),
-			'pile_ids'                => $pile_ids,
 			'reorder_at'              => $reorder_at,
-			'loss_percent'            => $loss_percent,
 			'reorder_email'           => $reorder_email,
 			'eligible_category_slugs' => $slugs,
 			'min_subtotal'            => $min_subtotal,

@@ -1,6 +1,6 @@
 /**
  * Sticker Giveaway admin — AJAX save, live summary line, the variations
- * of a product picked just now, and the two acts on a giveaway pile
+ * of a product picked just now, and the two acts on a design's stock
  * ("Add stickers", "Recount").
  *
  * The summary mirrors Admin::summary() in PHP so what the owner reads
@@ -48,8 +48,8 @@
 
 	/**
 	 * Put the server's lists in place. `which` names the ones to replace;
-	 * the stock table keeps what was typed into it and not yet saved (a
-	 * reorder number, a switch) when it is redrawn after a count.
+	 * the stock table keeps the "Reorder at" numbers typed into it and not
+	 * yet saved when it is redrawn after a stock act.
 	 */
 	function applyFragments(fragments, which, keepEdits) {
 		if (!fragments) {
@@ -60,9 +60,6 @@
 		if (keepEdits) {
 			$('#fh-sg-stock').find('input[name^="reorder_at["]').each(function () {
 				edits[this.name] = this.value;
-			});
-			$('#fh-sg-stock').find('input[name="pile_ids[]"]').each(function () {
-				edits['pile:' + this.value] = this.checked;
 			});
 		}
 
@@ -76,11 +73,6 @@
 			$('#fh-sg-stock').find('input[name^="reorder_at["]').each(function () {
 				if (typeof edits[this.name] !== 'undefined') {
 					this.value = edits[this.name];
-				}
-			});
-			$('#fh-sg-stock').find('input[name="pile_ids[]"]').each(function () {
-				if (typeof edits['pile:' + this.value] !== 'undefined') {
-					this.checked = edits['pile:' + this.value];
 				}
 			});
 		}
@@ -189,9 +181,6 @@
 		if (typeof settings.upsell_max_qty !== 'undefined') {
 			$form.find('[name="upsell_max_qty"]').val(parseInt(settings.upsell_max_qty, 10) || 1);
 		}
-		if (typeof settings.loss_percent !== 'undefined') {
-			$form.find('[name="loss_percent"]').val(parseInt(settings.loss_percent, 10) || 0);
-		}
 
 		$form.find('input[type="text"][name]').each(function () {
 			if (typeof settings[this.name] === 'string') {
@@ -226,18 +215,18 @@
 
 		// "Add stickers" / "Recount": done at once, for one design. Enter
 		// in the number box presses its own button, never Save.
-		$form.on('keydown', '.fh-sg-pile-n', function (e) {
+		$form.on('keydown', '.fh-sg-stock-n', function (e) {
 			if (e.key === 'Enter' || e.which === 13) {
 				e.preventDefault();
-				$(this).closest('.fh-sg-stock__act').find('.fh-sg-pile-btn').trigger('click');
+				$(this).closest('.fh-sg-stock__act').find('.fh-sg-stock-btn').trigger('click');
 			}
 		});
 
-		$form.on('click', '.fh-sg-pile-btn', function (e) {
+		$form.on('click', '.fh-sg-stock-btn', function (e) {
 			e.preventDefault();
 
 			var $btn   = $(this);
-			var $input = $btn.closest('.fh-sg-stock__act').find('.fh-sg-pile-n');
+			var $input = $btn.closest('.fh-sg-stock__act').find('.fh-sg-stock-n');
 			var typed  = $.trim(String($input.val()));
 
 			if (typed === '') {
@@ -249,15 +238,15 @@
 			$btn.prop('disabled', true);
 
 			$.post(cfg.ajaxUrl || window.ajaxurl, {
-				action: 'fishotel_sticker_giveaway_pile',
+				action: 'fishotel_sticker_giveaway_stock',
 				_wpnonce: nonce(),
-				design_id: $btn.closest('.fh-sg-stock__row').data('design'),
+				count_id: $btn.closest('.fh-sg-stock__row').data('count'),
 				act: $btn.data('act'),
 				n: typed
 			}).done(function (res) {
 				var ok  = res && res.success;
 				var msg = (res && res.data && res.data.message) ? res.data.message : (i18n.error || 'Something went wrong.');
-				// What the count now reads stays up long enough to be read.
+				// What the stock now reads stays up long enough to be read.
 				notice(ok ? 'fishotel-misc-notice--success' : 'fishotel-misc-notice--error', msg, 8000);
 				if (ok && res.data) {
 					applyFragments(res.data.fragments, ['stock', 'warnings'], true);

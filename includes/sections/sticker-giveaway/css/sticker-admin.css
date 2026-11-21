@@ -366,9 +366,9 @@ body[class*="page_fishotel-misc-sticker-giveaway"] .select2-container--default .
 /* ------------------------------------------------------------------ */
 /*  Stock table: one small card per design                             */
 /*                                                                     */
-/*  Not a <table>: on a phone (390 px) a table of nine columns can     */
-/*  only scroll sideways. Each number carries its own label instead,   */
-/*  and the cards sit side by side where there is room.                */
+/*  Not a <table>: on a phone (390 px) a table can only scroll         */
+/*  sideways. Each number carries its own label instead, and the cards */
+/*  sit side by side where there is room.                              */
 /* ------------------------------------------------------------------ */
 .fh-sg-card--wide {
 	grid-column: 1 / -1;
@@ -399,6 +399,10 @@ body[class*="page_fishotel-misc-sticker-giveaway"] .select2-container--default .
 	border-left-color: var(--fh-danger, #dc3232);
 }
 
+.fh-sg-stock__row--off {
+	border-left-color: var(--fh-border, rgba(255, 255, 255, 0.1));
+}
+
 .fh-sg-stock__head {
 	display: flex;
 	flex-wrap: wrap;
@@ -423,63 +427,6 @@ body[class*="page_fishotel-misc-sticker-giveaway"] .select2-container--default .
 	color: var(--fh-text-primary, #e0e0e0);
 }
 
-.fh-sg-stock__facts {
-	display: grid;
-	grid-template-columns: repeat(2, minmax(0, 1fr));
-	gap: 8px 12px;
-	margin: 10px 0 0;
-}
-
-.fh-sg-stock__facts > div {
-	min-width: 0;
-}
-
-.fh-sg-stock__wide {
-	grid-column: 1 / -1;
-}
-
-.fh-sg-stock__facts dt {
-	margin: 0;
-	font-size: 11px;
-	text-transform: uppercase;
-	letter-spacing: 0.04em;
-	color: var(--fh-text-secondary, #a0a0a0);
-}
-
-.fh-sg-stock__facts dd {
-	margin: 2px 0 0;
-	font-size: 14px;
-	color: var(--fh-text-primary, #e0e0e0);
-	overflow-wrap: anywhere;
-}
-
-.fh-sg-stock__facts small {
-	display: block;
-	font-size: 11px;
-	color: var(--fh-text-secondary, #a0a0a0);
-}
-
-.fh-sg-stock__setting {
-	margin-top: 12px;
-	padding-top: 10px;
-	border-top: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
-}
-
-.fh-sg-check {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	font-size: 13px;
-	font-weight: 600;
-	color: var(--fh-text-primary, #e0e0e0);
-	cursor: pointer;
-}
-
-.fh-sg-check input[type="checkbox"] {
-	margin: 0;
-	flex: 0 0 auto;
-}
-
 .fh-sg-hint {
 	margin: 6px 0 0;
 	font-size: 12px;
@@ -492,17 +439,17 @@ body[class*="page_fishotel-misc-sticker-giveaway"] .select2-container--default .
 	max-width: 100%;
 }
 
+.fh-sg-stock__act {
+	min-width: 0;
+	margin-top: 12px;
+}
+
 .fh-sg-stock__acts {
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
 	gap: 12px;
 	margin-top: 12px;
-	padding-top: 10px;
 	border-top: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
-}
-
-.fh-sg-stock__act {
-	min-width: 0;
 }
 
 .fh-sg-stock__go {
@@ -520,7 +467,7 @@ body[class*="page_fishotel-misc-sticker-giveaway"] .select2-container--default .
 		min-height: 40px;
 	}
 
-	.fh-sg-wrap .fh-sg-pile-btn.button {
+	.fh-sg-wrap .fh-sg-stock-btn.button {
 		min-height: 40px;
 	}
 

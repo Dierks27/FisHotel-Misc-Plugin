@@ -9,7 +9,7 @@
  *                                           (simple products and variable ones).
  * @var array                    $categories [{term, depth}] product_cat tree.
  * @var string                   $summary    Live summary line.
- * @var array                    $fragments  The parts a save or a count redraws:
+ * @var array                    $fragments  The parts a save or a stock act redraws:
  *                                           variations, stock, warnings (HTML).
  */
 
@@ -84,21 +84,11 @@ $eligible_slugs = \FisHotel\Misc\Sections\Sticker_Giveaway\Rules::eligible_slugs
 					<h2 class="fishotel-misc-card-title"><?php esc_html_e( 'Stickers in stock', 'fishotel-misc-plugin' ); ?></h2>
 				</div>
 				<p class="fishotel-misc-card-desc">
-					<?php esc_html_e( 'Every design has two piles. The shop pile is the product\'s own WooCommerce stock — the stickers you set aside to sell on the site. The giveaway pile is counted here — the stickers that go into fish boxes. A free sticker or an add-on takes one from the giveaway pile when the order is paid, and puts it back if the order is cancelled. The shop pile is never touched by the giveaway.', 'fishotel-misc-plugin' ); ?>
+					<?php esc_html_e( 'The number on each row IS the stock number on the product\'s own page in WooCommerce. Shop sales and giveaway stickers both come out of it, and WooCommerce counts it down when an order is placed. Nothing is counted separately here.', 'fishotel-misc-plugin' ); ?>
 				</p>
+				<input type="hidden" name="stock_table" value="1">
 
 				<div id="fh-sg-stock" class="fh-sg-fragment"><?php echo $fragments['stock']; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in views/stock-table.php. ?></div>
-
-				<div class="fh-sg-field">
-					<label class="fh-sg-label" for="fh-sg-loss"><?php esc_html_e( 'Stickers that go missing', 'fishotel-misc-plugin' ); ?></label>
-					<span class="fh-sg-money">
-						<input type="number" id="fh-sg-loss" class="fh-sg-input fh-sg-input--count" name="loss_percent" min="0" max="<?php echo esc_attr( \FisHotel\Misc\Sections\Sticker_Giveaway\Piles::LOSS_MAX ); ?>" step="1" inputmode="numeric" value="<?php echo esc_attr( \FisHotel\Misc\Sections\Sticker_Giveaway\Piles::loss_percent( $settings ) ); ?>">
-						<span class="fh-sg-money__symbol">%</span>
-					</span>
-					<p class="fh-sg-hint">
-						<?php esc_html_e( 'How much of a giveaway pile you expect to lose. That share of what went into the pile since you last counted it is held back: with 10%, a pile of 200 reads "200 on paper · about 180 really there", and the design stops being offered when 20 are left on paper. A recount starts this over from the number you counted. 0 = trust the paper count to the last sticker.', 'fishotel-misc-plugin' ); ?>
-					</p>
-				</div>
 
 				<div class="fh-sg-field fh-sg-field--row">
 					<div>
@@ -109,8 +99,8 @@ $eligible_slugs = \FisHotel\Misc\Sections\Sticker_Giveaway\Rules::eligible_slugs
 							echo esc_html(
 								'' !== $fh_sg_to
 									/* translators: %s: email address */
-									? sprintf( __( 'One email when a design drops to its "Reorder at" number, to %s (WooCommerce\'s stock notification address, else the site admin). No second email until it has been restocked or recounted above the number.', 'fishotel-misc-plugin' ), $fh_sg_to )
-									: __( 'One email when a design drops to its "Reorder at" number. No address is set: add one under WooCommerce → Settings → Products → Inventory.', 'fishotel-misc-plugin' )
+									? sprintf( __( 'One email when a design\'s stock drops to its "Reorder at" number, to %s (WooCommerce\'s stock notification address, else the site admin). No second email until its stock is back above the number. WooCommerce\'s own low-stock emails are separate and not changed.', 'fishotel-misc-plugin' ), $fh_sg_to )
+									: __( 'One email when a design\'s stock drops to its "Reorder at" number. No address is set: add one under WooCommerce → Settings → Products → Inventory.', 'fishotel-misc-plugin' )
 							);
 							?>
 						</p>

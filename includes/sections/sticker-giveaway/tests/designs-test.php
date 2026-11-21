@@ -2,10 +2,10 @@
 /**
  * Acceptance tests for designs: what a design is (a simple product, or
  * one variation of a variable product), how it is named, which ones are
- * ticked after a save, which keep a giveaway pile, and when one can be
- * handed out.
+ * ticked after a save, and what a save keeps of the "Reorder at" numbers.
+ * (When a design can be handed out is in stock-test.php.)
  *
- * Two shop shapes are played through, both invented:
+ * Three shop shapes are played through, all invented:
  *
  *   A. ONE variable product "Reef Stickers" (#300) with four variations
  *      (#301–#304) on a CUSTOM attribute typed on the product — the
@@ -14,6 +14,7 @@
  *   B. ONE variable product "Logo Stickers" (#400) with variations
  *      (#401–#403) on a GLOBAL attribute — `attribute_pa_colour` =>
  *      "sea-green", a term slug whose name is "Sea Green".
+ *   C. A simple product "Round Logo Sticker" (#77).
  *
  * Run from the plugin root:
  *   php includes/sections/sticker-giveaway/tests/designs-test.php
@@ -121,102 +122,19 @@ check( 'added between drawing the page and saving it: not ticked, still new', ! 
 $removed = Rules::variation_ticks( array( 301, 302 ), array( 301, 302 ), true, array( 301, 303 ), array( 301, 302, 303, 304 ), true, $children, $children );
 check( 'a variation deleted from the product leaves the pool and the shown list', array( 301 ) === $removed['ticked'] && array( 301, 302 ) === $removed['seen'] );
 
-echo "5. Which designs keep a giveaway pile\n";
-// Before this version: three simple products in the pool, nothing stored about piles.
-$old_pool = array( 71, 72, 73 );
-check( 'a simple design already in the pool keeps today\'s behaviour (no row was posted for it)', array() === Rules::pile_ids( $old_pool, $old_pool, array(), array(), array() ) );
-check( '... also when the page showed its row with the switch off', array() === Rules::pile_ids( $old_pool, $old_pool, array(), array(), $old_pool ) );
-check( '... until the owner switches it on', array( 72 ) === Rules::pile_ids( $old_pool, $old_pool, array(), array( 72 ), $old_pool ) );
-check( 'a design picked just now keeps a pile', array( 301, 302, 303, 304 ) === Rules::pile_ids( array( 71, 301, 302, 303, 304 ), array( 71 ), array(), array(), array( 71 ) ) );
-check( 'a simple product picked just now keeps a pile too', array( 74 ) === Rules::pile_ids( array( 71, 74 ), array( 71 ), array(), array(), array( 71 ) ) );
-check( 'switched on before, row not posted: stays on', array( 301 ) === Rules::pile_ids( array( 301, 71 ), array( 301, 71 ), array( 301 ), array(), array() ) );
-check( 'switched off on the page: off', array() === Rules::pile_ids( array( 301 ), array( 301 ), array( 301 ), array(), array( 301 ) ) );
-check( 'a design that left the pool keeps nothing', array() === Rules::pile_ids( array(), array( 301 ), array( 301 ), array( 301 ), array( 301 ) ) );
-check( 'a posted switch for a design outside the pool is ignored', array() === Rules::pile_ids( array( 71 ), array( 71 ), array(), array( 999 ), array( 999 ) ) );
-
-$settings = array_merge( Settings::DEFAULTS, array( 'sticker_product_ids' => array( 71, 301, 302 ), 'pile_ids' => array( '301', 302 ), 'reorder_at' => array( 301 => '50', 302 => '' ) ) );
-check( 'keeps_pile() reads the setting', Rules::keeps_pile( 301, $settings ) && Rules::keeps_pile( 302, $settings ) && ! Rules::keeps_pile( 71, $settings ) );
-check( 'with nothing stored (the section as it was) no design keeps a pile', ! Rules::keeps_pile( 71, Settings::DEFAULTS ) && array() === Settings::DEFAULTS['pile_ids'] );
-check( 'reorder_at() reads the setting; blank is none', 50 === Rules::reorder_at( 301, $settings ) && null === Rules::reorder_at( 302, $settings ) && null === Rules::reorder_at( 71, $settings ) );
-
-echo "6. Reorder numbers after a save\n";
+echo "5. \"Reorder at\" numbers after a save\n";
 $pool = array( 301, 302, 303 );
 check( 'as typed for the rows on the page; blank removes the reminder', array( 301 => 40, 303 => 0 ) === Rules::reorder_numbers( $pool, array( 301 => '40', 302 => '', 303 => '0' ), $pool, array( 302 => 25 ) ) );
-check( 'a design whose row was not on the page keeps its number', array( 301 => 40, 302 => 25 ) === Rules::reorder_numbers( $pool, array( 301 => '40' ), array( 301 ), array( 302 => 25 ) ) );
+check( 'a count whose row was not on the page keeps its number', array( 301 => 40, 302 => 25 ) === Rules::reorder_numbers( $pool, array( 301 => '40' ), array( 301 ), array( 302 => 25 ) ) );
 check( 'a design that left the pool loses its number', array() === Rules::reorder_numbers( array(), array( 301 => '40' ), array( 301 ), array( 301 => 40 ) ) );
-check( 'junk is no reminder', array() === Rules::reorder_numbers( array( 301 ), array( 301 => 'soon' ), array( 301 ), array( 301 => 40 ) ) );
+check( 'junk and a minus are no reminder; a decimal is rounded down', array( 303 => 12 ) === Rules::reorder_numbers( $pool, array( 301 => 'soon', 302 => '-5', 303 => '12.9' ), $pool, array( 301 => 40 ) ) );
+check( 'four variations whose product keeps ONE stock number: one number, on the product', array( 300 => 40 ) === Rules::reorder_numbers( array( 300, 300, 300, 300 ), array( 300 => '40' ), array( 300 ), array() ) );
+check( 'a simple-product design has a number too', array( 77 => 15 ) === Rules::reorder_numbers( array( 77 ), array( 77 => '15' ), array( 77 ), array() ) );
 
-echo "7. When a design can be handed out\n";
-function facts( array $over = array() ) {
-	return array_merge(
-		array(
-			'type'             => 'variation',
-			'published'        => true,
-			'parent_published' => true,
-			'has_price'        => true,
-			'purchasable'      => true,
-			'fixed'            => true,
-			'in_stock'         => true,
-			'keeps_pile'       => true,
-			'paper'            => 200,
-			'basis'            => 200,
-		),
-		$over
-	);
-}
-check( 'a variation with stickers in its giveaway pile: offered', array() === Rules::blockers( facts(), 10 ) );
-check( '... WHATEVER the shop pile says: out of stock in the shop, still offered', array() === Rules::blockers( facts( array( 'in_stock' => false ) ), 10 ) );
-check( 'the pile at its reserve (20 of 200 at 10%): not offered', array( 'pile_reserve' ) === Rules::blockers( facts( array( 'paper' => 20 ) ), 10 ) );
-check( 'one above the reserve: offered', array() === Rules::blockers( facts( array( 'paper' => 21 ) ), 10 ) );
-check( 'an empty pile: not offered, and says "empty" rather than "reserve"', array( 'pile_empty' ) === Rules::blockers( facts( array( 'paper' => 0, 'basis' => 0 ) ), 10 ) );
-check( 'in stock in the shop does not make up for an empty giveaway pile', array( 'pile_empty' ) === Rules::blockers( facts( array( 'paper' => 0, 'basis' => 0, 'in_stock' => true ) ), 10 ) );
-check( 'the variation not enabled: not offered', array( 'unpublished' ) === Rules::blockers( facts( array( 'published' => false ) ), 10 ) );
-check( 'its product not published: not offered', array( 'parent_unpublished' ) === Rules::blockers( facts( array( 'parent_published' => false ) ), 10 ) );
-check( 'no price: not offered', array( 'no_price' ) === Rules::blockers( facts( array( 'has_price' => false, 'purchasable' => false ) ), 10 ) );
-check( 'a price but not purchasable: not offered', array( 'not_purchasable' ) === Rules::blockers( facts( array( 'purchasable' => false ) ), 10 ) );
-check( 'an attribute on "Any": not offered', array( 'any_attribute' ) === Rules::blockers( facts( array( 'fixed' => false ) ), 10 ) );
-check( 'every reason is named, not only the first', array( 'unpublished', 'no_price', 'pile_reserve' ) === Rules::blockers( facts( array( 'published' => false, 'has_price' => false, 'purchasable' => false, 'paper' => 5 ) ), 10 ) );
-check( 'a variable product itself, or any other kind, is never a design', array( 'type' ) === Rules::blockers( facts( array( 'type' => 'other' ) ), 10 ) );
-check( 'the same for a variation on a global attribute (the rule does not care which)', array() === Rules::blockers( facts( array( 'paper' => 3, 'basis' => 3 ) ), 10 ) );
+$settings = array_merge( Settings::DEFAULTS, array( 'reorder_at' => array( 301 => '50', 302 => '' ) ) );
+check( 'reorder_at() reads the setting; blank or absent is none', 50 === Rules::reorder_at( 301, $settings ) && null === Rules::reorder_at( 302, $settings ) && null === Rules::reorder_at( 71, $settings ) );
 
-// A simple design that keeps no giveaway pile: exactly the three checks it always had.
-$fh_old = static function ( array $f ) {
-	return $f['published'] && $f['purchasable'] && $f['in_stock'];
-};
-$mismatch = array();
-foreach ( array( true, false ) as $published ) {
-	foreach ( array( true, false ) as $purchasable ) {
-		foreach ( array( true, false ) as $in_stock ) {
-			foreach ( array( true, false ) as $has_price ) {
-				$f = facts(
-					array(
-						'type'        => 'simple',
-						'keeps_pile'  => false,
-						'paper'       => 0,
-						'basis'       => 0,
-						'published'   => $published,
-						'purchasable' => $purchasable,
-						'in_stock'    => $in_stock,
-						'has_price'   => $has_price,
-					)
-				);
-				// A product with no price is never purchasable in WooCommerce; skip the combination that cannot happen.
-				if ( ! $has_price && $purchasable ) {
-					continue;
-				}
-				if ( $fh_old( $f ) !== ( array() === Rules::blockers( $f, 10 ) ) ) {
-					$mismatch[] = json_encode( $f );
-				}
-			}
-		}
-	}
-}
-check( 'a simple design without a giveaway pile is offered exactly when it was before: published, purchasable, in stock', array() === $mismatch, implode( ' | ', $mismatch ) );
-check( '... its own stock decides: out of stock is not offered', array( 'out_of_stock' ) === Rules::blockers( facts( array( 'type' => 'simple', 'keeps_pile' => false, 'in_stock' => false ) ), 10 ) );
-check( '... and a giveaway pile row left over from an earlier try is not read', array() === Rules::blockers( facts( array( 'type' => 'simple', 'keeps_pile' => false, 'paper' => 0, 'basis' => 0 ) ), 10 ) );
-check( '... a simple product is never asked about attributes or a parent', array() === Rules::blockers( facts( array( 'type' => 'simple', 'keeps_pile' => false, 'fixed' => false, 'parent_published' => false ) ), 10 ) );
-
-echo "8. The picker's selection with variation designs\n";
+echo "6. The picker's selection with variation designs\n";
 $settings = array_merge(
 	Settings::DEFAULTS,
 	array(
@@ -230,22 +148,18 @@ check( 'add-ons: variations and a simple product side by side; the variable prod
 check( 'the variable product\'s own id cannot be the free pick', 0 === Rules::normalise_selection( 300, array(), $settings )['free'] );
 check( 'in_pool() is asked with the design id', Rules::in_pool( Rules::design_id( $custom_line ), $settings ) && ! Rules::in_pool( $custom_line['product_id'], $settings ) );
 
-echo "9. Settings: defaults, and a save that says nothing about the new fields\n";
-check( 'the loss percent defaults to 10 and the email switch to on', 10 === Settings::DEFAULTS['loss_percent'] && true === Settings::DEFAULTS['reorder_email'] );
+echo "7. Settings: defaults, and a save from a page that did not show the stock table\n";
+check( 'no "Reorder at" number and the email switch on by default', array() === Settings::DEFAULTS['reorder_at'] && true === Settings::DEFAULTS['reorder_email'] );
 
 $dropped = array();
-$before  = array_merge( Settings::DEFAULTS, array( 'loss_percent' => 15, 'reorder_email' => false ) );
+$before  = array_merge( Settings::DEFAULTS, array( 'sticker_product_ids' => array( 77 ), 'reorder_at' => array( 77 => 15 ), 'reorder_email' => false ) );
 $saved   = Settings::sanitize( array( 'upsell_price' => '1.00' ), $dropped, $before );
-check( 'a form without the percent (a page opened before this version) keeps the stored percent and switch', 15 === $saved['loss_percent'] && false === $saved['reorder_email'] );
-
-$saved = Settings::sanitize( array( 'loss_percent' => '25', 'reorder_email' => '1' ), $dropped, $before );
-check( 'the percent and the switch as posted', 25 === $saved['loss_percent'] && true === $saved['reorder_email'] );
-$saved = Settings::sanitize( array( 'loss_percent' => '25' ), $dropped, $before );
-check( 'the switch unticked (not posted beside the percent) is off', false === $saved['reorder_email'] );
-$saved = Settings::sanitize( array( 'loss_percent' => '' ), $dropped, $before );
-check( 'a blank percent restores the default; over 50 is 50', 10 === $saved['loss_percent'] && 50 === Settings::sanitize( array( 'loss_percent' => '90' ), $dropped, $before )['loss_percent'] );
-check( 'a save always stores every new key', array() === array_diff( array( 'sticker_parent_ids', 'sticker_seen_ids', 'pile_ids', 'reorder_at', 'loss_percent', 'reorder_email' ), array_keys( $saved ) ) );
-check( 'every stored key has a default (so an older stored option is filled in)', array() === array_diff( array_keys( $saved ), array_keys( Settings::DEFAULTS ) ) );
+check( 'a form without the stock table (a page opened before this version) keeps the email switch as it was', false === $saved['reorder_email'] );
+$saved = Settings::sanitize( array( 'stock_table' => '1', 'reorder_email' => '1' ), $dropped, $before );
+check( 'the switch as posted beside the table: on', true === $saved['reorder_email'] );
+$saved = Settings::sanitize( array( 'stock_table' => '1' ), $dropped, array_merge( $before, array( 'reorder_email' => true ) ) );
+check( '... and unticked: off', false === $saved['reorder_email'] );
+check( 'a save stores every key of this version and nothing without a default', array() === array_diff( array( 'sticker_parent_ids', 'sticker_seen_ids', 'reorder_at', 'reorder_email' ), array_keys( $saved ) ) && array() === array_diff( array_keys( $saved ), array_keys( Settings::DEFAULTS ) ) );
 
 echo "\n" . ( $failures ? "$failures of $checks checks FAILED\n" : "All $checks checks passed\n" );
 exit( $failures ? 1 : 0 );

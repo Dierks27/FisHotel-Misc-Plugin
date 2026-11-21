@@ -6,9 +6,12 @@
  * A design is a simple product or ONE variation of a variable product;
  * its id is that product's own post id (Rules::design_id()). This class
  * turns an id into the things the picker, the cart and the settings page
- * need — the product, its name on the picker, its picture, its shop pile,
- * its giveaway pile — and gathers the plain facts Rules::blockers() decides
- * on. The deciding itself is in class-rules.php and class-piles.php.
+ * need — the product, its name on the picker, its count — and gathers the
+ * plain facts Rules::blockers() decides on.
+ *
+ * A design's COUNT is its WooCommerce stock and nothing else: the
+ * variation's own, the variable product's when that keeps one stock
+ * number for its variations, or the simple product's.
  *
  * @package FisHotel\Misc\Sections\Sticker_Giveaway
  */
@@ -21,27 +24,6 @@ defined( 'ABSPATH' ) || exit;
  * Class Designs
  */
 class Designs {
-
-	/**
-	 * The store, one per request.
-	 *
-	 * @var Store|null
-	 */
-	private static $store = null;
-
-	/**
-	 * The store behind the piles.
-	 *
-	 * @return Store
-	 */
-	public static function store() {
-		if ( null === self::$store ) {
-			require_once Sticker_Giveaway::path() . 'class-store.php';
-			self::$store = new Store();
-		}
-
-		return self::$store;
-	}
 
 	/**
 	 * The product behind a design id: a simple product or a variation,
@@ -171,76 +153,39 @@ class Designs {
 	}
 
 	/**
-	 * The shop pile: the product's own WooCommerce stock, or null when it
-	 * does not manage stock (a variation that takes its stock from its
-	 * product reads the product's).
+	 * The count a design comes out of: the product that holds its stock
+	 * number in WooCommerce — the design itself, or the variable product
+	 * when that manages stock for its variations (they then share one
+	 * count).
 	 *
-	 * @param \WC_Product $product Design product, as WooCommerce hands it out.
-	 * @return int|null
+	 * @param \WC_Product $product Design product.
+	 * @return int
 	 */
-	public static function shop_stock( \WC_Product $product ) {
-		if ( self::is_pile_product( $product ) ) {
-			$product = self::product( $product->get_id() );
-		}
-
-		if ( ! $product || ! $product->managing_stock() ) {
-			return null;
-		}
-
-		return (int) $product->get_stock_quantity();
+	public static function count_id( \WC_Product $product ) {
+		return (int) $product->get_stock_managed_by_id();
 	}
 
 	/**
-	 * A design's giveaway pile (an empty one when nothing was counted
-	 * yet). Reads every pile of the pool in one query the first time.
+	 * A product's stock number as WooCommerce has it, or null when
+	 * WooCommerce does not track it ("Manage stock" off on the product, or
+	 * stock management off for the whole shop). A variation whose product
+	 * manages stock for it reads the product's.
 	 *
-	 * @param int   $design_id Design id.
-	 * @param array $settings  Settings.
-	 * @return array{paper: int, basis: int, alerted: bool}
-	 */
-	public static function pile( $design_id, array $settings ) {
-		$design_id = (int) $design_id;
-		$ids       = Rules::ids( (array) ( $settings['pile_ids'] ?? array() ) );
-
-		if ( ! in_array( $design_id, $ids, true ) ) {
-			$ids[] = $design_id;
-		}
-
-		$piles = self::store()->piles( $ids );
-
-		return $piles[ $design_id ] ?? Piles::pile( null );
-	}
-
-	/**
-	 * How many stickers of a design its giveaway pile can still hand out;
-	 * null when the design keeps no giveaway pile.
-	 *
-	 * @param int   $design_id Design id.
-	 * @param array $settings  Settings.
+	 * @param \WC_Product $product Product.
 	 * @return int|null
 	 */
-	public static function available( $design_id, array $settings ) {
-		if ( ! Rules::keeps_pile( $design_id, $settings ) ) {
-			return null;
-		}
-
-		$pile = self::pile( $design_id, $settings );
-
-		return Piles::really_there( $pile['paper'], $pile['basis'], Piles::loss_percent( $settings ) );
+	public static function stock( \WC_Product $product ) {
+		return $product->managing_stock() ? (int) $product->get_stock_quantity() : null;
 	}
 
 	/**
 	 * The plain facts about a design that Rules::blockers() decides on.
 	 *
-	 * @param \WC_Product $product  Design product (WooCommerce's, or the one on a cart line).
-	 * @param array       $settings Settings.
+	 * @param \WC_Product $product Design product (WooCommerce's, or the one on a cart line).
 	 * @return array
 	 */
-	public static function facts( \WC_Product $product, array $settings ) {
-		$id         = (int) $product->get_id();
-		$keeps_pile = Rules::keeps_pile( $id, $settings );
-		$pile       = $keeps_pile ? self::pile( $id, $settings ) : Piles::pile( null );
-		$variation  = $product->is_type( 'variation' );
+	public static function facts( \WC_Product $product ) {
+		$variation = $product->is_type( 'variation' );
 
 		return array(
 			'type'             => $variation ? 'variation' : ( $product->is_type( 'simple' ) ? 'simple' : 'other' ),
@@ -250,9 +195,7 @@ class Designs {
 			'purchasable'      => (bool) $product->is_purchasable(),
 			'fixed'            => self::is_fixed( $product ),
 			'in_stock'         => (bool) $product->is_in_stock(),
-			'keeps_pile'       => $keeps_pile,
-			'paper'            => $pile['paper'],
-			'basis'            => $pile['basis'],
+			'stock'            => self::stock( $product ),
 		);
 	}
 
@@ -260,12 +203,11 @@ class Designs {
 	 * Why a design cannot be handed out right now (Rules::blockers());
 	 * empty when it can.
 	 *
-	 * @param \WC_Product $product  Design product.
-	 * @param array       $settings Settings.
+	 * @param \WC_Product $product Design product.
 	 * @return string[]
 	 */
-	public static function blockers( \WC_Product $product, array $settings ) {
-		return Rules::blockers( self::facts( $product, $settings ), Piles::loss_percent( $settings ) );
+	public static function blockers( \WC_Product $product ) {
+		return Rules::blockers( self::facts( $product ) );
 	}
 
 	/**
@@ -273,64 +215,10 @@ class Designs {
 	 * the picker, the adding of a line and every totals pass, so a line
 	 * that passes here is one the picker would produce today.
 	 *
-	 * @param \WC_Product $product  Design product.
-	 * @param array       $settings Settings.
+	 * @param \WC_Product $product Design product.
 	 * @return bool
 	 */
-	public static function can_hand_out( \WC_Product $product, array $settings ) {
-		return array() === self::blockers( $product, $settings );
-	}
-
-	/* ============================================================== */
-	/*  Pile products                                                  */
-	/* ============================================================== */
-
-	/**
-	 * Whether a product object is one of the giveaway-line objects
-	 * (class-pile-products.php).
-	 *
-	 * @param mixed $product Product.
-	 * @return bool
-	 */
-	public static function is_pile_product( $product ) {
-		return is_object( $product ) && method_exists( $product, 'is_giveaway_pile_line' );
-	}
-
-	/**
-	 * The giveaway-line object for a design: the same product, read fresh,
-	 * that tells WooCommerce it is in stock and takes nobody's stock (see
-	 * class-pile-products.php for why). Null when it cannot be built — the
-	 * caller then keeps WooCommerce's own object.
-	 *
-	 * @param \WC_Product|int $product Design product or id.
-	 * @return \WC_Product|null
-	 */
-	public static function pile_product( $product ) {
-		if ( self::is_pile_product( $product ) ) {
-			return $product;
-		}
-
-		if ( ! $product instanceof \WC_Product ) {
-			$product = self::product( (int) $product );
-		}
-
-		if ( ! $product instanceof \WC_Product || ! class_exists( '\WC_Product_Variation' ) || ! class_exists( '\WC_Product_Simple' ) ) {
-			return null;
-		}
-
-		require_once Sticker_Giveaway::path() . 'class-pile-products.php';
-
-		try {
-			if ( $product->is_type( 'variation' ) ) {
-				return new Pile_Variation( $product->get_id() );
-			}
-			if ( $product->is_type( 'simple' ) ) {
-				return new Pile_Simple( $product->get_id() );
-			}
-		} catch ( \Throwable $e ) {
-			unset( $e );
-		}
-
-		return null;
+	public static function can_hand_out( \WC_Product $product ) {
+		return array() === self::blockers( $product );
 	}
 }

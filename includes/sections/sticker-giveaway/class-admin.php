@@ -11,11 +11,11 @@
  * renamed or added category never needs a code change.
  *
  * The page is one page: the pool, a stock table with one row per design
- * (the giveaway pile, the shop pile, the pace, the reorder number, and
- * the two acts "Add stickers" and "Recount"), then who gets a sticker,
- * the add-ons and the wording. Everything is saved by the one Save
- * button EXCEPT the two acts, which change a count the moment their
- * button is pressed (a count is not a setting — see class-store.php).
+ * (its WooCommerce stock, its "Reorder at" number, and the two acts "Add
+ * stickers" and "Recount"), then who gets a sticker, the add-ons and the
+ * wording. Everything is saved by the one Save button EXCEPT the two
+ * acts, which change the product's stock in WooCommerce the moment their
+ * button is pressed.
  *
  * @package FisHotel\Misc\Sections\Sticker_Giveaway
  */
@@ -31,7 +31,7 @@ class Admin {
 
 	/**
 	 * The most stickers one "Add stickers" or "Recount" takes — a typo
-	 * guard, far above any real pile.
+	 * guard, far above any real stock.
 	 *
 	 * @var int
 	 */
@@ -46,7 +46,7 @@ class Admin {
 	 */
 	public function init() {
 		add_action( 'admin_enqueue_scripts', array( $this, 'enqueue_assets' ), 20 );
-		add_action( 'wp_ajax_fishotel_sticker_giveaway_pile', array( $this, 'ajax_pile' ) );
+		add_action( 'wp_ajax_fishotel_sticker_giveaway_stock', array( $this, 'ajax_stock' ) );
 		add_action( 'wp_ajax_fishotel_sticker_giveaway_variations', array( $this, 'ajax_variations' ) );
 	}
 
@@ -67,11 +67,6 @@ class Admin {
 	public function render_page() {
 		if ( ! current_user_can( Sticker_Giveaway::SETTINGS_CAP ) ) {
 			wp_die( esc_html__( 'You do not have permission to access this page.', 'fishotel-misc-plugin' ) );
-		}
-
-		// A table that could not be made on boot gets another try when the owner opens the page.
-		if ( ! Store::installed() ) {
-			Store::install( true );
 		}
 
 		$settings   = Settings::get();
@@ -250,7 +245,7 @@ class Admin {
 	}
 
 	/**
-	 * The parts of the page that change with a save or a count, as HTML:
+	 * The parts of the page that change with a save or a stock act, as HTML:
 	 * the variation lists, the stock table, the warnings — and the summary
 	 * line. Rendered here for the first paint and sent back by every AJAX
 	 * answer, so the page never shows anything the server did not store.
@@ -261,17 +256,15 @@ class Admin {
 	public function fragments( $settings = null ) {
 		$settings = is_array( $settings ) ? $settings : Settings::get();
 
-		Store::forget();
-
 		$groups     = $this->variation_groups( $settings );
-		$stock_rows = Reorder::rows( $settings, true );
-		$warnings   = $this->pool_warnings( $settings, $stock_rows, $groups );
+		$stock_rows = Reorder::rows( $settings );
+		$warnings   = $this->pool_warnings( $settings, $groups );
 
 		return array(
 			'variations' => self::capture( 'variations', compact( 'groups' ) ),
-			'stock'      => self::capture( 'stock-table', compact( 'stock_rows', 'settings' ) ),
+			'stock'      => self::capture( 'stock-table', compact( 'stock_rows' ) ),
 			'warnings'   => self::capture( 'warnings', compact( 'warnings' ) ),
-			'summary'    => self::summary( $settings, count( array_filter( array_column( $stock_rows, 'product' ) ) ) ),
+			'summary'    => self::summary( $settings, array_sum( array_map( 'count', array_column( $stock_rows, 'designs' ) ) ) ),
 		);
 	}
 
@@ -331,30 +324,36 @@ class Admin {
 	}
 
 	/**
-	 * AJAX — "Add stickers" and "Recount" for one design's giveaway pile.
-	 * Done at once; nothing is asked twice. A wrong number is put right
-	 * with another Recount.
+	 * AJAX — "Add stickers" (+N: a new box arrived) and "Recount" (set to
+	 * N: what was counted by hand) for one row of the stock table. Both
+	 * change the product's stock through WooCommerce's own
+	 * wc_update_product_stock(), so the product's own page shows the same
+	 * number at once and the reorder look runs as for any stock change.
+	 * Done at once; a wrong number is put right with another Recount.
 	 */
-	public function ajax_pile() {
+	public function ajax_stock() {
 		if ( ! current_user_can( Sticker_Giveaway::SETTINGS_CAP ) ) {
 			wp_send_json_error( array( 'message' => __( 'Unauthorized.', 'fishotel-misc-plugin' ) ), 403 );
 		}
 
 		check_ajax_referer( Settings::NONCE_ACTION, '_wpnonce' );
 
-		$settings  = Settings::get();
-		$design_id = isset( $_POST['design_id'] ) ? absint( $_POST['design_id'] ) : 0;
-		$act       = isset( $_POST['act'] ) ? sanitize_key( wp_unslash( $_POST['act'] ) ) : '';
-		$typed     = isset( $_POST['n'] ) && is_scalar( $_POST['n'] ) ? trim( (string) wp_unslash( $_POST['n'] ) ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- checked by count_error() below.
-		$product   = Designs::product( $design_id );
-		$name      = $product ? Designs::name( $product ) : '';
+		$settings = Settings::get();
+		$count_id = isset( $_POST['count_id'] ) ? absint( $_POST['count_id'] ) : 0;
+		$act      = isset( $_POST['act'] ) ? sanitize_key( wp_unslash( $_POST['act'] ) ) : '';
+		$typed    = isset( $_POST['n'] ) && is_scalar( $_POST['n'] ) ? trim( (string) wp_unslash( $_POST['n'] ) ) : ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- checked by count_error() below.
+		$rows     = Reorder::rows( $settings );
+		$product  = isset( $rows[ $count_id ] ) ? wc_get_product( $count_id ) : null;
 
-		if ( ! $product || ! Rules::in_pool( $design_id, $settings ) ) {
-			wp_send_json_error( array( 'message' => __( 'That design is not in the pool. Save the settings first, then count its pile.', 'fishotel-misc-plugin' ) ), 400 );
+		if ( ! $product instanceof \WC_Product ) {
+			wp_send_json_error( array( 'message' => __( 'That design is not in the pool. Save the settings first.', 'fishotel-misc-plugin' ) ), 400 );
 		}
-		if ( ! Rules::keeps_pile( $design_id, $settings ) ) {
+
+		$name = (string) $rows[ $count_id ]['name'];
+
+		if ( ! $product->managing_stock() ) {
 			/* translators: %s: design name */
-			wp_send_json_error( array( 'message' => sprintf( __( '%s does not keep a giveaway pile. Tick "Keeps a giveaway pile" on its row and save the settings first.', 'fishotel-misc-plugin' ), $name ) ), 400 );
+			wp_send_json_error( array( 'message' => sprintf( __( '%s: WooCommerce does not track its stock. Tick "Manage stock" on the product page first.', 'fishotel-misc-plugin' ), $name ) ), 400 );
 		}
 
 		$error = self::count_error( $act, $typed );
@@ -362,23 +361,11 @@ class Admin {
 			wp_send_json_error( array( 'message' => $error ), 400 );
 		}
 
-		$n     = (int) $typed;
-		$store = Designs::store();
-		$done  = 'add' === $act ? $store->add( $design_id, $n ) : $store->recount( $design_id, $n );
-
-		if ( ! $done ) {
-			wp_send_json_error( array( 'message' => __( 'The count could not be saved (the database refused it). Nothing was changed.', 'fishotel-misc-plugin' ) ), 500 );
-		}
-
-		// Back above its reorder number, or (a recount downwards) under it.
-		Reorder::check( true );
-		Store::forget();
-
-		$pile = Designs::pile( $design_id, $settings );
+		$now = wc_update_product_stock( $product, (int) $typed, 'add' === $act ? 'increase' : 'set' );
 
 		wp_send_json_success(
 			array(
-				'message'   => self::count_message( $act, $name, $n, $pile['paper'], Piles::really_there( $pile['paper'], $pile['basis'], Piles::loss_percent( $settings ) ) ),
+				'message'   => self::count_message( $act, $name, (int) $typed, (int) $now ),
 				'fragments' => $this->fragments( $settings ),
 			)
 		);
@@ -422,21 +409,20 @@ class Admin {
 	/**
 	 * What an act did, in one sentence. Pure.
 	 *
-	 * @param string $act    'add' or 'recount'.
-	 * @param string $name   Design name.
-	 * @param int    $n      The typed number.
-	 * @param int    $paper  The paper count now.
-	 * @param int    $really "Really there" now.
+	 * @param string $act  'add' or 'recount'.
+	 * @param string $name Design name.
+	 * @param int    $n    The typed number.
+	 * @param int    $now  The stock number now.
 	 * @return string
 	 */
-	public static function count_message( $act, $name, $n, $paper, $really ) {
+	public static function count_message( $act, $name, $n, $now ) {
 		if ( 'add' === $act ) {
-			/* translators: 1: design, 2: added, 3: paper count, 4: really there */
-			return sprintf( __( '%1$s: %2$d added. %3$d on paper · about %4$d really there.', 'fishotel-misc-plugin' ), $name, $n, $paper, $really );
+			/* translators: 1: design, 2: added, 3: in stock now */
+			return sprintf( __( '%1$s: %2$d added. In stock now: %3$d.', 'fishotel-misc-plugin' ), $name, $n, $now );
 		}
 
-		/* translators: 1: design, 2: counted, 3: really there */
-		return sprintf( __( '%1$s: counted %2$d. %2$d on paper · about %3$d really there.', 'fishotel-misc-plugin' ), $name, $n, $really );
+		/* translators: 1: design, 2: in stock now */
+		return sprintf( __( '%1$s: counted. In stock now: %2$d.', 'fishotel-misc-plugin' ), $name, $now );
 	}
 
 	/* ============================================================== */
@@ -448,31 +434,29 @@ class Admin {
 	 * handed out and why, and anything about its product that will look
 	 * wrong in the cart.
 	 *
-	 * @param array   $settings   Settings.
-	 * @param array[] $stock_rows Reorder::rows().
-	 * @param array[] $groups     variation_groups().
+	 * @param array   $settings Settings.
+	 * @param array[] $groups   variation_groups().
 	 * @return string[]
 	 */
-	private function pool_warnings( array $settings, array $stock_rows, array $groups ) {
+	private function pool_warnings( array $settings, array $groups ) {
 		$warnings = array();
+		$designs  = array();
 
-		if ( ! Store::installed() ) {
-			$warnings[] = __( 'The giveaway piles could not be set up in the database, so a design that keeps a giveaway pile is not offered. Reload this page to try again; if this stays, the database user may not be allowed to create tables.', 'fishotel-misc-plugin' );
+		foreach ( Rules::pool( $settings ) as $id ) {
+			$design = wc_get_product( $id );
+			if ( $design instanceof \WC_Product ) {
+				$designs[ $id ] = $design;
+			}
 		}
 
-		if ( ! empty( $settings['pile_ids'] ) && 'yes' !== get_option( 'woocommerce_manage_stock' ) ) {
-			$warnings[] = __( 'WooCommerce\'s stock management is switched off (WooCommerce → Settings → Products → Inventory). The giveaway piles are counted down when WooCommerce reduces stock for a paid order, and it does not do that while this is off — the piles will not move.', 'fishotel-misc-plugin' );
+		if ( $designs && 'yes' !== get_option( 'woocommerce_manage_stock' ) ) {
+			$warnings[] = __( 'WooCommerce\'s stock management is switched off (WooCommerce → Settings → Products → Inventory), so no sticker is counted and there is no reorder reminder.', 'fishotel-misc-plugin' );
 		}
 
 		// Per design: why it is not offered.
-		foreach ( $stock_rows as $row ) {
-			$is_variation = $row['product'] instanceof \WC_Product && $row['product']->is_type( 'variation' );
-
-			foreach ( (array) $row['blockers'] as $code ) {
-				$text = self::blocker_text( $code, (string) $row['name'], $is_variation );
-				if ( '' !== $text ) {
-					$warnings[] = $text;
-				}
+		foreach ( $designs as $design ) {
+			foreach ( Designs::blockers( $design ) as $code ) {
+				$warnings[] = self::blocker_text( $code, Designs::name( $design ), $design->is_type( 'variation' ) );
 			}
 		}
 
@@ -501,12 +485,7 @@ class Admin {
 		$theme_skips = self::theme_skips_sticker_lines();
 		$seen        = array();
 
-		foreach ( $stock_rows as $row ) {
-			$design = $row['product'];
-			if ( ! $design instanceof \WC_Product ) {
-				continue;
-			}
-
+		foreach ( $designs as $design ) {
 			$product_id = Designs::parent_id( $design );
 			if ( isset( $seen[ $product_id ] ) ) {
 				continue;
@@ -583,12 +562,6 @@ class Admin {
 			case 'any_attribute':
 				/* translators: %s: design name */
 				return sprintf( __( '%s leaves an attribute on "Any". A design has to be one exact variation — choose a value for every attribute on the product page. Until then it will not appear in the picker.', 'fishotel-misc-plugin' ), $name );
-			case 'pile_empty':
-				/* translators: %s: design name */
-				return sprintf( __( '%s: its giveaway pile is empty — it will not appear in the picker. Count the stickers you have set aside for the giveaway and type the number under Recount.', 'fishotel-misc-plugin' ), $name );
-			case 'pile_reserve':
-				/* translators: %s: design name */
-				return sprintf( __( '%s: its giveaway pile is down to its "go missing" reserve — it no longer appears in the picker. Add stickers, or recount the pile if more are really there.', 'fishotel-misc-plugin' ), $name );
 			case 'out_of_stock':
 				/* translators: %s: design name */
 				return sprintf( __( '%s is out of stock — it will not appear in the picker.', 'fishotel-misc-plugin' ), $name );

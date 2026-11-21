@@ -1,13 +1,18 @@
 <?php
 /**
- * Reorder, in words: what the stock table, the Today line and the one
- * email say, and what the settings page answers when a count is typed.
- * Pure — the sentences are built from plain rows.
+ * Reorder: what the stock table, the Today line and the one email say,
+ * what the settings page answers when a count is typed, and — with
+ * stand-ins for WooCommerce's product and for wp_mail — that a stock
+ * change writes the one email once and costs nothing for a product that
+ * is not a design.
  *
  * Run from the plugin root:
  *   php includes/sections/sticker-giveaway/tests/reorder-test.php
  *
- * Invented designs and numbers.
+ * Invented designs and numbers: a variation on a custom attribute
+ * ("Night Glow", #301, its own stock), a variable product on a global
+ * attribute that keeps one stock number for its variations ("Logo
+ * Stickers", #400), a simple product ("Round Logo Sticker", #77).
  *
  * @package FisHotel\Misc\Sections\Sticker_Giveaway
  */
@@ -25,6 +30,71 @@ function add_filter( $hook, $callback, $priority = 10, $args = 1 ) {
 	$GLOBALS['fh_filters'][ $hook ][] = array( $callback, $priority );
 	return true;
 }
+function add_action( $hook, $callback, $priority = 10, $args = 1 ) {
+	$GLOBALS['fh_actions'][ $hook ][] = $callback;
+	return true;
+}
+function update_option( $key, $value, $autoload = null ) {
+	$GLOBALS['fh_options'][ $key ] = $value;
+	$GLOBALS['fh_writes'][]        = $key;
+	return true;
+}
+function wp_mail( $to, $subject, $body, $headers = '' ) {
+	$GLOBALS['fh_mails'][] = compact( 'to', 'subject', 'body' );
+	return $GLOBALS['fh_mail_ok'];
+}
+function get_bloginfo( $what = '' ) {
+	return 'Invented Reef Shop';
+}
+function wp_specialchars_decode( $text, $flags = 0 ) {
+	return $text;
+}
+function wp_strip_all_tags( $text ) {
+	return strip_tags( $text );
+}
+function taxonomy_exists( $taxonomy ) {
+	return false;
+}
+
+/**
+ * A stand-in for the product WooCommerce hands to its stock actions.
+ */
+class WC_Product {
+	public $id;
+	public $type;
+	public $name;
+	public $stock;
+	public $attributes;
+	public function __construct( $id, $type, $name, $stock, array $attributes = array() ) {
+		$this->id         = $id;
+		$this->type       = $type;
+		$this->name       = $name;
+		$this->stock      = $stock;
+		$this->attributes = $attributes;
+	}
+	public function get_id() {
+		return $this->id;
+	}
+	public function is_type( $type ) {
+		return $type === $this->type;
+	}
+	public function get_name() {
+		return $this->name;
+	}
+	public function managing_stock() {
+		return null !== $this->stock;
+	}
+	public function get_stock_quantity() {
+		return $this->stock;
+	}
+	public function get_variation_attributes() {
+		return $this->attributes;
+	}
+}
+
+$fh_mails   = array();
+$fh_writes  = array();
+$fh_mail_ok = true;
 
 require_once FISHOTEL_MISC_PATH . 'includes/class-layout.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/sticker-giveaway/class-reorder.php';
@@ -32,7 +102,8 @@ require_once FISHOTEL_MISC_PATH . 'includes/sections/sticker-giveaway/class-toda
 require_once FISHOTEL_MISC_PATH . 'includes/sections/sticker-giveaway/class-admin.php';
 
 use FisHotel\Misc\Sections\Sticker_Giveaway\Admin;
-use FisHotel\Misc\Sections\Sticker_Giveaway\Piles;
+use FisHotel\Misc\Sections\Sticker_Giveaway\Settings;
+use FisHotel\Misc\Sections\Sticker_Giveaway\Sticker_Giveaway;
 use FisHotel\Misc\Sections\Sticker_Giveaway\Reorder;
 use FisHotel\Misc\Sections\Sticker_Giveaway\Today_Line;
 
@@ -52,62 +123,44 @@ function check( $label, $condition, $detail = '' ) {
 	echo "  FAIL $label" . ( '' !== (string) $detail ? "\n       $detail" : '' ) . "\n";
 }
 
-/**
- * A stock-table row as Reorder::rows() builds it, from the plain facts.
- */
-function row( $name, array $facts ) {
-	return array_merge( Piles::summary( array_merge( array( 'percent' => 10 ), $facts ) ), array( 'name' => $name ) );
-}
-
-$blue  = row( 'Blue Tang', array( 'keeps_pile' => true, 'paper' => 50, 'basis' => 200, 'shop' => 10, 'went' => 36, 'reorder_at' => 50 ) );
-$clown = row( 'Clown Fish', array( 'keeps_pile' => true, 'paper' => 20, 'basis' => 200, 'shop' => 6, 'went' => 12, 'reorder_at' => 30 ) );
-$gone  = row( 'Sea Green', array( 'keeps_pile' => true, 'paper' => 8, 'basis' => 100, 'shop' => 0, 'went' => 3, 'reorder_at' => 10 ) );
-$round = row( 'Round Logo Sticker', array( 'keeps_pile' => false, 'shop' => 7, 'in_stock' => true, 'reorder_at' => 10 ) );
+$night = array( 'name' => 'Night Glow', 'stock' => 40, 'reorder_at' => 40 );
+$logo  = array( 'name' => 'Logo Stickers', 'stock' => 7, 'reorder_at' => 25 );
+$round = array( 'name' => 'Round Logo Sticker', 'stock' => 0, 'reorder_at' => 10 );
 
 echo "1. What is left, in a few words\n";
-check( 'a design with a giveaway pile: "about 40 left" (30 really there + 10 in the shop)', 'about 40 left' === Reorder::left_text( $blue ), Reorder::left_text( $blue ) );
-check( 'its giveaway pile down to the reserve but stickers in the shop: says both', 'giveaway pile out, 6 in the shop' === Reorder::left_text( $clown ), Reorder::left_text( $clown ) );
-check( 'nothing anywhere: "out"', 'out' === Reorder::left_text( $gone ) );
-check( 'a design without a giveaway pile: the plain shop number, no "about"', '7 left' === Reorder::left_text( $round ) );
+check( '"40 left" — the stock number, nothing estimated', '40 left' === Reorder::left_text( $night ) );
+check( 'nothing: "out"', 'out' === Reorder::left_text( $round ) );
 
-echo "2. How fast it goes\n";
-check( '36 in 28 days with about 30 there', '36 went in the last 28 days · about 9 a week · roughly 3 weeks left' === Reorder::pace_text( $blue ), Reorder::pace_text( $blue ) );
-check( 'nothing went: says so, no weeks', 'none went in the last 28 days' === Reorder::pace_text( row( 'x', array( 'keeps_pile' => true, 'paper' => 50, 'basis' => 50 ) ) ) );
-check( '3 in 28 days: "less than 1 a week"', false !== strpos( Reorder::pace_text( row( 'x', array( 'keeps_pile' => true, 'paper' => 100, 'basis' => 100, 'went' => 3 ) ) ), 'less than 1 a week' ) );
-check( 'one week reads "1 week"', false !== strpos( Reorder::pace_text( row( 'x', array( 'keeps_pile' => true, 'paper' => 19, 'basis' => 100, 'went' => 36 ) ) ), 'roughly 1 week left' ) );
-check( 'nearly gone: "less than a week left"', false !== strpos( Reorder::pace_text( row( 'x', array( 'keeps_pile' => true, 'paper' => 12, 'basis' => 100, 'went' => 36 ) ) ), 'less than a week left' ) );
-check( 'a pile that outlasts two years is not given a silly number', false !== strpos( Reorder::pace_text( row( 'x', array( 'keeps_pile' => true, 'paper' => 5000, 'basis' => 5000, 'went' => 4 ) ) ), 'more than 99 weeks left' ) );
-
-echo "3. The Today line\n";
+echo "2. The Today line\n";
 $url  = 'https://example.test/wp-admin/admin.php?page=fishotel-misc-sticker-giveaway';
-$line = Today_Line::line( array( $blue ), $url );
-check( 'one design: "Stickers to reorder: Blue Tang (about 40 left)"', 'Stickers to reorder: Blue Tang (about 40 left)' === $line['text'], $line['text'] );
+$line = Today_Line::line( array( $night ), $url );
+check( 'one design: "Stickers to reorder: Night Glow (40 left)"', 'Stickers to reorder: Night Glow (40 left)' === $line['text'], $line['text'] );
 check( 'it links to the Sticker Giveaway page, counts 1, is something to do', $url === $line['url'] && 1 === $line['count'] && 'todo' === $line['tone'] && 'stickers' === $line['key'] );
 check( 'it stands under Customers, the heading the section itself stands under', 'customers' === $line['group'] && in_array( 'sticker-giveaway', \FisHotel\Misc\Layout::GROUPS['customers'], true ) );
 
-$line = Today_Line::line( array( $blue, $clown, $gone ), $url );
-check( 'three designs, each with what is left', 'Stickers to reorder: Blue Tang (about 40 left), Clown Fish (giveaway pile out, 6 in the shop), Sea Green (out)' === $line['text'] && 3 === $line['count'], $line['text'] );
+$line = Today_Line::line( array( $night, $logo, $round ), $url );
+check( 'three designs, each with what is left', 'Stickers to reorder: Night Glow (40 left), Logo Stickers (7 left), Round Logo Sticker (out)' === $line['text'] && 3 === $line['count'], $line['text'] );
 check( 'no design due: no line', null === Today_Line::line( array(), $url ) );
 
 $many = array();
 for ( $i = 1; $i <= 9; $i++ ) {
-	$many[] = row( 'A Design With A Rather Long Name ' . $i, array( 'keeps_pile' => true, 'paper' => 50, 'basis' => 200, 'shop' => 10, 'reorder_at' => 50 ) );
+	$many[] = array( 'name' => 'A Design With A Rather Long Name ' . $i, 'stock' => 40, 'reorder_at' => 50 );
 }
 $line = Today_Line::line( $many, $url );
 check( 'many designs: the line stays within the Today page\'s 160 characters', strlen( $line['text'] ) <= 160, strlen( $line['text'] ) . ': ' . $line['text'] );
-check( '... names the first ones and counts the rest', 0 === strpos( $line['text'], 'Stickers to reorder: A Design With A Rather Long Name 1 (about 40 left)' ) && (bool) preg_match( '/ and \d more$/', $line['text'] ) && 9 === $line['count'] );
+check( '... names the first ones and counts the rest', 0 === strpos( $line['text'], 'Stickers to reorder: A Design With A Rather Long Name 1 (40 left)' ) && (bool) preg_match( '/ and \d more$/', $line['text'] ) && 9 === $line['count'] );
 
 $others = array( array( 'key' => 'packing', 'text' => 'Packing: 2 orders' ), array( 'key' => 'stickers', 'text' => 'an older sticker line' ) );
-$with   = Today_Line::with_line( $others, Today_Line::line( array( $blue ), $url ) );
-check( 'added to the other sections\' lines; its own older line is replaced, never doubled', 2 === count( $with ) && 'packing' === $with[0]['key'] && 'Stickers to reorder: Blue Tang (about 40 left)' === $with[1]['text'] );
+$with   = Today_Line::with_line( $others, Today_Line::line( array( $night ), $url ) );
+check( 'added to the other sections\' lines; its own older line is replaced, never doubled', 2 === count( $with ) && 'packing' === $with[0]['key'] && 'Stickers to reorder: Night Glow (40 left)' === $with[1]['text'] );
 check( 'no line leaves the others untouched', array( $others[0] ) === Today_Line::with_line( array( $others[0] ), null ) );
 
 Today_Line::register();
 check( 'it registers on the Today section\'s own filter and nothing else', array( 'fishotel_today_lines' ) === array_keys( $GLOBALS['fh_filters'] ) && 1 === count( $GLOBALS['fh_filters']['fishotel_today_lines'] ) );
 
 Today_Line::use_source(
-	static function () use ( $blue ) {
-		return array( 302 => $blue );
+	static function () use ( $night ) {
+		return array( 301 => $night );
 	}
 );
 $lines = Today_Line::filter( array( $others[0] ) );
@@ -123,41 +176,95 @@ Today_Line::use_source(
 check( 'whatever goes wrong adds nothing and breaks nothing', array( $others[0] ) === Today_Line::filter( array( $others[0] ) ) );
 Today_Line::use_source( null );
 
-echo "4. The one email\n";
-$mail = Reorder::mail( array( $blue ), 'Invented Reef Shop', $url );
-check( 'the subject names the site and the design', '[Invented Reef Shop] Stickers to reorder: Blue Tang' === $mail['subject'], $mail['subject'] );
-check( 'the body says what is left, where, and the reorder number', false !== strpos( $mail['body'], 'Blue Tang: about 40 left (giveaway pile about 30, shop 10). Reorder at 50.' ), $mail['body'] );
-check( 'it says there will be no second email until a restock or a recount', false !== strpos( $mail['body'], 'You will not get another email about a design until it has been restocked or recounted above its reorder number.' ) );
-check( 'it links to the settings page', false !== strpos( $mail['body'], 'Sticker Giveaway: ' . $url ) );
+echo "3. The one email, in words\n";
+$mail = Reorder::mail( array( $night ), 'Invented Reef Shop', $url );
+check( 'the subject names the site and the design', '[Invented Reef Shop] Stickers to reorder: Night Glow' === $mail['subject'], $mail['subject'] );
+check( 'the body says where the stock is and what to do next', false !== strpos( $mail['body'], "Night Glow is down to 40 (reorder at 40).\n\nTime to count the stickers by hand and reorder." ), $mail['body'] );
+check( 'it says where the counted number goes, and links to the settings page', false !== strpos( $mail['body'], 'under Recount on the Sticker Giveaway page' ) && false !== strpos( $mail['body'], "\n" . $url . "\n" ) );
+check( 'it says there will be no second email until the stock is back above the number', false !== strpos( $mail['body'], 'You will not get another email about a design until its stock is back above its "Reorder at" number.' ) );
 check( 'plain text: no markup', $mail['body'] === strip_tags( $mail['body'] ) && $mail['subject'] === strip_tags( $mail['subject'] ) );
+$mail = Reorder::mail( array( $night, $round ), 'Invented Reef Shop', '' );
+check( 'two designs found at a settings save: one email naming both; one at 0 is "out of stock"', '[Invented Reef Shop] Stickers to reorder: Night Glow, Round Logo Sticker' === $mail['subject'] && false !== strpos( $mail['body'], 'Round Logo Sticker is out of stock (reorder at 10).' ) );
 
-$mail = Reorder::mail( array( $blue, $clown ), 'Invented Reef Shop', $url );
-check( 'two designs dropping together: one email naming both', '[Invented Reef Shop] Stickers to reorder: Blue Tang, Clown Fish' === $mail['subject'] && false !== strpos( $mail['body'], '2 sticker designs are down to their reorder number:' ) );
-check( 'a design whose giveaway pile no longer offers it is said to be off the picker', false !== strpos( $mail['body'], 'customers are no longer offered this design' ) );
-$mail = Reorder::mail( array( $round ), 'Invented Reef Shop', '' );
-check( 'a design without a giveaway pile: the shop number only', false !== strpos( $mail['body'], 'Round Logo Sticker: 7 left (shop 7). Reorder at 10.' ) && false === strpos( $mail['body'], 'giveaway pile' ), $mail['body'] );
+echo "4. A stock change: the email once, and nothing for other products\n";
+Reorder::register();
+check( 'the look hangs on WooCommerce\'s two "stock changed" actions — every route ends there', array( 'woocommerce_product_set_stock', 'woocommerce_variation_set_stock' ) === array_keys( $GLOBALS['fh_actions'] ) );
+
+$fh_options = array(
+	Sticker_Giveaway::OPTION_KEY          => array(
+		'sticker_product_ids' => array( 301, 302, 401, 402, 77 ),
+		'reorder_at'          => array( 301 => 40, 400 => 25, 77 => 10 ),
+	),
+	'woocommerce_stock_email_recipient' => 'stock@example.test',
+	'admin_email'                       => 'owner@example.test',
+);
+$change = static function ( $id, $type, $name, $stock, array $attributes = array() ) {
+	Reorder::stock_changed( new WC_Product( $id, $type, $name, $stock, $attributes ) );
+};
+$night_glow = array( 'attribute_style' => 'Night Glow' );
+
+$change( 9001, 'simple', 'A Bag Of Salt', 3 );
+$change( 302, 'variation', 'Reef Stickers - Coral Pop', 0, array( 'attribute_style' => 'Coral Pop' ) );
+check( 'a product that is not a design, and a design without a "Reorder at" number: no email, nothing written', array() === $fh_mails && array() === $fh_writes );
+
+$change( 301, 'variation', 'Reef Stickers - Night Glow', 41, $night_glow );
+check( 'Night Glow at 41 (reorder at 40): nothing yet', array() === $fh_mails && array() === $fh_writes );
+$change( 301, 'variation', 'Reef Stickers - Night Glow', 40, $night_glow );
+check( 'an order takes it to 40: one email, to WooCommerce\'s stock address', 1 === count( $fh_mails ) && 'stock@example.test' === $fh_mails[0]['to'] );
+check( '... named by the variation\'s own value, not "Reef Stickers - Night Glow"', '[Invented Reef Shop] Stickers to reorder: Night Glow' === $fh_mails[0]['subject'] && 0 === strpos( $fh_mails[0]['body'], 'Night Glow is down to 40' ), $fh_mails[0]['subject'] );
+check( '... and remembered in the one small option of its own, never in the settings', array( 301 ) === $fh_options[ Reorder::OPTION_SENT ] && array( Reorder::OPTION_SENT ) === array_unique( $fh_writes ) );
+$change( 301, 'variation', 'Reef Stickers - Night Glow', 39, $night_glow );
+$change( 301, 'variation', 'Reef Stickers - Night Glow', 12, $night_glow );
+$change( 301, 'variation', 'Reef Stickers - Night Glow', 40, $night_glow );
+check( 'further orders, and a recount that leaves it at 40: no second email', 1 === count( $fh_mails ) );
+$change( 301, 'variation', 'Reef Stickers - Night Glow', 200, $night_glow );
+check( 'Add stickers puts it above the number: no email, and the next drop will write again', 1 === count( $fh_mails ) && array() === $fh_options[ Reorder::OPTION_SENT ] );
+$change( 301, 'variation', 'Reef Stickers - Night Glow', 38, $night_glow );
+check( 'the next drop: the second email', 2 === count( $fh_mails ) );
+
+$change( 400, 'variable', 'Logo Stickers', 25 );
+check( 'a product that keeps one stock number for its variations: the email names the product', 3 === count( $fh_mails ) && false !== strpos( $fh_mails[2]['subject'], 'Logo Stickers' ) && array( 301, 400 ) === $fh_options[ Reorder::OPTION_SENT ] );
+$change( 77, 'simple', 'Round Logo Sticker', null );
+check( 'a design WooCommerce no longer tracks ("Manage stock" off): nothing', 3 === count( $fh_mails ) );
+
+$fh_mail_ok = false;
+$change( 77, 'simple', 'Round Logo Sticker', 4 );
+check( 'the mail could not be handed over: not remembered as sent', 4 === count( $fh_mails ) && ! in_array( 77, $fh_options[ Reorder::OPTION_SENT ], true ) );
+$fh_mail_ok = true;
+$change( 77, 'simple', 'Round Logo Sticker', 4 );
+check( '... so the next look tries again', 5 === count( $fh_mails ) && in_array( 77, $fh_options[ Reorder::OPTION_SENT ], true ) );
+
+unset( $fh_options['woocommerce_stock_email_recipient'] );
+$fh_options[ Reorder::OPTION_SENT ] = array();
+$change( 77, 'simple', 'Round Logo Sticker', 3 );
+check( 'no stock address in WooCommerce: the site admin', 'owner@example.test' === $fh_mails[5]['to'] );
+
+$fh_options[ Sticker_Giveaway::OPTION_KEY ]['reorder_email'] = false;
+$fh_options[ Reorder::OPTION_SENT ]                         = array();
+$before = count( $fh_mails );
+$change( 301, 'variation', 'Reef Stickers - Night Glow', 5, $night_glow );
+check( '"Email me when a design needs reordering" switched off: no email, and nothing remembered as sent', count( $fh_mails ) === $before && array() === $fh_options[ Reorder::OPTION_SENT ] );
+check( 'the switch is on unless it was switched off', true === Settings::DEFAULTS['reorder_email'] );
 
 echo "5. Typing a count on the settings page\n";
 check( 'a whole number is taken', '' === Admin::count_error( 'add', '100' ) && '' === Admin::count_error( 'recount', '140' ) );
-check( 'Recount 0 is a count (the pile is empty)', '' === Admin::count_error( 'recount', '0' ) );
+check( 'Recount 0 is a count (none left)', '' === Admin::count_error( 'recount', '0' ) );
 check( 'Add 0 is refused, and says to use Recount to put a count right', false !== strpos( Admin::count_error( 'add', '0' ), 'Recount' ) );
 check( 'blank: asks for a number', 'Type a number first.' === Admin::count_error( 'add', '' ) && 'Type a number first.' === Admin::count_error( 'recount', '   ' ) );
 check( 'a minus, a decimal, words: refused in plain words', '' !== Admin::count_error( 'add', '-5' ) && '' !== Admin::count_error( 'recount', '12.5' ) && '' !== Admin::count_error( 'recount', 'about 40' ) );
-check( 'a slipped key (seven digits) is refused before it becomes the count', '' !== Admin::count_error( 'recount', '2000000' ) && '' !== Admin::count_error( 'add', '100001' ) && '' === Admin::count_error( 'add', '100000' ) );
+check( 'a slipped key (seven digits) is refused before it becomes the stock', '' !== Admin::count_error( 'recount', '2000000' ) && '' !== Admin::count_error( 'add', '100001' ) && '' === Admin::count_error( 'add', '100000' ) );
 check( 'an unknown action is refused', '' !== Admin::count_error( 'delete', '5' ) );
 
-check( 'after Add: what was added and what the pile now reads', 'Blue Tang: 100 added. 300 on paper · about 270 really there.' === Admin::count_message( 'add', 'Blue Tang', 100, 300, 270 ) );
-check( 'after Recount: what was counted and what is really there', 'Blue Tang: counted 140. 140 on paper · about 126 really there.' === Admin::count_message( 'recount', 'Blue Tang', 140, 140, 126 ) );
+check( 'after Add: what was added and what the stock now reads', 'Night Glow: 100 added. In stock now: 140.' === Admin::count_message( 'add', 'Night Glow', 100, 140 ) );
+check( 'after Recount: what the stock now reads', 'Night Glow: counted. In stock now: 52.' === Admin::count_message( 'recount', 'Night Glow', 52, 52 ) );
 
 echo "6. Why a ticked design is not offered\n";
-foreach ( array( 'unpublished', 'parent_unpublished', 'no_price', 'not_purchasable', 'any_attribute', 'pile_empty', 'pile_reserve', 'out_of_stock', 'type' ) as $code ) {
-	$text = Admin::blocker_text( $code, 'Blue Tang', true );
-	check( "$code: a sentence that names the design", 0 === strpos( $text, 'Blue Tang' ) && strlen( $text ) > 30, $text );
+foreach ( array( 'unpublished', 'parent_unpublished', 'no_price', 'not_purchasable', 'any_attribute', 'out_of_stock', 'type' ) as $code ) {
+	$text = Admin::blocker_text( $code, 'Night Glow', true );
+	check( "$code: a sentence that names the design", 0 === strpos( $text, 'Night Glow' ) && strlen( $text ) > 30, $text );
 }
-check( 'the empty pile says what to do: count and Recount', false !== strpos( Admin::blocker_text( 'pile_empty', 'Blue Tang' ), 'Recount' ) );
-check( 'the reserve says what to do: add, or recount', false !== strpos( Admin::blocker_text( 'pile_reserve', 'Blue Tang' ), 'Add stickers' ) && false !== strpos( Admin::blocker_text( 'pile_reserve', 'Blue Tang' ), 'recount' ) );
-check( '"Any" is said plainly', false !== strpos( Admin::blocker_text( 'any_attribute', 'Blue Tang' ), 'leaves an attribute on "Any"' ) );
-check( 'a variation that is switched off is told apart from an unpublished product', false !== strpos( Admin::blocker_text( 'unpublished', 'Blue Tang', true ), 'Enabled' ) && false === strpos( Admin::blocker_text( 'unpublished', 'Round Logo Sticker', false ), 'Enabled' ) );
+check( '"Any" is said plainly', false !== strpos( Admin::blocker_text( 'any_attribute', 'Night Glow' ), 'leaves an attribute on "Any"' ) );
+check( 'a variation that is switched off is told apart from an unpublished product', false !== strpos( Admin::blocker_text( 'unpublished', 'Night Glow', true ), 'Enabled' ) && false === strpos( Admin::blocker_text( 'unpublished', 'Round Logo Sticker', false ), 'Enabled' ) );
 check( 'the sentences a simple product had before are the same', 'Round Logo Sticker is not published — it will not appear in the picker.' === Admin::blocker_text( 'unpublished', 'Round Logo Sticker' ) && 'Round Logo Sticker is out of stock — it will not appear in the picker.' === Admin::blocker_text( 'out_of_stock', 'Round Logo Sticker' ) && 'Round Logo Sticker is not purchasable (another plugin is blocking it) — it will not appear in the picker.' === Admin::blocker_text( 'not_purchasable', 'Round Logo Sticker' ) && 'Round Logo Sticker has no price — give it a regular price (the picker overrides it) so WooCommerce treats it as purchasable.' === Admin::blocker_text( 'no_price', 'Round Logo Sticker' ) );
 check( 'an unknown code says nothing', '' === Admin::blocker_text( 'bogus', 'x' ) );
 

@@ -20,8 +20,8 @@
  * A DESIGN is what a customer picks: a simple product, or one variation
  * of a variable product. Its id is the product's own post id — the
  * variation id for a variation — so the pool stays one flat list of ids
- * (design_id() reads it off a cart line). The numbers of a design's
- * giveaway pile live in class-piles.php.
+ * (design_id() reads it off a cart line). A design's count is its
+ * product's own WooCommerce stock; the section keeps no count of its own.
  *
  * @package FisHotel\Misc\Sections\Sticker_Giveaway
  */
@@ -48,6 +48,15 @@ class Rules {
 	 * @var string
 	 */
 	const KIND_EXTRA = 'extra';
+
+	/**
+	 * How a count reads in the stock table (status()).
+	 *
+	 * @var string
+	 */
+	const STATUS_OK      = 'ok';
+	const STATUS_REORDER = 'reorder';
+	const STATUS_OUT     = 'out';
 
 	/**
 	 * The giveaway pool as a clean list of positive, unique design IDs (a
@@ -185,66 +194,43 @@ class Rules {
 	}
 
 	/**
-	 * Which designs keep a giveaway pile after a save.
+	 * A typed "Reorder at" number: a whole number of 0 or more, or null
+	 * for blank or junk (no reminder).
 	 *
-	 *   - A design whose row the page showed: as its switch was posted.
-	 *   - A design already in the pool whose row was not posted: as before.
-	 *   - A design picked just now: ON.
-	 *
-	 * A simple product that was in the pool before giveaway piles existed
-	 * has no "before" (nothing was stored), so it stays OFF — it keeps
-	 * using its own WooCommerce stock until the owner switches it on.
-	 *
-	 * @param int[] $pool     The pool after this save.
-	 * @param int[] $old_pool The pool before it.
-	 * @param int[] $old_on   The designs that kept a pile before it.
-	 * @param int[] $on       Switches posted ON.
-	 * @param int[] $listed   Designs whose row was in the form.
-	 * @return int[]
+	 * @param mixed $raw What was typed or stored.
+	 * @return int|null
 	 */
-	public static function pile_ids( array $pool, array $old_pool, array $old_on, array $on, array $listed ) {
-		$old_pool = self::ids( $old_pool );
-		$old_on   = self::ids( $old_on );
-		$on       = self::ids( $on );
-		$listed   = self::ids( $listed );
-		$out      = array();
+	public static function reorder_number( $raw ) {
+		$raw = is_scalar( $raw ) ? trim( (string) $raw ) : '';
 
-		foreach ( self::ids( $pool ) as $id ) {
-			if ( in_array( $id, $listed, true ) ) {
-				$keep = in_array( $id, $on, true );
-			} elseif ( in_array( $id, $old_pool, true ) ) {
-				$keep = in_array( $id, $old_on, true );
-			} else {
-				$keep = true;
-			}
-
-			if ( $keep ) {
-				$out[] = $id;
-			}
+		if ( '' === $raw || ! is_numeric( $raw ) || (float) $raw < 0 ) {
+			return null;
 		}
 
-		return $out;
+		return (int) min( 1000000, floor( (float) $raw ) );
 	}
 
 	/**
-	 * The reorder number of every design after a save: as typed for a
-	 * design whose row the page showed (blank = no reminder), as before for
-	 * one that was not shown, none for a design that left the pool.
+	 * The "Reorder at" number of every count after a save: as typed for a
+	 * count whose row the page showed (blank = no reminder), as before for
+	 * one that was not shown, none for a count no design uses any more.
 	 *
-	 * @param int[] $pool     The pool after this save.
-	 * @param array $typed    design id => what was typed.
-	 * @param int[] $listed   Designs whose row was in the form.
-	 * @param array $previous design id => number, before this save.
+	 * A COUNT is the product whose WooCommerce stock a design comes out
+	 * of: the design itself, or the variable product when that keeps one
+	 * stock number for all its variations.
+	 *
+	 * @param int[] $counts   The counts of the pool after this save.
+	 * @param array $typed    count id => what was typed.
+	 * @param int[] $listed   Counts whose row was in the form.
+	 * @param array $previous count id => number, before this save.
 	 * @return array<int, int>
 	 */
-	public static function reorder_numbers( array $pool, array $typed, array $listed, array $previous ) {
+	public static function reorder_numbers( array $counts, array $typed, array $listed, array $previous ) {
 		$listed = self::ids( $listed );
 		$out    = array();
 
-		foreach ( self::ids( $pool ) as $id ) {
-			$number = in_array( $id, $listed, true )
-				? Piles::reorder_number( $typed[ $id ] ?? '' )
-				: Piles::reorder_number( $previous[ $id ] ?? '' );
+		foreach ( self::ids( $counts ) as $id ) {
+			$number = self::reorder_number( in_array( $id, $listed, true ) ? ( $typed[ $id ] ?? '' ) : ( $previous[ $id ] ?? '' ) );
 
 			if ( null !== $number ) {
 				$out[ $id ] = $number;
@@ -255,27 +241,119 @@ class Rules {
 	}
 
 	/**
-	 * Whether a design keeps a giveaway pile.
+	 * A count's "Reorder at" number, or null when it has no reminder.
 	 *
-	 * @param int   $design_id Design id.
-	 * @param array $settings  Settings array.
-	 * @return bool
+	 * @param int   $count_id Count id.
+	 * @param array $settings Settings array.
+	 * @return int|null
 	 */
-	public static function keeps_pile( $design_id, array $settings ) {
-		return in_array( (int) $design_id, self::ids( (array) ( $settings['pile_ids'] ?? array() ) ), true );
+	public static function reorder_at( $count_id, array $settings ) {
+		$numbers = (array) ( $settings['reorder_at'] ?? array() );
+
+		return self::reorder_number( $numbers[ (int) $count_id ] ?? '' );
 	}
 
 	/**
-	 * A design's reorder number, or null when it has no reminder.
+	 * Whether a design has a sticker to hand out. The count is the
+	 * product's own WooCommerce stock: at least 1 when WooCommerce tracks
+	 * it — also when the product allows backorders; the giveaway never
+	 * hands out a sticker that is not there — and "in stock" when it does
+	 * not.
 	 *
-	 * @param int   $design_id Design id.
-	 * @param array $settings  Settings array.
-	 * @return int|null
+	 * @param bool     $in_stock What WooCommerce says (is_in_stock()).
+	 * @param int|null $stock    The stock number; null when not tracked.
+	 * @return bool
 	 */
-	public static function reorder_at( $design_id, array $settings ) {
-		$numbers = (array) ( $settings['reorder_at'] ?? array() );
+	public static function has_stock( $in_stock, $stock ) {
+		return $in_stock && ( null === $stock || (int) $stock >= 1 );
+	}
 
-		return Piles::reorder_number( $numbers[ (int) $design_id ] ?? '' );
+	/**
+	 * How many each sticker line may keep, given what its count holds.
+	 *
+	 * One count is shared by everything that comes out of it: a normal
+	 * purchase, the free sticker and an add-on of the same design (and
+	 * every variation of a product that keeps one stock number). A sticker
+	 * never costs a sale and never blocks an order, so the normal purchases
+	 * are served first, then the free sticker, then the add-ons — a sticker
+	 * line that no longer fits is cut down or dropped (0) before
+	 * WooCommerce's own check can refuse the cart on its account.
+	 *
+	 * @param array $lines     key => [ 'count' => int, 'kind' => ''|'free'|'extra', 'qty' => int ].
+	 * @param array $available count id => how many it can still hand out;
+	 *                         a count that is not tracked is left out and
+	 *                         limits nothing.
+	 * @return array<string, int> Sticker line key => the quantity that fits.
+	 */
+	public static function fit( array $lines, array $available ) {
+		$out = array();
+
+		foreach ( array( '', self::KIND_FREE, self::KIND_EXTRA ) as $turn ) {
+			foreach ( $lines as $key => $line ) {
+				$count = (int) ( $line['count'] ?? 0 );
+				$qty   = max( 0, (int) ( $line['qty'] ?? 0 ) );
+
+				if ( (string) ( $line['kind'] ?? '' ) !== $turn ) {
+					continue;
+				}
+
+				if ( isset( $available[ $count ] ) ) {
+					$qty                 = min( $qty, max( 0, (int) $available[ $count ] ) );
+					$available[ $count ] = (int) $available[ $count ] - $qty;
+				}
+
+				if ( '' !== $turn ) {
+					$out[ $key ] = $qty;
+				}
+			}
+		}
+
+		return $out;
+	}
+
+	/**
+	 * How a count reads in the stock table: '' when WooCommerce does not
+	 * track it, "out" at 0, "reorder" at or below its "Reorder at" number,
+	 * else "ok".
+	 *
+	 * @param int|null $stock      The stock number; null when not tracked.
+	 * @param int|null $reorder_at The "Reorder at" number; null for none.
+	 * @return string
+	 */
+	public static function status( $stock, $reorder_at ) {
+		if ( null === $stock ) {
+			return '';
+		}
+		if ( (int) $stock <= 0 ) {
+			return self::STATUS_OUT;
+		}
+
+		return null !== $reorder_at && (int) $stock <= (int) $reorder_at ? self::STATUS_REORDER : self::STATUS_OK;
+	}
+
+	/**
+	 * What the reorder email does when a count's stock is looked at:
+	 * 'send' the first time the stock is at or below the number, nothing
+	 * while it stays there, 'clear' (the next drop writes again) once it is
+	 * back ABOVE the number or the number was taken away.
+	 *
+	 * @param int|null $stock      The stock number; null when not tracked.
+	 * @param int|null $reorder_at The "Reorder at" number; null for none.
+	 * @param bool     $sent       Whether the email for this drop has gone.
+	 * @return string 'send', 'clear' or ''.
+	 */
+	public static function reorder_step( $stock, $reorder_at, $sent ) {
+		if ( null === $reorder_at ) {
+			return $sent ? 'clear' : '';
+		}
+		if ( null === $stock ) {
+			return '';
+		}
+		if ( (int) $stock <= (int) $reorder_at ) {
+			return $sent ? '' : 'send';
+		}
+
+		return $sent ? 'clear' : '';
 	}
 
 	/**
@@ -291,22 +369,14 @@ class Rules {
 	 *   no_price            no price, so WooCommerce will not sell it
 	 *   not_purchasable     has a price but WooCommerce still refuses it
 	 *   any_attribute       the variation leaves an attribute on "Any"
-	 *   pile_empty          keeps a giveaway pile and it holds nothing
-	 *   pile_reserve        the pile is down to its "go missing" reserve
-	 *   out_of_stock        keeps no giveaway pile and is out of stock
+	 *   out_of_stock        no sticker to hand out (has_stock())
 	 *
-	 * A design that keeps a giveaway pile is NOT asked whether the shop
-	 * has stock: the shop pile may be at 0 and the design is still offered.
-	 * One that keeps none is asked exactly what it always was — published,
-	 * purchasable, in stock.
-	 *
-	 * @param array $facts   type, published, parent_published, has_price,
-	 *                       purchasable, fixed, in_stock, keeps_pile, paper,
-	 *                       basis (Designs::facts()).
-	 * @param int   $percent The "go missing" percent.
+	 * @param array $facts type, published, parent_published, has_price,
+	 *                     purchasable, fixed, in_stock, stock
+	 *                     (Designs::facts()).
 	 * @return string[]
 	 */
-	public static function blockers( array $facts, $percent ) {
+	public static function blockers( array $facts ) {
 		$out  = array();
 		$type = (string) ( $facts['type'] ?? '' );
 
@@ -332,15 +402,7 @@ class Rules {
 		if ( 'variation' === $type && empty( $facts['fixed'] ) ) {
 			$out[] = 'any_attribute';
 		}
-
-		if ( ! empty( $facts['keeps_pile'] ) ) {
-			$paper = (int) ( $facts['paper'] ?? 0 );
-			if ( $paper <= 0 ) {
-				$out[] = 'pile_empty';
-			} elseif ( ! Piles::offered( $paper, (int) ( $facts['basis'] ?? 0 ), $percent ) ) {
-				$out[] = 'pile_reserve';
-			}
-		} elseif ( empty( $facts['in_stock'] ) ) {
+		if ( ! self::has_stock( ! empty( $facts['in_stock'] ), $facts['stock'] ?? null ) ) {
 			$out[] = 'out_of_stock';
 		}
 
