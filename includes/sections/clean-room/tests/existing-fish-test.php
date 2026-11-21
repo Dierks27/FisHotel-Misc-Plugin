@@ -163,7 +163,9 @@ $at  = static function ( $days_ago, $time = '12:00:00' ) use ( $today ) {
 $ev  = static function ( $id, $type, array $more = array() ) {
 	return array_merge( array( 'id' => $id, 'type' => $type, 'qty' => null, 'note' => '', 'event_at' => gmdate( 'Y-m-d H:i:s' ), 'source' => 'existing' ), $more );
 };
-$opt = array( 'tank_areas' => array( 1 => 'clean', 2 => 'clean', 10 => 'spa' ) );
+// The site's zone, as the Store passes it: without it the Replay dates an event in UTC, and "today" here is the
+// site's — the two differ every evening (US Central), when this ran red.
+$opt = array( 'tank_areas' => array( 1 => 'clean', 2 => 'clean', 10 => 'spa' ), 'tz' => wp_timezone() );
 
 $arrive = $ev( 1, 'arrival', array( 'qty' => 3, 'to_tank_id' => 1, 'note' => Replay::NOTE_ARRIVED_UNKNOWN . ' · already here' ) );
 $s      = Replay::state( array( 'checkin_date' => '2024-01-01' ), array( $arrive ), $today, $opt );
