@@ -50,6 +50,9 @@ php  includes/sections/clean-room/tests/import-map-test.php
 php  includes/sections/clean-room/tests/import-test.php
 php  includes/sections/clean-room/tests/sale-dates-test.php
 php  includes/sections/clean-room/tests/sizes-test.php
+php  includes/sections/clean-room/tests/sizes-tidy-test.php
+php  includes/sections/clean-room/tests/sizes-tidy-run-test.php
+php  includes/sections/clean-room/tests/sizes-tidy-admin-test.php
 php  includes/sections/clean-room/tests/box-shares-test.php
 php  includes/sections/clean-room/tests/identify-test.php
 php  includes/sections/clean-room/tests/medications-test.php
@@ -63,6 +66,7 @@ php  includes/sections/clean-room/tests/temp-board-test.php
 php  includes/sections/clean-room/tests/temp-guards-test.php
 php  includes/sections/clean-room/tests/dose-temp-test.php
 php  includes/sections/clean-room/tests/order-view-test.php
+php  includes/sections/clean-room/tests/existing-fish-test.php
 php  includes/sections/clean-room/tests/order-import-test.php
 php  includes/sections/clean-room/tests/order-import-layouts-test.php
 php  includes/sections/clean-room/tests/order-import-admin-test.php
@@ -70,8 +74,10 @@ php  includes/sections/clean-room/tests/shop-price-test.php
 php  includes/sections/clean-room/tests/splits-test.php
 node includes/sections/clean-room/tests/front-desk.test.js
 node includes/sections/clean-room/tests/clean-room-admin.test.js
+node includes/sections/clean-room/tests/sizes-tidy.test.js
 node includes/sections/clean-room/tests/dose-math.test.js
 node includes/sections/clean-room/tests/front-desk-dose.test.js
+node includes/sections/clean-room/tests/front-desk-status.test.js
 node includes/sections/clean-room/tests/medications-admin.test.js
 node includes/sections/clean-room/tests/order-import.test.js
 node includes/sections/clean-room/tests/order-entry.test.js
@@ -474,6 +480,42 @@ system temp directory (`FH_TEST_TMP` overrides).
   when the batch has a date), "ready (still in the Spa)" in the CSV and
   XLSX state column, the order card's Spa count and own-date flag, and
   the Board's building line counting as its summary does.
+- **sizes-tidy-test.php** — "Tidy up the sizes", the thinking
+  (`Sizes_Tidy`, pure), on the invented shop of `tidy-fixture.php` (the
+  31 sizes, a dozen fish that between them show every case, a row or two
+  in each other place that stores a size) held by `fake-tidy-shop.php`:
+  how a label is read (`2 - 3.5"`, `3”-4”`, `10"+`, `<1"`, "Show size"),
+  the short list, the rule on all 31 sizes — the expected map written
+  out row by row —, odd labels and other short lists, the list edited (a
+  size added, reordered, removed while rows point at it), the owner's
+  own choices, and the dry run: Clean, Two become one (and resolved by
+  keeping one), Typed on the product, the in-between words taken off
+  (out of stock now; for sale today left, moved or taken off), a fish
+  left with nothing to buy, the totals, the terms that go, wait or
+  retire, and the other stores (rows, a lost-fish kind key, box shares
+  that become one, the Packing map).
+- **sizes-tidy-run-test.php** — Apply and Undo (`Sizes_Tidy_Run`) on the
+  same shop: the record saved before the first write, what Apply did to
+  every kind of product, a size retiring and then finished, the Clean
+  Room's stays keeping a retired size, the "Sizes to fill in" list
+  filling and emptying, the other stores, old terms deleted only when
+  unused (one that came into use between the preview and Apply is left,
+  and named), a second click, a batch cut off at six different writes
+  and finished — or undone — afterwards, two clicks at once, Undo (a
+  full dump before and after, compared part by part), a second run
+  undone, the stack of three, and a shop of 2,000 variations (no step
+  over its batch, time and memory per step).
+- **sizes-tidy-admin-test.php** — the tool itself (`Admin_Sizes_Tidy`):
+  a wrong nonce, the Settings tab's nonce, a shop manager, WooCommerce
+  absent, a shop without a size attribute; the owner's choices read from
+  a posted form; the dry run as the page shows it (the real numbers,
+  everything escaped, nothing written); Apply behind the backup tick,
+  the typed word and the token; the steps; Undo; the "Sizes to fill in"
+  list; the name a past order line keeps; and that nothing runs on its
+  own — no cron, no activation or upgrade hook, the record's tables made
+  by Apply only, the state never autoloaded. The real shop
+  (`Sizes_Tidy_Site`) needs WooCommerce and a database: it is proved on
+  a site, not here.
 - **sizes-test.php** — the one list of fish sizes: what counts as a
   size (an attribute key matching "size"), slugs and a typed list, an
   attribute's terms in the order the attribute is set to (custom, name,
@@ -776,7 +818,11 @@ system temp directory (`FH_TEST_TMP` overrides).
   ask and the "Which fish?" prefix, `fmt()`, `escapeHtml()`,
   `saleSummary()` (a batch date, an own date, none with the suggestion,
   the "still in the Spa" warning, the page's strings), `sizeText()`,
-  `unknownName()` against `fixtures/unknown-names.json`.
+  `unknownName()` against `fixtures/unknown-names.json`; `datesText()`
+  ("day ?", "arrived: unknown", "cleared: unknown", the treatment day
+  unknown only while in quarantine) and `existingFields()` (what the
+  "Add fish already here" sheet posts: Unknown unless answered, "not
+  cleared yet" in a quarantine tank, never a non-date as a date).
 - **clean-room-admin.test.js** — `renumber()` with a prefix and a
   template row's `__i__`, `suggestImportFees()` (the exact pair, the
   origin-less fallback, nulls, cents); the order page's box helpers
@@ -786,7 +832,15 @@ system temp directory (`FH_TEST_TMP` overrides).
   or the name of a share kept under an id —, its suggestion and its
   text, "How full"); `unknownName()` /
   `knownName()` (the "??" box of an order line) against
-  `fixtures/unknown-names.json`.
+  `fixtures/unknown-names.json`; `existingPost()` (the Stays tab's
+  "Add fish already here": Unknown when empty, "not cleared yet" in a
+  quarantine tank, a picked product kept only while its name stands, an
+  unknown fish as "??").
+- **sizes-tidy.test.js** — the tidy-up page's helpers (`js/sizes-tidy.js`):
+  which rows count as set by hand, the fields of a request, and the loop
+  that steps a run — to the end, through a failed step that is asked
+  again, past another click that holds the lock, and stopping when the
+  steps keep failing.
 - **temp-tanks.test.js** — the phone's and the Board's pure helpers for
   the temporary tanks and the day's list, both scripts loaded without a
   DOM: `tankHeading()`, `offerTemplates()` / `offer()` and
@@ -921,6 +975,49 @@ system temp directory (`FH_TEST_TMP` overrides).
   `fixtures/dose-maths.json`: the same tables and the same 51 sums as
   dose-test.php, plus the page's own spelling of the inputs and
   translated words.
+- **front-desk-status.test.js** — the status line run for real:
+  `js/front-desk.js` started against a small stand-in DOM (the bar and
+  the line in it as `views/front-desk.php` writes them), a clock moved
+  by hand, a `ResizeObserver` the test fires and a `fetch` that records
+  what is posted. The line is first in every screen's bar — a tank, a
+  sheet, and alone on the picker and the day's list, where a tick and a
+  refusal are answered in it. A message changes no size: the bar's and
+  the line's heights, what the stylesheet is handed and the line's three
+  parts are the same before, during and after a message, an error and a
+  long one, and the script writes no size or place on any of them. Its
+  life: the words, a filled Undo at the left named by what it undoes,
+  the thin bar running out; then the same button turns quiet in place
+  and the words read "Last: … · 2 min ago"; it stays through a redraw
+  and onto a sheet (the Mic sheet too, which does not pass through
+  `go()`); the next write replaces it, a "Saved" with nothing to undo
+  takes it away; it leaves ten seconds before the server's window ends
+  and is offered for its seconds only when the page was told no window.
+  The filled and the quiet Undo post the very same request. An Undo
+  that has only just come up — after a write, in another's place, back
+  after an error, on the message's sheet — takes no tap for 0.7 s; a
+  tap on the words or elsewhere on the line never undoes; a write on the
+  tank screen leaves the page where it was scrolled to. A phone that
+  slept, the clock on and its timers held, is not left with an Undo past
+  its time, and a tap on one says "That can no longer be undone."
+  without a request. An error keeps an Undo that is still good for after
+  (its seconds, or another screen opened), not one whose time ran out
+  meanwhile; an undo the server refuses is over, one that never reached
+  it keeps its Undo; an expired session stays in the line until tapped.
+  A request that got no answer (fetch itself rejects — Chrome's,
+  Safari's and Firefox's words, a request given up on) is said in the
+  page's plain words, "not saved" for a write only, never the browser's;
+  the Shop App guard's own sentence and a refusal from the server are
+  said as they came.
+  A tap on the words opens the whole message with its Undo, and Back
+  shows the screen under it as it was — the very field, what was typed
+  in it. The words for the last thing done (`agoText()`). And the place:
+  the bar measured at each render, again through the observer when it
+  grows, without an observer at each render and window change; and
+  `css/front-desk.css` — the page's foot from `--fd-bar-h` alone, the
+  line one fixed height with its words on one line cut with "…", the
+  Undo at least 44 px each way, quiet a change of colours only, nothing
+  fixed to the screen but the bar, no toast left, no new colour, reduced
+  motion respected.
 - **front-desk-dose.test.js** — the Dose sheet, the Calculator and a
   dose phrase's preview run for real: `js/front-desk.js` started against
   a small stand-in DOM and a `fetch` that records what is posted. "Now"
@@ -968,6 +1065,36 @@ system temp directory (`FH_TEST_TMP` overrides).
   is that tank; the Temporary area's "last dose" carries the working;
   and a new setup in the same slot starts with nothing read, dosed or
   due.
+- **existing-fish-test.php** — "Add fish already here" (0.46.6, schema
+  1.7), through `Front_Desk::perform( 'existing' )` and
+  `Admin::add_existing()` on the `Fake_Store`: with the section off no
+  AJAX action is registered and the facts are null; the schema (an empty
+  check-in, the source `existing` on the stays and their events, the
+  gate waiting for both ENUM values and for the NULL, the one
+  `ALTER … MODIFY checkin_date DATE NULL` that keeps every row and is
+  not run again, `schema_current()`); the Replay with an
+  "arrived:unknown" arrival and a "cleared:unknown" clear — no date
+  guessed, a move back out of the Spa never "cleared today", a date set
+  later wins, the undo of a "checkin:" note back to unknown;
+  `existing_answers()` for every combination of known / unknown answers
+  in a clean tank and in a quarantine one, and every refusal (a future
+  date, the year 0026, cleared before it arrived, "not cleared yet" in
+  a clean tank, "cleared, date unknown" in the Spa); the act on a Clean
+  Room tank, a Spa tank, a quarantine and a clean temporary tank and a
+  free slot, with a product, an unlisted name, an unknown fish (??) and
+  a size; then a loss, shipped, a recount, a Clean → Clean move, a split
+  (its sister as unknown as the original, source existing) and its
+  undo, the check-in and the cleared date set later and undone, a sale
+  date without a check-in, a Spa group of unknown arrival moved into
+  the Clean Room, Undo of the whole addition (once, and only by who
+  wrote it); the day's list (the feeding alone for an undated group,
+  the schedule as ever beside a dated one); the product facts (null,
+  never "unknown"; a known check-in sorts first); `Stats::existing_stock()`
+  (alive / shipped / lost, a split counted once, an undone addition not
+  at all, how many were left out); the phone's occupant and choices, the
+  Board's words, the Events tab's text and the CSV; the Stays tab's tank
+  list and form; and both AJAX endpoints — capability, nonce, the
+  missing tables, and 503 until the 1.7 upgrade is written.
 - **medications-admin.test.js** — the pure parts of
   `js/medications-admin.js`: what 100 gallons take at a rate (the
   editor's hint), the rates the Board's Calculator offers, its sum.
@@ -1018,9 +1145,15 @@ line's `split` field holds anything (`fields_before`) — and one press on
    login's cookie lasts about a year).
 3. Arrival → type "paj": suggestions from the quarantined-fish products;
    pick one, qty 4, Save. The row shows 4 live · in QT · day 1, above the
-   folded "Today · N to do ▸" line; the toast stays until the next tap (at
-   least 10 s) and its Undo removes the arrival (a compensating event,
-   visible on the Events tab); tapping Undo twice changes nothing more.
+   folded "Today · N to do ▸" line; the status line — the first row of
+   the button bar, above Lost / Shipped / Move — says "4 × … in Tank …"
+   with a filled "↶ Undo" at its left and a thin bar running out for
+   10 s; nothing on the screen moves when it shows, and nothing when the
+   bar runs out: the Undo turns outlined and the words read "Last: … ·
+   just now". It stays until the next write (open a sheet: it is still
+   there, first in the sheet's bar); a tap on the words opens the whole
+   message; its Undo removes the arrival (a compensating event, visible
+   on the Events tab); tapping Undo twice changes nothing more.
 4. Tap "−1 lost" on the row (the first button under the title): 3 live at
    once, Undo works. Mic → "lost one cardinal": the preview reads "1 × …
    lost in Tank 521" and confirms after the countdown.
@@ -1257,7 +1390,23 @@ line's `split` field holds anything (`fields_before`) — and one press on
     again at once. Settings → Sales statuses: untick "Shipped", Save —
     Real sales names the shorter list and its figures drop; "Back to
     the suggested list" restores it.
-31. Import lines. Arrivals → *New order from pasted lines / a file*:
+31. Add fish already here. On the phone, open a Clean Room tank: the
+    bar has **+ Add fish already here** under its six buttons. Pick a
+    fish, 2, leave the three questions on **Unknown**, Save: the toast
+    says "… added to Tank 121 (already here) · arrived: unknown ·
+    cleared: unknown" with Undo; the row reads *cleared*, "day ?",
+    "arrived: unknown", and its sheet "added as already here". Dates →
+    set the check-in date: the row shows its day. Undo in the status line
+    takes the whole addition back. On a Spa tank the second question
+    offers **Not cleared yet** (the default) or a date, and the row says
+    "treatment day unknown — set the arrival date"; the building's To do
+    is as it was. The Stays tab's **Add fish already here** does the
+    same for the tank picked (its *Cleared on* hint follows the tank).
+    Stats → By year: the card *Fish already here (added by hand)* with
+    what is alive, shipped and lost and how many were left out. The
+    product's page in the shop shows nothing new.
+
+32. Import lines. Arrivals → *New order from pasted lines / a file*:
     the new order opens with **Import lines** showing, "This is what I
     ORDERED" on. Type the supplier, paste the supplier's price list
     with your order quantities filled in (title rows and all) and press
@@ -1282,7 +1431,7 @@ line's `split` field holds anything (`fields_before`) — and one press on
     moves down the column. As a shop manager who is not an administrator:
     pasting works, the file picker is not offered. Save an order of 150
     lines, reload: all 150 are there.
-32. Entry and Numbers. Open an order that is *ordered*: it opens in
+33. Entry and Numbers. Open an order that is *ordered*: it opens in
     **Entry** — # · Fish · Sci name · Size · Ordered · Received · Cost ·
     DOA · Box # · % of box · Tank — and at a 1280-px window nothing
     scrolls sideways. Type a received count and press Enter: the next
@@ -1302,7 +1451,7 @@ line's `split` field holds anything (`fields_before`) — and one press on
     product's price again: the closed order's profit and revenue do not
     move, and neither does its year on the Stats tab. Save from Numbers, switch to Entry: every
     count is as it was. Open the order as another user: their own view.
-33. Split. On a line with 6 received and 1 DOA click **Split**, then
+34. Split. On a line with 6 received and 1 DOA click **Split**, then
     **1 per tank**: five rows, one fish each, over the next empty Spa
     tanks of the order's building; "5 of 5 placed"; Save. Try 2 + 2 + 2:
     the Save is refused with the line and the reason. **Check in

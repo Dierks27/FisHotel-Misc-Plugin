@@ -21,7 +21,16 @@
  *     and it wins over the layout's own area, because a slot is quarantine
  *     this month and clean the next;
  *   - the check-in date is the SITE date of the first arrival, corrected
- *     by a note event "checkin:YYYY-MM-DD";
+ *     by a note event "checkin:YYYY-MM-DD"; fish that were already here
+ *     before the room was on the site (added by hand, "Add fish already
+ *     here") may have an UNKNOWN check-in: their first arrival carries the
+ *     note "arrived:unknown" and gives no date — the check-in stays empty
+ *     (no day number, no suggested sale date) until a "checkin:" note sets
+ *     one. Unknown is a state, never a guessed date;
+ *   - likewise a 'clear' noted "cleared:unknown" clears the stay with an
+ *     unknown date (cleared_unknown): it counts as cleared, its date
+ *     stays empty until one is set, and a later move out of the Spa does
+ *     not clear it again;
  *   - the sale date is CHOSEN, never computed: the stay's own date (a note
  *     event "sale_ready:YYYY-MM-DD"; "sale_ready:" clears it) when set,
  *     else its batch's date (the supplier order it was checked in from —
@@ -119,6 +128,23 @@ class Replay {
 	 * @var string
 	 */
 	const NOTE_CHECKIN = 'checkin:';
+
+	/**
+	 * The note of an arrival whose date nobody knows (fish already here,
+	 * added by hand): the stay's check-in stays unknown. Anything after it
+	 * (" · split from #12") is only words.
+	 *
+	 * @var string
+	 */
+	const NOTE_ARRIVED_UNKNOWN = 'arrived:unknown';
+
+	/**
+	 * The note of a clear whose date nobody knows: the stay counts as
+	 * cleared, its cleared date stays empty.
+	 *
+	 * @var string
+	 */
+	const NOTE_CLEARED_UNKNOWN = 'cleared:unknown';
 
 	/**
 	 * The note a compensating event carries: 'undo of #<id>'.
@@ -417,7 +443,8 @@ class Replay {
 	 *                        tank_areas (array tank_id => 'clean'|'spa') to spot a move into the Clean Room.
 	 * @return array{
 	 *   qty_arrived: int, qty_live: int, qty_lost: int, qty_sold: int, overdrawn: bool,
-	 *   checkin_date: string, cleared_date: string|null, closed_date: string|null,
+	 *   checkin_date: string ('' = unknown), checkin_unknown: bool, cleared_date: string|null,
+	 *   cleared_unknown: bool (cleared, the date not known), closed_date: string|null,
 	 *   sale_ready_override: string|null, batch_sale_date: string|null, sale_ready_date: string|null,
 	 *   sale_date_source: string, sale_ready_suggested: string, sale_ready: bool, ready_in_spa: bool,
 	 *   tank_id: int|null, status: string, stored_status: string, day: int|null,
@@ -436,6 +463,7 @@ class Replay {
 		$checkin      = self::is_date( $stay['checkin_date'] ?? null ) ? (string) $stay['checkin_date'] : '';
 		$checkin_set  = null; // A "checkin:" note, which wins over the arrival's date.
 		$cleared_date = null;
+		$cleared_unk  = false; // Cleared, the date unknown ("cleared:unknown").
 		$closed_date  = null;
 		$override     = null;
 		$tank_id      = isset( $stay['tank_id'] ) && (int) $stay['tank_id'] > 0 ? (int) $stay['tank_id'] : null;
@@ -458,7 +486,10 @@ class Replay {
 					$qty_live    += $n;
 					if ( $n > 0 ) {
 						$had_arrival = true;
-						if ( ! $first_seen && '' !== $date ) {
+						if ( ! $first_seen && self::is_arrived_unknown( $event ) ) {
+							$checkin    = ''; // Already here, nobody knows since when: no date, not a guessed one.
+							$first_seen = true;
+						} elseif ( ! $first_seen && '' !== $date ) {
 							$checkin    = $date;
 							$first_seen = true;
 						}
@@ -497,7 +528,7 @@ class Replay {
 						// Clean → Clean move must not re-clear.
 						$from_area = self::event_area( $event, 'from', $areas );
 						$tank_id   = (int) $event['to_tank_id'];
-						if ( null === $cleared_date && '' !== $date && self::CLEAN_AREA === self::event_area( $event, 'to', $areas ) && self::CLEAN_AREA !== $from_area ) {
+						if ( null === $cleared_date && ! $cleared_unk && '' !== $date && self::CLEAN_AREA === self::event_area( $event, 'to', $areas ) && self::CLEAN_AREA !== $from_area ) {
 							$cleared_date = $date;
 						}
 					}
@@ -506,14 +537,20 @@ class Replay {
 				case 'clear':
 					if ( null !== $qty && $qty < 0 ) {
 						$cleared_date = null;
+						$cleared_unk  = false;
+					} elseif ( self::is_cleared_unknown( $event ) ) {
+						$cleared_date = null; // Cleared, nobody knows when.
+						$cleared_unk  = true;
 					} else {
 						// The date typed (in the note) wins; an old-shape event
 						// without one is dated by its event_at.
 						$typed = self::note_date( (string) ( $event['note'] ?? '' ), self::NOTE_CLEARED );
 						if ( '' !== $typed ) {
 							$cleared_date = $typed;
+							$cleared_unk  = false;
 						} elseif ( '' !== $date ) {
 							$cleared_date = $date;
+							$cleared_unk  = false;
 						}
 					}
 					break;
@@ -553,19 +590,21 @@ class Replay {
 		}
 
 		$day    = self::day_number( $checkin, (string) $today );
-		$status = null !== $closed_date ? 'closed' : ( null !== $cleared_date ? 'cleared' : 'in_qt' );
+		$status = null !== $closed_date ? 'closed' : ( null !== $cleared_date || $cleared_unk ? 'cleared' : 'in_qt' );
 		$sale   = self::sale_fields( $override, $stay['batch_sale_date'] ?? null, $checkin, (string) $today, $status, $days );
 
 		return array_merge(
 			array(
-				'qty_arrived'   => $qty_arrived,
-				'qty_live'      => $qty_live,
-				'qty_lost'      => $qty_lost,
-				'qty_sold'      => $qty_sold,
-				'overdrawn'     => $overdrawn,
-				'checkin_date'  => $checkin,
-				'cleared_date'  => $cleared_date,
-				'closed_date'   => $closed_date,
+				'qty_arrived'     => $qty_arrived,
+				'qty_live'        => $qty_live,
+				'qty_lost'        => $qty_lost,
+				'qty_sold'        => $qty_sold,
+				'overdrawn'       => $overdrawn,
+				'checkin_date'    => $checkin,
+				'checkin_unknown' => '' === $checkin,
+				'cleared_date'    => $cleared_date,
+				'cleared_unknown' => null === $cleared_date && $cleared_unk,
+				'closed_date'     => $closed_date,
 			),
 			$sale,
 			array(
@@ -577,6 +616,47 @@ class Replay {
 				'last_event_at' => $last_at,
 			)
 		);
+	}
+
+	/**
+	 * Whether an arrival says nobody knows when the fish came in (its note
+	 * starts with NOTE_ARRIVED_UNKNOWN).
+	 *
+	 * @param array $event Event.
+	 * @return bool
+	 */
+	public static function is_arrived_unknown( array $event ) {
+		return 'arrival' === (string) ( $event['type'] ?? '' ) && 0 === strpos( (string) ( $event['note'] ?? '' ), self::NOTE_ARRIVED_UNKNOWN );
+	}
+
+	/**
+	 * The group a stay was split off (pure): its first arrival is noted
+	 * "split from #<id>" (after "arrived:unknown · " when nobody knows the
+	 * check-in) — Store::split_events() writes it and nothing edits it,
+	 * unlike the stay's notes. 0 for a group that came in on its own.
+	 *
+	 * @param array[] $events The stay's events (any order).
+	 * @return int
+	 */
+	public static function split_from( array $events ) {
+		foreach ( self::sort_events( $events ) as $event ) {
+			if ( 'arrival' !== (string) ( $event['type'] ?? '' ) ) {
+				continue;
+			}
+			return preg_match( '/^(?:' . preg_quote( self::NOTE_ARRIVED_UNKNOWN, '/' ) . ' · )?split from #(\d+)$/u', (string) ( $event['note'] ?? '' ), $m ) ? (int) $m[1] : 0;
+		}
+		return 0;
+	}
+
+	/**
+	 * Whether a clear says the stay is cleared on an unknown date.
+	 *
+	 * @param array $event Event.
+	 * @return bool
+	 */
+	public static function is_cleared_unknown( array $event ) {
+		$qty = isset( $event['qty'] ) && null !== $event['qty'] ? (int) $event['qty'] : null;
+		return 'clear' === (string) ( $event['type'] ?? '' ) && ( null === $qty || $qty >= 0 ) && 0 === strpos( (string) ( $event['note'] ?? '' ), self::NOTE_CLEARED_UNKNOWN );
 	}
 
 	/**
@@ -606,7 +686,8 @@ class Replay {
 	 *                      own date, batch_sale_date = its supplier order's).
 	 * @param string $today Site date.
 	 * @param array  $opts  sale_ready_days (the suggested date only).
-	 * @return array{status: string, day: int|null, sale_ready_override: string|null, batch_sale_date: string|null,
+	 * @return array{status: string, day: int|null, checkin_unknown: bool, cleared_unknown: bool,
+	 *               sale_ready_override: string|null, batch_sale_date: string|null,
 	 *               sale_ready_date: string|null, sale_date_source: string, sale_ready_suggested: string,
 	 *               sale_ready: bool, ready_in_spa: bool, state_label: string}
 	 */
@@ -617,14 +698,17 @@ class Replay {
 		$status  = (string) ( $row['status'] ?? 'in_qt' );
 
 		if ( 'closed' !== $status ) {
-			$status = ! empty( $row['cleared_date'] ) ? 'cleared' : 'in_qt';
+			// A stay cleared on an unknown date is stored 'cleared' without a date.
+			$status = ! empty( $row['cleared_date'] ) || 'cleared' === $status ? 'cleared' : 'in_qt';
 		}
 		$sale = self::sale_fields( $row['sale_ready_date'] ?? null, $row['batch_sale_date'] ?? null, $checkin, (string) $today, $status, $days );
 
 		return array_merge(
 			array(
-				'status' => $status,
-				'day'    => $day,
+				'status'          => $status,
+				'day'             => $day,
+				'checkin_unknown' => ! self::is_date( $checkin ),
+				'cleared_unknown' => 'cleared' === $status && empty( $row['cleared_date'] ),
 			),
 			$sale,
 			array( 'state_label' => self::state_label( $status, $sale['sale_ready'] ) )
@@ -660,7 +744,8 @@ class Replay {
 	 *
 	 * @param array $event        The event to undo (type, qty, from_tank_id, to_tank_id, note).
 	 * @param array $state_before The state just before that event (for a count's previous
-	 *                            qty_live and a sale-date note's previous own date).
+	 *                            qty_live, a sale-date note's previous own date and an
+	 *                            un-clear's previous cleared date or cleared_unknown).
 	 * @return array|null type, qty, from_tank_id, to_tank_id, note.
 	 */
 	public static function compensating( array $event, array $state_before = array() ) {
@@ -706,7 +791,23 @@ class Replay {
 
 			case 'clear':
 				if ( null !== $qty && $qty < 0 ) {
-					return null; // Un-clearing an un-clear would need the old date; not offered.
+					// The undo of an un-clear writes back what the stay held
+					// just before: cleared on an unknown date, or on its date.
+					// Nothing to give back when it was not cleared.
+					if ( ! empty( $state_before['cleared_unknown'] ) ) {
+						$back = self::NOTE_CLEARED_UNKNOWN;
+					} elseif ( self::is_date( (string) ( $state_before['cleared_date'] ?? '' ) ) ) {
+						$back = self::NOTE_CLEARED . $state_before['cleared_date'];
+					} else {
+						return null;
+					}
+					return array(
+						'type'         => 'clear',
+						'qty'          => null,
+						'from_tank_id' => null,
+						'to_tank_id'   => null,
+						'note'         => $back,
+					);
 				}
 				return array(
 					'type'         => 'clear',

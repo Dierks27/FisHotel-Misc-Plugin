@@ -475,13 +475,13 @@ class Fake_Store {
 			'needs_id'        => ! empty( $fields['needs_id'] ) ? 1 : 0,
 			'qty_arrived'     => 0,
 			'qty_live'        => 0,
-			'checkin_date'    => Replay::is_date( $fields['checkin_date'] ?? null ) ? (string) $fields['checkin_date'] : gmdate( 'Y-m-d' ),
+			'checkin_date'    => Store::checkin_or_null( $fields ),
 			'cleared_date'    => null,
 			'sale_ready_date' => null,
 			'closed_date'     => null,
 			'status'          => 'in_qt',
 			'tank_id'         => ! empty( $fields['tank_id'] ) ? (int) $fields['tank_id'] : null,
-			'source'          => (string) ( $fields['source'] ?? 'manual' ),
+			'source'          => in_array( (string) ( $fields['source'] ?? '' ), Store::STAY_SOURCES, true ) ? (string) $fields['source'] : 'manual',
 			'order_line_id'   => ! empty( $fields['order_line_id'] ) ? (int) $fields['order_line_id'] : null,
 			'supplier'        => '' !== trim( (string) ( $fields['supplier'] ?? '' ) ) ? trim( (string) $fields['supplier'] ) : null,
 			'order_ref'       => '' !== trim( (string) ( $fields['order_ref'] ?? '' ) ) ? trim( (string) $fields['order_ref'] ) : null,
@@ -613,6 +613,24 @@ class Fake_Store {
 	}
 
 	/**
+	 * The stays of fish already here, added by hand, with their figures (Store::existing_stays()).
+	 */
+	public function existing_stays( $today, array $settings ) {
+		$out = array();
+		foreach ( array_reverse( $this->stays, true ) as $row ) {
+			if ( Store::SOURCE_EXISTING !== (string) $row['source'] ) {
+				continue;
+			}
+			$stay            = Store::hydrate_stay( $this->joined_row( $row ), $today, $settings );
+			$events             = $this->events( (int) $row['id'] );
+			$stay['figures']    = Orders::figures_from_events( $events );
+			$stay['split_from'] = Replay::split_from( $events );
+			$out[]              = $stay;
+		}
+		return $out;
+	}
+
+	/**
 	 * The facts of a product (Store::product_facts() → the same pure facts_from_stays()).
 	 */
 	public function product_facts( $product_id, $today, array $settings ) {
@@ -732,7 +750,7 @@ class Fake_Store {
 			'note'          => (string) ( $event['note'] ?? '' ),
 			'event_at'      => Store::utc_datetime( $event['event_at'] ?? '' ),
 			'actor_id'      => (int) ( $event['actor_id'] ?? 0 ),
-			'source'        => in_array( (string) ( $event['source'] ?? '' ), Store::SOURCES, true ) ? (string) $event['source'] : 'manual',
+			'source'        => in_array( (string) ( $event['source'] ?? '' ), Store::STAY_SOURCES, true ) ? (string) $event['source'] : 'manual',
 			'created_at'    => ! empty( $event['created_at'] ) ? Store::utc_datetime( $event['created_at'] ) : gmdate( 'Y-m-d H:i:s' ),
 			'from_setup_id' => $setups['from'],
 			'to_setup_id'   => $setups['to'],
@@ -778,7 +796,7 @@ class Fake_Store {
 		$row                    = &$this->stays[ (int) $stay_id ];
 		$row['qty_arrived']     = (int) $state['qty_arrived'];
 		$row['qty_live']        = (int) $state['qty_live'];
-		$row['checkin_date']    = '' !== $state['checkin_date'] ? $state['checkin_date'] : $row['checkin_date'];
+		$row['checkin_date']    = Store::cached_checkin( $state );
 		$row['cleared_date']    = $state['cleared_date'];
 		$row['sale_ready_date'] = $state['sale_ready_override'];
 		$row['closed_date']     = $state['closed_date'];
@@ -818,47 +836,19 @@ class Fake_Store {
 	}
 
 	public function split_stay( array $stay, $qty, array $to_tank, array $base, $today, array $settings, $reason = '' ) {
-		$qty    = (int) $qty;
-		$reason = trim( (string) $reason );
+		$qty = (int) $qty;
 		if ( $qty < 1 || $qty >= (int) $stay['qty_live'] ) {
 			return false;
 		}
-		$sister = $this->create_stay(
-			array(
-				'product_id'    => $stay['product_id'],
-				'species'       => $stay['species'],
-				'size_slug'     => $stay['size_slug'] ?? null,
-				'size_label'    => $stay['size_label'] ?? null,
-				'needs_id'      => ! empty( $stay['needs_id'] ),
-				'checkin_date'  => $stay['checkin_date'],
-				'tank_id'       => $stay['tank_id'],
-				'source'        => (string) ( $base['source'] ?? 'manual' ),
-				'order_line_id' => $stay['order_line_id'],
-				'supplier'      => $stay['supplier'],
-				'order_ref'     => $stay['order_ref'],
-				'landed_cost'   => $stay['landed_cost'],
-				'notes'         => 'split from #' . (int) $stay['id'],
-			)
-		);
-		$ids   = array();
-		$now   = gmdate( 'Y-m-d H:i:s' );
-		$birth = Store::site_noon_utc( $stay['checkin_date'] );
-		if ( strcmp( $birth, $now ) > 0 ) {
-			$birth = $now; // A same-day split before noon: the arrival must still sort before the move.
+		// As the real Store: the same sister row and the same events, in the same order.
+		$sister = $this->create_stay( Store::sister_fields( $stay, $base ) );
+		$ids    = array();
+		foreach ( Store::split_events( $stay, (int) $sister, $qty, (int) $to_tank['id'], $base, gmdate( 'Y-m-d H:i:s' ), $reason ) as $step ) {
+			$written = $this->record_event( $step['stay_id'], $step['event'], $today, $settings );
+			if ( $written && $step['undo'] ) {
+				$ids[] = $written['event_id'];
+			}
 		}
-
-		$written = $this->record_event( (int) $stay['id'], array_merge( $base, array( 'type' => 'move', 'qty' => $qty, 'from_tank_id' => $stay['tank_id'], 'to_tank_id' => (int) $to_tank['id'], 'note' => 'split to #' . $sister . ( '' !== $reason ? ' · ' . $reason : '' ), 'event_at' => $now ) ), $today, $settings );
-		$ids[]   = $written['event_id'];
-		$written = $this->record_event( $sister, array_merge( $base, array( 'type' => 'arrival', 'qty' => $qty, 'to_tank_id' => $stay['tank_id'], 'note' => 'split from #' . (int) $stay['id'], 'event_at' => $birth ) ), $today, $settings );
-		$ids[]   = $written['event_id'];
-		if ( ! empty( $stay['cleared_date'] ) ) {
-			$this->record_event( $sister, array_merge( $base, array( 'type' => 'clear', 'note' => Replay::NOTE_CLEARED . $stay['cleared_date'], 'event_at' => $now ) ), $today, $settings );
-		}
-		if ( ! empty( $stay['sale_ready_override'] ) ) {
-			$this->record_event( $sister, array_merge( $base, array( 'type' => 'note', 'note' => Replay::NOTE_SALE_READY . $stay['sale_ready_override'], 'event_at' => $birth ) ), $today, $settings );
-		}
-		$written = $this->record_event( $sister, array_merge( $base, array( 'type' => 'move', 'from_tank_id' => $stay['tank_id'], 'to_tank_id' => (int) $to_tank['id'], 'note' => $reason, 'event_at' => $now ) ), $today, $settings );
-		$ids[]   = $written['event_id'];
 
 		return array(
 			'stay_id'   => (int) $sister,

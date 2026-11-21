@@ -141,6 +141,7 @@ foreach ( new RecursiveIteratorIterator( new RecursiveDirectoryIterator( $sectio
 	}
 	$files[ substr( $path, strlen( $section ) ) ] = (string) file_get_contents( $path );
 }
+ksort( $files ); // A directory is listed in no order of its own (it differs from one machine to the next), and the checks below name files in order.
 check( 'the section\'s code is read: its classes, its views and its script', count( $files ) >= 19 && isset( $files['class-packing.php'], $files['class-store.php'], $files['views/order-box.php'], $files['js/packing-admin.js'] ), (string) count( $files ) );
 
 /**

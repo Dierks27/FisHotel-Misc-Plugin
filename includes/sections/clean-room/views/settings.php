@@ -335,7 +335,7 @@ $fh_from_attr = Sizes::SOURCE_ATTRIBUTE === $fh_standard['source'];
 				<div class="fishotel-misc-card-icon"><span class="dashicons dashicons-editor-expand"></span></div>
 				<h2 class="fishotel-misc-card-title"><?php esc_html_e( 'Sizes', 'fishotel-misc-plugin' ); ?></h2>
 			</div>
-			<p class="fishotel-misc-card-desc"><?php esc_html_e( 'One list of fish sizes for supplier order lines and stays — the same list the product variations use, so everything matches. It is the product attribute with "size" in its name; its terms are the sizes, in the order and with the labels (in inches) they have there. Nothing on this page changes a product.', 'fishotel-misc-plugin' ); ?></p>
+			<p class="fishotel-misc-card-desc"><?php esc_html_e( 'One list of fish sizes for supplier order lines and stays — the same list the product variations use, so everything matches. It is the product attribute with "size" in its name; its terms are the sizes, in the order and with the labels (in inches) they have there. Nothing in this card changes a product; the tool below, "Tidy up the sizes", is the one thing that can.', 'fishotel-misc-plugin' ); ?></p>
 
 			<?php if ( $fh_from_attr ) : ?>
 				<div class="fh-cr-field fh-cr-field--row">
@@ -411,6 +411,13 @@ $fh_from_attr = Sizes::SOURCE_ATTRIBUTE === $fh_standard['source'];
 				</table>
 			<?php endif; ?>
 		</form>
+
+		<?php
+		/* ── Tidy up the sizes (an owner's tool; needs WooCommerce) ── */
+		if ( class_exists( '\FisHotel\Misc\Sections\Clean_Room\Admin_Sizes_Tidy' ) ) {
+			\FisHotel\Misc\Sections\Clean_Room\Admin_Sizes_Tidy::render( $store, $settings );
+		}
+		?>
 
 		<?php /* ── Box shares ────────────────────────────────────── */ ?>
 		<div class="fishotel-misc-card fh-cr-card fh-cr-card--wide" id="fishotel-cleanroom-box-shares">

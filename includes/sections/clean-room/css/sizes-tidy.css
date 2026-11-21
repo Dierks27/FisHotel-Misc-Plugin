@@ -1,0 +1,167 @@
+/**
+ * Settings → Sizes → "Tidy up the sizes".
+ */
+.fh-tidy .fh-tidy__short {
+	width: 100%;
+	max-width: 22em;
+	font-family: Consolas, Monaco, monospace;
+}
+
+.fh-tidy .fh-tidy__hint {
+	margin-left: 8px;
+}
+
+.fh-tidy .fh-tidy__message,
+.fh-tidy .fh-tidy__progress {
+	margin: 12px 0;
+	padding: 10px 12px;
+	border-left: 4px solid var(--fh-accent, #00a0d2);
+	border-radius: 4px;
+	color: var(--fh-text-primary, #e0e0e0);
+	background: var(--fh-bg-primary, #1a1a1a);
+	font-weight: 600;
+}
+
+.fh-tidy .fh-tidy__message--bad {
+	border-left-color: var(--fh-danger, #dc3232);
+}
+
+.fh-tidy .fh-tidy__box {
+	margin: 16px 0;
+	padding: 12px 14px;
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	border-radius: 4px;
+	color: var(--fh-text-primary, #e0e0e0);
+	background: var(--fh-bg-primary, #1a1a1a);
+}
+
+.fh-tidy .fh-tidy__box--warn {
+	border-left: 4px solid var(--fh-warning, #ffb900);
+}
+
+.fh-tidy .fh-tidy__box > .fh-cr-h3:first-child,
+.fh-tidy .fh-tidy__h4 {
+	margin: 0 0 6px;
+	font-size: 14px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-tidy .fh-tidy__box a,
+.fh-tidy .fh-tidy__map a,
+.fh-tidy .fh-tidy__group a,
+.fh-tidy .button-link {
+	color: var(--fh-accent, #00a0d2);
+}
+
+.fh-tidy .fh-tidy__map th[scope="row"] {
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.fh-tidy .fh-tidy__row--stay {
+	opacity: 0.75;
+}
+
+.fh-tidy .fh-tidy__map select,
+.fh-tidy .fh-tidy__sale select {
+	max-width: 100%;
+	min-width: 14em;
+}
+
+.fh-tidy .fh-tidy__list {
+	margin: 6px 0 6px 18px;
+	list-style: disc;
+}
+
+.fh-tidy .fh-tidy__small {
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-tidy .fh-tidy__group {
+	margin: 12px 0;
+}
+
+.fh-tidy .fh-tidy__group > summary,
+.fh-tidy .fh-tidy__map details > summary {
+	cursor: pointer;
+}
+
+.fh-tidy .fh-tidy__two {
+	margin: 10px 0;
+	padding-top: 8px;
+	border-top: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+}
+
+.fh-tidy .fh-tidy__pick {
+	margin: 4px 0 8px;
+	padding: 0;
+	border: 0;
+}
+
+.fh-tidy .fh-tidy__moved {
+	margin: 6px 0 0;
+}
+
+.fh-tidy .fh-tidy__moved select {
+	min-width: 11em;
+	margin-left: 4px;
+}
+
+.fh-tidy .fh-tidy__pick legend {
+	padding: 0;
+	font-weight: 600;
+}
+
+.fh-tidy .fh-tidy__choices label {
+	display: inline-block;
+	margin: 3px 0;
+}
+
+.fh-tidy .fh-tidy__totals {
+	margin: 16px 0;
+	font-size: 14px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-tidy .fh-tidy__choices,
+.fh-tidy .fh-tidy__pick,
+.fh-tidy .fh-tidy__runs,
+.fh-tidy .fh-tidy__list,
+.fh-tidy label {
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-tidy .fh-tidy__confirm {
+	width: 8em;
+}
+
+.fh-tidy .fh-tidy__runs {
+	margin-left: 18px;
+}
+
+.fh-tidy .fh-tidy__runs .button {
+	margin-left: 8px;
+	vertical-align: baseline;
+}
+
+.fh-tidy.fh-tidy--busy {
+	cursor: progress;
+}
+
+@media (max-width: 782px) {
+	.fh-tidy .fh-tidy__map,
+	.fh-tidy .fh-tidy__sale,
+	.fh-tidy .fh-tidy__fill {
+		display: block;
+		overflow-x: auto;
+	}
+}
+
+.fh-tidy .fh-tidy__apply .fh-tidy__apply-message {
+	margin: 8px 0;
+}
+
+.fh-tidy .fh-tidy__form[hidden],
+.fh-tidy .fh-tidy__held[hidden] {
+	display: none;
+}

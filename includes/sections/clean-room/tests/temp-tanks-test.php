@@ -423,7 +423,7 @@ foreach ( Store::schema( 'DEFAULT CHARSET=utf8mb4' ) as $statement ) {
 		$tables[ $m[1] ] = $statement;
 	}
 }
-check( 'schema version 1.6: eleven tables, tank_setups the new one, one CREATE per table', '1.6' === Store::DB_VERSION && 11 === count( Store::TABLES ) && 'tank_setups' === Store::TABLES[10] && array_keys( $tables ) === Store::TABLES );
+check( 'schema version 1.6 or later: eleven tables, tank_setups the new one, one CREATE per table', version_compare( Store::DB_VERSION, '1.6', '>=' ) && 11 === count( Store::TABLES ) && 'tank_setups' === Store::TABLES[10] && array_keys( $tables ) === Store::TABLES );
 check( 'fh_buildings: own_water marks "each tank its own water"; the area can be temp', 1 === preg_match( "/\n\t+own_water TINYINT\(1\) NOT NULL DEFAULT 0,\n/", $tables['buildings'] ) && false !== strpos( $tables['buildings'], "area ENUM('clean','spa','temp') NOT NULL DEFAULT 'clean'," ) );
 check( 'fh_tank_setups: the slot, name, purpose, kind, gallons, start date, the copied steps, note, who and when, closed when', 1 === preg_match( "/\n\t+tank_id BIGINT\(20\) UNSIGNED NOT NULL,\n\t+open_tank_id BIGINT\(20\) UNSIGNED NULL,\n\t+slot TINYINT NOT NULL DEFAULT 0,\n\t+name VARCHAR\(60\) NOT NULL DEFAULT '',\n\t+purpose VARCHAR\(120\) NOT NULL DEFAULT '',\n\t+kind ENUM\('quarantine','clean'\) NOT NULL DEFAULT 'quarantine',\n\t+gallons SMALLINT NOT NULL DEFAULT 0,\n\t+template VARCHAR\(40\) NOT NULL DEFAULT '',\n\t+start_date DATE NOT NULL,\n\t+steps LONGTEXT NULL,\n\t+note TEXT NULL,\n\t+created_by BIGINT\(20\) UNSIGNED NOT NULL DEFAULT 0,\n\t+created_at DATETIME NOT NULL,\n\t+updated_at DATETIME NOT NULL,\n\t+closed_by BIGINT\(20\) UNSIGNED NOT NULL DEFAULT 0,\n\t+closed_at DATETIME NULL,\n/", $tables['tank_setups'] ) );
 check( 'one open setup per slot is a unique key', false !== strpos( $tables['tank_setups'], "PRIMARY KEY  (id),\n" ) && false !== strpos( $tables['tank_setups'], 'UNIQUE KEY open_tank_id (open_tank_id)' ) && false !== strpos( $tables['tank_setups'], 'KEY tank_id (tank_id)' ) );
@@ -464,8 +464,13 @@ $v16['stay_events'][] = 'from_setup_id';
 check( 'one column short (a failed ALTER) keeps it shut: the version is not written, the ALTER is retried', array( 'stay_events.to_setup_id' ) === Store::missing_columns( $v16 ) && ! Store::schema_ready( $v16 ) );
 $v16['stay_events'][] = 'to_setup_id';
 check( 'with every column there it opens', array() === Store::missing_columns( $v16 ) && Store::schema_ready( $v16 ) );
-check( 'but not while the area column cannot hold "temp"', array( 'buildings.area=temp' ) === Store::missing_enum_values( array( 'buildings.area' => "enum('clean','spa')" ) ) && ! Store::schema_ready( $v16, array( 'buildings.area' => "enum('clean','spa')" ) ) && array( 'buildings.area=temp' ) === Store::missing_enum_values( array() ) );
-check( 'once it can, the gate opens (the type compares whatever its case)', array() === Store::missing_enum_values( array( 'buildings.area' => "ENUM('clean','spa','temp')" ) ) && Store::schema_ready( $v16, array( 'buildings.area' => "enum('clean','spa','temp')" ) ) );
+// The sources 1.7 added are the gate's too (tests/existing-fish-test.php); here they are already there.
+$fh_sources = array(
+	'stays.source'       => "enum('manual','voice','qr','import','order','existing')",
+	'stay_events.source' => "enum('manual','voice','qr','import','order','existing')",
+);
+check( 'but not while the area column cannot hold "temp"', array( 'buildings.area=temp' ) === Store::missing_enum_values( array_merge( $fh_sources, array( 'buildings.area' => "enum('clean','spa')" ) ) ) && ! Store::schema_ready( $v16, array_merge( $fh_sources, array( 'buildings.area' => "enum('clean','spa')" ) ) ) && in_array( 'buildings.area=temp', Store::missing_enum_values( array() ), true ) );
+check( 'once it can, the gate opens (the type compares whatever its case)', array() === Store::missing_enum_values( array_merge( $fh_sources, array( 'buildings.area' => "ENUM('clean','spa','temp')" ) ) ) && Store::schema_ready( $v16, array_merge( $fh_sources, array( 'buildings.area' => "enum('clean','spa','temp')" ) ) ) );
 
 /* ------------------------------------------------------------------ */
 echo "10. A site that never sets one up\n";
