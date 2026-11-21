@@ -925,6 +925,10 @@ class Admin {
 					if ( Replay::is_undone( (array) $stay['events'], (int) $event['id'] ) ) {
 						wp_send_json_error( array( 'message' => __( 'Already undone.', 'fishotel-misc-plugin' ) ), 400 );
 					}
+					$refused = self::undo_refusal( $stay, $event );
+					if ( '' !== $refused ) {
+						wp_send_json_error( array( 'message' => $refused ), 400 );
+					}
 					$ok = $store->undo_event( $stay, $event, $base, $today, $settings );
 					if ( null === $ok ) {
 						wp_send_json_error( array( 'message' => __( 'Nothing to undo there.', 'fishotel-misc-plugin' ) ), 400 );
@@ -992,6 +996,24 @@ class Admin {
 		}
 
 		wp_send_json_success( array( 'message' => $msg ) );
+	}
+
+	/**
+	 * Why the Stays tab's Undo refuses an event — '' when it does not.
+	 * The phone's rule (Front_Desk::act_undo()), kept here too: an arrival
+	 * whose group was split on into other tanks is not taken back on its
+	 * own — the fish that moved on would be left standing as stays of a
+	 * line that never arrived. The splits are undone first.
+	 *
+	 * @param array $stay  The stay, with its events.
+	 * @param array $event The event to undo.
+	 * @return string
+	 */
+	public static function undo_refusal( array $stay, array $event ) {
+		if ( 'arrival' === (string) ( $event['type'] ?? '' ) && Front_Desk::split_on( (array) ( $stay['events'] ?? array() ) ) ) {
+			return __( 'Some of these fish were split on into other tanks. Undo those moves first, then the arrival.', 'fishotel-misc-plugin' );
+		}
+		return '';
 	}
 
 	/**

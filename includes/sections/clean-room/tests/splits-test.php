@@ -19,6 +19,7 @@
 
 require_once __DIR__ . '/wp-stubs.php';
 
+use FisHotel\Misc\Sections\Clean_Room\Admin;
 use FisHotel\Misc\Sections\Clean_Room\Admin_Workbook;
 use FisHotel\Misc\Sections\Clean_Room\Clean_Room;
 use FisHotel\Misc\Sections\Clean_Room\Front_Desk;
@@ -560,6 +561,10 @@ foreach ( array_reverse( $made['splits'] ) as $split ) {
 $undo = act( $store, 511, 'undo', array( 'event_ids' => array( $made['event_id'] ) ) );
 check( 'the splits undone first, the arrival can go too', empty( $undo['error'] ) && 'Undone' === $undo['message'], json_encode( $undo ) );
 check( 'the pure half: a move "split to #…" that stands, one that was undone, a whole move', true === Front_Desk::split_on( array( array( 'id' => 1, 'type' => 'arrival', 'note' => '' ), array( 'id' => 2, 'type' => 'move', 'note' => 'split to #9' ) ) ) && false === Front_Desk::split_on( array( array( 'id' => 1, 'type' => 'arrival', 'note' => '' ), array( 'id' => 2, 'type' => 'move', 'note' => '' ) ) ) );
+
+$fh_arr = array( 'id' => 1, 'type' => 'arrival', 'note' => '' );
+$fh_spl = array( 'id' => 2, 'type' => 'move', 'note' => 'split to #9' );
+check( 'the Stays tab\'s Undo keeps the same rule: the arrival of a group split on is refused in the phone\'s words, a loss on it is not, and neither is an arrival nobody split', false !== strpos( Admin::undo_refusal( array( 'events' => array( $fh_arr, $fh_spl ) ), $fh_arr ), 'Undo those moves first' ) && '' === Admin::undo_refusal( array( 'events' => array( $fh_arr, $fh_spl ) ), array( 'id' => 3, 'type' => 'loss' ) ) && '' === Admin::undo_refusal( array( 'events' => array( $fh_arr ) ), $fh_arr ) );
 
 echo "17. A save from a page that has no split field leaves the plan alone\n";
 delete_option( Splits::OPTION );

@@ -1150,7 +1150,8 @@ first line looks for an empty one**: a line left on "auto" never lands
 in a tank a later line was planned into while empty tanks stand beside
 it. The arrival of a split line is not undone on its own — its splits
 are undone first, or the fish that moved on would be left as stays of a
-line that never arrived. A line that
+line that never arrived (the phone's Undo and the Stays tab's Undo both
+say so). A line that
 **already is a stay** cannot be split from the order page: a plan posted
 for it (a page loaded before the check-in) is refused plainly — "that
 line is already checked in: split the group from its tank instead (Move,
