@@ -28,7 +28,8 @@ function wp_parse_args( $args, $defaults = array() ) {
 }
 
 function get_option( $key, $default = false ) {
-	return $default;
+	// A test may set an option by hand; nothing is ever stored.
+	return isset( $GLOBALS['fh_options'] ) && array_key_exists( $key, $GLOBALS['fh_options'] ) ? $GLOBALS['fh_options'][ $key ] : $default;
 }
 
 require_once FISHOTEL_MISC_PATH . 'includes/sections/sticker-giveaway/class-sticker-giveaway.php';

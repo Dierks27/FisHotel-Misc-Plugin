@@ -29,8 +29,10 @@
  *
  * What a move does to a ledger row is decided by Piles::ledger() (pure,
  * tested); this class writes it down. Every method is wrapped: a database
- * error or a missing table means false / 0 / an empty list, never an
- * exception — a sticker must not take a checkout down.
+ * error means false / 0 / an empty list, never an exception — a sticker
+ * must not take a checkout down. While the tables are not installed (the
+ * version option says so; no query) nothing is sent to the database at
+ * all: every pile reads empty and every write answers "not done".
  *
  * @package FisHotel\Misc\Sections\Sticker_Giveaway
  */
@@ -269,7 +271,10 @@ class Store {
 			foreach ( $need as $id ) {
 				self::$piles[ $id ] = self::empty_pile();
 			}
+		}
 
+		// Tables not made (yet): every pile reads empty, and nothing is asked of the database.
+		if ( $need && self::installed() ) {
 			try {
 				$table = self::table( 'sticker_piles' );
 				$in    = implode( ',', array_map( 'intval', $need ) );
@@ -346,7 +351,7 @@ class Store {
 		$design_id = (int) $design_id;
 		$n         = (int) $n;
 
-		if ( $design_id < 1 || $n < 1 ) {
+		if ( $design_id < 1 || $n < 1 || ! self::installed() ) {
 			return false;
 		}
 
@@ -392,7 +397,7 @@ class Store {
 		$design_id = (int) $design_id;
 		$n         = (int) $n;
 
-		if ( $design_id < 1 || $n < 0 ) {
+		if ( $design_id < 1 || $n < 0 || ! self::installed() ) {
 			return false;
 		}
 
@@ -488,7 +493,7 @@ class Store {
 		$to        = $to ? 1 : 0;
 		$table     = self::table( 'sticker_piles' );
 
-		if ( $design_id < 1 ) {
+		if ( $design_id < 1 || ! self::installed() ) {
 			return false;
 		}
 
@@ -567,7 +572,7 @@ class Store {
 		global $wpdb;
 
 		$item_id = (int) $item_id;
-		if ( $item_id < 1 ) {
+		if ( $item_id < 1 || ! self::installed() ) {
 			return 0;
 		}
 
@@ -669,7 +674,7 @@ class Store {
 		$ids = Rules::ids( $design_ids );
 		$out = array_fill_keys( $ids, 0 );
 
-		if ( ! $ids ) {
+		if ( ! $ids || ! self::installed() ) {
 			return $out;
 		}
 

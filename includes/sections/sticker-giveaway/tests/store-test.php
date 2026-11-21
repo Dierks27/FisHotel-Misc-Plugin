@@ -263,6 +263,16 @@ class FH_Fake_WPDB {
 $wpdb  = new FH_Fake_WPDB();
 $store = new Store();
 
+echo "0. Before the tables are there\n";
+check( 'not installed: every pile reads empty', false === Store::installed() && 0 === $store->pile( 302 )['paper'] );
+check( '... no write is done, and each says so', false === $store->add( 302, 5 ) && false === $store->recount( 302, 5 ) && 0 === $store->move( 9001, Piles::TAKE, 1, 302, 5001, 'free' ) && false === $store->claim_alert( 302 ) );
+check( '... the 28-day count is 0', array( 302 => 0 ) === $store->went_since( array( 302 ), time() - 86400 ) );
+check( '... and nothing at all was sent to the database', array() === $wpdb->sent );
+
+// The tables are there from here on.
+$GLOBALS['fh_options'][ Store::DB_VERSION_OPTION ] = Store::DB_VERSION;
+Store::forget();
+
 // Design ids, invented: two variations of one product, and a simple product.
 const BLUE  = 302;
 const CLOWN = 303;
