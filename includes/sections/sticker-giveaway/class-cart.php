@@ -762,10 +762,14 @@ class Cart {
 	 *
 	 * @param \WC_Cart $cart     Cart.
 	 * @param array    $settings Settings.
+	 * @return bool Whether a line's quantity was cut down (a removed line
+	 *              makes WooCommerce total the cart again by itself; a
+	 *              changed quantity outside a totals pass does not).
 	 */
 	private static function fit_pile_lines( \WC_Cart $cart, array $settings ) {
 		$lines     = self::sticker_lines( $cart );
 		$available = array();
+		$cut       = false;
 
 		foreach ( $lines as $line ) {
 			$design = $line['design'];
@@ -779,7 +783,7 @@ class Cart {
 		}
 
 		if ( ! $available ) {
-			return;
+			return false;
 		}
 
 		foreach ( Piles::fit( $lines, $available ) as $key => $fits ) {
@@ -791,8 +795,11 @@ class Cart {
 				self::remove_quietly( $cart, $key );
 			} elseif ( isset( $cart->cart_contents[ $key ] ) ) {
 				$cart->cart_contents[ $key ]['quantity'] = $fits;
+				$cut                                     = true;
 			}
 		}
+
+		return $cut;
 	}
 
 	/**
@@ -813,6 +820,7 @@ class Cart {
 		}
 
 		$fresh = false;
+		$cut   = false;
 
 		foreach ( $cart->get_cart() as $key => $item ) {
 			if ( ! self::is_sticker_item( $item ) || ! Rules::keeps_pile( Rules::design_id( $item ), $settings ) ) {
@@ -834,11 +842,17 @@ class Cart {
 			// WooCommerce swaps the line's object back to its own when a "sold individually" line holds more than one; never let it get that far.
 			if ( $product->is_sold_individually() && (int) ( $item['quantity'] ?? 0 ) > 1 && isset( $cart->cart_contents[ $key ] ) ) {
 				$cart->cart_contents[ $key ]['quantity'] = 1;
+				$cut                                     = true;
 			}
 		}
 
-		if ( $fresh ) {
-			self::fit_pile_lines( $cart, $settings );
+		if ( $fresh && self::fit_pile_lines( $cart, $settings ) ) {
+			$cut = true;
+		}
+
+		// A quantity changed here is outside a totals pass: total the cart again so the order is made from what is in it.
+		if ( $cut ) {
+			$cart->calculate_totals();
 		}
 	}
 
