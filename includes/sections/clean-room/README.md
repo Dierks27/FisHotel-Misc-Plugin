@@ -349,7 +349,13 @@ seconds, or when another screen is opened. Meanwhile the Undo's place is
 kept, empty (`.is-held`: not seen, no tap), so the error's words do not
 start where a thumb was on its way to the Undo. An undo that never reached
 the server (no signal) keeps its Undo for another try; one the server
-refused does not. Before anything was done on the page the line is
+refused does not. A request that got no answer at all is said in plain
+words — "No connection — not saved. Try again." for a write, "No
+connection. Try again." for a read such as Refresh — never in the
+browser's own ("Failed to fetch", "Load failed"): `post()` marks it
+(`offline` / `offlineRead`, an error without `data`) and `sayFailed()`
+words it. Inside the Shop App the app's guard has its own sheet and its
+own sentence for a save, and that sentence is said as it is. Before anything was done on the page the line is
 empty; it is there all the same. The "last thing done" is kept for the
 page, not for the visit: another tank is another page.
 

@@ -22,6 +22,8 @@
  *     plainly without a request;
  *   - an error keeps an Undo that is still good for after, and keeps
  *     its place: the error's words do not start where the Undo was;
+ *   - a request that got no answer (no signal) is said in plain words,
+ *     never in the browser's own ("Failed to fetch", "Load failed");
  *   - the tap guard, and that no tap elsewhere on the line undoes; a
  *     write on the tank screen leaves the page where it was scrolled to;
  *   - on a sheet the line's Undo opens the whole message first: one
@@ -299,6 +301,8 @@ function screen( withTank, undoWindow ) {
 var LOSS    = '1 × Invented Goby lost';
 var LONG    = '12 × Invented Goby with a very long invented name, size small to medium, lost in Tank 721 — and 3 × Made-up Blenny moved along with them';
 var REFUSED = { refused: { message: 'No fish left to lose.' } };
+var OFFLINE      = 'No connection — not saved. Try again.';
+var OFFLINE_READ = 'No connection. Try again.';
 var SAVED   = function ( fields, config ) { return { message: 'Saved', undo: { eventIds: [], label: '' }, screen: config.screen }; };
 
 /* The server: a loss is written and can be undone (each with event ids of its own); an undo is done; anything else is saved with nothing to undo. */
@@ -325,7 +329,11 @@ function inTurn( replies ) {
  * reply( fields, config, n ), search (the address's query), noObserver (a
  * browser without ResizeObserver), hold (replies wait for
  * page.release()), bareLine (a page whose line came without its span
- * for the screen reader).
+ * for the screen reader), i18n (the page's own words, where it has any).
+ *
+ * A reply { offline: … } is no answer at all — fetch itself rejects: with
+ * Chrome's TypeError for true, with a TypeError of those words for a
+ * string, with the very thing given for anything else.
  */
 function start( config ) {
 	var body      = new El( 'body' );
@@ -396,7 +404,8 @@ function start( config ) {
 		posts.push( fields );
 		var data = reply( fields, config, posts.length );
 		if ( data && data.offline ) {
-			return Promise.reject( new TypeError( 'Failed to fetch' ) ); // The request never got there.
+			// The request never got there.
+			return Promise.reject( true === data.offline ? new TypeError( 'Failed to fetch' ) : ( 'string' === typeof data.offline ? new TypeError( data.offline ) : data.offline ) );
 		}
 		var answer = data && data.status
 			? { status: data.status, json: function () { return Promise.resolve( {} ); } }
@@ -410,7 +419,7 @@ function start( config ) {
 	};
 	delete global.SpeechRecognition;
 	delete global.webkitSpeechRecognition;
-	global.fhFrontDesk = { ajaxUrl: '/ajax', nonce: 'n', screen: config.screen, baseUrl: '#', boardUrl: '#board', view: '', i18n: {} };
+	global.fhFrontDesk = { ajaxUrl: '/ajax', nonce: 'n', screen: config.screen, baseUrl: '#', boardUrl: '#board', view: '', i18n: config.i18n || {} };
 
 	delete require.cache[ require.resolve( file ) ];
 	var helpers = require( file );
@@ -901,12 +910,60 @@ async function run() {
 	page.tapUndo();
 	await settle();
 	check( 'an undo that never reached the server (no signal): an error', 'is-error' === page.kind() && 2 === page.posts.length, page.words() );
+	check( '… said in plain words, not the browser\'s', OFFLINE === page.words(), page.words() );
 	pass( 4.2 );
 	check( '… and the Undo is back for another try', page.quiet() );
 	pass( 1 );
 	page.tapUndo();
 	await settle();
 	check( '… which goes through', 3 === page.posts.length && 'undo' === page.posts[2].act && 'Undone' === page.words(), page.words() );
+
+	console.log( '11b. No answer at all (no signal): plain words, never the browser\'s own' );
+	var timedOut  = new Error( 'The operation was aborted.' );
+	timedOut.name = 'AbortError';
+	var browsers  = [
+		[ 'Chrome', new TypeError( 'Failed to fetch' ) ],
+		[ 'Safari', new TypeError( 'Load failed' ) ],
+		[ 'Firefox', new TypeError( 'NetworkError when attempting to fetch resource.' ) ],
+		[ 'a request given up on', timedOut ],
+		[ 'a rejection with nothing in it', { name: '', message: '' } ]
+	];
+	for ( var b = 0; b < browsers.length; b++ ) {
+		page = start( { screen: screen( true, 900 ), reply: ( function ( thrown ) { return function () { return { offline: thrown }; }; }( browsers[ b ][1] ) ) } );
+		page.tap( '−1 lost' );
+		await settle();
+		check( 'a write that got no answer, ' + browsers[ b ][0] + ': "' + OFFLINE + '" in the error colour', 'is-error' === page.kind() && OFFLINE === page.words(), page.words() );
+		page.tapWords();
+		check( '… and the whole message says the same: nowhere "' + ( browsers[ b ][1].message || 'undefined' ) + '"', -1 !== page.sheetText().indexOf( OFFLINE ) && ( ! browsers[ b ][1].message || -1 === page.sheetText().indexOf( browsers[ b ][1].message ) ), page.sheetText() );
+	}
+	page = start( { screen: screen( true, 900 ), reply: function () { return { offline: true }; } } );
+	page.tap( '−1 lost' );
+	await settle();
+	pass( 4.2 );
+	page.tap( '−1 lost' );
+	await settle();
+	check( 'the page is not left busy by it: the next tap is sent', 2 === page.posts.length && 'loss' === page.posts[1].act && OFFLINE === page.words(), page.words() );
+	page = start( { screen: screen( true, 900 ), reply: function () { return { offline: true }; } } );
+	page.tap( 'Refresh' );
+	await settle();
+	check( 'a read that got no answer (Refresh) does not speak of saving: "' + OFFLINE_READ + '"', 'is-error' === page.kind() && OFFLINE_READ === page.words() && 'fishotel_cleanroom_screen' === page.posts[0].action, page.words() );
+	page = start( { screen: screen( true, 900 ), i18n: { offline: 'Keine Verbindung.' }, reply: function () { return { offline: true }; } } );
+	page.tap( '−1 lost' );
+	await settle();
+	check( 'the words are the page\'s own where it has them (i18n.offline)', 'Keine Verbindung.' === page.words(), page.words() );
+	check( '… and the page has them: class-front-desk.php hands over the very words the script falls back on', -1 !== php.indexOf( "'offline'     => __( '" + OFFLINE + "'," ) && -1 !== php.indexOf( "'offlineRead' => __( '" + OFFLINE_READ + "'," ) );
+	var GUARD = 'Not confirmed as saved. Check the connection, then save again — the same entry is written once.';
+	page = await lostOne( { screen: screen( true, 900 ), reply: inTurn( [ null, function () { return { offline: new Error( GUARD ) }; } ] ) } );
+	pass( 20 );
+	page.tapUndo();
+	await settle();
+	check( 'a sentence written for a person by what stands before fetch (the Shop App\'s guard) is said as it is', 'is-error' === page.kind() && GUARD === page.words(), page.words() );
+	pass( 4.2 );
+	check( '… and an undo it was said for never got there either: its Undo is back', page.quiet() );
+	page = start( { screen: screen( true, 900 ), reply: function () { return { refused: { message: 'offline' } }; } } );
+	page.tap( '−1 lost' );
+	await settle();
+	check( 'the server\'s own no is never taken for it: a refusal is said in the server\'s words', 'is-error' === page.kind() && 'offline' === page.words(), page.words() );
 
 	page = start( { screen: screen( true, 900 ), reply: function () { return { status: 403 }; } } );
 	page.tap( '−1 lost' );
