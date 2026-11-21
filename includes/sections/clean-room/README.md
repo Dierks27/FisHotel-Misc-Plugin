@@ -1072,7 +1072,8 @@ use**, so an order line, a stay and a product all say the same thing.
   value on the variations of the fish categories (attribute terms *and*
   values typed on a product), how many products use each, flagged when
   it is not in the standard list — what needs cleaning up. Nothing in
-  the section changes a product or a term.
+  this card changes a product or a term; the one thing in the section
+  that does is the owner's tool, *Tidy up the sizes* (below).
 - **What is stored.** A size is its slug plus a snapshot of its label
   (`size_slug`, `size_label`) on the order line and on the stay. A
   stored size that is no longer in the list still displays, marked *not
@@ -1086,6 +1087,199 @@ use**, so an order line, a stay and a product all say the same thing.
   rows, the order page and the product box; a `size` column in the stays
   and orders exports. The voice parser keeps ignoring size words: a
   spoken arrival has no size.
+
+### Tidy up the sizes
+
+A tool on **Settings → Sizes** that brings the shop's long list of sizes
+down to a short one. It is the owner's: `manage_options`, its own nonce,
+and it is not there at all unless WooCommerce is active. **Nothing runs
+by itself** — no cron, no activation hook, nothing on an upgrade: only
+its buttons do anything.
+
+1. **The short list** — plain lines, in the order the sizes should be
+   offered. It starts as `1-2"`, `2-3"`, `3-4"`, `4-5"`, `5"+`, `Small`,
+   `Medium`, `Large`, `Pair`, `All` (`Sizes_Tidy::DEFAULT_LIST`); a size
+   that has no term yet is created.
+2. **The map** — one row per size of the attribute (and per size typed
+   on a fish product), with how many products and variations use it and
+   where else it is stored, and a choice: a size of the short list,
+   *keep as it is*, or *take off the products*. A rule fills the choices
+   in and any row can be overruled:
+   - an inch range goes to the inch size that holds its midpoint, a tie
+     going to the lower one (`2-3.5"` → `2-3"`, `3-5"` → `3-4"`, `4-6"` →
+     `4-5"`, `5-7"` → `5"+`);
+   - an "and up" size goes to the inch size that starts at it, else the
+     one that holds it, and to the top size from the top size's start
+     upward (`3"+` → `3-4"`, `3.5"+` → `3-4"`, `6"+` → `5"+`) — one tick
+     keeps every "and up" size as it is instead;
+   - a size below the smallest goes to the smallest, flagged;
+   - a **word is never guessed into inches**: a word of the list stays,
+     an in-between word (`Small-Medium`, `Medium-Large`, `Large-XL`) is
+     taken off, a word no product uses is removed, any other word is
+     kept, flagged.
+
+   Inch sizes are recognised by their numbers and words by having none,
+   so the rule works for any short list.
+3. **Show what would change** — a dry run; nothing is written. It calls
+   out: **Clean** (a variation that only changes its size name); **Two
+   become one** (two switched-on variations of one fish would end up the
+   same size: the tool never merges or deletes variations — that fish is
+   left untouched and listed, until the one to keep is picked; the
+   others then get the same size and are switched off, kept, their stock
+   shown); **Typed on the product** (a custom "Size" attribute on a fish:
+   made a term of the attribute only for the fish that are ticked); the
+   fish that would be left with nothing to buy (on the fish page those
+   read "Currently unavailable — contact us", with no price and no
+   "Notify me" button, until a size is added); and the totals, e.g.
+   *31 sizes → 13 · 214 variations renamed · 12 products need a look · 0
+   deleted*.
+4. **Take off the products** never deletes a variation. It is switched
+   off — WooCommerce's own "Enabled" box unticked: not for sale, not on
+   the fish page — keeps its price, stock, SKU and number, and loses its
+   size; the product's own list loses the size too. A variation that
+   nobody can buy anyway is taken off at once: the ones **out of stock**
+   in one group, and — called out by themselves, with their stock,
+   because they are not sold out — the ones that are **not on the shop
+   but have stock** (the fish is a draft, or the variation is switched
+   off or has no price). One that is **for sale today** (in stock or on
+   backorder) is named with its stock, and the owner picks: **leave them
+   until they sell out** (the default — the size stays in the shop,
+   *retiring — N fish left*, until a later run or **Finish retiring…**
+   takes it off; nothing does so by itself), **move them to a size I
+   pick** (a dropdown per fish — a pick that lands on a size the fish
+   already sells makes it a fish that needs a look, and the pick is
+   shown in that box, where it can be changed or the one to keep
+   picked), or **take them off the shop now**. A
+   fish that lost a size goes on the **Sizes to fill in** list of
+   Settings → Sizes, with a link to its product, until the variation is
+   given a size again (or the row is ticked off).
+
+   Two things keep a live fish from coming off the shop unseen:
+   - **Sold as "any size".** A switched-on variation with no size of its
+     own, on a product that varies by size, sells every size the product
+     lists (WooCommerce lets the customer pick one and sells them this
+     variation). It counts as carrying each of them
+     (`Sizes_Tidy::any_size()`): in stock, it is named among the fish for
+     sale today and the size stays on its product, retiring; out of
+     stock, the size leaves the product's list — and when that leaves
+     the list empty the variation is switched off and listed like any
+     other. (A product that only *lists* sizes, without varying by them,
+     sells nothing through them.)
+   - **Stock is looked at again when a fish is written.** The preview
+     may be minutes old, and a run that stopped half-way hours. A
+     variation the plan takes off *because nobody could buy it* is
+     checked once more at that moment (`for_sale_now()`, read from the
+     database): if it is for sale by then — restocked, or its draft
+     published — it is left alone, its size stays on the product and in
+     the shop (retiring), and the last line of the run names it. Fish
+     the owner chose to take off although they were for sale are taken
+     off as shown.
+5. **Apply** — behind "I have a backup", a typed word and the preview's
+   token (the shop or a choice changed since the preview: preview
+   again). What stands in the way is said next to the Apply button,
+   where a second **Show what would change** is too; changing a choice
+   marks the preview out of date at once. A preview that finds nothing
+   to tidy (a second look, while fish still need one) has no Apply box,
+   but the same second **Show what would change** and the same notice:
+   picking the variation to keep is a choice like any other. It works
+   through the shop in
+   batches, shows how far it is, and survives a timeout: **Carry on**
+   picks up where it stopped, and every write sets an absolute value, so
+   a second click changes nothing. **While a tidy-up is not finished
+   there is no other Apply**: the list and the preview are put away, and
+   a request to apply other choices is refused — the run goes on with
+   the choices it was started with, or is undone first. (Only the very
+   preview it was started from — a double click — carries it on.)
+   Writes go through WooCommerce's own code: the
+   variation's size and status through its product object (which
+   rewrites its title and summary, its caches and the attribute lookup
+   table), the product's list through `WC_Product_Attribute` and
+   `save()`, its default size, `WC_Product_Variable::sync()`,
+   `wc_delete_product_transients()`; terms through `wp_insert_term()` /
+   `wp_delete_term()`; the short list's order as the attribute's custom
+   order (`wc_set_term_order()`). **Every other place that stores a
+   size** follows a size that *becomes* another: the stays and supplier
+   order lines here (`fh_stays`, `fh_order_lines`), the remembered box
+   shares (`fh_box_shares` — a share's key holds the size, and two
+   shares that land on one key become one: the latest wins, the order
+   counts add up, the lines that counted in them follow), the fish
+   requests (`fh_requests`), the lost-fish cases (`fh_lostfish_cases`,
+   with the kind key of a case without a product), the lines of *draft*
+   invoices (`fh_invoice_lines`) and the Packing section's size → bag map
+   (two sizes with different bags that become one are named, by the
+   bags' names). A size
+   that is *taken off* is **not** rewritten there: the fish in the tanks
+   keep the size they were given, shown as *not a standard size*. Only
+   then are the old terms deleted — each one only if no product and no
+   variation, of any kind and status, still uses it. **The trash
+   counts**: deleting a term takes it off whatever uses it, so a size a
+   product in the trash still uses stays in the list (the row says so),
+   out of the pickers, until that product is deleted for good or
+   restored and the tool is run again.
+   **Past orders are not touched**: an order line keeps
+   the size text it was bought with (WooCommerce looks the name up by
+   the slug it stored; the tool remembers the names of the sizes it
+   removed and `Sizes::order_size_name()` hands them back).
+   **Open baskets are not rewritten either — but WooCommerce empties
+   them of what changed**: a basket line remembers the variation as it
+   was when it went in, and WooCommerce takes a fish out of a basket
+   (`WC_Cart_Session`, "…has been removed from your cart because it has
+   since been modified", with a link to add it back) once its size has
+   another name, exactly as it does for one that is off the shop. A fish
+   that keeps its size — one left for sale until it sells out — stays in
+   the basket. The preview says so; a quiet hour is the time to run it.
+6. **Undo the last tidy-up** — before the first write a run saves a
+   complete record of what it is about to change: every variation's
+   attribute meta, title, summary and status, every product's attribute
+   list, default size and term relationships, every term it will delete
+   with its id, name, slug, order and meta, every stay, line, share and
+   setting it rewrites. Undo puts every one of those back exactly, then
+   lets WooCommerce refresh what it derives. Two things are not the
+   record's to say, because the shop goes on after a tidy-up:
+   - **a variation that was given another size since** (neither the one
+     the run set nor the one it had — the owner filled it in) is left as
+     it is, size, Enabled and all, and the last line of the undo names
+     it; its product's list keeps the size it carries. Undo never
+     touches a price, a stock count or a SKU either way;
+   - **a product's stock status, price range and "out of stock"
+     visibility** are WooCommerce's own sums over the variations as they
+     are *at the undo*. A fish that sold out since still reads sold out,
+     one that was restocked reads in stock; the recorded rows only come
+     back when WooCommerce works out the very same values.
+
+   The last three runs are
+   kept — a stack: the latest is undone first. The record lives in two
+   tables of its own, `{prefix}fh_sizes_tidy_runs` and
+   `{prefix}fh_sizes_tidy_items`, created the first time Apply is
+   pressed — never in an autoloaded option, and not part of the
+   section's own install.
+7. **Afterwards** the pickers show the short list, in its order: they
+   read the attribute. A size that is on its way out but still on a
+   product (retiring, or waiting for a product that needs a look) is
+   still a term; `Sizes::leaving()` leaves it out of the pickers. The
+   tool's own state — the short list, those sizes, the names of the ones
+   it removed — is the option `fishotel_cleanroom_sizes_tidy`, not
+   autoloaded.
+
+Where the code is: `Sizes_Tidy` (pure — the rule and the plan),
+`Sizes_Tidy_Run` (the run and Undo, on the `Sizes_Tidy_Shop` seam),
+`Sizes_Tidy_Site` (the real shop behind that seam), `Admin_Sizes_Tidy`
+(the card, its one AJAX action `fishotel_cleanroom_sizes_tidy`), the
+views `sizes-tidy*.php`, `js/sizes-tidy.js`, `css/sizes-tidy.css`.
+
+What it does not do: products in the trash are left alone — nothing on
+them is changed, and a size one of them still uses is not deleted; a
+published invoice keeps what it says, and a draft one keeps the price on
+its line (only a tank fish of a size that was taken off, added to an
+invoice later, finds no shop price for that size any more —
+`Invoices\Shop::price_for()` looks for a switched-on variation of that
+size — and gets the species price or one typed by hand); the event notes
+of a stay keep the size they were written with.
+
+The pickers' order, while here: WooCommerce has kept a term's custom
+order in the term meta `order` since 3.6 (`order_<taxonomy>` before).
+`Store::size_terms()` reads the newer key, and the older one when the
+newer is not there.
 
 ## Percent of a box
 
@@ -1876,6 +2070,12 @@ clean-room/
 │                           of a box, the per-box summary, display helpers
 ├── class-sizes.php         PURE: the standard sizes (the product attribute that matches "size", else
 │                           a typed list), a stored size that left the list, the sizes-in-use report
+├── class-sizes-tidy.php    PURE: "Tidy up the sizes" — the short list, the rule that suggests what each
+│                           size becomes, the plan (the dry run), the other places a size is stored
+├── class-sizes-tidy-run.php   the run: Apply in batches and Undo, on the Sizes_Tidy_Shop seam
+├── class-sizes-tidy-site.php  the real shop behind that seam: WooCommerce's own code for the writes,
+│                           the record's two tables (created by Apply only)
+├── class-admin-sizes-tidy.php  the tool's card on Settings → Sizes and its AJAX (manage_options)
 ├── class-box-shares.php    the remembered shares: keys, what a saved line writes and gives back, the
 │                           suggestion and "How full" (takes the store as a parameter)
 ├── class-identify.php      unknown ("??") and mislabeled fish: the fish a correction names, the one
@@ -1924,6 +2124,8 @@ clean-room/
 │                           the Board and Settings)
 ├── css/clean-room-admin.css, js/clean-room-admin.js
 ├── css/medications-admin.css, js/medications-admin.js   Settings → Medications, the Board's Calculator
+├── css/sizes-tidy.css, js/sizes-tidy.js   Settings → Sizes → Tidy up the sizes
+├── views/sizes-tidy.php, sizes-tidy-plan.php, sizes-tidy-status.php   its card, its dry run, its status panel
 ├── css/temp-tanks-admin.css, js/temp-tanks-admin.js   the Temporary area and the To do tab
 ├── views/front-desk.php, board.php, stays.php, arrivals.php, order.php, species.php, stats.php,
 │          events.php, settings.php, import.php, tabs.php, labels.php, meta-box.php,
