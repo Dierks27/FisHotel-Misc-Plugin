@@ -23,7 +23,12 @@
  * Undo puts back what a record says, exactly — the rows themselves
  * (post title, summary, status and dates, the meta rows with their
  * ids, a deleted term with its id, name, slug, order and meta) —, then
- * lets WooCommerce refresh what it derives from them.
+ * lets WooCommerce refresh what it derives from them. What WooCommerce
+ * works out from the variations — a product's stock status, its price
+ * range, whether it is hidden as out of stock — is WooCommerce's to
+ * say at the moment of the undo, never the record's: fish sell and are
+ * restocked between a tidy-up and its undo. And a variation that was
+ * given another size since is left as it is (product_restore()).
  *
  * The record lives in two tables of its own, {prefix}fh_sizes_tidy_runs
  * and {prefix}fh_sizes_tidy_items, created the first time Apply is
@@ -78,9 +83,14 @@ class Sizes_Tidy_Site implements Sizes_Tidy_Shop {
 	);
 
 	/**
-	 * The product meta a record keeps, row by row.
+	 * The product meta a record keeps, row by row: the product's own
+	 * (OWN_META — put back as recorded) and what WooCommerce derives from
+	 * the variations (DERIVED_META — put back only when WooCommerce works
+	 * out the very same values at the undo).
 	 */
-	const PARENT_META = array( '_product_attributes', '_default_attributes', '_price', '_stock_status', Sizes_Tidy::FILL_META );
+	const OWN_META     = array( '_product_attributes', '_default_attributes', Sizes_Tidy::FILL_META );
+	const DERIVED_META = array( '_price', '_stock_status' );
+	const PARENT_META  = array( '_product_attributes', '_default_attributes', '_price', '_stock_status', Sizes_Tidy::FILL_META );
 
 	/**
 	 * Row caps of the readers.
@@ -149,7 +159,8 @@ class Sizes_Tidy_Site implements Sizes_Tidy_Shop {
 	/**
 	 * Everything the plan is made of — read only, in a handful of
 	 * queries whatever the size of the shop. Products in the trash are
-	 * left out.
+	 * left out; the sizes they still use are counted (`trashed`), so the
+	 * plan leaves those sizes in the shop.
 	 *
 	 * @param string $taxonomy The size attribute's taxonomy.
 	 * @return array
@@ -163,6 +174,7 @@ class Sizes_Tidy_Site implements Sizes_Tidy_Shop {
 			'orderby'  => 'menu_order',
 			'terms'    => array(),
 			'orders'   => array(),
+			'trashed'  => array(),
 			'stores'   => array(),
 			'packing'  => array(),
 			'state'    => array(),
@@ -297,6 +309,7 @@ class Sizes_Tidy_Site implements Sizes_Tidy_Shop {
 				'status'     => (string) $post['post_status'],
 				'fish'       => $is_fish,
 				'sizes'      => isset( $lists[ $pid ] ) ? $lists[ $pid ] : array(),
+				'varies'     => isset( $attributes[ $taxonomy ] ) && is_array( $attributes[ $taxonomy ] ) && ! empty( $attributes[ $taxonomy ]['is_variation'] ),
 				'default'    => (string) ( $defaults[ $taxonomy ] ?? '' ),
 				'typed'      => $typed,
 				'fill'       => isset( $meta[ $pid ][ Sizes_Tidy::FILL_META ] ) ? $meta[ $pid ][ Sizes_Tidy::FILL_META ] : array(),
@@ -304,6 +317,11 @@ class Sizes_Tidy_Site implements Sizes_Tidy_Shop {
 			);
 		}
 		unset( $variations, $meta, $posts, $variation_key );
+
+		// The sizes a product in the trash still lists, or one of its variations still carries.
+		foreach ( $this->trashed_uses( $taxonomy ) as $slug => $uses ) {
+			$shop['trashed'][ (string) $slug ] = (int) $uses;
+		}
 
 		// Past order lines per size.
 		$itemmeta = $wpdb->prefix . 'woocommerce_order_itemmeta';
@@ -333,6 +351,27 @@ class Sizes_Tidy_Site implements Sizes_Tidy_Shop {
 		}
 
 		return $shop;
+	}
+
+	/**
+	 * How often each size is used by a product in the trash: listed on
+	 * it, or carried by one of its variations (WooCommerce puts those in
+	 * the trash with it).
+	 *
+	 * @param string $taxonomy Taxonomy.
+	 * @return array<string,int> slug → uses.
+	 */
+	private function trashed_uses( $taxonomy ) {
+		global $wpdb;
+
+		$out = array();
+		foreach ( (array) $wpdb->get_results( $wpdb->prepare( 'SELECT t.slug, COUNT(*) AS uses FROM ' . $wpdb->term_relationships . ' tr INNER JOIN ' . $wpdb->term_taxonomy . ' tt ON tt.term_taxonomy_id = tr.term_taxonomy_id INNER JOIN ' . $wpdb->terms . ' t ON t.term_id = tt.term_id INNER JOIN ' . $wpdb->posts . " p ON p.ID = tr.object_id WHERE tt.taxonomy = %s AND p.post_type = 'product' AND p.post_status = 'trash' GROUP BY t.slug", (string) $taxonomy ), ARRAY_A ) as $row ) {
+			$out[ (string) $row['slug'] ] = (int) $row['uses'];
+		}
+		foreach ( (array) $wpdb->get_results( $wpdb->prepare( 'SELECT pm.meta_value AS slug, COUNT(*) AS uses FROM ' . $wpdb->postmeta . ' pm INNER JOIN ' . $wpdb->posts . ' v ON v.ID = pm.post_id INNER JOIN ' . $wpdb->posts . " p ON p.ID = v.post_parent WHERE pm.meta_key = %s AND pm.meta_value <> '' AND v.post_type = 'product_variation' AND p.post_type = 'product' AND p.post_status = 'trash' GROUP BY pm.meta_value", 'attribute_' . (string) $taxonomy ), ARRAY_A ) as $row ) {
+			$out[ (string) $row['slug'] ] = ( $out[ (string) $row['slug'] ] ?? 0 ) + (int) $row['uses'];
+		}
+		return $out;
 	}
 
 	/* ============================================================== */
@@ -373,7 +412,9 @@ class Sizes_Tidy_Site implements Sizes_Tidy_Shop {
 
 	/**
 	 * How many products list a term and how many variations carry it —
-	 * of every product type and status but the trash.
+	 * of every product type and status, the trash too: deleting a term
+	 * takes it off whatever uses it, and a product in the trash is left
+	 * alone.
 	 *
 	 * @param string $taxonomy Taxonomy.
 	 * @param string $slug     Slug.
@@ -382,8 +423,8 @@ class Sizes_Tidy_Site implements Sizes_Tidy_Shop {
 	public function term_uses( $taxonomy, $slug ) {
 		global $wpdb;
 
-		$listed  = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . $wpdb->term_relationships . ' tr INNER JOIN ' . $wpdb->term_taxonomy . ' tt ON tt.term_taxonomy_id = tr.term_taxonomy_id INNER JOIN ' . $wpdb->terms . ' t ON t.term_id = tt.term_id INNER JOIN ' . $wpdb->posts . " p ON p.ID = tr.object_id WHERE tt.taxonomy = %s AND t.slug = %s AND p.post_status NOT IN ('trash','auto-draft')", (string) $taxonomy, (string) $slug ) );
-		$carried = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . $wpdb->postmeta . ' pm INNER JOIN ' . $wpdb->posts . ' v ON v.ID = pm.post_id INNER JOIN ' . $wpdb->posts . " p ON p.ID = v.post_parent WHERE pm.meta_key = %s AND pm.meta_value = %s AND v.post_type = 'product_variation' AND v.post_status IN ('publish','private') AND p.post_status NOT IN ('trash','auto-draft')", 'attribute_' . $taxonomy, (string) $slug ) );
+		$listed  = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . $wpdb->term_relationships . ' tr INNER JOIN ' . $wpdb->term_taxonomy . ' tt ON tt.term_taxonomy_id = tr.term_taxonomy_id INNER JOIN ' . $wpdb->terms . ' t ON t.term_id = tt.term_id INNER JOIN ' . $wpdb->posts . " p ON p.ID = tr.object_id WHERE tt.taxonomy = %s AND t.slug = %s AND p.post_status <> 'auto-draft'", (string) $taxonomy, (string) $slug ) );
+		$carried = (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(*) FROM ' . $wpdb->postmeta . ' pm INNER JOIN ' . $wpdb->posts . ' v ON v.ID = pm.post_id INNER JOIN ' . $wpdb->posts . " p ON p.ID = v.post_parent WHERE pm.meta_key = %s AND pm.meta_value = %s AND v.post_type = 'product_variation' AND (v.post_status IN ('publish','private') OR p.post_status = 'trash') AND p.post_status <> 'auto-draft'", 'attribute_' . $taxonomy, (string) $slug ) );
 
 		return $listed + $carried;
 	}
@@ -639,7 +680,9 @@ class Sizes_Tidy_Site implements Sizes_Tidy_Shop {
 
 	/**
 	 * A product and its variations as stored — everything the run, or
-	 * WooCommerce in its wake, may change, row by row.
+	 * WooCommerce in its wake, may change, row by row. (The product's
+	 * "out of stock" visibility is not recorded: it follows the stock
+	 * status WooCommerce works out, at the undo as at any other time.)
 	 *
 	 * @param string $taxonomy      Taxonomy.
 	 * @param int    $product_id    Product id.
@@ -660,8 +703,7 @@ class Sizes_Tidy_Site implements Sizes_Tidy_Shop {
 			'post'       => $post,
 			'meta'       => $this->meta_rows( $product_id, self::PARENT_META ),
 			'terms'      => array(
-				(string) $taxonomy   => $this->relationships( $product_id, (string) $taxonomy ),
-				'product_visibility' => $this->relationships( $product_id, 'product_visibility' ),
+				(string) $taxonomy => $this->relationships( $product_id, (string) $taxonomy ),
 			),
 			'variations' => array(),
 		);
@@ -677,6 +719,46 @@ class Sizes_Tidy_Site implements Sizes_Tidy_Shop {
 		}
 
 		return $record;
+	}
+
+	/**
+	 * Which of some variations of a product can be bought right now —
+	 * read from the database at this moment, not from a cache: the
+	 * product and the variation published, a price, in stock or on
+	 * backorder (Sizes_Tidy::for_sale()).
+	 *
+	 * @param string $taxonomy      Taxonomy.
+	 * @param int    $product_id    Product id.
+	 * @param int[]  $variation_ids Variation ids.
+	 * @return int[]
+	 */
+	public function for_sale_now( $taxonomy, $product_id, array $variation_ids ) {
+		global $wpdb;
+
+		$ids = array_values( array_filter( array_map( 'intval', $variation_ids ) ) );
+		if ( ! $ids ) {
+			return array();
+		}
+		$in   = implode( ',', $ids );
+		$rows = (array) $wpdb->get_results(
+			$wpdb->prepare(
+				'SELECT v.ID, v.post_status, p.post_status AS product_status, pr.meta_value AS price, st.meta_value AS stock_status FROM ' . $wpdb->posts . ' v INNER JOIN ' . $wpdb->posts . ' p ON p.ID = v.post_parent LEFT JOIN ' . $wpdb->postmeta . " pr ON pr.post_id = v.ID AND pr.meta_key = '_price' LEFT JOIN " . $wpdb->postmeta . " st ON st.post_id = v.ID AND st.meta_key = '_stock_status' WHERE v.ID IN ({$in}) AND v.post_parent = %d AND v.post_type = 'product_variation'", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- integers.
+				(int) $product_id
+			),
+			ARRAY_A
+		);
+		$out  = array();
+		foreach ( $rows as $row ) {
+			$variation = array(
+				'status'       => (string) $row['post_status'],
+				'price'        => (string) $row['price'],
+				'stock_status' => null !== $row['stock_status'] && '' !== (string) $row['stock_status'] ? (string) $row['stock_status'] : 'instock',
+			);
+			if ( Sizes_Tidy::for_sale( array( 'status' => (string) $row['product_status'] ), $variation ) ) {
+				$out[ (int) $row['ID'] ] = (int) $row['ID'];
+			}
+		}
+		return array_values( $out );
 	}
 
 	/**
@@ -791,29 +873,78 @@ class Sizes_Tidy_Site implements Sizes_Tidy_Shop {
 	}
 
 	/**
-	 * Put a product and its variations back exactly as recorded. First
-	 * through WooCommerce (so its caches, the lookup tables and whatever
-	 * listens to a save follow), then the rows themselves: the titles,
-	 * summaries, statuses and dates, and the meta rows with their ids.
+	 * Put a product and its variations back as recorded. First through
+	 * WooCommerce (so its caches, the lookup tables and whatever listens
+	 * to a save follow), then the rows themselves: the titles, summaries,
+	 * statuses and dates, and the meta rows with their ids.
+	 *
+	 * Two things are not the record's to say, because the shop went on
+	 * after the tidy-up:
+	 *  - a variation the run changed that has ANOTHER size by now —
+	 *    neither the one the run set nor the one it had — was given that
+	 *    size by somebody since. It is left as it is (size, Enabled,
+	 *    title) and returned, so the tool can name it. The product's list
+	 *    keeps every size one of its variations carries;
+	 *  - the product's stock status, its price range and whether it is
+	 *    hidden as out of stock are WooCommerce's sums over the
+	 *    variations as they are NOW. They are left as its sync leaves
+	 *    them; the recorded rows only come back when they say the same.
+	 *
+	 * Never touched: a variation's price, stock and SKU.
 	 *
 	 * @param string $taxonomy   Taxonomy.
 	 * @param int    $product_id Product id.
 	 * @param array  $record     product_get().
-	 * @return bool
+	 * @param array  $change     What the run set (the plan's product: vars, convert, …).
+	 * @return array[] The variations left as they are: variation, product, title, size, label.
 	 */
-	public function product_restore( $taxonomy, $product_id, array $record ) {
+	public function product_restore( $taxonomy, $product_id, array $record, array $change = array() ) {
 		global $wpdb;
 
 		$taxonomy   = (string) $taxonomy;
 		$product_id = (int) $product_id;
-		if ( ! $wpdb->get_var( $wpdb->prepare( 'SELECT ID FROM ' . $wpdb->posts . " WHERE ID = %d AND post_type = 'product'", $product_id ) ) ) {
-			return false;
+		$title      = $wpdb->get_var( $wpdb->prepare( 'SELECT post_title FROM ' . $wpdb->posts . " WHERE ID = %d AND post_type = 'product'", $product_id ) );
+		if ( null === $title ) {
+			return array();
+		}
+
+		// Given another size since the run: left as it is.
+		$kept = array();
+		$set  = isset( $change['vars'] ) && is_array( $change['vars'] ) ? $change['vars'] : array();
+		foreach ( (array) ( $record['variations'] ?? array() ) as $vid => $was ) {
+			$vid = (int) $vid;
+			if ( ( isset( $was['changed'] ) && ! $was['changed'] ) || ! isset( $set[ $vid ] ) ) {
+				continue;
+			}
+			$had = '';
+			foreach ( (array) ( $was['meta'] ?? array() ) as $row ) {
+				if ( 'attribute_' . $taxonomy === (string) $row['meta_key'] ) {
+					$had = (string) $row['meta_value'];
+				}
+			}
+			$now = $wpdb->get_var( $wpdb->prepare( 'SELECT pm.meta_value FROM ' . $wpdb->postmeta . ' pm INNER JOIN ' . $wpdb->posts . " v ON v.ID = pm.post_id WHERE pm.post_id = %d AND pm.meta_key = %s AND v.post_type = 'product_variation' ORDER BY pm.meta_id DESC LIMIT 1", $vid, 'attribute_' . $taxonomy ) );
+			$now = null === $now ? '' : (string) $now;
+			if ( $now !== (string) ( $set[ $vid ]['to'] ?? '' ) && $now !== $had ) {
+				$term         = get_term_by( 'slug', $now, $taxonomy );
+				$kept[ $vid ] = array(
+					'variation' => $vid,
+					'product'   => $product_id,
+					'title'     => Sizes::plain( (string) $title ),
+					'size'      => $now,
+					'label'     => $term && ! is_wp_error( $term ) ? Sizes::plain( (string) $term->name ) : $now,
+				);
+			}
+		}
+		if ( $kept && isset( $change['convert'] ) && is_array( $change['convert'] ) ) {
+			// A typed size that was made a size of the list goes back whole or not at all: the
+			// product's own attribute and its variations' have to agree.
+			return array_values( $kept );
 		}
 
 		foreach ( (array) ( $record['variations'] ?? array() ) as $vid => $was ) {
 			$vid = (int) $vid;
-			if ( isset( $was['changed'] ) && ! $was['changed'] ) {
-				continue; // A variation the run did not change: only its rows, at the end.
+			if ( ( isset( $was['changed'] ) && ! $was['changed'] ) || isset( $kept[ $vid ] ) ) {
+				continue; // One the run did not change gets only its rows, at the end; one given a size since, nothing.
 			}
 			$variation = wc_get_product( $vid );
 			if ( ! $variation instanceof \WC_Product_Variation ) {
@@ -838,19 +969,49 @@ class Sizes_Tidy_Site implements Sizes_Tidy_Shop {
 			clean_post_cache( $vid );
 		}
 
-		// The product's own list: its terms, then its meta rows.
-		$term_ids = array();
+		// The product's own list — its terms as recorded, and a size one of its variations carries
+		// now that none carried then (a variation given a size, or added, since the run: it stays
+		// listed, or the fish page could not offer it) —, then its meta rows.
+		$slugs = array();
 		foreach ( (array) ( $record['terms'][ $taxonomy ] ?? array() ) as $row ) {
-			$term = get_term_by( 'slug', (string) $row['slug'], $taxonomy );
+			$slugs[] = (string) $row['slug'];
+		}
+		$then = array();
+		foreach ( (array) ( $record['variations'] ?? array() ) as $was ) {
+			foreach ( (array) ( $was['meta'] ?? array() ) as $row ) {
+				if ( 'attribute_' . $taxonomy === (string) $row['meta_key'] ) {
+					$then[ (string) $row['meta_value'] ] = true;
+				}
+			}
+		}
+		$carried = $wpdb->get_col( $wpdb->prepare( 'SELECT DISTINCT pm.meta_value FROM ' . $wpdb->postmeta . ' pm INNER JOIN ' . $wpdb->posts . " v ON v.ID = pm.post_id WHERE v.post_parent = %d AND v.post_type = 'product_variation' AND v.post_status IN ('publish','private') AND pm.meta_key = %s AND pm.meta_value <> '' ORDER BY v.menu_order ASC, v.ID ASC", $product_id, 'attribute_' . $taxonomy ) );
+		foreach ( (array) $carried as $slug ) {
+			if ( ! isset( $then[ (string) $slug ] ) && ! in_array( (string) $slug, $slugs, true ) ) {
+				$slugs[] = (string) $slug;
+			}
+		}
+		$term_ids = array();
+		foreach ( $slugs as $slug ) {
+			$term = get_term_by( 'slug', $slug, $taxonomy );
 			if ( $term && ! is_wp_error( $term ) ) {
 				$term_ids[] = (int) $term->term_id;
 			}
 		}
 		wp_set_object_terms( $product_id, $term_ids, $taxonomy );
-		$this->meta_restore( $product_id, self::PARENT_META, false, (array) ( $record['meta'] ?? array() ) );
+		$own = array();
+		$sum = array();
+		foreach ( (array) ( $record['meta'] ?? array() ) as $row ) {
+			if ( in_array( (string) $row['meta_key'], self::DERIVED_META, true ) ) {
+				$sum[] = $row;
+			} else {
+				$own[] = $row;
+			}
+		}
+		$this->meta_restore( $product_id, self::OWN_META, false, $own );
 		clean_post_cache( $product_id );
 
-		// WooCommerce's own: the prices and stock status it derives, its caches, its lookup table.
+		// WooCommerce's own: the prices and the stock status it works out from the variations as
+		// they are now, its caches, its lookup tables, the "out of stock" visibility.
 		$product = wc_get_product( $product_id );
 		if ( $product instanceof \WC_Product_Variable ) {
 			\WC_Product_Variable::sync( $product_id );
@@ -859,14 +1020,20 @@ class Sizes_Tidy_Site implements Sizes_Tidy_Shop {
 		$this->refresh_lookup( $product_id );
 		$this->synced( $product_id );
 
-		// And the rows again, should the sync have read them differently from how they were.
-		$this->meta_restore( $product_id, self::PARENT_META, false, (array) ( $record['meta'] ?? array() ) );
-		$visibility = array();
-		foreach ( (array) ( $record['terms']['product_visibility'] ?? array() ) as $row ) {
-			$visibility[] = (string) $row['slug'];
-		}
-		if ( taxonomy_exists( 'product_visibility' ) ) {
-			wp_set_object_terms( $product_id, $visibility, 'product_visibility' );
+		// The product's own rows again, should the save have written them differently. What
+		// WooCommerce worked out stays; its recorded rows come back only when they say the very
+		// same (then nothing changes but the rows' ids — the product is as it was, row for row).
+		$this->meta_restore( $product_id, self::OWN_META, false, $own );
+		$pairs = static function ( array $rows ) {
+			$out = array();
+			foreach ( $rows as $row ) {
+				$out[] = (string) $row['meta_key'] . '=' . (string) $row['meta_value'];
+			}
+			sort( $out );
+			return $out;
+		};
+		if ( $pairs( $this->meta_rows( $product_id, self::DERIVED_META ) ) === $pairs( $sum ) ) {
+			$this->meta_restore( $product_id, self::DERIVED_META, false, $sum );
 		}
 		if ( is_array( $record['post'] ?? null ) ) {
 			$wpdb->update(
@@ -883,17 +1050,9 @@ class Sizes_Tidy_Site implements Sizes_Tidy_Shop {
 		// The variations' own rows, last: WooCommerce rewrites the summary line of every variation of
 		// a product whose sizes change. One the run did not change gets its row back only if its
 		// sizes are still what they were — the owner may have given it another since.
-		$pairs = static function ( array $rows ) {
-			$out = array();
-			foreach ( $rows as $row ) {
-				$out[] = (string) $row['meta_key'] . '=' . (string) $row['meta_value'];
-			}
-			sort( $out );
-			return $out;
-		};
 		foreach ( (array) ( $record['variations'] ?? array() ) as $vid => $was ) {
 			$vid = (int) $vid;
-			if ( ! is_array( $was['post'] ?? null ) || ! $wpdb->get_var( $wpdb->prepare( 'SELECT ID FROM ' . $wpdb->posts . " WHERE ID = %d AND post_type = 'product_variation'", $vid ) ) ) {
+			if ( isset( $kept[ $vid ] ) || ! is_array( $was['post'] ?? null ) || ! $wpdb->get_var( $wpdb->prepare( 'SELECT ID FROM ' . $wpdb->posts . " WHERE ID = %d AND post_type = 'product_variation'", $vid ) ) ) {
 				continue;
 			}
 			$row = $was['post'];
@@ -907,7 +1066,7 @@ class Sizes_Tidy_Site implements Sizes_Tidy_Shop {
 			clean_post_cache( $vid );
 		}
 
-		return true;
+		return array_values( $kept );
 	}
 
 	/**
@@ -1568,7 +1727,9 @@ class Sizes_Tidy_Site implements Sizes_Tidy_Shop {
 	}
 
 	/**
-	 * How many variations that are for sale today carry each size.
+	 * How many variations that are for sale today carry each size — one
+	 * sold as "any size" carries every size its product lists that no
+	 * variation of its own carries (Sizes_Tidy::any_size()).
 	 *
 	 * @param string   $taxonomy Taxonomy.
 	 * @param string[] $slugs    Slugs.
@@ -1577,16 +1738,49 @@ class Sizes_Tidy_Site implements Sizes_Tidy_Shop {
 	public function retiring_counts( $taxonomy, array $slugs ) {
 		global $wpdb;
 
-		$slugs = array_values( array_map( 'strval', $slugs ) );
+		$taxonomy = (string) $taxonomy;
+		$slugs    = array_values( array_map( 'strval', $slugs ) );
 		if ( ! $slugs ) {
 			return array();
 		}
 		$in     = implode( ',', array_fill( 0, count( $slugs ), '%s' ) );
-		$params = array_merge( array( 'attribute_' . (string) $taxonomy ), $slugs );
+		$params = array_merge( array( 'attribute_' . $taxonomy ), $slugs );
 		$out    = array();
 		foreach ( (array) $wpdb->get_results( $wpdb->prepare( 'SELECT pm.meta_value AS slug, COUNT(*) AS fish FROM ' . $wpdb->postmeta . ' pm INNER JOIN ' . $wpdb->posts . " v ON v.ID = pm.post_id AND v.post_type = 'product_variation' AND v.post_status = 'publish' INNER JOIN " . $wpdb->posts . " p ON p.ID = v.post_parent AND p.post_status = 'publish' INNER JOIN " . $wpdb->postmeta . " pr ON pr.post_id = v.ID AND pr.meta_key = '_price' AND pr.meta_value <> '' LEFT JOIN " . $wpdb->postmeta . " st ON st.post_id = v.ID AND st.meta_key = '_stock_status' WHERE pm.meta_key = %s AND pm.meta_value IN ({$in}) AND (st.meta_value IS NULL OR st.meta_value <> 'outofstock') GROUP BY pm.meta_value", $params ), ARRAY_A ) as $row ) { // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
 			$out[ (string) $row['slug'] ] = (int) $row['fish'];
 		}
+
+		// The published products that list one of those sizes, for the fish sold as "any size".
+		$listing = array();
+		foreach ( (array) $wpdb->get_results( $wpdb->prepare( 'SELECT tr.object_id, t.slug FROM ' . $wpdb->term_relationships . ' tr INNER JOIN ' . $wpdb->term_taxonomy . ' tt ON tt.term_taxonomy_id = tr.term_taxonomy_id INNER JOIN ' . $wpdb->terms . ' t ON t.term_id = tt.term_id INNER JOIN ' . $wpdb->posts . " p ON p.ID = tr.object_id AND p.post_type = 'product' AND p.post_status = 'publish' WHERE tt.taxonomy = %s AND t.slug IN ({$in}) LIMIT %d", array_merge( array( $taxonomy ), $slugs, array( self::PRODUCTS_LIMIT ) ) ), ARRAY_A ) as $row ) { // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare
+			$listing[ (int) $row['object_id'] ][] = (string) $row['slug'];
+		}
+		foreach ( $listing as $product_id => $listed ) {
+			$attributes = get_post_meta( $product_id, '_product_attributes', true );
+			$product    = array(
+				'status'     => 'publish',
+				'sizes'      => $listed,
+				'varies'     => is_array( $attributes ) && isset( $attributes[ $taxonomy ] ) && is_array( $attributes[ $taxonomy ] ) && ! empty( $attributes[ $taxonomy ]['is_variation'] ),
+				'variations' => array(),
+			);
+			$own        = array();
+			foreach ( (array) $wpdb->get_results( $wpdb->prepare( 'SELECT v.ID, v.post_status, sz.meta_value AS size, pr.meta_value AS price, st.meta_value AS stock_status FROM ' . $wpdb->posts . ' v LEFT JOIN ' . $wpdb->postmeta . ' sz ON sz.post_id = v.ID AND sz.meta_key = %s LEFT JOIN ' . $wpdb->postmeta . " pr ON pr.post_id = v.ID AND pr.meta_key = '_price' LEFT JOIN " . $wpdb->postmeta . " st ON st.post_id = v.ID AND st.meta_key = '_stock_status' WHERE v.post_parent = %d AND v.post_type = 'product_variation' AND v.post_status IN ('publish','private')", 'attribute_' . $taxonomy, $product_id ), ARRAY_A ) as $row ) {
+				$own[ (string) $row['size'] ]              = true;
+				$product['variations'][ (int) $row['ID'] ] = array(
+					'status'       => (string) $row['post_status'],
+					'attrs'        => array( $taxonomy => (string) $row['size'] ),
+					'price'        => (string) $row['price'],
+					'stock_status' => null !== $row['stock_status'] && '' !== (string) $row['stock_status'] ? (string) $row['stock_status'] : 'instock',
+				);
+			}
+			$sellers = count( array_filter( Sizes_Tidy::any_size( $product, $taxonomy ) ) );
+			foreach ( $sellers > 0 ? $listed : array() as $slug ) {
+				if ( ! isset( $own[ $slug ] ) ) {
+					$out[ $slug ] = ( $out[ $slug ] ?? 0 ) + $sellers;
+				}
+			}
+		}
+
 		return $out;
 	}
 }

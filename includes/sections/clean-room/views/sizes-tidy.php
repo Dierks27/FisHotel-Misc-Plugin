@@ -4,6 +4,7 @@
  * Only an owner sees it, and only while WooCommerce is active.
  *
  * @var string $taxonomy The size attribute's taxonomy ('' = the shop has none).
+ * @var string $label    The attribute's name as the shop shows it ("Size").
  * @var array  $status   Admin_Sizes_Tidy::status().
  * @var string $nonce    The tool's nonce.
  *
@@ -28,11 +29,12 @@ use FisHotel\Misc\Sections\Clean_Room\Admin_Sizes_Tidy;
 	<?php else : ?>
 		<p class="fh-cr-sub">
 			<?php
-			/* translators: %s: the attribute's taxonomy */
-			echo esc_html( sprintf( __( 'It works on the product attribute in use above (%s) — on every product that uses it, fish or not — and on sizes typed on a fish product. Other attributes are never touched.', 'fishotel-misc-plugin' ), $taxonomy ) );
+			/* translators: %s: the attribute's name, e.g. Size */
+			echo esc_html( sprintf( __( 'It works on the shop\'s "%s" attribute — the one in use above — on every product that uses it, fish or not, and on sizes typed on a fish product. Other attributes are never touched.', 'fishotel-misc-plugin' ), $label ) );
 			?>
 		</p>
-		<form class="fh-tidy__form" method="post" action="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>" onsubmit="return false;">
+		<p class="fh-cr-muted fh-tidy__held" <?php echo $status['open'] ? '' : 'hidden'; ?>><?php esc_html_e( 'A tidy-up is not finished — see below. It goes on with the choices it was started with: carry on with it, or undo it. The list and the preview come back here once that is done.', 'fishotel-misc-plugin' ); ?></p>
+		<form class="fh-tidy__form" method="post" action="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>" onsubmit="return false;" <?php echo $status['open'] ? 'hidden' : ''; ?>>
 			<h3 class="fh-cr-h3"><?php esc_html_e( '1. The sizes the shop should have', 'fishotel-misc-plugin' ); ?></h3>
 			<p class="fh-cr-sub"><?php esc_html_e( 'One size per line, in the order they should be offered. Inch sizes first, then words — or however you like. A size that does not exist yet is created.', 'fishotel-misc-plugin' ); ?></p>
 			<p>

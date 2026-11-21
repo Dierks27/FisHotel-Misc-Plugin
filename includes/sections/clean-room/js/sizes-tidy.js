@@ -8,6 +8,13 @@
  * is. A step that fails is asked again a few times; after that the page
  * says it stopped, and "Carry on" picks it up where it was.
  *
+ * What stands between a click on "Tidy up the sizes now" and the server
+ * is said next to that button, not at the top of the tool a long scroll
+ * away: the backup tick, the word, a choice changed since the preview
+ * (the preview is then out of date — there is a second "Show what would
+ * change" right there). While a tidy-up is not finished the list and
+ * the preview are put away: it is carried on, or undone, first.
+ *
  * The helpers are exported for the node test; the wiring only runs in
  * the browser.
  */
@@ -62,6 +69,27 @@
 			out[ 'over[' + key + ']' ] = over[ key ];
 		} );
 		return out;
+	}
+
+	/**
+	 * What stands in the way of Apply, checked in the page before the
+	 * server is asked (which checks it all again).
+	 *
+	 * @param {Object} state backup (ticked), word (as typed), expect (the word to type), stale (a choice
+	 *                       changed since the preview).
+	 * @return {string} '' when nothing does, else needBackup | needWord | stale.
+	 */
+	function blocked( state ) {
+		if ( state && state.stale ) {
+			return 'stale';
+		}
+		if ( ! state || ! state.backup ) {
+			return 'needBackup';
+		}
+		if ( String( state.word || '' ).trim().toUpperCase() !== String( state.expect || '' ).toUpperCase() ) {
+			return 'needWord';
+		}
+		return '';
 	}
 
 	/**
@@ -126,7 +154,8 @@
 		if ( ! $root.length ) {
 			return;
 		}
-		var busy = false;
+		var busy  = false;
+		var stale = false;
 
 		function post( data ) {
 			return new Promise( function ( resolve, reject ) {
@@ -143,7 +172,30 @@
 		}
 
 		function say( text, bad ) {
-			$root.find( '.fh-tidy__message' ).text( text || '' ).prop( 'hidden', ! text ).toggleClass( 'fh-tidy__message--bad', !! bad );
+			$root.find( '.fh-tidy__message' ).not( '.fh-tidy__apply-message' ).text( text || '' ).prop( 'hidden', ! text ).toggleClass( 'fh-tidy__message--bad', !! bad );
+		}
+
+		// About Apply: said next to the Apply button (at the top when there is no Apply box).
+		function sayApply( text ) {
+			var $at = $root.find( '.fh-tidy__apply-message' );
+			if ( ! $at.length ) {
+				say( text, true );
+				return;
+			}
+			$at.text( text || '' ).prop( 'hidden', ! text );
+		}
+
+		// A tidy-up that is not finished comes first: the list and the preview are put away until it
+		// is carried on or undone.
+		function held() {
+			var open = $root.find( '.fh-tidy__status .fh-tidy__continue' ).length > 0;
+			$root.find( '.fh-tidy__form' ).prop( 'hidden', open );
+			$root.find( '.fh-tidy__held' ).prop( 'hidden', ! open );
+		}
+
+		function status( html ) {
+			$root.find( '.fh-tidy__status' ).html( html );
+			held();
 		}
 
 		function progress( text ) {
@@ -178,6 +230,7 @@
 					return;
 				}
 				say( '' );
+				stale = false;
 				$root.find( '.fh-tidy__result' ).html( reply.data.html );
 			} ).catch( function () {
 				lock( false );
@@ -195,7 +248,7 @@
 				lock( false );
 				$root.find( '.fh-tidy__result' ).empty();
 				if ( data.status ) {
-					$root.find( '.fh-tidy__status' ).html( data.status );
+					status( data.status );
 				}
 				progress( data.message );
 			} ).catch( function () {
@@ -203,12 +256,14 @@
 				progress( cfg.i18n.stopped );
 				post( { op: 'status' } ).then( function ( reply ) {
 					if ( reply && reply.success && reply.data.status ) {
-						$root.find( '.fh-tidy__status' ).html( reply.data.status );
+						status( reply.data.status );
 						progress( cfg.i18n.stopped );
 					}
 				} ).catch( function () {} );
 			} );
 		}
+
+		held();
 
 		$root.on( 'click', '.fh-tidy__preview', function () {
 			preview();
@@ -224,6 +279,17 @@
 			preview();
 		} );
 
+		// Any other choice: the preview is out of date. Say so where Apply is — only once there is a
+		// preview with an Apply box to be out of date.
+		function changed() {
+			if ( $root.find( '.fh-tidy__apply' ).length ) {
+				stale = true;
+				sayApply( cfg.i18n.stale );
+			}
+		}
+		$root.on( 'change', '.fh-tidy__becomes, .fh-tidy__move, input[name^="keep_one["], input[name^="convert["]', changed );
+		$root.on( 'input', '.fh-tidy__short', changed );
+
 		$root.on( 'click', '.fh-tidy__finish', function () {
 			preview();
 			var top = $root.find( '.fh-tidy__form' ).offset();
@@ -236,26 +302,37 @@
 			if ( busy ) {
 				return;
 			}
-			if ( ! $root.find( '.fh-tidy__backup' ).is( ':checked' ) ) {
-				say( cfg.i18n.needBackup, true );
-				return;
-			}
-			if ( String( $root.find( '.fh-tidy__confirm' ).val() ).trim().toUpperCase() !== cfg.word ) {
-				say( cfg.i18n.needWord.replace( '%s', cfg.word ), true );
+			var why = blocked( {
+				stale: stale,
+				backup: $root.find( '.fh-tidy__backup' ).is( ':checked' ),
+				word: $root.find( '.fh-tidy__confirm' ).val(),
+				expect: cfg.word
+			} );
+			if ( why ) {
+				sayApply( cfg.i18n[ why ].replace( '%s', cfg.word ) );
 				return;
 			}
 			var data = request( 'apply' );
 			lock( true );
+			sayApply( '' );
 			post( data ).then( function ( reply ) {
 				if ( ! reply || ! reply.success ) {
 					lock( false );
-					say( reply && reply.data && reply.data.message ? reply.data.message : cfg.i18n.error, true );
+					var message = reply && reply.data && reply.data.message ? reply.data.message : cfg.i18n.error;
+					if ( reply && reply.data && reply.data.open && reply.data.status ) {
+						// A tidy-up is not finished: its box, with Carry on and Undo, takes the place of the preview.
+						status( reply.data.status );
+						progress( message );
+						return;
+					}
+					stale = stale || !! ( reply && reply.data && reply.data.stale );
+					sayApply( message );
 					return;
 				}
 				run( reply.data.run, reply.data.message );
 			} ).catch( function () {
 				lock( false );
-				say( cfg.i18n.error, true );
+				sayApply( cfg.i18n.error );
 			} );
 		} );
 
@@ -289,13 +366,13 @@
 			}
 			post( { op: 'dismiss', product: $( this ).data( 'product' ) } ).then( function ( reply ) {
 				if ( reply && reply.success && reply.data.status ) {
-					$root.find( '.fh-tidy__status' ).html( reply.data.status );
+					status( reply.data.status );
 				}
 			} ).catch( function () {} );
 		} );
 	}
 
-	var api = { overrides: overrides, fields: fields, steps: steps, wire: wire };
+	var api = { overrides: overrides, fields: fields, blocked: blocked, steps: steps, wire: wire };
 
 	if ( 'object' === typeof module && module.exports ) {
 		module.exports = api;

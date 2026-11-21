@@ -297,4 +297,58 @@ check_same( 'the Packing map: a size that becomes another hands its bag on; a si
 check_same( '…and two old sizes with different bags are named', array( array( 'to' => '3-4', 'kept' => 'bag-m', 'from' => '3-5', 'dropped' => 'bag-l' ) ), $packing['clashes'] );
 check_same( 'the plan carries it', array( true, 1 ), array( $plan['packing']['changed'], count( $plan['packing']['clashes'] ) ) );
 
+echo "12. Sold as \"any size\": it carries every size its product lists\n";
+$shop  = fh_tidy_shop();
+$quill = $shop->add_product( 'Quill Anthias', array( 'small-medium' => array( '30.00', 4, 'attrs' => array( 'pa_size' => '' ) ) ) );
+$ruby  = $shop->add_product( 'Ruby Basslet', array( 'small-medium' => array( '18.00', 3, 'attrs' => array( 'pa_size' => '' ) ) ), array( 'sizes' => array( 'small-medium', 'medium' ) ) );
+$sable = $shop->add_product( 'Sable Chromis', array( 'small-medium' => array( '12.00', 0, 'attrs' => array( 'pa_size' => '' ) ) ) );
+$plain = $shop->add_product( 'Tiger Cowrie', array( 'small-medium' => array( '8.00', 2, 'attrs' => array( 'pa_colour' => 'brown' ) ) ), array( 'varies' => false, 'sizes' => array( 'small-medium' ) ) );
+$data  = $shop->read_shop( 'pa_size' );
+$plan  = Sizes_Tidy::plan( $data );
+$by    = array();
+foreach ( $plan['changes'] as $row ) {
+	$by[ $row['title'] ][] = $row['from_label'] . '>' . $row['to_label'] . ':' . $row['why'] . ( ! empty( $row['any'] ) ? ':any' : '' ) . ( $row['off'] ? ':off' : '' );
+}
+check_same( 'a fish in stock whose ONE variation is "any size", on a product that lists only Small-Medium: it is for sale today, so it is left — and named', array( 'Small-Medium>Small-Medium:left:any' ), $by['Quill Anthias'] );
+check( '…its product is not touched: the list keeps Small-Medium, the fish can still be bought', ! isset( $plan['products'][ $quill ] ) );
+check( '…it is not among the fish with nothing left to buy, and the size stays in the shop, retiring', ! isset( $plan['unavailable'][ $quill ] ) && isset( $plan['retiring']['small-medium'] ) && ! in_array( 'small-medium', $plan['delete'], true ) );
+check_same( 'a product that lists Small-Medium and Medium: Small-Medium does not vanish from its list either', array( array( 'Small-Medium>Small-Medium:left:any' ), false ), array( $by['Ruby Basslet'], isset( $plan['products'][ $ruby ] ) ) );
+check_same( '…the row says how many fish are left on the size: the two sold as any size', 2, fh_rows_by( $plan['rows'] )['Small-Medium']['left'] );
+check_same( 'out of stock: taken off like any other — the list loses the size, and with no size left to pick the variation is switched off and listed', array( 'Small-Medium>:off_out:any:off' ), $by['Sable Chromis'] );
+check_same( '…as the plan writes it', array( 'from' => '', 'to' => '', 'off' => true, 'why' => 'off_out', 'list' => array( 'small-medium' ) ), array_values( $plan['products'][ $sable ]['vars'] )[0] );
+check( '…it is a fish with nothing left to buy, and goes on the "Sizes to fill in" list with the size it had', isset( $plan['unavailable'][ $sable ] ) && array( 'slug' => 'small-medium', 'label' => 'Small-Medium' ) === array_values( $plan['products'][ $sable ]['fill'] )[0] );
+check( 'a product that only LISTS the size (it does not vary by it) sells nothing through it: the size just leaves its list', ! isset( $by['Tiger Cowrie'] ) && array() === $plan['products'][ $plain ]['sizes'] && array() === $plan['products'][ $plain ]['vars'] );
+check_same( 'the totals count them: one more left for sale, one more switched off', array( 5, 4 ), array( $plan['totals']['left'], $plan['totals']['off'] ) );
+
+$off = Sizes_Tidy::plan( $data, array( 'instock' => 'off' ) );
+check_same( '"take them off the shop now": the only size goes, so the any-size variation is switched off — said, with its stock', array( array( 'from' => '', 'to' => '', 'off' => true, 'why' => 'off_now', 'list' => array( 'small-medium' ) ), true ), array( array_values( $off['products'][ $quill ]['vars'] )[0], isset( $off['unavailable'][ $quill ] ) ) );
+check_same( '…where another size is left, the list loses Small-Medium and the variation stays for sale in the other', array( array( 'medium' ), false, false ), array( $off['products'][ $ruby ]['sizes'], array_values( $off['products'][ $ruby ]['vars'] )[0]['off'], isset( $off['unavailable'][ $ruby ] ) ) );
+$move = Sizes_Tidy::plan( $data, array( 'instock' => 'move', 'move' => array( $shop->vids( $quill )[0] => 'medium' ) ) );
+check_same( '"move them to a size I pick": the product lists the picked size instead; the variation still sells it', array( array( 'medium' ), array() ), array( $move['products'][ $quill ]['sizes'], $move['products'][ $quill ]['vars'] ) );
+check( '…one without a pick is left', ! isset( $move['products'][ $ruby ] ) && isset( $move['retiring']['small-medium'] ) );
+check_same( 'any_size(): a switched-on variation without a size, on a product that lists sizes and varies by them', array( array( $shop->vids( $quill )[0] => true ), array( $shop->vids( $sable )[0] => false ), array(), array() ), array( Sizes_Tidy::any_size( $data['products'][ $quill ], 'pa_size' ), Sizes_Tidy::any_size( $data['products'][ $sable ], 'pa_size' ), Sizes_Tidy::any_size( $data['products'][ $plain ], 'pa_size' ), Sizes_Tidy::any_size( $data['products'][ $ids['Koi Angel'] ], 'pa_size' ) ) );
+
+echo "13. A product in the trash is left alone — so a size it uses stays\n";
+$shop          = fh_tidy_shop();
+$shop->trashed = array( 'xl' => 2, '3-5' => 1 );
+$plan          = Sizes_Tidy::plan( $shop->read_shop( 'pa_size' ) );
+$rows          = fh_rows_by( $plan['rows'] );
+check( 'XL — no product uses it but one in the trash: it is not deleted', ! in_array( 'xl', $plan['delete'], true ) && in_array( 'tiny', $plan['delete'], true ) );
+check_same( '…the row says why it stays, and how many products hold it', array( 'trash', 2 ), array( $rows['XL']['after'], $rows['XL']['trash'] ) );
+check( '…and it waits, out of the pickers, until the trash is emptied', isset( $plan['waiting']['xl'] ) );
+check_same( 'a size that waits for another reason keeps that reason', 'waiting', $rows['3-5"']['after'] );
+
+echo "14. What nobody can buy, and why\n";
+$shop = fh_tidy_shop();
+$ids  = fh_tidy_ids( $shop );
+$plan = Sizes_Tidy::plan( $shop->read_shop( 'pa_size' ) );
+$off  = array();
+foreach ( $plan['changes'] as $row ) {
+	if ( 'off_out' === $row['why'] ) {
+		$off[ $row['title'] ] = array( $row['out'], $row['status'], $row['stock_text'] );
+	}
+}
+check_same( 'a variation that is taken off because nobody can buy it says whether it is out of stock, and what its product is — a draft with stock is not "sold out"', array( 'Flame Hawk' => array( true, 'publish', 'out of stock' ), 'Ivory Puffer' => array( true, 'publish', 'out of stock' ), 'Opal Jawfish' => array( false, 'draft', '4 in stock' ) ), $off );
+check_same( 'the plan names each product, for what the run says at the end', 'Flame Hawk', $plan['products'][ $ids['Flame Hawk'] ]['title'] );
+
 fh_finish();

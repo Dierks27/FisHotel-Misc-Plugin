@@ -13,7 +13,10 @@
  *   apply    start a run of that plan — after "I have a backup" is
  *            ticked, CONFIRM_WORD is typed and the plan is still the one
  *            that was shown (its token). Saves the record; the shop is
- *            written by the steps.
+ *            written by the steps. While a run is not finished, Apply
+ *            is refused: that run is carried on or undone first, with
+ *            the choices it was started with — never with the ones on
+ *            the page now.
  *   step     one batch of the run (recording, applying or undoing).
  *   undo     take the latest run back (then steps).
  *   dismiss  tick a fish off the "Sizes to fill in" list.
@@ -132,6 +135,8 @@ class Admin_Sizes_Tidy {
 		$taxonomy = self::taxonomy( $store, $settings );
 		$status   = self::status( $taxonomy );
 		$nonce    = wp_create_nonce( self::NONCE );
+		$standard = Sizes::standard( $store, $settings );
+		$label    = '' !== $taxonomy && '' !== Sizes::plain( (string) ( $standard['label'] ?? '' ) ) ? Sizes::plain( (string) $standard['label'] ) : $taxonomy;
 
 		include Clean_Room::path() . 'views/sizes-tidy.php';
 	}
@@ -219,6 +224,42 @@ class Admin_Sizes_Tidy {
 	}
 
 	/**
+	 * When a tidy-up was made, in the site's own time (the record keeps
+	 * it in UTC).
+	 *
+	 * @param string $gmt 'Y-m-d H:i:s', UTC.
+	 * @return string
+	 */
+	public static function when( $gmt ) {
+		$time = strtotime( (string) $gmt . ' UTC' );
+		if ( false === $time ) {
+			return (string) $gmt;
+		}
+		if ( function_exists( 'wp_date' ) ) {
+			return (string) wp_date( 'j M Y, g:i a', $time );
+		}
+		return ( new \DateTimeImmutable( '@' . $time ) )->setTimezone( function_exists( 'wp_timezone' ) ? wp_timezone() : new \DateTimeZone( 'UTC' ) )->format( 'j M Y, g:i a' );
+	}
+
+	/**
+	 * Some fish by name, for a message: the first few, then how many more.
+	 *
+	 * @param string[] $names Names.
+	 * @return string
+	 */
+	public static function names_text( array $names ) {
+		$names = array_values( array_unique( array_filter( array_map( 'strval', $names ), 'strlen' ) ) );
+		$shown = array_slice( $names, 0, 8 );
+		$more  = count( $names ) - count( $shown );
+		$text  = implode( ', ', $shown );
+		if ( $more > 0 ) {
+			/* translators: 1: names, 2: how many more */
+			$text = sprintf( __( '%1$s and %2$d more', 'fishotel-misc-plugin' ), $text, $more );
+		}
+		return $text;
+	}
+
+	/**
 	 * A price as the shop writes it, as plain text ('' = no price).
 	 *
 	 * @param string $price Price.
@@ -262,7 +303,7 @@ class Admin_Sizes_Tidy {
 			case 'gone':
 				return __( 'the size you had picked is not in the list any more — back to the suggestion', 'fishotel-misc-plugin' );
 			case 'orphan':
-				return __( 'its term is gone', 'fishotel-misc-plugin' );
+				return __( 'still on a product, but no longer in the shop\'s list of sizes', 'fishotel-misc-plugin' );
 		}
 		return '';
 	}
@@ -353,12 +394,32 @@ class Admin_Sizes_Tidy {
 				foreach ( (array) ( $progress['skipped'] ?? array() ) as $skipped ) {
 					$kept += 'term_delete' === (string) ( $skipped['kind'] ?? '' ) ? 1 : 0;
 				}
+				$back = array();
+				foreach ( (array) ( $progress['back'] ?? array() ) as $entry ) {
+					$name   = '' !== (string) ( $entry['title'] ?? '' ) ? (string) $entry['title'] : '#' . (int) ( $entry['product'] ?? 0 );
+					$back[] = $name . ' (' . implode( ', ', array_map( 'strval', (array) ( $entry['sizes'] ?? array() ) ) ) . ')';
+				}
+				if ( $back ) {
+					/* translators: 1: count, 2: fish names with their size */
+					return sprintf( _n( 'Done. The sizes are tidied — except %1$d fish that was out of stock when you looked and is for sale again now: it was left for sale as it is, and its size stays in the list, retiring. %2$s.', 'Done. The sizes are tidied — except %1$d fish that were out of stock when you looked and are for sale again now: they were left for sale as they are, and their sizes stay in the list, retiring. %2$s.', count( $back ), 'fishotel-misc-plugin' ), count( $back ), self::names_text( $back ) );
+				}
 				if ( $kept > 0 ) {
 					/* translators: %d: count */
 					return sprintf( _n( 'Done. The sizes are tidied — %d old size turned out to be in use after all and was left in the list. Show what would change again to see it.', 'Done. The sizes are tidied — %d old sizes turned out to be in use after all and were left in the list. Show what would change again to see them.', $kept, 'fishotel-misc-plugin' ), $kept );
 				}
 				return __( 'Done. The sizes are tidied.', 'fishotel-misc-plugin' );
 			case 'undone':
+				$left = array();
+				foreach ( (array) ( $progress['kept'] ?? array() ) as $entry ) {
+					$name = '' !== (string) ( $entry['title'] ?? '' ) ? (string) $entry['title'] : '#' . (int) ( $entry['product'] ?? 0 );
+					$size = (string) ( $entry['label'] ?? ( $entry['size'] ?? '' ) );
+					/* translators: 1: fish name, 2: the size it has now */
+					$left[] = '' !== $size ? sprintf( __( '%1$s (now %2$s)', 'fishotel-misc-plugin' ), $name, $size ) : $name;
+				}
+				if ( $left ) {
+					/* translators: 1: count, 2: fish names with the size they have now */
+					return sprintf( _n( 'Done. Everything that tidy-up changed is back as it was — except %1$d variation you have given another size since: it was left as it is now. %2$s.', 'Done. Everything that tidy-up changed is back as it was — except %1$d variations you have given another size since: they were left as they are now. %2$s.', count( $left ), 'fishotel-misc-plugin' ), count( $left ), self::names_text( $left ) );
+				}
 				return __( 'Done. Everything that tidy-up changed is back as it was.', 'fishotel-misc-plugin' );
 		}
 		return __( 'That tidy-up is not there any more.', 'fishotel-misc-plugin' );
@@ -399,8 +460,8 @@ class Admin_Sizes_Tidy {
 					'needBackup'  => __( 'Tick “I have a backup” first.', 'fishotel-misc-plugin' ),
 					/* translators: %s: the word to type */
 					'needWord'    => __( 'Type %s in the box to go ahead.', 'fishotel-misc-plugin' ),
-					'confirmUndo' => __( 'Undo the last tidy-up? Every product, variation, size and row it changed goes back to how it was before.', 'fishotel-misc-plugin' ),
-					'stale'       => __( 'You changed something since the preview. Click “Show what would change” again.', 'fishotel-misc-plugin' ),
+					'confirmUndo' => __( 'Undo the last tidy-up? Every product, variation, size and row it changed goes back to how it was before. Two things stay as they are today: a variation you have given another size since the tidy-up, and stock and prices — Undo never touches those.', 'fishotel-misc-plugin' ),
+					'stale'       => __( 'You changed a choice since the preview. Click “Show what would change” again, then tidy up.', 'fishotel-misc-plugin' ),
 					'stopped'     => __( 'It stopped half-way. Nothing is lost — click “Carry on” to finish, or “Undo” to take it back.', 'fishotel-misc-plugin' ),
 				),
 			)
@@ -591,7 +652,8 @@ class Admin_Sizes_Tidy {
 
 	/**
 	 * Apply: the backup tick, the typed word and the token, then the
-	 * run is started (its record saved) and the page steps it.
+	 * run is started (its record saved) and the page steps it. Refused
+	 * while another run is not finished.
 	 *
 	 * @param Sizes_Tidy_Shop $shop Shop.
 	 * @param array           $plan The plan, worked out again from the shop as it is now.
@@ -599,30 +661,45 @@ class Admin_Sizes_Tidy {
 	 * @return array{ok: bool, status: int, data: array}
 	 */
 	private static function apply( Sizes_Tidy_Shop $shop, array $plan, array $post ) {
+		$ticked = '1' === (string) ( is_scalar( $post['backup'] ?? null ) ? $post['backup'] : '' );
+		$typed  = strtoupper( trim( (string) ( is_scalar( $post['confirm'] ?? null ) ? $post['confirm'] : '' ) ) ) === self::CONFIRM_WORD;
+		$token  = is_scalar( $post['token'] ?? null ) ? (string) $post['token'] : '';
+
 		$open = Sizes_Tidy_Run::open( $shop );
-		if ( $open && 'undoing' !== (string) $open['status'] ) {
-			// Apply clicked again: the run that is open carries on.
-			return self::answer(
+		if ( $open ) {
+			// A run is not finished. Only the very preview it was started from may carry it on
+			// (Apply clicked twice); any other — other choices, a later preview — is refused: the
+			// run goes on with the choices it was started with, and the page says so.
+			$started = (string) ( $open['data']['token'] ?? '' );
+			if ( 'undoing' !== (string) $open['status'] && $ticked && $typed && '' !== $token && '' !== $started && hash_equals( $started, $token ) ) {
+				return self::answer(
+					array(
+						'run'     => (int) $open['id'],
+						'message' => self::progress_text( Sizes_Tidy_Run::progress( $shop, $open ) ),
+					)
+				);
+			}
+			return self::refuse(
+				'undoing' === (string) $open['status']
+					? __( 'An undo is half-way. Click “Carry on” to finish it first.', 'fishotel-misc-plugin' )
+					: __( 'Nothing was started: a tidy-up stopped half-way, and it was begun with other choices than the ones on this page. Click “Carry on” to finish it as it was begun, or “Undo it instead” — then tidy up again with the choices you want.', 'fishotel-misc-plugin' ),
+				409,
 				array(
-					'run'     => (int) $open['id'],
-					'message' => self::progress_text( Sizes_Tidy_Run::progress( $shop, $open ) ),
+					'open'   => true,
+					'status' => self::status_html( self::status( (string) $plan['taxonomy'] ) ),
 				)
 			);
 		}
-		if ( $open ) {
-			return self::refuse( __( 'An undo is half-way. Click “Carry on” to finish it first.', 'fishotel-misc-plugin' ), 409 );
-		}
-		if ( '1' !== (string) ( is_scalar( $post['backup'] ?? null ) ? $post['backup'] : '' ) ) {
+		if ( ! $ticked ) {
 			return self::refuse( __( 'Tick “I have a backup” first.', 'fishotel-misc-plugin' ) );
 		}
-		if ( strtoupper( trim( (string) ( is_scalar( $post['confirm'] ?? null ) ? $post['confirm'] : '' ) ) ) !== self::CONFIRM_WORD ) {
+		if ( ! $typed ) {
 			/* translators: %s: the word to type */
 			return self::refuse( sprintf( __( 'Type %s in the box to go ahead.', 'fishotel-misc-plugin' ), self::CONFIRM_WORD ) );
 		}
 		if ( ! empty( $plan['nothing'] ) ) {
 			return self::refuse( __( 'There is nothing to tidy with these choices.', 'fishotel-misc-plugin' ) );
 		}
-		$token = is_scalar( $post['token'] ?? null ) ? (string) $post['token'] : '';
 		if ( '' === $token || ! hash_equals( (string) $plan['token'], $token ) ) {
 			return self::refuse( __( 'The shop, or a choice on this page, changed since the preview. Click “Show what would change” again, then Apply.', 'fishotel-misc-plugin' ), 409, array( 'stale' => true ) );
 		}

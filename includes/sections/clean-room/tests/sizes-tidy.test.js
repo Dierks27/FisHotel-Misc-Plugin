@@ -1,7 +1,8 @@
 /**
  * Tidy up the sizes — the page's helpers (js/sizes-tidy.js), without a
  * DOM or jQuery: which rows count as set by hand, the fields of a
- * request, and the loop that steps a run — to the end, through a failed
+ * request, what stands in the way of Apply, and the loop that steps a
+ * run — to the end, through a failed
  * step that is asked again, past another click that holds the lock, and
  * stopping (so "Carry on" can pick it up) when the steps keep failing.
  *
@@ -56,6 +57,13 @@ check( 'a row left as the page showed it is not sent', same( tidy.overrides( [ {
 check( 'a row the owner changed is', same( tidy.overrides( [ { key: 'g:3-5', value: 'to:4-5', shown: 'to:3-4', yours: '0' } ] ), { 'g:3-5': 'to:4-5' } ) );
 check( 'a row set by hand before stays set, even when it reads like the suggestion', same( tidy.overrides( [ { key: 'g:6', value: 'to:5', shown: 'to:5', yours: '1' } ] ), { 'g:6': 'to:5' } ) );
 check( 'rows without a key, and no rows at all', same( tidy.overrides( [ { value: 'keep', shown: 'remove' }, null ] ), {} ) && same( tidy.overrides(), {} ) );
+
+console.log( '1b. What stands in the way of Apply (said next to the button)' );
+check( 'nothing ticked: the backup first', 'needBackup' === tidy.blocked( { backup: false, word: '', expect: 'TIDY', stale: false } ) );
+check( 'ticked, the word not typed', 'needWord' === tidy.blocked( { backup: true, word: 'tid', expect: 'TIDY', stale: false } ) );
+check( 'ticked and typed (any case, spaces around): nothing', '' === tidy.blocked( { backup: true, word: ' tidy ', expect: 'TIDY', stale: false } ) );
+check( 'a choice changed since the preview comes before both: the preview is out of date', 'stale' === tidy.blocked( { backup: true, word: 'TIDY', expect: 'TIDY', stale: true } ) && 'stale' === tidy.blocked( { backup: false, word: '', expect: 'TIDY', stale: true } ) );
+check( 'no state at all is not a yes', 'needBackup' === tidy.blocked() );
 
 console.log( '2. The fields of a request' );
 var sent = tidy.fields(

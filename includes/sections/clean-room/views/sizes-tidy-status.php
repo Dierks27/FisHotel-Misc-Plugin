@@ -20,6 +20,9 @@ $fh_runs = $status['runs'];
 	<div class="fh-tidy__box fh-tidy__box--warn">
 		<h3 class="fh-cr-h3"><?php echo esc_html( 'undoing' === $fh_open['status'] ? __( 'An undo stopped half-way', 'fishotel-misc-plugin' ) : __( 'A tidy-up stopped half-way', 'fishotel-misc-plugin' ) ); ?></h3>
 		<p><?php echo esc_html( Admin_Sizes_Tidy::progress_text( $fh_open['progress'] ) ); ?> <?php esc_html_e( 'Nothing is lost: carry on and it picks up where it stopped.', 'fishotel-misc-plugin' ); ?></p>
+		<?php if ( 'undoing' !== $fh_open['status'] ) : ?>
+			<p class="fh-cr-sub"><?php esc_html_e( 'It finishes with the choices it was started with. A fish that came back into stock in the meantime is not taken off: it is left for sale and named at the end.', 'fishotel-misc-plugin' ); ?></p>
+		<?php endif; ?>
 		<p class="fh-cr-actions-row">
 			<button type="button" class="button button-primary fh-tidy__continue" data-run="<?php echo esc_attr( (string) $fh_open['id'] ); ?>"><?php esc_html_e( 'Carry on', 'fishotel-misc-plugin' ); ?></button>
 			<?php if ( 'undoing' !== $fh_open['status'] ) : ?>
@@ -37,15 +40,15 @@ $fh_runs = $status['runs'];
 		<p class="fh-cr-sub">
 			<?php
 			/* translators: %d: how many tidy-ups are kept */
-			echo esc_html( sprintf( __( 'Before a tidy-up changes anything it saves a complete record of what it is about to change; Undo puts every bit of it back exactly. The last %d tidy-ups are kept — the latest is undone first.', 'fishotel-misc-plugin' ), (int) $status['max_runs'] ) );
+			echo esc_html( sprintf( __( 'Before a tidy-up changes anything it saves a complete record of what it is about to change; Undo puts every bit of it back. Two things stay as they are on the day of the undo: a variation you have given another size since (it is named, not overwritten), and stock and prices, which Undo never touches — a fish that sold out since still reads sold out. The last %d tidy-ups are kept — the latest is undone first.', 'fishotel-misc-plugin' ), (int) $status['max_runs'] ) );
 			?>
 		</p>
 		<ol class="fh-tidy__runs">
 			<?php foreach ( $fh_runs as $fh_index => $fh_run ) : ?>
 				<li>
 					<?php
-					/* translators: 1: date and time (UTC), 2: user login */
-					echo esc_html( sprintf( __( '%1$s (UTC), by %2$s', 'fishotel-misc-plugin' ), (string) $fh_run['created_at'], '' !== (string) $fh_run['created_by'] ? (string) $fh_run['created_by'] : '—' ) );
+					/* translators: 1: date and time, 2: user login */
+					echo esc_html( sprintf( __( '%1$s, by %2$s', 'fishotel-misc-plugin' ), Admin_Sizes_Tidy::when( (string) $fh_run['created_at'] ), '' !== (string) $fh_run['created_by'] ? (string) $fh_run['created_by'] : '—' ) );
 					if ( isset( $fh_run['data']['totals'] ) && is_array( $fh_run['data']['totals'] ) ) {
 						echo ' — ' . esc_html( Admin_Sizes_Tidy::totals_text( $fh_run['data']['totals'] ) );
 					}
@@ -78,7 +81,7 @@ $fh_runs = $status['runs'];
 				</li>
 			<?php endforeach; ?>
 			<?php foreach ( $status['waiting'] as $fh_label ) : ?>
-				<li><strong><?php echo esc_html( (string) $fh_label ); ?></strong> — <?php esc_html_e( 'waiting for a product that needs a look', 'fishotel-misc-plugin' ); ?></li>
+				<li><strong><?php echo esc_html( (string) $fh_label ); ?></strong> — <?php esc_html_e( 'waiting: a product that needs a look, or one in the trash, still uses it', 'fishotel-misc-plugin' ); ?></li>
 			<?php endforeach; ?>
 		</ul>
 		<?php if ( '' !== $status['taxonomy'] ) : ?>

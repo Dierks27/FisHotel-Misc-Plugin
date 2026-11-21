@@ -32,7 +32,12 @@
  * sale, hidden from the fish page), keeps its price, stock, SKU and id,
  * and loses its size. A variation that is for sale today is left alone
  * unless the owner says otherwise (IN_STOCK_*): its size then stays in
- * the shop, "retiring", until nothing in stock carries it.
+ * the shop, "retiring", until nothing in stock carries it. A variation
+ * sold as "any size" (switched on, with no size of its own) sells every
+ * size its product lists, so it counts as carrying each of them.
+ *
+ * A product in the trash is left alone: a size one still uses stays in
+ * the shop's list until the trash is emptied.
  *
  * Two variations of one product that would end up the same size are
  * never merged: the product is left untouched and listed, until the
@@ -654,6 +659,32 @@ class Sizes_Tidy {
 	}
 
 	/**
+	 * The variations of a product that are sold as "any size": switched
+	 * on, with no size of their own, on a product that varies by size and
+	 * lists sizes. WooCommerce lets the customer pick any size the
+	 * product lists and sells them this variation — so it carries every
+	 * one of them.
+	 *
+	 * @param array  $product  status, sizes, typed, varies (optional: whether the size attribute is
+	 *                         used for variations — taken as true for a product without a typed size).
+	 * @param string $taxonomy The size attribute's taxonomy.
+	 * @return array<int,bool> variation id → whether it can be bought today.
+	 */
+	public static function any_size( array $product, $taxonomy ) {
+		$out    = array();
+		$varies = isset( $product['varies'] ) ? ! empty( $product['varies'] ) : ! isset( $product['typed'] );
+		if ( ! $varies || empty( $product['sizes'] ) ) {
+			return $out;
+		}
+		foreach ( (array) ( $product['variations'] ?? array() ) as $vid => $variation ) {
+			if ( '' === (string) ( $variation['attrs'][ (string) $taxonomy ] ?? '' ) && self::enabled( $variation ) ) {
+				$out[ (int) $vid ] = self::for_sale( $product, $variation );
+			}
+		}
+		return $out;
+	}
+
+	/**
 	 * A variation's stock in words.
 	 *
 	 * @param array $variation stock (int|null), stock_status.
@@ -677,6 +708,13 @@ class Sizes_Tidy {
 	 * the tool calls out, the terms that would be created and deleted and
 	 * the totals. `products` is exactly what Apply does, product by
 	 * product; `token` changes whenever the plan does.
+	 *
+	 * Per product, `vars` is variation id → from, to, off, why — why is
+	 * rename | move | convert | off_out (taken off: nobody could buy it
+	 * when the plan was made — the run checks that again as it writes) |
+	 * off_now (taken off although for sale: the owner said so) | dupe_off.
+	 * A variation sold as "any size" has from and to '' and `list`: the
+	 * sizes its product's list loses.
 	 *
 	 * @param array $shop    Sizes_Tidy_Site::read_shop().
 	 * @param array $request short, over, keep_plus, instock, move (variation id → slug),
@@ -721,6 +759,8 @@ class Sizes_Tidy {
 		$move     = isset( $request['move'] ) && is_array( $request['move'] ) ? $request['move'] : array();
 		$keep_one = isset( $request['keep_one'] ) && is_array( $request['keep_one'] ) ? $request['keep_one'] : array();
 		$convert  = isset( $request['convert'] ) && is_array( $request['convert'] ) ? $request['convert'] : array();
+
+		$trashed  = isset( $shop['trashed'] ) && is_array( $shop['trashed'] ) ? $shop['trashed'] : array();
 
 		$products    = array();
 		$changes     = array();
@@ -935,6 +975,11 @@ class Sizes_Tidy {
 				}
 			}
 
+			// Sold as "any size": a switched-on variation with no size of its own, on a product that
+			// varies by size, sells every size the product lists (variation id → for sale today).
+			$any      = null === $converted ? self::any_size( $product, $taxonomy ) : array();
+			$any_fate = array();
+
 			// The product's own list of sizes, in step with its variations.
 			$after  = array();
 			$holds  = array();
@@ -959,6 +1004,7 @@ class Sizes_Tidy {
 						'product'    => $pid,
 						'title'      => $title,
 						'fish'       => ! empty( $product['fish'] ),
+						'status'     => (string) ( $product['status'] ?? '' ),
 						'from'       => $entry['from'],
 						'from_label' => isset( $labels[ $entry['from'] ] ) ? $labels[ $entry['from'] ] : $entry['from'],
 						'to'         => $entry['from'],
@@ -982,7 +1028,32 @@ class Sizes_Tidy {
 					if ( 0 === strpos( $action, self::TO ) ) {
 						$to = substr( $action, strlen( self::TO ) );
 					} elseif ( self::REMOVE === $action && ! isset( $holds[ $slug ] ) ) {
-						continue;
+						// No variation of its own carries it. One sold as "any size" still sells it, and
+						// is treated as any other fish for sale today.
+						$stays = false;
+						$picks = array();
+						foreach ( $any as $vid => $sale ) {
+							$fate = 'off_out';
+							if ( $sale && self::IN_STOCK_OFF === $instock ) {
+								$fate = 'off_now';
+							} elseif ( $sale && self::IN_STOCK_MOVE === $instock && isset( $move[ $vid ] ) && is_scalar( $move[ $vid ] ) && isset( $in_short[ (string) $move[ $vid ] ] ) ) {
+								$fate    = 'move';
+								$picks[] = (string) $move[ $vid ];
+							} elseif ( $sale ) {
+								$fate          = 'left';
+								$stays         = true;
+								$left[ $slug ] = ( $left[ $slug ] ?? 0 ) + 1;
+							}
+							$any_fate[ $vid ][ $fate ][] = $slug;
+						}
+						foreach ( $picks as $pick ) {
+							if ( ! in_array( $pick, $after, true ) ) {
+								$after[] = $pick;
+							}
+						}
+						if ( ! $stays ) {
+							continue;
+						}
 					}
 					if ( isset( $holds[ $slug ] ) && ! in_array( $slug, $after, true ) && $to !== $slug ) {
 						$after[] = $slug; // A variation still carries the old size.
@@ -996,6 +1067,54 @@ class Sizes_Tidy {
 						$after[] = (string) $slug;
 					}
 				}
+			}
+
+			// What that does to the variations sold as "any size": one loses the sizes that are taken off
+			// its product's list — and is switched off, as any other, when the list is left empty.
+			$any_views = array();
+			foreach ( $any_fate as $vid => $fates ) {
+				$names = static function ( array $slugs ) use ( $labels ) {
+					$out = array();
+					foreach ( $slugs as $slug ) {
+						$out[] = isset( $labels[ $slug ] ) ? (string) $labels[ $slug ] : (string) $slug;
+					}
+					return implode( ', ', $out );
+				};
+				$gone  = array_merge( isset( $fates['off_out'] ) ? $fates['off_out'] : array(), isset( $fates['off_now'] ) ? $fates['off_now'] : array() );
+				if ( $gone ) {
+					$change[ $vid ] = array(
+						'from' => '',
+						'to'   => '',
+						'off'  => ! $after,
+						'why'  => isset( $fates['off_now'] ) ? 'off_now' : 'off_out',
+						'list' => $gone,
+					);
+					if ( ! $after ) {
+						$lost[ $vid ] = array(
+							'slug'  => (string) $gone[0],
+							'label' => $names( $gone ),
+						);
+					}
+				}
+				foreach ( $fates as $fate => $slugs ) {
+					$any_views[] = self::variation_view( $vars[ $vid ], $vid ) + array(
+						'product'    => $pid,
+						'title'      => $title,
+						'fish'       => ! empty( $product['fish'] ),
+						'status'     => (string) ( $product['status'] ?? '' ),
+						'from'       => (string) $slugs[0],
+						'from_label' => $names( $slugs ),
+						'to'         => 'left' === $fate ? (string) $slugs[0] : ( 'move' === $fate ? (string) $move[ $vid ] : '' ),
+						'to_label'   => 'left' === $fate ? $names( $slugs ) : ( 'move' === $fate && isset( $labels[ (string) $move[ $vid ] ] ) ? (string) $labels[ (string) $move[ $vid ] ] : '' ),
+						'off'        => 'left' !== $fate && 'move' !== $fate && ! $after,
+						'why'        => $fate,
+						'for_sale'   => $any[ $vid ],
+						'any'        => true,
+					);
+				}
+			}
+			foreach ( $any_views as $view ) {
+				$changes[] = $view;
 			}
 
 			$default = null;
@@ -1031,6 +1150,7 @@ class Sizes_Tidy {
 			}
 			$products[ $pid ] = array(
 				'id'      => $pid,
+				'title'   => $title,
 				'vars'    => $change,
 				'sizes'   => $after,
 				'default' => $default,
@@ -1053,10 +1173,14 @@ class Sizes_Tidy {
 			}
 
 			foreach ( $change as $vid => $entry ) {
+				if ( isset( $entry['list'] ) ) {
+					continue; // Sold as "any size": shown above, by the sizes it loses.
+				}
 				$changes[] = self::variation_view( $vars[ $vid ], $vid ) + array(
 					'product'    => $pid,
 					'title'      => $title,
 					'fish'       => ! empty( $product['fish'] ),
+					'status'     => (string) ( $product['status'] ?? '' ),
 					'from'       => $entry['from'],
 					'from_label' => isset( $labels[ $entry['from'] ] ) ? $labels[ $entry['from'] ] : $entry['from'],
 					'to'         => $entry['to'],
@@ -1085,8 +1209,16 @@ class Sizes_Tidy {
 			if ( $row['typed'] || in_array( $row['action'], array( self::STAY, self::KEEP ), true ) ) {
 				continue;
 			}
-			$still = (int) ( $used[ $row['slug'] ] ?? 0 );
-			if ( 0 === $still ) {
+			$still  = (int) ( $used[ $row['slug'] ] ?? 0 );
+			$binned = (int) ( $trashed[ $row['slug'] ] ?? 0 );
+			if ( $binned > 0 ) {
+				$rows[ $index ]['trash'] = $binned;
+			}
+			if ( 0 === $still && $binned > 0 ) {
+				// Only a product in the trash still uses it: the trash is left alone, so the size stays.
+				$waiting[ $row['slug'] ] = $row['label'];
+				$rows[ $index ]['after'] = 'trash';
+			} elseif ( 0 === $still ) {
 				if ( isset( $terms[ $row['slug'] ] ) ) {
 					$delete[] = $row['slug'];
 				}
@@ -1185,13 +1317,14 @@ class Sizes_Tidy {
 	 *
 	 * @param array $variation The variation.
 	 * @param int   $vid       Its id.
-	 * @return array id, price, stock, stock_text, sku, on.
+	 * @return array id, price, stock, out (out of stock), stock_text, sku, on.
 	 */
 	private static function variation_view( array $variation, $vid ) {
 		return array(
 			'id'         => (int) $vid,
 			'price'      => (string) ( $variation['price'] ?? '' ),
 			'stock'      => isset( $variation['stock'] ) && is_numeric( $variation['stock'] ) ? (int) $variation['stock'] : null,
+			'out'        => 'outofstock' === (string) ( $variation['stock_status'] ?? 'instock' ),
 			'stock_text' => self::stock_text( $variation ),
 			'sku'        => (string) ( $variation['sku'] ?? '' ),
 			'on'         => self::enabled( $variation ),

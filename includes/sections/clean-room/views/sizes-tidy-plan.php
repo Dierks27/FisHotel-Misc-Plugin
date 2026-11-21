@@ -23,6 +23,7 @@ $fh_labels = $plan['labels'];
 $fh_by_row  = array();
 $fh_clean   = array();
 $fh_off_out = array();
+$fh_off_hid = array();
 $fh_sale    = array();
 $fh_dupes   = array();
 foreach ( $plan['changes'] as $fh_change ) {
@@ -30,6 +31,9 @@ foreach ( $plan['changes'] as $fh_change ) {
 	$fh_by_row[ $fh_key ][] = $fh_change;
 	if ( in_array( $fh_change['why'], array( 'left', 'off_now', 'move' ), true ) ) {
 		$fh_sale[] = $fh_change;
+	} elseif ( 'off_out' === $fh_change['why'] && empty( $fh_change['out'] ) ) {
+		// Not out of stock: nobody can buy it because its product is not on the shop (a draft), or it is switched off.
+		$fh_off_hid[] = $fh_change;
 	} elseif ( 'off_out' === $fh_change['why'] ) {
 		$fh_off_out[] = $fh_change;
 	} elseif ( 'dupe_off' === $fh_change['why'] ) {
@@ -40,9 +44,27 @@ foreach ( $plan['changes'] as $fh_change ) {
 }
 
 /**
+ * Why nobody can buy a variation although it is not out of stock: its
+ * product is not on the shop, or it is switched off itself.
+ */
+$fh_mark = static function ( array $change ) {
+	$status = (string) ( $change['status'] ?? 'publish' );
+	if ( 'draft' === $status ) {
+		return __( 'a draft — not on the shop yet', 'fishotel-misc-plugin' );
+	}
+	if ( 'publish' !== $status ) {
+		return __( 'its product is not published', 'fishotel-misc-plugin' );
+	}
+	if ( empty( $change['on'] ) ) {
+		return '' === trim( (string) $change['price'] ) ? __( 'no price', 'fishotel-misc-plugin' ) : __( 'already switched off', 'fishotel-misc-plugin' );
+	}
+	return '';
+};
+
+/**
  * One changed variation, as a list item.
  */
-$fh_item = static function ( array $change ) {
+$fh_item = static function ( array $change ) use ( $fh_mark ) {
 	$title = '' !== (string) $change['title'] ? (string) $change['title'] : '#' . (int) $change['product'];
 	$to    = '' !== (string) $change['to'] ? (string) $change['to_label'] : __( 'no size, switched off', 'fishotel-misc-plugin' );
 	if ( $change['off'] && '' !== (string) $change['to'] ) {
@@ -52,9 +74,14 @@ $fh_item = static function ( array $change ) {
 	if ( 'left' === $change['why'] ) {
 		$to = __( 'left as it is', 'fishotel-misc-plugin' );
 	}
+	if ( ! empty( $change['any'] ) && 'left' !== $change['why'] && 'move' !== $change['why'] ) {
+		$to = $change['off'] ? __( 'off the product\'s list; the product lists no size any more, so this variation is switched off', 'fishotel-misc-plugin' ) : __( 'off the product\'s list', 'fishotel-misc-plugin' );
+	}
 	echo '<li><a href="' . esc_url( Admin_Sizes_Tidy::edit_url( $change['product'] ) ) . '">' . esc_html( $title ) . '</a> — ' . esc_html( (string) $change['from_label'] ) . ' → ' . esc_html( $to )
 		. ' <span class="fh-cr-muted">· ' . esc_html( Admin_Sizes_Tidy::money( $change['price'] ) ) . ' · ' . esc_html( (string) $change['stock_text'] )
 		. ( '' !== (string) $change['sku'] ? ' · ' . esc_html( sprintf( /* translators: %s: SKU */ __( 'SKU %s', 'fishotel-misc-plugin' ), (string) $change['sku'] ) ) : '' )
+		. ( ! empty( $change['any'] ) ? ' · ' . esc_html__( 'sold as "any size"', 'fishotel-misc-plugin' ) : '' )
+		. ( '' !== $fh_mark( $change ) ? ' · ' . esc_html( $fh_mark( $change ) ) : '' )
 		. ( empty( $change['fish'] ) ? ' · ' . esc_html__( 'not in a fish category', 'fishotel-misc-plugin' ) : '' ) . '</span></li>';
 };
 ?>
@@ -97,10 +124,13 @@ $fh_item = static function ( array $change ) {
 				} elseif ( 'waiting' === $fh_row['after'] ) {
 					/* translators: %d: products */
 					$fh_notes[] = sprintf( _n( 'stays for now: %d product needs a look first', 'stays for now: %d products need a look first', max( 1, (int) ( $fh_row['stuck'] ?? 0 ) ), 'fishotel-misc-plugin' ), max( 1, (int) ( $fh_row['stuck'] ?? 0 ) ) );
+				} elseif ( 'trash' === $fh_row['after'] ) {
+					/* translators: %d: products */
+					$fh_notes[] = sprintf( _n( 'stays in the list: %d product in the trash still uses it, and the trash is left alone. Delete that product for good (or restore it), then run this again', 'stays in the list: %d products in the trash still use it, and the trash is left alone. Delete those products for good (or restore them), then run this again', (int) ( $fh_row['trash'] ?? 1 ), 'fishotel-misc-plugin' ), (int) ( $fh_row['trash'] ?? 1 ) );
 				}
 			}
 			if ( Sizes_Tidy::REMOVE === $fh_row['action'] && ! empty( $fh_row['stores']['invoice_lines'] ) ) {
-				$fh_notes[] = __( 'a draft invoice that lists it keeps the size but can no longer read its shop price — set the price on the invoice by hand', 'fishotel-misc-plugin' );
+				$fh_notes[] = __( 'a draft invoice that lists it keeps the size and the price on its line; only a fish of this size added to an invoice later finds no shop price for the size — type the price on the invoice', 'fishotel-misc-plugin' );
 			}
 			$fh_also = array();
 			foreach ( $fh_row['stores'] as $fh_store => $fh_count ) {
@@ -198,7 +228,12 @@ $fh_item = static function ( array $change ) {
 				<?php foreach ( $fh_sale as $fh_change ) : ?>
 					<tr>
 						<td><a href="<?php echo esc_url( Admin_Sizes_Tidy::edit_url( $fh_change['product'] ) ); ?>"><?php echo esc_html( '' !== $fh_change['title'] ? $fh_change['title'] : '#' . $fh_change['product'] ); ?></a></td>
-						<td><?php echo esc_html( $fh_change['from_label'] ); ?></td>
+						<td>
+							<?php echo esc_html( $fh_change['from_label'] ); ?>
+							<?php if ( ! empty( $fh_change['any'] ) ) : ?>
+								<span class="fh-cr-muted"><?php esc_html_e( '— sold as "any size": the customer picks a size from the product\'s list', 'fishotel-misc-plugin' ); ?></span>
+							<?php endif; ?>
+						</td>
 						<td><?php echo esc_html( Admin_Sizes_Tidy::money( $fh_change['price'] ) ); ?></td>
 						<td><?php echo esc_html( $fh_change['stock_text'] ); ?></td>
 						<td>
@@ -210,6 +245,8 @@ $fh_item = static function ( array $change ) {
 										<option value="<?php echo esc_attr( $fh_size['slug'] ); ?>" <?php selected( 'move' === $fh_change['why'] ? $fh_change['to'] : '', $fh_size['slug'] ); ?>><?php echo esc_html( $fh_size['label'] ); ?></option>
 									<?php endforeach; ?>
 								</select>
+							<?php elseif ( 'off_now' === $fh_change['why'] && ! empty( $fh_change['any'] ) && empty( $fh_change['off'] ) ) : ?>
+								<?php esc_html_e( 'the size comes off the product\'s list now; the fish stays for sale in its other sizes', 'fishotel-misc-plugin' ); ?>
 							<?php elseif ( 'off_now' === $fh_change['why'] ) : ?>
 								<?php esc_html_e( 'taken off the shop now', 'fishotel-misc-plugin' ); ?>
 							<?php else : ?>
@@ -240,11 +277,26 @@ $fh_item = static function ( array $change ) {
 			<strong><?php esc_html_e( 'Taken off now', 'fishotel-misc-plugin' ); ?></strong> —
 			<?php
 			/* translators: %d: count */
-			echo esc_html( sprintf( _n( '%d variation that nobody can buy anyway (out of stock, or not on the shop) is switched off and loses its size', '%d variations that nobody can buy anyway (out of stock, or not on the shop) are switched off and lose their size', count( $fh_off_out ), 'fishotel-misc-plugin' ), count( $fh_off_out ) ) );
+			echo esc_html( sprintf( _n( '%d variation that is out of stock — nobody can buy it anyway — is switched off and loses its size', '%d variations that are out of stock — nobody can buy them anyway — are switched off and lose their size', count( $fh_off_out ), 'fishotel-misc-plugin' ), count( $fh_off_out ) ) );
 			?>
 		</summary>
+		<p class="fh-cr-sub"><?php esc_html_e( 'Checked again at the moment each one is written: a fish that is back in stock by then is left for sale as it is, and named at the end.', 'fishotel-misc-plugin' ); ?></p>
 		<ul class="fh-tidy__list"><?php array_map( $fh_item, $fh_off_out ); ?></ul>
 	</details>
+<?php endif; ?>
+
+<?php if ( $fh_off_hid ) : ?>
+	<div class="fh-tidy__box">
+		<h4 class="fh-tidy__h4">
+			<strong><?php esc_html_e( 'Taken off now — not on the shop, but with stock', 'fishotel-misc-plugin' ); ?></strong> —
+			<?php
+			/* translators: %d: count */
+			echo esc_html( sprintf( _n( '%d variation', '%d variations', count( $fh_off_hid ), 'fishotel-misc-plugin' ), count( $fh_off_hid ) ) );
+			?>
+		</h4>
+		<p class="fh-cr-sub"><?php esc_html_e( 'Nobody can buy these today — the fish is a draft, or the variation is switched off or has no price — so they are switched off and lose their size like the ones above. But they are not sold out: their stock is kept and shown here, and each fish goes on the "Sizes to fill in" list. To leave one alone, set its size\'s row to "keep as it is".', 'fishotel-misc-plugin' ); ?></p>
+		<ul class="fh-tidy__list"><?php array_map( $fh_item, $fh_off_hid ); ?></ul>
+	</div>
 <?php endif; ?>
 
 <?php if ( $plan['two'] ) : ?>
@@ -345,7 +397,7 @@ $fh_item = static function ( array $change ) {
 			echo esc_html( sprintf( _n( '%d fish will show as unavailable until you add a size', '%d fish will show as unavailable until you add a size', count( $plan['unavailable'] ), 'fishotel-misc-plugin' ), count( $plan['unavailable'] ) ) );
 			?>
 		</h4>
-		<p class="fh-cr-sub"><?php esc_html_e( 'Every size they sell is being taken off. The products themselves are not hidden, trashed or changed in any other way; they go on the "Sizes to fill in" list.', 'fishotel-misc-plugin' ); ?></p>
+		<p class="fh-cr-sub"><?php esc_html_e( 'Every size they sell is being taken off. On the fish page they then read "Currently unavailable — contact us", with no price and no "Notify me" button, until a size is added. The products themselves are not hidden, trashed or changed in any other way; they go on the "Sizes to fill in" list.', 'fishotel-misc-plugin' ); ?></p>
 		<ul class="fh-tidy__list">
 			<?php foreach ( $plan['unavailable'] as $fh_product ) : ?>
 				<li><a href="<?php echo esc_url( Admin_Sizes_Tidy::edit_url( $fh_product['id'] ) ); ?>"><?php echo esc_html( '' !== $fh_product['title'] ? $fh_product['title'] : '#' . $fh_product['id'] ); ?></a></li>
@@ -382,7 +434,7 @@ $fh_item = static function ( array $change ) {
 <ul class="fh-tidy__list fh-tidy__small">
 	<li><?php esc_html_e( 'The Clean Room\'s stays and supplier order lines, fish requests, lost-fish cases, draft invoices, box shares and the Packing size map follow a size that BECOMES another. A size that is taken off stays on the fish in the tanks as it is — it shows as "not a standard size".', 'fishotel-misc-plugin' ); ?></li>
 	<li><?php esc_html_e( 'Past orders are not touched: an order line keeps the size text it was bought with. Open baskets are not touched either — but a fish that is taken off the shop drops out of a basket it was in, as any fish that is no longer for sale does.', 'fishotel-misc-plugin' ); ?></li>
-	<li><?php esc_html_e( 'An old size is removed from the list only once no product and no variation uses it any more.', 'fishotel-misc-plugin' ); ?></li>
+	<li><?php esc_html_e( 'An old size is removed from the list only once no product and no variation uses it any more — a product in the trash counts: the trash is left alone.', 'fishotel-misc-plugin' ); ?></li>
 </ul>
 
 <p class="fh-tidy__totals"><strong><?php echo esc_html( Admin_Sizes_Tidy::totals_text( $fh_totals ) ); ?></strong></p>
@@ -402,9 +454,11 @@ $fh_item = static function ( array $change ) {
 			</label>
 			<input type="text" id="fh-tidy-confirm" class="fh-cr-input fh-tidy__confirm" name="confirm" autocomplete="off" size="8">
 		</p>
+		<p class="fh-tidy__message fh-tidy__message--bad fh-tidy__apply-message" role="alert" hidden></p>
 		<p class="fh-cr-actions-row">
 			<button type="button" class="button button-primary fh-tidy__apply-button"><?php esc_html_e( 'Tidy up the sizes now', 'fishotel-misc-plugin' ); ?></button>
-			<span class="fh-cr-muted"><?php esc_html_e( 'It works through the shop a few fish at a time and shows how far it is. If the page stops, click again: it carries on where it stopped. Afterwards "Undo the last tidy-up" puts everything back.', 'fishotel-misc-plugin' ); ?></span>
+			<button type="button" class="button fh-tidy__preview fh-tidy__preview--again"><?php esc_html_e( 'Show what would change', 'fishotel-misc-plugin' ); ?></button>
+			<span class="fh-cr-muted"><?php esc_html_e( 'It works through the shop a few fish at a time and shows how far it is. If the page stops, "Carry on" picks it up where it stopped — with these choices, whatever the page shows by then. Afterwards "Undo the last tidy-up" puts everything back.', 'fishotel-misc-plugin' ); ?></span>
 		</p>
 	</div>
 <?php endif; ?>

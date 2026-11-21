@@ -70,6 +70,19 @@ function fh_tidy_picker( Fake_Tidy_Shop $shop ) {
 	return Sizes::resolve( array( array( 'taxonomy' => 'pa_size', 'name' => 'size', 'label' => 'Size', 'orderby' => $data['orderby'] ) ), $data['terms'], array(), Sizes::leaving( 'pa_size' ) )['sizes'];
 }
 
+/**
+ * The rows of a plan's map by slug.
+ */
+function fh_rows_by_slug( array $rows ) {
+	$by = array();
+	foreach ( $rows as $row ) {
+		if ( ! $row['typed'] ) {
+			$by[ $row['slug'] ] = $row;
+		}
+	}
+	return $by;
+}
+
 echo "1. The record comes first\n";
 $shop   = fh_tidy_shop();
 $ids    = fh_tidy_ids( $shop );
@@ -381,5 +394,131 @@ check( 'memory stays far below a small site\'s limit', memory_get_peak_usage() <
 check_same( 'every stay whose size became another was rewritten, none other', array( 0, 200 ), array( count( array_filter( $big->tables['stays'], static function ( $row ) { return in_array( $row['size_slug'], array( '1-3', '2-3-5', '3', '4-6', '6' ), true ); } ) ), count( array_filter( $big->tables['stays'], static function ( $row ) { return 'small-medium' === $row['size_slug']; } ) ) ) );
 $undone = fh_tidy_undo( $big );
 check( 'and Undo puts the 2,000 back exactly', 'undone' === $undone['status'] && $zero === $big->dump() );
+
+echo "13. A shop that does not stand still: stock is looked at again as each fish is written\n";
+$shop = fh_tidy_shop();
+$ids  = fh_tidy_ids( $shop );
+$hawk = $shop->vids( $ids['Flame Hawk'] )[0];
+$plan = Sizes_Tidy::plan( $shop->read_shop( 'pa_size' ) );
+check_same( 'when the owner looked, Flame Hawk Small-Medium was out of stock: to be taken off', 'off_out', $plan['products'][ $ids['Flame Hawk'] ]['vars'][ $hawk ]['why'] );
+$start = Sizes_Tidy_Run::start( $shop, $plan, 'owner' );
+Sizes_Tidy_Run::step( $shop, $start['run'], 100 ); // Recorded.
+// The run stops here (a timeout, a closed tab). Before "Carry on", the fish is restocked.
+$shop->products[ $ids['Flame Hawk'] ]['variations'][ $hawk ]['stock']        = 5;
+$shop->products[ $ids['Flame Hawk'] ]['variations'][ $hawk ]['stock_status'] = 'instock';
+$restocked = $shop->dump();
+$done      = fh_tidy_steps( $shop, $start['run'] );
+$now       = $shop->products[ $ids['Flame Hawk'] ];
+check_same( 'Carry on does NOT switch it off: it is for sale now, so it is left — its size, Enabled and stock as they are', array( 'publish', 'small-medium', 5 ), array( $now['variations'][ $hawk ]['status'], $now['variations'][ $hawk ]['attrs']['pa_size'], $now['variations'][ $hawk ]['stock'] ) );
+check_same( '…its product still lists the size, and is not on the "Sizes to fill in" list', array( array( 'medium', 'small-medium' ), false ), array( $now['sizes'], isset( $shop->fill_list()[ $ids['Flame Hawk'] ] ) ) );
+check( '…the size is still a term, and is marked retiring (out of the pickers) with the fish left on it', isset( $shop->terms['small-medium'] ) && 'Small-Medium' === $shop->option_get( Sizes::STATE_OPTION )['retiring']['small-medium'] && 1 === $shop->retiring_counts( 'pa_size', array( 'small-medium' ) )['small-medium'] && ! in_array( 'Small-Medium', array_column( fh_tidy_picker( $shop ), 'label' ), true ) );
+check_same( '…and the run names the fish at the end', array( array( 'variation' => $hawk, 'product' => $ids['Flame Hawk'], 'title' => 'Flame Hawk', 'sizes' => array( 'small-medium' => 'Small-Medium' ) ) ), $done['back'] );
+check( 'everything else was tidied as planned', 'private' === array_values( $shop->products[ $ids['Ivory Puffer'] ]['variations'] )[0]['status'] && array( '1-2', '2-3' ) === $shop->products[ $ids['Banded Goby'] ]['sizes'] );
+$again = Sizes_Tidy::plan( $shop->read_shop( 'pa_size' ) );
+check( 'a later look: the fish is for sale, so it is left to retire like the others', true === $again['nothing'] && 1 === fh_rows_by_slug( $again['rows'] )['small-medium']['left'] );
+fh_tidy_undo( $shop );
+check( 'Undo puts the shop back as it was — with the restock', $restocked === $shop->dump() );
+
+$shop  = fh_tidy_shop();
+$ids   = fh_tidy_ids( $shop );
+$opal  = $shop->vids( $ids['Opal Jawfish'] )[0];
+$shop->before_apply = static function ( $pid ) use ( $shop, $ids ) {
+	if ( $pid === $ids['Opal Jawfish'] ) {
+		$shop->products[ $pid ]['status'] = 'publish'; // The draft goes on the shop while the tool works.
+	}
+};
+$done = fh_tidy_run( $shop );
+check_same( 'a draft fish with stock that is published in the meantime is left for sale too', array( 'publish', 'small-medium', array( 'Opal Jawfish' ) ), array( $shop->products[ $ids['Opal Jawfish'] ]['variations'][ $opal ]['status'], $shop->products[ $ids['Opal Jawfish'] ]['variations'][ $opal ]['attrs']['pa_size'], array_column( $done['back'], 'title' ) ) );
+$shop  = fh_tidy_shop();
+$ids   = fh_tidy_ids( $shop );
+$wrasse = $shop->vids( $ids['Golden Wrasse'] )[0];
+fh_tidy_run( $shop, array( 'instock' => 'off' ) );
+check_same( '"take them off the shop now" is the owner\'s own word for the fish that WERE for sale: those are taken off, as shown', array( 'private', '' ), array( $shop->products[ $ids['Golden Wrasse'] ]['variations'][ $wrasse ]['status'], $shop->products[ $ids['Golden Wrasse'] ]['variations'][ $wrasse ]['attrs']['pa_size'] ) );
+
+echo "14. Sold as \"any size\", through Apply and Undo\n";
+$shop  = fh_tidy_shop();
+$quill = $shop->add_product( 'Quill Anthias', array( 'small-medium' => array( '30.00', 4, 'attrs' => array( 'pa_size' => '' ) ) ) );
+$ruby  = $shop->add_product( 'Ruby Basslet', array( 'small-medium' => array( '18.00', 3, 'attrs' => array( 'pa_size' => '' ) ) ), array( 'sizes' => array( 'small-medium', 'medium' ) ) );
+$sable = $shop->add_product( 'Sable Chromis', array( 'small-medium' => array( '12.00', 0, 'attrs' => array( 'pa_size' => '' ) ) ) );
+$zero  = $shop->dump();
+$done  = fh_tidy_run( $shop );
+check( 'the fish in stock sold as any size are exactly as they were: still listed with Small-Medium, still for sale', 'done' === $done['status'] && $zero['products'][ $quill ] === $shop->products[ $quill ] && $zero['products'][ $ruby ] === $shop->products[ $ruby ] );
+check_same( 'Small-Medium stays in the shop, retiring — 2 fish left', array( true, 2 ), array( isset( $shop->terms['small-medium'] ), $shop->retiring_counts( 'pa_size', array( 'small-medium' ) )['small-medium'] ) );
+$gone = $shop->products[ $sable ];
+check_same( 'the one out of stock: its product lists nothing, it is switched off, price and stock kept, and it is on the "Sizes to fill in" list', array( array(), 'private', '12.00', 0, true ), array( $gone['sizes'], array_values( $gone['variations'] )[0]['status'], array_values( $gone['variations'] )[0]['price'], array_values( $gone['variations'] )[0]['stock'], isset( $shop->fill_list()[ $sable ] ) ) );
+// The last two sell out; "Finish retiring" (the same tool again) takes the size off.
+foreach ( array( $quill, $ruby ) as $pid ) {
+	$vid = $shop->vids( $pid )[0];
+	$shop->products[ $pid ]['variations'][ $vid ]['stock']        = 0;
+	$shop->products[ $pid ]['variations'][ $vid ]['stock_status'] = 'outofstock';
+}
+fh_tidy_run( $shop );
+check_same( 'once they sold out, a second run finishes it: the size is gone, Ruby Basslet still lists Medium and its variation is still on', array( false, array(), array( 'medium' ), 'publish' ), array( isset( $shop->terms['small-medium'] ), $shop->products[ $quill ]['sizes'], $shop->products[ $ruby ]['sizes'], array_values( $shop->products[ $ruby ]['variations'] )[0]['status'] ) );
+fh_tidy_undo( $shop );
+fh_tidy_undo( $shop );
+foreach ( array( $quill, $ruby ) as $pid ) {
+	$vid = $shop->vids( $pid )[0];
+	$shop->products[ $pid ]['variations'][ $vid ]['stock']        = $zero['products'][ $pid ]['variations'][ $vid ]['stock'];
+	$shop->products[ $pid ]['variations'][ $vid ]['stock_status'] = 'instock';
+}
+check( 'both runs undone: the shop is as it was (the stock put back by hand — Undo never touches stock)', $zero === $shop->dump() );
+$shop  = fh_tidy_shop();
+$sable = $shop->add_product( 'Sable Chromis', array( 'small-medium' => array( '12.00', 0, 'attrs' => array( 'pa_size' => '' ) ) ) );
+$vid   = $shop->vids( $sable )[0];
+$shop->before_apply = static function ( $pid ) use ( $shop, $sable, $vid ) {
+	if ( $pid === $sable ) {
+		$shop->products[ $sable ]['variations'][ $vid ]['stock']        = 2;
+		$shop->products[ $sable ]['variations'][ $vid ]['stock_status'] = 'instock';
+	}
+};
+$done = fh_tidy_run( $shop );
+check_same( 'an any-size fish restocked while the tool works keeps its product\'s list, and is named', array( array( 'small-medium' ), 'publish', array( 'small-medium' => 'Small-Medium' ) ), array( $shop->products[ $sable ]['sizes'], $shop->products[ $sable ]['variations'][ $vid ]['status'], $done['back'][0]['sizes'] ) );
+
+echo "15. Undo after the owner went on\n";
+$shop = fh_tidy_shop();
+$ids  = fh_tidy_ids( $shop );
+$zero = $shop->dump();
+fh_tidy_run( $shop );
+// The owner works through "Sizes to fill in": the switched-off Flame Hawk gets Small, a new price, stock, and Enabled.
+$hawk = $shop->vids( $ids['Flame Hawk'] )[0];
+$shop->products[ $ids['Flame Hawk'] ]['variations'][ $hawk ] = array_merge( $shop->products[ $ids['Flame Hawk'] ]['variations'][ $hawk ], array( 'attrs' => array( 'pa_size' => 'small' ), 'status' => 'publish', 'price' => '23.00', 'stock' => 6, 'stock_status' => 'instock', 'title' => 'Flame Hawk - small' ) );
+$shop->products[ $ids['Flame Hawk'] ]['sizes'][]             = 'small';
+// Ivory Puffer's is only switched on again (it reads "any size"); the last Banded Goby sells.
+$puffer = $shop->vids( $ids['Ivory Puffer'] )[0];
+$shop->products[ $ids['Ivory Puffer'] ]['variations'][ $puffer ]['status'] = 'publish';
+$goby = $shop->vids( $ids['Banded Goby'] )[1];
+$shop->products[ $ids['Banded Goby'] ]['variations'][ $goby ]['stock']        = 0;
+$shop->products[ $ids['Banded Goby'] ]['variations'][ $goby ]['stock_status'] = 'outofstock';
+$undone = fh_tidy_undo( $shop );
+$now    = $shop->products[ $ids['Flame Hawk'] ]['variations'][ $hawk ];
+check_same( 'the variation that was given Small since is NOT made Small-Medium again: its size, price, stock and Enabled are the owner\'s', array( 'small', 'publish', '23.00', 6 ), array( $now['attrs']['pa_size'], $now['status'], $now['price'], $now['stock'] ) );
+check_same( '…Undo says which one it left', array( array( 'variation' => $hawk, 'product' => $ids['Flame Hawk'], 'title' => 'Flame Hawk', 'size' => 'small', 'label' => 'Small' ) ), $undone['kept'] );
+check_same( '…and its product lists what it listed before, plus the size that variation carries now', array( 'small-medium', 'medium', 'small' ), $shop->products[ $ids['Flame Hawk'] ]['sizes'] );
+check_same( 'a variation that was only switched on again still has the size the run gave it (none): it goes back to what it was', array( 'large-xl', 'publish' ), array( $shop->products[ $ids['Ivory Puffer'] ]['variations'][ $puffer ]['attrs']['pa_size'], $shop->products[ $ids['Ivory Puffer'] ]['variations'][ $puffer ]['status'] ) );
+check_same( 'a renamed fish that sold out since gets its old size name back — and is still sold out: Undo never writes stock', array( '2-3-5', 0, 'outofstock' ), array( $shop->products[ $ids['Banded Goby'] ]['variations'][ $goby ]['attrs']['pa_size'], $shop->products[ $ids['Banded Goby'] ]['variations'][ $goby ]['stock'], $shop->products[ $ids['Banded Goby'] ]['variations'][ $goby ]['stock_status'] ) );
+$want = $zero;
+$want['products'][ $ids['Flame Hawk'] ]['variations'][ $hawk ]              = $now;
+$want['products'][ $ids['Flame Hawk'] ]['sizes'][]                          = 'small';
+$want['products'][ $ids['Banded Goby'] ]['variations'][ $goby ]['stock']        = 0;
+$want['products'][ $ids['Banded Goby'] ]['variations'][ $goby ]['stock_status'] = 'outofstock';
+check( 'everything else is back exactly as it was', 'undone' === $undone['status'] && $want === $shop->dump() );
+$shop = fh_tidy_shop();
+$ids  = fh_tidy_ids( $shop );
+fh_tidy_run( $shop, array( 'convert' => array( $ids['Koi Angel'] => 1 ) ) );
+$koi = $shop->vids( $ids['Koi Angel'] )[0];
+$shop->products[ $ids['Koi Angel'] ]['variations'][ $koi ]['attrs']['pa_size'] = '3-4';
+$after  = $shop->products[ $ids['Koi Angel'] ];
+$undone = fh_tidy_undo( $shop );
+check( 'a typed size that was made a size of the list, then changed by the owner: the whole fish is left as it is and named — never half typed, half listed', $after === $shop->products[ $ids['Koi Angel'] ] && array( 'Koi Angel' ) === array_column( $undone['kept'], 'title' ) );
+
+echo "16. A product in the trash keeps its size\n";
+$shop          = fh_tidy_shop();
+$shop->trashed = array( 'xl' => 1 );
+$done          = fh_tidy_run( $shop );
+check( 'XL is still a term after the run (Tiny, which nothing uses, is gone) — nothing was skipped: the plan knew', isset( $shop->terms['xl'] ) && ! isset( $shop->terms['tiny'] ) && array() === $done['skipped'] && ! in_array( 'term_delete xl', $shop->calls, true ) );
+check( '…and it is out of the pickers, waiting', isset( $shop->option_get( Sizes::STATE_OPTION )['waiting']['xl'] ) && ! in_array( 'XL', array_column( fh_tidy_picker( $shop ), 'label' ), true ) );
+$shop->trashed = array();
+fh_tidy_run( $shop );
+check( 'once the trash is emptied, the next run takes it off', ! isset( $shop->terms['xl'] ) );
 
 fh_finish();

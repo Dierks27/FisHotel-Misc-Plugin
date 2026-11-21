@@ -147,3 +147,12 @@
 		overflow-x: auto;
 	}
 }
+
+.fh-tidy .fh-tidy__apply .fh-tidy__apply-message {
+	margin: 8px 0;
+}
+
+.fh-tidy .fh-tidy__form[hidden],
+.fh-tidy .fh-tidy__held[hidden] {
+	display: none;
+}

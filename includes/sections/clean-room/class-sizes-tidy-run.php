@@ -27,10 +27,20 @@
  * start() saves the whole list; the first step()s record every product
  * as it is ("recording") and only when the last one is recorded does the
  * first write happen ("applying"). Each item sets absolute values, so an
- * item cut off half-way is simply applied again: clicking Apply twice,
- * or after a timeout, carries on where it stopped. undo() walks the same
- * items backwards and puts every `before` back. The last MAX_RUNS runs
- * are kept — a stack: the latest is undone first.
+ * item cut off half-way is simply applied again: after a timeout, Carry
+ * on picks up where it stopped. undo() walks the same items backwards
+ * and puts every `before` back. The last MAX_RUNS runs are kept — a
+ * stack: the latest is undone first.
+ *
+ * Two things are looked at again at the moment of writing, because a
+ * shop does not stand still between the preview and the last batch:
+ *   - a variation the plan takes off because nobody could buy it is
+ *     left alone when it is for sale by then (restocked, or its product
+ *     published): it keeps its size, the size stays in the shop as
+ *     "retiring", and the run says so (`back` in its data);
+ *   - Undo leaves a variation alone that was given another size since
+ *     the run (`kept` in its data) — it never overwrites the owner's
+ *     later work — and says so.
  *
  * Nothing here runs on its own: no cron, no activation hook, nothing on
  * an upgrade — only the tool's buttons call it.
@@ -143,6 +153,18 @@ interface Sizes_Tidy_Shop {
 	public function product_get( $taxonomy, $product_id, array $variation_ids );
 
 	/**
+	 * Which of some variations of a product can be bought right now (the
+	 * product and the variation published, a price, in stock or on
+	 * backorder) — asked at the moment of writing.
+	 *
+	 * @param string $taxonomy      Taxonomy.
+	 * @param int    $product_id    Product id.
+	 * @param int[]  $variation_ids Variation ids.
+	 * @return int[] The ids that are for sale.
+	 */
+	public function for_sale_now( $taxonomy, $product_id, array $variation_ids );
+
+	/**
 	 * Apply one product of a plan (Sizes_Tidy::plan()['products'][id]).
 	 *
 	 * @param string $taxonomy   Taxonomy.
@@ -153,14 +175,21 @@ interface Sizes_Tidy_Shop {
 	public function product_apply( $taxonomy, $product_id, array $change );
 
 	/**
-	 * Put a product and its variations back exactly as product_get() gave them.
+	 * Put a product and its variations back as product_get() gave them —
+	 * but a variation the run changed that has since been given another
+	 * size (neither the one the run set nor the one it had) is left as it
+	 * is now, and the product's list keeps the sizes its variations
+	 * carry. What WooCommerce derives from the variations (the product's
+	 * stock status, price and catalogue visibility) is left to
+	 * WooCommerce: stock may have moved since.
 	 *
 	 * @param string $taxonomy   Taxonomy.
 	 * @param int    $product_id Product id.
 	 * @param array  $record     product_get().
-	 * @return bool
+	 * @param array  $change     What the run set (the plan's product: vars, convert, …).
+	 * @return array[] The variations left as they are: variation, product, title, size (the slug it has now), label.
 	 */
-	public function product_restore( $taxonomy, $product_id, array $record );
+	public function product_restore( $taxonomy, $product_id, array $record, array $change = array() );
 
 	/**
 	 * Rows of a store whose size is one of the slugs, by id, complete.
@@ -776,7 +805,12 @@ class Sizes_Tidy_Run {
 						break;
 					}
 					foreach ( $items as $item ) {
-						$note = self::apply_item( $shop, $taxonomy, $item );
+						$data = (array) $run['data'];
+						$note = self::apply_item( $shop, $taxonomy, $item, $data );
+						if ( $data !== (array) $run['data'] ) {
+							$run['data'] = $data;
+							$shop->run_update( (int) $run['id'], array( 'data' => $data ) );
+						}
 						$shop->item_update(
 							(int) $item['id'],
 							array(
@@ -801,7 +835,15 @@ class Sizes_Tidy_Run {
 						break;
 					}
 					foreach ( $items as $item ) {
-						self::restore_item( $shop, $taxonomy, $item );
+						$kept = self::restore_item( $shop, $taxonomy, $item );
+						if ( $kept ) {
+							$data = (array) $run['data'];
+							foreach ( $kept as $entry ) {
+								$data['kept'][ (int) $entry['variation'] ] = $entry;
+							}
+							$run['data'] = $data;
+							$shop->run_update( (int) $run['id'], array( 'data' => $data ) );
+						}
 						$shop->item_update( (int) $item['id'], array( 'state' => self::UNDONE ) );
 						--$left;
 						if ( microtime( true ) - $started >= $seconds ) {
@@ -826,7 +868,9 @@ class Sizes_Tidy_Run {
 	 * @param Sizes_Tidy_Shop $shop Shop.
 	 * @param array|null      $run  The run (null = it is gone).
 	 * @param string          $why  '' | gone | busy.
-	 * @return array
+	 * @return array ok, why, status, done, total, finished, skipped, back (the variations left for sale
+	 *               because they were back in stock when their turn came), kept (the variations an undo
+	 *               left as they are because they were given another size since).
 	 */
 	public static function progress( Sizes_Tidy_Shop $shop, $run, $why = '' ) {
 		if ( ! $run ) {
@@ -838,9 +882,13 @@ class Sizes_Tidy_Run {
 				'total'    => 0,
 				'finished' => true,
 				'skipped'  => array(),
+				'back'     => array(),
+				'kept'     => array(),
 			);
 		}
 		$status = (string) $run['status'];
+		$back   = isset( $run['data']['back'] ) && is_array( $run['data']['back'] ) ? array_values( $run['data']['back'] ) : array();
+		$kept   = isset( $run['data']['kept'] ) && is_array( $run['data']['kept'] ) ? array_values( $run['data']['kept'] ) : array();
 		if ( 'undone' === $status ) {
 			return array(
 				'ok'       => true,
@@ -850,6 +898,8 @@ class Sizes_Tidy_Run {
 				'total'    => 0,
 				'finished' => true,
 				'skipped'  => array(),
+				'back'     => array(),
+				'kept'     => $kept,
 			);
 		}
 		$counts = (array) $shop->items_count( (int) $run['id'] );
@@ -888,6 +938,8 @@ class Sizes_Tidy_Run {
 			'total'    => $total,
 			'finished' => 'done' === $status,
 			'skipped'  => $skipped,
+			'back'     => $back,
+			'kept'     => $kept,
 		);
 	}
 
@@ -898,9 +950,10 @@ class Sizes_Tidy_Run {
 	 * @param Sizes_Tidy_Shop $shop     Shop.
 	 * @param string          $taxonomy Taxonomy.
 	 * @param array           $item     Item.
+	 * @param array           $data     The run's data: `back` is added to here.
 	 * @return string '' when applied, else why it was skipped.
 	 */
-	private static function apply_item( Sizes_Tidy_Shop $shop, $taxonomy, array $item ) {
+	private static function apply_item( Sizes_Tidy_Shop $shop, $taxonomy, array $item, array &$data ) {
 		$after = (array) $item['after'];
 		$key   = (string) $item['object_key'];
 
@@ -912,7 +965,7 @@ class Sizes_Tidy_Run {
 				return '';
 
 			case 'product':
-				$shop->product_apply( $taxonomy, (int) $item['object_id'], $after );
+				$shop->product_apply( $taxonomy, (int) $item['object_id'], self::still_right( $shop, $taxonomy, (int) $item['object_id'], $after, $data ) );
 				return '';
 
 			case 'rows':
@@ -934,7 +987,17 @@ class Sizes_Tidy_Run {
 				return '';
 
 			case 'option':
-				$shop->option_set( $key, $after['value'] ?? null );
+				$value = $after['value'] ?? null;
+				if ( Sizes::STATE_OPTION === $key && is_array( $value ) && ! empty( $data['back'] ) ) {
+					// A size a fish came back into stock on is still on that fish: it is retiring, not gone.
+					foreach ( (array) $data['back'] as $entry ) {
+						foreach ( (array) ( $entry['sizes'] ?? array() ) as $slug => $label ) {
+							$value['retiring'][ (string) $slug ] = (string) $label;
+							unset( $value['waiting'][ (string) $slug ], $value['retired'][ (string) $slug ] );
+						}
+					}
+				}
+				$shop->option_set( $key, $value );
 				return '';
 
 			case 'order':
@@ -960,11 +1023,73 @@ class Sizes_Tidy_Run {
 	}
 
 	/**
+	 * One product of a plan as it is applied NOW: a variation the plan
+	 * takes off because nobody could buy it (off_out) is looked at again —
+	 * the preview may be minutes old, and a run that stopped half-way
+	 * hours. One that is for sale by now is left alone: it keeps its size
+	 * and stays switched on, its product keeps the size in its list, and
+	 * the run's data names it (`back`).
+	 *
+	 * @param Sizes_Tidy_Shop $shop       Shop.
+	 * @param string          $taxonomy   Taxonomy.
+	 * @param int             $product_id Product id.
+	 * @param array           $change     The plan's product (vars, sizes, default, convert, fill).
+	 * @param array           $data       The run's data.
+	 * @return array The change to apply.
+	 */
+	private static function still_right( Sizes_Tidy_Shop $shop, $taxonomy, $product_id, array $change, array &$data ) {
+		$doubt = array();
+		foreach ( (array) ( $change['vars'] ?? array() ) as $vid => $entry ) {
+			if ( 'off_out' === (string) ( $entry['why'] ?? '' ) ) {
+				$doubt[] = (int) $vid;
+			}
+		}
+		if ( ! $doubt ) {
+			return $change;
+		}
+
+		foreach ( array_map( 'intval', (array) $shop->for_sale_now( $taxonomy, (int) $product_id, $doubt ) ) as $vid ) {
+			if ( ! isset( $change['vars'][ $vid ] ) ) {
+				continue;
+			}
+			$entry = (array) $change['vars'][ $vid ];
+			unset( $change['vars'][ $vid ] );
+			$sizes = array();
+			foreach ( isset( $entry['list'] ) ? (array) $entry['list'] : array( (string) ( $entry['from'] ?? '' ) ) as $slug ) {
+				$slug = (string) $slug;
+				if ( '' === $slug ) {
+					continue;
+				}
+				if ( ! in_array( $slug, array_map( 'strval', (array) ( $change['sizes'] ?? array() ) ), true ) ) {
+					$change['sizes'][] = $slug;
+				}
+				$term           = $shop->term_get( $taxonomy, $slug );
+				$sizes[ $slug ] = is_array( $term ) && '' !== Sizes::plain( (string) ( $term['name'] ?? '' ) ) ? Sizes::plain( (string) $term['name'] ) : $slug;
+			}
+			if ( isset( $change['fill'] ) && is_array( $change['fill'] ) ) {
+				unset( $change['fill'][ $vid ] );
+				if ( ! $change['fill'] ) {
+					$change['fill'] = null;
+				}
+			}
+			$data['back'][ $vid ] = array(
+				'variation' => $vid,
+				'product'   => (int) $product_id,
+				'title'     => (string) ( $change['title'] ?? '' ),
+				'sizes'     => $sizes,
+			);
+		}
+
+		return $change;
+	}
+
+	/**
 	 * Put back what one item changed.
 	 *
 	 * @param Sizes_Tidy_Shop $shop     Shop.
 	 * @param string          $taxonomy Taxonomy.
 	 * @param array           $item     Item.
+	 * @return array[] The variations left as they are (product_restore()).
 	 */
 	private static function restore_item( Sizes_Tidy_Shop $shop, $taxonomy, array $item ) {
 		$before = is_array( $item['before'] ) ? $item['before'] : array();
@@ -975,19 +1100,17 @@ class Sizes_Tidy_Run {
 				if ( empty( $before['existed'] ) && null !== $shop->term_get( $taxonomy, $key ) && 0 === $shop->term_uses( $taxonomy, $key ) ) {
 					$shop->term_delete( $taxonomy, $key );
 				}
-				return;
+				return array();
 
 			case 'product':
-				if ( $before ) {
-					$shop->product_restore( $taxonomy, (int) $item['object_id'], $before );
-				}
-				return;
+				$kept = $before ? $shop->product_restore( $taxonomy, (int) $item['object_id'], $before, (array) $item['after'] ) : array();
+				return is_array( $kept ) ? $kept : array();
 
 			case 'rows':
 				foreach ( $before as $id => $fields ) {
 					$shop->row_update( $key, (int) $id, (array) $fields );
 				}
-				return;
+				return array();
 
 			case 'shares':
 				// Out of the way first: a share that took a key gives it back before its old holder returns.
@@ -1007,21 +1130,23 @@ class Sizes_Tidy_Run {
 				foreach ( (array) ( $before['lines'] ?? array() ) as $id => $share_key ) {
 					$shop->row_update( 'order_lines', (int) $id, array( 'share_key' => (string) $share_key ) );
 				}
-				return;
+				return array();
 
 			case 'option':
 				$shop->option_set( $key, $before['value'] ?? null );
-				return;
+				return array();
 
 			case 'order':
 				$shop->order_set( $taxonomy, (array) ( $before['order'] ?? array() ), (string) ( $before['orderby'] ?? 'menu_order' ) );
-				return;
+				return array();
 
 			case 'term_delete':
 				if ( $before && null === $shop->term_get( $taxonomy, $key ) ) {
 					$shop->term_restore( $taxonomy, $before );
 				}
-				return;
+				return array();
 		}
+
+		return array();
 	}
 }

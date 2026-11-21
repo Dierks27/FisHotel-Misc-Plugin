@@ -8,8 +8,9 @@
  *
  * Seams a test may use that the real site has no need for: $fuse (throw
  * after that many writes, as a timeout would cut a batch off), $calls
- * (what was called, in order) and $loaded (how many products the last
- * step read).
+ * (what was called, in order), $loaded (how many products the last
+ * step read) and $before_apply (called with a product's id just before
+ * it is written — a shop that does not stand still).
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  */
@@ -41,6 +42,9 @@ class Fake_Tidy_Shop implements Sizes_Tidy_Shop {
 	/** @var array<string,int> slug → past order lines. */
 	public $orders = array();
 
+	/** @var array<string,int> slug → uses by products in the trash. */
+	public $trashed = array();
+
 	/** @var array<string,array[]> store → id → row. */
 	public $tables = array(
 		'stays'          => array(),
@@ -58,6 +62,9 @@ class Fake_Tidy_Shop implements Sizes_Tidy_Shop {
 	public $flushed = 0;
 
 	public $fuse   = 0;
+
+	/** @var callable|null */
+	public $before_apply = null;
 	public $writes = 0;
 	public $calls  = array();
 	public $loaded = 0;
@@ -196,6 +203,7 @@ class Fake_Tidy_Shop implements Sizes_Tidy_Shop {
 			'orderby'  => $this->orderby,
 			'terms'    => $terms,
 			'orders'   => $this->orders,
+			'trashed'  => $this->trashed,
 			'stores'   => $stores,
 			'packing'  => is_array( $packing ) && isset( $packing['size_map'] ) ? $packing['size_map'] : array(),
 			'state'    => is_array( $state ) ? $state : array(),
@@ -221,7 +229,7 @@ class Fake_Tidy_Shop implements Sizes_Tidy_Shop {
 	}
 
 	public function term_uses( $taxonomy, $slug ) {
-		$uses = 0;
+		$uses = (int) ( $this->trashed[ $slug ] ?? 0 );
 		foreach ( $this->products as $product ) {
 			$uses += in_array( $slug, $product['sizes'], true ) ? 1 : 0;
 			foreach ( $product['variations'] as $variation ) {
@@ -281,6 +289,19 @@ class Fake_Tidy_Shop implements Sizes_Tidy_Shop {
 		return $this->products[ $product_id ] + array( 'changing' => array_values( $variation_ids ) );
 	}
 
+	public function for_sale_now( $taxonomy, $product_id, array $variation_ids ) {
+		if ( is_callable( $this->before_apply ) ) {
+			call_user_func( $this->before_apply, (int) $product_id );
+		}
+		$out = array();
+		foreach ( $variation_ids as $vid ) {
+			if ( isset( $this->products[ $product_id ]['variations'][ $vid ] ) && Sizes_Tidy::for_sale( $this->products[ $product_id ], $this->products[ $product_id ]['variations'][ $vid ] ) ) {
+				$out[] = (int) $vid;
+			}
+		}
+		return $out;
+	}
+
 	public function product_apply( $taxonomy, $product_id, array $change ) {
 		if ( ! isset( $this->products[ $product_id ] ) ) {
 			return false;
@@ -323,26 +344,71 @@ class Fake_Tidy_Shop implements Sizes_Tidy_Shop {
 		return true;
 	}
 
-	public function product_restore( $taxonomy, $product_id, array $record ) {
+	public function product_restore( $taxonomy, $product_id, array $record, array $change = array() ) {
 		$this->write( 'restore ' . $product_id );
 		$changing   = (array) ( $record['changing'] ?? array() );
 		$variations = $this->products[ $product_id ]['variations'];
+		$convert    = isset( $change['convert'] ) && is_array( $change['convert'] ) ? $change['convert'] : null;
+		$title      = (string) $this->products[ $product_id ]['title'];
+
+		// A variation the run changed that has another size by now — not the one the run set, not
+		// the one it had: somebody gave it that size since. It is left as it is.
+		$kept = array();
 		foreach ( $record['variations'] as $vid => $variation ) {
-			if ( ! isset( $variations[ $vid ] ) ) {
+			if ( ! isset( $variations[ $vid ], $change['vars'][ $vid ] ) || ! in_array( (int) $vid, $changing, true ) ) {
+				continue;
+			}
+			$now = (string) ( $variations[ $vid ]['attrs'][ $taxonomy ] ?? '' );
+			$had = (string) ( $variation['attrs'][ $taxonomy ] ?? '' );
+			if ( $now !== (string) $change['vars'][ $vid ]['to'] && $now !== $had ) {
+				$kept[ (int) $vid ] = array(
+					'variation' => (int) $vid,
+					'product'   => (int) $product_id,
+					'title'     => $title,
+					'size'      => $now,
+					'label'     => isset( $this->terms[ $now ] ) ? Sizes::plain( (string) $this->terms[ $now ]['name'] ) : $now,
+				);
+			}
+		}
+		if ( $kept && null !== $convert ) {
+			return array_values( $kept ); // A typed size made a size of the list: all of it or none.
+		}
+
+		foreach ( $record['variations'] as $vid => $variation ) {
+			if ( ! isset( $variations[ $vid ] ) || isset( $kept[ (int) $vid ] ) ) {
 				continue;
 			}
 			if ( in_array( (int) $vid, $changing, true ) ) {
-				$variations[ $vid ] = $variation;
+				// Its size and whether it is switched on — never its price, stock or SKU.
+				foreach ( array( 'attrs', 'status', 'title', 'summary' ) as $field ) {
+					$variations[ $vid ][ $field ] = $variation[ $field ];
+				}
 			} elseif ( $variations[ $vid ]['attrs'] === $variation['attrs'] ) {
 				// One the run did not change: only what WooCommerce rewrote in its wake.
 				$variations[ $vid ]['summary'] = $variation['summary'];
 				$variations[ $vid ]['title']   = $variation['title'];
 			}
 		}
-		unset( $record['changing'] );
-		$this->products[ $product_id ]               = $record;
+
+		// The product's own list, default size and notes — not its title or whether it is published.
+		$sizes = array_values( (array) $record['sizes'] );
+		$then  = array();
+		foreach ( $record['variations'] as $variation ) {
+			$then[ (string) ( $variation['attrs'][ $taxonomy ] ?? '' ) ] = true;
+		}
+		foreach ( $variations as $variation ) {
+			$slug = (string) ( $variation['attrs'][ $taxonomy ] ?? '' );
+			if ( '' !== $slug && ! isset( $then[ $slug ] ) && ! in_array( $slug, $sizes, true ) ) {
+				$sizes[] = $slug; // A size a variation was given since stays listed.
+			}
+		}
+		foreach ( array( 'default', 'typed', 'fill' ) as $field ) {
+			$this->products[ $product_id ][ $field ] = $record[ $field ];
+		}
+		$this->products[ $product_id ]['sizes']      = $sizes;
 		$this->products[ $product_id ]['variations'] = $variations;
-		return true;
+
+		return array_values( $kept );
 	}
 
 	public function rows_find( $store, array $slugs, $after_id, $limit ) {
@@ -570,10 +636,19 @@ class Fake_Tidy_Shop implements Sizes_Tidy_Shop {
 	public function retiring_counts( $taxonomy, array $slugs ) {
 		$out = array();
 		foreach ( $this->products as $product ) {
+			$own = array();
 			foreach ( $product['variations'] as $variation ) {
-				$slug = (string) ( $variation['attrs'][ $taxonomy ] ?? '' );
+				$slug         = (string) ( $variation['attrs'][ $taxonomy ] ?? '' );
+				$own[ $slug ] = true;
 				if ( in_array( $slug, $slugs, true ) && Sizes_Tidy::for_sale( $product, $variation ) ) {
 					$out[ $slug ] = ( $out[ $slug ] ?? 0 ) + 1;
+				}
+			}
+			// Sold as "any size": every size the product lists that no variation of its own carries.
+			$sellers = count( array_filter( Sizes_Tidy::any_size( $product, $taxonomy ) ) );
+			foreach ( $sellers > 0 ? $product['sizes'] : array() as $slug ) {
+				if ( in_array( $slug, $slugs, true ) && ! isset( $own[ $slug ] ) ) {
+					$out[ $slug ] = ( $out[ $slug ] ?? 0 ) + $sellers;
 				}
 			}
 		}
