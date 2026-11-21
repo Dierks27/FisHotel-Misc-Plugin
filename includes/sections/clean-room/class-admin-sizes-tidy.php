@@ -204,13 +204,46 @@ class Admin_Sizes_Tidy {
 	 * A plan as HTML: the map, the preview and the Apply box.
 	 *
 	 * @param array $plan Sizes_Tidy::plan().
+	 * @param array $bags bag_names(): the Packing section's bags, id → name.
 	 * @return string
 	 */
-	public static function plan_html( array $plan ) {
+	public static function plan_html( array $plan, array $bags = array() ) {
 		$confirm = self::CONFIRM_WORD;
 		ob_start();
 		include Clean_Room::path() . 'views/sizes-tidy-plan.php';
 		return (string) ob_get_clean();
+	}
+
+	/**
+	 * The Packing section's bags by name (pure): its size → bag map holds a
+	 * bag's id, and "the bag 2" tells an owner nothing. Reads the rows the
+	 * Packing settings keep (id, name); a plain id → name list reads too.
+	 *
+	 * @param mixed $settings The option fishotel_packing_settings.
+	 * @return array Bag id (as a string) → name.
+	 */
+	public static function bag_names( $settings ) {
+		$out = array();
+		foreach ( is_array( $settings ) && isset( $settings['bags'] ) && is_array( $settings['bags'] ) ? $settings['bags'] : array() as $key => $bag ) {
+			if ( is_array( $bag ) && isset( $bag['id'], $bag['name'] ) && is_scalar( $bag['id'] ) && is_scalar( $bag['name'] ) && '' !== trim( (string) $bag['name'] ) ) {
+				$out[ (string) $bag['id'] ] = trim( (string) $bag['name'] );
+			} elseif ( is_string( $bag ) && '' !== trim( $bag ) ) {
+				$out[ (string) $key ] = trim( $bag );
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * A bag as the preview names it: by its name, by its id when the
+	 * Packing section no longer knows it.
+	 *
+	 * @param string $bag  Bag id.
+	 * @param array  $bags bag_names().
+	 * @return string
+	 */
+	public static function bag_name( $bag, array $bags ) {
+		return isset( $bags[ (string) $bag ] ) ? (string) $bags[ (string) $bag ] : (string) $bag;
 	}
 
 	/**
@@ -455,14 +488,15 @@ class Admin_Sizes_Tidy {
 				'nonce'   => wp_create_nonce( self::NONCE ),
 				'word'    => self::CONFIRM_WORD,
 				'i18n'    => array(
-					'working'     => __( 'Working it out…', 'fishotel-misc-plugin' ),
-					'error'       => __( 'Something went wrong. Nothing is lost: click again to carry on.', 'fishotel-misc-plugin' ),
-					'needBackup'  => __( 'Tick “I have a backup” first.', 'fishotel-misc-plugin' ),
+					'working'      => __( 'Working it out…', 'fishotel-misc-plugin' ),
+					'error'        => __( 'Something went wrong. Nothing is lost: click again to carry on.', 'fishotel-misc-plugin' ),
+					'needBackup'   => __( 'Tick “I have a backup” first.', 'fishotel-misc-plugin' ),
 					/* translators: %s: the word to type */
-					'needWord'    => __( 'Type %s in the box to go ahead.', 'fishotel-misc-plugin' ),
-					'confirmUndo' => __( 'Undo the last tidy-up? Every product, variation, size and row it changed goes back to how it was before. Two things stay as they are today: a variation you have given another size since the tidy-up, and stock and prices — Undo never touches those.', 'fishotel-misc-plugin' ),
-					'stale'       => __( 'You changed a choice since the preview. Click “Show what would change” again, then tidy up.', 'fishotel-misc-plugin' ),
-					'stopped'     => __( 'It stopped half-way. Nothing is lost — click “Carry on” to finish, or “Undo” to take it back.', 'fishotel-misc-plugin' ),
+					'needWord'     => __( 'Type %s in the box to go ahead.', 'fishotel-misc-plugin' ),
+					'confirmUndo'  => __( 'Undo the last tidy-up? Every product, variation, size and row it changed goes back to how it was before. Two things stay as they are today: a variation you have given another size since the tidy-up, and stock and prices — Undo never touches those.', 'fishotel-misc-plugin' ),
+					'stale'        => __( 'You changed a choice since the preview. Click “Show what would change” again, then tidy up.', 'fishotel-misc-plugin' ),
+					'staleNothing' => __( 'You changed a choice. Click “Show what would change” to see what it does.', 'fishotel-misc-plugin' ),
+					'stopped'      => __( 'It stopped half-way. Nothing is lost — click “Carry on” to finish, or “Undo” to take it back.', 'fishotel-misc-plugin' ),
 				),
 			)
 		);
@@ -608,7 +642,7 @@ class Admin_Sizes_Tidy {
 				}
 				return self::answer(
 					array(
-						'html'    => self::plan_html( $plan ),
+						'html'    => self::plan_html( $plan, self::bag_names( $shop->option_get( Sizes_Tidy_Run::PACKING_OPTION ) ) ),
 						'token'   => $plan['token'],
 						'nothing' => ! empty( $plan['nothing'] ),
 						'totals'  => $plan['totals'],

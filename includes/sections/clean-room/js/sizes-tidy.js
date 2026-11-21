@@ -279,12 +279,13 @@
 			preview();
 		} );
 
-		// Any other choice: the preview is out of date. Say so where Apply is — only once there is a
-		// preview with an Apply box to be out of date.
+		// Any other choice: the preview is out of date. Say so where Apply is (or, when the preview
+		// found nothing to tidy, where its second "Show what would change" is) — only once there is
+		// a preview to be out of date.
 		function changed() {
-			if ( $root.find( '.fh-tidy__apply' ).length ) {
+			if ( $root.find( '.fh-tidy__apply-message' ).length ) {
 				stale = true;
-				sayApply( cfg.i18n.stale );
+				sayApply( $root.find( '.fh-tidy__apply' ).length ? cfg.i18n.stale : cfg.i18n.staleNothing );
 			}
 		}
 		$root.on( 'change', '.fh-tidy__becomes, .fh-tidy__move, input[name^="keep_one["], input[name^="convert["]', changed );

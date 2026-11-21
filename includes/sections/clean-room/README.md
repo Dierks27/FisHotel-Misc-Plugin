@@ -1123,7 +1123,11 @@ its buttons do anything.
    token (the shop or a choice changed since the preview: preview
    again). What stands in the way is said next to the Apply button,
    where a second **Show what would change** is too; changing a choice
-   marks the preview out of date at once. It works through the shop in
+   marks the preview out of date at once. A preview that finds nothing
+   to tidy (a second look, while fish still need one) has no Apply box,
+   but the same second **Show what would change** and the same notice:
+   picking the variation to keep is a choice like any other. It works
+   through the shop in
    batches, shows how far it is, and survives a timeout: **Carry on**
    picks up where it stopped, and every write sets an absolute value, so
    a second click changes nothing. **While a tidy-up is not finished
@@ -1147,7 +1151,8 @@ its buttons do anything.
    requests (`fh_requests`), the lost-fish cases (`fh_lostfish_cases`,
    with the kind key of a case without a product), the lines of *draft*
    invoices (`fh_invoice_lines`) and the Packing section's size → bag map
-   (two sizes with different bags that become one are named). A size
+   (two sizes with different bags that become one are named, by the
+   bags' names). A size
    that is *taken off* is **not** rewritten there: the fish in the tanks
    keep the size they were given, shown as *not a standard size*. Only
    then are the old terms deleted — each one only if no product and no
@@ -1156,10 +1161,18 @@ its buttons do anything.
    product in the trash still uses stays in the list (the row says so),
    out of the pickers, until that product is deleted for good or
    restored and the tool is run again.
-   **Past orders and open baskets are not touched**: an order line keeps
+   **Past orders are not touched**: an order line keeps
    the size text it was bought with (WooCommerce looks the name up by
    the slug it stored; the tool remembers the names of the sizes it
    removed and `Sizes::order_size_name()` hands them back).
+   **Open baskets are not rewritten either — but WooCommerce empties
+   them of what changed**: a basket line remembers the variation as it
+   was when it went in, and WooCommerce takes a fish out of a basket
+   (`WC_Cart_Session`, "…has been removed from your cart because it has
+   since been modified", with a link to add it back) once its size has
+   another name, exactly as it does for one that is off the shop. A fish
+   that keeps its size — one left for sale until it sells out — stays in
+   the basket. The preview says so; a quiet hour is the time to run it.
 6. **Undo the last tidy-up** — before the first write a run saves a
    complete record of what it is about to change: every variation's
    attribute meta, title, summary and status, every product's attribute

@@ -177,8 +177,11 @@ check_contains( 'Typed on the product', '2 fish have their sizes typed on the pr
 check( '…a tick per fish; one that cannot be converted says why', 1 === preg_match( '/name="convert\[' . $ids['Koi Angel'] . '\]" value="1"\s+>/', $html ) && false !== strpos( $html, 'cannot be converted yet' ) );
 check_contains( 'a fish left with nothing to buy is listed', '1 fish will show as unavailable until you add a size', $html );
 check( '…each product links to its edit screen', false !== strpos( $html, 'post.php?post=' . $ids['Ivory Puffer'] . '&amp;action=edit' ) || false !== strpos( $html, 'post.php?post=' . $ids['Ivory Puffer'] . '&action=edit' ) );
-check_contains( 'the Packing clash is named', 'already has the bag "bag-m"', str_replace( '&quot;', '"', $html ) );
+check_contains( 'the Packing clash is named — by the bags\' names, not their ids', 'already has the bag "Medium bag" — that one is kept ("Large bag" is dropped)', str_replace( '&quot;', '"', $html ) );
+check_same( '…read from the rows the Packing settings keep (id, name)', array( '1' => 'Small bag', '2' => 'Medium bag' ), Admin_Sizes_Tidy::bag_names( array( 'bags' => array( array( 'id' => 1, 'name' => 'Small bag', 'width' => '6' ), array( 'id' => 2, 'name' => ' Medium bag ' ), array( 'id' => 3, 'name' => '' ), 'junk' => 7 ) ) ) );
+check_same( '…a bag Packing no longer knows reads as its id; no settings at all is no names', array( 'Medium bag', '9', array() ), array( Admin_Sizes_Tidy::bag_name( 2, array( '2' => 'Medium bag' ) ), Admin_Sizes_Tidy::bag_name( '9', array( '2' => 'Medium bag' ) ), Admin_Sizes_Tidy::bag_names( false ) ) );
 check_contains( 'it says what is not touched', 'Past orders are not touched: an order line keeps the size text it was bought with.', $html );
+check( '…and what WooCommerce does to an open basket: a renamed fish drops out of it too, with a link back', false !== strpos( $html, 'Open baskets are not rewritten either' ) && false !== strpos( $html, 'has since been modified' ) && false === strpos( $html, 'Open baskets are not touched' ) );
 check_contains( 'the Apply box: a backup tick and a word to type', 'I have a backup of the site', $html );
 check_contains( '…the word', 'Type ' . Admin_Sizes_Tidy::CONFIRM_WORD . ' to go ahead', $html );
 check( 'nothing in the page is unescaped: a size named <1" reads as text', false !== strpos( $html, '&lt;1&quot;' ) && false === strpos( $html, '<1"' ) );
@@ -226,6 +229,7 @@ check( '…and the "Sizes to fill in" list, each fish linked', false !== strpos(
 $after = $shop->dump();
 $again = fh_tidy_click( array( 'op' => 'preview' ) );
 check( 'the same choices again: nothing to tidy, and no Apply box', true === $again->data['nothing'] && false !== strpos( (string) $again->data['html'], 'There is nothing to tidy with these choices.' ) && false === strpos( (string) $again->data['html'], 'fh-tidy__apply-button' ) );
+check( '…but the way on is right there: a second "Show what would change", a place to say a choice changed, and what to change', 1 === preg_match( '/There is nothing to tidy with these choices\..*?fh-tidy__apply-message" role="alert" hidden.*?class="button fh-tidy__preview fh-tidy__preview--again".*?the one variation to keep of a fish that needs a look/s', (string) $again->data['html'] ) );
 $try = fh_tidy_click( array( 'op' => 'apply', 'token' => $again->data['token'], 'backup' => '1', 'confirm' => 'TIDY' ) );
 check( 'Apply on it: refused, nothing changed', false === $try->success && $after === $shop->dump() && 1 === count( $shop->runs ) );
 ob_start();

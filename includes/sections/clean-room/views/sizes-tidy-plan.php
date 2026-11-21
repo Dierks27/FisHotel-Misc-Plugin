@@ -5,6 +5,7 @@
  * box (Admin_Sizes_Tidy::plan_html()). Showing it writes nothing.
  *
  * @var array  $plan    Sizes_Tidy::plan().
+ * @var array  $bags    Admin_Sizes_Tidy::bag_names(): the Packing section's bags, id → name.
  * @var string $confirm The word to type before Apply.
  *
  * @package FisHotel\Misc\Sections\Clean_Room
@@ -414,7 +415,7 @@ $fh_item = static function ( array $change ) use ( $fh_mark ) {
 				<li>
 					<?php
 					/* translators: 1: old size, 2: new size, 3: bag kept, 4: bag dropped */
-					echo esc_html( sprintf( __( '%1$s becomes %2$s, which already has the bag "%3$s" — that one is kept ("%4$s" is dropped). Check Packing → Sizes afterwards.', 'fishotel-misc-plugin' ), isset( $fh_labels[ $fh_clash['from'] ] ) ? $fh_labels[ $fh_clash['from'] ] : $fh_clash['from'], isset( $fh_labels[ $fh_clash['to'] ] ) ? $fh_labels[ $fh_clash['to'] ] : $fh_clash['to'], $fh_clash['kept'], $fh_clash['dropped'] ) );
+					echo esc_html( sprintf( __( '%1$s becomes %2$s, which already has the bag "%3$s" — that one is kept ("%4$s" is dropped). Check Packing → Sizes afterwards.', 'fishotel-misc-plugin' ), isset( $fh_labels[ $fh_clash['from'] ] ) ? $fh_labels[ $fh_clash['from'] ] : $fh_clash['from'], isset( $fh_labels[ $fh_clash['to'] ] ) ? $fh_labels[ $fh_clash['to'] ] : $fh_clash['to'], Admin_Sizes_Tidy::bag_name( $fh_clash['kept'], $bags ), Admin_Sizes_Tidy::bag_name( $fh_clash['dropped'], $bags ) ) );
 					?>
 				</li>
 			<?php endforeach; ?>
@@ -433,7 +434,7 @@ $fh_item = static function ( array $change ) use ( $fh_mark ) {
 
 <ul class="fh-tidy__list fh-tidy__small">
 	<li><?php esc_html_e( 'The Clean Room\'s stays and supplier order lines, fish requests, lost-fish cases, draft invoices, box shares and the Packing size map follow a size that BECOMES another. A size that is taken off stays on the fish in the tanks as it is — it shows as "not a standard size".', 'fishotel-misc-plugin' ); ?></li>
-	<li><?php esc_html_e( 'Past orders are not touched: an order line keeps the size text it was bought with. Open baskets are not touched either — but a fish that is taken off the shop drops out of a basket it was in, as any fish that is no longer for sale does.', 'fishotel-misc-plugin' ); ?></li>
+	<li><?php esc_html_e( 'Past orders are not touched: an order line keeps the size text it was bought with. Open baskets are not rewritten either — but WooCommerce itself takes a fish out of a basket once its size has another name or it is off the shop: the shopper is told it "has since been modified" and is given a link to add it back. A quiet hour is the best time to tidy up.', 'fishotel-misc-plugin' ); ?></li>
 	<li><?php esc_html_e( 'An old size is removed from the list only once no product and no variation uses it any more — a product in the trash counts: the trash is left alone.', 'fishotel-misc-plugin' ); ?></li>
 </ul>
 
@@ -441,6 +442,11 @@ $fh_item = static function ( array $change ) use ( $fh_mark ) {
 
 <?php if ( ! empty( $plan['nothing'] ) ) : ?>
 	<p class="fh-cr-muted"><?php esc_html_e( 'There is nothing to tidy with these choices.', 'fishotel-misc-plugin' ); ?></p>
+	<p class="fh-tidy__message fh-tidy__message--bad fh-tidy__apply-message" role="alert" hidden></p>
+	<p class="fh-cr-actions-row">
+		<button type="button" class="button fh-tidy__preview fh-tidy__preview--again"><?php esc_html_e( 'Show what would change', 'fishotel-misc-plugin' ); ?></button>
+		<span class="fh-cr-muted"><?php esc_html_e( 'To go on, change a choice above — the one variation to keep of a fish that needs a look, a row of the table, a fish to tick — and show the changes again.', 'fishotel-misc-plugin' ); ?></span>
+	</p>
 <?php else : ?>
 	<div class="fh-tidy__box fh-tidy__apply">
 		<h3 class="fh-cr-h3"><?php esc_html_e( '4. Tidy up', 'fishotel-misc-plugin' ); ?></h3>
