@@ -2,8 +2,11 @@
  * Clean Room front desk — the phone screen. Inlined into the page by
  * Front_Desk::maybe_render(); nothing here is loaded from anywhere.
  *
- * One thumb, wet hands: every target is at least 56px tall, high contrast
- * on a dark background, the action bar sits at the bottom.
+ * One thumb, wet hands: big targets (56px; 48px with the phone on its
+ * side; the Undo and the links 44px), high contrast on a dark
+ * background, the action bar sits at the bottom. Its first row is the
+ * status line: every message is said there, so nothing ever comes up
+ * over the page.
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  */
@@ -22,9 +25,8 @@
 	--fd-border: rgba(255, 255, 255, 0.12);
 	--fd-radius: 14px;
 	--fd-tap: 56px;
-	/* The button bar and the toast as they stand now: measured by the script (place()), nothing until it has. */
+	/* The button bar as it stands now: measured by the script (place()), nothing until it has. */
 	--fd-bar-h: 0px;
-	--fd-toast-h: 0px;
 	--fd-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
@@ -45,10 +47,10 @@ body {
 	-webkit-text-size-adjust: 100%;
 }
 
-/* Room at the foot for the bar as it really is and the toast above it: the last row scrolls clear of both. */
+/* Room at the foot for the bar as it really is — its status line and its buttons: the last row scrolls clear of it. */
 body.fh-fd {
 	min-height: 100vh;
-	padding-bottom: calc(max(var(--fd-bar-h), env(safe-area-inset-bottom, 0px)) + var(--fd-toast-h) + 24px);
+	padding-bottom: calc(max(var(--fd-bar-h), env(safe-area-inset-bottom, 0px)) + 24px);
 }
 
 .fh-fd-noscript,
@@ -228,14 +230,15 @@ button.fh-fd-occ:active {
 }
 
 /* ------------------------------------------------------------------ */
-/*  Action bar and buttons                                             */
+/*  Action bar, its status line, and buttons                           */
 /* ------------------------------------------------------------------ */
 .fh-fd-bar {
 	position: fixed;
 	left: 0;
 	right: 0;
 	bottom: 0;
-	padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+	z-index: 20;
+	padding: 4px 12px calc(10px + env(safe-area-inset-bottom, 0px));
 	background: rgba(15, 23, 32, 0.96);
 	border-top: 1px solid var(--fd-border);
 	backdrop-filter: blur(6px);
@@ -243,10 +246,175 @@ button.fh-fd-occ:active {
 
 .fh-fd-bar__inner {
 	max-width: 640px;
-	margin: 0 auto;
+	margin: 6px auto 0; /* Under the status line. */
 	display: grid;
 	grid-template-columns: repeat(3, 1fr);
 	gap: 8px;
+}
+
+/* The whole message is open: the screen's own buttons are put aside for its Back. */
+.fh-fd-bar__inner[hidden] {
+	display: none;
+}
+
+/*
+ * The status line: the first row of the bar, on every screen, from the
+ * first paint. Whatever the page has to say is said here — so nothing
+ * ever comes up over the page. One line, one height (48 px at this text
+ * size; it grows with the text size, never with the words): a message
+ * changes no place and no size of anything.
+ */
+.fh-fd-status {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	max-width: 640px;
+	height: 3em;
+	min-height: 48px;
+	margin: 0 auto;
+	padding: 0 8px 0 2px;
+	overflow: hidden;
+	border-radius: 10px;
+	color: var(--fd-text);
+	font-size: 16px;
+	line-height: 1.25;
+}
+
+/* A message in its seconds: the green of a thing done, the red of one refused. Then the line is quiet again. */
+.fh-fd-status.is-ok {
+	background: #0b3d26;
+}
+
+.fh-fd-status.is-error {
+	background: #4a1515;
+}
+
+.fh-fd-status.is-last {
+	color: var(--fd-muted);
+}
+
+/* The Undo: always at the left end, at least 44 px each way. Filled while its seconds run, then outlined — same place, same size. */
+.fh-fd-status__undo {
+	flex: 0 0 auto;
+	height: 2.75em;
+	min-height: 44px;
+	min-width: 44px;
+	margin: 0;
+	padding: 0 14px;
+	border: 1px solid var(--fd-ok);
+	border-radius: 9px;
+	background: var(--fd-ok);
+	color: var(--fd-bg);
+	font: inherit;
+	font-weight: 800;
+	white-space: nowrap;
+	cursor: pointer;
+}
+
+.fh-fd-status__undo.is-quiet {
+	border-color: var(--fd-border);
+	background: transparent;
+	color: var(--fd-muted);
+}
+
+/* An error has the line and the Undo is still good: its place is kept, empty, so the error's words do not start under a thumb on its way there. */
+.fh-fd-status__undo.is-held {
+	visibility: hidden;
+}
+
+.fh-fd-status__undo[hidden],
+.fh-fd-status__text[hidden],
+.fh-fd-status__ago[hidden] {
+	display: none;
+}
+
+/* The words: one line, cut with "…"; a tap on them opens the whole message. */
+.fh-fd-status__text {
+	flex: 1 1 auto;
+	display: flex;
+	align-items: center;
+	align-self: stretch;
+	min-width: 0;
+	margin: 0;
+	padding: 0 0 0 6px;
+	border: 0;
+	background: none;
+	overflow: hidden;
+	color: inherit;
+	font: inherit;
+	font-weight: 600;
+	text-align: left;
+	cursor: pointer;
+}
+
+.fh-fd-status__words {
+	flex: 0 1 auto;
+	min-width: 3em; /* On the narrowest phone the words still start; "· 2 min ago" is what runs out of the line. */
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+/* "· 2 min ago" after the last thing done: kept whole, the words before it are what is cut. */
+.fh-fd-status__ago {
+	flex: 0 0 auto;
+	font-size: 0.875em;
+	white-space: pre;
+}
+
+/* What a screen reader is told (role="status"): the words of a message alone. In the line, taking no room in it. */
+.fh-fd-status__said {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
+/* The line lets nothing out of its box: a keyboard's focus ring is drawn inside it. */
+.fh-fd-status button:focus-visible {
+	outline-offset: -3px;
+}
+
+/* The seconds of a message, running out along the lower edge. */
+.fh-fd-status__bar {
+	position: absolute;
+	left: 0;
+	bottom: 0;
+	width: 0;
+	height: 2px;
+	background: var(--fd-ok);
+	transition: width 0.25s linear;
+	pointer-events: none;
+}
+
+.fh-fd-status.is-error .fh-fd-status__bar {
+	background: var(--fd-danger);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.fh-fd-status__bar {
+		transition: none;
+	}
+}
+
+/* The whole message, opened from the status line. */
+.fh-fd-msg__text {
+	margin: 0 0 12px;
+	font-size: 22px;
+	font-weight: 700;
+	line-height: 1.3;
+	overflow-wrap: anywhere;
+}
+
+.fh-fd-msg__text.is-error {
+	color: var(--fd-danger);
+}
+
+.fh-fd-msg .fh-fd-btn--big {
+	margin-top: 8px;
 }
 
 .fh-fd-btn {
@@ -628,67 +796,6 @@ button.fh-fd-occ:active {
 	50% { transform: scale(1.12); opacity: 0.75; }
 }
 
-/* Toast */
-.fh-fd-toast {
-	position: fixed;
-	left: 12px;
-	right: 12px;
-	bottom: calc(max(var(--fd-bar-h), env(safe-area-inset-bottom, 0px)) + 10px); /* Above the measured bar, however many rows it has. */
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 12px;
-	max-width: 616px;
-	margin: 0 auto;
-	padding: 12px 14px;
-	border-radius: var(--fd-radius);
-	background: #0b3d26;
-	border: 1px solid rgba(61, 220, 132, 0.5);
-	color: #fff;
-	font-size: 17px;
-	font-weight: 600;
-	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
-	z-index: 20;
-}
-
-.fh-fd-toast[hidden] {
-	display: none;
-}
-
-.fh-fd-toast.is-error {
-	background: #4a1515;
-	border-color: rgba(255, 92, 92, 0.6);
-}
-
-.fh-fd-toast button {
-	flex: 0 0 auto;
-	min-height: 48px;
-	padding: 8px 18px;
-	border: 1px solid rgba(255, 255, 255, 0.5);
-	border-radius: 999px;
-	background: transparent;
-	color: #fff;
-	font: inherit;
-	font-size: 17px;
-	font-weight: 800;
-	cursor: pointer;
-}
-
-.fh-fd-toast .fh-fd-toast__bar {
-	position: absolute;
-	left: 0;
-	bottom: 0;
-	height: 4px;
-	background: var(--fd-ok);
-	border-radius: 0 0 var(--fd-radius) var(--fd-radius);
-	transition: width 0.25s linear;
-}
-
-.fh-fd-toast {
-	position: fixed;
-	overflow: hidden;
-}
-
 /* Small helpers */
 .fh-fd-muted {
 	color: var(--fd-muted);
@@ -727,6 +834,36 @@ button.fh-fd-occ:active {
 @media (min-width: 640px) {
 	.fh-fd-bar__inner {
 		grid-template-columns: repeat(6, 1fr);
+	}
+}
+
+/*
+ * A phone on its side: the bar must not take the screen (and, under a
+ * head such as the Shop App's, must not reach it). Lower buttons, and a
+ * screen's six go in one row with smaller words; a sheet's two or three
+ * keep their width.
+ */
+@media (max-height: 480px) and (orientation: landscape) {
+	.fh-fd-bar__inner {
+		grid-template-columns: repeat(6, 1fr);
+		gap: 6px;
+	}
+
+	.fh-fd-bar__inner > * {
+		grid-column: span 2;
+		min-height: 48px;
+	}
+
+	.fh-fd-bar__inner > :first-child:nth-last-child(n+6),
+	.fh-fd-bar__inner > :first-child:nth-last-child(n+6) ~ * {
+		grid-column: span 1;
+		padding: 6px 4px;
+		font-size: 15px;
+	}
+
+	.fh-fd-bar__inner > :first-child:nth-last-child(n+6) ~ .fh-fd-btn--row {
+		grid-column: 1 / -1;
+		min-height: 44px;
 	}
 }
 
@@ -771,68 +908,6 @@ button.fh-fd-occ:active {
 	flex: 0 0 auto;
 	font-size: 18px;
 	color: var(--fd-accent);
-}
-
-/*
- * A sticky toast (with Undo): whole while its bar runs out, then folded
- * to the pill. Whole, it comes up over the rows of the page, whose own
- * buttons ("−1 lost") are at the right: its Undo stands at the left end,
- * so a second tap on such a row meets the words, not the Undo.
- */
-.fh-fd-toast.is-sticky {
-	justify-content: flex-start;
-	border-color: rgba(53, 184, 255, 0.5);
-}
-
-.fh-fd-toast.is-sticky button {
-	order: -1;
-}
-
-/*
- * The folded toast: a strip of its own on top of the button bar, as wide
- * and as dark as the bar, with a small "↶ Undo" at the right. Rows that
- * scroll under it are behind it as they are behind the bar, so nothing
- * to tap ever shows beside the pill or under it.
- */
-.fh-fd-toast.is-pill {
-	left: 0;
-	right: 0;
-	bottom: var(--fd-bar-h);
-	justify-content: flex-end;
-	max-width: none;
-	padding: 5px max(12px, calc(50% - 308px)) max(5px, calc(env(safe-area-inset-bottom, 0px) - var(--fd-bar-h)));
-	border: 0;
-	border-top: 1px solid var(--fd-border);
-	border-radius: 0;
-	background: rgba(15, 23, 32, 0.96);
-	backdrop-filter: blur(6px);
-	box-shadow: none;
-	animation: fh-fd-fold 0.2s ease-out;
-}
-
-.fh-fd-toast.is-pill button {
-	min-height: 44px;
-	padding: 6px 16px;
-	border-color: var(--fd-border);
-	background: var(--fd-card);
-	color: var(--fd-muted);
-	font-size: 16px;
-	font-weight: 700;
-}
-
-@keyframes fh-fd-fold {
-	from { opacity: 0; }
-	to { opacity: 1; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.fh-fd-toast.is-pill {
-		animation: none;
-	}
-
-	.fh-fd-toast .fh-fd-toast__bar {
-		transition: none;
-	}
 }
 
 .fh-fd-today__head {

@@ -72,7 +72,7 @@ when they are not.
   Two phones can record a loss against the same count; the second entry
   is kept but flagged **overdrawn** — the toast says the tank now shows
   fewer fish than were taken out and asks for a recount (or an undo of the
-  duplicate, from the toast or the Events tab).
+  duplicate, from the phone's Undo or the Events tab).
 - **Moves** are one line — "move 3 cardinals 121 to 221". A quantity
   smaller than the group **splits** it: that many continue as a sister
   stay with the same check-in, cleared date and override; the rest stay
@@ -81,7 +81,7 @@ when they are not.
   Events tab.
 - Counts stay **editable at any time** (Jeff loses fish after an order
   exists); the order itself is edited in WooCommerce. Any mistake is undone
-  with a compensating event — from the phone's toast within 15 minutes, or
+  with a compensating event — from the phone's Undo within 15 minutes, or
   from the Events tab at any time — and never twice for the same event.
 - The **treatment schedules** are editable, named templates, not code:
   steps with a day offset, a kind (feed / dose / test / water change /
@@ -294,48 +294,100 @@ counts as cleared: Unknown or a date; in a Spa or quarantine temporary
 tank: **Not cleared yet**, the default, or a date) and *Where it came
 from* (Unknown, or the supplier and the origin — the names the supplier
 orders already use as chips, or typed). Save puts the group straight
-into THIS tank — any tank that holds fish — and the toast offers Undo
-like every other action. See *Fish already here*.
+into THIS tank — any tank that holds fish — and the status line offers
+Undo like every other action. See *Fish already here*.
 
 Every write is one AJAX action (`fishotel_cleanroom_act`, nonce +
-`manage_woocommerce`); the reply carries the refreshed screen, and a
-toast offers **Undo** — a compensating event, never a delete. The toast
-is shown whole for 10 seconds (`Settings::UNDO_SECONDS`, the bar under
-it running out): a big Undo at its left end, the words beside it. Then
-it folds to a small **↶ Undo** at the right, in a strip of its own on
-top of the button bar — no countdown, at least 44 px tall, and named
-for a screen reader by what it undoes ("Undo: 1 × … lost"). Whole or
-folded, the Undo goes on the next action (another write brings its own;
-a sheet opening closes it at once — it never sits on a sheet), and the
-small one leaves by itself ten seconds before the server's window ends:
-the server honours the undo for 15 minutes (`Front_Desk::UNDO_WINDOW`,
-handed to the page as `settings.undoWindow`), only for the user who
-wrote the event, and never twice for the same event, and it stays the
-judge — an undo that comes too late is answered "That can no longer be
-undone." A phone that slept holds its timers, so the page looks at the
-clock again when it is back on the screen and at every tap on an Undo:
-one whose window has ended is taken away, and a tap on it gets that
-same answer without asking the server. An error (4 seconds) and a
-"Saved" with nothing to undo go after their seconds and never fold.
+`manage_woocommerce`); the reply carries the refreshed screen and a
+message (in this file often still "the toast"), and where the write can
+be taken back an **Undo** — a compensating event, never a delete.
 
-Where it stands: the toast never lies on the button bar. The script
-measures the bar as it stands (`place()`, a `ResizeObserver` on the bar
-and the toast — three rows on a tank, one on a sheet, none on the
-picker; larger text, a turned phone) and hands the heights to the
-stylesheet as `--fd-bar-h` and `--fd-toast-h`, which puts the toast
-above the bar and keeps that much room at the foot of the page, so the
-last row scrolls clear of both. The whole toast does come up over the
-rows of the page for its 10 seconds — often over the very "−1 lost"
-that was just tapped — so its Undo is at the left, away from the rows'
-own buttons at the right, an Undo that has only just come up (whole or
-folded) takes no tap for 0.7 seconds, and a tap on the words does
-nothing: the second of two quick taps never undoes the first. Rows
-that scroll under the small Undo's strip are behind it as they are
-behind the bar. Where there is no room for the whole toast between the
-head of the page and the bar (a small phone on its side, most of all
-under the Shop App's bar), it folds as it comes up. The Shop App adds
-its bar at the head of the page and pins nothing to the foot; its
-keypad and its questions cover the whole screen, the toast included.
+**The status line.** Nothing the page says comes up over the page. It is
+said in one place that is always there: the status line, the first row
+of the button bar itself — above Lost / Shipped / Move on a tank, above
+Cancel / Save on a sheet, and alone at the foot of the screens with no
+buttons of their own (the picker, the day's list, an empty slot). It is
+written into the page (`views/front-desk.php`), so it is there from the
+first paint, and it is one line at one height: 48 px, growing with the
+text size and never with the words. So a message changes no size and no
+place of anything — nothing is covered that was not already under the
+bar, nothing shifts, a second tap lands where the first did. In it:
+
+- at the left, **↶ Undo** (at least 44 px each way, named for a screen
+  reader by what it undoes: "Undo: 1 × … lost"), only while there is
+  something to undo. On the tank screen a tap undoes. On a sheet — where
+  it sits a finger's width above Cancel / Save, and an undo would go
+  back to the tank screen and drop what was typed — a tap opens the
+  whole message first, and the Undo there does it;
+- the words, on one line, cut with "…" when long. A tap on them opens
+  the whole message as a sheet of its own — with the Undo, while it is
+  good — and Back shows the screen under it as it was, what was typed
+  included (it is put aside, not drawn again);
+- along its lower edge a thin bar that runs out with a message's
+  seconds.
+
+A write that can be undone shows its words and a filled Undo for 10
+seconds (`Settings::UNDO_SECONDS`). Then nothing moves or resizes: the
+Undo turns quiet (outlined) and the words read "Last: … · 2 min ago".
+The Undo stays — on a sheet too: in the bar it covers nothing — until
+the next write, and leaves by itself ten seconds before the server's
+window ends: the server honours the undo for 15 minutes
+(`Front_Desk::UNDO_WINDOW`, handed to the page as `settings.undoWindow`),
+only for the user who wrote the event, and never twice for the same
+event, and it stays the judge — an undo that comes too late is answered
+"That can no longer be undone." A phone that slept holds its timers, so
+the line is painted by the clock when the page is back on the screen
+(`visibilitychange`, `pageshow`) and the clock is looked at again at
+every tap on an Undo: one whose window has ended is taken away, and a
+tap on it gets that same answer without asking the server. A "Saved"
+with nothing to undo is plain words for its 10 seconds, then "Last: …";
+it is the next write, so the Undo before it has gone. An error is said
+in the same line in the error colour for 4 seconds (an expired session
+until its words are tapped, which reloads) and never throws away an Undo
+that is still good: the Undo is back when the error has gone — after its
+seconds, or when another screen is opened. Meanwhile the Undo's place is
+kept, empty (`.is-held`: not seen, no tap), so the error's words do not
+start where a thumb was on its way to the Undo. An undo that never reached
+the server (no signal) keeps its Undo for another try; one the server
+refused does not. A request that got no answer at all is said in plain
+words — "No connection — not saved. Try again." for a write, "No
+connection. Try again." for a read such as Refresh — never in the
+browser's own ("Failed to fetch", "Load failed"): `post()` marks it
+(`offline` / `offlineRead`, an error without `data`) and `sayFailed()`
+words it. Inside the Shop App the app's guard has its own sheet and its
+own sentence for a save, and that sentence is said as it is. Before anything was done on the page the line is
+empty; it is there all the same. The "last thing done" is kept for the
+page, not for the visit: another tank is another page.
+
+An Undo that has only just come up — after a write, in place of
+another's, back after an error, on the message's sheet — takes no tap
+for 0.7 seconds, so the second of two quick taps never undoes the first;
+its place never moves; and a tap anywhere else on the line never undoes.
+A write made on the tank screen itself ("−1 lost" on a row, a to-do
+chip, the Undo) leaves the page where it was scrolled to: counting
+bodies down a long tank, the second tap lands on the same row. Back from
+the whole message puts the page where it was as well, at its foot too
+(the room for the screen's own bar is given back first). An undo done
+from a sheet's message goes back to the tank screen, as every write
+does.
+
+For a screen reader the words of each message — a write, a "Saved", an
+error — are put alone into one span that is in the line from the first
+paint (`#fh-fd-said`, `role="status"`). The line itself is no live
+region, so "Undo: …" is not read beside the words and "… 3 min ago" not
+every minute; the same words said twice are told twice. Not yet heard on
+a real screen reader.
+
+The script measures the bar as it stands (`place()`, a `ResizeObserver`
+on the bar — the line and three rows of buttons on a tank, one row on a
+sheet, the line alone on the picker; larger text, a turned phone) and
+hands its height to the stylesheet as `--fd-bar-h`, which keeps that
+much room at the foot of the page, so the last row scrolls clear of the
+bar. On a phone on its side the bar is lower — six buttons in one row,
+48 px tall — so it does not take the screen or reach the Shop App's bar
+at the head. The Shop App adds that bar at the head and pins nothing to
+the foot; its keypad, its scanner and its questions cover the whole
+screen, the Front Desk's bar and its status line included.
 
 The temporary tanks ride on the same action
 with five more acts — `setup`, `setup_edit`, `setup_steps`, `takedown`
