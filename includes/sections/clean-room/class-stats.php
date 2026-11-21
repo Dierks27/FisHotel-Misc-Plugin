@@ -1010,4 +1010,65 @@ class Stats {
 		}
 		return $out;
 	}
+
+	/**
+	 * The fish that were already here, added by hand (pure): they count in
+	 * what is alive, shipped and lost, and they are left out of every
+	 * figure that needs a date or a batch — the yearly figures, the
+	 * survival per batch, the landed cost, the days in QT — because they
+	 * belong to no supplier order. Says how many were left out, and how
+	 * many of the groups still in tanks have no arrival date or no
+	 * cleared date.
+	 *
+	 * A group split off another one counts once: its fish were added with
+	 * the group they came from (split_from, read from its first arrival —
+	 * never from its notes, which Edit can change).
+	 *
+	 * @param array[] $stays Store::existing_stays() (hydrated, each with its figures).
+	 * @return array{groups: int, open: int, added: int, live: int, sold: int, lost: int,
+	 *               no_arrival: int, cleared_unknown: int, left_out_groups: int, left_out_fish: int}
+	 */
+	public static function existing_stock( array $stays ) {
+		$out = array(
+			'groups'          => 0,
+			'open'            => 0,
+			'added'           => 0,
+			'live'            => 0,
+			'sold'            => 0,
+			'lost'            => 0,
+			'no_arrival'      => 0,
+			'cleared_unknown' => 0,
+			'left_out_groups' => 0,
+			'left_out_fish'   => 0,
+		);
+		foreach ( $stays as $stay ) {
+			$figures = is_array( $stay['figures'] ?? null ) ? $stay['figures'] : array();
+			$split   = ! empty( $stay['split_from'] ); // From its first arrival, not its notes (Edit can change those).
+			$arrived = (int) ( $figures['arrived'] ?? $stay['qty_arrived'] ?? 0 );
+			if ( $arrived <= 0 && 'closed' === (string) ( $stay['status'] ?? '' ) ) {
+				continue; // Added and taken back (Undo): nothing was ever here.
+			}
+			$out['live'] += 'closed' === (string) ( $stay['status'] ?? '' ) ? 0 : (int) ( $stay['qty_live'] ?? 0 );
+			$out['sold'] += (int) ( $figures['sold'] ?? 0 );
+			$out['lost'] += (int) ( $figures['lost'] ?? 0 );
+			if ( ! $split ) {
+				$out['groups']++;
+				$out['added'] += $arrived;
+			}
+			if ( 'closed' !== (string) ( $stay['status'] ?? '' ) ) {
+				$out['open']++;
+				if ( ! Replay::is_date( $stay['checkin_date'] ?? null ) ) {
+					$out['no_arrival']++;
+				}
+				if ( ! empty( $stay['cleared_unknown'] ) ) {
+					$out['cleared_unknown']++;
+				}
+			}
+		}
+		// None of them is on a supplier order: every one is left out of the batch figures.
+		$out['left_out_groups'] = $out['groups'];
+		$out['left_out_fish']   = $out['added'];
+
+		return $out;
+	}
 }

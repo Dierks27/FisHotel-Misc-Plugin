@@ -13,6 +13,8 @@
  * @var array[] $closed_stays Closed stays (when shown).
  * @var array   $filters      area, species, ready, needs_id.
  * @var array[] $sizes        The standard sizes (slug, label).
+ * @var array[] $fish_tanks   The tanks "Add fish already here" offers (Admin::existing_tanks()).
+ * @var array   $picks        suppliers, origins the supplier orders already name.
  * @var string  $csv_url      Nonced CSV URL.
  * @var array   $settings     Settings.
  * @var string  $today        Site date.
@@ -39,6 +41,7 @@ $tab = 'stays';
  * @param bool    $open  Whether these are open stays (edits offered).
  */
 $fh_table = static function ( array $rows, $open ) use ( $today, $sizes ) {
+	$fh_unknown = '<span class="fh-cr-muted">' . esc_html__( 'unknown', 'fishotel-misc-plugin' ) . '</span>';
 	if ( ! $rows ) {
 		echo '<div class="fishotel-misc-empty"><span class="dashicons dashicons-location-alt"></span><p>' . esc_html__( 'Nothing here.', 'fishotel-misc-plugin' ) . '</p></div>';
 		return;
@@ -77,10 +80,15 @@ $fh_table = static function ( array $rows, $open ) use ( $today, $sizes ) {
 						<?php endif; ?>
 					</td>
 					<td class="fh-cr-num"><?php echo esc_html( $fh_stay['qty_live'] ); ?> / <?php echo esc_html( $fh_stay['qty_arrived'] ); ?></td>
-					<td><?php echo esc_html( $fh_stay['checkin_date'] ); ?></td>
-					<td class="fh-cr-num"><?php echo null !== $fh_stay['day'] ? esc_html( $fh_stay['day'] ) : '—'; ?></td>
-					<td><?php echo Admin::badge_html( $fh_stay ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by badge_html(). ?></td>
-					<td><?php echo $fh_stay['cleared_date'] ? esc_html( $fh_stay['cleared_date'] ) : '—'; ?></td>
+					<td><?php echo ! empty( $fh_stay['checkin_unknown'] ) ? $fh_unknown : esc_html( $fh_stay['checkin_date'] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above. ?></td>
+					<td class="fh-cr-num"><?php echo null !== $fh_stay['day'] ? esc_html( $fh_stay['day'] ) : ( ! empty( $fh_stay['checkin_unknown'] ) ? '?' : '—' ); ?></td>
+					<td>
+						<?php echo Admin::badge_html( $fh_stay ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by badge_html(). ?>
+						<?php if ( '' !== Admin::treatment_unknown( $fh_stay ) ) : ?>
+							<span class="fh-cr-warn"><?php echo esc_html( Admin::treatment_unknown( $fh_stay ) ); ?></span>
+						<?php endif; ?>
+					</td>
+					<td><?php echo $fh_stay['cleared_date'] ? esc_html( $fh_stay['cleared_date'] ) : ( ! empty( $fh_stay['cleared_unknown'] ) ? $fh_unknown : '—' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above. ?></td>
 					<td>
 						<?php if ( '' !== $fh_sale['date'] ) : ?>
 							<?php echo esc_html( $fh_sale['date'] ); ?>
@@ -109,7 +117,7 @@ $fh_table = static function ( array $rows, $open ) use ( $today, $sizes ) {
 						<?php if ( null !== $fh_stay['landed_cost'] ) : ?>
 							<span class="fh-cr-sub"><?php echo esc_html( number_format( (float) $fh_stay['landed_cost'], 2 ) ); ?></span>
 						<?php endif; ?>
-						<span class="fh-cr-sub"><?php echo esc_html( $fh_stay['source'] ); ?></span>
+						<span class="fh-cr-sub"><?php echo esc_html( Admin::source_label( (string) $fh_stay['source'] ) ); ?></span>
 					</td>
 					<td class="fh-cr-row__actions">
 						<?php if ( $open ) : ?>
@@ -212,6 +220,55 @@ $fh_table = static function ( array $rows, $open ) use ( $today, $sizes ) {
 			<span class="fh-cr-status" aria-live="polite"></span>
 		</div>
 	</div>
+
+	<?php if ( $tables_ok && ! empty( $fish_tanks ) ) : ?>
+		<details class="fh-cr-existing">
+			<summary><?php esc_html_e( 'Add fish already here', 'fishotel-misc-plugin' ); ?></summary>
+			<p class="fh-cr-sub"><?php esc_html_e( 'Fish that are already in a tank — in the Clean Room for a long time, say — go straight in, with no Spa step. Anything you do not know stays Unknown (never a guessed date); fill it in later with Edit or Cleared…. They are marked "already here" and belong to no supplier order.', 'fishotel-misc-plugin' ); ?></p>
+			<div class="fh-cr-fields__row fh-cr-existing__row">
+				<label><?php esc_html_e( 'Tank', 'fishotel-misc-plugin' ); ?>
+					<select class="fh-cr-input fh-cr-existing-tank">
+						<?php foreach ( $fish_tanks as $fh_t ) : ?>
+							<option value="<?php echo esc_attr( (string) $fh_t['number'] ); ?>" data-area="<?php echo esc_attr( $fh_t['area'] ); ?>"><?php echo esc_html( $fh_t['label'] ); ?></option>
+						<?php endforeach; ?>
+					</select>
+				</label>
+				<label class="fh-cr-identify__fish"><?php esc_html_e( 'Fish', 'fishotel-misc-plugin' ); ?>
+					<span class="fh-cr-suggest-wrap"><input type="text" class="fh-cr-input fh-cr-existing-search" maxlength="120" autocomplete="off" placeholder="<?php esc_attr_e( 'type for products and the species list, or a name of your own', 'fishotel-misc-plugin' ); ?>"></span>
+				</label>
+				<label class="fh-cr-identify__unknown"><input type="checkbox" class="fh-cr-existing-unknown"> <?php esc_html_e( 'Unknown fish (??)', 'fishotel-misc-plugin' ); ?></label>
+				<label><?php esc_html_e( 'How many', 'fishotel-misc-plugin' ); ?> <input type="number" class="fh-cr-input fh-cr-input--num fh-cr-existing-qty" min="1" max="999" value="1"></label>
+				<label><?php esc_html_e( 'Size', 'fishotel-misc-plugin' ); ?>
+					<select class="fh-cr-input fh-cr-existing-size">
+						<option value=""><?php esc_html_e( 'none', 'fishotel-misc-plugin' ); ?></option>
+						<?php foreach ( $sizes as $fh_size ) : ?>
+							<option value="<?php echo esc_attr( $fh_size['slug'] ); ?>"><?php echo esc_html( $fh_size['label'] ); ?></option>
+						<?php endforeach; ?>
+					</select>
+				</label>
+			</div>
+			<div class="fh-cr-fields__row fh-cr-existing__row">
+				<label><?php esc_html_e( 'Arrived on', 'fishotel-misc-plugin' ); ?> <input type="date" class="fh-cr-input fh-cr-existing-arrived" min="<?php echo esc_attr( Replay::SALE_DATE_MIN ); ?>" max="<?php echo esc_attr( $today ); ?>"> <span class="fh-cr-sub fh-cr-sub--inline"><?php esc_html_e( 'empty = Unknown', 'fishotel-misc-plugin' ); ?></span></label>
+				<label><?php esc_html_e( 'Cleared on', 'fishotel-misc-plugin' ); ?> <input type="date" class="fh-cr-input fh-cr-existing-cleared" min="<?php echo esc_attr( Replay::SALE_DATE_MIN ); ?>" max="<?php echo esc_attr( $today ); ?>">
+					<span class="fh-cr-sub fh-cr-sub--inline fh-cr-existing-cleared-clean"><?php esc_html_e( 'empty = Unknown (a fish in a clean tank counts as cleared)', 'fishotel-misc-plugin' ); ?></span>
+					<span class="fh-cr-sub fh-cr-sub--inline fh-cr-existing-cleared-spa" hidden><?php esc_html_e( 'empty = not cleared yet', 'fishotel-misc-plugin' ); ?></span>
+				</label>
+				<label><?php esc_html_e( 'Supplier', 'fishotel-misc-plugin' ); ?> <input type="text" class="fh-cr-input fh-cr-existing-supplier" maxlength="80" list="fh-cr-existing-suppliers" placeholder="<?php esc_attr_e( 'Unknown', 'fishotel-misc-plugin' ); ?>"></label>
+				<label><?php esc_html_e( 'Origin', 'fishotel-misc-plugin' ); ?> <input type="text" class="fh-cr-input fh-cr-existing-origin" maxlength="80" list="fh-cr-existing-origins" placeholder="<?php esc_attr_e( 'Unknown', 'fishotel-misc-plugin' ); ?>"></label>
+				<button type="button" class="button button-primary fh-cr-existing-save"><?php esc_html_e( 'Add', 'fishotel-misc-plugin' ); ?></button>
+			</div>
+			<datalist id="fh-cr-existing-suppliers">
+				<?php foreach ( (array) ( $picks['suppliers'] ?? array() ) as $fh_name ) : ?>
+					<option value="<?php echo esc_attr( $fh_name ); ?>"></option>
+				<?php endforeach; ?>
+			</datalist>
+			<datalist id="fh-cr-existing-origins">
+				<?php foreach ( (array) ( $picks['origins'] ?? array() ) as $fh_name ) : ?>
+					<option value="<?php echo esc_attr( $fh_name ); ?>"></option>
+				<?php endforeach; ?>
+			</datalist>
+		</details>
+	<?php endif; ?>
 
 	<?php
 	if ( ! empty( $filters['needs_id'] ) ) {

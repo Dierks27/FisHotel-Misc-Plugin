@@ -23,8 +23,11 @@ remembers** per supplier and origin; **unknown and mislabeled fish** —
 "??" until somebody knows, and one correction that puts the stay and its
 order line right together —; **temporary tanks** — hospital tanks and
 the like, each its own water, set up for a while with their own
-schedule and their own clock, and taken down again —; **one to-do list
-for the day, by water system**; and the facts the fish page will read.
+schedule and their own clock, and taken down again —; **fish already
+here** — added by hand straight into any tank, with whatever is known of
+their arrival and clearing and the rest left **Unknown** —; **one to-do
+list for the day, by water system**; and the facts the fish page will
+read.
 
 Nothing here needs WooCommerce: a stay may or may not be linked to a
 product, a species may or may not be, and the species search reads the
@@ -37,7 +40,11 @@ when they are not.
 
 - **Every arrival goes into a Spa tank** (buildings 500 and 600). Nothing
   is ever checked in straight to a Clean Room tank; the Arrival screen,
-  the parser and the server all refuse it and offer the Spa tanks.
+  the parser and the server all refuse it and offer the Spa tanks. The
+  one way around it is for fish that are **already here** — in the room
+  before it was on the site, some of them for a long time: *Add fish
+  already here* puts them straight into the tank they stand in, any
+  tank, and asks what is known (see *Fish already here*).
 - **Cleared** is the day a group first *moves* from a Spa tank into a
   Clean Room tank — the day it comes off copper. Only a move *out of the
   Spa* (or out of a tank the layout no longer knows) clears: after a hand
@@ -65,7 +72,7 @@ when they are not.
   Two phones can record a loss against the same count; the second entry
   is kept but flagged **overdrawn** — the toast says the tank now shows
   fewer fish than were taken out and asks for a recount (or an undo of the
-  duplicate, from the toast or the Events tab).
+  duplicate, from the phone's Undo or the Events tab).
 - **Moves** are one line — "move 3 cardinals 121 to 221". A quantity
   smaller than the group **splits** it: that many continue as a sister
   stay with the same check-in, cleared date and override; the rest stay
@@ -74,7 +81,7 @@ when they are not.
   Events tab.
 - Counts stay **editable at any time** (Jeff loses fish after an order
   exists); the order itself is edited in WooCommerce. Any mistake is undone
-  with a compensating event — from the phone's toast within 15 minutes, or
+  with a compensating event — from the phone's Undo within 15 minutes, or
   from the Events tab at any time — and never twice for the same event.
 - The **treatment schedules** are editable, named templates, not code:
   steps with a day offset, a kind (feed / dose / test / water change /
@@ -186,14 +193,18 @@ day N, state badge, "still in the Spa" when a group's sale date came
 before it was cleared, "needs identifying" on a fish nobody knows yet,
 in since / "on sale <date>" or "Sale date not set", each with
 a **−1 lost** button — the
-fastest path is never below the fold), then the **Today** strip folded
+fastest path is never below the fold; a group whose arrival nobody
+knows reads "day ?" and "arrived: unknown", one cleared on a date
+nobody knows "cleared: unknown", and one still in quarantine without an
+arrival date "treatment day unknown — set the arrival date"), then the **Today** strip folded
 to one line ("Today · 3 to do ▸", plus "Cu low" when the last reading is
 under the floor) that opens on tap — the to-do from the building's
 schedule as tap-to-tick chips, feeding first; the last copper reading
 with its age, red when below the floor; a Copper entry and a **Dose**
 entry — and stays open for the session; and the bar: **Lost · Shipped ·
 Move · Arrival · Note · Mic** (Copper takes the Mic's place when voice is
-off). Tapping an occupant opens its sheet: −1 lost, Lost…, Shipped, Move,
+off), with **+ Add fish already here** as a row of its own under them
+(see *Fish already here*). Tapping an occupant opens its sheet: −1 lost, Lost…, Shipped, Move,
 Full recount, Note, Dates (check-in date, cleared date, the group's own
 sale date — empty goes back to the batch's, a "suggested …" chip fills
 the picker) and **Identify** (*Correct the fish* on a fish that has a
@@ -274,12 +285,111 @@ still in quarantine the sheet says that a move into the Clean Room — or
 into a clean temporary tank — clears it today, and a tap on a **clean
 temporary tank** asks first ("Move and clear").
 
+**Add fish already here** — the same species search as Arrival (*Unknown
+fish (??)* and an unlisted name included; a product picked is linked),
+how many, the size (optional), then three questions, each with
+**Unknown** already picked: *Arrived on* (Unknown or a date), *Cleared
+on* (in a clean tank — the Clean Room or a clean temporary tank — a fish
+counts as cleared: Unknown or a date; in a Spa or quarantine temporary
+tank: **Not cleared yet**, the default, or a date) and *Where it came
+from* (Unknown, or the supplier and the origin — the names the supplier
+orders already use as chips, or typed). Save puts the group straight
+into THIS tank — any tank that holds fish — and the status line offers
+Undo like every other action. See *Fish already here*.
+
 Every write is one AJAX action (`fishotel_cleanroom_act`, nonce +
-`manage_woocommerce`); the reply carries the refreshed screen, and a
-toast offers **Undo** — a compensating event, never a delete. The toast
-stays until the next action (at least 10 seconds); the server honours the
-undo for 15 minutes, only for the user who wrote the event, and never
-twice for the same event. The temporary tanks ride on the same action
+`manage_woocommerce`); the reply carries the refreshed screen and a
+message (in this file often still "the toast"), and where the write can
+be taken back an **Undo** — a compensating event, never a delete.
+
+**The status line.** Nothing the page says comes up over the page. It is
+said in one place that is always there: the status line, the first row
+of the button bar itself — above Lost / Shipped / Move on a tank, above
+Cancel / Save on a sheet, and alone at the foot of the screens with no
+buttons of their own (the picker, the day's list, an empty slot). It is
+written into the page (`views/front-desk.php`), so it is there from the
+first paint, and it is one line at one height: 48 px, growing with the
+text size and never with the words. So a message changes no size and no
+place of anything — nothing is covered that was not already under the
+bar, nothing shifts, a second tap lands where the first did. In it:
+
+- at the left, **↶ Undo** (at least 44 px each way, named for a screen
+  reader by what it undoes: "Undo: 1 × … lost"), only while there is
+  something to undo. On the tank screen a tap undoes. On a sheet — where
+  it sits a finger's width above Cancel / Save, and an undo would go
+  back to the tank screen and drop what was typed — a tap opens the
+  whole message first, and the Undo there does it;
+- the words, on one line, cut with "…" when long. A tap on them opens
+  the whole message as a sheet of its own — with the Undo, while it is
+  good — and Back shows the screen under it as it was, what was typed
+  included (it is put aside, not drawn again);
+- along its lower edge a thin bar that runs out with a message's
+  seconds.
+
+A write that can be undone shows its words and a filled Undo for 10
+seconds (`Settings::UNDO_SECONDS`). Then nothing moves or resizes: the
+Undo turns quiet (outlined) and the words read "Last: … · 2 min ago".
+The Undo stays — on a sheet too: in the bar it covers nothing — until
+the next write, and leaves by itself ten seconds before the server's
+window ends: the server honours the undo for 15 minutes
+(`Front_Desk::UNDO_WINDOW`, handed to the page as `settings.undoWindow`),
+only for the user who wrote the event, and never twice for the same
+event, and it stays the judge — an undo that comes too late is answered
+"That can no longer be undone." A phone that slept holds its timers, so
+the line is painted by the clock when the page is back on the screen
+(`visibilitychange`, `pageshow`) and the clock is looked at again at
+every tap on an Undo: one whose window has ended is taken away, and a
+tap on it gets that same answer without asking the server. A "Saved"
+with nothing to undo is plain words for its 10 seconds, then "Last: …";
+it is the next write, so the Undo before it has gone. An error is said
+in the same line in the error colour for 4 seconds (an expired session
+until its words are tapped, which reloads) and never throws away an Undo
+that is still good: the Undo is back when the error has gone — after its
+seconds, or when another screen is opened. Meanwhile the Undo's place is
+kept, empty (`.is-held`: not seen, no tap), so the error's words do not
+start where a thumb was on its way to the Undo. An undo that never reached
+the server (no signal) keeps its Undo for another try; one the server
+refused does not. A request that got no answer at all is said in plain
+words — "No connection — not saved. Try again." for a write, "No
+connection. Try again." for a read such as Refresh — never in the
+browser's own ("Failed to fetch", "Load failed"): `post()` marks it
+(`offline` / `offlineRead`, an error without `data`) and `sayFailed()`
+words it. Inside the Shop App the app's guard has its own sheet and its
+own sentence for a save, and that sentence is said as it is. Before anything was done on the page the line is
+empty; it is there all the same. The "last thing done" is kept for the
+page, not for the visit: another tank is another page.
+
+An Undo that has only just come up — after a write, in place of
+another's, back after an error, on the message's sheet — takes no tap
+for 0.7 seconds, so the second of two quick taps never undoes the first;
+its place never moves; and a tap anywhere else on the line never undoes.
+A write made on the tank screen itself ("−1 lost" on a row, a to-do
+chip, the Undo) leaves the page where it was scrolled to: counting
+bodies down a long tank, the second tap lands on the same row. Back from
+the whole message puts the page where it was as well, at its foot too
+(the room for the screen's own bar is given back first). An undo done
+from a sheet's message goes back to the tank screen, as every write
+does.
+
+For a screen reader the words of each message — a write, a "Saved", an
+error — are put alone into one span that is in the line from the first
+paint (`#fh-fd-said`, `role="status"`). The line itself is no live
+region, so "Undo: …" is not read beside the words and "… 3 min ago" not
+every minute; the same words said twice are told twice. Not yet heard on
+a real screen reader.
+
+The script measures the bar as it stands (`place()`, a `ResizeObserver`
+on the bar — the line and three rows of buttons on a tank, one row on a
+sheet, the line alone on the picker; larger text, a turned phone) and
+hands its height to the stylesheet as `--fd-bar-h`, which keeps that
+much room at the foot of the page, so the last row scrolls clear of the
+bar. On a phone on its side the bar is lower — six buttons in one row,
+48 px tall — so it does not take the screen or reach the Shop App's bar
+at the head. The Shop App adds that bar at the head and pins nothing to
+the foot; its keypad, its scanner and its questions cover the whole
+screen, the Front Desk's bar and its status line included.
+
+The temporary tanks ride on the same action
 with five more acts — `setup`, `setup_edit`, `setup_steps`, `takedown`
 and `todo_tick` (one line of the day's list, for a whole building or
 for one tank) — which need no tank on the page and have no undo: a
@@ -364,7 +474,12 @@ own date: pre-filled with it, else empty when the batch has a date — OK
 then keeps the batch's —, else the suggestion; empty = the batch's; the
 date it already has writes nothing) / Move… / Coming Soon / **Identify…** (*Correct fish…* on a named fish: the real fish, its size, or still unknown) / Edit (species, size, product, check-in date, supplier,
 order ref, landed cost, a note — a changed species or size is the same
-correction as Identify…), a *For sale now* and a *Needs identifying* filter, closed stays
+correction as Identify…), a *For sale now* and a *Needs identifying* filter, **Add fish
+already here** (a small form above the table: the tank — every tank that holds fish,
+a temporary one with the kind it was set up as —, the fish, how many, the size and the
+three questions, an empty date being Unknown; it posts `fishotel_cleanroom_existing`,
+the Board's nonce + `manage_woocommerce`, which runs the phone's own act), an unknown
+date shown as "unknown" and a day as "?", closed stays
 with a toggle, a CSV and an XLSX export with the formula-cell guard. A *Move…* that clears the
 group (out of quarantine into a clean tank — the Clean Room or a clean temporary tank) says so in
 its reply; an Undo or a Count that a taken-down temporary tank stands in the way of says why.
@@ -622,6 +737,98 @@ down can no longer be undone: the undo would put the group into
 whatever is set up there now, and could clear it. While the setup
 stands, both work as anywhere. The Temporary building itself cannot be
 set to *offline* or *coming soon* while a tank in it is running.
+
+## Fish already here
+
+"I already have a bunch of fish in the clean rooms … I have had some of
+these fish for a long time … it would be really nice to know that they
+are there in the system. I think we need a way to override all of these
+steps and simply add a fish into a tank if need be. As the fish gets
+added you could ask the questions of arrival and such. Location and I
+can fill it in if I know it. Otherwise it gets marked as Unknown."
+
+**Where.** On the phone, every tank screen — Spa, Clean Room and a
+temporary tank that is set up — has **+ Add fish already here** under
+the bar's six buttons; Arrival keeps its rules for new fish. On the
+Board, the Stays tab has the same as a small form (*Add fish already
+here*). Both run one act, `existing` (`Front_Desk::perform()`; the
+Board's `fishotel_cleanroom_existing` hands it the tank it names), so the
+answers mean the same wherever they are given.
+
+**The questions** (`Front_Desk::existing_answers()`, pure) — each one is
+**Unknown** until it is answered, and Unknown is a state of its own,
+never a guessed date:
+
+| | In a clean tank (Clean Room, clean temporary tank) | In a Spa tank or a quarantine temporary tank |
+|---|---|---|
+| *Arrived on* | Unknown, or a date | Unknown, or a date |
+| *Cleared on* | Unknown (the fish counts as cleared), or a date — "not cleared yet" is refused | **Not cleared yet** (the default), or a date — Unknown is refused |
+| *Where it came from* | Unknown, or a supplier and an origin | the same |
+
+A date is from 2000-01-01 (`Replay::SALE_DATE_MIN`: a typed "26" is not
+the year 0026) up to today, and a cleared date is not before a known
+arrival. A free slot, an offline tank and a tank that is not in the
+layout take nothing.
+
+**What is written.** One stay, straight into the tank — no Spa step —
+with the source **`existing`** (on the stay and on its events, so every
+report can tell these fish apart), the fish, its size, its product when
+one was picked, the supplier, and the origin as the stay's note
+("Origin: …"); it belongs to no supplier order. Then an `arrival` of the
+count — dated on the arrival date when it is known (the check-in then
+comes from it like any other), else written now with the note
+`arrived:unknown`, which the Replay reads as "no check-in date" — and,
+for a group that is cleared, a `clear` carrying the date
+(`cleared:YYYY-MM-DD`) or `cleared:unknown`. The toast says what is
+known ("… added to Tank 121 (already here) · arrived: unknown · cleared:
+unknown") and its **Undo** takes the whole addition back, like an
+Arrival's.
+
+**Unknown dates everywhere.** The stay's check-in and cleared dates stay
+empty (`fh_stays.checkin_date` / `cleared_date` NULL; a stay cleared on
+an unknown date is stored `cleared` without a date and reads
+`cleared_unknown`). The phone, the Board and the Stays tab say
+"arrived: unknown" / "cleared: unknown" and "day ?" — no day number,
+no suggested sale date. Filling a date in later is the usual Dates sheet
+on the phone (check-in date, cleared date) or *Edit* / *Cleared…* on the
+Stays tab, and from then on the stay behaves exactly as any other.
+
+- The **replay, moves, splits, losses, shipped, recounts and undo** all
+  work with empty dates: a split's sister is as unknown as the original
+  (its arrival noted `arrived:unknown`, its clear `cleared:unknown`, its
+  source `existing`); a group cleared on an unknown date that goes to a
+  hospital tank and back is never "cleared today"; one whose clearing is
+  unset by hand is cleared by its next move out of the Spa as any group
+  is; the undo of a `checkin:` note takes it back to unknown. The undo of
+  "Not cleared" writes back what the group held just before — its
+  cleared date, or `cleared:unknown` — so a tap by mistake never forces a
+  made-up date (`Replay::compensating()`). On the phone's Dates sheet an
+  empty cleared box on a group cleared on an unknown date asks for the
+  date instead of unsetting it; the *Not cleared* chip is the deliberate
+  way.
+- **Sale dates** need no check-in: a group's own date or its batch's
+  works as always; there is simply no "suggested" date.
+- **The To do list.** A Spa group with an unknown check-in has no
+  treatment day: its building's schedule still drives the building's
+  list from the groups that have one (and the feeding counts every tank
+  with fish), and the group itself says "treatment day unknown — set the
+  arrival date" on the phone and the Stays tab.
+- **Stats** (*By year*) count these fish in a card of their own — *Fish
+  already here (added by hand)*: the groups and fish added, what is
+  alive now, shipped and lost (a split half counted once — known by its
+  first arrival, "split from #…", never by the notes Edit can change —
+  an addition that was undone not at all), how many groups in tanks have no arrival
+  or no cleared date — and say how many were **left out** of everything
+  that needs a date or a batch: the yearly figures, survival per batch,
+  landed cost and days in QT (`Stats::existing_stock()`). They belong to
+  no supplier order, so the order-based figures never saw them.
+- **The fish page** reads null for a date nobody knows, never "unknown"
+  (see *What the fish page will read*). Nothing for customers changes:
+  the theme does not read these facts yet.
+- The Events tab says "2 added as already here in Tank 121 (arrival date
+  unknown)" and "cleared (date unknown)" (a split half's arrival reads as
+  any split half's: "1 arrived in Tank 121 (arrival date unknown)"); the exports leave the dates
+  and the day empty, with the source `existing`.
 
 ## To do — one list for the day, by water system
 
@@ -1112,7 +1319,11 @@ rows, then the same figures two ways, both shown and both exported:
   was "not in the formulas yet"), and *total fish through QT* = Σ
   survived;
 
-and the weighted figures by supplier, by origin and by species group
+a card **Fish already here (added by hand)** when there are any — the
+groups and fish added, alive now, shipped and lost (all years), how many
+groups in tanks have no arrival or no cleared date, and how many were
+left out of every figure here: they belong to no supplier order (see
+*Fish already here*) —, and the weighted figures by supplier, by origin and by species group
 (the species row's group; "(no group)" otherwise). By supplier and by
 origin also say how the labels held up: **Mislabeled** — the lines that
 received fish whose `label_name` differs from the fish they turned out
@@ -1516,6 +1727,13 @@ next         the stay that can ship first (one for sale, else the earliest sale 
              Tank 121'), qty_live — or null
 ```
 
+**For theme authors (0.46.6):** `checkin_date` and `cleared_date` (and
+`day`) are **null** when nobody knows them — fish that were already here,
+added by hand with an Unknown arrival or clearing (see *Fish already
+here*). Show nothing for a null; the facts never carry the word
+"unknown". A stay with a known check-in sorts before one without for
+`next`. (No theme reads these facts yet.)
+
 **For theme authors (0.44):** `sale_ready_date` is now `string|null` — the
 stay's effective sale date (its own, else its batch's, Y-m-d) or **null**
 when none has been chosen; it used to be a date always computed as
@@ -1536,7 +1754,8 @@ Lottery Draw section.
 
 Every stay carries `supplier`, `order_ref`, `landed_cost` and
 `order_line_id` (all nullable; editable on the Stays tab) and a `source`
-of `order` (the Arrivals button) / `import` (the workbook import). The
+of `order` (the Arrivals button) / `import` (the workbook import) /
+`existing` (fish already here, added by hand — no order line). The
 check-in fills them (see *Supplier orders*): one stay per order line
 through `Store::create_stay()` + an `arrival` event
 (`Store::record_event()`), exactly as the Front Desk does — the Replay,
@@ -1546,17 +1765,21 @@ its orders, species and stays through the same Store methods.
 ## Data
 
 Eleven tables, created by dbDelta on first boot (gated by the autoloaded
-`fishotel_cleanroom_db_version` option, 1.6, so a booted site pays no
+`fishotel_cleanroom_db_version` option, 1.7, so a booted site pays no
 query and no `SHOW TABLES`) and on activation, the layout seeded in the
 same step; the version is written only once every table and every
 column added since a table's first version (`Store::REQUIRED_COLUMNS`:
 the orders' `sale_date`, the sizes, the box number / percent / share key,
 `needs_id`, `label_name`, the buildings' `own_water`, the logs'
 `setup_id`, the events' `from_setup_id` / `to_setup_id`) is really
-there — and the buildings' `area` column really accepts `temp`
-(`Store::REQUIRED_ENUM_VALUES`) —, so a
+there — and the buildings' `area` column really accepts `temp` and the
+stays' and events' `source` really accept `existing`
+(`Store::REQUIRED_ENUM_VALUES`), and the stays' `checkin_date` really
+takes NULL (`Store::REQUIRED_NULLABLE`; dbDelta never changes a column's
+NULL, so the install runs `ALTER … MODIFY checkin_date DATE NULL` itself,
+which keeps every row and its date) —, so a
 failed CREATE or ALTER is retried on the next boot; everything kept on
-deactivation. An upgrade from 1.3, 1.4 or 1.5 keeps every row; when the
+deactivation. An upgrade from 1.3, 1.4, 1.5 or 1.6 keeps every row; when the
 gate opens, the Temporary building and its six slots are added once
 (only while the layout has no own-water building), and nothing else
 about the permanent buildings, tanks, stays, events and logs changes.
@@ -1564,7 +1787,7 @@ about the permanent buildings, tanks, stays, events and logs changes.
 - `{prefix}fh_buildings` — id, area (`clean` / `spa`; `temp` since 1.6, for the own-water building only), number (unique), name, status, sort, notes, schedule (the template the building runs, '' = the default), system_gallons (NULL = the sum of its tanks; the seed and the 1.2 backfill give Spa 500 205 and Spa 600 100), own_water (1.6: 1 = each tank its own water — the Temporary building, whose tanks are slots)
 - `{prefix}fh_tanks` — id, building_id, number (unique), level, position, size_label, gallons, status, sort (a slot: level 0, position = the slot, no size or gallons of its own)
 - `{prefix}fh_tank_setups` (1.6) — what is set up in a slot: tank_id (the slot), open_tank_id (= tank_id while it stands there, **unique** — one open setup per slot, whichever phone is faster —, NULL once taken down), slot, name, purpose, kind (`quarantine` / `clean`), gallons, template (the name its steps were copied from, '' = none), start_date (day 1 of its own clock), steps (the copied steps, JSON — its own schedule), note, created_by / created_at, updated_at, closed_by / closed_at
-- `{prefix}fh_stays` — the cached state: product_id, species, size_slug + size_label (1.4), needs_id (1.5: the fish still has to be identified), qty_arrived, qty_live, checkin_date, cleared_date, sale_ready_date (the stay's OWN sale date, from its note events; the effective one is computed on read with the batch's), closed_date, status, tank_id, source, order_line_id (→ its batch; keyed since 1.5), supplier, order_ref, landed_cost, notes
+- `{prefix}fh_stays` — the cached state: product_id, species, size_slug + size_label (1.4), needs_id (1.5: the fish still has to be identified), qty_arrived, qty_live, checkin_date (NULL since 1.7 when nobody knows it), cleared_date (NULL also for a stay cleared on an unknown date, whose status is `cleared`), sale_ready_date (the stay's OWN sale date, from its note events; the effective one is computed on read with the batch's), closed_date, status, tank_id, source (`existing` since 1.7: fish already here, added by hand), order_line_id (→ its batch; keyed since 1.5), supplier, order_ref, landed_cost, notes
 - `{prefix}fh_stay_events` — the truth: stay_id, type (arrival · move · loss · clear · sold · count · note), qty, from/to tank, from_setup_id / to_setup_id (1.6: the setup that stood in a slot the event came out of or went into, NULL for a rack tank — the Replay reads that setup's kind as the area, so a slot's history keeps its meaning), note, event_at (UTC), actor, source. Who a fish IS is identity, not history: a correction writes the stay's columns and leaves a note event ("identified: <old> → <new>") as its trace
 - `{prefix}fh_tank_logs` — per tank, or per building: copper readings, doses (value = the amount, note "<Medication> <amount> <unit>"), test / water-change / feed tick-offs, tank notes; a building-level entry has tank_id 0 and building_id set and counts for every tank of the building (the day's to-do); since 1.6 a building is read as one water — the last copper reading of every tank of a shared building is the newest taken anywhere in it, on the building or on any of its tanks, and each reading says which tank it was taken on; an imported entry carries `import:<ref>#<row>` at the end of its note; setup_id (1.6) ties an entry on a slot to the setup that stood there — a slot's to-do, last reading and last doses read only its present setup's entries, and never a building-level one
 - `{prefix}fh_aliases` — spoken words → product / species
@@ -1599,7 +1822,10 @@ refused a second time), a `clear` carries its date in the note
 `event_at`) and with −1 unsets the cleared date, a note of
 `sale_ready:YYYY-MM-DD` sets the stay's own sale date (`sale_ready:`
 removes it), a note of `checkin:YYYY-MM-DD`
-corrects the check-in, a move's note is its reason. Day number =
+corrects the check-in, an arrival noted `arrived:unknown` gives no
+check-in at all (it stays empty until a `checkin:` note), a `clear`
+noted `cleared:unknown` clears the stay on an unknown date, a move's
+note is its reason. Day number =
 floor((today − check-in) / 86400) + 1 over the two calendar dates, never
 stored.
 
@@ -1608,7 +1834,8 @@ stored.
 ```
 clean-room/
 ├── class-clean-room.php    section info, load, boot, menu, activate / deactivate, the globals
-│                           fishotel_cleanroom_product_facts() + the fishotel_product_qt_facts filter,
+│                           fishotel_cleanroom_product_facts() + the fishotel_product_qt_facts filter
+│                           (null for a date nobody knows),
 │                           fishotel_cleanroom_todo() + the fishotel_cleanroom_todo filter, and the
 │                           line the Today section shows (fishotel_today_lines)
 ├── class-store.php         the ONLY $wpdb file: eleven tables, seed, stays / events / logs, record_event
@@ -1678,8 +1905,10 @@ clean-room/
 ├── class-settings.php      options, sanitised AJAX saves (settings, the schedule templates and
 │                           their operations, box rates, sizes, box shares), layout editor, aliases
 ├── class-front-desk.php    the phone page (query var fh_front_desk), the label-login cookie life,
-│                           its AJAX (act / parse / suggest) with perform() = the testable switch
-├── class-admin.php         the Room Board page, CSV, labels, stay edits + move + undo + identify, Coming
+│                           its AJAX (act / parse / suggest) with perform() = the testable switch,
+│                           "Add fish already here" (existing_answers(), the act `existing`)
+├── class-admin.php         the Room Board page, CSV, labels, stay edits + move + undo + identify, the
+│                           Stays tab's "Add fish already here" (fishotel_cleanroom_existing), Coming
 │                           Soon release, the product meta box and its sale dates (save_post_product)
 ├── class-admin-workbook.php  the Arrivals / Species / Stats tabs, their AJAX (an order's save, check-in,
 │                           "Correct the fish…"), the Boxes card, the XLSX / CSV exports, the batch's

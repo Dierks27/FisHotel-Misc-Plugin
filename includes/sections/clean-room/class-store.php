@@ -102,11 +102,14 @@ class Store {
 	 * called a fish that was corrected) and the stays' order_line_id key.
 	 * 1.6 adds the temporary tanks: the buildings' own_water and the 'temp'
 	 * area, the tank_setups table, the tank logs' setup_id and the stay
-	 * events' from_setup_id / to_setup_id.
+	 * events' from_setup_id / to_setup_id. 1.7 lets a stay's check-in date
+	 * be empty (fish already here, added by hand, whose arrival nobody
+	 * knows — an explicit ALTER, as dbDelta never changes a column's NULL)
+	 * and adds the source 'existing' to the stays and their events.
 	 *
 	 * @var string
 	 */
-	const DB_VERSION = '1.6';
+	const DB_VERSION = '1.7';
 
 	/**
 	 * The columns added after a table's first version. The version option
@@ -133,7 +136,21 @@ class Store {
 	 * @var array<string, string[]>
 	 */
 	const REQUIRED_ENUM_VALUES = array(
-		'buildings.area' => array( 'temp' ),
+		'buildings.area'     => array( 'temp' ),
+		'stays.source'       => array( 'existing' ),
+		'stay_events.source' => array( 'existing' ),
+	);
+
+	/**
+	 * The columns that became nullable after their first version, as
+	 * "table.column" => the definition that makes them so. dbDelta never
+	 * changes whether a column takes NULL, so install() runs the ALTER
+	 * itself, and the gate waits until the column really takes NULL.
+	 *
+	 * @var array<string, string>
+	 */
+	const REQUIRED_NULLABLE = array(
+		'stays.checkin_date' => 'DATE NULL',
 	);
 
 	/**
@@ -173,6 +190,17 @@ class Store {
 	const PRODUCT_STATUSES = array( 'publish', 'private', 'draft', 'pending', 'future' );
 
 	const SOURCES   = array( 'manual', 'voice', 'qr', 'import', 'order' );
+
+	/**
+	 * The sources a stay and its events may carry: SOURCES and 'existing'
+	 * — fish that were already here, added by hand (Front_Desk's
+	 * "Add fish already here"), so the reports can tell them apart. The
+	 * tank logs keep SOURCES.
+	 *
+	 * @var string[]
+	 */
+	const STAY_SOURCES  = array( 'manual', 'voice', 'qr', 'import', 'order', 'existing' );
+	const SOURCE_EXISTING = 'existing';
 	const LOG_KINDS = array( 'copper', 'dose', 'test', 'water_change', 'feed', 'note', 'other' );
 	const TABLES    = array( 'buildings', 'tanks', 'stays', 'stay_events', 'tank_logs', 'aliases', 'species', 'orders', 'order_lines', 'box_shares', 'tank_setups' );
 
@@ -263,7 +291,10 @@ class Store {
 		// only once every table AND every added column is really there, so
 		// an ALTER that failed is retried on the next boot like a failed
 		// CREATE.
-		if ( self::tables_exist() && self::schema_ready( self::present_columns(), self::present_enums() ) ) {
+		if ( self::tables_exist() ) {
+			self::make_nullable();
+		}
+		if ( self::tables_exist() && self::schema_ready( self::present_columns(), self::present_enums() ) && ! self::missing_nullable( self::present_nullable() ) ) {
 			update_option( self::DB_VERSION_OPTION, self::DB_VERSION, true );
 			self::seed_if_empty();
 			self::backfill_system_gallons();
@@ -271,6 +302,74 @@ class Store {
 		}
 
 		return true;
+	}
+
+	/**
+	 * Whether the installed schema is this version (the autoloaded option:
+	 * no query). A write that needs what the last upgrade added — an empty
+	 * check-in, the source 'existing' — waits for it.
+	 *
+	 * @return bool
+	 */
+	public static function schema_current() {
+		return self::DB_VERSION === (string) get_option( self::DB_VERSION_OPTION );
+	}
+
+	/**
+	 * Whether the columns REQUIRED_NULLABLE names take NULL, as the tables
+	 * really have them (install only). A column that cannot be read counts
+	 * as not nullable.
+	 *
+	 * @return array<string, bool> "table.column" → takes NULL.
+	 */
+	private static function present_nullable() {
+		global $wpdb;
+
+		$out = array();
+		foreach ( array_keys( self::REQUIRED_NULLABLE ) as $key ) {
+			list( $table, $column ) = explode( '.', $key, 2 );
+			try {
+				$row = $wpdb->get_row( $wpdb->prepare( 'SHOW COLUMNS FROM ' . self::table( $table ) . ' LIKE %s', $column ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			} catch ( \Throwable $e ) {
+				$row = null;
+			}
+			$out[ $key ] = is_array( $row ) && isset( $row['Null'] ) && 'YES' === strtoupper( (string) $row['Null'] );
+		}
+
+		return $out;
+	}
+
+	/**
+	 * The columns of REQUIRED_NULLABLE that do not take NULL yet (pure).
+	 *
+	 * @param array<string, bool> $nullable "table.column" → takes NULL.
+	 * @return string[] "table.column".
+	 */
+	public static function missing_nullable( array $nullable ) {
+		$missing = array();
+		foreach ( array_keys( self::REQUIRED_NULLABLE ) as $key ) {
+			if ( empty( $nullable[ $key ] ) ) {
+				$missing[] = $key;
+			}
+		}
+		return $missing;
+	}
+
+	/**
+	 * Make the REQUIRED_NULLABLE columns take NULL where they do not yet
+	 * (install only): ALTER … MODIFY keeps every row and its value.
+	 */
+	private static function make_nullable() {
+		global $wpdb;
+
+		foreach ( self::missing_nullable( self::present_nullable() ) as $key ) {
+			list( $table, $column ) = explode( '.', $key, 2 );
+			try {
+				$wpdb->query( 'ALTER TABLE ' . self::table( $table ) . ' MODIFY ' . $column . ' ' . self::REQUIRED_NULLABLE[ $key ] ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.SchemaChange -- names from a constant.
+			} catch ( \Throwable $e ) {
+				unset( $e ); // Retried on the next boot: the gate stays shut.
+			}
+		}
 	}
 
 	/**
@@ -435,13 +534,13 @@ class Store {
 				needs_id TINYINT(1) NOT NULL DEFAULT 0,
 				qty_arrived INT NOT NULL DEFAULT 0,
 				qty_live INT NOT NULL DEFAULT 0,
-				checkin_date DATE NOT NULL,
+				checkin_date DATE NULL,
 				cleared_date DATE NULL,
 				sale_ready_date DATE NULL,
 				closed_date DATE NULL,
 				status ENUM('in_qt','cleared','closed') NOT NULL DEFAULT 'in_qt',
 				tank_id BIGINT(20) UNSIGNED NULL,
-				source ENUM('manual','voice','qr','import','order') NOT NULL DEFAULT 'manual',
+				source ENUM('manual','voice','qr','import','order','existing') NOT NULL DEFAULT 'manual',
 				order_line_id BIGINT(20) UNSIGNED NULL,
 				supplier VARCHAR(80) NULL,
 				order_ref VARCHAR(80) NULL,
@@ -466,7 +565,7 @@ class Store {
 				note TEXT NULL,
 				event_at DATETIME NOT NULL,
 				actor_id BIGINT(20) UNSIGNED NOT NULL DEFAULT 0,
-				source ENUM('manual','voice','qr','import','order') NOT NULL DEFAULT 'manual',
+				source ENUM('manual','voice','qr','import','order','existing') NOT NULL DEFAULT 'manual',
 				created_at DATETIME NOT NULL,
 				from_setup_id BIGINT(20) UNSIGNED NULL,
 				to_setup_id BIGINT(20) UNSIGNED NULL,
@@ -1322,6 +1421,48 @@ class Store {
 	}
 
 	/**
+	 * Every stay of fish that were already here, added by hand (source
+	 * 'existing'), open and closed, newest first — with its live figures
+	 * from its events (figures: Orders::figures_from_events()) and the
+	 * group it was split off (split_from: Replay::split_from(), 0 for
+	 * none). What Stats::existing_stock() counts.
+	 *
+	 * @param string $today    Site date.
+	 * @param array  $settings Settings.
+	 * @param int    $limit    Row cap.
+	 * @return array[]
+	 */
+	public function existing_stays( $today, array $settings, $limit = 2000 ) {
+		if ( ! self::tables_exist() ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		try {
+			$rows = $wpdb->get_results(
+				$wpdb->prepare( self::stay_select() . ' WHERE s.source = %s ORDER BY s.id DESC LIMIT %d', self::SOURCE_EXISTING, max( 1, (int) $limit ) ), // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+				ARRAY_A
+			);
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+
+		$out = array();
+		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
+			$out[] = self::hydrate_stay( $row, $today, $settings );
+		}
+		$events = $out ? $this->events_by_stay( array_column( $out, 'id' ) ) : array();
+		foreach ( $out as $i => $stay ) {
+			$own                     = $events[ (int) $stay['id'] ] ?? array();
+			$out[ $i ]['figures']    = Orders::figures_from_events( $own );
+			$out[ $i ]['split_from'] = Replay::split_from( $own );
+		}
+
+		return $out;
+	}
+
+	/**
 	 * Every stay of a product (open first, then closed), with state.
 	 *
 	 * @param int    $product_id Product ID.
@@ -1445,10 +1586,10 @@ class Store {
 			'needs_id'      => ! empty( $fields['needs_id'] ) ? 1 : 0,
 			'qty_arrived'   => 0,
 			'qty_live'      => 0,
-			'checkin_date'  => Replay::is_date( $fields['checkin_date'] ?? null ) ? (string) $fields['checkin_date'] : gmdate( 'Y-m-d' ),
+			'checkin_date'  => self::checkin_or_null( $fields ),
 			'status'        => 'in_qt',
 			'tank_id'       => ! empty( $fields['tank_id'] ) ? (int) $fields['tank_id'] : null,
-			'source'        => in_array( (string) ( $fields['source'] ?? '' ), self::SOURCES, true ) ? (string) $fields['source'] : 'manual',
+			'source'        => in_array( (string) ( $fields['source'] ?? '' ), self::STAY_SOURCES, true ) ? (string) $fields['source'] : 'manual',
 			'order_line_id' => ! empty( $fields['order_line_id'] ) ? (int) $fields['order_line_id'] : null,
 			'supplier'      => '' !== trim( (string) ( $fields['supplier'] ?? '' ) ) ? substr( trim( (string) $fields['supplier'] ), 0, 80 ) : null,
 			'order_ref'     => '' !== trim( (string) ( $fields['order_ref'] ?? '' ) ) ? substr( trim( (string) $fields['order_ref'] ), 0, 80 ) : null,
@@ -1465,6 +1606,25 @@ class Store {
 		}
 
 		return $ok ? (int) $wpdb->insert_id : false;
+	}
+
+	/**
+	 * The check-in date a new stay row starts with (pure): the date given;
+	 * NULL when the fields say it is not known (checkin_date given as null
+	 * or '' — fish already here, added by hand); else today (UTC), as it
+	 * always was. The first arrival's replay sets the real value.
+	 *
+	 * @param array $fields create_stay() fields.
+	 * @return string|null
+	 */
+	public static function checkin_or_null( array $fields ) {
+		if ( Replay::is_date( $fields['checkin_date'] ?? null ) ) {
+			return (string) $fields['checkin_date'];
+		}
+		if ( array_key_exists( 'checkin_date', $fields ) && ( null === $fields['checkin_date'] || '' === $fields['checkin_date'] ) ) {
+			return null;
+		}
+		return gmdate( 'Y-m-d' );
 	}
 
 	/**
@@ -1674,7 +1834,7 @@ class Store {
 			'note'          => (string) ( $event['note'] ?? '' ),
 			'event_at'      => self::utc_datetime( $event['event_at'] ?? '' ),
 			'actor_id'      => (int) ( $event['actor_id'] ?? 0 ),
-			'source'        => in_array( (string) ( $event['source'] ?? '' ), self::SOURCES, true ) ? (string) $event['source'] : 'manual',
+			'source'        => in_array( (string) ( $event['source'] ?? '' ), self::STAY_SOURCES, true ) ? (string) $event['source'] : 'manual',
 			'created_at'    => gmdate( 'Y-m-d H:i:s' ),
 			'from_setup_id' => $setups['from'],
 			'to_setup_id'   => $setups['to'],
@@ -1907,7 +2067,7 @@ class Store {
 				array(
 					'qty_arrived'     => (int) $state['qty_arrived'],
 					'qty_live'        => (int) $state['qty_live'],
-					'checkin_date'    => '' !== $state['checkin_date'] ? $state['checkin_date'] : $stay['checkin_date'],
+					'checkin_date'    => self::cached_checkin( $state ),
 					'cleared_date'    => $state['cleared_date'],
 					'sale_ready_date' => $state['sale_ready_override'],
 					'closed_date'     => $state['closed_date'],
@@ -1922,6 +2082,19 @@ class Store {
 		}
 
 		return $state;
+	}
+
+	/**
+	 * The check-in date the stays row caches (pure): the replay's — which
+	 * already falls back to the row's own date when no arrival gives one —
+	 * or NULL when it is unknown (an "arrived:unknown" arrival and no
+	 * "checkin:" date): never a guessed date.
+	 *
+	 * @param array $state Replay::state().
+	 * @return string|null
+	 */
+	public static function cached_checkin( array $state ) {
+		return Replay::is_date( $state['checkin_date'] ?? null ) ? (string) $state['checkin_date'] : null;
 	}
 
 	/**
@@ -1951,9 +2124,11 @@ class Store {
 	 * (Replay subtracts them); the sister is the same fish of the same
 	 * size — as unknown as the original, when that one still has to be
 	 * identified — and gets a backdated arrival (same
-	 * check-in), a clear carrying the original's cleared date when it had
-	 * one, the same own sale date (the batch's comes with the order line),
-	 * and the move itself — so its
+	 * check-in; an "arrived:unknown" one when nobody knows it), a clear
+	 * carrying the original's cleared date when it had one ("cleared:unknown"
+	 * when it was cleared on an unknown date), the same own sale date (the
+	 * batch's comes with the order line), and the move itself
+	 * (split_events()) — so its
 	 * history reads the same and the move into the Clean Room clears it as
 	 * usual.
 	 *
@@ -1967,81 +2142,125 @@ class Store {
 	 * @return array{stay_id: int, event_ids: int[]}|false
 	 */
 	public function split_stay( array $stay, $qty, array $to_tank, array $base, $today, array $settings, $reason = '' ) {
-		$qty    = (int) $qty;
-		$reason = trim( (string) $reason );
+		$qty = (int) $qty;
 		if ( $qty < 1 || $qty >= (int) $stay['qty_live'] ) {
 			return false;
 		}
 
-		$sister = $this->create_stay(
-			array(
-				'product_id'    => $stay['product_id'],
-				'species'       => $stay['species'],
-				'size_slug'     => $stay['size_slug'] ?? null,
-				'size_label'    => $stay['size_label'] ?? null,
-				'needs_id'      => ! empty( $stay['needs_id'] ),
-				'checkin_date'  => $stay['checkin_date'],
-				'tank_id'       => $stay['tank_id'],
-				'source'        => (string) ( $base['source'] ?? 'manual' ),
-				'order_line_id' => $stay['order_line_id'],
-				'supplier'      => $stay['supplier'],
-				'order_ref'     => $stay['order_ref'],
-				'landed_cost'   => $stay['landed_cost'],
-				'notes'         => 'split from #' . (int) $stay['id'],
-			)
-		);
+		$sister = $this->create_stay( self::sister_fields( $stay, $base ) );
 		if ( ! $sister ) {
 			return false;
 		}
 
-		$ids   = array();
-		$now   = gmdate( 'Y-m-d H:i:s' );
-		$birth = self::site_noon_utc( $stay['checkin_date'] );
-		if ( strcmp( $birth, $now ) > 0 ) {
-			$birth = $now; // A same-day split before noon: the arrival must still sort before the move.
-		}
-
-		// The original: that many leave.
-		$written = $this->record_event(
-			(int) $stay['id'],
-			array_merge( $base, array( 'type' => 'move', 'qty' => $qty, 'from_tank_id' => $stay['tank_id'], 'to_tank_id' => (int) $to_tank['id'], 'note' => 'split to #' . $sister . ( '' !== $reason ? ' · ' . $reason : '' ), 'event_at' => $now ) ),
-			$today,
-			$settings
-		);
-		if ( $written ) {
-			$ids[] = $written['event_id'];
-		}
-
-		// The sister: the same past, then the move.
-		$written = $this->record_event(
-			$sister,
-			array_merge( $base, array( 'type' => 'arrival', 'qty' => $qty, 'to_tank_id' => $stay['tank_id'], 'note' => 'split from #' . (int) $stay['id'], 'event_at' => $birth ) ),
-			$today,
-			$settings
-		);
-		if ( $written ) {
-			$ids[] = $written['event_id'];
-		}
-		if ( ! empty( $stay['cleared_date'] ) ) {
-			$this->record_event( $sister, array_merge( $base, array( 'type' => 'clear', 'note' => Replay::NOTE_CLEARED . $stay['cleared_date'], 'event_at' => $now ) ), $today, $settings );
-		}
-		if ( ! empty( $stay['sale_ready_override'] ) ) {
-			$this->record_event( $sister, array_merge( $base, array( 'type' => 'note', 'note' => Replay::NOTE_SALE_READY . $stay['sale_ready_override'], 'event_at' => $birth ) ), $today, $settings );
-		}
-		$written = $this->record_event(
-			$sister,
-			array_merge( $base, array( 'type' => 'move', 'from_tank_id' => $stay['tank_id'], 'to_tank_id' => (int) $to_tank['id'], 'note' => $reason, 'event_at' => $now ) ),
-			$today,
-			$settings
-		);
-		if ( $written ) {
-			$ids[] = $written['event_id'];
+		$ids = array();
+		foreach ( self::split_events( $stay, (int) $sister, $qty, (int) $to_tank['id'], $base, gmdate( 'Y-m-d H:i:s' ), $reason ) as $step ) {
+			$written = $this->record_event( $step['stay_id'], $step['event'], $today, $settings );
+			if ( $written && $step['undo'] ) {
+				$ids[] = $written['event_id'];
+			}
 		}
 
 		return array(
 			'stay_id'   => (int) $sister,
 			'event_ids' => $ids,
 		);
+	}
+
+	/**
+	 * The sister stay's row of a split (pure): the same fish of the same
+	 * size — as unknown as the original — with its check-in (empty when
+	 * the original's is not known), its batch and its supplier fields.
+	 * Fish already here, added by hand, stay that in the sister too.
+	 *
+	 * @param array $stay The hydrated original stay.
+	 * @param array $base actor_id, source.
+	 * @return array create_stay() fields.
+	 */
+	public static function sister_fields( array $stay, array $base ) {
+		return array(
+			'product_id'    => $stay['product_id'],
+			'species'       => $stay['species'],
+			'size_slug'     => $stay['size_slug'] ?? null,
+			'size_label'    => $stay['size_label'] ?? null,
+			'needs_id'      => ! empty( $stay['needs_id'] ),
+			'checkin_date'  => Replay::is_date( $stay['checkin_date'] ?? null ) ? (string) $stay['checkin_date'] : null,
+			'tank_id'       => $stay['tank_id'],
+			'source'        => self::SOURCE_EXISTING === (string) ( $stay['source'] ?? '' ) ? self::SOURCE_EXISTING : (string) ( $base['source'] ?? 'manual' ),
+			'order_line_id' => $stay['order_line_id'],
+			'supplier'      => $stay['supplier'],
+			'order_ref'     => $stay['order_ref'],
+			'landed_cost'   => $stay['landed_cost'],
+			'notes'         => 'split from #' . (int) $stay['id'],
+		);
+	}
+
+	/**
+	 * The events of a split, in the order they are written (pure): the
+	 * original's move of $qty, then the sister's past — an arrival
+	 * backdated to the check-in (or, when nobody knows the check-in, an
+	 * "arrived:unknown" arrival now), a clear carrying the cleared date (or
+	 * "cleared:unknown" for a group cleared on an unknown date), the own
+	 * sale date — and its move. 'undo' marks the three the toast's Undo
+	 * takes back.
+	 *
+	 * @param array  $stay     The hydrated original stay.
+	 * @param int    $sister   The sister stay's id.
+	 * @param int    $qty      Fish moving.
+	 * @param int    $to_tank  Destination tank id.
+	 * @param array  $base     actor_id, source.
+	 * @param string $now      UTC now.
+	 * @param string $reason   The move reason.
+	 * @return array[] stay_id, event, undo.
+	 */
+	public static function split_events( array $stay, $sister, $qty, $to_tank, array $base, $now, $reason = '' ) {
+		$reason  = trim( (string) $reason );
+		$known   = Replay::is_date( $stay['checkin_date'] ?? null );
+		$birth   = $known ? self::site_noon_utc( $stay['checkin_date'] ) : $now;
+		if ( strcmp( $birth, $now ) > 0 ) {
+			$birth = $now; // A same-day split before noon: the arrival must still sort before the move.
+		}
+		$arrival = $known ? 'split from #' . (int) $stay['id'] : Replay::NOTE_ARRIVED_UNKNOWN . ' · split from #' . (int) $stay['id'];
+		$source  = self::SOURCE_EXISTING === (string) ( $stay['source'] ?? '' ) ? array( 'source' => self::SOURCE_EXISTING ) : array();
+		$from    = $stay['tank_id'];
+
+		$out   = array();
+		$out[] = array(
+			'stay_id' => (int) $stay['id'],
+			'event'   => array_merge( $base, array( 'type' => 'move', 'qty' => (int) $qty, 'from_tank_id' => $from, 'to_tank_id' => (int) $to_tank, 'note' => 'split to #' . (int) $sister . ( '' !== $reason ? ' · ' . $reason : '' ), 'event_at' => $now ) ),
+			'undo'    => true,
+		);
+		$out[] = array(
+			'stay_id' => (int) $sister,
+			'event'   => array_merge( $base, $source, array( 'type' => 'arrival', 'qty' => (int) $qty, 'to_tank_id' => $from, 'note' => $arrival, 'event_at' => $birth ) ),
+			'undo'    => true,
+		);
+		if ( ! empty( $stay['cleared_date'] ) ) {
+			$out[] = array(
+				'stay_id' => (int) $sister,
+				'event'   => array_merge( $base, array( 'type' => 'clear', 'note' => Replay::NOTE_CLEARED . $stay['cleared_date'], 'event_at' => $now ) ),
+				'undo'    => false,
+			);
+		} elseif ( ! empty( $stay['cleared_unknown'] ) ) {
+			$out[] = array(
+				'stay_id' => (int) $sister,
+				'event'   => array_merge( $base, array( 'type' => 'clear', 'note' => Replay::NOTE_CLEARED_UNKNOWN, 'event_at' => $now ) ),
+				'undo'    => false,
+			);
+		}
+		if ( ! empty( $stay['sale_ready_override'] ) ) {
+			$out[] = array(
+				'stay_id' => (int) $sister,
+				'event'   => array_merge( $base, array( 'type' => 'note', 'note' => Replay::NOTE_SALE_READY . $stay['sale_ready_override'], 'event_at' => $birth ) ),
+				'undo'    => false,
+			);
+		}
+		$out[] = array(
+			'stay_id' => (int) $sister,
+			'event'   => array_merge( $base, array( 'type' => 'move', 'from_tank_id' => $from, 'to_tank_id' => (int) $to_tank, 'note' => $reason, 'event_at' => $now ) ),
+			'undo'    => true,
+		);
+
+		return $out;
 	}
 
 	/**
@@ -4367,6 +4586,23 @@ class Store {
 	 * @return array<int, array>
 	 */
 	public function stay_figures( array $stay_ids ) {
+		$out = array();
+		foreach ( $this->events_by_stay( $stay_ids ) as $id => $events ) {
+			$out[ $id ] = Orders::figures_from_events( $events );
+		}
+
+		return $out;
+	}
+
+	/**
+	 * The events of several stays in one query (only what the figures and
+	 * Replay::split_from() read), stay id → events; every id asked for is
+	 * a key, an unknown one with no events.
+	 *
+	 * @param int[] $stay_ids Stay ids.
+	 * @return array<int, array[]>
+	 */
+	private function events_by_stay( array $stay_ids ) {
 		$stay_ids = array_values( array_unique( array_filter( array_map( 'intval', $stay_ids ) ) ) );
 		if ( ! self::tables_exist() || ! $stay_ids ) {
 			return array();
@@ -4388,12 +4624,7 @@ class Store {
 			$by_stay[ (int) $row['stay_id'] ][] = self::hydrate_event( $row );
 		}
 
-		$out = array();
-		foreach ( $by_stay as $id => $events ) {
-			$out[ $id ] = Orders::figures_from_events( $events );
-		}
-
-		return $out;
+		return $by_stay;
 	}
 
 	/**
@@ -5268,8 +5499,10 @@ class Store {
 	 * else null) and whether it is for sale today, and 'next' — the stay
 	 * that can ship first: one for sale with fish left, else the one with
 	 * the earliest sale date (a stay without a date sorts last), then the
-	 * earliest check-in. ready_total counts the fish of every stay that is
-	 * for sale, cleared or still in the Spa.
+	 * earliest check-in (an unknown one last). ready_total counts the fish
+	 * of every stay that is for sale, cleared or still in the Spa. A date
+	 * nobody knows (fish already here, added by hand) is null, as is its
+	 * day: a customer page never reads "unknown".
 	 *
 	 * @param array[] $stays Hydrated stays (any status; closed ones and empty ones are skipped).
 	 * @return array{live_total: int, ready_total: int, in_qt: array[], cleared: array[], next: array|null}
@@ -5293,8 +5526,9 @@ class Store {
 			$entry  = array(
 				'stay_id'          => (int) $stay['id'],
 				'qty_live'         => (int) $stay['qty_live'],
-				'checkin_date'     => (string) $stay['checkin_date'],
-				'cleared_date'     => $stay['cleared_date'] ?? null,
+				// An unknown date is null — never "unknown", never a guessed date: a customer page shows nothing.
+				'checkin_date'     => Replay::is_date( $stay['checkin_date'] ?? null ) ? (string) $stay['checkin_date'] : null,
+				'cleared_date'     => Replay::is_date( $stay['cleared_date'] ?? null ) ? (string) $stay['cleared_date'] : null,
 				'sale_ready_date'  => $date,
 				'sale_date_source' => null !== $date && '' !== $source ? $source : null,
 				'sale_ready'       => ! empty( $stay['sale_ready'] ),
@@ -5323,7 +5557,13 @@ class Store {
 					return null === $a['sale_ready_date'] ? 1 : -1;
 				}
 				$d = strcmp( (string) $a['sale_ready_date'], (string) $b['sale_ready_date'] );
-				return 0 !== $d ? $d : strcmp( $a['checkin_date'], $b['checkin_date'] );
+				if ( 0 !== $d ) {
+					return $d;
+				}
+				if ( ( null === $a['checkin_date'] ) !== ( null === $b['checkin_date'] ) ) {
+					return null === $a['checkin_date'] ? 1 : -1; // An unknown check-in sorts after a known one.
+				}
+				return strcmp( (string) $a['checkin_date'], (string) $b['checkin_date'] );
 			}
 		);
 		if ( $candidates ) {

@@ -4,9 +4,12 @@
  *
  * Every screen is built with the DOM API from the data the server sends
  * (never innerHTML from data); every write goes through the one AJAX
- * action fishotel_cleanroom_act and re-renders from the reply; every stay
- * change shows a toast whose Undo posts a compensating event — it stays
- * until the next action, and at least settings.undoSeconds.
+ * action fishotel_cleanroom_act and re-renders from the reply. What the
+ * page has to say it says in the status line — the first row of the
+ * button bar, always there, always the same height — and a stay change
+ * puts an Undo there that posts a compensating event: filled for
+ * settings.undoSeconds, then quiet until the next write, and never past
+ * settings.undoWindow.
  *
  * The fastest path is a loss (Jeff counts bodies): one tap on "−1 lost"
  * on the fish's row, or Lost → the row — so the fish rows come first and
@@ -404,6 +407,92 @@
 		return (text === '' ? '??' : '?? ' + text).substring(0, 120);
 	}
 
+	/**
+	 * A group's dates in words, with Unknown as a state of its own: the day
+	 * ("day 12", "day ?" when the check-in is not known, '' without one),
+	 * the arrival ("in since 2026-10-02" while in quarantine, "arrived:
+	 * unknown"), the clearing ("cleared 2026-10-20", "cleared: unknown")
+	 * and, for a group still in quarantine (not cleared) whose check-in is
+	 * not known, that its treatment day is unknown too.
+	 *
+	 * @param {Object} o       Occupant (day, status, checkinDate, checkinUnknown, clearedDate, clearedUnknown).
+	 * @param {Object} strings day, dayUnknown, inSince, arrivedUnknown, clearedOn, clearedUnknown, treatUnknown.
+	 * @return {{day: string, arrived: string, cleared: string, treatment: string}}
+	 */
+	function datesText(o, strings) {
+		var s = strings || {};
+		var get = function (key, fallback) { return s[key] ? s[key] : fallback; };
+		o = o || {};
+		var out = { day: '', arrived: '', cleared: '', treatment: '' };
+		if (o.checkinUnknown) {
+			out.day = get('dayUnknown', 'day ?');
+			out.arrived = get('arrivedUnknown', 'arrived: unknown');
+			if (o.status === 'in_qt') {
+				out.treatment = get('treatUnknown', 'treatment day unknown — set the arrival date');
+			}
+		} else {
+			out.day = (o.day === null || typeof o.day === 'undefined') ? '' : fmt(get('day', 'day %d'), o.day);
+			out.arrived = o.checkinDate ? fmt(get('inSince', 'in since %s'), o.checkinDate) : '';
+		}
+		if (o.clearedDate) {
+			out.cleared = fmt(get('clearedOn', 'cleared %s'), o.clearedDate);
+		} else if (o.clearedUnknown) {
+			out.cleared = get('clearedUnknown', 'cleared: unknown');
+		}
+		return out;
+	}
+
+	/**
+	 * What the Dates sheet's cleared Save posts (pure): the date typed; an
+	 * empty box unsets the date — except on a group cleared on an unknown
+	 * date, where an empty box is no answer (null: ask for the date). The
+	 * "Not cleared" chip stays the one deliberate way to unset that.
+	 *
+	 * @param {Object} o    Occupant (stayId, clearedUnknown).
+	 * @param {string} date The box ('' when empty).
+	 * @param {number} tank The page's tank number.
+	 * @return {Object|null}
+	 */
+	function clearedSaveFields(o, date, tank) {
+		o = o || {};
+		if (!date) {
+			return o.clearedUnknown ? null : { act: 'clear', tank: tank, stay_id: o.stayId, unset: 1, via: 'qr' };
+		}
+		return { act: 'clear', tank: tank, stay_id: o.stayId, date: date, via: 'qr' };
+	}
+
+	/**
+	 * What the "Add fish already here" sheet's Save posts (pure). Each of
+	 * the three questions is Unknown unless it was answered: arrived and
+	 * cleared are a date or 'unknown' — in quarantine "not cleared yet"
+	 * ('no') is the default and Unknown is not offered; in a clean tank a
+	 * fish counts as cleared, its date Unknown unless one is given.
+	 *
+	 * @param {Object}  f     The sheet: species, productId, unknown, qty, size, arrived, cleared, supplier, origin.
+	 * @param {number}  tank  The page's tank number.
+	 * @param {boolean} clean Whether the tank behaves as a clean tank.
+	 * @return {Object}
+	 */
+	function existingFields(f, tank, clean) {
+		f = f || {};
+		var date = function (value) { return /^\d{4}-\d{2}-\d{2}$/.test(String(value || '')) ? String(value) : ''; };
+		var text = function (value) { return String(value === null || typeof value === 'undefined' ? '' : value).replace(/^\s+|\s+$/g, ''); };
+		return {
+			act: 'existing',
+			tank: tank,
+			species: f.species || '',
+			product_id: f.productId || 0,
+			unknown: f.unknown ? 1 : 0,
+			qty: f.qty || 1,
+			size: f.size || '',
+			arrived: date(f.arrived) || 'unknown',
+			cleared: date(f.cleared) || (clean ? 'unknown' : 'no'),
+			supplier: text(f.supplier) || 'unknown',
+			origin: text(f.origin) || 'unknown',
+			via: 'qr'
+		};
+	}
+
 	/* Whether a value was given at all (0 counts; '', null and undefined do not). */
 	function present(value) {
 		return value !== null && typeof value !== 'undefined' && value !== '';
@@ -734,6 +823,26 @@
 	}
 
 	/**
+	 * How long ago, in the status line's words: "just now", "2 min ago",
+	 * "3 h ago".
+	 *
+	 * @param {number} ms      Milliseconds since.
+	 * @param {Object} strings justNow, minAgo, hoursAgo.
+	 * @return {string}
+	 */
+	function agoText(ms, strings) {
+		var s = strings || {};
+		var min = Math.floor(Math.max(0, Number(ms) || 0) / 60000);
+		if (min < 1) {
+			return s.justNow || 'just now';
+		}
+		if (min < 60) {
+			return fmt(s.minAgo || '%d min ago', min);
+		}
+		return fmt(s.hoursAgo || '%d h ago', Math.floor(min / 60));
+	}
+
+	/**
 	 * The tanks of a grid building a screen offers: every rack tank; of the
 	 * temporary slots only the ones that are set up — a slot with nothing
 	 * in it is no tank to pick.
@@ -753,6 +862,9 @@
 		fmt: fmt,
 		escapeHtml: escapeHtml,
 		saleSummary: saleSummary,
+		datesText: datesText,
+		existingFields: existingFields,
+		clearedSaveFields: clearedSaveFields,
 		sizeText: sizeText,
 		unknownName: unknownName,
 		doseStart: doseStart,
@@ -773,6 +885,7 @@
 	api.gridTanks = gridTanks;
 	api.tileText = tileText;
 	api.flagsText = flagsText;
+	api.agoText = agoText;
 
 	root.fhFrontDeskHelpers = api;
 
@@ -791,7 +904,6 @@
 	var cfg = root.fhFrontDesk;
 	var i18n = cfg.i18n || {};
 	var app = document.getElementById('fh-fd-app');
-	var toastEl = document.getElementById('fh-fd-toast');
 
 	var state = {
 		screen: cfg.screen || {},
@@ -802,8 +914,10 @@
 		sending: false,
 		sure: null,
 		timers: {},
-		toastShownAt: 0,
-		toastSticky: false,
+		undo: null, // What can be undone now: { ids, label, text, at }.
+		note: null, // An error, or a "Saved" with nothing to undo, in its seconds: { text, error, at, until, tap }.
+		last: null, // The last thing done on this page: { text, at }.
+		msg: null,  // The whole message, while its sheet is open.
 		openFeeds: {}
 	};
 
@@ -888,7 +1002,7 @@
 
 	function clearTimers() {
 		Object.keys(state.timers).forEach(function (k) {
-			if (k === 'toast' || k === 'toastBar') {
+			if (k === 'line' || k === 'lineBar') {
 				return;
 			}
 			root.clearInterval(state.timers[k]);
@@ -901,6 +1015,19 @@
 	/*  AJAX                                                             */
 	/* ---------------------------------------------------------------- */
 
+	/*
+	 * A request can fail three ways, and each says its own thing:
+	 *  - no answer at all (no signal; fetch itself rejects): the browser's
+	 *    own words for it — "Failed to fetch", "Load failed" — are for a
+	 *    console, not a person, so the error carries a marker of ours,
+	 *    'offline' for a write and 'offlineRead' for a read, and
+	 *    sayFailed() says it in plain words. It has no `data`: act() knows
+	 *    by that an undo never got there. A sentence written for a person
+	 *    by whatever stands in front of fetch (the Shop App's guard, after
+	 *    its own sheet) is a plain Error with words: it is kept as it is;
+	 *  - an answer that is not one ('expired', 'bad');
+	 *  - the server's own no: its message, with `data`.
+	 */
 	function post(action, fields) {
 		var body = new URLSearchParams();
 		body.append('action', action);
@@ -918,6 +1045,11 @@
 			credentials: 'same-origin',
 			headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
 			body: body.toString()
+		}).catch(function (err) {
+			if (err && err.name === 'Error' && err.message) {
+				throw err;
+			}
+			throw new Error(action === 'fishotel_cleanroom_act' ? 'offline' : 'offlineRead');
 		}).then(function (res) {
 			if (res.status === 403 || res.status === 401) {
 				throw new Error('expired');
@@ -944,6 +1076,10 @@
 	 * with what went in, and saving again goes through), or a level to
 	 * confirm ("Bring it to" far above the copper target — saving the same
 	 * level again says it was meant).
+	 *
+	 * A write made on the tank screen itself ("−1 lost" on a row, a to-do
+	 * chip, the Undo) leaves the page where it was scrolled to: counting
+	 * bodies, the second tap must land on the row the first one did.
 	 */
 	function act(fields) {
 		if (state.sending) {
@@ -952,6 +1088,7 @@
 		state.sending = true;
 		busy(true);
 		var before = tank() ? tank().number : 0;
+		var stayAt = state.view === 'tank' && !state.msg ? (root.pageYOffset || 0) : 0;
 		return post('fishotel_cleanroom_act', fields).then(function (data) {
 			state.sure = null;
 			if (data.screen) {
@@ -968,14 +1105,20 @@
 			state.voice = null;
 			state.form = {};
 			render();
+			if (stayAt) {
+				root.scrollTo(0, stayAt);
+			}
 			if (fields.act === 'undo') {
-				toast(data.message || t('undone', 'Undone'), null);
+				say(data.message || t('undone', 'Undone'), null);
 			} else {
-				toast(data.message || t('saved', 'Saved'), data.undo && data.undo.eventIds && data.undo.eventIds.length ? data.undo.eventIds : null);
+				say(data.message || t('saved', 'Saved'), data.undo && data.undo.eventIds && data.undo.eventIds.length ? data.undo.eventIds : null, false, null, data.undo && data.undo.label);
 			}
 			return data;
 		}).catch(function (err) {
 			var more = err && err.data ? err.data : null;
+			if (fields.act === 'undo' && err && typeof err.data !== 'undefined') {
+				state.undo = null; // The server's own no: that Undo is over. A request that never got there leaves it for another try.
+			}
 			if (more && typeof more.confirm === 'number') {
 				state.sure = more.confirm;
 			}
@@ -986,7 +1129,7 @@
 				}
 				render();
 			}
-			failToast(err);
+			sayFailed(err);
 		}).then(function () {
 			state.sending = false;
 			busy(false);
@@ -998,16 +1141,28 @@
 		return typeof state.sure === 'number' && present(target) && Math.abs(Number(target) - state.sure) < 1e-9;
 	}
 
-	function failToast(err) {
+	/*
+	 * 'expired', 'bad', 'offline' and 'offlineRead' are post()'s own
+	 * markers, on an error without `data`. A refusal — the server's words,
+	 * with `data` — is said as it came, whatever it says.
+	 */
+	function sayFailed(err) {
 		var msg = err && err.message ? err.message : t('error', 'Something went wrong.');
-		if (msg === 'expired') {
-			toast(t('expired', 'Session expired — tap to reload.'), null, true, function () { root.location.reload(); });
+		var mark = err && typeof err.data === 'undefined' ? msg : '';
+		if (mark === 'expired') {
+			say(t('expired', 'Session expired — tap to reload.'), null, true, function () { root.location.reload(); });
 			return;
 		}
-		if (msg === 'bad') {
+		if (mark === 'bad') {
 			msg = t('error', 'Something went wrong.');
 		}
-		toast(msg, null, true);
+		if (mark === 'offline') {
+			msg = t('offline', 'No connection — not saved. Try again.');
+		}
+		if (mark === 'offlineRead') {
+			msg = t('offlineRead', 'No connection. Try again.');
+		}
+		say(msg, null, true);
 	}
 
 	function busy(on) {
@@ -1016,86 +1171,372 @@
 	}
 
 	/* ---------------------------------------------------------------- */
-	/*  Toast with Undo                                                  */
+	/*  The status line                                                  */
 	/* ---------------------------------------------------------------- */
 
 	/*
-	 * A toast with Undo is sticky: it stays until the next action
-	 * (dismissToast(), called when a new screen opens or a new toast
-	 * replaces it) and at least settings.undoSeconds either way, so a wet
-	 * thumb can still undo after the server round trip. The bar shows that
-	 * minimum running out; the server honours the undo for its own window.
+	 * What the page has to say it says in one place that is always there:
+	 * the status line, the first row of the button bar (bar()) — on a
+	 * screen with no buttons of its own the bar is that line alone. Its
+	 * height never changes with what it says, so a message covers
+	 * nothing, moves nothing, and a second tap lands where the first did.
+	 *
+	 * In it, from the left: the Undo — only while there is something to
+	 * undo —, then the words on one line, cut with "…" (a tap on them
+	 * opens the whole message: openMessage()), and along its lower edge a
+	 * thin bar that runs out with a message's seconds.
+	 *
+	 *   - A write that can be undone: its words and a filled "↶ Undo" for
+	 *     settings.undoSeconds. Then nothing moves: the Undo turns quiet
+	 *     and the words read "Last: … · 2 min ago". The Undo stays, on
+	 *     every screen, until the next write, and goes by itself
+	 *     undoSeconds before the server's window (settings.undoWindow)
+	 *     ends; with no window told it lasts its undoSeconds only.
+	 *   - A "Saved" with nothing to undo: its words for undoSeconds, then
+	 *     "Last: …". It is the next write: the Undo before it has gone.
+	 *   - An error: its words in the error colour for ERROR_SECONDS (the
+	 *     expired session until it is tapped). It never throws away an
+	 *     Undo that is still good: the Undo is back when the error has
+	 *     gone — after its seconds, or when another screen is opened.
+	 *     Meanwhile its place is kept, empty: the error's words do not
+	 *     start where a thumb was on its way to the Undo.
+	 *
+	 * UNDO_GUARD: an Undo that has only just come up takes no tap, so the
+	 * second of two quick taps cannot undo the first. The Undo is always
+	 * at the left end, and a tap anywhere else on the line never undoes.
+	 *
+	 * On a sheet the Undo sits a finger's width above Cancel / Save, and
+	 * an undo goes back to the tank screen — what was typed would be
+	 * gone. So there a tap on it opens the whole message first, with its
+	 * Undo; Back shows the sheet as it was.
+	 *
+	 * For a screen reader the words of each message are put, alone, into
+	 * one span that is always in the line (role="status", tell()). The
+	 * line itself is no live region: "Undo: …" beside the words would be
+	 * read as well, and "… 3 min ago" every minute.
 	 */
-	function toast(message, undoIds, isError, onTap) {
-		var seconds = isError ? 4 : Math.max(10, parseInt(settings().undoSeconds, 10) || 10);
-		var sticky = !isError && !!(undoIds && undoIds.length);
-		root.clearTimeout(state.timers.toast);
-		root.clearInterval(state.timers.toastBar);
+	var UNDO_GUARD = 700;
+	var ERROR_SECONDS = 4;
 
-		while (toastEl.firstChild) {
-			toastEl.removeChild(toastEl.firstChild);
-		}
-		toastEl.className = 'fh-fd-toast' + (isError ? ' is-error' : '') + (sticky ? ' is-sticky' : '');
-		toastEl.appendChild(el('span', { text: message }));
-		if (undoIds && undoIds.length) {
-			toastEl.appendChild(el('button', {
-				type: 'button',
-				text: t('undo', 'Undo'),
-				on: {
-					click: function (e) {
-						e.stopPropagation();
-						hideToast();
-						act({ act: 'undo', event_ids: undoIds, tank: tank() ? tank().number : 0 });
-					}
-				}
-			}));
-		}
-		if (onTap) {
-			toastEl.addEventListener('click', onTap, { once: true });
-		} else if (sticky) {
-			// A tap on the message itself closes it — once the minimum has passed.
-			toastEl.addEventListener('click', function () { dismissToast(); });
-		}
-		var bar = el('span', { class: 'fh-fd-toast__bar' });
-		bar.style.width = '100%';
-		toastEl.appendChild(bar);
-		toastEl.hidden = false;
+	// The line itself comes with the page (views/front-desk.php), so it is there from the first paint.
+	var statusEl = document.getElementById('fh-fd-status') || el('div', { id: 'fh-fd-status', class: 'fh-fd-status' });
+	var undoEl = el('button', { type: 'button', class: 'fh-fd-status__undo', text: '↶ ' + t('undo', 'Undo'), hidden: true, on: { click: tapUndo } });
+	var wordsEl = el('span', { class: 'fh-fd-status__words' });
+	var agoEl = el('span', { class: 'fh-fd-status__ago', hidden: true });
+	var textEl = el('button', { type: 'button', class: 'fh-fd-status__text', hidden: true, on: { click: tapWords } }, [wordsEl, agoEl]);
+	var runEl = el('span', { class: 'fh-fd-status__bar' });
+	// What a screen reader is told. It comes with the page too, and is never taken out of the line.
+	var saidEl = document.getElementById('fh-fd-said') || el('span', { id: 'fh-fd-said', class: 'fh-fd-status__said', role: 'status' });
+	if (saidEl.parentNode !== statusEl) {
+		statusEl.appendChild(saidEl);
+	}
+	[undoEl, textEl, runEl].forEach(function (node) { statusEl.insertBefore(node, saidEl); });
 
-		var started = Date.now();
-		state.toastShownAt = started;
-		state.toastSticky = sticky;
-		state.timers.toastBar = root.setInterval(function () {
-			var left = Math.max(0, 1 - (Date.now() - started) / (seconds * 1000));
-			bar.style.width = (left * 100) + '%';
-			if (left <= 0) {
-				root.clearInterval(state.timers.toastBar);
+	var shownUndo = null; // The Undo the button stands for now …
+	var undoBorn = 0;     // … and when it came up.
+	var barNode = null;   // The button bar on the page now …
+	var barInner = null;  // … and its buttons, where the screen has any.
+
+	function undoSeconds() {
+		return Math.max(10, parseInt(settings().undoSeconds, 10) || 10);
+	}
+
+	/* The server's window for an undo (ms); 0 when the page was told none. */
+	function undoWindow() {
+		return (parseInt(settings().undoWindow, 10) || 0) * 1000;
+	}
+
+	/*
+	 * When an Undo stops being offered: undoSeconds before the window's
+	 * end — the round trip of the undo —, so it is not there to offer an
+	 * undo the server would refuse; and never before its own seconds.
+	 */
+	function undoEnds(undo) {
+		var shown = undoSeconds() * 1000;
+		return undo.at + Math.max(shown, undoWindow() - shown);
+	}
+
+	/* When "… 2 min ago" next reads differently. */
+	function agoTurns(at, now) {
+		var min = Math.floor((now - at) / 60000);
+		return min < 60 ? at + (min + 1) * 60000 : at + (Math.floor(min / 60) + 1) * 3600000;
+	}
+
+	/*
+	 * What the line holds now, by the clock: an error or a "Saved" past
+	 * its seconds and an Undo past its time are dropped here, so nothing
+	 * depends on a timer having run (a phone that slept held them).
+	 */
+	function lineNow(now) {
+		if (state.note && state.note.until && now >= state.note.until) {
+			state.note = null;
+		}
+		if (state.undo && now >= undoEnds(state.undo)) {
+			state.undo = null;
+		}
+		var note = state.note;
+		var undo = state.undo;
+		if (note) {
+			// held: an Undo that is still good waits behind these words; its place is kept for it.
+			return { kind: note.error ? 'error' : 'ok', text: note.text, ago: '', undo: null, held: !!undo, fresh: false, from: note.at, to: note.until };
+		}
+		var fresh = undo ? undo.at + undoSeconds() * 1000 : 0;
+		if (undo && now < fresh) {
+			return { kind: 'ok', text: undo.text, ago: '', undo: undo, held: false, fresh: true, from: undo.at, to: fresh };
+		}
+		if (state.last) {
+			return { kind: 'last', text: fmt(t('lastDone', 'Last: %s'), state.last.text), ago: agoText(now - state.last.at, i18n), undo: undo, held: false, fresh: false, from: 0, to: 0 };
+		}
+		return { kind: '', text: '', ago: '', undo: null, held: false, fresh: false, from: 0, to: 0 };
+	}
+
+	/* The line as it is now, and a timer for the next thing the clock changes. Nothing here changes its size. */
+	function paintLine() {
+		var now = Date.now();
+		var m = lineNow(now);
+		root.clearTimeout(state.timers.line);
+		root.clearInterval(state.timers.lineBar);
+
+		statusEl.className = 'fh-fd-status' + (m.kind ? ' is-' + m.kind : '');
+		if (wordsEl.textContent !== m.text) {
+			wordsEl.textContent = m.text;
+		}
+		agoEl.textContent = m.ago ? ' · ' + m.ago : '';
+		agoEl.hidden = !m.ago;
+		textEl.hidden = !m.text;
+
+		if (m.undo !== shownUndo) {
+			shownUndo = m.undo;
+			undoBorn = now; // Just come up (or back, after an error): no tap yet.
+		}
+		undoEl.hidden = !m.undo && !m.held;
+		undoEl.disabled = m.held; // Held behind an error: in its place, not seen, and it takes no tap.
+		undoEl.className = 'fh-fd-status__undo' + (m.held ? ' is-held' : (m.fresh ? '' : ' is-quiet'));
+		if (m.undo) {
+			undoEl.setAttribute('aria-label', fmt(t('undoWhat', 'Undo: %s'), m.undo.label));
+		}
+
+		if (m.to) {
+			var step = function () {
+				runEl.style.width = (Math.max(0, (m.to - Date.now()) / (m.to - m.from)) * 100) + '%';
+			};
+			step();
+			state.timers.lineBar = root.setInterval(step, 200);
+		} else {
+			runEl.style.width = '0%';
+		}
+
+		var next = [
+			m.to,
+			state.undo ? state.undo.at + undoSeconds() * 1000 : 0,
+			state.undo ? undoEnds(state.undo) : 0,
+			m.kind === 'last' ? agoTurns(state.last.at, now) : 0
+		].filter(function (at) { return at > now; });
+		if (next.length) {
+			state.timers.line = root.setTimeout(paintLine, Math.min.apply(null, next) - now);
+		}
+		if (state.msg) {
+			drawMessage();
+		}
+	}
+
+	/*
+	 * Say it in the status line. undoIds: the write can be undone. isError:
+	 * the error colour, and whatever can still be undone is kept for
+	 * after. onTap: what a tap on the words does instead of opening them
+	 * (the reload of an expired session).
+	 */
+	function say(message, undoIds, isError, onTap, undoLabel) {
+		var now = Date.now();
+		closeMessage();
+		if (isError) {
+			state.note = { text: message, error: true, at: now, until: onTap ? 0 : now + ERROR_SECONDS * 1000, tap: onTap || null };
+		} else {
+			var ids = undoIds && undoIds.length ? undoIds : null;
+			state.undo = ids ? { ids: ids, label: undoLabel || message, text: message, at: now } : null;
+			state.note = ids ? null : { text: message, error: false, at: now, until: now + undoSeconds() * 1000, tap: null };
+			state.last = { text: message, at: now };
+		}
+		tell(message);
+		paintLine();
+	}
+
+	/* For a screen reader: the words alone, once. The same words said again are a new message — the space makes them new. */
+	function tell(message) {
+		saidEl.textContent = saidEl.textContent === message ? message + '\u00a0' : message;
+	}
+
+	/* Another screen is opened: an error said on the one before has had its say. */
+	function clearError() {
+		if (state.note && state.note.error) {
+			state.note = null;
+			paintLine();
+		}
+	}
+
+	/*
+	 * A tap on the Undo, in the line or in the message's sheet. The clock
+	 * is looked at here as well: past the server's window it answers
+	 * plainly and asks nothing of the server. While the request is under
+	 * way the Undo is kept — act() takes it away when the server has
+	 * answered.
+	 */
+	function takeUndo() {
+		var undo = state.undo;
+		var now = Date.now();
+		if (!undo || state.sending || now - undoBorn < UNDO_GUARD) {
+			return; // Nothing to undo, a write under way, or the Undo has only just come up under the thumb.
+		}
+		if (undoWindow() && now - undo.at >= undoWindow()) {
+			state.undo = null;
+			say(t('undoLate', 'That can no longer be undone.'), null, true);
+			return;
+		}
+		act({ act: 'undo', event_ids: undo.ids, tank: tank() ? tank().number : 0 });
+	}
+
+	/*
+	 * A tap on the line's own Undo. On the tank screen it undoes. On a
+	 * sheet it opens the whole message, whose Undo then does: one stray
+	 * tap beside Save cannot take back a write and drop what was typed.
+	 */
+	function tapUndo() {
+		if (undoEl.disabled) {
+			return;
+		}
+		if (state.undo && state.view !== 'tank' && !state.msg) {
+			openMessage();
+			return;
+		}
+		takeUndo();
+	}
+
+	/* A tap on the words: what the message asked for (the reload), else the whole message. */
+	function tapWords() {
+		var note = state.note;
+		if (note && note.tap) {
+			var tap = note.tap;
+			note.tap = null;
+			tap();
+			return;
+		}
+		openMessage();
+	}
+
+	/*
+	 * The whole message. The line cuts long words, so a tap on them opens
+	 * them as a sheet of their own — with the Undo, while it is good. The
+	 * screen under it is only put aside, not drawn again: its fields keep
+	 * what was typed, and Back shows it as it was.
+	 */
+	function openMessage() {
+		var now = Date.now();
+		var m = lineNow(now);
+		if (state.msg || !m.text || !barNode) {
+			return;
+		}
+		state.msg = {
+			text: m.kind === 'last' ? state.last.text : m.text,
+			error: m.kind === 'error',
+			at: m.kind === 'error' ? 0 : state.last.at,
+			y: root.pageYOffset || 0,
+			node: el('div', { class: 'fh-fd-app fh-fd-msg' }),
+			back: el('div', { class: 'fh-fd-bar__inner' }, [button(t('back', 'Back'), 'fh-fd-btn--quiet', function () { closeMessage(); })]),
+			inner: barInner
+		};
+		undoBorn = now; // The sheet's Undo has only just come up, too.
+		if (barInner) {
+			barInner.hidden = true;
+		}
+		barNode.appendChild(state.msg.back);
+		app.hidden = true;
+		app.parentNode.insertBefore(state.msg.node, app.nextSibling);
+		drawMessage();
+		root.scrollTo(0, 0);
+		place();
+	}
+
+	function drawMessage() {
+		var msg = state.msg;
+		var now = Date.now();
+		var undo = state.undo;
+		while (msg.node.firstChild) {
+			msg.node.removeChild(msg.node.firstChild);
+		}
+		msg.node.appendChild(header(t('message', 'Message'), msg.error ? null : [agoText(now - msg.at, i18n)]));
+		var screen = el('div', { class: 'fh-fd-screen' }, [
+			el('p', { class: 'fh-fd-msg__text' + (msg.error ? ' is-error' : ''), text: msg.text })
+		]);
+		if (undo) {
+			if (undo.text !== msg.text) {
+				screen.appendChild(el('p', { class: 'fh-fd-muted', text: fmt(t('lastDone', 'Last: %s'), undo.text) + ' · ' + agoText(now - undo.at, i18n) }));
 			}
-		}, 200);
-		if (!sticky) {
-			state.timers.toast = root.setTimeout(hideToast, seconds * 1000);
+			var big = button('↶ ' + t('undo', 'Undo'), 'fh-fd-btn--big', takeUndo);
+			big.setAttribute('aria-label', fmt(t('undoWhat', 'Undo: %s'), undo.label));
+			screen.appendChild(big);
+		}
+		msg.node.appendChild(screen);
+	}
+
+	/* Back from the whole message (stay: another screen is about to be drawn — it places itself). */
+	function closeMessage(stay) {
+		var msg = state.msg;
+		if (!msg) {
+			return;
+		}
+		state.msg = null;
+		if (msg.node.parentNode) {
+			msg.node.parentNode.removeChild(msg.node);
+		}
+		if (msg.back.parentNode) {
+			msg.back.parentNode.removeChild(msg.back);
+		}
+		if (msg.inner) {
+			msg.inner.hidden = false;
+		}
+		app.hidden = false;
+		if (!stay) {
+			place(); // First the room at the page's foot for the screen's own bar: a page that was at its foot can only then be put back there.
+			root.scrollTo(0, msg.y);
 		}
 	}
 
-	/* The next action happened: close a sticky toast, but never before its minimum. */
-	function dismissToast() {
-		if (toastEl.hidden || !state.toastSticky) {
-			return;
-		}
-		var minimum = Math.max(10, parseInt(settings().undoSeconds, 10) || 10) * 1000;
-		var left = minimum - (Date.now() - state.toastShownAt);
-		root.clearTimeout(state.timers.toast);
-		if (left <= 0) {
-			hideToast();
-			return;
-		}
-		state.timers.toast = root.setTimeout(hideToast, left);
+	/*
+	 * A phone that slept held its timers while the clock went on. When the
+	 * page is looked at again the line is painted by the clock: a message
+	 * past its seconds has gone, an Undo past its time is not left there
+	 * offering what the server would refuse.
+	 */
+	if (typeof document.addEventListener === 'function') {
+		document.addEventListener('visibilitychange', function () { paintLine(); });
+	}
+	if (typeof root.addEventListener === 'function') {
+		root.addEventListener('pageshow', function () { paintLine(); });
 	}
 
-	function hideToast() {
-		root.clearTimeout(state.timers.toast);
-		root.clearInterval(state.timers.toastBar);
-		state.toastSticky = false;
-		toastEl.hidden = true;
+	/* The height a thing takes on the screen now; nothing for one that is not there. */
+	function tall(node) {
+		return node && !node.hidden ? Math.ceil(node.getBoundingClientRect().height) || 0 : 0;
+	}
+
+	/*
+	 * The bar is measured as it stands — the status line and however many
+	 * rows of buttons the screen has — and its height handed to the
+	 * stylesheet (--fd-bar-h), which keeps that much room at the foot of
+	 * the page: the last row scrolls clear of it.
+	 */
+	function place() {
+		document.body.style.setProperty('--fd-bar-h', tall(barNode) + 'px');
+	}
+
+	/*
+	 * Measured again whenever the bar changes its size by itself: larger
+	 * text, a turned phone, a label that wraps. An old browser without
+	 * ResizeObserver measures at every render and when the window changes.
+	 */
+	var sizes = typeof root.ResizeObserver === 'function' ? new root.ResizeObserver(place) : null;
+	if (!sizes && typeof root.addEventListener === 'function') {
+		root.addEventListener('resize', place);
 	}
 
 	/* ---------------------------------------------------------------- */
@@ -1103,14 +1544,31 @@
 	/* ---------------------------------------------------------------- */
 
 	function render() {
+		draw();
+		if (!barNode) {
+			bar([]); // A screen with no buttons of its own (the picker, the day's list): the status line alone, at the foot.
+		}
+		// Each render makes its bar anew: watch that one, and measure now.
+		if (sizes) {
+			sizes.disconnect();
+			sizes.observe(barNode);
+		}
+		place();
+	}
+
+	function draw() {
+		closeMessage(true);
 		clearTimers();
 		while (app.firstChild) {
 			app.removeChild(app.firstChild);
 		}
+		// The bar of the screen before (at the first render, the one the page came with): the status line moves on to the new one.
 		var old = document.querySelector('.fh-fd-bar');
 		if (old) {
 			old.parentNode.removeChild(old);
 		}
+		barNode = null;
+		barInner = null;
 
 		if (!state.screen.tablesOk) {
 			app.appendChild(el('div', { class: 'fh-fd-empty', text: t('noTables', 'The Clean Room tables are missing.') }));
@@ -1136,6 +1594,7 @@
 		}
 		switch (state.view) {
 			case 'arrival': renderArrival(); break;
+			case 'existing': renderExisting(); break;
 			case 'pick': renderPick(); break;
 			case 'occupant': renderOccupant(); break;
 			case 'identify': renderIdentify(); break;
@@ -1183,10 +1642,6 @@
 		return bits;
 	}
 
-	function dayText(day) {
-		return (day === null || typeof day === 'undefined') ? '' : fmt(t('day', 'day %d'), day);
-	}
-
 	/* An occupant row; onClick opens it, quick adds a "−1 lost" button. */
 	function occupantNode(o, onClick, quick) {
 		var tag = onClick ? 'button' : 'div';
@@ -1196,12 +1651,15 @@
 			attrs.on = { click: onClick };
 		}
 		var sale = saleSummary(o, i18n);
+		var dates = datesText(o, i18n);
 		var meta = [
 			el('span', { class: 'fh-fd-badge fh-fd-badge--' + (o.saleReady ? 'ready' : o.status), text: o.stateLabel }),
 			sale.warning ? el('span', { class: 'fh-fd-warn', text: sale.warning }) : null,
 			o.needsId ? el('span', { class: 'fh-fd-warn', text: t('needsId', 'needs identifying') }) : null,
-			dayText(o.day) ? el('span', { text: dayText(o.day) }) : null,
-			o.status === 'in_qt' && o.checkinDate ? el('span', { text: fmt(t('inSince', 'in since %s'), o.checkinDate) }) : null,
+			dates.treatment ? el('span', { class: 'fh-fd-warn', text: dates.treatment }) : null,
+			dates.day ? el('span', { text: dates.day }) : null,
+			(o.status === 'in_qt' || o.checkinUnknown) && dates.arrived ? el('span', { text: dates.arrived }) : null,
+			o.status === 'cleared' && o.clearedUnknown ? el('span', { text: dates.cleared }) : null,
 			!o.saleReady ? el('span', { text: sale.short }) : null,
 			o.qtyArrived !== o.qtyLive ? el('span', { text: o.qtyLive + '/' + o.qtyArrived }) : null
 		];
@@ -1226,10 +1684,11 @@
 		return row;
 	}
 
+	/* The button bar: the status line first, then the screen's buttons — none on a screen that has none. */
 	function bar(buttons) {
-		var inner = el('div', { class: 'fh-fd-bar__inner' }, buttons);
-		var node = el('div', { class: 'fh-fd-bar' }, [inner]);
-		document.body.appendChild(node);
+		barInner = buttons && buttons.length ? el('div', { class: 'fh-fd-bar__inner' }, buttons) : null;
+		barNode = el('div', { class: 'fh-fd-bar' }, [statusEl, barInner]);
+		document.body.appendChild(barNode);
 	}
 
 	function button(label, cls, onClick, disabled) {
@@ -1237,7 +1696,7 @@
 	}
 
 	function go(view, pending) {
-		dismissToast();
+		clearError();
 		state.view = view;
 		state.pending = pending || null;
 		state.form = {};
@@ -1294,7 +1753,9 @@
 			button(t('move', 'Move'), '', startMove, !hasOcc),
 			button(t('arrival', 'Arrival'), 'fh-fd-btn--primary', function () { go('arrival'); }),
 			button(t('note', 'Note'), '', function () { go('note', { tank: true }); }),
-			voiceOn ? button(t('mic', 'Mic'), 'fh-fd-btn--mic', startVoice) : button(t('copper', 'Copper'), '', function () { go('copper'); })
+			voiceOn ? button(t('mic', 'Mic'), 'fh-fd-btn--mic', startVoice) : button(t('copper', 'Copper'), '', function () { go('copper'); }),
+			// Fish that are already in this tank: any tank, no Spa step (Arrival keeps its rules for new fish).
+			button('+ ' + t('existingAdd', 'Add fish already here'), 'fh-fd-btn--row', function () { go('existing'); })
 		]);
 	}
 
@@ -1381,7 +1842,7 @@
 				state.screen = data.screen;
 			}
 			render();
-		}).catch(failToast).then(function () { busy(false); });
+		}).catch(sayFailed).then(function () { busy(false); });
 	}
 
 	/* Tank picker (no tank in the URL) */
@@ -1510,14 +1971,123 @@
 			button(t('cancel', 'Cancel'), 'fh-fd-btn--quiet', function () { go('tank'); }),
 			button(t('save', 'Save'), 'fh-fd-btn--primary', function () {
 				if (!f.species) {
-					toast(t('whichFish', 'Which fish?'), null, true);
+					say(t('whichFish', 'Which fish?'), null, true);
 					return;
 				}
 				if (!f.toTank) {
-					toast(t('notSpa', 'Arrivals go into a Spa tank'), null, true);
+					say(t('notSpa', 'Arrivals go into a Spa tank'), null, true);
 					return;
 				}
 				act({ act: 'arrival', tank: tk.number, to_tank: f.toTank, species: f.species, product_id: f.productId || 0, unknown: f.unknown ? 1 : 0, qty: f.qty, size: f.size || '', date: f.date, via: 'qr' });
+			})
+		]);
+	}
+
+	/* ---------------------------------------------------------------- */
+	/*  Add fish already here                                            */
+	/* ---------------------------------------------------------------- */
+
+	/*
+	 * Two or more big chips, one of them on: the answer to one question.
+	 * choices: [{ value, label }]; the chip whose value is current is on.
+	 */
+	function choiceChips(choices, current, onPick) {
+		return el('div', { class: 'fh-fd-chips' }, choices.map(function (choice) {
+			return el('button', {
+				type: 'button',
+				class: 'fh-fd-chip' + (choice.value === current ? ' is-on' : ''),
+				text: choice.label,
+				on: { click: function () { onPick(choice.value); } }
+			});
+		}));
+	}
+
+	/*
+	 * One question with a date: [Unknown or Not cleared yet] [A date]; a
+	 * date picker under it once "A date" is picked. f[key] holds the date,
+	 * f[key + 'Mode'] the chip.
+	 */
+	function dateQuestion(f, key, label, firstChoice, hint) {
+		var mode = f[key + 'Mode'] || 'first';
+		var wrap = el('div', { class: 'fh-fd-field' }, [el('label', { class: 'fh-fd-label', text: label })]);
+		wrap.appendChild(choiceChips([firstChoice, { value: 'date', label: t('aDate', 'A date') }], mode, function (value) {
+			f[key + 'Mode'] = value;
+			if (value !== 'date') {
+				f[key] = '';
+			}
+			render();
+		}));
+		if (mode === 'date') {
+			wrap.appendChild(el('input', { class: 'fh-fd-input', type: 'date', value: f[key] || '', min: state.screen.saleDateMin || null, max: state.screen.today, on: { change: function (e) { f[key] = e.target.value; } } }));
+		}
+		if (hint) {
+			wrap.appendChild(el('p', { class: 'fh-fd-muted', text: hint }));
+		}
+		return wrap;
+	}
+
+	/* Supplier or origin: the names the supplier orders already use as chips, or typed; Unknown when empty. */
+	function pickQuestion(f, key, label, list) {
+		var wrap = el('div', { class: 'fh-fd-sub-field' }, [el('span', { class: 'fh-fd-label', text: label })]);
+		var input = el('input', { class: 'fh-fd-input', type: 'text', value: f[key] || '', placeholder: t('unknownChoice', 'Unknown'), autocomplete: 'off', autocapitalize: 'words', on: { input: function (e) { f[key] = e.target.value; } } });
+		if (list && list.length) {
+			wrap.appendChild(choiceChips(list.map(function (name) { return { value: name, label: name }; }), f[key] || '', function (value) {
+				f[key] = f[key] === value ? '' : value;
+				render();
+			}));
+		}
+		wrap.appendChild(input);
+		return wrap;
+	}
+
+	function renderExisting() {
+		var tk = tank();
+		var f = state.form;
+		var clean = !tk.isSpa;
+		if (typeof f.qty === 'undefined') {
+			f.qty = 1;
+		}
+		app.appendChild(header(t('existingAdd', 'Add fish already here'), [fmt(t('existingSub', 'Fish that are already in Tank %d — straight in, no Spa step. Anything not known stays Unknown.'), tk.number)]));
+
+		var screen = el('div', { class: 'fh-fd-screen' });
+		screen.appendChild(speciesField(f, function () { render(); }, { unknown: true }));
+		screen.appendChild(stepperField(t('howMany', 'How many?'), f, 'qty', 1, 999));
+		var sizes = sizeChooser(f);
+		if (sizes) {
+			screen.appendChild(sizes);
+		}
+		screen.appendChild(dateQuestion(f, 'arrived', t('arrivedOn', 'Arrived on'), { value: 'first', label: t('unknownChoice', 'Unknown') }, ''));
+		screen.appendChild(dateQuestion(
+			f,
+			'cleared',
+			t('clearedOnQ', 'Cleared on'),
+			clean ? { value: 'first', label: t('unknownChoice', 'Unknown') } : { value: 'first', label: t('notClearedYet', 'Not cleared yet') },
+			clean ? t('cleanCounts', 'A fish in a clean tank counts as cleared.') : ''
+		));
+		var picks = state.screen.picks || {};
+		var from = el('div', { class: 'fh-fd-field' }, [el('label', { class: 'fh-fd-label', text: t('cameFrom', 'Where it came from') })]);
+		from.appendChild(choiceChips([{ value: 'unknown', label: t('unknownChoice', 'Unknown') }], (f.supplier || f.origin) ? '' : 'unknown', function () {
+			f.supplier = '';
+			f.origin = '';
+			render();
+		}));
+		from.appendChild(pickQuestion(f, 'supplier', t('supplier', 'Supplier'), picks.suppliers || []));
+		from.appendChild(pickQuestion(f, 'origin', t('origin', 'Origin'), picks.origins || []));
+		screen.appendChild(from);
+		app.appendChild(screen);
+
+		bar([
+			button(t('cancel', 'Cancel'), 'fh-fd-btn--quiet', function () { go('tank'); }),
+			button(t('save', 'Save'), 'fh-fd-btn--primary', function () {
+				if (!f.species) {
+					say(t('whichFish', 'Which fish?'), null, true);
+					return;
+				}
+				if ((f.arrivedMode === 'date' && !f.arrived) || (f.clearedMode === 'date' && !f.cleared)) {
+					say(t('date', 'Date') + '?', null, true);
+					return;
+				}
+				act(existingFields(f, tk.number, clean));
 			})
 		]);
 	}
@@ -1689,12 +2259,15 @@
 		app.appendChild(header(o.species, [(sizeText(o, i18n) ? sizeText(o, i18n) + ' · ' : '') + 'Tank ' + tk.number + ' · ' + o.qtyLive + ' ' + t('live', 'live') + ' / ' + o.qtyArrived]));
 		var screen = el('div', { class: 'fh-fd-screen' });
 		var sale = saleSummary(o, i18n);
+		var dates = datesText(o, i18n);
 		screen.appendChild(el('div', { class: 'fh-fd-facts' }, [
 			el('span', { class: 'fh-fd-badge fh-fd-badge--' + (o.saleReady ? 'ready' : o.status), text: o.stateLabel }),
 			sale.warning ? el('span', { class: 'fh-fd-warn', text: sale.warning }) : null,
-			el('span', { text: dayText(o.day) }),
-			el('span', { text: fmt(t('inSince', 'in since %s'), o.checkinDate) }),
-			o.clearedDate ? el('span', { text: fmt(t('clearedOn', 'cleared %s'), o.clearedDate) }) : null,
+			dates.treatment ? el('span', { class: 'fh-fd-warn', text: dates.treatment }) : null,
+			dates.day ? el('span', { text: dates.day }) : null,
+			dates.arrived ? el('span', { text: dates.arrived }) : null,
+			dates.cleared ? el('span', { text: dates.cleared }) : null,
+			o.existing ? el('span', { text: t('alreadyHere', 'added as already here') }) : null,
 			el('span', { text: sale.text })
 		]));
 		screen.appendChild(el('div', { class: 'fh-fd-grid2' }, [
@@ -1715,7 +2288,7 @@
 	 * Identify / Correct the fish: the real fish from the same search the
 	 * Arrival sheet uses (or still unknown, with what it looks like) and
 	 * its size. The server corrects the stay and its supplier order line
-	 * together and words the toast; there is no Undo — correct it again.
+	 * together and words the message; there is no Undo — correct it again.
 	 */
 	function renderIdentify() {
 		var tk = tank();
@@ -1741,7 +2314,7 @@
 			button(t('cancel', 'Cancel'), 'fh-fd-btn--quiet', function () { go('occupant', { stay: o }); }),
 			button(t('save', 'Save'), 'fh-fd-btn--primary', function () {
 				if (!f.species) {
-					toast(t('whichFish', 'Which fish?'), null, true);
+					say(t('whichFish', 'Which fish?'), null, true);
 					return;
 				}
 				act({ act: 'identify', tank: tk.number, stay_id: o.stayId, species: f.species, product_id: f.productId || 0, unknown: f.unknown ? 1 : 0, size: f.size || '', via: 'qr' });
@@ -1866,12 +2439,12 @@
 		app.appendChild(header(t('dates', 'Dates'), [o.species]));
 		var screen = el('div', { class: 'fh-fd-screen' });
 		screen.appendChild(el('div', { class: 'fh-fd-field' }, [
-			el('label', { class: 'fh-fd-label', for: 'fh-fd-idate', text: t('checkinDate', 'Check-in date') }),
+			el('label', { class: 'fh-fd-label', for: 'fh-fd-idate', text: t('checkinDate', 'Check-in date') + (o.checkinUnknown ? ' · ' + t('arrivedUnknown', 'arrived: unknown') : '') }),
 			el('div', { class: 'fh-fd-row' }, [
 				el('input', { id: 'fh-fd-idate', class: 'fh-fd-input', type: 'date', value: f.checkin, max: state.screen.today, on: { change: function (e) { f.checkin = e.target.value; } } }),
 				button(t('save', 'Save'), 'fh-fd-btn--ok', function () {
 					if (!f.checkin) {
-						toast(t('date', 'Date') + '?', null, true);
+						say(t('date', 'Date') + '?', null, true);
 						return;
 					}
 					act({ act: 'checkin', tank: tk.number, stay_id: o.stayId, date: f.checkin, via: 'qr' });
@@ -1883,14 +2456,16 @@
 			el('div', { class: 'fh-fd-row' }, [
 				el('input', { id: 'fh-fd-cdate', class: 'fh-fd-input', type: 'date', value: f.cleared, max: state.screen.today, on: { change: function (e) { f.cleared = e.target.value; } } }),
 				button(t('save', 'Save'), 'fh-fd-btn--ok', function () {
-					if (!f.cleared) {
-						act({ act: 'clear', tank: tk.number, stay_id: o.stayId, unset: 1, via: 'qr' });
-					} else {
-						act({ act: 'clear', tank: tk.number, stay_id: o.stayId, date: f.cleared, via: 'qr' });
+					var fields = clearedSaveFields(o, f.cleared, tk.number);
+					if (!fields) {
+						say(t('date', 'Date') + '?', null, true);
+						return;
 					}
+					act(fields);
 				})
 			]),
-			o.clearedDate ? el('button', { type: 'button', class: 'fh-fd-chip fh-fd-chip--ghost', text: t('unsetDate', 'Not cleared'), on: { click: function () { act({ act: 'clear', tank: tk.number, stay_id: o.stayId, unset: 1, via: 'qr' }); } } }) : null
+			o.clearedUnknown ? el('p', { class: 'fh-fd-muted', text: t('clearedUnknown', 'cleared: unknown') }) : null,
+			o.clearedDate || o.clearedUnknown ? el('button', { type: 'button', class: 'fh-fd-chip fh-fd-chip--ghost', text: t('unsetDate', 'Not cleared'), on: { click: function () { act({ act: 'clear', tank: tk.number, stay_id: o.stayId, unset: 1, via: 'qr' }); } } }) : null
 		]));
 		// The suggestion (check-in + the setting) only fills the picker on a tap; Save writes it.
 		var readyInput = el('input', { id: 'fh-fd-rdate', class: 'fh-fd-input', type: 'date', value: f.ready, min: state.screen.saleDateMin || null, max: state.screen.saleDateMax || null, on: { change: function (e) { f.ready = e.target.value; } } });
@@ -1956,7 +2531,7 @@
 			button(t('cancel', 'Cancel'), 'fh-fd-btn--quiet', function () { go('tank'); }),
 			button(t('save', 'Save'), 'fh-fd-btn--primary', function () {
 				if (!f.value) {
-					toast(t('copperHint', 'Reading?'), null, true);
+					say(t('copperHint', 'Reading?'), null, true);
 					return;
 				}
 				act({ act: 'copper', tank: tk.number, value: f.value, via: 'qr' });
@@ -2161,7 +2736,7 @@
 	 * this tank only), the sum with its working — per gallon a rate, to a
 	 * level "Now" and "Bring it to", a Top-up switch —, and the amount,
 	 * filled with the result and editable: what was really added is what
-	 * is logged. The server words the toast and writes the working into
+	 * is logged. The server words the message and writes the working into
 	 * the log; a dose has no undo, and the sheet says so before Save.
 	 */
 	function renderDose() {
@@ -2301,11 +2876,11 @@
 			button(t('cancel', 'Cancel'), 'fh-fd-btn--quiet', function () { go('tank'); }),
 			button(t('save', 'Save'), 'fh-fd-btn--primary', function () {
 				if (!med) {
-					toast(t('medication', 'Medication') + '?', null, true);
+					say(t('medication', 'Medication') + '?', null, true);
 					return;
 				}
 				if (!readingOnly() && (!f.amount || !(parseFloat(f.amount) > 0))) {
-					toast(plan && plan.state !== 'ok' && plan.line ? plan.line : t('amount', 'Amount') + '?', null, true);
+					say(plan && plan.state !== 'ok' && plan.line ? plan.line : t('amount', 'Amount') + '?', null, true);
 					return;
 				}
 				var fields = doseFields(med, f, plan);
@@ -2470,7 +3045,7 @@
 		}).catch(function (err) {
 			state.voice = { heard: text, error: 'parse' };
 			render();
-			failToast(err);
+			sayFailed(err);
 		});
 	}
 
@@ -2630,7 +3205,7 @@
 			form.rateChosen = true;
 		}
 		stopVoice();
-		dismissToast();
+		clearError();
 		state.view = 'dose';
 		state.pending = null;
 		state.form = form;
@@ -2870,7 +3445,7 @@
 				var d = p.dose || {};
 				var plan = d.plan || {};
 				if (plan.state !== 'ok' && plan.state !== 'spoken') {
-					toast(plan.line || t('amount', 'Amount') + '?', null, true);
+					say(plan.line || t('amount', 'Amount') + '?', null, true);
 					return;
 				}
 				fields.act = 'dose';
@@ -2897,11 +3472,11 @@
 				}
 				break;
 			default:
-				toast(t('error', 'Something went wrong.'), null, true);
+				say(t('error', 'Something went wrong.'), null, true);
 				return;
 		}
 		if ((fields.act === 'loss' || fields.act === 'sold' || fields.act === 'count') && !fields.stay_id) {
-			toast(t('whichFish', 'Which fish?'), null, true);
+			say(t('whichFish', 'Which fish?'), null, true);
 			return;
 		}
 		act(fields);
@@ -2926,9 +3501,9 @@
 			state.pending = null;
 			state.form = {};
 			after(data);
-			toast(data.message || t('saved', 'Saved'), null);
+			say(data.message || t('saved', 'Saved'), null);
 			return data;
-		}).catch(failToast).then(function () {
+		}).catch(sayFailed).then(function () {
 			busy(false);
 		});
 	}
@@ -2971,7 +3546,7 @@
 			button(t('scheduleEdit', 'Schedule'), 'fh-fd-btn--quiet', function () { go('schedule'); }),
 			button(t('takeDown', 'Take down'), 'fh-fd-btn--quiet', function () {
 				if (!su.empty) {
-					toast(t('takeDownFish', 'Move the fish out first — then it can be taken down.'), null, true);
+					say(t('takeDownFish', 'Move the fish out first — then it can be taken down.'), null, true);
 					return;
 				}
 				go('confirm', { kind: 'takeDown' });
@@ -3164,7 +3739,7 @@
 			button(t('cancel', 'Cancel'), 'fh-fd-btn--quiet', leave),
 			button(t('setItUp', 'Set it up'), 'fh-fd-btn--primary', function () {
 				if (!f.kind) {
-					toast(t('tempKind', 'What kind of tank?'), null, true);
+					say(t('tempKind', 'What kind of tank?'), null, true);
 					return;
 				}
 				sideAct({
@@ -3253,7 +3828,7 @@
 		screen.appendChild(stepperField(t('stepDay', 'Day'), f, 'day', 1, 120));
 		screen.appendChild(button(t('addStep', 'Add a step'), 'fh-fd-btn--primary', function () {
 			if (!f.label || !f.label.replace(/\s+/g, '')) {
-				toast(t('stepName', 'Step') + '?', null, true);
+				say(t('stepName', 'Step') + '?', null, true);
 				return;
 			}
 			change({ op: 'add', label: f.label, kind: f.kind, day: f.day });
@@ -3374,7 +3949,7 @@
 						state.screen = data.screen;
 					}
 					renderKeepingScroll();
-				}).catch(failToast).then(function () { busy(false); });
+				}).catch(sayFailed).then(function () { busy(false); });
 			} } })
 		]));
 	}
@@ -3480,5 +4055,6 @@
 		state.view = 'today';
 	}
 
+	paintLine();
 	render();
 })(typeof window !== 'undefined' ? window : globalThis);

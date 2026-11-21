@@ -131,8 +131,15 @@ Each helper exits 0 when CI runs it directly.
   the Front Desk's guard; inside it the session holds the Front Desk's
   capability, not the Settings one (the medications editor refuses it);
   every Settings, Board, Stays, Arrivals and Species action sees a
-  visitor; and outside the wp-admin screens nothing on the act path asks
-  for a capability of its own.
+  visitor; outside the wp-admin screens nothing on the act path asks
+  for a capability of its own; and the screen: the Front Desk says
+  everything in the status line of its own button bar (in the page as it
+  is written) and fixes nothing else to the screen, the app's bar is at
+  the head of the page, nothing of the app is pinned to the foot where
+  that bar and its Undo stand, every layer the app fixes to the screen
+  covers all of it and lies over the bar, and on a phone on its side the
+  Front Desk lowers its bar by the height of the screen alone — it asks
+  the page nothing and names nothing of this app.
 - **saves-test.php** — a save id: the handler runs once however often the
   id arrives, the first answer is repeated with a fresh screen; a refused
   save can be sent again; "still saving" while the first runs, taken over

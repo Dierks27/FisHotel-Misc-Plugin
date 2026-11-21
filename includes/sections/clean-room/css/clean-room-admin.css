@@ -475,6 +475,30 @@ a.fh-cr-chip--muted {
 	flex: 1 1 220px;
 }
 
+/* Stays tab: "Add fish already here" — fish that are already in a tank, added by hand. */
+.fh-cr-existing {
+	margin: 0 0 14px;
+	padding: 10px 14px;
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	border-radius: 8px;
+	background: var(--fh-bg-secondary, #2d2d2d);
+}
+
+.fh-cr-existing summary {
+	cursor: pointer;
+	font-weight: 600;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-existing__row {
+	margin-top: 10px;
+}
+
+/* The cleared hint for the other kind of tank: .fh-cr-sub's display would show it. */
+.fh-cr-existing [hidden] {
+	display: none;
+}
+
 .fh-cr-columns {
 	display: grid;
 	grid-template-columns: repeat(auto-fit, minmax(min(380px, 100%), 1fr));

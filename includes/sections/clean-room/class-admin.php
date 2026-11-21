@@ -95,6 +95,7 @@ class Admin {
 		add_action( 'admin_post_fishotel_cleanroom_labels', array( $this, 'print_labels' ) );
 		add_action( 'wp_ajax_fishotel_cleanroom_stay', array( $this, 'ajax_stay' ) );
 		add_action( 'wp_ajax_fishotel_cleanroom_release', array( $this, 'ajax_release' ) );
+		add_action( 'wp_ajax_fishotel_cleanroom_existing', array( $this, 'ajax_existing' ) );
 		add_action( 'add_meta_boxes_product', array( $this, 'add_meta_box' ) );
 		add_action( 'save_post_product', array( $this, 'save_meta_box' ), 20, 3 );
 		add_action( 'admin_notices', array( $this, 'sale_date_notices' ) );
@@ -226,6 +227,8 @@ class Admin {
 			$xlsx_url     = Admin_Workbook::export_url( 'stays', 'xlsx', $show_closed ? array( 'closed' => '1' ) : array() );
 			$flash        = Admin_Workbook::take_flash();
 			$sizes        = Sizes::standard( $store, $settings )['sizes'];
+			$fish_tanks   = $tables_ok ? self::existing_tanks( $store->tanks( false ) ) : array();
+			$picks        = $tables_ok ? Front_Desk::picks( $store ) : array( 'suppliers' => array(), 'origins' => array() );
 
 			include Clean_Room::path() . 'views/stays.php';
 			return;
@@ -888,6 +891,100 @@ class Admin {
 	}
 
 	/**
+	 * AJAX: the Stays tab's "Add fish already here" — the same act as the
+	 * phone's sheet (Front_Desk::perform( 'existing' )), for the tank the
+	 * form names. The Board's nonce and the Front Desk's capability.
+	 */
+	public function ajax_existing() {
+		if ( ! current_user_can( Clean_Room::CAPABILITY ) ) {
+			wp_send_json_error( array( 'message' => __( 'Unauthorized.', 'fishotel-misc-plugin' ) ), 403 );
+		}
+
+		check_ajax_referer( self::NONCE_AJAX, 'nonce' );
+
+		if ( ! Store::tables_exist() ) {
+			wp_send_json_error( array( 'message' => __( 'The Clean Room tables are missing — deactivate and reactivate the plugin.', 'fishotel-misc-plugin' ) ), 500 );
+		}
+		if ( ! Store::schema_current() ) {
+			wp_send_json_error( array( 'message' => __( 'The Clean Room tables are being upgraded — reload the page and try again.', 'fishotel-misc-plugin' ) ), 503 );
+		}
+
+		$raw    = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above.
+		$result = self::add_existing( new Store(), is_array( $raw ) ? $raw : array(), (int) get_current_user_id(), Clean_Room::today(), Settings::get() );
+		if ( ! empty( $result['error'] ) ) {
+			wp_send_json_error( array( 'message' => (string) $result['error'] ), 400 );
+		}
+
+		wp_send_json_success( array( 'message' => (string) $result['message'] ) );
+	}
+
+	/**
+	 * The testable half of ajax_existing(): the tank by its number (one
+	 * that is in the layout and not offline), then the phone's own act.
+	 *
+	 * @param object $store    Store (or the tests' stand-in).
+	 * @param array  $raw      Unslashed payload: tank, species, product_id, unknown, qty, size,
+	 *                         arrived, cleared, supplier, origin.
+	 * @param int    $actor_id Who.
+	 * @param string $today    Site date.
+	 * @param array  $settings Settings.
+	 * @return array message, event_ids, stay_id — or error.
+	 */
+	public static function add_existing( $store, array $raw, $actor_id, $today, array $settings ) {
+		$number = isset( $raw['tank'] ) && is_scalar( $raw['tank'] ) ? absint( $raw['tank'] ) : 0;
+		$tank   = $number > 0 ? $store->tank_by_number( $number ) : null;
+		if ( ! $tank || 'offline' === (string) $tank['status'] ) {
+			return array( 'error' => __( 'Which tank? That number is not in the layout.', 'fishotel-misc-plugin' ) );
+		}
+
+		return Front_Desk::perform(
+			'existing',
+			array(
+				'store'    => $store,
+				'settings' => $settings,
+				'today'    => (string) $today,
+				'tank'     => $tank,
+				'base'     => array(
+					'actor_id' => (int) $actor_id,
+					'source'   => 'manual',
+				),
+			),
+			$raw
+		);
+	}
+
+	/**
+	 * The tanks the Stays tab's "Add fish already here" offers (pure):
+	 * every tank that holds fish — active, in a building that is not
+	 * offline, a Spa or Clean Room tank or a temporary tank that is set
+	 * up — with the area it behaves as (the form asks "Cleared on" by it).
+	 *
+	 * @param array[] $tanks Hydrated tanks (Store::tanks(), setups attached).
+	 * @return array[] number, label, area (clean|spa).
+	 */
+	public static function existing_tanks( array $tanks ) {
+		$out = array();
+		foreach ( $tanks as $tank ) {
+			$area = Temp_Tanks::effective_area( $tank );
+			if ( 'offline' === (string) ( $tank['status'] ?? '' ) || 'offline' === (string) ( $tank['building']['status'] ?? '' ) || ! in_array( $area, array( 'clean', 'spa' ), true ) ) {
+				continue;
+			}
+			$out[] = array(
+				'number' => (int) $tank['number'],
+				'label'  => Layout::is_slot( $tank ) ? Layout::tank_label( $tank ) . ' · ' . Temp_Tanks::kind_label( (string) ( $tank['setup']['kind'] ?? '' ) ) : (int) $tank['number'] . ' · ' . Layout::area_label( $area ),
+				'area'   => $area,
+			);
+		}
+		usort(
+			$out,
+			static function ( $a, $b ) {
+				return $a['number'] <=> $b['number'];
+			}
+		);
+		return $out;
+	}
+
+	/**
 	 * The Stays tab's Edit — the testable half of ajax_stay()'s "fields":
 	 * the supplier, the order ref, the landed cost, the product link (which
 	 * must exist), the species, the size (size_slug: one of the standard
@@ -1420,6 +1517,65 @@ class Admin {
 	}
 
 	/**
+	 * "treatment day unknown — set the arrival date" for a group still in
+	 * quarantine (not cleared) whose check-in nobody knows: it has no day
+	 * number, so its own steps cannot be counted (the building's schedule
+	 * still runs for the groups that have one, and the feeding); '' for
+	 * any other group (pure).
+	 *
+	 * @param array $stay Hydrated stay (status, checkin_unknown).
+	 * @return string
+	 */
+	public static function treatment_unknown( array $stay ) {
+		if ( 'in_qt' !== (string) ( $stay['status'] ?? '' ) || empty( $stay['checkin_unknown'] ) ) {
+			return '';
+		}
+		return __( 'treatment day unknown — set the arrival date', 'fishotel-misc-plugin' );
+	}
+
+	/**
+	 * A stay's day beside its count (pure): "day 12" ("QT day 12" on a
+	 * temporary tank's card), "day ?" when its check-in is not known — no
+	 * number is ever guessed — or '' without either.
+	 *
+	 * @param array $stay Hydrated stay (day, checkin_unknown).
+	 * @param bool  $qt   Say "QT day" (a fish's own day beside a temporary tank's).
+	 * @return string
+	 */
+	public static function day_text( array $stay, $qt = false ) {
+		if ( isset( $stay['day'] ) && null !== $stay['day'] ) {
+			/* translators: %d: day number */
+			return sprintf( $qt ? __( 'QT day %d', 'fishotel-misc-plugin' ) : __( 'day %d', 'fishotel-misc-plugin' ), (int) $stay['day'] );
+		}
+		if ( ! empty( $stay['checkin_unknown'] ) ) {
+			return $qt ? __( 'QT day ?', 'fishotel-misc-plugin' ) : __( 'day ?', 'fishotel-misc-plugin' );
+		}
+		return '';
+	}
+
+	/**
+	 * A stay's check-in date, or "arrival unknown" (pure).
+	 *
+	 * @param array $stay Hydrated stay (checkin_date, checkin_unknown).
+	 * @return string
+	 */
+	public static function checkin_text( array $stay ) {
+		return Replay::is_date( $stay['checkin_date'] ?? null ) ? (string) $stay['checkin_date'] : __( 'arrival unknown', 'fishotel-misc-plugin' );
+	}
+
+	/**
+	 * Where a stay came from, in words (pure): "already here" for fish
+	 * added by hand ("Add fish already here"), else the stored source as
+	 * it always read (order, import, qr, voice, manual).
+	 *
+	 * @param string $source The stay's source.
+	 * @return string
+	 */
+	public static function source_label( $source ) {
+		return Store::SOURCE_EXISTING === (string) $source ? __( 'already here', 'fishotel-misc-plugin' ) : (string) $source;
+	}
+
+	/**
 	 * A stay's sale state in words (pure): the effective sale date ("on
 	 * sale 2026-10-30") with where it comes from ("from the batch" / "own
 	 * date"), or "Sale date not set" with the suggestion ("suggested …",
@@ -1493,7 +1649,11 @@ class Admin {
 
 		switch ( $type ) {
 			case 'arrival':
-				return sprintf( '%d arrived%s%s', abs( (int) $qty ), '' !== $to ? ' in ' . $to : '', $undo );
+				if ( Store::SOURCE_EXISTING === (string) ( $event['source'] ?? '' ) && (int) $qty > 0 && 0 === Replay::split_from( array( $event ) ) ) {
+					// Added by hand: fish that were already here (a split half's arrival is not: it reads as any split's).
+					return sprintf( '%d added as already here%s%s', (int) $qty, '' !== $to ? ' in ' . $to : '', Replay::is_arrived_unknown( $event ) ? ' (arrival date unknown)' : '' );
+				}
+				return sprintf( '%d arrived%s%s%s', abs( (int) $qty ), '' !== $to ? ' in ' . $to : '', Replay::is_arrived_unknown( $event ) && (int) $qty > 0 ? ' (arrival date unknown)' : '', $undo );
 			case 'loss':
 				$reason = '' !== $note && 0 !== strpos( $note, 'undo' ) ? ' (' . $note . ')' : '';
 				return sprintf( '%d lost%s%s', abs( null === $qty ? 1 : $qty ), $reason, $undo );
@@ -1509,6 +1669,9 @@ class Admin {
 			case 'clear':
 				if ( null !== $qty && $qty < 0 ) {
 					return 'cleared date removed' . $undo;
+				}
+				if ( Replay::is_cleared_unknown( $event ) ) {
+					return 'cleared (date unknown)' . $undo;
 				}
 				$date = Replay::note_date( $note, Replay::NOTE_CLEARED );
 				return ( '' !== $date ? 'cleared date set to ' . $date : 'cleared' ) . $undo;

@@ -16,13 +16,20 @@
  *     the Gate's list; every other wp_ajax_ action of the Clean Room — the
  *     Board's temporary-tank writes, the medications list, the layout, the
  *     settings — is not, and a shop session is a visitor there;
- *   - every act of the one write (readings, doses, ticks, arrivals,
- *     losses, moves, setting up and taking down a temporary tank, the
+ *   - every act of the one write (readings, doses, ticks, arrivals, fish
+ *     already here (added by hand), losses, moves, setting up and taking down a temporary tank, the
  *     day's list's ticks) gets past the Front Desk's guard under a PIN;
  *   - inside that handler the session holds the Front Desk's capability
  *     and not the Settings one: the medications editor refuses it even
  *     when called from there;
- *   - nothing on the act path asks for a capability of its own.
+ *   - nothing on the act path asks for a capability of its own;
+ *   - the screen: the Front Desk says everything in the status line, the
+ *     first row of its own button bar at the foot of the page, and fixes
+ *     nothing else to the screen; this app adds its bar at the head and
+ *     pins nothing to the foot, and every layer it lays over the whole
+ *     screen (the keypad, a question, the scanner) lies over that bar,
+ *     never under it; on a phone on its side the Front Desk lowers its
+ *     bar so it stays clear of this app's — with no knowledge of this app.
  *
  * Run from the plugin root:
  *   php includes/sections/shop-app/tests/front-desk-seam-test.php
@@ -100,6 +107,7 @@ $admin_only = array(
 	'fishotel_cleanroom_alias_delete' => 'Settings: forget a spoken name',
 	'fishotel_cleanroom_box_rates'    => 'Settings: box rates',
 	'fishotel_cleanroom_box_share'    => 'Settings: a remembered box share',
+	'fishotel_cleanroom_existing'     => 'Stays: add fish already here (the phone posts the same act through fishotel_cleanroom_act)',
 	'fishotel_cleanroom_layout'       => 'Settings: the layout',
 	'fishotel_cleanroom_medications'  => 'Settings: the medications list',
 	'fishotel_cleanroom_order'        => 'Arrivals: a supplier order',
@@ -120,7 +128,7 @@ $unsorted = array_values( array_diff( $room_actions, $desk['actions'], array_key
 check( 'every other AJAX action of the Clean Room is named here as wp-admin only — none is left unsorted', array() === $unsorted, implode( ', ', $unsorted ) );
 $gone = array_values( array_diff( array_keys( $admin_only ), $room_actions ) );
 check( '… and every name here is still one of its actions', array() === $gone, implode( ', ', $gone ) );
-check( 'the acts of the one write include the readings, doses, ticks, arrivals, losses, moves and the temporary tanks', array() === array_diff( array( 'arrival', 'identify', 'loss', 'sold', 'move', 'clear', 'checkin', 'ready', 'count', 'note', 'copper', 'dose', 'tick', 'undo', 'alias', 'setup', 'setup_edit', 'setup_steps', 'takedown', 'todo_tick' ), $acts ), implode( ', ', $acts ) );
+check( 'the acts of the one write include the readings, doses, ticks, arrivals (and fish already here), losses, moves and the temporary tanks', array() === array_diff( array( 'arrival', 'existing', 'identify', 'loss', 'sold', 'move', 'clear', 'checkin', 'ready', 'count', 'note', 'copper', 'dose', 'tick', 'undo', 'alias', 'setup', 'setup_edit', 'setup_steps', 'takedown', 'todo_tick' ), $acts ), implode( ', ', $acts ) );
 
 echo "\n2. Which addresses are shop-floor requests (pure)\n";
 $rules = Gate::rules();
@@ -347,5 +355,56 @@ check(
 	) === $asks,
 	implode( ' | ', $asks )
 );
+
+/* ------------------------------------------------------------------ */
+/*  The screen: this app's own parts and the Front Desk's bar           */
+/* ------------------------------------------------------------------ */
+
+// Whatever the Front Desk has to say — a write's message with its Undo, an
+// error — it says in the status line, the first row of its own button bar
+// at the foot of the page. What this app adds to that page must leave the
+// foot alone and, where it covers the screen, cover the bar too.
+$app_css   = (string) file_get_contents( FISHOTEL_MISC_PATH . 'includes/sections/shop-app/css/app.css' );
+$desk_css  = (string) file_get_contents( $room_dir . 'css/front-desk.css' ) . "\n" . (string) file_get_contents( $room_dir . 'css/front-desk-temp.css' );
+$desk_view = (string) file_get_contents( $room_dir . 'views/front-desk.php' );
+echo "\n7. The screen: nothing of the app under or on the Front Desk's bar and its status line\n";
+$bar_z     = preg_match( '/\n\.fh-fd-bar \{[^}]*?z-index:\s*(\d+);/', $desk_css, $z ) ? (int) $z[1] : -1;
+$fixed     = array();
+$under     = array();
+$at_foot   = array();
+preg_match_all( '/([^{}]+)\{([^{}]*)\}/', (string) preg_replace( '#/\*.*?\*/#s', '', $app_css ), $rules, PREG_SET_ORDER );
+foreach ( $rules as $rule ) {
+	$name = trim( $rule[1] );
+	if ( preg_match( '/(?:^|[\s;])bottom:/', $rule[2] ) ) {
+		$at_foot[] = $name;
+	}
+	if ( ! preg_match( '/position:\s*fixed;/', $rule[2] ) ) {
+		continue;
+	}
+	$fixed[] = $name;
+	if ( ! preg_match( '/inset:\s*0;/', $rule[2] ) || ! preg_match( '/z-index:\s*(\d+);/', $rule[2], $z ) || (int) $z[1] <= $bar_z ) {
+		$under[] = $name;
+	}
+}
+$desk_fixed = array();
+preg_match_all( '/([^{}]+)\{([^{}]*)\}/', (string) preg_replace( '#/\*.*?\*/#s', '', $desk_css ), $rules, PREG_SET_ORDER );
+foreach ( $rules as $rule ) {
+	if ( preg_match( '/position:\s*(?:fixed|sticky);/', $rule[2] ) ) {
+		$desk_fixed[] = trim( $rule[1] );
+	}
+}
+check( 'the Front Desk\'s bar has a place in the stack', $bar_z > 0, (string) $bar_z );
+check( 'the status line is in the page the Front Desk writes, inside that bar — there before any script runs', 1 === preg_match( '/<div class="fh-fd-bar"><div id="fh-fd-status" class="fh-fd-status"/', $desk_view ) );
+check( 'the Front Desk fixes nothing to the screen but that bar: no message floats where this app\'s bar or one of its layers is', array( '.fh-fd-bar' ) === $desk_fixed, implode( ' | ', $desk_fixed ) );
+check( 'the app\'s bar on a tank screen is at the head of the page (sticky, top), above the Front Desk\'s bar in the stack', 1 === preg_match( '/\n\.fh-sa-bar \{[^}]*position:\s*sticky;\s*top:\s*0;\s*z-index:\s*(\d+);/', $app_css, $z ) && (int) $z[1] > $bar_z );
+check( 'the app pins nothing to the foot of the page, where the Front Desk\'s bar and its Undo stand', array() === $at_foot, implode( ' | ', $at_foot ) );
+check( 'every layer the app fixes to the screen covers all of it and lies over the bar (the keypad, a question, the scanner)', count( $fixed ) >= 3 && array() === $under, implode( ' | ', $fixed ) . ' — under: ' . implode( ' | ', $under ) );
+// The app's bar is sticky and above the Front Desk's in the stack: a bar
+// tall enough to reach it would have its status line — the Undo — under
+// it. On a phone on its side the Front Desk makes its bar lower, by the
+// height of the screen alone.
+check( 'on a phone on its side the Front Desk lowers its own bar: six buttons in a row, lower ones', 1 === preg_match( '/@media \(max-height: \d+px\) and \(orientation: landscape\) \{\s*\.fh-fd-bar__inner \{\s*grid-template-columns:\s*repeat\(6, 1fr\);/', $desk_css ) );
+check( '… and asks the page nothing about what lies where', false === strpos( $page_js, 'elementFromPoint' ) );
+check( '… and knows nothing of this app: no fh-sa name in the Front Desk\'s script, stylesheets or page', false === strpos( $page_js, 'fh-sa' ) && false === strpos( $desk_css, 'fh-sa' ) && false === strpos( $desk_view, 'fh-sa' ) );
 
 fh_finish();

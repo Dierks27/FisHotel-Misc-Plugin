@@ -93,9 +93,9 @@ foreach ( $stays as $fh_stay ) {
 							<?php endif; ?>
 						</div>
 						<div class="fh-cr-metabox__muted">
-							<?php echo esc_html( sprintf( /* translators: 1: check-in date, 2: fish alive */ __( 'in %1$s · %2$d live', 'fishotel-misc-plugin' ), (string) $fh_stay['checkin_date'], (int) $fh_stay['qty_live'] ) ); ?>
-							<?php if ( null !== $fh_stay['day'] ) : ?>
-								· <?php echo esc_html( sprintf( /* translators: %d: day */ __( 'day %d', 'fishotel-misc-plugin' ), (int) $fh_stay['day'] ) ); ?>
+							<?php echo esc_html( sprintf( /* translators: 1: check-in date (or "arrival unknown"), 2: fish alive */ __( 'in %1$s · %2$d live', 'fishotel-misc-plugin' ), Admin::checkin_text( $fh_stay ), (int) $fh_stay['qty_live'] ) ); ?>
+							<?php if ( '' !== Admin::day_text( $fh_stay ) ) : ?>
+								· <?php echo esc_html( Admin::day_text( $fh_stay ) ); ?>
 							<?php endif; ?>
 							<?php if ( '' !== Sizes::text( $fh_stay ) ) : ?>
 								· <?php echo esc_html( Sizes::text( $fh_stay ) ); ?>
@@ -138,7 +138,7 @@ foreach ( $stays as $fh_stay ) {
 					<li>
 						<?php echo Admin::badge_html( $fh_stay ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by badge_html(). ?>
 						<strong><?php echo esc_html( $fh_stay['qty_live'] ); ?></strong>/<?php echo esc_html( $fh_stay['qty_arrived'] ); ?>
-						· <?php echo esc_html( (string) $fh_stay['checkin_date'] ); ?>
+						· <?php echo esc_html( Admin::checkin_text( $fh_stay ) ); ?>
 						<?php if ( ! empty( $fh_stay['batch_order_ref'] ) ) : ?>
 							· <?php echo esc_html( (string) $fh_stay['batch_order_ref'] ); ?>
 						<?php endif; ?>

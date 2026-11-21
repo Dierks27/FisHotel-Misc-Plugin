@@ -367,7 +367,7 @@ namespace FisHotel\Misc\Sections\Shop_App {
 					'calc' => '/^1$/D',
 				),
 				// The tank page's AJAX: one action for every write — readings,
-				// doses, ticks, arrivals, losses, moves and the temporary tanks
+				// doses, ticks, arrivals, fish already here, losses, moves and the temporary tanks
 				// (setup, setup_edit, setup_steps, takedown, todo_tick) are all
 				// acts of it —, three that only read. The Board's own writes
 				// (fishotel_cleanroom_temp) and Settings (the medications list,

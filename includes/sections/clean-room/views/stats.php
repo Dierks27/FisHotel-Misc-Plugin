@@ -11,6 +11,7 @@
  * @package FisHotel\Misc\Sections\Clean_Room
  *
  * @var array   $stats        Stats::build().
+ * @var array   $existing     Stats::existing_stock(): the fish already here, added by hand (no year, no batch).
  * @var int[]   $years        Years with orders.
  * @var int     $year         The year shown (0 = all).
  * @var array   $exports      xlsx / csv URLs.
@@ -202,6 +203,35 @@ $fh_group_table = static function ( array $groups, $label, $labels = false ) use
 			<p class="fishotel-misc-card-desc"><?php esc_html_e( 'The unweighted average of each batch\'s rate, as the workbook\'s Controller & Stats tab did: a small batch counts as much as a big one; a batch that received nothing is left out, and one whose survivors are not typed yet is left out of the survival average (it was "not in the formulas yet").', 'fishotel-misc-plugin' ); ?></p>
 		</div>
 	</div>
+
+	<?php if ( ! empty( $existing ) && (int) $existing['groups'] > 0 ) : ?>
+		<div class="fishotel-misc-card fh-cr-card fh-cr-existing-stats">
+			<div class="fishotel-misc-card-header">
+				<div class="fishotel-misc-card-icon"><span class="dashicons dashicons-location-alt"></span></div>
+				<h2 class="fishotel-misc-card-title"><?php esc_html_e( 'Fish already here (added by hand)', 'fishotel-misc-plugin' ); ?></h2>
+			</div>
+			<dl class="fh-cr-stats-block">
+				<div><dt><?php esc_html_e( 'Groups added', 'fishotel-misc-plugin' ); ?></dt><dd><?php echo esc_html( (int) $existing['groups'] ); ?> <span class="fh-cr-sub fh-cr-sub--inline"><?php echo esc_html( sprintf( /* translators: %d: fish */ __( '%d fish', 'fishotel-misc-plugin' ), (int) $existing['added'] ) ); ?></span></dd></div>
+				<div><dt><?php esc_html_e( 'Alive now', 'fishotel-misc-plugin' ); ?></dt><dd><?php echo esc_html( (int) $existing['live'] ); ?> <span class="fh-cr-sub fh-cr-sub--inline"><?php echo esc_html( sprintf( /* translators: %d: groups */ __( 'in %d groups', 'fishotel-misc-plugin' ), (int) $existing['open'] ) ); ?></span></dd></div>
+				<div><dt><?php esc_html_e( 'Shipped', 'fishotel-misc-plugin' ); ?></dt><dd><?php echo esc_html( (int) $existing['sold'] ); ?></dd></div>
+				<div><dt><?php esc_html_e( 'Lost', 'fishotel-misc-plugin' ); ?></dt><dd><?php echo esc_html( (int) $existing['lost'] ); ?></dd></div>
+				<div><dt><?php esc_html_e( 'Arrival date unknown (groups in tanks)', 'fishotel-misc-plugin' ); ?></dt><dd><?php echo esc_html( (int) $existing['no_arrival'] ); ?></dd></div>
+				<div><dt><?php esc_html_e( 'Cleared, date unknown (groups in tanks)', 'fishotel-misc-plugin' ); ?></dt><dd><?php echo esc_html( (int) $existing['cleared_unknown'] ); ?></dd></div>
+			</dl>
+			<p class="fishotel-misc-card-desc">
+				<?php
+				echo esc_html(
+					sprintf(
+						/* translators: 1: groups, 2: fish */
+						__( 'Left out of everything above and below — the yearly figures, survival per batch, landed cost and days in QT: %1$d groups, %2$d fish. They belong to no supplier order, and their dates are not always known. They count only here, in what is alive, shipped and lost (all years).', 'fishotel-misc-plugin' ),
+						(int) $existing['left_out_groups'],
+						(int) $existing['left_out_fish']
+					)
+				);
+				?>
+			</p>
+		</div>
+	<?php endif; ?>
 
 	<h2 class="fh-cr-h2"><?php esc_html_e( 'Orders', 'fishotel-misc-plugin' ); ?></h2>
 	<?php if ( ! $stats['orders'] ) : ?>
