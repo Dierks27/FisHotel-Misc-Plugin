@@ -64,6 +64,7 @@ php  includes/sections/clean-room/tests/temp-guards-test.php
 php  includes/sections/clean-room/tests/dose-temp-test.php
 php  includes/sections/clean-room/tests/order-view-test.php
 php  includes/sections/clean-room/tests/existing-fish-test.php
+php  includes/sections/clean-room/tests/board-lines-test.php
 node includes/sections/clean-room/tests/front-desk.test.js
 node includes/sections/clean-room/tests/clean-room-admin.test.js
 node includes/sections/clean-room/tests/dose-math.test.js
@@ -911,6 +912,28 @@ system temp directory (`FH_TEST_TMP` overrides).
   Board's words, the Events tab's text and the CSV; the Stays tab's tank
   list and form; and both AJAX endpoints — capability, nonce, the
   missing tables, and 503 until the 1.7 upgrade is written.
+- **board-lines-test.php** — the Board's tank cards (`Board_Lines`,
+  pure): the order (names natural and case-blind, an unknown fish last,
+  the standard sizes' own order then a non-standard size then none, the
+  check-in with an unknown one last, the same result from any input
+  order); the gathering by fish + size + state badge, the summed count,
+  the day as a number, a range, "?" and "9 / ?", another size or state
+  kept apart but adjacent (`repeat`), for sale / not for sale never
+  mixed, an unknown and a known fish of one name never mixed; the foot's
+  "Sale date not set" count and what a line says of its own dates; the
+  species filter on a gathered line; then a room on the `Fake_Store`
+  with a tank of eight groups moved in out of four Spa tanks — six
+  lines, `Admin::totals()` for the room and the building still counting
+  stays, the cards' feet adding up to the summary's chip; the quarantine
+  tank a cleared group came out of (`Board_Lines::origins()`: a move on
+  keeps it, a move back forgets it, a split's remainder has not moved, a
+  quarantine temporary tank counts); `views/board.php` rendered — the
+  lines, the foot's one link, the opened groups with "cleared from" and
+  their Stays links, the badges, the species and area filters, the
+  dimming, the summary chips and the building header, and a temporary
+  setup's card through the same lines; the Stays tab's `tank` /
+  `no_sale` filters (`Admin::narrow_stays()`, `tank_stays_url()`); and
+  the phone's tank screen: the same order, eight rows for eight groups.
 - **medications-admin.test.js** — the pure parts of
   `js/medications-admin.js`: what 100 gallons take at a rate (the
   editor's hint), the rates the Board's Calculator offers, its sum.
