@@ -388,6 +388,22 @@ $third_order = save( $store, array( row( 'Copper Test Butterfly', array( 'specie
 $in          = check_in( $store, (int) $third_order['order_id'] );
 check( 'a third order kept together (the offer declined): the fish is forgotten again', 1 === count( $in['created'] ) && array() === $in['created'][0]['splits'] && null === Splits::remembered( array( 'species_id' => 1, 'species' => 'Copper Test Butterfly' ) ) && array() === Splits::all()['species'] && array() === Splits::all()['plans'] );
 check( 'nothing is seeded: an install that never split anything stores nothing', false === get_option( Splits::OPTION, false ) );
+// The same fish in two sizes on one order, one line split and one kept together — in either order of the lines.
+foreach ( array( 'the split line first' => false, 'the split line last' => true ) as $said => $flip ) {
+	$two = array(
+		row( 'Copper Test Butterfly', array( 'species_id' => '1', 'size_slug' => 'small', 'qty_received' => '3', 'split' => plan( $store, array( array( 1, 521 ), array( 1, 522 ), array( 1, 523 ) ) ) ) ),
+		row( 'Copper Test Butterfly', array( 'species_id' => '1', 'size_slug' => 'large', 'qty_received' => '2' ) ),
+	);
+	$both = save( $store, $flip ? array_reverse( $two ) : $two );
+	$in   = check_in( $store, (int) $both['order_id'] );
+	check( 'two sizes of one fish on one order, ' . $said . ': the line kept together does not take away what the split one taught', empty( $both['error'] ) && 2 === count( $in['created'] ) && array( 'ones' => true, 'on' => $today, 'n' => 3 ) === Splits::remembered( array( 'species_id' => 1, 'species' => 'Copper Test Butterfly' ) ), json_encode( array( $both['error'] ?? '', Splits::all()['species'] ) ) );
+	foreach ( $in['created'] as $made ) { // Empty the tanks again for the next round.
+		foreach ( $store->stays_for_line( $made['line_id'], $today, $settings ) as $stay ) {
+			act( $store, (int) $store->tank( (int) $stay['tank_id'] )['number'], 'shipped', array( 'stay_id' => $stay['id'], 'qty' => $stay['qty_live'] ) );
+		}
+	}
+	delete_option( Splits::OPTION );
+}
 // The workbook import checks history in: it neither reads a plan nor teaches the memory.
 Splits::remember( array( 'species_id' => 2, 'species' => 'Lilac Test Anthias' ), true, true, $today );
 $hist = save( $store, array( row( 'Lilac Test Anthias', array( 'species_id' => '2', 'qty_received' => '4', 'split' => plan( $store, array( array( 2, 522 ), array( 2, 523 ) ) ) ) ) ) );

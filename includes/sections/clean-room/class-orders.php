@@ -645,6 +645,7 @@ class Orders {
 			}
 		}
 
+		$taught = array(); // The fish this check-in has split (Splits::species_keys()).
 		foreach ( $order['lines'] as $line ) {
 			if ( ! empty( $line['stay_id'] ) ) {
 				$result['skipped']++;
@@ -752,7 +753,15 @@ class Orders {
 					$left = $store->stay( $stay_id, $today, $settings );
 					$ones = $left && 1 === (int) $left['qty_live'];
 				}
-				Splits::remember( $line, (bool) $split['made'], $ones, $today, $ones ? count( $split['made'] ) + 1 : 0 );
+				// The same fish on two lines of one order — two sizes — is one fish to the memory: a line
+				// kept together does not take away what a split line of this very check-in taught.
+				$keys = Splits::species_keys( $line );
+				if ( $split['made'] ) {
+					$taught = array_merge( $taught, $keys );
+				}
+				if ( $split['made'] || ! array_intersect( $keys, $taught ) ) {
+					Splits::remember( $line, (bool) $split['made'], $ones, $today, $ones ? count( $split['made'] ) + 1 : 0 );
+				}
 			}
 
 			$result['created'][] = array(

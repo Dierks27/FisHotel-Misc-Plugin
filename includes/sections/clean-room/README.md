@@ -1168,7 +1168,10 @@ half that moved away.)
 **The site remembers per fish** whether its last order line was split at
 its check-in, whether that was one per tank and over how many tanks —
 under its species-list row and under its name, in the same option;
-nothing is seeded, and a fish checked in together again is forgotten.
+nothing is seeded, and a fish checked in together again is forgotten
+(the same fish on two lines of one order — two sizes — is one fish: a
+line kept together does not take away what a split line of the same
+check-in taught, whichever comes first).
 The next time that fish is on an order its line **offers the split,
 opened — as a proposal**: the rows are drawn dashed under the line and
 the line's field stays EMPTY, so Save and Check in keep the group
