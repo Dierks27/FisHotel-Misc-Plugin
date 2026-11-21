@@ -23,14 +23,13 @@
  *     and not the Settings one: the medications editor refuses it even
  *     when called from there;
  *   - nothing on the act path asks for a capability of its own;
- *   - the screen: the Front Desk's toast and its folded Undo stand at the
- *     foot of the page, above its button bar; this app adds its bar at
- *     the head and pins nothing to the foot, and every layer it lays over
- *     the whole screen (the keypad, a question, the scanner) lies over
- *     the toast, never under it; and where this app's bar at the head
- *     leaves the whole toast no room (a small phone on its side), the
- *     Front Desk folds it to the small Undo — by asking the page what
- *     lies at the toast's top, with no knowledge of this app.
+ *   - the screen: the Front Desk says everything in the status line, the
+ *     first row of its own button bar at the foot of the page, and fixes
+ *     nothing else to the screen; this app adds its bar at the head and
+ *     pins nothing to the foot, and every layer it lays over the whole
+ *     screen (the keypad, a question, the scanner) lies over that bar,
+ *     never under it; on a phone on its side the Front Desk lowers its
+ *     bar so it stays clear of this app's — with no knowledge of this app.
  *
  * Run from the plugin root:
  *   php includes/sections/shop-app/tests/front-desk-seam-test.php
@@ -358,16 +357,18 @@ check(
 );
 
 /* ------------------------------------------------------------------ */
-/*  The screen: this app's own parts and the Front Desk's toast         */
+/*  The screen: this app's own parts and the Front Desk's bar           */
 /* ------------------------------------------------------------------ */
 
-// The toast (whole, or folded to the small Undo) is fixed above the Front
-// Desk's own button bar. What this app adds to that page must leave the
-// foot alone and, where it covers the screen, cover the toast too.
+// Whatever the Front Desk has to say — a write's message with its Undo, an
+// error — it says in the status line, the first row of its own button bar
+// at the foot of the page. What this app adds to that page must leave the
+// foot alone and, where it covers the screen, cover the bar too.
 $app_css   = (string) file_get_contents( FISHOTEL_MISC_PATH . 'includes/sections/shop-app/css/app.css' );
-$desk_css  = (string) file_get_contents( $room_dir . 'css/front-desk.css' );
-echo "\n7. The screen: nothing of the app under or on the Front Desk's toast\n";
-$toast_z   = preg_match( '/\n\.fh-fd-toast \{[^}]*?z-index:\s*(\d+);/', $desk_css, $z ) ? (int) $z[1] : -1;
+$desk_css  = (string) file_get_contents( $room_dir . 'css/front-desk.css' ) . "\n" . (string) file_get_contents( $room_dir . 'css/front-desk-temp.css' );
+$desk_view = (string) file_get_contents( $room_dir . 'views/front-desk.php' );
+echo "\n7. The screen: nothing of the app under or on the Front Desk's bar and its status line\n";
+$bar_z     = preg_match( '/\n\.fh-fd-bar \{[^}]*?z-index:\s*(\d+);/', $desk_css, $z ) ? (int) $z[1] : -1;
 $fixed     = array();
 $under     = array();
 $at_foot   = array();
@@ -381,22 +382,29 @@ foreach ( $rules as $rule ) {
 		continue;
 	}
 	$fixed[] = $name;
-	if ( ! preg_match( '/inset:\s*0;/', $rule[2] ) || ! preg_match( '/z-index:\s*(\d+);/', $rule[2], $z ) || (int) $z[1] <= $toast_z ) {
+	if ( ! preg_match( '/inset:\s*0;/', $rule[2] ) || ! preg_match( '/z-index:\s*(\d+);/', $rule[2], $z ) || (int) $z[1] <= $bar_z ) {
 		$under[] = $name;
 	}
 }
-check( 'the Front Desk\'s toast has a place in the stack', $toast_z > 0, (string) $toast_z );
-check( 'the app\'s bar on a tank screen is at the head of the page (sticky, top), above the toast in the stack', 1 === preg_match( '/\n\.fh-sa-bar \{[^}]*position:\s*sticky;\s*top:\s*0;\s*z-index:\s*(\d+);/', $app_css, $z ) && (int) $z[1] > $toast_z );
-check( 'the app pins nothing to the foot of the page, where the toast and the Undo stand', array() === $at_foot, implode( ' | ', $at_foot ) );
-check( 'every layer the app fixes to the screen covers all of it and lies over the toast (the keypad, a question, the scanner)', count( $fixed ) >= 3 && array() === $under, implode( ' | ', $fixed ) . ' — under: ' . implode( ' | ', $under ) );
-// The app's bar is sticky and above the toast in the stack: on a small
-// phone turned on its side the whole toast would slide under it, its
-// Undo half hidden beside Lock. The Front Desk folds such a toast as it
-// comes up — and finds out by asking the page, not by knowing this app.
-$place = preg_match( '/\n\tfunction place\(\) \{(.*?)\n\t\}/s', $page_js, $z ) ? $z[1] : '';
-$clear = preg_match( '/\n\tfunction headClear\(\) \{(.*?)\n\t\}/s', $page_js, $z ) ? $z[1] : '';
-check( 'the Front Desk folds a whole toast whose top is not to be seen, each time it measures', 1 === preg_match( '/!headClear\(\)\) \{\s*foldToast\(\);/', $place ), $place );
-check( '… by asking the page what lies at the toast\'s top and at its foot (a layer over both is not a head)', 2 === substr_count( $clear, 'seen(' ) - 1 && false !== strpos( $clear, 'document.elementFromPoint(' ) && false !== strpos( $clear, 'box.top' ) && false !== strpos( $clear, 'box.bottom' ), $clear );
-check( '… and knows nothing of this app: no fh-sa name in the Front Desk\'s script or stylesheet', false === strpos( $page_js, 'fh-sa' ) && false === strpos( $desk_css, 'fh-sa' ) );
+$desk_fixed = array();
+preg_match_all( '/([^{}]+)\{([^{}]*)\}/', (string) preg_replace( '#/\*.*?\*/#s', '', $desk_css ), $rules, PREG_SET_ORDER );
+foreach ( $rules as $rule ) {
+	if ( preg_match( '/position:\s*(?:fixed|sticky);/', $rule[2] ) ) {
+		$desk_fixed[] = trim( $rule[1] );
+	}
+}
+check( 'the Front Desk\'s bar has a place in the stack', $bar_z > 0, (string) $bar_z );
+check( 'the status line is in the page the Front Desk writes, inside that bar — there before any script runs', 1 === preg_match( '/<div class="fh-fd-bar"><div id="fh-fd-status" class="fh-fd-status"/', $desk_view ) );
+check( 'the Front Desk fixes nothing to the screen but that bar: no message floats where this app\'s bar or one of its layers is', array( '.fh-fd-bar' ) === $desk_fixed, implode( ' | ', $desk_fixed ) );
+check( 'the app\'s bar on a tank screen is at the head of the page (sticky, top), above the Front Desk\'s bar in the stack', 1 === preg_match( '/\n\.fh-sa-bar \{[^}]*position:\s*sticky;\s*top:\s*0;\s*z-index:\s*(\d+);/', $app_css, $z ) && (int) $z[1] > $bar_z );
+check( 'the app pins nothing to the foot of the page, where the Front Desk\'s bar and its Undo stand', array() === $at_foot, implode( ' | ', $at_foot ) );
+check( 'every layer the app fixes to the screen covers all of it and lies over the bar (the keypad, a question, the scanner)', count( $fixed ) >= 3 && array() === $under, implode( ' | ', $fixed ) . ' — under: ' . implode( ' | ', $under ) );
+// The app's bar is sticky and above the Front Desk's in the stack: a bar
+// tall enough to reach it would have its status line — the Undo — under
+// it. On a phone on its side the Front Desk makes its bar lower, by the
+// height of the screen alone.
+check( 'on a phone on its side the Front Desk lowers its own bar: six buttons in a row, lower ones', 1 === preg_match( '/@media \(max-height: \d+px\) and \(orientation: landscape\) \{\s*\.fh-fd-bar__inner \{\s*grid-template-columns:\s*repeat\(6, 1fr\);/', $desk_css ) );
+check( '… and asks the page nothing about what lies where', false === strpos( $page_js, 'elementFromPoint' ) );
+check( '… and knows nothing of this app: no fh-sa name in the Front Desk\'s script, stylesheets or page', false === strpos( $page_js, 'fh-sa' ) && false === strpos( $desk_css, 'fh-sa' ) && false === strpos( $desk_view, 'fh-sa' ) );
 
 fh_finish();

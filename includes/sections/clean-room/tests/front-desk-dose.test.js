@@ -80,6 +80,12 @@ El.prototype.removeChild = function ( child ) {
 	}
 	return child;
 };
+El.prototype.insertBefore = function ( child, before ) {
+	var at = before ? this.children.indexOf( before ) : -1;
+	child.parentNode = this;
+	this.children.splice( at < 0 ? this.children.length : at, 0, child );
+	return child;
+};
 El.prototype.setAttribute = function ( key, value ) {
 	this.attrs[ key ] = value;
 	if ( 'value' === key ) {
@@ -90,7 +96,7 @@ El.prototype.addEventListener = function ( type, fn ) {
 	( this.listeners[ type ] = this.listeners[ type ] || [] ).push( fn );
 };
 El.prototype.focus = function () {};
-/* The page measures its button bar and its toast (place()): no layout here, so nothing tall. */
+/* The page measures its button bar (place()): no layout here, so nothing tall. */
 El.prototype.getBoundingClientRect = function () { return { height: 0 }; };
 /* '.one-class' only — what the page asks for. */
 El.prototype.querySelectorAll = function ( selector ) {
@@ -190,7 +196,7 @@ function screen( withTank, systemGallons ) {
  */
 function start( config ) {
 	var app   = new El( 'div' );
-	var toast = new El( 'div' );
+	var line  = new El( 'div' ); // The status line the page comes with (views/front-desk.php): where every message is said.
 	var body  = new El( 'body' );
 	var posts = [];
 	var reply = config.reply || function () { return { message: 'Saved', undo: { eventIds: [] }, screen: config.screen }; };
@@ -199,7 +205,7 @@ function start( config ) {
 	global.document       = {
 		createElement: function ( tag ) { return new El( tag ); },
 		createTextNode: function ( text ) { var n = new El( '#text' ); n._text = String( text ); return n; },
-		getElementById: function ( id ) { return 'fh-fd-app' === id ? app : ( 'fh-fd-toast' === id ? toast : find( body, function ( n ) { return n.attrs.id === id; } ).concat( find( app, function ( n ) { return n.attrs.id === id; } ) )[0] || null ); },
+		getElementById: function ( id ) { return 'fh-fd-app' === id ? app : ( 'fh-fd-status' === id ? line : find( body, function ( n ) { return n.attrs.id === id; } ).concat( find( app, function ( n ) { return n.attrs.id === id; } ) )[0] || null ); },
 		querySelector: function ( selector ) { return find( body, function ( n ) { return '.' + n.className === selector; } )[0] || null; },
 		body: body
 	};
@@ -224,17 +230,17 @@ function start( config ) {
 	delete require.cache[ require.resolve( file ) ];
 	require( file );
 
-	/* Every button whose text holds the label — in the app, then in the bar under it; hidden ones too. */
+	/* Every button whose text holds the label — in the app, then in the bar under it; hidden ones too. The status line's words are not one of them. */
 	function buttons( label ) {
 		function test( n ) {
-			return 'button' === n.tag && -1 !== n.textContent.indexOf( label );
+			return 'button' === n.tag && -1 !== n.textContent.indexOf( label ) && 0 !== n.className.indexOf( 'fh-fd-status__' );
 		}
 		return find( app, test ).concat( find( body, test ) );
 	}
 	return {
 		app: app,
 		body: body,
-		toast: toast,
+		line: line,
 		posts: posts,
 		text: function () { return shown( app ).replace( /\s+/g, ' ' ); },
 		tap: function ( label ) {
@@ -297,7 +303,7 @@ async function run() {
 	page.tap( 'Save' );
 	await later( function () {} );
 	check( 'Save posts ONE request: the dose with the sum\'s inputs — the server writes the working and the reading', 1 === page.posts.length && 'fishotel_cleanroom_act' === page.posts[0].action && 'dose' === page.posts[0].act && '621' === page.posts[0].tank && 'copper' === page.posts[0].medication && '16.6' === page.posts[0].amount && 'ml' === page.posts[0].unit && '1' === page.posts[0].whole && '1' === page.posts[0].calc && '2.16' === page.posts[0].now && '2.4' === page.posts[0].target && ! ( 'rate' in page.posts[0] ) && ! ( 'topup' in page.posts[0] ) && ! ( 'gallons' in page.posts[0] ), JSON.stringify( page.posts ) );
-	check( 'the toast states what the server answered, and offers no Undo', -1 !== shown( page.toast ).indexOf( 'Saved' ) && 0 === find( page.toast, function ( n ) { return 'button' === n.tag; } ).length );
+	check( 'the status line states what the server answered, and offers no Undo', -1 !== shown( page.line ).indexOf( 'Saved' ) && 0 === find( page.line, function ( n ) { return 'button' === n.tag && ! n.hidden && -1 !== n.className.indexOf( 'fh-fd-status__undo' ); } ).length );
 
 	console.log( '2. Typing follows the sum; the amount stays the page\'s to edit' );
 	page = start( { screen: screen( true ) } );
@@ -313,7 +319,7 @@ async function run() {
 	check( 'no reading: it asks for one; nothing is said about logging a reading', 'Type the reading now to get the amount.' === result( page ) && -1 === page.text().indexOf( 'Saving also logs' ) );
 	page.tap( 'Save' );
 	await later( function () {} );
-	check( 'Save without an amount posts nothing and says what is missing', 0 === page.posts.length && -1 !== shown( page.toast ).indexOf( 'Type the reading now' ) );
+	check( 'Save without an amount posts nothing and says what is missing', 0 === page.posts.length && -1 !== shown( page.line ).indexOf( 'Type the reading now' ) );
 	page.type( 'fh-fd-now', '2.16' );
 	page.type( 'fh-fd-target', '2.5' );
 	check( '"Bring it to" is editable: 2.16 → 2.50 is 23.5 ml', 0 === result( page ).indexOf( 'Add 23.5 ml Copper Power' ), result( page ) );
@@ -594,11 +600,11 @@ async function run() {
 	check( 'a sheet drawn before another phone\'s Save still offers 16.6 ml', '16.6' === page.input( 'fh-fd-amount' ).value );
 	page.tap( 'Save' );
 	await later( function () {} );
-	check( '…its Save is refused: the toast says what went in, and the sheet — still open — is redrawn as the room is now', 1 === page.posts.length && -1 !== shown( page.toast ).indexOf( 'Copper Power 16.6 ml was logged in this water at 09:20' ) && -1 !== page.text().indexOf( 'Already logged today: Copper Power 16.6 ml, at 09:20.' ) && !! page.input( 'fh-fd-now' ) && '' === page.input( 'fh-fd-now' ).value && '' === page.input( 'fh-fd-amount' ).value, page.text() );
+	check( '…its Save is refused: the status line says what went in, and the sheet — still open — is redrawn as the room is now', 1 === page.posts.length && -1 !== shown( page.line ).indexOf( 'Copper Power 16.6 ml was logged in this water at 09:20' ) && -1 !== page.text().indexOf( 'Already logged today: Copper Power 16.6 ml, at 09:20.' ) && !! page.input( 'fh-fd-now' ) && '' === page.input( 'fh-fd-now' ).value && '' === page.input( 'fh-fd-amount' ).value, page.text() );
 	page.type( 'fh-fd-now', '2.38' );
 	page.tap( 'Save' );
 	await later( function () {} );
-	check( '…saving again from it (it knows of that dose now) goes through', 2 === page.posts.length && '2026-11-12 15:20:00' === page.posts[1].seen && '1.4' === page.posts[1].amount && -1 !== shown( page.toast ).indexOf( 'Saved' ), JSON.stringify( page.posts[1] ) );
+	check( '…saving again from it (it knows of that dose now) goes through', 2 === page.posts.length && '2026-11-12 15:20:00' === page.posts[1].seen && '1.4' === page.posts[1].amount && -1 !== shown( page.line ).indexOf( 'Saved' ), JSON.stringify( page.posts[1] ) );
 
 	page = phrase( function () { return JSON.parse( JSON.stringify( preview ) ); } );
 	await later( function () {} );
@@ -615,7 +621,7 @@ async function run() {
 	}( global.fetch ) );
 	page.tap( 'Confirm now' );
 	await later( function () {} );
-	check( 'a preview that is behind: refused the same way, and it now tells of the dose', 2 === page.posts.length && -1 !== page.text().indexOf( 'Already logged today: Copper Power 16.6 ml, at 09:20.' ) && -1 !== shown( page.toast ).indexOf( 'was logged in this water' ), page.text() );
+	check( 'a preview that is behind: refused the same way, and it now tells of the dose', 2 === page.posts.length && -1 !== page.text().indexOf( 'Already logged today: Copper Power 16.6 ml, at 09:20.' ) && -1 !== shown( page.line ).indexOf( 'was logged in this water' ), page.text() );
 	page.tap( 'Confirm now' );
 	await later( function () {} );
 	check( '…confirmed again, knowing of it: posted with that dose\'s time', 3 === page.posts.length && '2026-11-12 15:20:00' === page.posts[2].seen );
@@ -634,7 +640,7 @@ async function run() {
 	check( '"Bring it to" 24 for 2.4: the sum does as it is told', 0 === result( page ).indexOf( 'Add 1511.3 ml Copper Power' ), result( page ) );
 	page.tap( 'Save' );
 	await later( function () {} );
-	check( '…the server asks first: the toast says so, the sheet stays open with what was typed', 1 === page.posts.length && ! ( 'sure' in page.posts[0] ) && -1 !== shown( page.toast ).indexOf( 'far above the copper target' ) && '24' === page.input( 'fh-fd-target' ).value );
+	check( '…the server asks first: the status line says so, the sheet stays open with what was typed', 1 === page.posts.length && ! ( 'sure' in page.posts[0] ) && -1 !== shown( page.line ).indexOf( 'far above the copper target' ) && '24' === page.input( 'fh-fd-target' ).value );
 	page.type( 'fh-fd-target', '2.4' );
 	page.tap( 'Save' );
 	await later( function () {} );
@@ -647,7 +653,7 @@ async function run() {
 	await later( function () {} );
 	page.tap( 'Save' );
 	await later( function () {} );
-	check( '…saved again as it stands: it was meant, and the post says so', 2 === page.posts.length && '24' === page.posts[1].target && '1' === page.posts[1].sure && -1 !== shown( page.toast ).indexOf( 'Saved' ), JSON.stringify( page.posts[1] ) );
+	check( '…saved again as it stands: it was meant, and the post says so', 2 === page.posts.length && '24' === page.posts[1].target && '1' === page.posts[1].sure && -1 !== shown( page.line ).indexOf( 'Saved' ), JSON.stringify( page.posts[1] ) );
 
 	// At or above the target.
 	page = start( { screen: screen( true ), reply: function () { return { message: 'Copper 2.45 logged · Building 600, whole system · nothing to add', undo: { eventIds: [] }, screen: screen( true ) }; } } );
@@ -657,7 +663,7 @@ async function run() {
 	check( 'at or above the target: "Nothing to add" — and the sheet says the reading is all Save logs', 0 === result( page ).indexOf( 'Nothing to add' ) && -1 !== page.text().indexOf( 'Save logs the copper reading 2.45 (once) — there is nothing to add.' ) && -1 === page.text().indexOf( 'Saving also logs' ), page.text() );
 	page.tap( 'Save' );
 	await later( function () {} );
-	check( '…Save keeps that word: ONE post, the dose action with no amount and the levels — the server logs the reading alone', 1 === page.posts.length && 'dose' === page.posts[0].act && 'copper' === page.posts[0].medication && '' === page.posts[0].amount && '1' === page.posts[0].calc && '2.45' === page.posts[0].now && '2.4' === page.posts[0].target && '1' === page.posts[0].whole && -1 !== shown( page.toast ).indexOf( 'Copper 2.45 logged' ), JSON.stringify( page.posts ) );
+	check( '…Save keeps that word: ONE post, the dose action with no amount and the levels — the server logs the reading alone', 1 === page.posts.length && 'dose' === page.posts[0].act && 'copper' === page.posts[0].medication && '' === page.posts[0].amount && '1' === page.posts[0].calc && '2.45' === page.posts[0].now && '2.4' === page.posts[0].target && '1' === page.posts[0].whole && -1 !== shown( page.line ).indexOf( 'Copper 2.45 logged' ), JSON.stringify( page.posts ) );
 	page = start( { screen: screen( true ) } );
 	page.tap( 'Dose +' );
 	page.tap( 'Ramp' );
@@ -665,7 +671,7 @@ async function run() {
 	page.type( 'fh-fd-target', '0.5' );
 	page.tap( 'Save' );
 	await later( function () {} );
-	check( '…another medication dosed to a level has no reading to log: nothing is promised and nothing posted', 0 === result( page ).indexOf( 'Nothing to add' ) && -1 === page.text().indexOf( 'copper reading' ) && 0 === page.posts.length && -1 !== shown( page.toast ).indexOf( 'Nothing to add' ) );
+	check( '…another medication dosed to a level has no reading to log: nothing is promised and nothing posted', 0 === result( page ).indexOf( 'Nothing to add' ) && -1 === page.text().indexOf( 'copper reading' ) && 0 === page.posts.length && -1 !== shown( page.line ).indexOf( 'Nothing to add' ) );
 
 	console.log( '10. A temporary tank: its own water only; the picker with the day\'s list and the Calculator' );
 	// TEMP 1 · 901: 10 gallons, its own schedule on day 2 ("Copper Power to 2.4"), 2.16 read today.

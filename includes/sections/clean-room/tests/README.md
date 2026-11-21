@@ -69,7 +69,7 @@ node includes/sections/clean-room/tests/front-desk.test.js
 node includes/sections/clean-room/tests/clean-room-admin.test.js
 node includes/sections/clean-room/tests/dose-math.test.js
 node includes/sections/clean-room/tests/front-desk-dose.test.js
-node includes/sections/clean-room/tests/front-desk-toast.test.js
+node includes/sections/clean-room/tests/front-desk-status.test.js
 node includes/sections/clean-room/tests/medications-admin.test.js
 node includes/sections/clean-room/tests/temp-tanks.test.js
 ```
@@ -808,33 +808,44 @@ system temp directory (`FH_TEST_TMP` overrides).
   `fixtures/dose-maths.json`: the same tables and the same 51 sums as
   dose-test.php, plus the page's own spelling of the inputs and
   translated words.
-- **front-desk-toast.test.js** — the toast with Undo run for real:
-  `js/front-desk.js` started against a small stand-in DOM, a clock moved
+- **front-desk-status.test.js** — the status line run for real:
+  `js/front-desk.js` started against a small stand-in DOM (the bar and
+  the line in it as `views/front-desk.php` writes them), a clock moved
   by hand, a `ResizeObserver` the test fires and a `fetch` that records
-  what is posted. Shown whole with its Undo and its bar; the bar runs
-  out and it folds to the "↶ Undo" pill, named by what it undoes, no
-  countdown; the pill stays through a redraw of the same screen and goes
-  on the next action, when a sheet opens by any road (the Mic sheet does
-  not pass through `go()`), and ten seconds before the server's window
-  ends — and is never shown when the page was told no window; Undo from
-  the pill posts the very request the big Undo posts; a sheet opening
-  inside the seconds closes the whole toast too; a tap on the words does
-  nothing; the whole toast's Undo is at the left end and an Undo that
-  has only just come up, whole or folded, takes no tap for 0.7 s (the
-  second of two quick taps on "−1 lost"); a phone that slept, the clock
-  on and its timers held, is not left with a pill past its time, and a
-  tap on one says "That can no longer be undone." without a request; a
-  whole toast whose top is under the head of the page, or off the
-  screen, folds as it comes up, one under a layer over the whole screen
-  does not; an error and a plain "Saved" never fold; an undo refused as
-  too late says so; a tap on the pill while another write is under way
-  posts nothing and keeps the pill. And the
-  place: the bar measured at each render (three rows, a sheet's one,
-  none), again through the observer when it grows, without an observer
-  at each render and window change; the toast and the strip measured at
-  each change; and `css/front-desk.css` placing the toast and the page's
-  foot from `--fd-bar-h` and `--fd-toast-h` with no counted rows, the
-  pill at least 44 px, the fold a fade, reduced motion respected.
+  what is posted. The line is first in every screen's bar — a tank, a
+  sheet, and alone on the picker and the day's list, where a tick and a
+  refusal are answered in it. A message changes no size: the bar's and
+  the line's heights, what the stylesheet is handed and the line's three
+  parts are the same before, during and after a message, an error and a
+  long one, and the script writes no size or place on any of them. Its
+  life: the words, a filled Undo at the left named by what it undoes,
+  the thin bar running out; then the same button turns quiet in place
+  and the words read "Last: … · 2 min ago"; it stays through a redraw
+  and onto a sheet (the Mic sheet too, which does not pass through
+  `go()`); the next write replaces it, a "Saved" with nothing to undo
+  takes it away; it leaves ten seconds before the server's window ends
+  and is offered for its seconds only when the page was told no window.
+  The filled and the quiet Undo post the very same request. An Undo
+  that has only just come up — after a write, in another's place, back
+  after an error, on the message's sheet — takes no tap for 0.7 s; a
+  tap on the words or elsewhere on the line never undoes; a write on the
+  tank screen leaves the page where it was scrolled to. A phone that
+  slept, the clock on and its timers held, is not left with an Undo past
+  its time, and a tap on one says "That can no longer be undone."
+  without a request. An error keeps an Undo that is still good for after
+  (its seconds, or another screen opened), not one whose time ran out
+  meanwhile; an undo the server refuses is over, one that never reached
+  it keeps its Undo; an expired session stays in the line until tapped.
+  A tap on the words opens the whole message with its Undo, and Back
+  shows the screen under it as it was — the very field, what was typed
+  in it. The words for the last thing done (`agoText()`). And the place:
+  the bar measured at each render, again through the observer when it
+  grows, without an observer at each render and window change; and
+  `css/front-desk.css` — the page's foot from `--fd-bar-h` alone, the
+  line one fixed height with its words on one line cut with "…", the
+  Undo at least 44 px each way, quiet a change of colours only, nothing
+  fixed to the screen but the bar, no toast left, no new colour, reduced
+  motion respected.
 - **front-desk-dose.test.js** — the Dose sheet, the Calculator and a
   dose phrase's preview run for real: `js/front-desk.js` started against
   a small stand-in DOM and a `fetch` that records what is posted. "Now"
@@ -952,11 +963,15 @@ system temp directory (`FH_TEST_TMP` overrides).
    login's cookie lasts about a year).
 3. Arrival → type "paj": suggestions from the quarantined-fish products;
    pick one, qty 4, Save. The row shows 4 live · in QT · day 1, above the
-   folded "Today · N to do ▸" line; the toast is whole for 10 s (above
-   the button bar, on none of its buttons, its Undo at the left), then folds to a small
-   "↶ Undo" at the right on top of the bar, which stays until the next
-   tap; its Undo removes the arrival (a compensating event, visible on
-   the Events tab); tapping Undo twice changes nothing more.
+   folded "Today · N to do ▸" line; the status line — the first row of
+   the button bar, above Lost / Shipped / Move — says "4 × … in Tank …"
+   with a filled "↶ Undo" at its left and a thin bar running out for
+   10 s; nothing on the screen moves when it shows, and nothing when the
+   bar runs out: the Undo turns outlined and the words read "Last: … ·
+   just now". It stays until the next write (open a sheet: it is still
+   there, first in the sheet's bar); a tap on the words opens the whole
+   message; its Undo removes the arrival (a compensating event, visible
+   on the Events tab); tapping Undo twice changes nothing more.
 4. Tap "−1 lost" on the row (the first button under the title): 3 live at
    once, Undo works. Mic → "lost one cardinal": the preview reads "1 × …
    lost in Tank 521" and confirms after the countdown.
@@ -1199,7 +1214,7 @@ system temp directory (`FH_TEST_TMP` overrides).
     says "… added to Tank 121 (already here) · arrived: unknown ·
     cleared: unknown" with Undo; the row reads *cleared*, "day ?",
     "arrived: unknown", and its sheet "added as already here". Dates →
-    set the check-in date: the row shows its day. Undo from the toast
+    set the check-in date: the row shows its day. Undo in the status line
     takes the whole addition back. On a Spa tank the second question
     offers **Not cleared yet** (the default) or a date, and the row says
     "treatment day unknown — set the arrival date"; the building's To do

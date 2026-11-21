@@ -39,8 +39,9 @@
  *
  * The reply carries the refreshed tank screen so the page re-renders
  * without a reload, and the ids of the stay events just written so the
- * toast (whole for Settings::UNDO_SECONDS, then a small Undo until the
- * next action, never past UNDO_WINDOW) can undo them — an undo is a compensating event (Replay::compensating),
+ * status line's Undo (filled for Settings::UNDO_SECONDS, then quiet until
+ * the next write, never past UNDO_WINDOW) can undo them — an undo is a
+ * compensating event (Replay::compensating),
  * never a delete, and posting the same ids twice writes nothing twice.
  *
  * The page also carries the medication list and, per tank, what the Dose
@@ -76,12 +77,12 @@ class Front_Desk {
 	const NONCE = 'fishotel_cleanroom_front';
 
 	/**
-	 * How long after an event the toast's undo is still honoured (seconds).
-	 * The toast is whole for Settings::UNDO_SECONDS, then folds to a small
-	 * Undo that stays until the next action; the page is told this window
-	 * (settings.undoWindow) so the Undo leaves before it ends. This is the
-	 * server-side guard: act_undo() refuses an older event whatever the
-	 * page shows.
+	 * How long after an event its undo is still honoured (seconds). The
+	 * Undo in the page's status line is filled for Settings::UNDO_SECONDS,
+	 * then quiet, and stays until the next write; the page is told this
+	 * window (settings.undoWindow) so the Undo leaves before it ends. This
+	 * is the server-side guard: act_undo() refuses an older event whatever
+	 * the page shows.
 	 *
 	 * @var int
 	 */
@@ -269,6 +270,14 @@ class Front_Desk {
 			/* translators: %s: what the Undo takes back, e.g. "1 × Pajama Cardinal lost" */
 			'undoWhat'    => __( 'Undo: %s', 'fishotel-misc-plugin' ),
 			'undoLate'    => __( 'That can no longer be undone.', 'fishotel-misc-plugin' ), // The page's own answer once UNDO_WINDOW is over; act_undo() says the same.
+			/* translators: %s: the last thing done on the page, e.g. "1 × Pajama Cardinal lost" */
+			'lastDone'    => __( 'Last: %s', 'fishotel-misc-plugin' ),
+			'justNow'     => __( 'just now', 'fishotel-misc-plugin' ),
+			/* translators: %d: minutes */
+			'minAgo'      => __( '%d min ago', 'fishotel-misc-plugin' ),
+			/* translators: %d: hours */
+			'hoursAgo'    => __( '%d h ago', 'fishotel-misc-plugin' ),
+			'message'     => __( 'Message', 'fishotel-misc-plugin' ), // The heading of the whole message, opened from the status line.
 			'saved'       => __( 'Saved', 'fishotel-misc-plugin' ),
 			'undone'      => __( 'Undone', 'fishotel-misc-plugin' ),
 			'empty'       => __( 'No fish in this tank', 'fishotel-misc-plugin' ),
@@ -571,7 +580,7 @@ class Front_Desk {
 				'autoConfirmSeconds' => (int) $settings['auto_confirm_seconds'],
 				'voiceEnabled'       => ! empty( $settings['voice_enabled'] ),
 				'undoSeconds'        => Settings::UNDO_SECONDS,
-				'undoWindow'         => self::UNDO_WINDOW, // The folded Undo leaves the screen before this ends.
+				'undoWindow'         => self::UNDO_WINDOW, // The status line's Undo leaves before this ends.
 				'saleReadyDays'      => (int) $settings['sale_ready_days'], // The suggestion only (occupants carry saleSuggested).
 				'copperFloor'        => (float) $settings['copper_floor'],
 				'copperTarget'       => (float) $settings['copper_target'],
