@@ -33,7 +33,7 @@ const JSQR = path.join(__dirname, '..', 'js', 'vendor', 'jsQR.js');
 const CODES = JSON.parse(fs.readFileSync(path.join(__dirname, 'scan-codes.json'), 'utf8'));
 const SITE = 'https://shop.example.test';
 const LABEL = SITE + '/?fh_front_desk=1';
-const QR_LIB = SITE + '/wp-content/plugins/fishotel-misc-plugin/includes/sections/shop-app/js/vendor/jsQR.js?ver=0.46.9';
+const QR_LIB = SITE + '/wp-content/plugins/fishotel-misc-plugin/includes/sections/shop-app/js/vendor/jsQR.js?ver=0.46.10';
 
 let failures = 0;
 let checks = 0;
