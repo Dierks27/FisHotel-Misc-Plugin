@@ -29,6 +29,10 @@
  * Loaded on first use (Designs::pile_product()), because the classes extend
  * WooCommerce's and must not be declared before WooCommerce is.
  *
+ * The overrides declare their return types although WooCommerce's own
+ * methods declare none today: should WooCommerce add them, these stay
+ * compatible instead of becoming a fatal error on the live shop.
+ *
  * @package FisHotel\Misc\Sections\Sticker_Giveaway
  */
 
@@ -47,7 +51,7 @@ trait Pile_Line {
 	 *
 	 * @return bool
 	 */
-	public function is_in_stock() {
+	public function is_in_stock(): bool {
 		return true;
 	}
 
@@ -56,7 +60,7 @@ trait Pile_Line {
 	 *
 	 * @return bool
 	 */
-	public function managing_stock() {
+	public function managing_stock(): bool {
 		return false;
 	}
 
@@ -66,7 +70,7 @@ trait Pile_Line {
 	 * @param mixed $quantity Quantity asked for.
 	 * @return bool
 	 */
-	public function has_enough_stock( $quantity ) {
+	public function has_enough_stock( $quantity ): bool {
 		unset( $quantity );
 		return true;
 	}
@@ -77,7 +81,7 @@ trait Pile_Line {
 	 * @param int $qty_in_cart Quantity in the cart.
 	 * @return bool
 	 */
-	public function is_on_backorder( $qty_in_cart = 0 ) {
+	public function is_on_backorder( $qty_in_cart = 0 ): bool {
 		unset( $qty_in_cart );
 		return false;
 	}
@@ -87,7 +91,7 @@ trait Pile_Line {
 	 *
 	 * @return int
 	 */
-	public function get_stock_managed_by_id() {
+	public function get_stock_managed_by_id(): int {
 		return Piles::STOCK_BUCKET;
 	}
 
@@ -96,7 +100,7 @@ trait Pile_Line {
 	 *
 	 * @return bool
 	 */
-	public function is_giveaway_pile_line() {
+	public function is_giveaway_pile_line(): bool {
 		return true;
 	}
 }
