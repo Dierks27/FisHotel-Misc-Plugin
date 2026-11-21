@@ -1015,6 +1015,19 @@
 	/*  AJAX                                                             */
 	/* ---------------------------------------------------------------- */
 
+	/*
+	 * A request can fail three ways, and each says its own thing:
+	 *  - no answer at all (no signal; fetch itself rejects): the browser's
+	 *    own words for it — "Failed to fetch", "Load failed" — are for a
+	 *    console, not a person, so the error carries a marker of ours,
+	 *    'offline' for a write and 'offlineRead' for a read, and
+	 *    sayFailed() says it in plain words. It has no `data`: act() knows
+	 *    by that an undo never got there. A sentence written for a person
+	 *    by whatever stands in front of fetch (the Shop App's guard, after
+	 *    its own sheet) is a plain Error with words: it is kept as it is;
+	 *  - an answer that is not one ('expired', 'bad');
+	 *  - the server's own no: its message, with `data`.
+	 */
 	function post(action, fields) {
 		var body = new URLSearchParams();
 		body.append('action', action);
@@ -1032,6 +1045,11 @@
 			credentials: 'same-origin',
 			headers: { 'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8' },
 			body: body.toString()
+		}).catch(function (err) {
+			if (err && err.name === 'Error' && err.message) {
+				throw err;
+			}
+			throw new Error(action === 'fishotel_cleanroom_act' ? 'offline' : 'offlineRead');
 		}).then(function (res) {
 			if (res.status === 403 || res.status === 401) {
 				throw new Error('expired');
@@ -1123,14 +1141,26 @@
 		return typeof state.sure === 'number' && present(target) && Math.abs(Number(target) - state.sure) < 1e-9;
 	}
 
+	/*
+	 * 'expired', 'bad', 'offline' and 'offlineRead' are post()'s own
+	 * markers, on an error without `data`. A refusal — the server's words,
+	 * with `data` — is said as it came, whatever it says.
+	 */
 	function sayFailed(err) {
 		var msg = err && err.message ? err.message : t('error', 'Something went wrong.');
-		if (msg === 'expired') {
+		var mark = err && typeof err.data === 'undefined' ? msg : '';
+		if (mark === 'expired') {
 			say(t('expired', 'Session expired — tap to reload.'), null, true, function () { root.location.reload(); });
 			return;
 		}
-		if (msg === 'bad') {
+		if (mark === 'bad') {
 			msg = t('error', 'Something went wrong.');
+		}
+		if (mark === 'offline') {
+			msg = t('offline', 'No connection — not saved. Try again.');
+		}
+		if (mark === 'offlineRead') {
+			msg = t('offlineRead', 'No connection. Try again.');
 		}
 		say(msg, null, true);
 	}

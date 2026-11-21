@@ -304,6 +304,8 @@ class Front_Desk {
 			'go'          => __( 'Go', 'fishotel-misc-plugin' ),
 			'error'       => __( 'Something went wrong. Try again.', 'fishotel-misc-plugin' ),
 			'expired'     => __( 'Session expired — tap to reload.', 'fishotel-misc-plugin' ),
+			'offline'     => __( 'No connection — not saved. Try again.', 'fishotel-misc-plugin' ),
+			'offlineRead' => __( 'No connection. Try again.', 'fishotel-misc-plugin' ),
 			'sharesWater' => __( 'shares water with', 'fishotel-misc-plugin' ),
 			'ownWater'    => __( 'its own water', 'fishotel-misc-plugin' ),
 			'day'         => __( 'day %d', 'fishotel-misc-plugin' ),
