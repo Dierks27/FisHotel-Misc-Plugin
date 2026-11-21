@@ -980,7 +980,8 @@ class Order_Import {
 	 * @param string  $name      The fish as typed.
 	 * @param string  $size_cell The size column's cell ('' without one).
 	 * @param array[] $sizes     The standard list.
-	 * @return array{name: string, slug: string|null, label: string|null, written: string, lifted: bool}
+	 * @return array{name: string, slug: string|null, label: string|null, written: string, lifted: bool, cell: bool}
+	 *         `cell`: the size stood in a column of its own, so it is nowhere in the name.
 	 */
 	public static function lift_size( $name, $size_cell, array $sizes ) {
 		$name = trim( (string) $name );
@@ -990,11 +991,13 @@ class Order_Import {
 			'label'   => null,
 			'written' => '',
 			'lifted'  => false,
+			'cell'    => false,
 		);
 
 		$size_cell = trim( (string) $size_cell );
 		if ( '' !== $size_cell ) {
 			$out['written'] = $size_cell;
+			$out['cell']    = true;
 			$found          = self::standard_size( $size_cell, $sizes );
 			if ( $found ) {
 				$out['slug']  = $found['slug'];
@@ -1080,6 +1083,7 @@ class Order_Import {
 			'label'   => (string) $size['label'],
 			'written' => trim( (string) $written ),
 			'lifted'  => true,
+			'cell'    => false,
 		);
 	}
 

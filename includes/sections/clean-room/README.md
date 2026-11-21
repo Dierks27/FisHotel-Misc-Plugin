@@ -799,7 +799,9 @@ tabs above it:
 
 **Which view opens**: Entry while the order is a draft, ordered or being
 received (fish still to check in); Numbers once it is closed or every
-line that received fish is a stay. A switch is **remembered per user**,
+line that received fish is a stay. An order being worked on that has
+**no line yet** — a new one — always opens in Entry: Numbers has
+nothing to show for it, and *Add line* and *Import lines* are Entry's. A switch is **remembered per user**,
 separately for orders being worked on and for finished ones, with the
 *More columns* switch (user meta `fishotel_cleanroom_order_view`; the
 order's `view` op writes it and nothing else). *Import lines* sends the
@@ -939,7 +941,9 @@ which makes it theirs). For a fish that went one per tank, "1 per tank"
 is laid out in the proposal only for **as many fish as went one per tank
 last time** — three butterflies last time never lay out a line of 93;
 such a line says so and leaves the rows to the owner, as does a fish
-that was split some other way. *Keep together* removes the offer (which
+that was split some other way, a line whose count is not typed yet, and
+a line for which two empty Spa tanks are not left (each with its own
+sentence). *Keep together* removes the offer (which
 that line then remembers); it is only ever drawn in the Entry view, and
 a fish that still has to be identified is never remembered. A save from
 a page that has no split field at all (a tab opened before Split
@@ -1095,7 +1099,9 @@ may carry ("CITES", "Pallet") are no fee words.
 "- S", "S/M", "LG/XL", or a size column of its own. A size is lifted out
 into the line's Size **only when it is one of the standard sizes**
 (*Sizes*) — the last size word of the name counts, so "… (INV) M" is a
-Medium —; otherwise the name stays exactly as typed. "Mated Pair",
+Medium —; otherwise the name stays exactly as typed, and a size that
+stood in a **column of its own** is kept in the line's notes
+(`[size as written: M]`) — it is nowhere in the name. "Mated Pair",
 "male", "female", "NEW", "RARE" and "(INV)" are no sizes and are never
 dropped from the name.
 

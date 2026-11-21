@@ -515,8 +515,12 @@ class Admin_Workbook {
 	 */
 	public static function order_view( array $order, array $prefs ) {
 		$stage = self::order_stage( $order );
+		// An order being worked on that has no line yet has nothing to read in Numbers, and "Add line"
+		// and "Import lines" are Entry's: it opens in Entry whatever was left on (what is remembered
+		// stays as it is).
+		$empty = 'working' === $stage && empty( $order['lines'] );
 		return array(
-			'view'  => $prefs[ $stage ],
+			'view'  => $empty ? 'entry' : $prefs[ $stage ],
 			'stage' => $stage,
 			'more'  => ! empty( $prefs['more'] ),
 		);
@@ -661,6 +665,8 @@ class Admin_Workbook {
 					'onesShort'      => __( 'Only %1$d empty Spa tanks: the other %2$d stay in the first tank.', 'fishotel-misc-plugin' ),
 					'offerOnes'      => __( 'This fish was split one per tank last time, so the same is laid out here — a proposal: nothing is planned until you press "Use this split" (or change a row). "Keep together" if this group stays as one.', 'fishotel-misc-plugin' ),
 					'offerOnesLater' => __( 'This fish was split one per tank last time. Once the received count is typed, "1 per tank" lays it out — or "Keep together" if this group stays as one.', 'fishotel-misc-plugin' ),
+					'offerOnesOne'   => __( 'This fish was split one per tank last time. This line has fewer than two live fish, so there is nothing to split.', 'fishotel-misc-plugin' ),
+					'offerOnesTanks' => __( 'This fish was split one per tank last time, but two empty Spa tanks are not left for it in the order\'s building (the lines above took them, or they hold fish): nothing is laid out. Add the tanks yourself, or "Keep together".', 'fishotel-misc-plugin' ),
 					/* translators: 1: fish last time, 2: fish on this line */
 					'offerOnesMore'  => __( 'This fish was split one per tank last time — %1$d of them. This line has %2$d, so nothing is laid out by itself: press "1 per tank", add the tanks yourself, or "Keep together".', 'fishotel-misc-plugin' ),
 					'use'            => __( 'Use this split', 'fishotel-misc-plugin' ),

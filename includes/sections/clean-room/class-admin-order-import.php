@@ -1179,8 +1179,13 @@ class Admin_Order_Import {
 				'slug'    => $size['slug'],
 				'label'   => $size['label'],
 				'written' => $size['written'],
-				/* translators: %s: a size as the sheet writes it */
-				'note'    => null === $size['slug'] && '' !== $size['written'] ? sprintf( __( 'size "%s" is not in your list of sizes — kept in the name', 'fishotel-misc-plugin' ), $size['written'] ) : '',
+				'note'    => null === $size['slug'] && '' !== $size['written']
+					? ( ! empty( $size['cell'] )
+						/* translators: %s: a size as the sheet writes it */
+						? sprintf( __( 'size "%s" is not in your list of sizes — kept in the line\'s notes', 'fishotel-misc-plugin' ), $size['written'] )
+						/* translators: %s: a size as the sheet writes it */
+						: sprintf( __( 'size "%s" is not in your list of sizes — kept in the name', 'fishotel-misc-plugin' ), $size['written'] ) )
+					: '',
 			),
 			'sci'        => $row['sci'],
 			'code'       => $row['code'],
@@ -1419,7 +1424,10 @@ class Admin_Order_Import {
 		// The name as the sheet writes it stays on the line whenever the line reads differently.
 		if ( '' !== $row['typed'] && ! Identify::same_fish( $row['typed'], $fish['name'] ) && ! $fish['unknown'] ) {
 			$notes = Order_Import::note_with( $notes, Order_Import::NOTE_WRITTEN, $row['typed'] );
-		} elseif ( null === $row['size']['slug'] && '' !== $row['size']['written'] && ! $row['size']['lifted'] && false === stripos( $row['typed'], $row['size']['written'] ) ) {
+		}
+		// A size from a column of its own that is none of the standard sizes is nowhere in the name:
+		// it is kept beside it — also when its letter happens to stand in the name ("M" in "Mock").
+		if ( null === $row['size']['slug'] && '' !== $row['size']['written'] && ! $row['size']['lifted'] && ( ! empty( $row['size']['cell'] ) || false === stripos( $row['typed'], $row['size']['written'] ) ) ) {
 			$notes = Order_Import::note_with( $notes, Order_Import::NOTE_SIZE, $row['size']['written'] );
 		}
 		return array(

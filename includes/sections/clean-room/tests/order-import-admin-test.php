@@ -686,4 +686,19 @@ $one = fh_ask( fh_store(), fh_form( fh_store(), 0 ), 'preview', array( 'text' =>
 check_same( 'one line is "1 line", not "1 lines"', '1 line · 3 fish', $one['foot'] );
 check( '… on the page too', isset( AOI::js_config()['i18n']['footOne'], AOI::js_config()['i18n']['feeWord'] ) && false !== strpos( (string) file_get_contents( Clean_Room::path() . 'js/order-import.js' ), 'footText(foot, t)' ) );
 
+echo "A size from a column of its own that is none of the standard sizes stays on the line\n";
+$keep_sizes                    = $ctx['settings']['size_list'];
+$ctx['settings']['size_list'] = array( 'Tiny', 'Huge' );
+$s11  = fh_store();
+$text = "Fish\tSize\tQty\nGreen Test Chromis\tM\t3\nPale Test Tang\tXL\t2\nRed Test Gobi\tM\t4\nBlue Test Wrasse - S\t\t1\n";
+$p11  = fh_ask( $s11, fh_form( $s11, 0 ), 'preview', array( 'text' => $text, 'mode' => 'ordered' ) );
+check( 'the preview says where it goes: a size column\'s size into the line\'s notes, a size inside the name stays in the name', false !== strpos( fh_row( $p11, 'Green Test Chromis' )['size']['note'], 'kept in the line\'s notes' ) && false !== strpos( fh_row( $p11, 'Blue Test Wrasse - S' )['size']['note'], 'kept in the name' ) );
+$d11 = fh_ask( $s11, fh_form( $s11, 0 ), 'confirm', array( 'grid' => $p11['grid'], 'mode' => 'ordered', 'token' => $p11['token'] ) );
+$n11 = array_column( $s11->order( (int) $d11['order_id'] )['lines'], 'notes', 'species' );
+check_same( '"M" beside "Green Test Chromis" is kept although the name holds an m; "XL" too; a name that was matched keeps both what was written and the size; a size inside the name is in what was written and needs no second note', array( '[size as written: M]', '[size as written: XL]', '[size as written: M] [as written: Red Test Gobi]', '[as written: Blue Test Wrasse - S]' ), array( $n11['Green Test Chromis'], $n11['Pale Test Tang'], $n11['Red Test Goby'], $n11['Blue Test Wrasse'] ) );
+check( '… and no size was invented for any of them', array( '', '', '', '' ) === array_map( 'strval', array_column( $s11->order( (int) $d11['order_id'] )['lines'], 'size_slug' ) ) );
+$ctx['settings']['size_list'] = $keep_sizes;
+$std = fh_ask( fh_store(), fh_form( fh_store(), 0 ), 'preview', array( 'text' => "Fish\tSize\tQty\nGreen Test Chromis\tM\t3\n", 'mode' => 'ordered' ) );
+check( 'a size column\'s size that IS a standard size goes into the Size, with no note', 'medium' === $std['rows'][0]['size']['slug'] && '' === $std['rows'][0]['size']['note'] );
+
 fh_finish();

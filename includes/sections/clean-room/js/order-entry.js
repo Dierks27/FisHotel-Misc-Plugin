@@ -351,8 +351,33 @@
 		return kind === 'ones' && live !== null && whole(live) > 1 && whole(last) > 0 && whole(live) <= whole(last);
 	}
 
+	/**
+	 * Why an offer that lays nothing out lays nothing out — which of the
+	 * sentences under the empty rows is the true one: no count typed yet,
+	 * more fish than went one per tank last time, a single fish, or the
+	 * count is there and the empty tanks are not.
+	 *
+	 * @param {string} kind The line's offer: 'ones' | 'some' | ''.
+	 * @param {number} last Over how many tanks it went last time.
+	 * @param {?number} live The line's live fish (null = no count typed).
+	 * @return {string} 'some' | 'later' | 'more' | 'one' | 'tanks'
+	 */
+	function offerWhy(kind, last, live) {
+		if (kind !== 'ones') {
+			return 'some';
+		}
+		if (live === null) {
+			return 'later';
+		}
+		if (whole(last) > 0 && whole(live) > whole(last)) {
+			return 'more';
+		}
+		return whole(live) < 2 ? 'one' : 'tanks';
+	}
+
 	var api = {
 		offerLaysOut: offerLaysOut,
+		offerWhy: offerWhy,
 		whole: whole,
 		splitParts: splitParts,
 		splitField: splitField,
@@ -873,7 +898,13 @@
 			var last = whole($row.attr('data-split-last'));
 			var live = liveOf($row);
 			var parts = offerLaysOut(kind, last, live) ? layOnes($row) : null;
-			var why = kind !== 'ones' ? (t.offerSome || '') : (live !== null && last > 0 && live > last ? fmt(t.offerOnesMore || '', last, live) : (t.offerOnesLater || ''));
+			var why = {
+				some: t.offerSome || '',
+				later: t.offerOnesLater || '',
+				more: fmt(t.offerOnesMore || '', last, live),
+				one: t.offerOnesOne || t.offerSome || '',
+				tanks: t.offerOnesTanks || t.onesNone || ''
+			}[offerWhy(kind, last, live)];
 			var $panel = panelOf($row);
 			if (!$panel) {
 				$panel = draw($row, [], '');
