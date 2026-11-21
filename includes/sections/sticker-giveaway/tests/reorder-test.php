@@ -26,6 +26,7 @@ function add_filter( $hook, $callback, $priority = 10, $args = 1 ) {
 	return true;
 }
 
+require_once FISHOTEL_MISC_PATH . 'includes/class-layout.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/sticker-giveaway/class-reorder.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/sticker-giveaway/class-today-line.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/sticker-giveaway/class-admin.php';
@@ -82,7 +83,7 @@ $url  = 'https://example.test/wp-admin/admin.php?page=fishotel-misc-sticker-give
 $line = Today_Line::line( array( $blue ), $url );
 check( 'one design: "Stickers to reorder: Blue Tang (about 40 left)"', 'Stickers to reorder: Blue Tang (about 40 left)' === $line['text'], $line['text'] );
 check( 'it links to the Sticker Giveaway page, counts 1, is something to do', $url === $line['url'] && 1 === $line['count'] && 'todo' === $line['tone'] && 'stickers' === $line['key'] );
-check( 'its group is one the Today page knows', in_array( $line['group'], array( 'fish-room', 'customers', 'shipping', 'site' ), true ) );
+check( 'it stands under Customers, the heading the section itself stands under', 'customers' === $line['group'] && in_array( 'sticker-giveaway', \FisHotel\Misc\Layout::GROUPS['customers'], true ) );
 
 $line = Today_Line::line( array( $blue, $clown, $gone ), $url );
 check( 'three designs, each with what is left', 'Stickers to reorder: Blue Tang (about 40 left), Clown Fish (giveaway pile out, 6 in the shop), Sea Green (out)' === $line['text'] && 3 === $line['count'], $line['text'] );

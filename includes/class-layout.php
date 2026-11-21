@@ -164,7 +164,7 @@ class Layout {
 			case 'shop-app':
 				return __( 'Lets a phone or tablet you set up open the fish-room screens with a PIN, without a WordPress login (needs HTTPS). Starts nothing by itself and sends no e-mail.', 'fishotel-misc-plugin' );
 			case 'sticker-giveaway':
-				return __( 'A free FisHotel sticker picked at checkout on fish orders, with optional add-on stickers. Switching it on adds the sticker choice to checkout; it starts nothing else.', 'fishotel-misc-plugin' );
+				return __( 'A free FisHotel sticker picked at checkout on fish orders, with optional add-on stickers and a count of the stickers set aside for it. Switching it on adds the sticker choice to checkout and starts nothing on a timer; it e-mails you once when a design drops to the reorder number you gave it (the Sticker Giveaway page turns that off).', 'fishotel-misc-plugin' );
 			case 'announcer':
 				return __( 'Notice bars and banners across the site. Starts nothing by itself.', 'fishotel-misc-plugin' );
 			case 'coming-soon':

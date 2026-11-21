@@ -201,8 +201,9 @@ what is left is at or below the reorder number the design reads
   paper count, really there, the shop pile, how many went in the last 28
   days with "about N a week · roughly W weeks left" (of the giveaway pile,
   at that pace), the reorder number and the status;
-- on the **Today** page and its dashboard widget: "Stickers to reorder:
-  Blue Tang (about 40 left)". This goes through the Today section's own
+- on the **Today** page and its dashboard widget, under *Customers* (the
+  heading this section stands under): "Stickers to reorder: Blue Tang
+  (about 40 left)". This goes through the Today section's own
   seam for other sections' lines (the `fishotel_today_lines` filter, as
   Packing's line does); nothing was built into Today;
 - by **one email** when a design first drops to its number — to

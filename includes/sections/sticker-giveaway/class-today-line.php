@@ -23,13 +23,15 @@ defined( 'ABSPATH' ) || exit;
 class Today_Line {
 
 	/**
-	 * The Today section's filter, this line's key and its heading there.
+	 * The Today section's filter, this line's key and its heading there
+	 * (Customers — the heading this section stands under on the Dashboard
+	 * and in the menu, as every section's line stands under its own).
 	 *
 	 * @var string
 	 */
 	const FILTER = 'fishotel_today_lines';
 	const KEY    = 'stickers';
-	const GROUP  = 'shipping';
+	const GROUP  = 'customers';
 
 	/**
 	 * How many designs the line names before "and N more", and how long
