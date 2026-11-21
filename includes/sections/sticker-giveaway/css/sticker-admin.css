@@ -309,6 +309,8 @@ body[class*="page_fishotel-misc-sticker-giveaway"] .select2-container--default .
 }
 
 .fh-sg-variation__name {
+	flex: 1 1 6em;
+	min-width: 0;
 	font-weight: 600;
 	overflow-wrap: anywhere;
 }

@@ -862,8 +862,9 @@ class Cart {
 	 *   - add-on line: removed when the upsell is off, is not offered to
 	 *     this cart, or the design left the pool; quantity clamped to
 	 *     `upsell_max_qty`. The theme's cart page renders its own qty
-	 *     stepper (it never applies `woocommerce_cart_item_quantity`), so
-	 *     this is the only place the max is enforced after the picker.
+	 *     stepper (an older theme never applied
+	 *     `woocommerce_cart_item_quantity`), so this is the only place the
+	 *     max is enforced after the picker.
 	 *
 	 * Idempotent: WC calls this many times per request; set_price() on an
 	 * already-priced product is a no-op, and a cart that is already clean
@@ -984,10 +985,11 @@ class Cart {
 	 * the picker, so show plain text instead of a qty input. The remove
 	 * link is untouched; a customer can still take the line out.
 	 *
-	 * Only WooCommerce's stock cart template applies this filter. The
-	 * FisHotel theme's cart.php draws its own stepper, which is why
-	 * `item_class()` tags the row (so CSS can hide the stepper on the free
-	 * line) and `apply_pricing()` clamps whatever quantity comes back.
+	 * WooCommerce's stock cart template applies this filter, and so does
+	 * the current FisHotel theme's cart.php. An older theme drew its own
+	 * stepper without it, which is why `item_class()` tags the row (so CSS
+	 * can hide the stepper on the free line) and `apply_pricing()` clamps
+	 * whatever quantity comes back.
 	 *
 	 * @param string $product_quantity Quantity input HTML.
 	 * @param string $cart_item_key    Cart item key.

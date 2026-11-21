@@ -73,7 +73,7 @@ $eligible_slugs = \FisHotel\Misc\Sections\Sticker_Giveaway\Rules::eligible_slugs
 
 				<div class="fh-sg-callout">
 					<span class="dashicons dashicons-info-outline"></span>
-					<span><?php esc_html_e( "Leave each sticker product's Shipping class blank (or use a ground class). Do NOT give stickers the Premium/overnight class: the theme's free-shipping piggyback treats any Premium line as an overnight box, so a single add-on sticker on a meds re-order would be charged shipping. The picker keeps sticker lines out of the shipping calculation regardless of class.", 'fishotel-misc-plugin' ); ?></span>
+					<span><?php esc_html_e( "Leave each sticker product's Shipping class blank (or use a ground class). The picker keeps its own sticker lines out of the shipping calculation whatever the class. But a sticker bought the normal way, from the shop page, ships by its class — a Premium/overnight class would turn that order into an overnight box.", 'fishotel-misc-plugin' ); ?></span>
 				</div>
 			</div>
 

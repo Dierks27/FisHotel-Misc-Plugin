@@ -161,7 +161,7 @@ $fh_sg_status = array(
 			<div class="fh-sg-stock__act">
 				<label class="fh-sg-label" for="fh-sg-add-<?php echo esc_attr( $fh_id ); ?>"><?php esc_html_e( 'New stickers arrived', 'fishotel-misc-plugin' ); ?></label>
 				<span class="fh-sg-stock__go">
-					<input type="number" id="fh-sg-add-<?php echo esc_attr( $fh_id ); ?>" class="fh-sg-input fh-sg-input--count fh-sg-pile-n" data-act="add" min="1" step="1" inputmode="numeric" placeholder="0">
+					<input type="number" id="fh-sg-add-<?php echo esc_attr( $fh_id ); ?>" class="fh-sg-input fh-sg-input--count fh-sg-pile-n" data-act="add" min="1" step="1" inputmode="numeric">
 					<button type="button" class="button fh-sg-pile-btn" data-act="add"><?php esc_html_e( 'Add stickers', 'fishotel-misc-plugin' ); ?></button>
 				</span>
 				<p class="fh-sg-hint"><?php esc_html_e( 'How many went into the giveaway pile. Adds to the paper count.', 'fishotel-misc-plugin' ); ?></p>
@@ -169,7 +169,7 @@ $fh_sg_status = array(
 			<div class="fh-sg-stock__act">
 				<label class="fh-sg-label" for="fh-sg-recount-<?php echo esc_attr( $fh_id ); ?>"><?php esc_html_e( 'I counted the pile', 'fishotel-misc-plugin' ); ?></label>
 				<span class="fh-sg-stock__go">
-					<input type="number" id="fh-sg-recount-<?php echo esc_attr( $fh_id ); ?>" class="fh-sg-input fh-sg-input--count fh-sg-pile-n" data-act="recount" min="0" step="1" inputmode="numeric" placeholder="<?php echo esc_attr( (int) $row['paper'] ); ?>">
+					<input type="number" id="fh-sg-recount-<?php echo esc_attr( $fh_id ); ?>" class="fh-sg-input fh-sg-input--count fh-sg-pile-n" data-act="recount" min="0" step="1" inputmode="numeric">
 					<button type="button" class="button fh-sg-pile-btn" data-act="recount"><?php esc_html_e( 'Recount', 'fishotel-misc-plugin' ); ?></button>
 				</span>
 				<p class="fh-sg-hint"><?php esc_html_e( 'How many are really in it now. Replaces the paper count. Typed it wrong? Recount again.', 'fishotel-misc-plugin' ); ?></p>
