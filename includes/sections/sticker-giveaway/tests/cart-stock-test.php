@@ -1,16 +1,17 @@
 <?php
 /**
- * The cart class played through stand-ins for WooCommerce's cart and
- * products: a variation design goes into the cart as a variation line,
- * and a sticker line gives way to the stock — on a totals pass and just
- * before WooCommerce's own cart check — while a normal purchase is never
- * touched.
+ * The cart class played through stand-ins for WooCommerce's cart,
+ * products and orders: a variation design goes into the cart as a
+ * variation line, and a sticker line gives way to the stock — on a
+ * totals pass, just before WooCommerce's own cart check, when a normal
+ * purchase is added from the shop, and on the pay page of an order whose
+ * payment failed — while a normal purchase is never touched.
  *
  * The stand-ins do what WooCommerce 11.2's own classes do at the calls
  * the section makes (a removed line totals the cart again; quantities
  * are summed per product that holds the stock). They are not
- * WooCommerce: that a real cart behaves the same is proved on a
- * rehearsal site.
+ * WooCommerce: the same cases were also played on a throwaway WordPress
+ * with WooCommerce 11.2 (the section README says which).
  *
  * Invented shop: "Reef Stickers" (#300), variations #301 "Night Glow"
  * and #302 "Coral Pop" on a custom attribute, each with its own stock;
@@ -59,6 +60,18 @@ function wc_get_held_stock_quantity( $product, $exclude_order_id = 0 ) {
 }
 function WC() {
 	return $GLOBALS['fh_wc'];
+}
+function wc_get_order( $id ) {
+	return $GLOBALS['fh_orders'][ $id ] ?? false;
+}
+function wc_get_is_pending_statuses() {
+	return array( 'pending' );
+}
+function wc_clean( $text ) {
+	return $text;
+}
+function wp_unslash( $text ) {
+	return $text;
 }
 
 class WP_Term {
@@ -178,6 +191,86 @@ class WC_Cart {
 	}
 }
 
+class FH_Item {
+	public $product;
+	public $qty;
+	public $total;
+	public $kind;
+	public function __construct( $product_id, $qty, $total, $kind = '' ) {
+		$this->product = $product_id;
+		$this->qty     = $qty;
+		$this->total   = $total;
+		$this->kind    = $kind;
+	}
+	public function get_product() {
+		return wc_get_product( $this->product );
+	}
+	public function get_meta( $key ) {
+		return '_fh_sticker' === $key ? $this->kind : '';
+	}
+	public function get_name() {
+		return 'Sticker #' . $this->product;
+	}
+	public function get_quantity() {
+		return $this->qty;
+	}
+	public function set_quantity( $qty ) {
+		$this->qty = $qty;
+	}
+	public function get_subtotal() {
+		return $this->total;
+	}
+	public function set_subtotal( $total ) {
+	}
+	public function get_total() {
+		return $this->total;
+	}
+	public function set_total( $total ) {
+		$this->total = $total;
+	}
+}
+
+class WC_Order {
+	public $items;
+	public $status        = 'failed';
+	public $stock_reduced = false;
+	public $totalled      = 0;
+	public $notes         = array();
+	public function __construct( array $items ) {
+		$this->items = $items;
+	}
+	public function get_id() {
+		return 500;
+	}
+	public function get_order_key() {
+		return 'wc_order_invented';
+	}
+	public function needs_payment() {
+		return in_array( $this->status, array( 'pending', 'failed' ), true );
+	}
+	public function has_status( $statuses ) {
+		return in_array( $this->status, (array) $statuses, true );
+	}
+	public function get_data_store() {
+		return $this;
+	}
+	public function get_stock_reduced() {
+		return $this->stock_reduced;
+	}
+	public function get_items() {
+		return $this->items;
+	}
+	public function remove_item( $id ) {
+		unset( $this->items[ $id ] );
+	}
+	public function calculate_totals() {
+		$this->totalled++;
+	}
+	public function add_order_note( $note ) {
+		$this->notes[] = $note;
+	}
+}
+
 class FH_Session {
 	public $data = array();
 	public function get( $key, $default = null ) {
@@ -189,8 +282,10 @@ class FH_Session {
 }
 
 require_once FISHOTEL_MISC_PATH . 'includes/sections/sticker-giveaway/class-cart.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/sticker-giveaway/class-frontend.php';
 
 use FisHotel\Misc\Sections\Sticker_Giveaway\Cart;
+use FisHotel\Misc\Sections\Sticker_Giveaway\Frontend;
 use FisHotel\Misc\Sections\Sticker_Giveaway\Sticker_Giveaway;
 
 $failures = 0;
@@ -318,6 +413,136 @@ $cart->totalled = 0;
 $cart->line( 'shop', 300, 301, 9 );
 $guard->guard_lines();
 check( 'a cart without sticker lines: nothing is touched and nothing is totalled', 9 === qty( $cart, 'shop' ) && 0 === $cart->totalled );
+
+echo "4. The customer adds a normal purchase from the shop\n";
+// What WooCommerce's add-to-cart handlers do: ask the validation filter, then add.
+$shop_adds = static function ( WC_Cart $cart, $product_id, $qty, $variation_id = 0 ) use ( $guard ) {
+	return $guard->make_room( true, $product_id, $qty, $variation_id );
+};
+
+$cart = shop();
+$cart->line( 'free', 300, 301, 1, 'free' );
+$shop_adds( $cart, 300, 3, 301 );
+check( 'the free sticker is in the cart and the customer adds the last 3 of that design: the sticker steps back, so WooCommerce finds room', 0 === qty( $cart, 'free' ) && 1 === qty( $cart, 'fish' ) );
+
+$cart = shop();
+$GLOBALS['fh_products'][301]->stock = 6;
+$cart->line( 'free', 300, 301, 1, 'free' );
+$cart->line( 'add', 300, 301, 5, 'extra' );
+$cart->totalled = 0;
+$shop_adds( $cart, 300, 2, 301 );
+check( '6 in stock, the free sticker and 5 add-ons, the customer adds 2: the free sticker stays, the add-ons go down to 3', 1 === qty( $cart, 'free' ) && 3 === qty( $cart, 'add' ) );
+check( '... and the cart is totalled again', $cart->totalled > 0 );
+
+$cart = shop();
+$GLOBALS['fh_products'][400]->stock = 1;
+$cart->line( 'free', 400, 401, 1, 'free' );
+$shop_adds( $cart, 400, 1, 402 );
+check( 'one stock number for two designs, 1 left, a free sticker of one: buying the other is not blocked by it', 0 === qty( $cart, 'free' ) );
+
+$cart = shop();
+$cart->line( 'free', 300, 301, 1, 'free' );
+$shop_adds( $cart, 301, 2 );
+check( 'an archive button hands over the variation itself: 2 of 3 are added and the free sticker keeps the last one', 1 === qty( $cart, 'free' ) );
+
+$cart = shop();
+$cart->line( 'free', 300, 301, 1, 'free' );
+$cart->line( 'add', 300, 301, 2, 'extra' );
+$shop_adds( $cart, 300, 5, 301 );
+check( 'the customer asks for 5 of a design with 3: that refusal is WooCommerce\'s own — the sticker lines are left alone', 1 === qty( $cart, 'free' ) && 2 === qty( $cart, 'add' ) );
+
+$cart = shop();
+$cart->line( 'free', 300, 301, 1, 'free' );
+check( 'the answer of the validation is never changed', true === $guard->make_room( true, 300, 3, 301 ) && false === $guard->make_room( false, 300, 3, 301 ) );
+
+$cart = shop();
+$cart->line( 'free', 300, 301, 1, 'free' );
+$guard->make_room( false, 300, 3, 301 );
+check( 'an add another plugin already refused: nothing is touched', 1 === qty( $cart, 'free' ) );
+
+echo "5. The picker offers what can be added\n";
+$settings = $GLOBALS['fh_options'][ Sticker_Giveaway::OPTION_KEY ];
+
+$cart = shop();
+check( 'every design with a sticker to give is offered', array( 301, 302, 401, 402, 77 ) === array_keys( Frontend::available_pool( $settings ) ) );
+
+$cart->line( 'shop', 300, 301, 3 );
+check( 'the customer is buying the last 3 of a design: it is not offered (it could be picked but never added)', array( 302, 401, 402, 77 ) === array_keys( Frontend::available_pool( $settings ) ) );
+
+$cart = shop();
+$cart->line( 'shop', 300, 301, 2 );
+check( 'buying 2 of 3: still offered — one is left to give', isset( Frontend::available_pool( $settings )[301] ) );
+
+$cart = shop();
+$cart->line( 'shop', 400, 401, 4 );
+check( 'one stock number for two designs, all 4 in the cart as a purchase of one: neither is offered', array( 301, 302, 77 ) === array_keys( Frontend::available_pool( $settings ) ) );
+
+$cart = shop();
+$cart->line( 'free', 300, 301, 1, 'free' );
+$cart->line( 'add', 300, 301, 2, 'extra' );
+check( 'a design whose stock is all in the cart as STICKER lines stays on the picker (they are its own lines)', isset( Frontend::available_pool( $settings )[301] ) );
+
+echo "6. An order whose payment failed comes back to be paid\n";
+$pay = static function ( array $items, $key = 'wc_order_invented' ) use ( $guard ) {
+	$order                    = new WC_Order( $items );
+	$GLOBALS['fh_orders']     = array( 500 => $order );
+	$GLOBALS['wp']            = new stdClass();
+	$GLOBALS['wp']->query_vars = array( 'order-pay' => 500 );
+	$_GET['key']              = $key;
+	return $order;
+};
+$order_items = static function () {
+	return array(
+		1 => new FH_Item( 9, 1, 40.0 ),
+		2 => new FH_Item( 301, 1, 0.0, 'free' ),
+		3 => new FH_Item( 301, 4, 4.0, 'extra' ),
+	);
+};
+
+shop();
+$GLOBALS['fh_products'][301]->stock = 0;
+$order = $pay( $order_items() );
+$guard->guard_order();
+check( 'the design ran out since: its sticker lines are taken off the order, the fish stays', array( 1 ) === array_keys( $order->items ) );
+check( '... the order is totalled again and a note says what happened', 1 === $order->totalled && 1 === count( $order->notes ) && false !== strpos( $order->notes[0], 'Sticker #301' ) );
+
+shop();
+$order = $pay( $order_items() );
+$guard->guard_order();
+check( '3 left for a free sticker and 4 add-ons: the free one stays, the add-ons go down to 2 and their price with them', 1 === $order->items[2]->qty && 2 === $order->items[3]->qty && 2.0 === $order->items[3]->total );
+
+shop();
+$order = $pay( array( 1 => new FH_Item( 301, 3, 12.0 ), 2 => new FH_Item( 301, 1, 0.0, 'free' ) ) );
+$guard->guard_order();
+check( 'the order buys the last 3 and has a free one of the same design: the sticker gives way, the purchase keeps its 3', array( 1 ) === array_keys( $order->items ) && 3 === $order->items[1]->qty );
+
+shop();
+$GLOBALS['fh_products'][301]->stock = 9;
+$order = $pay( $order_items() );
+$guard->guard_order();
+check( 'everything still in stock: the order is not touched, not totalled, no note', 3 === count( $order->items ) && 4 === $order->items[3]->qty && 0 === $order->totalled && array() === $order->notes );
+
+shop();
+$GLOBALS['fh_products'][301]->stock = 0;
+$order = $pay( array( 1 => new FH_Item( 9, 1, 40.0 ), 2 => new FH_Item( 301, 5, 20.0 ) ) );
+$guard->guard_order();
+check( 'a NORMAL purchase that ran out is never touched: that answer is WooCommerce\'s', 5 === $order->items[2]->qty && 0 === $order->totalled );
+
+shop();
+$GLOBALS['fh_products'][301]->stock = 0;
+$order = $pay( $order_items(), 'somebody-elses-key' );
+$guard->guard_order();
+check( 'without the order\'s own key nothing is touched', 3 === count( $order->items ) );
+
+$order         = $pay( $order_items() );
+$order->status = 'pending';
+$guard->guard_order();
+check( 'an order still pending (WooCommerce holds its stock and does not check): not touched', 3 === count( $order->items ) );
+
+$order                = $pay( $order_items() );
+$order->stock_reduced = true;
+$guard->guard_order();
+check( 'an order whose stock was already taken: not touched', 3 === count( $order->items ) );
 
 echo "\n" . ( $failures ? "$failures of $checks checks FAILED\n" : "All $checks checks passed\n" );
 exit( $failures ? 1 : 0 );
