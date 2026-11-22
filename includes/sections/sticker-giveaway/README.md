@@ -48,8 +48,8 @@ variations underneath, each with a tick:
   Choose a value for every attribute on the product page.
 
 On the picker a variation design is shown under **its own attribute
-value** as the owner typed it — "Night Glow", not "Reef Stickers - Blue
-Tang" (two attributes: "Night Glow, Large"; a global attribute shows the
+value** as the owner typed it — "Night Glow", not "Reef Stickers - Night
+Glow" (two attributes: "Night Glow, Large"; a global attribute shows the
 term's name, not its slug) — and with **its own picture**, or the
 product's when the variation has none.
 
@@ -147,6 +147,9 @@ reduces for a sticker line.
 (`Rules::has_stock()`): stock quantity ≥ 1 when WooCommerce tracks the
 stock — also when the product allows backorders; the giveaway never hands
 out a sticker that is not there — and "in stock" when it does not track it.
+On the picker a design must also have one left beside what this customer
+is already buying of it: a design whose last ones are in the cart as a
+normal purchase is not offered (it could be picked but never added).
 
 **A sticker never blocks an order and never costs a sale.** A sticker
 line must fit in the count less whatever else of that same count is in
@@ -162,6 +165,28 @@ the order) — there with the stock WooCommerce is holding for other
 customers' unpaid orders taken off first, as WooCommerce's check does.
 The normal purchase keeps whatever the stock allows; if it asks for more
 than there is, WooCommerce says so about the purchase, as it always did.
+
+WooCommerce checks stock in two more places, and the sticker line gives
+way there too, by the same rule:
+
+- **A normal purchase added from the shop** while a sticker of the same
+  stock number is in the cart. `WC_Cart::add_to_cart()` counts everything
+  of that stock number already in the cart and would refuse with "you
+  already have 1 in your cart". On `woocommerce_add_to_cart_validation`
+  the sticker lines of that count step back as far as the purchase needs
+  (`Cart::make_room()`). When the stock would not cover the purchase even
+  without the stickers they are left alone, and WooCommerce answers.
+- **The pay page of an order whose payment failed** (My account → Pay).
+  WooCommerce checks there that every line is still in stock and shows
+  "… this order cannot be paid for" in place of the payment form. On
+  `before_woocommerce_pay`, and only for an order WooCommerce is about to
+  check (the order's own key, not pending, stock not taken yet), the
+  order's sticker lines are cut down or taken off (`Cart::guard_order()`),
+  the order is totalled again and an order note says so. A normal line
+  that ran out is still WooCommerce's to refuse.
+
+In all of these only the sticker lines move; what WooCommerce checks and
+what it answers is never changed.
 
 ### The stock table
 
@@ -205,7 +230,15 @@ The look runs when WooCommerce changes that product's stock, whatever the
 route — an order, the product page, Add stickers, Recount all end in
 `woocommerce_product_set_stock` / `woocommerce_variation_set_stock` — and
 when the settings are saved. A product without a *Reorder at* number
-costs one array lookup.
+costs one array lookup. A stock change is only noted; the look itself
+happens once, at the end of the request, so an order that takes a design
+down line by line (a purchase, the free sticker, an add-on) writes one
+email with the number the stock ended at, and two designs dropping in one
+order share one email.
+
+The look does not ask how the stock got there: a Recount that lands at or
+below the number, when no email has gone for that drop yet, sends the
+email too.
 
 WooCommerce's own low-stock and out-of-stock emails (WooCommerce →
 Settings → Products → Inventory) still exist, are separate, and are not
@@ -215,9 +248,13 @@ changed.
 
 - In the settings option: the pool and the ticks, the email switch, and
   `reorder_at` (count id → number).
-- In one small option of its own, `fishotel_sticker_giveaway_reorder_sent`:
-  the counts whose email has gone. It is kept apart from the settings so
-  that an order never rewrites the settings.
+- One tiny option per count whose email is out,
+  `fishotel_sticker_giveaway_reorder_sent_<product id>` (not autoloaded):
+  made when the email goes, deleted when the stock is back above the
+  number, the number is taken away or the design leaves the pool. It is
+  kept apart from the settings so that an order never rewrites them, and
+  it is made with `add_option()`, which succeeds for one request only —
+  two orders paid in the same instant write one email, not two.
 - On the product: nothing, except the stock number itself when Add
   stickers or Recount is used.
 
@@ -287,7 +324,7 @@ following needs anything from the owner on the live theme (1.26.0):
 | --- | --- |
 | `class-rules.php` | Eligibility, selection clamping, pricing; what a design is, how it is named, which variations are ticked after a save, when a design can be handed out, what fits in a count, the status and the email's when. Pure — no WordPress calls. |
 | `class-designs.php` | A design id → product, name, count, stock; gathers the facts `Rules::blockers()` decides on. |
-| `class-cart.php` | Sync the cart with the picker (diff-based, on `woocommerce_checkout_update_order_review` and `woocommerce_checkout_process`), pricing + quantity clamping on every totals pass, sticker lines giving way to the stock, row class, labels, thumbnail, order line meta, shipping package stripping. |
+| `class-cart.php` | Sync the cart with the picker (diff-based, on `woocommerce_checkout_update_order_review` and `woocommerce_checkout_process`), pricing + quantity clamping on every totals pass, sticker lines giving way to the stock (in the cart, when a normal purchase is added, on the pay page of a failed order), row class, labels, thumbnail, order line meta, shipping package stripping. |
 | `class-reorder.php` | The stock table's rows; the look at a stock change; the reorder email. |
 | `class-today-line.php` | "Stickers to reorder" on the Today page. |
 | `class-frontend.php` | Renders the picker on `woocommerce_checkout_after_customer_details` (inside `<form name="checkout">`), enqueues assets, optional cart-page AJAX sync. |
@@ -315,7 +352,8 @@ FisHotel Tools → Sticker Giveaway. Needs `manage_woocommerce`. One page:
   description.
 - **Stickers in stock** — the stock table: one card per design (picture,
   name, status, *In stock*, *Reorder at*, *Add stickers* and *Recount*).
-  Cards, not a table, so the page needs no sideways scrolling on a phone.
+  Cards, not a table, so the page needs no sideways scrolling on a phone;
+  what the number boxes do is said once above the cards.
   Below it *Email me when a design needs reordering*.
 - **Eligible categories** — product_cat checkbox tree, default
   `quarantined-fish`. Nothing ticked = no free stickers.
@@ -349,21 +387,29 @@ php includes/sections/sticker-giveaway/tests/category-warning-test.php
 - `designs-test` — the design of a cart line and its name, for a variation
   on a custom attribute, on a global one, and a simple product; "Any";
   which variations are ticked after a save (first pick, added later,
-  unticked, deleted); the *Reorder at* numbers a save keeps.
+  unticked, deleted) and which the page calls new; the *Reorder at*
+  numbers a save keeps.
 - `stock-test` — when a design is offered (stock tracked, not tracked,
   backorders, the product managing stock for its variations), what fits
   beside the other lines of the same count and which line gives way, the
   status, and the email armed, sent and armed again.
-- `cart-stock-test` — the cart class on stand-ins for WooCommerce's cart
-  and products: a variation design added as a variation line, and the
-  sticker line giving way on a totals pass and just before WooCommerce's
-  own cart check (stock run out, a normal purchase of the same design,
-  stock held for an unpaid order).
+- `cart-stock-test` — the cart class on stand-ins for WooCommerce's cart,
+  products and orders: a variation design added as a variation line; the
+  sticker line giving way on a totals pass, just before WooCommerce's own
+  cart check (stock run out, a normal purchase of the same design, stock
+  held for an unpaid order), when a normal purchase is added from the
+  shop, and on the pay page of a failed order; which designs the picker
+  offers beside what is in the cart.
 - `reorder-test` — the sentences (what is left, the Today line, the email,
   the answers to a typed count, why a design is not offered, the preset
-  warning), and a stock change played through stand-ins for WooCommerce's
-  product and `wp_mail`: one email, none for a product that is not a
-  design.
+  warning), the stock table saying what its boxes do once, and a stock
+  change played through stand-ins for WooCommerce's product and
+  `wp_mail`: one email at the end of the request with the final number,
+  one when two requests look at the same moment, none for a product that
+  is not a design.
 
-None of these runs WordPress: that a real cart, a real order and a real
-stock change behave as written is proved on a rehearsal site.
+None of these runs WordPress. The cases above were also played, with
+invented products, on a throwaway WordPress with WooCommerce 11.2 and the
+theme 1.26.0 — a real cart, a real order, a real stock change, the pay
+page of a failed order, eight stock changes in the same instant — but
+never on the live shop: watch the first real orders.
