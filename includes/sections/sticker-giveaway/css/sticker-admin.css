@@ -253,3 +253,235 @@ body[class*="page_fishotel-misc-sticker-giveaway"] .select2-container--default .
 body[class*="page_fishotel-misc-sticker-giveaway"] .select2-container--default .select2-results__option[aria-selected="true"] {
 	background: #363636;
 }
+
+/* ------------------------------------------------------------------ */
+/*  Variations of a picked product                                     */
+/* ------------------------------------------------------------------ */
+.fh-sg-fragment:empty {
+	display: none;
+}
+
+.fh-sg-variations {
+	margin: 16px 0 0;
+	padding: 10px 12px 6px;
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	border-radius: 4px;
+	min-width: 0; /* a fieldset otherwise refuses to shrink below its content on a phone */
+}
+
+.fh-sg-variations legend {
+	padding: 0 6px;
+	margin: 0;
+}
+
+.fh-sg-variations__hint {
+	margin: 0 0 6px;
+}
+
+.fh-sg-variation {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	padding: 6px 0;
+	font-size: 13px;
+	color: var(--fh-text-primary, #e0e0e0);
+	cursor: pointer;
+}
+
+.fh-sg-variation + .fh-sg-variation {
+	border-top: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+}
+
+.fh-sg-variation input[type="checkbox"] {
+	margin: 0;
+	flex: 0 0 auto;
+}
+
+.fh-sg-variation__thumb img,
+.fh-sg-stock__thumb img {
+	display: block;
+	width: 36px;
+	height: 36px;
+	object-fit: cover;
+	border-radius: 4px;
+	background: var(--fh-bg-primary, #1a1a1a);
+}
+
+.fh-sg-variation__name {
+	flex: 1 1 6em;
+	min-width: 0;
+	font-weight: 600;
+	overflow-wrap: anywhere;
+}
+
+.fh-sg-variation--off {
+	cursor: default;
+}
+
+.fh-sg-variation--off .fh-sg-variation__name {
+	color: var(--fh-text-secondary, #a0a0a0);
+	font-weight: 400;
+}
+
+.fh-sg-variation__why {
+	flex: 1 1 100%;
+	font-size: 12px;
+	line-height: 1.5;
+	color: var(--fh-warning, #ffb900);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Tags                                                               */
+/* ------------------------------------------------------------------ */
+.fh-sg-tag {
+	display: inline-block;
+	padding: 2px 8px;
+	border-radius: 999px;
+	font-size: 11px;
+	font-weight: 600;
+	line-height: 1.5;
+	border: 1px solid transparent;
+}
+
+.fh-sg-tag--ok {
+	color: var(--fh-success, #46b450);
+	background: rgba(70, 180, 80, 0.12);
+	border-color: rgba(70, 180, 80, 0.35);
+}
+
+.fh-sg-tag--reorder,
+.fh-sg-tag--new {
+	color: var(--fh-warning, #ffb900);
+	background: rgba(255, 185, 0, 0.1);
+	border-color: rgba(255, 185, 0, 0.35);
+}
+
+.fh-sg-tag--out {
+	color: #ff8a8a;
+	background: rgba(220, 50, 50, 0.12);
+	border-color: rgba(220, 50, 50, 0.4);
+}
+
+/* ------------------------------------------------------------------ */
+/*  Stock table: one small card per design                             */
+/*                                                                     */
+/*  Not a <table>: on a phone (390 px) a table can only scroll         */
+/*  sideways. Each number carries its own label instead, and the cards */
+/*  sit side by side where there is room.                              */
+/* ------------------------------------------------------------------ */
+.fh-sg-card--wide {
+	grid-column: 1 / -1;
+	min-width: 0;
+}
+
+.fh-sg-stock {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
+	gap: 14px;
+	margin-top: 14px;
+}
+
+.fh-sg-stock__row {
+	min-width: 0;
+	padding: 12px;
+	background: var(--fh-bg-primary, #1a1a1a);
+	border: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	border-left: 3px solid var(--fh-success, #46b450);
+	border-radius: 6px;
+}
+
+.fh-sg-stock__row--reorder {
+	border-left-color: var(--fh-warning, #ffb900);
+}
+
+.fh-sg-stock__row--out {
+	border-left-color: var(--fh-danger, #dc3232);
+}
+
+.fh-sg-stock__row--off {
+	border-left-color: var(--fh-border, rgba(255, 255, 255, 0.1));
+}
+
+.fh-sg-stock__head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+
+.fh-sg-stock__name {
+	flex: 1 1 8em;
+	min-width: 0;
+	margin: 0;
+	font-size: 14px;
+	font-weight: 600;
+	color: var(--fh-text-primary, #e0e0e0);
+	overflow-wrap: anywhere;
+}
+
+.fh-sg-stock__line {
+	margin: 10px 0 0;
+	font-size: 15px;
+	font-weight: 600;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-sg-hint {
+	margin: 6px 0 0;
+	font-size: 12px;
+	line-height: 1.5;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-sg-input--count {
+	width: 110px;
+	max-width: 100%;
+}
+
+.fh-sg-stock__act {
+	min-width: 0;
+	margin-top: 12px;
+}
+
+.fh-sg-stock__acts {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
+	gap: 12px;
+	margin-top: 12px;
+	border-top: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+}
+
+.fh-sg-stock__go {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+
+/* A thumb can press these without zooming: 16px text stops iOS zooming into a focused field. */
+@media (max-width: 600px) {
+	.fh-sg-wrap .fh-sg-input--count,
+	.fh-sg-wrap .fh-sg-input--number {
+		font-size: 16px;
+		min-height: 40px;
+	}
+
+	.fh-sg-wrap .fh-sg-stock-btn.button {
+		min-height: 40px;
+	}
+
+	.fh-sg-field--row {
+		flex-wrap: wrap;
+	}
+}
+
+.fh-sg-card--wide > * {
+	min-width: 0;
+}
+
+@media (max-width: 600px) {
+	.fh-sg-wrap .fh-sg-card--wide {
+		padding: 16px;
+	}
+}

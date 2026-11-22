@@ -4,11 +4,13 @@
  *
  * @package FisHotel\Misc\Sections\Sticker_Giveaway
  *
- * @var array                    $settings      Active settings.
- * @var array<int, \WC_Product>  $pool_products Saved pool, resolved.
- * @var array                    $categories    [{term, depth}] product_cat tree.
- * @var string                   $summary       Live summary line.
- * @var string[]                 $warnings      Pool product warnings.
+ * @var array                    $settings   Active settings.
+ * @var array<int, \WC_Product>  $picked     The products picked in the search
+ *                                           (simple products and variable ones).
+ * @var array                    $categories [{term, depth}] product_cat tree.
+ * @var string                   $summary    Live summary line.
+ * @var array                    $fragments  The parts a save or a stock act redraws:
+ *                                           variations, stock, warnings (HTML).
  */
 
 defined( 'ABSPATH' ) || exit;
@@ -45,7 +47,7 @@ $eligible_slugs = \FisHotel\Misc\Sections\Sticker_Giveaway\Rules::eligible_slugs
 					<h2 class="fishotel-misc-card-title"><?php esc_html_e( 'Sticker pool', 'fishotel-misc-plugin' ); ?></h2>
 				</div>
 				<p class="fishotel-misc-card-desc">
-					<?php esc_html_e( 'The sticker products customers can choose from. Simple products only — give each one a regular price (any amount; the picker charges nothing for the free one and the add-on price for extras).', 'fishotel-misc-plugin' ); ?>
+					<?php esc_html_e( 'The designs customers can choose from. Search for your sticker product: a simple product is one design; a product with variations lists them underneath, and each ticked variation is one design. Give every design a regular price (any amount; the picker charges nothing for the free one and the add-on price for extras).', 'fishotel-misc-plugin' ); ?>
 				</p>
 
 				<div class="fh-sg-field">
@@ -57,24 +59,56 @@ $eligible_slugs = \FisHotel\Misc\Sections\Sticker_Giveaway\Rules::eligible_slugs
 						style="width: 100%;"
 						data-placeholder="<?php esc_attr_e( 'Search for a sticker product…', 'fishotel-misc-plugin' ); ?>"
 						data-action="woocommerce_json_search_products"
-						data-exclude_type="variable">
-						<?php foreach ( $pool_products as $pid => $product ) : ?>
-							<option value="<?php echo esc_attr( $pid ); ?>" selected="selected"><?php echo esc_html( wp_strip_all_tags( $product->get_formatted_name() ) ); ?></option>
+						data-exclude_type="grouped,external">
+						<?php foreach ( $picked as $pid => $product ) : ?>
+							<option value="<?php echo esc_attr( $pid ); ?>" selected="selected" data-kind="<?php echo esc_attr( $product->is_type( 'variable' ) ? 'variable' : 'simple' ); ?>"><?php echo esc_html( wp_strip_all_tags( $product->get_formatted_name() ) ); ?></option>
 						<?php endforeach; ?>
 					</select>
 				</div>
 
-				<?php if ( $warnings ) : ?>
-				<ul class="fh-sg-warnings">
-					<?php foreach ( $warnings as $warning ) : ?>
-						<li><?php echo esc_html( $warning ); ?></li>
-					<?php endforeach; ?>
-				</ul>
-				<?php endif; ?>
+				<?php // The variations of each picked variable product. Redrawn after a save; a product picked just now gets its list from the server at once. ?>
+				<div id="fh-sg-variations" class="fh-sg-fragment"><?php echo $fragments['variations']; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in views/variations.php. ?></div>
+
+				<div id="fh-sg-warnings" class="fh-sg-fragment" aria-live="polite"><?php echo $fragments['warnings']; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in views/warnings.php. ?></div>
 
 				<div class="fh-sg-callout">
 					<span class="dashicons dashicons-info-outline"></span>
-					<span><?php esc_html_e( "Leave each sticker product's Shipping class blank (or use a ground class). Do NOT give stickers the Premium/overnight class: the theme's free-shipping piggyback treats any Premium line as an overnight box, so a single add-on sticker on a meds re-order would be charged shipping. The picker keeps sticker lines out of the shipping calculation regardless of class.", 'fishotel-misc-plugin' ); ?></span>
+					<span><?php esc_html_e( "Leave each sticker product's Shipping class blank (or use a ground class). The picker keeps its own sticker lines out of the shipping calculation whatever the class. But a sticker bought the normal way, from the shop page, ships by its class — a Premium/overnight class would turn that order into an overnight box.", 'fishotel-misc-plugin' ); ?></span>
+				</div>
+			</div>
+
+			<?php /* ── Stock ──────────────────────────────────────────── */ ?>
+			<div class="fishotel-misc-card fh-sg-card fh-sg-card--wide">
+				<div class="fishotel-misc-card-header">
+					<div class="fishotel-misc-card-icon"><span class="dashicons dashicons-archive"></span></div>
+					<h2 class="fishotel-misc-card-title"><?php esc_html_e( 'Stickers in stock', 'fishotel-misc-plugin' ); ?></h2>
+				</div>
+				<p class="fishotel-misc-card-desc">
+					<?php esc_html_e( 'The number on each row IS the stock number on the product\'s own page in WooCommerce. Shop sales and giveaway stickers both come out of it, and WooCommerce counts it down with every order, as for any product. Nothing is counted separately here.', 'fishotel-misc-plugin' ); ?>
+				</p>
+				<input type="hidden" name="stock_table" value="1">
+
+				<div id="fh-sg-stock" class="fh-sg-fragment"><?php echo $fragments['stock']; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in views/stock-table.php. ?></div>
+
+				<div class="fh-sg-field fh-sg-field--row">
+					<div>
+						<span class="fh-sg-label"><?php esc_html_e( 'Email me when a design needs reordering', 'fishotel-misc-plugin' ); ?></span>
+						<p class="fishotel-misc-card-desc" style="margin: 4px 0 0;">
+							<?php
+							$fh_sg_to = \FisHotel\Misc\Sections\Sticker_Giveaway\Reorder::recipient();
+							echo esc_html(
+								'' !== $fh_sg_to
+									/* translators: %s: email address */
+									? sprintf( __( 'One email when a design\'s stock drops to its "Reorder at" number, to %s (WooCommerce\'s stock notification address, else the site admin). No second email until its stock is back above the number. WooCommerce\'s own low-stock emails are separate and not changed.', 'fishotel-misc-plugin' ), $fh_sg_to )
+									: __( 'One email when a design\'s stock drops to its "Reorder at" number. No address is set: add one under WooCommerce → Settings → Products → Inventory.', 'fishotel-misc-plugin' )
+							);
+							?>
+						</p>
+					</div>
+					<label class="fishotel-misc-toggle">
+						<input type="checkbox" name="reorder_email" value="1" <?php checked( ! empty( $settings['reorder_email'] ) ); ?>>
+						<span class="slider"></span>
+					</label>
 				</div>
 			</div>
 

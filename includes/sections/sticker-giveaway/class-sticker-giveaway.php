@@ -11,14 +11,25 @@
  * checkout <form> so the choice rides along with WooCommerce's own
  * update_order_review AJAX; no custom endpoints are needed on checkout.
  *
+ * A DESIGN is what the customer picks: a simple product, or one
+ * variation of a variable product (the shop's stickers are one variable
+ * product with a variation per design). Its count is the product's own
+ * WooCommerce stock — shop sales and giveaway stickers come out of the
+ * same number — with a "Reorder at" reminder.
+ *
  * Architecture:
- *   - class-rules.php     pure eligibility / clamping / pricing — no WP
- *                         calls, unit-tested headless.
+ *   - class-rules.php     pure eligibility / clamping / pricing, what a
+ *                         design is, when it can be handed out, what fits
+ *                         in its stock, when to reorder — no WP calls,
+ *                         unit-tested headless.
+ *   - class-designs.php   a design id → product, name, stock.
  *   - class-cart.php      keeps the cart in step with the picker: adds and
  *                         removes sticker lines (flagged with cart item
  *                         data `fh_sticker` = free|extra), zeroes the free
  *                         line's price, keeps stickers out of the shipping
  *                         package so table rates never change.
+ *   - class-reorder.php   the stock table's rows and the reorder email.
+ *   - class-today-line.php  "Stickers to reorder" on the Today page.
  *   - class-frontend.php  renders the picker card and the tiny JS bridge.
  *   - class-settings.php  option storage, defaults, AJAX save.
  *   - class-admin.php     settings page under FisHotel Tools.
@@ -131,26 +142,42 @@ class Sticker_Giveaway {
 		// The plugin autoloader maps namespace segments to directories
 		// verbatim; our directory is dashed (`sticker-giveaway`) while the
 		// namespace is underscored, so require the files explicitly.
-		require_once self::path() . 'class-settings.php';
-		require_once self::path() . 'class-rules.php';
-		require_once self::path() . 'class-cart.php';
+		self::load();
 		require_once self::path() . 'class-frontend.php';
 
 		$cart = new Cart();
 		$cart->init();
+
+		// The reorder look, wherever WooCommerce changes a product's stock.
+		Reorder::register();
 
 		$frontend = new Frontend();
 		$frontend->init();
 
 		if ( is_admin() ) {
 			require_once self::path() . 'class-admin.php';
+			require_once self::path() . 'class-today-line.php';
 
 			$settings = new Settings();
 			$settings->init();
 
 			$admin = new Admin();
 			$admin->init();
+
+			// Its line on the Today page: designs that are down to their reorder number.
+			Today_Line::register();
 		}
+	}
+
+	/**
+	 * Require the classes every part of the section needs.
+	 */
+	private static function load() {
+		require_once self::path() . 'class-settings.php';
+		require_once self::path() . 'class-rules.php';
+		require_once self::path() . 'class-designs.php';
+		require_once self::path() . 'class-reorder.php';
+		require_once self::path() . 'class-cart.php';
 	}
 
 	/**
@@ -193,9 +220,7 @@ class Sticker_Giveaway {
 			return;
 		}
 
-		require_once self::path() . 'class-settings.php';
-		require_once self::path() . 'class-rules.php';
-		require_once self::path() . 'class-cart.php'; // Admin::pool_warnings() resolves category ancestry through Cart.
+		self::load(); // Admin::pool_warnings() resolves category ancestry through Cart.
 		require_once self::path() . 'class-admin.php';
 
 		add_submenu_page(

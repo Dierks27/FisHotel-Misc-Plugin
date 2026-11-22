@@ -17,6 +17,12 @@
  *     'is_sticker'     => bool,
  *   ]
  *
+ * A DESIGN is what a customer picks: a simple product, or one variation
+ * of a variable product. Its id is the product's own post id — the
+ * variation id for a variation — so the pool stays one flat list of ids
+ * (design_id() reads it off a cart line). A design's count is its
+ * product's own WooCommerce stock; the section keeps no count of its own.
+ *
  * @package FisHotel\Misc\Sections\Sticker_Giveaway
  */
 
@@ -44,7 +50,17 @@ class Rules {
 	const KIND_EXTRA = 'extra';
 
 	/**
-	 * The giveaway pool as a clean list of positive, unique product IDs.
+	 * How a count reads in the stock table (status()).
+	 *
+	 * @var string
+	 */
+	const STATUS_OK      = 'ok';
+	const STATUS_REORDER = 'reorder';
+	const STATUS_OUT     = 'out';
+
+	/**
+	 * The giveaway pool as a clean list of positive, unique design IDs (a
+	 * simple product's id, or a variation's).
 	 *
 	 * @param array $settings Settings array.
 	 * @return int[]
@@ -63,9 +79,376 @@ class Rules {
 	}
 
 	/**
-	 * Whether a product ID is in the pool.
+	 * The design of a cart line: its variation when it has one, else its
+	 * product. A cart line of a variation design is found again by this id
+	 * (a design never leaves an attribute on "Any", so one variation is one
+	 * design, and the line's attribute values are that variation's own).
 	 *
-	 * @param int   $product_id Product ID.
+	 * @param mixed $item A cart line (or anything with product_id / variation_id).
+	 * @return int 0 when it names neither.
+	 */
+	public static function design_id( $item ) {
+		if ( ! is_array( $item ) ) {
+			return 0;
+		}
+
+		$variation = isset( $item['variation_id'] ) ? (int) $item['variation_id'] : 0;
+		if ( $variation > 0 ) {
+			return $variation;
+		}
+
+		return isset( $item['product_id'] ) ? max( 0, (int) $item['product_id'] ) : 0;
+	}
+
+	/**
+	 * A design's name on the picker. For a variation that is its own
+	 * attribute value(s) as the owner typed them — "Blue Tang", or
+	 * "Blue Tang, Large" with two attributes — and never
+	 * "Stickers - Blue Tang": the customer is choosing between the
+	 * variations of one product, so the product's name says nothing. A
+	 * simple product (no values) keeps its own name.
+	 *
+	 * @param array  $values   The attribute values, in the product's order.
+	 * @param string $fallback The product's own name.
+	 * @return string
+	 */
+	public static function design_name( array $values, $fallback ) {
+		$parts = array();
+
+		foreach ( $values as $value ) {
+			$value = is_scalar( $value ) ? trim( (string) $value ) : '';
+			if ( '' !== $value ) {
+				$parts[] = $value;
+			}
+		}
+
+		return $parts ? implode( ', ', $parts ) : trim( (string) $fallback );
+	}
+
+	/**
+	 * Whether a variation fixes every attribute its product varies by. A
+	 * variation that leaves one on "Any" cannot be a design: WooCommerce
+	 * will not put it in a cart without being told which value, and the
+	 * picker has nobody to ask.
+	 *
+	 * @param string[] $attribute_keys The product's variation attributes
+	 *                                 (`attribute_style`, `attribute_pa_colour`).
+	 * @param array    $values         The variation's value per key.
+	 * @return bool
+	 */
+	public static function variation_is_fixed( array $attribute_keys, array $values ) {
+		foreach ( $attribute_keys as $key ) {
+			$value = $values[ $key ] ?? '';
+			if ( ! is_scalar( $value ) || '' === trim( (string) $value ) ) {
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	/**
+	 * Which variations of one picked product are designs after a save, and
+	 * which ones the page has shown so far.
+	 *
+	 *   - The page listed them (ticks were posted): the ticked ones are
+	 *     designs; every listed one counts as shown.
+	 *   - The product was picked just now and the list was not posted
+	 *     (saved before the page drew it): every variation is ticked.
+	 *   - The product was already saved and no list came: nothing changes.
+	 *
+	 * A variation added to the product later was never shown, so it is not
+	 * in `seen` and never in `ticked`: the page lists it unticked and marks
+	 * it new — it is never offered silently. A variation with an attribute
+	 * on "Any" is never ticked.
+	 *
+	 * @param int[] $children   Every variation of the product, in its order.
+	 * @param int[] $fixed      Those that fix every attribute.
+	 * @param bool  $listed     Whether the form carried this product's list.
+	 * @param int[] $ticked     Ticked in the form.
+	 * @param int[] $shown      Listed in the form.
+	 * @param bool  $was_saved  Whether the product was picked before this save.
+	 * @param int[] $old_pool   The pool before this save.
+	 * @param int[] $old_seen   The variations shown before this save.
+	 * @return array{ticked: int[], seen: int[]}
+	 */
+	public static function variation_ticks( array $children, array $fixed, $listed, array $ticked, array $shown, $was_saved, array $old_pool, array $old_seen ) {
+		$children = self::ids( $children );
+		$fixed    = array_values( array_intersect( $children, self::ids( $fixed ) ) );
+
+		if ( $listed ) {
+			$want = self::ids( $ticked );
+			$seen = self::ids( $shown );
+		} elseif ( $was_saved ) {
+			$want = self::ids( $old_pool );
+			$seen = self::ids( $old_seen );
+		} else {
+			$want = $fixed;
+			$seen = $children;
+		}
+
+		return array(
+			'ticked' => array_values( array_intersect( $fixed, $want ) ),
+			'seen'   => array_values( array_intersect( $children, array_merge( $seen, $want ) ) ),
+		);
+	}
+
+	/**
+	 * Whether the page marks a variation "New — not offered yet": one that
+	 * was added to an already saved product since the page last listed its
+	 * variations. A variation that leaves an attribute on "Any" is never
+	 * called new — it cannot be ticked, and its row says why instead.
+	 *
+	 * @param int   $id    The variation.
+	 * @param bool  $fixed Whether it fixes every attribute.
+	 * @param bool  $saved Whether its product is in the saved settings.
+	 * @param int[] $seen  The variations the page has shown so far.
+	 * @param int[] $pool  The pool.
+	 * @return bool
+	 */
+	public static function variation_is_new( $id, $fixed, $saved, array $seen, array $pool ) {
+		return $fixed && $saved && ! in_array( (int) $id, self::ids( array_merge( $seen, $pool ) ), true );
+	}
+
+	/**
+	 * A typed "Reorder at" number: a whole number of 0 or more, or null
+	 * for blank or junk (no reminder).
+	 *
+	 * @param mixed $raw What was typed or stored.
+	 * @return int|null
+	 */
+	public static function reorder_number( $raw ) {
+		$raw = is_scalar( $raw ) ? trim( (string) $raw ) : '';
+
+		if ( '' === $raw || ! is_numeric( $raw ) || (float) $raw < 0 ) {
+			return null;
+		}
+
+		return (int) min( 1000000, floor( (float) $raw ) );
+	}
+
+	/**
+	 * The "Reorder at" number of every count after a save: as typed for a
+	 * count whose row the page showed (blank = no reminder), as before for
+	 * one that was not shown, none for a count no design uses any more.
+	 *
+	 * A COUNT is the product whose WooCommerce stock a design comes out
+	 * of: the design itself, or the variable product when that keeps one
+	 * stock number for all its variations.
+	 *
+	 * @param int[] $counts   The counts of the pool after this save.
+	 * @param array $typed    count id => what was typed.
+	 * @param int[] $listed   Counts whose row was in the form.
+	 * @param array $previous count id => number, before this save.
+	 * @return array<int, int>
+	 */
+	public static function reorder_numbers( array $counts, array $typed, array $listed, array $previous ) {
+		$listed = self::ids( $listed );
+		$out    = array();
+
+		foreach ( self::ids( $counts ) as $id ) {
+			$number = self::reorder_number( in_array( $id, $listed, true ) ? ( $typed[ $id ] ?? '' ) : ( $previous[ $id ] ?? '' ) );
+
+			if ( null !== $number ) {
+				$out[ $id ] = $number;
+			}
+		}
+
+		return $out;
+	}
+
+	/**
+	 * A count's "Reorder at" number, or null when it has no reminder.
+	 *
+	 * @param int   $count_id Count id.
+	 * @param array $settings Settings array.
+	 * @return int|null
+	 */
+	public static function reorder_at( $count_id, array $settings ) {
+		$numbers = (array) ( $settings['reorder_at'] ?? array() );
+
+		return self::reorder_number( $numbers[ (int) $count_id ] ?? '' );
+	}
+
+	/**
+	 * Whether a design has a sticker to hand out. The count is the
+	 * product's own WooCommerce stock: at least 1 when WooCommerce tracks
+	 * it — also when the product allows backorders; the giveaway never
+	 * hands out a sticker that is not there — and "in stock" when it does
+	 * not.
+	 *
+	 * @param bool     $in_stock What WooCommerce says (is_in_stock()).
+	 * @param int|null $stock    The stock number; null when not tracked.
+	 * @return bool
+	 */
+	public static function has_stock( $in_stock, $stock ) {
+		return $in_stock && ( null === $stock || (int) $stock >= 1 );
+	}
+
+	/**
+	 * How many each sticker line may keep, given what its count holds.
+	 *
+	 * One count is shared by everything that comes out of it: a normal
+	 * purchase, the free sticker and an add-on of the same design (and
+	 * every variation of a product that keeps one stock number). A sticker
+	 * never costs a sale and never blocks an order, so the normal purchases
+	 * are served first, then the free sticker, then the add-ons — a sticker
+	 * line that no longer fits is cut down or dropped (0) before
+	 * WooCommerce's own check can refuse the cart on its account.
+	 *
+	 * @param array $lines     key => [ 'count' => int, 'kind' => ''|'free'|'extra', 'qty' => int ].
+	 * @param array $available count id => how many it can still hand out;
+	 *                         a count that is not tracked is left out and
+	 *                         limits nothing.
+	 * @return array<string, int> Sticker line key => the quantity that fits.
+	 */
+	public static function fit( array $lines, array $available ) {
+		$out = array();
+
+		foreach ( array( '', self::KIND_FREE, self::KIND_EXTRA ) as $turn ) {
+			foreach ( $lines as $key => $line ) {
+				$count = (int) ( $line['count'] ?? 0 );
+				$qty   = max( 0, (int) ( $line['qty'] ?? 0 ) );
+
+				if ( (string) ( $line['kind'] ?? '' ) !== $turn ) {
+					continue;
+				}
+
+				if ( isset( $available[ $count ] ) ) {
+					$qty                 = min( $qty, max( 0, (int) $available[ $count ] ) );
+					$available[ $count ] = (int) $available[ $count ] - $qty;
+				}
+
+				if ( '' !== $turn ) {
+					$out[ $key ] = $qty;
+				}
+			}
+		}
+
+		return $out;
+	}
+
+	/**
+	 * How a count reads in the stock table: '' when WooCommerce does not
+	 * track it, "out" at 0, "reorder" at or below its "Reorder at" number,
+	 * else "ok".
+	 *
+	 * @param int|null $stock      The stock number; null when not tracked.
+	 * @param int|null $reorder_at The "Reorder at" number; null for none.
+	 * @return string
+	 */
+	public static function status( $stock, $reorder_at ) {
+		if ( null === $stock ) {
+			return '';
+		}
+		if ( (int) $stock <= 0 ) {
+			return self::STATUS_OUT;
+		}
+
+		return null !== $reorder_at && (int) $stock <= (int) $reorder_at ? self::STATUS_REORDER : self::STATUS_OK;
+	}
+
+	/**
+	 * What the reorder email does when a count's stock is looked at:
+	 * 'send' the first time the stock is at or below the number, nothing
+	 * while it stays there, 'clear' (the next drop writes again) once it is
+	 * back ABOVE the number or the number was taken away.
+	 *
+	 * @param int|null $stock      The stock number; null when not tracked.
+	 * @param int|null $reorder_at The "Reorder at" number; null for none.
+	 * @param bool     $sent       Whether the email for this drop has gone.
+	 * @return string 'send', 'clear' or ''.
+	 */
+	public static function reorder_step( $stock, $reorder_at, $sent ) {
+		if ( null === $reorder_at ) {
+			return $sent ? 'clear' : '';
+		}
+		if ( null === $stock ) {
+			return '';
+		}
+		if ( (int) $stock <= (int) $reorder_at ) {
+			return $sent ? '' : 'send';
+		}
+
+		return $sent ? 'clear' : '';
+	}
+
+	/**
+	 * Why a design cannot be handed out right now; empty when it can.
+	 *
+	 * The picker, the adding of a line and every totals pass ask this one
+	 * question, so a design is offered exactly when a line of it would be
+	 * kept. The reasons, as codes the settings page puts into words:
+	 *
+	 *   type                not a simple product or a variation
+	 *   unpublished         the product (or the variation) is not published
+	 *   parent_unpublished  the variation's product is not published
+	 *   no_price            no price, so WooCommerce will not sell it
+	 *   not_purchasable     has a price but WooCommerce still refuses it
+	 *   any_attribute       the variation leaves an attribute on "Any"
+	 *   out_of_stock        no sticker to hand out (has_stock())
+	 *
+	 * @param array $facts type, published, parent_published, has_price,
+	 *                     purchasable, fixed, in_stock, stock
+	 *                     (Designs::facts()).
+	 * @return string[]
+	 */
+	public static function blockers( array $facts ) {
+		$out  = array();
+		$type = (string) ( $facts['type'] ?? '' );
+
+		if ( 'simple' !== $type && 'variation' !== $type ) {
+			return array( 'type' );
+		}
+
+		$published = ! empty( $facts['published'] );
+
+		if ( ! $published ) {
+			$out[] = 'unpublished';
+		}
+		if ( 'variation' === $type && empty( $facts['parent_published'] ) ) {
+			$out[] = 'parent_unpublished';
+		}
+		if ( empty( $facts['purchasable'] ) ) {
+			if ( empty( $facts['has_price'] ) ) {
+				$out[] = 'no_price';
+			} elseif ( $published ) {
+				$out[] = 'not_purchasable';
+			}
+		}
+		if ( 'variation' === $type && empty( $facts['fixed'] ) ) {
+			$out[] = 'any_attribute';
+		}
+		if ( ! self::has_stock( ! empty( $facts['in_stock'] ), $facts['stock'] ?? null ) ) {
+			$out[] = 'out_of_stock';
+		}
+
+		return $out;
+	}
+
+	/**
+	 * A list of ids as positive, unique whole numbers, order kept.
+	 *
+	 * @param mixed $ids Ids.
+	 * @return int[]
+	 */
+	public static function ids( $ids ) {
+		$out = array();
+
+		foreach ( is_array( $ids ) ? $ids : array() as $id ) {
+			$id = is_scalar( $id ) ? (int) $id : 0;
+			if ( $id > 0 && ! in_array( $id, $out, true ) ) {
+				$out[] = $id;
+			}
+		}
+
+		return $out;
+	}
+
+	/**
+	 * Whether a design ID is in the pool.
+	 *
+	 * @param int   $product_id Design ID.
 	 * @param array $settings   Settings array.
 	 * @return bool
 	 */

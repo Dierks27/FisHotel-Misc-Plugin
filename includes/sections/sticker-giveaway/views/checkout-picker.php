@@ -11,7 +11,8 @@
  * @var array $view {
  *   @type string        $context       'checkout' | 'cart'
  *   @type array         $settings      Section settings.
- *   @type \WC_Product[] $products      Available pool, keyed by ID.
+ *   @type \WC_Product[] $products      Available designs (a simple product or
+ *                                      a variation), keyed by design ID.
  *   @type bool          $eligible      Cart qualifies for the free sticker.
  *   @type bool          $offer_upsell  Show add-on steppers.
  *   @type int           $selected_free Product ID checked (0 = no thanks).
@@ -24,6 +25,7 @@
  */
 
 use FisHotel\Misc\Sections\Sticker_Giveaway\Cart;
+use FisHotel\Misc\Sections\Sticker_Giveaway\Designs;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -53,7 +55,8 @@ $s = $view['settings'];
 			<input class="fh-sticker__radio" type="radio" name="<?php echo esc_attr( Cart::FIELD_FREE ); ?>" value="<?php echo esc_attr( $pid ); ?>" <?php checked( $view['selected_free'], (int) $pid ); ?>>
 			<span class="fh-sticker__card">
 				<span class="fh-sticker__thumb"><?php echo $product->get_image( 'woocommerce_thumbnail' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
-				<span class="fh-sticker__name"><?php echo esc_html( $product->get_name() ); ?></span>
+				<?php // A variation reads as its own attribute value ("Blue Tang"), not "Stickers - Blue Tang"; its picture is its own, else its product's. ?>
+				<span class="fh-sticker__name"><?php echo esc_html( Designs::name( $product ) ); ?></span>
 				<?php if ( '' !== $s['badge_text'] ) : ?>
 				<span class="fh-sticker__badge"><?php echo esc_html( $s['badge_text'] ); ?></span>
 				<?php endif; ?>
@@ -89,7 +92,7 @@ $s = $view['settings'];
 			<li class="fh-sticker__row">
 				<span class="fh-sticker__row-thumb"><?php echo $product->get_image( 'woocommerce_gallery_thumbnail' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
 				<?php // A <span>, not a <label for>: the theme styles every label[for] in the checkout form as a gold uppercase field label. The input carries aria-label instead. ?>
-				<span class="fh-sticker__row-name"><?php echo esc_html( $product->get_name() ); ?></span>
+				<span class="fh-sticker__row-name"><?php echo esc_html( Designs::name( $product ) ); ?></span>
 				<span class="fh-sticker__row-price"><?php echo wp_kses_post( wc_price( $view['extra_price'] ) ); ?></span>
 				<span class="fh-sticker__stepper">
 					<button type="button" class="fh-sticker__step" data-step="-1" aria-label="<?php esc_attr_e( 'One fewer', 'fishotel-misc-plugin' ); ?>">&minus;</button>
@@ -100,7 +103,7 @@ $s = $view['settings'];
 						name="<?php echo esc_attr( Cart::FIELD_EXTRA ); ?>[<?php echo esc_attr( $pid ); ?>]"
 						value="<?php echo esc_attr( $qty ); ?>"
 						<?php /* translators: %s: sticker product name */ ?>
-						aria-label="<?php echo esc_attr( sprintf( __( 'Quantity of %s', 'fishotel-misc-plugin' ), $product->get_name() ) ); ?>"
+						aria-label="<?php echo esc_attr( sprintf( __( 'Quantity of %s', 'fishotel-misc-plugin' ), Designs::name( $product ) ) ); ?>"
 						min="0"
 						max="<?php echo esc_attr( $view['max_qty'] ); ?>"
 						step="1"

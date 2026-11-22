@@ -59,13 +59,17 @@ class Frontend {
 	}
 
 	/**
-	 * Pool products that can actually be given away right now.
+	 * Pool products that can actually be given away right now: a design
+	 * that can be handed out and still has one to give beside what this
+	 * customer is already buying of it (a design whose last ones are in
+	 * the cart as a normal purchase could be picked but never added).
 	 *
 	 * @param array $settings Settings.
 	 * @return \WC_Product[] Keyed by product ID, in pool order.
 	 */
 	public static function available_pool( array $settings ) {
 		$products = array();
+		$bought   = Cart::bought();
 
 		foreach ( Rules::pool( $settings ) as $pid ) {
 			$product = wc_get_product( $pid );
@@ -75,6 +79,12 @@ class Frontend {
 			}
 
 			if ( ! Cart::is_sellable( $product ) ) {
+				continue;
+			}
+
+			$stock = Designs::stock( $product );
+
+			if ( null !== $stock && ! Rules::has_stock( true, $stock - ( $bought[ Designs::count_id( $product ) ] ?? 0 ) ) ) {
 				continue;
 			}
 

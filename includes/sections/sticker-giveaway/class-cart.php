@@ -23,6 +23,21 @@
  * shipping package (when anything else remains) so the theme's table-rate
  * result, keyed on shipping class, is identical with or without stickers.
  *
+ * A design is a simple product or one variation of a variable product;
+ * a line's design is read with Rules::design_id() (the variation id when
+ * there is one). A variation design is a normal variation line —
+ * add_to_cart( product, qty, variation, … ) — so the order screen, the
+ * emails and the invoice name the design with nothing further.
+ *
+ * Stock: a sticker comes out of the product's own WooCommerce stock, the
+ * same number a normal purchase of that design comes out of, and
+ * WooCommerce reduces, restores and holds it as for any line. All this
+ * class adds is that a STICKER line gives way first (fit_lines()): it is
+ * cut down or dropped quietly whenever the stock no longer covers it, so
+ * none of WooCommerce's own checks — of the cart, of a product being
+ * added to it, of a failed order coming back to be paid — refuses on
+ * account of a sticker.
+ *
  * @package FisHotel\Misc\Sections\Sticker_Giveaway
  */
 
@@ -101,6 +116,12 @@ class Cart {
 		add_filter( 'woocommerce_cart_item_subtotal', array( $this, 'free_price_label' ), 10, 2 );
 		add_action( 'woocommerce_cart_item_removed', array( $this, 'forget_choice_on_removal' ), 10, 2 );
 		add_filter( 'woocommerce_update_cart_validation', array( $this, 'forget_choice_on_zero_qty' ), 10, 4 );
+		add_filter( 'woocommerce_cart_item_thumbnail', array( $this, 'design_thumbnail' ), 10, 2 );
+
+		// ── Just before WooCommerce's own stock checks ──────────────
+		add_action( 'woocommerce_check_cart_items', array( $this, 'guard_lines' ), 0 );
+		add_filter( 'woocommerce_add_to_cart_validation', array( $this, 'make_room' ), 99, 4 );
+		add_action( 'before_woocommerce_pay', array( $this, 'guard_order' ), 5 );
 
 		// ── Order line items ────────────────────────────────────────
 		add_action( 'woocommerce_checkout_create_order_line_item', array( $this, 'order_line_item_meta' ), 10, 3 );
@@ -242,8 +263,8 @@ class Cart {
 	}
 
 	/**
-	 * What the cart currently holds: the free sticker's product ID (0 when
-	 * none) and an [product_id => qty] map of add-ons.
+	 * What the cart currently holds: the free sticker's design ID (0 when
+	 * none) and a [design_id => qty] map of add-ons.
 	 *
 	 * @return array{free: int, extras: array<int, int>}
 	 */
@@ -260,7 +281,7 @@ class Cart {
 
 		foreach ( $cart->get_cart() as $item ) {
 			$kind = self::kind( $item );
-			$pid  = isset( $item['product_id'] ) ? (int) $item['product_id'] : 0;
+			$pid  = Rules::design_id( $item );
 
 			if ( ! $kind || ! $pid ) {
 				continue;
@@ -409,7 +430,7 @@ class Cart {
 				continue;
 			}
 
-			$pid = isset( $item['product_id'] ) ? (int) $item['product_id'] : 0;
+			$pid = Rules::design_id( $item );
 
 			if ( Rules::KIND_FREE === $kind ) {
 				$current_free[ $key ] = $pid;
@@ -463,25 +484,33 @@ class Cart {
 
 	/**
 	 * Add one sticker line, guarding against products that have gone
-	 * missing, been unpublished or sold out since the pool was saved.
+	 * missing, been unpublished or run out since the pool was saved.
 	 *
 	 * WC_Cart::add_to_cart() re-validates stock against everything already
-	 * in the cart for that product (the free line, an add-on of the same
-	 * design and a normal purchase are three lines of one product) and
+	 * in the cart for that count (the free line, an add-on of the same
+	 * design and a normal purchase all come out of one stock number) and
 	 * raises a WooCommerce *error* notice when it refuses — a notice that
 	 * would be printed on every checkout refresh and would block Place
 	 * Order. So the cumulative check is done here first, and any error
 	 * notice WC still adds is discarded: a sticker must never stop a fish
 	 * order going through; the line is simply not added.
 	 *
-	 * @param int    $product_id Product ID.
-	 * @param int    $quantity   Quantity.
-	 * @param string $kind       'free' or 'extra'.
+	 * The check here is stricter than WooCommerce's in one case: a product
+	 * that allows backorders still only gives away what is in stock.
+	 *
+	 * A variation is added as a variation — the product, the variation id
+	 * and no attributes of our own: WooCommerce fills the line's attributes
+	 * from the variation itself, exactly as typed (a custom attribute's
+	 * "Night Glow" stays "Night Glow").
+	 *
+	 * @param int    $design_id Design ID (a simple product's, or a variation's).
+	 * @param int    $quantity  Quantity.
+	 * @param string $kind      'free' or 'extra'.
 	 * @return string|false Cart item key, or false when not added.
 	 */
-	private static function add_line( $product_id, $quantity, $kind ) {
+	private static function add_line( $design_id, $quantity, $kind ) {
 		$cart    = self::cart();
-		$product = wc_get_product( (int) $product_id );
+		$product = Designs::product( (int) $design_id );
 
 		if ( ! $cart || ! $product instanceof \WC_Product ) {
 			return false;
@@ -497,10 +526,11 @@ class Cart {
 			$quantity = 1;
 		}
 
-		if ( $product->managing_stock() && ! $product->backorders_allowed() ) {
+		$stock = Designs::stock( $product );
+
+		if ( null !== $stock ) {
 			$in_cart = $cart->get_cart_item_quantities();
-			$held    = (int) ( $in_cart[ $product->get_stock_managed_by_id() ] ?? 0 );
-			$room    = (int) $product->get_stock_quantity() - $held;
+			$room    = $stock - (int) ( $in_cart[ Designs::count_id( $product ) ] ?? 0 );
 
 			if ( $room < 1 ) {
 				return false;
@@ -508,13 +538,14 @@ class Cart {
 			$quantity = min( $quantity, $room );
 		}
 
+		$is_variation  = $product->is_type( 'variation' );
 		$errors_before = function_exists( 'wc_get_notices' ) ? wc_get_notices( 'error' ) : null;
 
 		try {
 			$key = $cart->add_to_cart(
-				$product->get_id(),
+				$is_variation ? $product->get_parent_id() : $product->get_id(),
 				$quantity,
-				0,
+				$is_variation ? $product->get_id() : 0,
 				array(),
 				array( Sticker_Giveaway::ITEM_KEY => $kind )
 			);
@@ -532,6 +563,268 @@ class Cart {
 	}
 
 	/* ============================================================== */
+	/*  A sticker line gives way first                                 */
+	/* ============================================================== */
+
+	/**
+	 * Bring the sticker lines down to what their counts still cover
+	 * (Rules::fit()): the normal purchases of the cart keep what they have,
+	 * then the free line, then the add-ons. A sticker line that no longer
+	 * fits at all is dropped quietly. Lines of a product WooCommerce does
+	 * not track are not touched. A cart without sticker lines costs one
+	 * loop and nothing else.
+	 *
+	 * @param \WC_Cart $cart      Cart.
+	 * @param bool     $with_held Also leave alone what WooCommerce is holding
+	 *                            for other customers' unpaid orders (one
+	 *                            query per count; only asked just before
+	 *                            WooCommerce's own check, which counts it).
+	 * @param array    $coming    count id => a normal purchase that is about
+	 *                            to be added to the cart (make_room()).
+	 * @return bool Whether a line's quantity was cut down (a removed line
+	 *              makes WooCommerce total the cart again by itself; a
+	 *              changed quantity outside a totals pass does not).
+	 */
+	private static function fit_lines( \WC_Cart $cart, $with_held = false, array $coming = array() ) {
+		$lines     = array();
+		$available = array();
+
+		foreach ( $cart->get_cart() as $key => $item ) {
+			$product = isset( $item['data'] ) && $item['data'] instanceof \WC_Product ? $item['data'] : null;
+			if ( ! $product ) {
+				continue;
+			}
+
+			$kind  = self::kind( $item );
+			$count = Designs::count_id( $product );
+			$stock = $kind && ! isset( $available[ $count ] ) ? Designs::stock( $product ) : null;
+
+			if ( null !== $stock ) {
+				$available[ $count ] = $stock - ( $with_held ? self::held( $product ) : 0 ) - (int) ( $coming[ $count ] ?? 0 );
+			}
+
+			$lines[ $key ] = array(
+				'count' => $count,
+				'kind'  => $kind,
+				'qty'   => (int) ( $item['quantity'] ?? 0 ),
+			);
+		}
+
+		if ( ! $available ) {
+			return false;
+		}
+
+		$cut = false;
+
+		foreach ( Rules::fit( $lines, $available ) as $key => $fits ) {
+			if ( $fits >= $lines[ $key ]['qty'] ) {
+				continue;
+			}
+
+			if ( $fits < 1 ) {
+				self::remove_quietly( $cart, $key );
+			} elseif ( isset( $cart->cart_contents[ $key ] ) ) {
+				$cart->cart_contents[ $key ]['quantity'] = $fits;
+				$cut                                     = true;
+			}
+		}
+
+		return $cut;
+	}
+
+	/**
+	 * How many of a product's stock WooCommerce is holding for other
+	 * customers' unpaid orders — asked exactly as WC_Cart::check_cart_item_stock()
+	 * asks it, the customer's own unpaid order left out.
+	 *
+	 * @param \WC_Product $product Product on a cart line.
+	 * @return int
+	 */
+	private static function held( \WC_Product $product ) {
+		if ( ! function_exists( 'wc_get_held_stock_quantity' ) ) {
+			return 0;
+		}
+
+		$session = function_exists( 'WC' ) && WC() ? WC()->session : null;
+		$own     = $session ? absint( $session->get( 'order_awaiting_payment' ) ) : 0;
+		if ( ! $own && $session ) {
+			$own = absint( $session->get( 'store_api_draft_order', 0 ) );
+		}
+
+		return (int) wc_get_held_stock_quantity( $product, $own );
+	}
+
+	/**
+	 * `woocommerce_check_cart_items` at priority 0 — on the cart page, on
+	 * checkout and at Place Order, just before WooCommerce's own check at
+	 * priority 1 (WC_Cart::check_cart_items(), which prints "not in stock"
+	 * / "not enough stock" and stops the order). A design that ran out
+	 * between the picker and the order, or whose stock a normal purchase in
+	 * the same cart now needs, loses its sticker line here, quietly, and
+	 * the order goes through without it.
+	 */
+	public function guard_lines() {
+		$cart  = self::cart();
+		$found = false;
+
+		if ( ! $cart ) {
+			return;
+		}
+
+		foreach ( $cart->get_cart() as $key => $item ) {
+			if ( ! self::is_sticker_item( $item ) ) {
+				continue;
+			}
+
+			$found   = true;
+			$product = isset( $item['data'] ) && $item['data'] instanceof \WC_Product ? $item['data'] : null;
+
+			if ( ! $product || ! self::is_sellable( $product ) ) {
+				self::remove_quietly( $cart, $key );
+			}
+		}
+
+		// A quantity changed here is outside a totals pass: total the cart again so the order is made from what is in it.
+		if ( $found && self::fit_lines( $cart, true ) ) {
+			$cart->calculate_totals();
+		}
+	}
+
+	/**
+	 * What the normal purchases in the cart take out of each count.
+	 *
+	 * @param \WC_Cart|null $cart Cart (defaults to the live one).
+	 * @return array<int, int> count id => quantity.
+	 */
+	public static function bought( $cart = null ) {
+		$cart = $cart instanceof \WC_Cart ? $cart : self::cart();
+		$out  = array();
+
+		foreach ( $cart ? $cart->get_cart() : array() as $item ) {
+			$product = isset( $item['data'] ) && $item['data'] instanceof \WC_Product ? $item['data'] : null;
+
+			if ( $product && ! self::is_sticker_item( $item ) ) {
+				$count         = Designs::count_id( $product );
+				$out[ $count ] = ( $out[ $count ] ?? 0 ) + (int) ( $item['quantity'] ?? 0 );
+			}
+		}
+
+		return $out;
+	}
+
+	/**
+	 * `woocommerce_add_to_cart_validation` — the customer is adding a
+	 * normal purchase from the shop (the product page, an archive button,
+	 * the Store API; the picker's own add_line() does not pass through
+	 * here). WC_Cart::add_to_cart() is about to count everything of that
+	 * stock number already in the cart, sticker lines included, and to
+	 * refuse with "you already have N in your cart" — so the sticker lines
+	 * of that count step back first, as far as the purchase needs.
+	 *
+	 * Nothing is touched when the stock would not cover the purchase even
+	 * without the stickers: that refusal is WooCommerce's to give. The
+	 * answer itself is never changed.
+	 *
+	 * @param bool $passed       What the validation says so far.
+	 * @param int  $product_id   Product (or, from an archive button, a variation).
+	 * @param int  $quantity     How many are being added.
+	 * @param int  $variation_id Variation, when there is one.
+	 * @return bool $passed, as it came.
+	 */
+	public function make_room( $passed, $product_id = 0, $quantity = 0, $variation_id = 0 ) {
+		$cart    = $passed ? self::cart() : null;
+		$product = $cart ? wc_get_product( $variation_id ? $variation_id : $product_id ) : null;
+		$stock   = $product instanceof \WC_Product ? Designs::stock( $product ) : null;
+
+		if ( null !== $stock ) {
+			$count = Designs::count_id( $product );
+			$want  = max( 0, (int) $quantity );
+
+			if ( $stock >= $want + ( self::bought( $cart )[ $count ] ?? 0 ) && self::fit_lines( $cart, false, array( $count => $want ) ) ) {
+				$cart->calculate_totals();
+			}
+		}
+
+		return $passed;
+	}
+
+	/**
+	 * `before_woocommerce_pay` — the pay page of an order whose payment
+	 * failed. WooCommerce checks there that every line is still in stock
+	 * and, when one is not, shows "… this order cannot be paid for" in
+	 * place of the payment form. A sticker that ran out since must not do
+	 * that to a fish order, so — only in the case WooCommerce is about to
+	 * check — the order's sticker lines give way exactly as a cart's do
+	 * (Rules::fit(): the normal lines keep theirs, then the free sticker,
+	 * then the add-ons). The order is totalled again and a note says what
+	 * was taken off. WooCommerce's check itself is not changed.
+	 */
+	public function guard_order() {
+		global $wp;
+
+		$order = isset( $wp->query_vars['order-pay'] ) ? wc_get_order( absint( $wp->query_vars['order-pay'] ) ) : null;
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- the order's own key, compared below as WooCommerce compares it.
+		$key = isset( $_GET['key'] ) && is_string( $_GET['key'] ) ? wc_clean( wp_unslash( $_GET['key'] ) ) : '';
+
+		// WooCommerce checks stock for an order that is the visitor's to pay, is not pending (stock is held for those) and has not had its stock taken yet.
+		if ( ! $order instanceof \WC_Order || ! hash_equals( (string) $order->get_order_key(), $key ) || ! $order->needs_payment()
+			|| $order->has_status( wc_get_is_pending_statuses() ) || $order->get_data_store()->get_stock_reduced( $order->get_id() ) ) {
+			return;
+		}
+
+		$lines     = array();
+		$available = array();
+		$items     = $order->get_items();
+
+		foreach ( $items as $id => $item ) {
+			$product = $item->get_product();
+			if ( ! $product instanceof \WC_Product ) {
+				continue;
+			}
+
+			$kind  = self::kind( array( Sticker_Giveaway::ITEM_KEY => $item->get_meta( '_fh_sticker' ) ) );
+			$count = Designs::count_id( $product );
+			$stock = $kind && ! isset( $available[ $count ] ) ? ( $product->is_in_stock() ? Designs::stock( $product ) : 0 ) : null;
+
+			if ( null !== $stock ) {
+				$available[ $count ] = $stock - (int) wc_get_held_stock_quantity( $product, $order->get_id() );
+			}
+
+			$lines[ $id ] = array(
+				'count' => $count,
+				'kind'  => $kind,
+				'qty'   => (int) $item->get_quantity(),
+			);
+		}
+
+		$names = array();
+
+		foreach ( Rules::fit( $lines, $available ) as $id => $fits ) {
+			$had = $lines[ $id ]['qty'];
+			if ( $fits >= $had ) {
+				continue;
+			}
+
+			$names[] = $items[ $id ]->get_name();
+
+			if ( $fits < 1 ) {
+				$order->remove_item( $id );
+				continue;
+			}
+
+			$items[ $id ]->set_quantity( $fits );
+			$items[ $id ]->set_subtotal( (float) $items[ $id ]->get_subtotal() / $had * $fits );
+			$items[ $id ]->set_total( (float) $items[ $id ]->get_total() / $had * $fits );
+		}
+
+		if ( $names ) {
+			$order->calculate_totals();
+			/* translators: %s: sticker names */
+			$order->add_order_note( sprintf( __( 'Sticker Giveaway: %s ran short before this order was paid, so its sticker line was cut down or taken off. Nothing else on the order was changed.', 'fishotel-misc-plugin' ), implode( ', ', array_unique( $names ) ) ) );
+		}
+	}
+
+	/* ============================================================== */
 	/*  Pricing + eligibility re-check                                 */
 	/* ============================================================== */
 
@@ -539,8 +832,10 @@ class Cart {
 	 * `woocommerce_before_calculate_totals` — price every sticker line
 	 * and keep each one within what the current settings allow:
 	 *
-	 *   - any sticker line: removed when its product can no longer be sold
-	 *     (unpublished, no longer purchasable, sold out since it was added).
+	 *   - any sticker line: removed when its design can no longer be handed
+	 *     out (unpublished, no longer purchasable, run out since it was
+	 *     added), and cut down to what its stock still covers beside the
+	 *     normal purchases in the cart (fit_lines()).
 	 *     WC's own check_cart_items() would otherwise raise an *error*
 	 *     notice for it at checkout and block Place Order — a sticker must
 	 *     never stop a fish order, so the line is dropped quietly instead.
@@ -581,9 +876,8 @@ class Cart {
 				continue;
 			}
 
-			$product    = isset( $item['data'] ) && $item['data'] instanceof \WC_Product ? $item['data'] : null;
-			$product_id = isset( $item['product_id'] ) ? (int) $item['product_id'] : 0;
-			$in_pool    = Rules::in_pool( $product_id, $settings );
+			$product = isset( $item['data'] ) && $item['data'] instanceof \WC_Product ? $item['data'] : null;
+			$in_pool = Rules::in_pool( Rules::design_id( $item ), $settings );
 
 			if ( ! $product || ! self::is_sellable( $product ) ) {
 				self::remove_quietly( $cart, $key );
@@ -625,19 +919,23 @@ class Cart {
 
 			$product->set_price( $extra_price );
 		}
+
+		// What is left may still be more than the stock covers.
+		self::fit_lines( $cart );
 	}
 
 	/**
-	 * Whether a sticker product can still be handed out: published,
-	 * purchasable and in stock. The same three checks gate the picker
-	 * (Frontend::available_pool) and add_line(), so a line that passes here
-	 * is one the picker would produce today.
+	 * Whether a sticker design can still be handed out
+	 * (Designs::can_hand_out()): a simple product or one exact variation,
+	 * published, purchasable and with at least one in stock. The same check
+	 * gates the picker (Frontend::available_pool) and add_line(), so a line
+	 * that passes here is one the picker would produce today.
 	 *
 	 * @param \WC_Product $product Product.
 	 * @return bool
 	 */
 	public static function is_sellable( \WC_Product $product ) {
-		return 'publish' === $product->get_status() && $product->is_purchasable() && $product->is_in_stock();
+		return Designs::can_hand_out( $product );
 	}
 
 	/**
@@ -745,6 +1043,41 @@ class Cart {
 		}
 
 		return '<span class="fh-sticker-free-price">' . esc_html__( 'FREE', 'fishotel-misc-plugin' ) . '</span>';
+	}
+
+	/**
+	 * `woocommerce_cart_item_thumbnail` — a sticker line of a variation
+	 * shows the variation's own picture. WooCommerce's stock templates
+	 * already do; the FisHotel theme draws a line's thumbnail from the
+	 * product the variation belongs to, which is the same picture for
+	 * every design. A variation without a picture of its own keeps what
+	 * the template gave (the product's).
+	 *
+	 * @param string $thumbnail Thumbnail HTML.
+	 * @param array  $cart_item Cart item.
+	 * @return string
+	 */
+	public function design_thumbnail( $thumbnail, $cart_item ) {
+		if ( ! self::is_sticker_item( $cart_item ) ) {
+			return $thumbnail;
+		}
+
+		$product = isset( $cart_item['data'] ) && $cart_item['data'] instanceof \WC_Product ? $cart_item['data'] : null;
+
+		if ( ! $product || ! $product->is_type( 'variation' ) ) {
+			return $thumbnail;
+		}
+
+		$image_id = (int) $product->get_image_id( 'edit' );
+		if ( $image_id < 1 ) {
+			return $thumbnail;
+		}
+
+		// Keep the size the template asked for (WordPress writes it into the class: "size-…").
+		$size = preg_match( '/\bsize-([A-Za-z0-9_-]+)/', (string) $thumbnail, $m ) ? $m[1] : 'woocommerce_thumbnail';
+		$html = wp_get_attachment_image( $image_id, $size );
+
+		return '' !== (string) $html ? $html : $thumbnail;
 	}
 
 	/**
