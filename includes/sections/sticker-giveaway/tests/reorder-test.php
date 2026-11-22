@@ -34,10 +34,21 @@ function add_action( $hook, $callback, $priority = 10, $args = 1 ) {
 	$GLOBALS['fh_actions'][ $hook ][] = $callback;
 	return true;
 }
-function update_option( $key, $value, $autoload = null ) {
+// As WordPress: an option that is already there is not added again — also when another request added it a moment ago.
+function add_option( $key, $value, $deprecated = '', $autoload = null ) {
+	if ( isset( $GLOBALS['fh_options'][ $key ] ) || ! empty( $GLOBALS['fh_elsewhere'][ $key ] ) ) {
+		return false;
+	}
 	$GLOBALS['fh_options'][ $key ] = $value;
 	$GLOBALS['fh_writes'][]        = $key;
 	return true;
+}
+function delete_option( $key ) {
+	unset( $GLOBALS['fh_options'][ $key ] );
+	return true;
+}
+function wc_get_product( $id ) {
+	return $GLOBALS['fh_products'][ $id ] ?? false;
 }
 function wp_mail( $to, $subject, $body, $headers = '' ) {
 	$GLOBALS['fh_mails'][] = compact( 'to', 'subject', 'body' );
@@ -198,52 +209,84 @@ $fh_options = array(
 	'woocommerce_stock_email_recipient' => 'stock@example.test',
 	'admin_email'                       => 'owner@example.test',
 );
-$change = static function ( $id, $type, $name, $stock, array $attributes = array() ) {
-	Reorder::stock_changed( new WC_Product( $id, $type, $name, $stock, $attributes ) );
+// WooCommerce changes a product's stock (one step of a request) ...
+$step = static function ( $id, $type, $name, $stock, array $attributes = array() ) {
+	$GLOBALS['fh_products'][ $id ] = new WC_Product( $id, $type, $name, $stock, $attributes );
+	Reorder::stock_changed( $GLOBALS['fh_products'][ $id ] );
+};
+// ... and the request ends.
+$change = static function ( $id, $type, $name, $stock, array $attributes = array() ) use ( $step ) {
+	$step( $id, $type, $name, $stock, $attributes );
+	Reorder::look_at_changed();
+};
+$sent       = static function ( $id ) {
+	return isset( $GLOBALS['fh_options'][ Reorder::OPTION_SENT . $id ] );
 };
 $night_glow = array( 'attribute_style' => 'Night Glow' );
 
-$change( 9001, 'simple', 'A Bag Of Salt', 3 );
-$change( 302, 'variation', 'Reef Stickers - Coral Pop', 0, array( 'attribute_style' => 'Coral Pop' ) );
-check( 'a product that is not a design, and a design without a "Reorder at" number: no email, nothing written', array() === $fh_mails && array() === $fh_writes );
+$step( 9001, 'simple', 'A Bag Of Salt', 3 );
+$step( 302, 'variation', 'Reef Stickers - Coral Pop', 0, array( 'attribute_style' => 'Coral Pop' ) );
+check( 'a product that is not a design, and a design without a "Reorder at" number: not even noted for the end of the request', ! isset( $GLOBALS['fh_actions']['shutdown'] ) && 0 === Reorder::look_at_changed() && array() === $fh_mails && array() === $fh_writes );
 
 $change( 301, 'variation', 'Reef Stickers - Night Glow', 41, $night_glow );
 check( 'Night Glow at 41 (reorder at 40): nothing yet', array() === $fh_mails && array() === $fh_writes );
+check( '... the look itself waits for the end of the request', isset( $GLOBALS['fh_actions']['shutdown'] ) );
 $change( 301, 'variation', 'Reef Stickers - Night Glow', 40, $night_glow );
 check( 'an order takes it to 40: one email, to WooCommerce\'s stock address', 1 === count( $fh_mails ) && 'stock@example.test' === $fh_mails[0]['to'] );
 check( '... named by the variation\'s own value, not "Reef Stickers - Night Glow"', '[Invented Reef Shop] Stickers to reorder: Night Glow' === $fh_mails[0]['subject'] && 0 === strpos( $fh_mails[0]['body'], 'Night Glow is down to 40' ), $fh_mails[0]['subject'] );
-check( '... and remembered in the one small option of its own, never in the settings', array( 301 ) === $fh_options[ Reorder::OPTION_SENT ] && array( Reorder::OPTION_SENT ) === array_unique( $fh_writes ) );
+check( '... and remembered in a tiny option of that count, never in the settings', $sent( 301 ) && array( Reorder::OPTION_SENT . '301' ) === $fh_writes );
 $change( 301, 'variation', 'Reef Stickers - Night Glow', 39, $night_glow );
 $change( 301, 'variation', 'Reef Stickers - Night Glow', 12, $night_glow );
 $change( 301, 'variation', 'Reef Stickers - Night Glow', 40, $night_glow );
 check( 'further orders, and a recount that leaves it at 40: no second email', 1 === count( $fh_mails ) );
 $change( 301, 'variation', 'Reef Stickers - Night Glow', 200, $night_glow );
-check( 'Add stickers puts it above the number: no email, and the next drop will write again', 1 === count( $fh_mails ) && array() === $fh_options[ Reorder::OPTION_SENT ] );
+check( 'Add stickers puts it above the number: no email, and the next drop will write again', 1 === count( $fh_mails ) && ! $sent( 301 ) );
+
+$step( 301, 'variation', 'Reef Stickers - Night Glow', 40, $night_glow );
+$step( 301, 'variation', 'Reef Stickers - Night Glow', 39, $night_glow );
+$step( 301, 'variation', 'Reef Stickers - Night Glow', 37, $night_glow );
+check( 'one order takes it down in three steps (3 bought, the free sticker, 2 add-ons): nothing is written while WooCommerce is still counting', 1 === count( $fh_mails ) );
+Reorder::look_at_changed();
+check( '... and at the end ONE email, with the number the stock ended at', 2 === count( $fh_mails ) && 0 === strpos( $fh_mails[1]['body'], 'Night Glow is down to 37 (reorder at 40).' ), $fh_mails[1]['body'] ?? '' );
+
+$change( 301, 'variation', 'Reef Stickers - Night Glow', 200, $night_glow );
+$step( 301, 'variation', 'Reef Stickers - Night Glow', 40, $night_glow );
+$step( 301, 'variation', 'Reef Stickers - Night Glow', 41, $night_glow );
+Reorder::look_at_changed();
+check( 'down to the number and back above it in one request (an order placed and cancelled): no email', 2 === count( $fh_mails ) && ! $sent( 301 ) );
+
+$fh_elsewhere = array( Reorder::OPTION_SENT . '301' => true );
 $change( 301, 'variation', 'Reef Stickers - Night Glow', 38, $night_glow );
-check( 'the next drop: the second email', 2 === count( $fh_mails ) );
+check( 'two orders paid in the same instant: the request that comes second to mark the count writes nothing — one email, not two', 2 === count( $fh_mails ) );
+$fh_elsewhere = array();
 
 $change( 400, 'variable', 'Logo Stickers', 25 );
-check( 'a product that keeps one stock number for its variations: the email names the product', 3 === count( $fh_mails ) && false !== strpos( $fh_mails[2]['subject'], 'Logo Stickers' ) && array( 301, 400 ) === $fh_options[ Reorder::OPTION_SENT ] );
-$change( 77, 'simple', 'Round Logo Sticker', null );
-check( 'a design WooCommerce no longer tracks ("Manage stock" off): nothing', 3 === count( $fh_mails ) );
+$step( 301, 'variation', 'Reef Stickers - Night Glow', 38, $night_glow );
+$step( 77, 'simple', 'Round Logo Sticker', null );
+check( 'a product that keeps one stock number for its variations: the email names the product', 3 === count( $fh_mails ) && false !== strpos( $fh_mails[2]['subject'], 'Logo Stickers' ) && $sent( 400 ) );
+Reorder::look_at_changed();
+check( 'two designs dropping in one request: one email naming both; a design WooCommerce no longer tracks ("Manage stock" off): nothing', 4 === count( $fh_mails ) && '[Invented Reef Shop] Stickers to reorder: Night Glow' === $fh_mails[3]['subject'] && ! $sent( 77 ) );
 
 $fh_mail_ok = false;
 $change( 77, 'simple', 'Round Logo Sticker', 4 );
-check( 'the mail could not be handed over: not remembered as sent', 4 === count( $fh_mails ) && ! in_array( 77, $fh_options[ Reorder::OPTION_SENT ], true ) );
+check( 'the mail could not be handed over: not remembered as sent', 5 === count( $fh_mails ) && ! $sent( 77 ) );
 $fh_mail_ok = true;
 $change( 77, 'simple', 'Round Logo Sticker', 4 );
-check( '... so the next look tries again', 5 === count( $fh_mails ) && in_array( 77, $fh_options[ Reorder::OPTION_SENT ], true ) );
+check( '... so the next look tries again', 6 === count( $fh_mails ) && $sent( 77 ) );
 
-unset( $fh_options['woocommerce_stock_email_recipient'] );
-$fh_options[ Reorder::OPTION_SENT ] = array();
+unset( $fh_options['woocommerce_stock_email_recipient'], $fh_options[ Reorder::OPTION_SENT . '77' ] );
 $change( 77, 'simple', 'Round Logo Sticker', 3 );
-check( 'no stock address in WooCommerce: the site admin', 'owner@example.test' === $fh_mails[5]['to'] );
+check( 'no stock address in WooCommerce: the site admin', 'owner@example.test' === $fh_mails[6]['to'] );
 
 $fh_options[ Sticker_Giveaway::OPTION_KEY ]['reorder_email'] = false;
-$fh_options[ Reorder::OPTION_SENT ]                         = array();
+unset( $fh_options[ Reorder::OPTION_SENT . '301' ] );
 $before = count( $fh_mails );
 $change( 301, 'variation', 'Reef Stickers - Night Glow', 5, $night_glow );
-check( '"Email me when a design needs reordering" switched off: no email, and nothing remembered as sent', count( $fh_mails ) === $before && array() === $fh_options[ Reorder::OPTION_SENT ] );
+check( '"Email me when a design needs reordering" switched off: no email, and nothing remembered as sent', count( $fh_mails ) === $before && ! $sent( 301 ) );
+
+$fh_options[ Reorder::OPTION_SENT . '555' ] = 1;
+Reorder::check( array( 'sticker_product_ids' => array() ), array( 555 ) );
+check( 'a settings save after a design left the pool: the mark of its count is forgotten', ! $sent( 555 ) );
 check( 'the switch is on unless it was switched off', true === Settings::DEFAULTS['reorder_email'] );
 
 echo "5. Typing a count on the settings page\n";

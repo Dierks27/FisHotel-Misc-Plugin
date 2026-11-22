@@ -118,10 +118,12 @@ class Settings {
 		$dropped  = array();
 		$settings = self::sanitize( wp_unslash( $_POST ), $dropped ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified above.
 
+		$before = array_keys( (array) ( self::get()['reorder_at'] ?? array() ) );
+
 		update_option( Sticker_Giveaway::OPTION_KEY, $settings );
 
 		// A reorder number may have been typed, changed or removed.
-		Reorder::check( $settings );
+		Reorder::check( $settings, $before );
 
 		$message = __( 'Settings saved.', 'fishotel-misc-plugin' );
 		if ( $dropped ) {

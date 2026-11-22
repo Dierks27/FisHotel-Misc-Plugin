@@ -14,8 +14,16 @@
  * admin). No further email for that count until its stock is back above
  * the number (Rules::reorder_step()).
  *
- * Which counts have had their email is one small option of its own
- * (OPTION_SENT, not autoloaded), so an order never rewrites the settings.
+ * A stock change is only noted; the look itself happens once, at the end
+ * of the request, so an order that takes a design down in three steps
+ * (a purchase, the free sticker, an add-on) writes one email with the
+ * number the stock ended at.
+ *
+ * That a count has had its email is one tiny option per count
+ * (OPTION_SENT + its id, not autoloaded), there only while the email is
+ * out, so an order never rewrites the settings. It is made with
+ * add_option(), which succeeds for one request only however many look at
+ * the same moment: two orders paid in the same instant write one email.
  * WooCommerce's own low-stock and out-of-stock emails are not touched.
  *
  * @package FisHotel\Misc\Sections\Sticker_Giveaway
@@ -31,11 +39,20 @@ defined( 'ABSPATH' ) || exit;
 class Reorder {
 
 	/**
-	 * The counts whose reorder email has gone: a list of product ids.
+	 * "The reorder email of this count has gone": this name followed by
+	 * the count's product id.
 	 *
 	 * @var string
 	 */
-	const OPTION_SENT = 'fishotel_sticker_giveaway_reorder_sent';
+	const OPTION_SENT = 'fishotel_sticker_giveaway_reorder_sent_';
+
+	/**
+	 * The counts whose stock changed in this request (id => true), looked
+	 * at once at its end.
+	 *
+	 * @var array<int, bool>
+	 */
+	private static $changed = array();
 
 	/**
 	 * Hook the look at every stock change (boot(), every kind of request:
@@ -113,7 +130,8 @@ class Reorder {
 	/**
 	 * `woocommerce_product_set_stock` / `woocommerce_variation_set_stock`
 	 * — WooCommerce changed this product's stock number. A product without
-	 * a "Reorder at" number costs one array lookup and nothing else.
+	 * a "Reorder at" number costs one array lookup and nothing else; one
+	 * with a number is noted for the look at the end of the request.
 	 *
 	 * @param mixed $product The product whose stock changed.
 	 */
@@ -123,27 +141,45 @@ class Reorder {
 				return;
 			}
 
-			$settings = Settings::get();
-			$id       = (int) $product->get_id();
-			$at       = Rules::reorder_at( $id, $settings );
+			$id = (int) $product->get_id();
 
-			if ( null === $at ) {
-				return;
+			if ( null !== Rules::reorder_at( $id, Settings::get() ) ) {
+				self::$changed[ $id ] = true;
+				add_action( 'shutdown', array( self::class, 'look_at_changed' ) );
 			}
-
-			self::look(
-				array(
-					$id => array(
-						'name'       => Designs::name( $product ),
-						'stock'      => Designs::stock( $product ),
-						'reorder_at' => $at,
-					),
-				),
-				$settings,
-				false
-			);
 		} catch ( \Throwable $e ) {
 			unset( $e );
+		}
+	}
+
+	/**
+	 * `shutdown` — look at the counts whose stock changed in this request,
+	 * each with the number its stock ended at. Never throws.
+	 *
+	 * @return int How many counts the email named (0 = none sent).
+	 */
+	public static function look_at_changed() {
+		try {
+			$settings      = Settings::get();
+			$rows          = array();
+			$ids           = array_keys( self::$changed );
+			self::$changed = array();
+
+			foreach ( $ids as $id ) {
+				$product = wc_get_product( $id );
+
+				if ( $product instanceof \WC_Product ) {
+					$rows[ $id ] = array(
+						'name'       => Designs::name( $product ),
+						'stock'      => Designs::stock( $product ),
+						'reorder_at' => Rules::reorder_at( $id, $settings ),
+					);
+				}
+			}
+
+			return self::look( $rows, $settings );
+		} catch ( \Throwable $e ) {
+			return 0;
 		}
 	}
 
@@ -152,13 +188,20 @@ class Reorder {
 	 * typed, changed or taken away. Never throws.
 	 *
 	 * @param array|null $settings Settings (defaults to the saved ones).
+	 * @param int[]      $before   The counts that had a number before the
+	 *                             save: one that is no longer a count is
+	 *                             forgotten.
 	 * @return int How many counts the email named (0 = none sent).
 	 */
-	public static function check( $settings = null ) {
+	public static function check( $settings = null, array $before = array() ) {
 		try {
 			$settings = is_array( $settings ) ? $settings : Settings::get();
+			$gone     = array(
+				'stock'      => null,
+				'reorder_at' => null,
+			);
 
-			return self::look( self::rows( $settings ), $settings, true );
+			return self::look( self::rows( $settings ) + array_fill_keys( Rules::ids( $before ), $gone ), $settings );
 		} catch ( \Throwable $e ) {
 			return 0;
 		}
@@ -171,33 +214,28 @@ class Reorder {
 	 *
 	 * @param array[] $rows     count id => name, stock, reorder_at.
 	 * @param array   $settings Settings.
-	 * @param bool    $all      Whether $rows is every count of the pool (a
-	 *                          count that is no longer one is then forgotten).
 	 * @return int How many counts the email named.
 	 */
-	private static function look( array $rows, array $settings, $all ) {
-		$before = Rules::ids( get_option( self::OPTION_SENT, array() ) );
-		$sent   = $all ? array_values( array_intersect( $before, array_keys( $rows ) ) ) : $before;
-		$due    = array();
+	private static function look( array $rows, array $settings ) {
+		$due = array();
 
 		foreach ( $rows as $id => $row ) {
-			$step = Rules::reorder_step( $row['stock'], $row['reorder_at'], in_array( $id, $sent, true ) );
+			$mark = self::OPTION_SENT . (int) $id;
+			$step = Rules::reorder_step( $row['stock'], $row['reorder_at'], (bool) get_option( $mark ) );
 
 			if ( 'clear' === $step ) {
-				$sent = array_values( array_diff( $sent, array( $id ) ) );
-			} elseif ( 'send' === $step && ! empty( $settings['reorder_email'] ) ) {
+				delete_option( $mark );
+			} elseif ( 'send' === $step && ! empty( $settings['reorder_email'] ) && add_option( $mark, 1, '', false ) ) {
+				// Marked before the mail is handed over; add_option() says yes to one request only.
 				$due[ $id ] = $row;
 			}
 		}
 
-		// Marked before the mail is handed over, so a second look in the same moment finds it done.
-		if ( $due || $sent !== $before ) {
-			update_option( self::OPTION_SENT, array_merge( $sent, array_keys( $due ) ), false );
-		}
-
 		if ( $due && ! self::send( $due ) ) {
 			// The mail did not go out: let the next look try again.
-			update_option( self::OPTION_SENT, $sent, false );
+			foreach ( array_keys( $due ) as $id ) {
+				delete_option( self::OPTION_SENT . (int) $id );
+			}
 			return 0;
 		}
 
