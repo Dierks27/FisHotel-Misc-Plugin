@@ -66,6 +66,18 @@ function wp_strip_all_tags( $text ) {
 function taxonomy_exists( $taxonomy ) {
 	return false;
 }
+function esc_html( $text ) {
+	return htmlspecialchars( (string) $text, ENT_QUOTES );
+}
+function esc_attr( $text ) {
+	return htmlspecialchars( (string) $text, ENT_QUOTES );
+}
+function esc_html_e( $text, $domain = null ) {
+	echo esc_html( $text );
+}
+function wp_kses_post( $html ) {
+	return $html;
+}
 
 /**
  * A stand-in for the product WooCommerce hands to its stock actions.
@@ -301,7 +313,31 @@ check( 'an unknown action is refused', '' !== Admin::count_error( 'delete', '5' 
 check( 'after Add: what was added and what the stock now reads', 'Night Glow: 100 added. In stock now: 140.' === Admin::count_message( 'add', 'Night Glow', 100, 140 ) );
 check( 'after Recount: what the stock now reads', 'Night Glow: counted. In stock now: 52.' === Admin::count_message( 'recount', 'Night Glow', 52, 52 ) );
 
-echo "6. Why a ticked design is not offered\n";
+echo "6. The stock table says what its boxes do once, not on every card\n";
+$stock_rows = array();
+foreach ( array( 301 => 'Night Glow', 302 => 'Coral Pop', 303 => 'Moon Jelly', 304 => 'Sea Fan' ) as $id => $name ) {
+	$stock_rows[ $id ] = array(
+		'id'         => $id,
+		'name'       => $name,
+		'designs'    => array( $id => $name ),
+		'image'      => '',
+		'stock'      => 120,
+		'reorder_at' => 40,
+		'status'     => 'ok',
+	);
+}
+ob_start();
+require FISHOTEL_MISC_PATH . 'includes/sections/sticker-giveaway/views/stock-table.php';
+$table = ob_get_clean();
+check( 'four designs: four cards, each with its three number boxes and two buttons', 4 === substr_count( $table, '<section' ) && 12 === substr_count( $table, 'type="number"' ) && 4 === substr_count( $table, 'data-act="add"' ) && 4 === substr_count( $table, 'data-act="recount"' ) );
+check( '... and the explanations once above them: two short paragraphs for the whole table', 2 === substr_count( $table, 'fh-sg-hint' ) && 1 === substr_count( $table, 'Blank = no reminder' ) && 1 === substr_count( $table, 'Typed it wrong? Recount again.' ) );
+$stock_rows[304]['stock'] = null;
+ob_start();
+require FISHOTEL_MISC_PATH . 'includes/sections/sticker-giveaway/views/stock-table.php';
+$table = ob_get_clean();
+check( 'a card keeps the word that is about that design alone: "not tracked" and what to tick', 3 === substr_count( $table, 'fh-sg-hint' ) && 1 === substr_count( $table, 'Tick &quot;Manage stock&quot; on the product page' ) );
+
+echo "7. Why a ticked design is not offered\n";
 foreach ( array( 'unpublished', 'parent_unpublished', 'no_price', 'not_purchasable', 'any_attribute', 'out_of_stock', 'type' ) as $code ) {
 	$text = Admin::blocker_text( $code, 'Night Glow', true );
 	check( "$code: a sentence that names the design", 0 === strpos( $text, 'Night Glow' ) && strlen( $text ) > 30, $text );
@@ -311,7 +347,7 @@ check( 'a variation that is switched off is told apart from an unpublished produ
 check( 'the sentences a simple product had before are the same', 'Round Logo Sticker is not published — it will not appear in the picker.' === Admin::blocker_text( 'unpublished', 'Round Logo Sticker' ) && 'Round Logo Sticker is out of stock — it will not appear in the picker.' === Admin::blocker_text( 'out_of_stock', 'Round Logo Sticker' ) && 'Round Logo Sticker is not purchasable (another plugin is blocking it) — it will not appear in the picker.' === Admin::blocker_text( 'not_purchasable', 'Round Logo Sticker' ) && 'Round Logo Sticker has no price — give it a regular price (the picker overrides it) so WooCommerce treats it as purchasable.' === Admin::blocker_text( 'no_price', 'Round Logo Sticker' ) );
 check( 'an unknown code says nothing', '' === Admin::blocker_text( 'bogus', 'x' ) );
 
-echo "7. The theme's preset categories\n";
+echo "8. The theme's preset categories\n";
 check( 'a theme that skips sticker lines: a sticker in "merchandise" is nothing to warn about', '' === Admin::preset_warning( 'Reef Stickers', array( 'merchandise' ), true ) );
 $old = Admin::preset_warning( 'Reef Stickers', array( 'merchandise' ), false );
 check( 'a theme that still counts sticker lines: warned, naming the product and the category', false !== strpos( $old, 'Reef Stickers is in the merchandise category' ) );

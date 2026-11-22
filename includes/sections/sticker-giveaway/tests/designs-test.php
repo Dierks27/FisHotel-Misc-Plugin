@@ -119,6 +119,10 @@ check( 'shown and ticked: a design', in_array( 305, $ticked_new['ticked'], true 
 $raced = Rules::variation_ticks( $grown, $grown, true, array( 301, 302 ), array( 301, 302, 303, 304 ), true, array( 301, 302, 303, 304 ), array( 301, 302, 303, 304 ) );
 check( 'added between drawing the page and saving it: not ticked, still new', ! in_array( 305, $raced['ticked'], true ) && ! in_array( 305, $raced['seen'], true ) );
 
+check( 'the page marks it "New — not offered yet": added to a saved product, never shown, not ticked', Rules::variation_is_new( 305, true, true, array( 301, 302, 303, 304 ), array( 301, 302, 303, 304 ) ) );
+check( '... not once it was shown, or ticked, and never on a product picked just now', ! Rules::variation_is_new( 305, true, true, $grown, array() ) && ! Rules::variation_is_new( 305, true, true, array(), $grown ) && ! Rules::variation_is_new( 305, true, false, array(), array() ) );
+check( 'a later variation that leaves an attribute on "Any" is never called new: it cannot be ticked, and its row says why', ! Rules::variation_is_new( 306, false, true, array( 301, 302, 303, 304 ), array( 301, 302, 303, 304 ) ) );
+
 $removed = Rules::variation_ticks( array( 301, 302 ), array( 301, 302 ), true, array( 301, 303 ), array( 301, 302, 303, 304 ), true, $children, $children );
 check( 'a variation deleted from the product leaves the pool and the shown list', array( 301 ) === $removed['ticked'] && array( 301, 302 ) === $removed['seen'] );
 

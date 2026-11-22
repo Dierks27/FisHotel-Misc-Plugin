@@ -215,7 +215,7 @@ class Admin {
 				'image'  => $child->get_image( 'thumbnail' ),
 				'fixed'  => $fixed,
 				'ticked' => $fixed && ( $saved ? in_array( $child_id, $pool, true ) : true ),
-				'new'    => $saved && ! in_array( $child_id, $seen, true ) && ! in_array( $child_id, $pool, true ),
+				'new'    => Rules::variation_is_new( $child_id, $fixed, $saved, $seen, $pool ),
 			);
 		}
 

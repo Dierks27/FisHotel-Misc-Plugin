@@ -4,6 +4,8 @@
  *
  * Each row is a small card rather than a table row, so the page reads on
  * a phone without sideways scrolling: every number carries its own label.
+ * What the three number boxes do is said once, above the rows, not on
+ * every card.
  * The number shown is the product's own WooCommerce stock. Designs of a
  * product that keeps ONE stock number for all its variations share a row.
  *
@@ -34,6 +36,8 @@ $fh_sg_status = array(
 	Rules::STATUS_OUT     => __( 'Out', 'fishotel-misc-plugin' ),
 );
 ?>
+<p class="fh-sg-hint"><?php esc_html_e( 'Reorder at: you are reminded when the stock drops to this number. Blank = no reminder. Saved with Save Settings.', 'fishotel-misc-plugin' ); ?></p>
+<p class="fh-sg-hint"><?php esc_html_e( 'Add stickers adds what came in a new box; Recount replaces the stock number with what you counted by hand. Both are done at once. Typed it wrong? Recount again.', 'fishotel-misc-plugin' ); ?></p>
 <div class="fh-sg-stock">
 	<?php
 	foreach ( $stock_rows as $row ) :
@@ -71,7 +75,6 @@ $fh_sg_status = array(
 		<div class="fh-sg-stock__act">
 			<label class="fh-sg-label" for="fh-sg-reorder-<?php echo esc_attr( $fh_id ); ?>"><?php esc_html_e( 'Reorder at', 'fishotel-misc-plugin' ); ?></label>
 			<input type="number" id="fh-sg-reorder-<?php echo esc_attr( $fh_id ); ?>" class="fh-sg-input fh-sg-input--count" name="reorder_at[<?php echo esc_attr( $fh_id ); ?>]" min="0" step="1" inputmode="numeric" value="<?php echo esc_attr( null === $row['reorder_at'] ? '' : (int) $row['reorder_at'] ); ?>">
-			<p class="fh-sg-hint"><?php esc_html_e( 'Reminds you when the stock drops to this number. Blank = no reminder. Saved with Save Settings.', 'fishotel-misc-plugin' ); ?></p>
 		</div>
 
 		<?php if ( $fh_tracked ) : ?>
@@ -82,7 +85,6 @@ $fh_sg_status = array(
 					<input type="number" id="fh-sg-add-<?php echo esc_attr( $fh_id ); ?>" class="fh-sg-input fh-sg-input--count fh-sg-stock-n" min="1" step="1" inputmode="numeric">
 					<button type="button" class="button fh-sg-stock-btn" data-act="add"><?php esc_html_e( 'Add stickers', 'fishotel-misc-plugin' ); ?></button>
 				</span>
-				<p class="fh-sg-hint"><?php esc_html_e( 'How many came. Adds them to the stock.', 'fishotel-misc-plugin' ); ?></p>
 			</div>
 			<div class="fh-sg-stock__act">
 				<label class="fh-sg-label" for="fh-sg-recount-<?php echo esc_attr( $fh_id ); ?>"><?php esc_html_e( 'I counted them', 'fishotel-misc-plugin' ); ?></label>
@@ -90,7 +92,6 @@ $fh_sg_status = array(
 					<input type="number" id="fh-sg-recount-<?php echo esc_attr( $fh_id ); ?>" class="fh-sg-input fh-sg-input--count fh-sg-stock-n" min="0" step="1" inputmode="numeric">
 					<button type="button" class="button fh-sg-stock-btn" data-act="recount"><?php esc_html_e( 'Recount', 'fishotel-misc-plugin' ); ?></button>
 				</span>
-				<p class="fh-sg-hint"><?php esc_html_e( 'How many you counted by hand. Replaces the stock number. Typed it wrong? Recount again.', 'fishotel-misc-plugin' ); ?></p>
 			</div>
 		</div>
 		<?php endif; ?>

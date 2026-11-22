@@ -194,6 +194,23 @@ class Rules {
 	}
 
 	/**
+	 * Whether the page marks a variation "New — not offered yet": one that
+	 * was added to an already saved product since the page last listed its
+	 * variations. A variation that leaves an attribute on "Any" is never
+	 * called new — it cannot be ticked, and its row says why instead.
+	 *
+	 * @param int   $id    The variation.
+	 * @param bool  $fixed Whether it fixes every attribute.
+	 * @param bool  $saved Whether its product is in the saved settings.
+	 * @param int[] $seen  The variations the page has shown so far.
+	 * @param int[] $pool  The pool.
+	 * @return bool
+	 */
+	public static function variation_is_new( $id, $fixed, $saved, array $seen, array $pool ) {
+		return $fixed && $saved && ! in_array( (int) $id, self::ids( array_merge( $seen, $pool ) ), true );
+	}
+
+	/**
 	 * A typed "Reorder at" number: a whole number of 0 or more, or null
 	 * for blank or junk (no reminder).
 	 *
