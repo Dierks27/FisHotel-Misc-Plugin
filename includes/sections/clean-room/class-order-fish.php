@@ -90,8 +90,8 @@ class Order_Fish {
 	 *
 	 * @param array[] $lines id, species, sci_name, needs_id, species_id, stay_product_id (the product
 	 *                       of the group the line became, if any), order_ref, order_status.
-	 * @param array[] $stays id, species, sci_name (its order line's), needs_id, product_id, qty_live,
-	 *                       status, tank_number.
+	 * @param array[] $stays id, species, sci_name and line_species_id (its order line's), needs_id,
+	 *                       product_id, qty_live, status, tank_number.
 	 * @param array   $known known().
 	 * @return array[] name, sci, from (order|tank), ref, tank — one per fish, by name.
 	 */
@@ -133,19 +133,32 @@ class Order_Fish {
 			$add( $line, 'order' );
 		}
 		foreach ( $stays as $stay ) {
-			if ( 'closed' === (string) ( $stay['status'] ?? '' ) || (int) ( $stay['qty_live'] ?? 0 ) < 1 || (int) ( $stay['product_id'] ?? 0 ) > 0 ) {
-				continue;
+			if ( 'closed' === (string) ( $stay['status'] ?? '' ) || (int) ( $stay['qty_live'] ?? 0 ) < 1 || (int) ( $stay['product_id'] ?? 0 ) > 0 || (int) ( $stay['line_species_id'] ?? 0 ) > 0 ) {
+				continue; // Gone; a product; a group whose order line is a Species-list fish (whatever the row is called now).
 			}
 			$add( $stay, 'tank' );
 		}
 
-		uasort(
+		if ( count( $out ) > self::MAX_OFFERED ) {
+			// Too many to keep: the fish alive in a tank stay, then the NEWEST lines' (newest first here).
+			$tanks = array();
+			$rest  = array();
+			foreach ( $out as $fish ) {
+				if ( 'tank' === $fish['from'] ) {
+					$tanks[] = $fish;
+				} else {
+					$rest[] = $fish;
+				}
+			}
+			$out = array_slice( array_merge( $tanks, $rest ), 0, self::MAX_OFFERED );
+		}
+		usort(
 			$out,
 			static function ( $a, $b ) {
 				return strcasecmp( $a['name'], $b['name'] );
 			}
 		);
-		return array_slice( array_values( $out ), 0, self::MAX_OFFERED );
+		return array_values( $out );
 	}
 
 	/**
@@ -167,7 +180,8 @@ class Order_Fish {
 	 * An offered fish as a search-box item: the shape
 	 * Store::species_suggestions() returns, with no product and no
 	 * Species row — picking it is "use as an unlisted fish" with this
-	 * spelling — plus `where`.
+	 * spelling — plus `where`, and `ref`: the fish order it is on ('' for
+	 * a fish in a tank), which an Arrival writes on the group it makes.
 	 *
 	 * @param array $fish One of offered().
 	 * @return array
@@ -181,6 +195,7 @@ class Order_Fish {
 			'match'      => 'tank' === ( $fish['from'] ?? '' ) ? 'tank' : 'order',
 			'alias'      => '',
 			'where'      => self::where( $fish ),
+			'ref'        => 'order' === ( $fish['from'] ?? '' ) ? (string) ( $fish['ref'] ?? '' ) : '',
 		);
 	}
 
@@ -231,8 +246,7 @@ class Order_Fish {
 	 *   0  the name is what was typed;
 	 *   1  the name starts with it;
 	 *   2  every word typed stands in the name;
-	 *   3  found by something else (a common name, the scientific name,
-	 *      a learned name).
+	 *   3  it does not: found by something else (the scientific name, say).
 	 *
 	 * @param string $name An item's name.
 	 * @param string $term Search text.
@@ -259,12 +273,30 @@ class Order_Fish {
 	}
 
 	/**
+	 * How well a listed item answers a term: the best of its name, the
+	 * learned name that found it and each of its common names — a product
+	 * found by "pj cardinal" answers "pj" as well as a fish typed
+	 * "PJ Cardinal" does, and stays above it.
+	 *
+	 * @param array  $item A suggestion: name, alias, common.
+	 * @param string $term Search text.
+	 * @return int
+	 */
+	public static function item_quality( array $item, $term ) {
+		$best = min( self::quality( (string) ( $item['name'] ?? '' ), $term ), self::quality( (string) ( $item['alias'] ?? '' ), $term ) );
+		foreach ( Store::split_names( (string) ( $item['common'] ?? '' ) ) as $common ) {
+			$best = min( $best, self::quality( $common, $term ) );
+		}
+		return $best;
+	}
+
+	/**
 	 * Put the order-line fish a term finds into a suggestion list, BELOW
 	 * the products and the Species rows that answer the term as well: each
-	 * goes right after the last item already listed whose name answers at
-	 * least as well as its own. The items already listed keep their order;
-	 * a fish whose name is already in the list (a learned name of it, say)
-	 * is not listed twice.
+	 * goes right after the last item already listed that answers at least
+	 * as well (item_quality()) as its own name does. The items already
+	 * listed keep their order; a fish whose name is already in the list (a
+	 * learned name of it, say) is not listed twice.
 	 *
 	 * @param array[] $items   Alias / product / species suggestions, in their order.
 	 * @param array[] $offered offered().
@@ -284,7 +316,7 @@ class Order_Fish {
 		$quality = array();
 		foreach ( $items as $index => $item ) {
 			$listed[ Species::key( (string) ( $item['name'] ?? '' ) ) ] = true;
-			$quality[ $index ] = self::quality( (string) ( $item['name'] ?? '' ), $term );
+			$quality[ $index ] = self::item_quality( $item, $term );
 		}
 
 		// Slot n = right before item n (count( $items ) = at the end).

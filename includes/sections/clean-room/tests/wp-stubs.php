@@ -67,6 +67,10 @@ function sanitize_text_field( $text ) {
 	return trim( strip_tags( $text ) );
 }
 
+function wp_specialchars_decode( $text, $quote_style = ENT_NOQUOTES ) {
+	return htmlspecialchars_decode( (string) $text, $quote_style );
+}
+
 function sanitize_textarea_field( $text ) {
 	return trim( strip_tags( (string) $text ) );
 }

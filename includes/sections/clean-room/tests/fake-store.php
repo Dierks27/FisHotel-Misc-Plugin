@@ -1174,8 +1174,9 @@ class Fake_Store {
 			$stays[] = array_merge(
 				$stay,
 				array(
-					'tank_number' => $tank ? (int) $tank['number'] : 0,
-					'sci_name'    => isset( $this->lines[ $line_id ] ) ? (string) $this->lines[ $line_id ]['sci_name'] : '',
+					'tank_number'     => $tank ? (int) $tank['number'] : 0,
+					'sci_name'        => isset( $this->lines[ $line_id ] ) ? (string) $this->lines[ $line_id ]['sci_name'] : '',
+					'line_species_id' => isset( $this->lines[ $line_id ] ) ? $this->lines[ $line_id ]['species_id'] : null,
 				)
 			);
 		}

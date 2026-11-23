@@ -371,8 +371,11 @@ system temp directory (`FH_TEST_TMP` overrides).
   not a "??" line; an unlisted fish alive in a tank; one fish on three
   lines spelled three ways offered once in its newest line's spelling),
   the words "on fish order 2026-9" / "in tank 512", the item (no
-  product, no Species row), the match on name and scientific name, the
-  ranking under the products and the Species rows of the same quality;
+  product, no Species row, the order's ref), the match on name and
+  scientific name, the ranking under the products and the Species rows
+  of the same quality (a product found by a learned or a common name
+  included), a group whose line is a renamed Species row, the cap that
+  cuts the oldest lines' fish, a name with a "<" stored as spelled;
   on the fake store: found, picked — the same answer as a typed unlisted
   name, an Arrival and "Add fish already here" with it, nothing created
   —, the order closed, the last fish gone, a Species row or a product of
@@ -738,9 +741,10 @@ system temp directory (`FH_TEST_TMP` overrides).
   and, in the ordered mode on a sheet with a received column, a row with
   no order quantity and a received count kept as ordered 0 (an "order"
   or a plain "qty" column), the row with neither still left out, a
-  received count that will not parse still only flagged, the sheet on
-  which not one row has an order quantity listed as before — and the
-  arrived mode as it was.
+  received count that will not parse still only flagged, a sum under
+  the received column with no fish beside it left out, the sheet on
+  which not one row has an order quantity (one unreadable cell or not)
+  listed as before — and the arrived mode as it was.
 - **order-import-layouts-test.php** — the saved layouts
   (`Import_Layouts`): built from a hand-set mapping, recognised the next
   time with and without a header, an ordered and an arrived layout side
@@ -1499,7 +1503,8 @@ line's `split` field holds anything (`fields_before`) — and one press on
     summary ends "· 1 more arrived without being ordered", and after the
     confirm its line reads ordered 0 · received 1 — with and without
     *These fish have arrived* ticked; a row with neither number is not
-    listed. A sheet whose headings nobody knows shows a
+    listed, and neither is a sum under the received column with no fish
+    beside it. A sheet whose headings nobody knows shows a
     dropdown above each column: set the fish and the quantity, leave
     *Remember this layout for <supplier>* ticked, confirm. The order is
     saved as *ordered*, every line with received empty and its `[code …]`
@@ -1564,8 +1569,12 @@ line's `split` field holds anything (`fields_before`) — and one press on
     type "golden": the fish is suggested, with its scientific name and
     "on fish order <ref>", under any product or Species-list fish that
     answers as well. Pick it, Save: the tank's group is "Golden Sample
-    Tang" exactly as the line spells it, with no product; the Species
-    tab has no new row and the shop no new product. The same from *+ Add
+    Tang" exactly as the line spells it, with no product, and the
+    Stays tab shows the order's ref beside it; the Species tab has no
+    new row and the shop no new product. (That group is linked to no
+    line: do NOT also press *Check in* for that line on the order — it
+    would put the same fish in a tank a second time. The fish of a fish
+    order normally go in through its Check in.) The same from *+ Add
     fish already here*, from Identify on a "??" group, and in wp-admin
     from another order's line (its scientific name is filled in), from
     the Stays tab's *Add fish already here* and from *Identify*. Type

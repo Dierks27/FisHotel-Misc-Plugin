@@ -1274,9 +1274,11 @@ quantity anywhere: the preview says so and offers the other button
   fill rate and every figure read it the same way. The row says "arrived
   without being ordered" and the summary counts it ("61 of 1,188 rows
   have an order quantity · 1 more arrived without being ordered"); a
-  price-list row with neither is left out as ever. When NOT ONE row has
-  an order quantity the sheet is what arrived: nothing is listed and the
-  preview offers *Read it as what ARRIVED*.
+  price-list row with neither is left out as ever, and so is a received
+  count with no fish beside it (a sum under the column). When NOT ONE row
+  has an order quantity the sheet is what arrived: it is read as it
+  always was (nothing to confirm) and the preview offers *Read it as
+  what ARRIVED*.
 - **This is what ARRIVED** — the supplier's invoice or packing list when
   the boxes land. Every row is **paired with a line already on the
   order**: as the owner says (a pairing made by hand wins), else by the
@@ -2047,14 +2049,26 @@ line —, with its scientific name when a line has one and a word saying
 where it comes from: "on fish order 2026-9" (the order's ref) or "in
 tank 512". They rank **below** the products and the Species rows that
 answer the term as well (a name that is what was typed, then one that
-starts with it, then one that holds every word, then anything found by
-another name); the entries that were listed before keep their order.
+starts with it, then one that holds every word, then anything found
+another way; a product or a Species row is judged by the best of its
+name, the learned name that found it and its common names — typed "pj",
+the product "pj cardinal" was learned for stays above a line's "PJ
+Cardinal"); the entries that were listed before keep their order.
 **Picking one is "use as an unlisted fish" with that exact spelling** —
 no product, no Species row, nothing created —, and on an order line its
 scientific name fills an empty field: the group in the tank and the
-order line read as the same fish wherever fish are grouped by name.
+order line read as the same fish wherever fish are grouped by name (a
+name is stored as it is spelled, a "<" included: "Clown Goby <1in").
+**The fish of a fish order still go into their tanks through the order's
+own Check in.** An Arrival or *Add fish already here* with such a fish
+makes a group of its own, linked to no line — the Arrival writes the
+order's ref on it, so the Stays tab says which fish order it came on —
+and a Check in of the same line afterwards would put the same fish in a
+tank a second time.
 Never offered: a line or a group that is linked to a product or a
-Species row — by its link, by the group it was checked in as — or
+Species row — by its link, by the group it was checked in as, by the
+line a group was checked in from (whatever that Species row is called
+now) — or
 carries the exact name of one (it is found as that — so a
 fish that later gets a product or a Species row stops being offered this
 way), an unknown "??" fish (it has no name), a closed order's fish that
@@ -2062,7 +2076,8 @@ is no longer in a tank.
 
 The list is two reads over the section's own tables, each with a row
 cap and neither growing with the history (closed orders and empty or
-closed groups are out in the query itself); it is kept beside the
+closed groups are out in the query itself; past 1,000 fish the ones
+alive in a tank and the newest lines' are kept); it is kept beside the
 candidate cache for ten minutes and dropped with it by every product,
 species and alias save — and, alone, by every write that changes the
 answer: a fish order saved, imported into or deleted, its status
