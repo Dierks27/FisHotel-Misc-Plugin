@@ -984,8 +984,11 @@ costing replicates the sheet exactly (`class-costing.php`, pure):
   Σ survived ÷ (Σ received − Σ DOA), undefined until a survivor count is
   known; DOA rate = Σ DOA ÷ Σ received; the sheet's DOA cost = Σ DOA ×
   price + Σ DOA × fee rate — in box mode the fee rate is a *whole box's*
-  fees, a carry-over from the bag version, so it is labelled and the
-  per-fish figure (fees per box ÷ per box) stands beside it;
+  fees, a carry-over from the bag version. The order's panel therefore
+  shows the per-fish figure as **DOA cost** — each DOA fish's price plus
+  its own share of the fees (fees per box ÷ per box, or the line's
+  percent of a box over its fish) — and the sheet's figure is kept,
+  labelled as the old sheet's, in the full list under the lines;
 - every division is guarded (an undefined ratio shows "—"); full float
   precision inside, rounding only on display and when a figure is
   stored.
