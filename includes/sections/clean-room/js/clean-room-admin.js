@@ -13,7 +13,8 @@
  * Correct the fish…" panel under a stay (Stays tab) or an order line (the
  * real fish from the species search, its size, or still unknown), with
  * the "??" box of an order line, and the Board's card lines, which open
- * to their groups on a click or a tap.
+ * to their groups on a click or a tap, and Species → "Fish with no
+ * product yet" (link a fish to a product, start a draft product).
  *
  * The server renders every row; this file posts and fills in. The pure
  * helpers are exported for the node test; the rest needs jQuery and the
@@ -597,8 +598,45 @@
 		};
 	}
 
+	/**
+	 * What "Fish with no product yet" posts for one fish (pure): 'link'
+	 * with the product picked — under the page's own nonce —, or 'draft'
+	 * under the draft's own. Null when something is missing (no fish, no
+	 * product for a link, no draft nonce: this user may not make products).
+	 *
+	 * @param {string} op      'link' or 'draft'.
+	 * @param {Object} fish    {key, name} — the row's data-key / data-name.
+	 * @param {*}      product The product id (link).
+	 * @param {Object} nonces  {page, draft, action}.
+	 * @return {Object|null}
+	 */
+	function noProductPost(op, fish, product, nonces) {
+		fish = fish || {};
+		nonces = nonces || {};
+		var key = String(fish.key === null || typeof fish.key === 'undefined' ? '' : fish.key);
+		var id = parseInt(product, 10) || 0;
+		if (!key || (op !== 'link' && op !== 'draft')) {
+			return null;
+		}
+		if (op === 'link' ? (id < 1 || !nonces.page) : !nonces.draft) {
+			return null;
+		}
+		var fields = {
+			action: nonces.action || 'fishotel_cleanroom_no_product',
+			op: op,
+			nonce: op === 'link' ? nonces.page : nonces.draft,
+			key: key,
+			name: String(fish.name === null || typeof fish.name === 'undefined' ? '' : fish.name)
+		};
+		if (op === 'link') {
+			fields.product_id = id;
+		}
+		return fields;
+	}
+
 	var api = {
 		existingPost: existingPost,
+		noProductPost: noProductPost,
 		packLines: packLines,
 		wellFormed: wellFormed,
 		renumber: renumber,
@@ -1372,7 +1410,10 @@
 			// A species picked from the list carries its species-list id; a name typed over it is
 			// another fish, so the id goes (picking again sets it again).
 			$order.on('input', '.fh-cr-species', function () {
-				$(this).closest('tr').find('input[name$="[species_id]"]').val('');
+				var $tr = $(this).closest('tr');
+				$tr.find('input[name$="[species_id]"]').val('');
+				// Another fish may have a product: the "no product yet" tag goes until the next Save says.
+				$tr.find('[data-f="no_product"]').text('');
 			});
 
 			// The "??" box: an unknown fish reads "??" and what it looks like; unticked, the mark goes.
@@ -1755,6 +1796,103 @@
 					fail(res);
 					$btn.prop('disabled', false);
 				});
+		});
+
+		// Species → "Fish with no product yet": link a fish to a product, or start a draft product for it.
+		var np = cfg.noProduct || {};
+		var npWords = np.i18n || {};
+
+		function npNonces() {
+			return { page: cfg.nonce, draft: np.draftNonce || '', action: np.action };
+		}
+
+		function npSay($row, text, isError) {
+			$row.find('.fh-cr-np-result').toggleClass('is-error', !!isError).text(text || '');
+		}
+
+		function npMessage(res) {
+			return (res && res.data && res.data.message) || (res && res.responseJSON && res.responseJSON.data && res.responseJSON.data.message) || (i18n.error || 'Something went wrong.');
+		}
+
+		function npLink($row, productId) {
+			var fields = noProductPost('link', { key: $row.attr('data-key'), name: $row.attr('data-name') }, productId, npNonces());
+			var $buttons = $row.find('button');
+			if (!fields || $row.hasClass('is-busy')) {
+				return;
+			}
+			$row.addClass('is-busy');
+			$buttons.prop('disabled', true);
+			npSay($row, npWords.linking || 'Linking…');
+			$.post(ajaxUrl(), fields)
+				.done(function (res) {
+					if (!res || !res.success) {
+						npSay($row, npMessage(res), true);
+						$buttons.prop('disabled', false);
+						return;
+					}
+					// Linked: the fish leaves the list. Its row says what was done until the page is reloaded.
+					$row.addClass('is-done').find('.fh-cr-np-linkbox').prop('hidden', true);
+					npSay($row, res.data.message || (i18n.linked || 'Linked.'));
+					$row.find('.fh-cr-np-result').append(' ').append($('<a href="#" class="fh-cr-np-reload"></a>').text(npWords.reload || 'Reload the list'));
+				})
+				.fail(function (res) {
+					npSay($row, npMessage(res), true);
+					$buttons.prop('disabled', false);
+				})
+				.always(function () { $row.removeClass('is-busy'); });
+		}
+
+		$(document).on('click', '.fh-cr-np-reload', function (e) {
+			e.preventDefault();
+			root.location.reload();
+		});
+
+		$(document).on('click', '.fh-cr-np-link-open', function () {
+			var $box = $(this).closest('.fh-cr-np-row').find('.fh-cr-np-linkbox');
+			$box.prop('hidden', !$box.prop('hidden'));
+			if (!$box.prop('hidden')) {
+				$box.find('.fh-cr-np-search').focus();
+			}
+		});
+
+		$(document).on('click', '.fh-cr-np-candidate', function () {
+			npLink($(this).closest('.fh-cr-np-row'), $(this).attr('data-product'));
+		});
+
+		attachSuggest($(document), '.fh-cr-np-search', 'products', function ($input, item) {
+			$input.val(item.name || '');
+			npLink($input.closest('.fh-cr-np-row'), item.product_id);
+		});
+
+		$(document).on('click', '.fh-cr-np-draft', function () {
+			var $row = $(this).closest('.fh-cr-np-row');
+			var $buttons = $row.find('button');
+			var fields = noProductPost('draft', { key: $row.attr('data-key'), name: $row.attr('data-name') }, 0, npNonces());
+			if (!fields || $row.hasClass('is-busy')) {
+				return; // One request at a time: a second click while the first is under way does nothing.
+			}
+			$row.addClass('is-busy');
+			$buttons.prop('disabled', true);
+			npSay($row, npWords.making || 'Making the draft…');
+			$.post(ajaxUrl(), fields)
+				.done(function (res) {
+					if (!res || !res.success) {
+						npSay($row, npMessage(res), true);
+						$buttons.prop('disabled', false);
+						return;
+					}
+					// The buttons stay off: the fish has its product now. What was done, and the way to the product.
+					$row.addClass('is-done').find('.fh-cr-np-linkbox').prop('hidden', true);
+					npSay($row, res.data.message || (i18n.saved || 'Saved.'));
+					if (res.data.edit_url) {
+						$row.find('.fh-cr-np-result').append($('<br>')).append($('<a></a>').attr('href', res.data.edit_url).text(npWords.finish || 'Finish it in the shop →'));
+					}
+				})
+				.fail(function (res) {
+					npSay($row, npMessage(res), true);
+					$buttons.prop('disabled', false);
+				})
+				.always(function () { $row.removeClass('is-busy'); });
 		});
 
 		attachSuggest($(document), '.fh-cr-product-search', 'products', function ($input, item) {

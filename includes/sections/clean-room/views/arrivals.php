@@ -17,7 +17,9 @@
 
 defined( 'ABSPATH' ) || exit;
 
+use FisHotel\Misc\Sections\Clean_Room\Admin_No_Product;
 use FisHotel\Misc\Sections\Clean_Room\Admin_Workbook;
+use FisHotel\Misc\Sections\Clean_Room\No_Product;
 use FisHotel\Misc\Sections\Clean_Room\Clean_Room;
 use FisHotel\Misc\Sections\Clean_Room\Costing;
 
@@ -99,6 +101,9 @@ $tab = 'arrivals';
 								<span class="fh-cr-badge fh-cr-badge--order-<?php echo esc_attr( $fh_order['status'] ); ?>"><?php echo esc_html( $fh_order['status'] ); ?></span>
 								<?php if ( $fh_order['to_identify'] > 0 ) : ?>
 									<a class="fh-cr-sub fh-cr-warn fh-cr-unknown" href="<?php echo esc_url( Admin_Workbook::order_url( (int) $fh_order['id'] ) ); ?>"><?php echo esc_html( sprintf( /* translators: %d: order lines */ __( '?? %d to identify', 'fishotel-misc-plugin' ), (int) $fh_order['to_identify'] ) ); ?></a>
+								<?php endif; ?>
+								<?php if ( ! empty( $fh_order['no_product'] ) ) : ?>
+									<a class="fh-cr-sub fh-cr-noproduct" href="<?php echo esc_url( Admin_No_Product::url( array( 'order' => (int) $fh_order['id'] ) ) ); ?>" title="<?php esc_attr_e( 'Fish of this order that are not linked to a product of the shop yet. Opens the list, where each can be linked to a product or get a draft product.', 'fishotel-misc-plugin' ); ?>"><?php echo esc_html( No_Product::count_text( (int) $fh_order['no_product'] ) ); ?> &rarr;</a>
 								<?php endif; ?>
 							</td>
 							<td>

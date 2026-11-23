@@ -26,6 +26,8 @@
 defined( 'ABSPATH' ) || exit;
 
 use FisHotel\Misc\Sections\Clean_Room\Admin;
+use FisHotel\Misc\Sections\Clean_Room\Admin_No_Product;
+use FisHotel\Misc\Sections\Clean_Room\No_Product;
 use FisHotel\Misc\Sections\Clean_Room\Admin_Workbook;
 use FisHotel\Misc\Sections\Clean_Room\Clean_Room;
 use FisHotel\Misc\Sections\Clean_Room\Identify;
@@ -71,10 +73,14 @@ $fh_table = static function ( array $rows, $open ) use ( $today, $sizes ) {
 						<strong><?php echo esc_html( $fh_stay['species'] ); ?></strong>
 						<?php echo Admin::size_html( $fh_stay, $sizes ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by size_html(). ?>
 						<?php echo Admin::unknown_html( $fh_stay ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by unknown_html(). ?>
-						<?php if ( $fh_stay['product_id'] ) : ?>
+						<?php
+						// One rule for "no product yet" (No_Product): a product in the trash is none; a "??" fish needs a name first.
+						$fh_np = isset( $product_states[ (int) $fh_stay['id'] ] ) ? (string) $product_states[ (int) $fh_stay['id'] ] : ( $fh_stay['product_id'] ? 'linked' : ( No_Product::is_unknown( $fh_stay ) ? 'unknown' : 'none' ) );
+						?>
+						<?php if ( 'linked' === $fh_np ) : ?>
 							<span class="fh-cr-sub"><a href="<?php echo esc_url( get_edit_post_link( (int) $fh_stay['product_id'] ) ?: '#' ); ?>"><?php echo esc_html( sprintf( /* translators: %d: product id */ __( 'product #%d', 'fishotel-misc-plugin' ), (int) $fh_stay['product_id'] ) ); ?></a></span>
-						<?php else : ?>
-							<span class="fh-cr-sub"><?php esc_html_e( 'no product', 'fishotel-misc-plugin' ); ?></span>
+						<?php elseif ( 'none' === $fh_np ) : ?>
+							<a class="fh-cr-sub fh-cr-noproduct" href="<?php echo esc_url( Admin_No_Product::url() ); ?>" title="<?php esc_attr_e( 'This fish is not linked to a product of the shop yet. Opens "Fish with no product yet", where it can be linked to a product or get a draft product.', 'fishotel-misc-plugin' ); ?>"><?php echo esc_html( No_Product::tag_text() ); ?> &rarr;</a>
 						<?php endif; ?>
 						<?php if ( '' !== $fh_stay['notes'] ) : ?>
 							<span class="fh-cr-sub"><?php echo esc_html( $fh_stay['notes'] ); ?></span>

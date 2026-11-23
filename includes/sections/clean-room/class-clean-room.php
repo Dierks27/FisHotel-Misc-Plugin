@@ -219,6 +219,7 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 			require_once self::path() . 'class-board-lines.php';
 			require_once self::path() . 'class-orders.php';
 			require_once self::path() . 'class-shop-price.php';
+			require_once self::path() . 'class-no-product.php';
 			require_once self::path() . 'class-splits.php';
 			require_once self::path() . 'class-xlsx.php';
 			require_once self::path() . 'class-workbook.php';
@@ -299,6 +300,8 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 				require_once self::path() . 'class-import-layouts.php';
 				require_once self::path() . 'class-admin-order-import.php';
 				require_once self::path() . 'class-admin-temp.php';
+				// "Fish with no product yet": the Species tab's view, the marks, the two acts.
+				require_once self::path() . 'class-admin-no-product.php';
 
 				$settings = new Settings();
 				$settings->init();
@@ -317,6 +320,9 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 
 				$order_import = new Admin_Order_Import();
 				$order_import->init();
+
+				$no_product = new Admin_No_Product();
+				$no_product->init();
 
 				// Settings → Sizes → "Tidy up the sizes": its AJAX and assets. It does nothing until a button is pressed.
 				require_once self::path() . 'class-admin-sizes-tidy.php';

@@ -93,6 +93,7 @@ $fh_page_url = static function ( $page ) use ( $filters ) {
 	</div>
 
 	<?php include Clean_Room::path() . 'views/tabs.php'; ?>
+	<?php include Clean_Room::path() . 'views/species-nav.php'; ?>
 
 	<?php if ( ! $tables_ok ) : ?>
 		<div class="fishotel-misc-notice fishotel-misc-notice--error">

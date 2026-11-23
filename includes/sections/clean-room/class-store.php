@@ -3591,6 +3591,62 @@ class Store {
 	}
 
 	/**
+	 * The post status of several products in one query, by id — what
+	 * "this fish has no product yet" asks (No_Product::alive()): a product
+	 * in the trash is none, and a product that is not in the answer was
+	 * deleted. At most PRICE_IDS_LIMIT ids are asked for; an id beyond
+	 * that reads as deleted.
+	 *
+	 * @param int[] $ids Product ids.
+	 * @return array<int, string> product id => post status.
+	 */
+	public function product_statuses( array $ids ) {
+		$ids = array_slice( array_values( array_unique( array_filter( array_map( 'intval', $ids ) ) ) ), 0, self::PRICE_IDS_LIMIT );
+		if ( ! $ids ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		$out = array();
+		foreach ( array_chunk( $ids, 500 ) as $chunk ) {
+			try {
+				$rows = $wpdb->get_results( 'SELECT ID, post_status FROM ' . $wpdb->posts . " WHERE post_type = 'product' AND ID IN (" . implode( ',', $chunk ) . ')', ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- ids cast to int above.
+			} catch ( \Throwable $e ) {
+				continue;
+			}
+			foreach ( is_array( $rows ) ? $rows : array() as $row ) {
+				$out[ (int) $row['ID'] ] = (string) $row['post_status'];
+			}
+		}
+
+		return $out;
+	}
+
+	/**
+	 * The product that carries a meta value — the draft "Start a draft
+	 * product" made for a fish (No_Product::DRAFT_META): the oldest one
+	 * that is not in the trash, 0 when there is none.
+	 *
+	 * @param string $meta_key   Meta key.
+	 * @param string $meta_value Meta value.
+	 * @return int
+	 */
+	public function product_with_meta( $meta_key, $meta_value ) {
+		if ( '' === (string) $meta_key || '' === (string) $meta_value ) {
+			return 0;
+		}
+
+		global $wpdb;
+
+		try {
+			return (int) $wpdb->get_var( $wpdb->prepare( 'SELECT p.ID FROM ' . $wpdb->posts . ' p INNER JOIN ' . $wpdb->postmeta . " m ON m.post_id = p.ID WHERE p.post_type = 'product' AND p.post_status NOT IN ('trash', 'auto-draft') AND m.meta_key = %s AND m.meta_value = %s ORDER BY p.ID ASC LIMIT 1", (string) $meta_key, (string) $meta_value ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		} catch ( \Throwable $e ) {
+			return 0;
+		}
+	}
+
+	/**
 	 * The species of the last N arrivals (distinct, newest first) — the
 	 * "recent species" chips. A fish that still has to be identified is
 	 * left out: "?? small wrasse" is not a species to check in again.
@@ -4079,7 +4135,8 @@ class Store {
 	/**
 	 * Order headers, newest first.
 	 *
-	 * @param array $filters year (int), status (string), supplier (string), limit (int).
+	 * @param array $filters year (int), status (string), supplier (string), open (bool: every
+	 *                       status but closed), limit (int).
 	 * @return array[] Hydrated headers (+ line_count).
 	 */
 	public function orders( array $filters = array() ) {
@@ -4102,6 +4159,9 @@ class Store {
 		if ( ! empty( $filters['supplier'] ) ) {
 			$where[]  = 'o.supplier = %s';
 			$params[] = (string) $filters['supplier'];
+		}
+		if ( ! empty( $filters['open'] ) ) {
+			$where[] = "o.status <> 'closed'"; // Draft, ordered or received: what "Fish with no product yet" reads by default.
 		}
 		$params[] = isset( $filters['limit'] ) ? max( 1, min( self::ORDERS_LIMIT, (int) $filters['limit'] ) ) : self::ORDERS_LIMIT;
 
@@ -4402,6 +4462,62 @@ class Store {
 		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
 			$line                         = self::hydrate_line( $row );
 			$out[ $line['order_id'] ][]   = $line;
+		}
+
+		return $out;
+	}
+
+	/**
+	 * Every line of ONE fish, on every order — closed ones too —, each with
+	 * its order's ref, status and dates (order_ref, order_status,
+	 * order_date, received_date, order_created): the lines that carry a
+	 * species-list id, and the lines typed with one of the names given.
+	 * The comparison is the database's (case-blind); the caller keeps the
+	 * lines whose fish key is the fish's (Stats::fish_key()). A fish that
+	 * still has to be identified is left out.
+	 *
+	 * @param int      $species_id Species-list id (0 = none).
+	 * @param string[] $names      Names the fish is typed with.
+	 * @param int      $limit      Row cap.
+	 * @return array[] Hydrated lines (+ the order fields above).
+	 */
+	public function lines_of_fish( $species_id, array $names, $limit = 5000 ) {
+		$names = array_slice( array_values( array_unique( array_filter( array_map( 'strval', $names ), 'strlen' ) ) ), 0, 50 );
+		if ( ! self::tables_exist() || ( (int) $species_id <= 0 && ! $names ) ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		$where  = array();
+		$params = array();
+		if ( (int) $species_id > 0 ) {
+			$where[]  = 'l.species_id = %d';
+			$params[] = (int) $species_id;
+		}
+		if ( $names ) {
+			$where[] = 'l.species IN (' . implode( ',', array_fill( 0, count( $names ), '%s' ) ) . ')';
+			$params  = array_merge( $params, $names );
+		}
+		$params[] = max( 1, min( 20000, (int) $limit ) );
+		$sql      = str_replace( ' FROM ' . self::table( 'order_lines' ) . ' l ', ', o.ref AS order_ref, o.status AS order_status, o.order_date AS order_date, o.received_date AS received_date, o.created_at AS order_created FROM ' . self::table( 'order_lines' ) . ' l INNER JOIN ' . self::table( 'orders' ) . ' o ON o.id = l.order_id ', self::line_select() )
+			. ' WHERE l.needs_id = 0 AND (' . implode( ' OR ', $where ) . ') ORDER BY l.order_id ASC, l.sort ASC, l.id ASC LIMIT %d';
+
+		try {
+			$rows = $wpdb->get_results( $wpdb->prepare( $sql, $params ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+
+		$out = array();
+		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
+			$line                  = self::hydrate_line( $row );
+			$line['order_ref']     = (string) ( $row['order_ref'] ?? '' );
+			$line['order_status']  = (string) ( $row['order_status'] ?? '' );
+			$line['order_date']    = self::date_or_null( $row['order_date'] ?? null );
+			$line['received_date'] = self::date_or_null( $row['received_date'] ?? null );
+			$line['order_created'] = (string) ( $row['order_created'] ?? '' );
+			$out[]                 = $line;
 		}
 
 		return $out;

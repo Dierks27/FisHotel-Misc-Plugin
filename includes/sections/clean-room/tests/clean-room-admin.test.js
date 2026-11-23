@@ -148,6 +148,14 @@ check( 'typing after the pick drops the product', 0 === ep.product_id );
 ep = helpers.existingPost( { tank: 122, area: 'clean', text: 'small wrasse', unknown: true, picked: { name: 'small wrasse', product_id: 5 }, cleared: '2025-06-01', supplier: 'Test Supplier' } );
 check( 'an unknown fish: "?? small wrasse", no product; a cleared date and a supplier', '?? small wrasse' === ep.species && 1 === ep.unknown && 0 === ep.product_id && '2025-06-01' === ep.cleared && 'Test Supplier' === ep.supplier, JSON.stringify( ep ) );
 
+console.log( '9. "Fish with no product yet": what the page posts for one fish' );
+var nonces = { page: 'page-nonce', draft: 'draft-nonce', action: 'fishotel_cleanroom_no_product' };
+var np = helpers.noProductPost( 'link', { key: 'n:orange test dart', name: 'Orange Test Dart' }, '31', nonces );
+check( 'a link: the fish by its key and name, the product, the page\'s own nonce', same( { action: 'fishotel_cleanroom_no_product', op: 'link', nonce: 'page-nonce', key: 'n:orange test dart', name: 'Orange Test Dart', product_id: 31 }, np ), JSON.stringify( np ) );
+np = helpers.noProductPost( 'draft', { key: 's:7', name: 'Blue Test Wrasse' }, 0, nonces );
+check( 'a draft: under the draft\'s own nonce, and it names no product', same( { action: 'fishotel_cleanroom_no_product', op: 'draft', nonce: 'draft-nonce', key: 's:7', name: 'Blue Test Wrasse' }, np ), JSON.stringify( np ) );
+check( 'nothing is posted without a fish, without a product to link, or for a draft by a user who may not make products (no draft nonce)', null === helpers.noProductPost( 'link', { key: '', name: 'x' }, 3, nonces ) && null === helpers.noProductPost( 'link', { key: 's:7' }, 0, nonces ) && null === helpers.noProductPost( 'draft', { key: 's:7' }, 0, { page: 'page-nonce', draft: '' } ) && null === helpers.noProductPost( 'publish', { key: 's:7' }, 3, nonces ) && null === helpers.noProductPost() );
+
 console.log( '' );
 console.log( failures ? failures + ' of ' + checks + ' checks FAILED' : 'All ' + checks + ' checks passed' );
 process.exit( failures ? 1 : 0 );

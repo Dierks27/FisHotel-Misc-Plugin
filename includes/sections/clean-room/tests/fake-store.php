@@ -1024,6 +1024,48 @@ class Fake_Store {
 		return $out;
 	}
 
+	/**
+	 * The post status of a product, seeded by a test (id => status): a
+	 * product of $products without one is published; 'trash' is a product
+	 * in the trash, and one that was deleted is simply not in $products.
+	 *
+	 * @var string[]
+	 */
+	public $product_statuses = array();
+
+	/**
+	 * The meta of products, seeded by a test or by a test's shop: id => array( key => value ).
+	 *
+	 * @var array[]
+	 */
+	public $product_meta = array();
+
+	/** How often the statuses were read: the mark costs ONE read per page, never one per row. */
+	public $status_reads = 0;
+
+	public function product_statuses( array $ids ) {
+		$this->status_reads++;
+		$out = array();
+		foreach ( array_unique( array_map( 'intval', $ids ) ) as $id ) {
+			if ( isset( $this->products[ $id ] ) ) {
+				$out[ $id ] = isset( $this->product_statuses[ $id ] ) ? (string) $this->product_statuses[ $id ] : 'publish';
+			}
+		}
+		return $out;
+	}
+
+	public function product_with_meta( $meta_key, $meta_value ) {
+		$ids = array_keys( $this->products );
+		sort( $ids );
+		foreach ( $ids as $id ) {
+			$status = isset( $this->product_statuses[ $id ] ) ? (string) $this->product_statuses[ $id ] : 'publish';
+			if ( 'trash' !== $status && isset( $this->product_meta[ $id ][ $meta_key ] ) && (string) $this->product_meta[ $id ][ $meta_key ] === (string) $meta_value ) {
+				return (int) $id;
+			}
+		}
+		return 0;
+	}
+
 	public function add_alias( $alias, $product_id, $species ) {
 		$alias = strtolower( trim( preg_replace( '/\s+/', ' ', (string) $alias ) ) );
 		if ( '' === $alias ) {
@@ -1358,6 +1400,9 @@ class Fake_Store {
 			if ( ! empty( $filters['supplier'] ) && $order['supplier'] !== (string) $filters['supplier'] ) {
 				continue;
 			}
+			if ( ! empty( $filters['open'] ) && 'closed' === $order['status'] ) {
+				continue;
+			}
 			$out[] = $order;
 		}
 		usort(
@@ -1479,6 +1524,38 @@ class Fake_Store {
 	public function order_lines( $order_id ) {
 		$by_order = $this->lines_for_orders( array( (int) $order_id ) );
 		return isset( $by_order[ (int) $order_id ] ) ? $by_order[ (int) $order_id ] : array();
+	}
+
+	/** As the real store: the lines with a species-list id or one of the names (case-blind), with their order's fields. */
+	public function lines_of_fish( $species_id, array $names, $limit = 5000 ) {
+		$keys = array_map( array( Species::class, 'key' ), $names );
+		$out  = array();
+		foreach ( $this->lines as $row ) {
+			if ( ! empty( $row['needs_id'] ) || ! isset( $this->orders[ (int) $row['order_id'] ] ) ) {
+				continue;
+			}
+			if ( ! ( (int) $species_id > 0 && (int) $row['species_id'] === (int) $species_id ) && ! in_array( Species::key( (string) $row['species'] ), $keys, true ) ) {
+				continue;
+			}
+			$order = $this->orders[ (int) $row['order_id'] ];
+			$out[] = array_merge(
+				$this->line_row( $row ),
+				array(
+					'order_ref'     => (string) $order['ref'],
+					'order_status'  => (string) $order['status'],
+					'order_date'    => $order['order_date'] ? (string) $order['order_date'] : null,
+					'received_date' => $order['received_date'] ? (string) $order['received_date'] : null,
+					'order_created' => (string) $order['created_at'],
+				)
+			);
+		}
+		usort(
+			$out,
+			static function ( $a, $b ) {
+				return ( $a['order_id'] <=> $b['order_id'] ) ?: ( ( $a['sort'] <=> $b['sort'] ) ?: ( $a['id'] <=> $b['id'] ) );
+			}
+		);
+		return array_slice( $out, 0, max( 1, (int) $limit ) );
 	}
 
 	public function lines_for_orders( array $order_ids ) {

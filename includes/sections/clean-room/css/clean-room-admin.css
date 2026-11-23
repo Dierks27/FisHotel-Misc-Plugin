@@ -1249,6 +1249,200 @@ a.fh-cr-chip--muted {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Fish with no product yet: the tag, the chip, the list              */
+/* ------------------------------------------------------------------ */
+
+/* The tag beside a fish (an order line, a fish order's row, a stay): one
+   look on every screen, and a link to the list. Empty = no tag. */
+.fh-cr-wrap a.fh-cr-noproduct,
+.fh-cr-wrap .fh-cr-line__fish a.fh-cr-noproduct {
+	display: inline-block;
+	width: auto;
+	margin-top: 2px;
+	padding: 0 6px;
+	border: 1px solid var(--fh-warning, #ffb900);
+	border-radius: 9px;
+	font-size: 11px;
+	font-weight: 600;
+	line-height: 16px;
+	white-space: nowrap;
+	color: var(--fh-warning, #ffb900);
+	text-decoration: none;
+}
+
+.fh-cr-wrap a.fh-cr-noproduct:hover,
+.fh-cr-wrap a.fh-cr-noproduct:focus {
+	color: var(--fh-bg-primary, #1e1e1e);
+	background: var(--fh-warning, #ffb900);
+}
+
+.fh-cr-wrap a.fh-cr-noproduct:empty {
+	display: none;
+}
+
+/* The list (Species → Fish with no product yet). */
+.fh-cr-np__title {
+	margin: 0 0 6px;
+	font-size: 18px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-np__title--sub {
+	margin-top: 28px;
+	font-size: 15px;
+}
+
+.fh-cr-np__intro {
+	max-width: 760px;
+	margin: 0 0 10px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-np__switch {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	margin: 0 0 14px;
+}
+
+.fh-cr-np-table td {
+	vertical-align: top;
+}
+
+.fh-cr-np-table .fh-cr-np-fish {
+	width: 26%;
+}
+
+.fh-cr-np-table .fh-cr-np-where {
+	width: 22%;
+}
+
+.fh-cr-np-table .fh-cr-np-money {
+	width: 20%;
+}
+
+.fh-cr-np-table .fh-cr-np-fish strong {
+	font-size: 14px;
+	overflow-wrap: anywhere;
+}
+
+.fh-cr-np-line {
+	display: block;
+	margin-bottom: 3px;
+	overflow-wrap: anywhere;
+}
+
+/* A fish that is in a tank comes first, and says so with its edge. */
+.fh-cr-np-row.is-in-tank > td:first-child {
+	box-shadow: inset 3px 0 0 var(--fh-warning, #ffb900);
+}
+
+.fh-cr-np-acts .button {
+	margin: 0 6px 6px 0;
+}
+
+.fh-cr-np-linkbox {
+	display: block;
+	position: relative;
+	max-width: 340px;
+	margin-top: 2px;
+}
+
+.fh-cr-np-linkbox[hidden] {
+	display: none;
+}
+
+.fh-cr-np-linkbox .fh-cr-input {
+	width: 100%;
+}
+
+.fh-cr-np-result {
+	display: block;
+	max-width: 420px;
+	font-size: 12px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-np-result:empty {
+	display: none;
+}
+
+.fh-cr-np-result.is-error {
+	color: var(--fh-danger, #dc3232);
+}
+
+.fh-cr-np-result a {
+	display: inline-block;
+	margin-top: 4px;
+	font-weight: 600;
+}
+
+.fh-cr-np-row.is-done {
+	opacity: 0.75;
+}
+
+/* A narrow window (a phone): every fish is a card, nothing scrolls sideways. */
+@media (max-width: 782px) {
+	.fh-cr-np-table,
+	.fh-cr-np-table tbody,
+	.fh-cr-np-table tr,
+	.fh-cr-np-table td {
+		display: block;
+		width: auto !important;
+	}
+
+	.fh-cr-np-table thead {
+		display: none;
+	}
+
+	.fh-cr-np-table tr {
+		padding: 10px 12px;
+		border-bottom: 1px solid var(--fh-border, rgba(255, 255, 255, 0.1));
+	}
+
+	.fh-cr-np-table td {
+		padding: 4px 0;
+		border: 0;
+	}
+
+	.fh-cr-np-table td[data-label]::before {
+		content: attr(data-label);
+		display: block;
+		font-size: 10px;
+		font-weight: 600;
+		letter-spacing: 0.4px;
+		text-transform: uppercase;
+		color: var(--fh-text-secondary, #a0a0a0);
+	}
+
+	.fh-cr-np-table td.fh-cr-np-fish[data-label]::before {
+		content: none;
+	}
+
+	.fh-cr-np-row.is-in-tank > td:first-child {
+		box-shadow: none;
+	}
+
+	.fh-cr-np-row.is-in-tank {
+		box-shadow: inset 3px 0 0 var(--fh-warning, #ffb900);
+	}
+
+	.fh-cr-np-acts .button {
+		display: block;
+		width: 100%;
+		margin: 0 0 6px;
+		text-align: center;
+	}
+
+	.fh-cr-np-linkbox,
+	.fh-cr-np-result,
+	.fh-cr-np__intro {
+		max-width: none;
+	}
+}
+
+/* ------------------------------------------------------------------ */
 /*  Unknown and mislabeled fish, the Identify panel                    */
 /* ------------------------------------------------------------------ */
 

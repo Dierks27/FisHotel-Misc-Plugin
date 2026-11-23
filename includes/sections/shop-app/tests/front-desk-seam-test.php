@@ -110,6 +110,7 @@ $admin_only = array(
 	'fishotel_cleanroom_existing'     => 'Stays: add fish already here (the phone posts the same act through fishotel_cleanroom_act)',
 	'fishotel_cleanroom_layout'       => 'Settings: the layout',
 	'fishotel_cleanroom_medications'  => 'Settings: the medications list',
+	'fishotel_cleanroom_no_product'   => 'Species: fish with no product yet (link to a product, start a draft product)',
 	'fishotel_cleanroom_order'        => 'Fish orders: a fish order',
 	'fishotel_cleanroom_protocol'     => 'Settings: the treatment schedules',
 	'fishotel_cleanroom_release'      => 'Board: release a group',

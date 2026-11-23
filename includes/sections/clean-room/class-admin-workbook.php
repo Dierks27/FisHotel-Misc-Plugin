@@ -191,6 +191,12 @@ class Admin_Workbook {
 		$flash        = self::take_flash();
 
 		if ( 'species' === $tab ) {
+			// "Fish with no product yet" is a view of this tab (Admin_No_Product).
+			if ( Admin_No_Product::is_asked( wp_unslash( $_GET ) ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only view switch.
+				Admin_No_Product::render( $ctx, $flash );
+				return;
+			}
+
 			$filters = array(
 				'search' => isset( $_GET['s'] ) ? substr( sanitize_text_field( wp_unslash( $_GET['s'] ) ), 0, 120 ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only filter.
 				'group'  => isset( $_GET['group'] ) ? substr( sanitize_text_field( wp_unslash( $_GET['group'] ) ), 0, 60 ) : '', // phpcs:ignore WordPress.Security.NonceVerification.Recommended
@@ -246,7 +252,7 @@ class Admin_Workbook {
 				echo '<div class="wrap fishotel-misc-wrap fh-cr-wrap"><div class="fishotel-misc-notice fishotel-misc-notice--error">' . esc_html__( 'That order no longer exists.', 'fishotel-misc-plugin' ) . '</div></div>';
 				return;
 			}
-			$order         = $order ? self::resolve_order( $store, $order ) : self::blank_order( $store, $today );
+			$order         = $order ? Admin_No_Product::mark_order( $store, self::resolve_order( $store, $order ) ) : self::blank_order( $store, $today );
 			$figures       = self::figures( $order );
 			$spa_tanks     = Orders::spa_tanks( $store );
 			$spa_buildings = array();
@@ -280,7 +286,8 @@ class Admin_Workbook {
 		$year  = isset( $_GET['year'] ) ? absint( wp_unslash( $_GET['year'] ) ) : ( $years ? (int) $years[0] : 0 ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$rows   = array();
 		$counts = $store->batch_sale_counts();
-		foreach ( self::resolved_orders( $store, $year > 0 ? array( 'year' => $year ) : array() ) as $order ) {
+		// The fish of each order that have no product yet: one read of the products' statuses for the whole list.
+		foreach ( Admin_No_Product::mark_orders( $store, self::resolved_orders( $store, $year > 0 ? array( 'year' => $year ) : array() ) ) as $order ) {
 			$rows[] = array_merge(
 				$order,
 				array(
@@ -859,6 +866,8 @@ class Admin_Workbook {
 				'sold'            => $linked && null !== ( $line['sold'] ?? null ) ? (string) (int) $line['sold'] : '—',
 				'survived'        => null !== ( $line['survived'] ?? null ) ? (string) (int) $line['survived'] : '—',
 				'doa'             => (string) (int) ( $line['doa'] ?? 0 ),
+				// The tag beside the fish: '' when it has a product, or is none of this rule's business.
+				'no_product'      => ! empty( $line['no_product'] ) ? No_Product::tag_text() : '',
 			);
 		}
 
@@ -1417,6 +1426,9 @@ class Admin_Workbook {
 		}
 		$kept  = array();
 		$lines = Identify::keep_corrected( $lines, $seen, $before, $kept );
+		// …and a page loaded before a fish was linked to a product posts the line's species-list id
+		// empty: the line keeps the id it has, or the save would take the fish off its product again.
+		$lines = No_Product::keep_species_ids( $lines, $before );
 
 		$sized = array_filter(
 			$lines,
@@ -1494,7 +1506,7 @@ class Admin_Workbook {
 			Shop_Price::freeze( $store, (array) $store->order( $saved_id ) );
 		}
 
-		$order = self::resolve_order( $store, $store->order( $saved_id ) );
+		$order = Admin_No_Product::mark_order( $store, self::resolve_order( $store, $store->order( $saved_id ) ) );
 		self::cache_landed_totals( $store, $order );
 		Box_Shares::remember( $store, $order, array_values( $before ), $today );
 
