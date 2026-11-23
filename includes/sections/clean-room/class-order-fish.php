@@ -22,6 +22,13 @@
  * exact name of one — it is found as that), an unknown "??" fish (it has no name), a line of a closed
  * order whose fish is no longer in a tank.
  *
+ * "A product" is one that still exists — the rule "Fish with no product
+ * yet" goes by (No_Product): a product in the trash, or deleted, is
+ * none. The fish search does not find such a product, so a group that
+ * is still linked to one is offered here by its own name, as that list
+ * shows it. The rows handed to offered() carry a product id only for a
+ * product that exists.
+ *
  * Picking one is "use as an unlisted fish" with that exact spelling:
  * the item carries no product and no Species row, so nothing is created
  * and the group in the tank reads as the order line does.
@@ -89,9 +96,11 @@ class Order_Fish {
 	 * The fish to offer, from the order lines and the stays.
 	 *
 	 * @param array[] $lines id, species, sci_name, needs_id, species_id, stay_product_id (the product
-	 *                       of the group the line became, if any), order_ref, order_status.
+	 *                       of the group the line became, if it has one that still exists), order_ref,
+	 *                       order_status.
 	 * @param array[] $stays id, species, sci_name and line_species_id (its order line's), needs_id,
-	 *                       product_id, qty_live, status, tank_number.
+	 *                       product_id (a product that still exists, else none), qty_live, status,
+	 *                       tank_number.
 	 * @param array   $known known().
 	 * @return array[] name, sci, from (order|tank), ref, tank — one per fish, by name.
 	 */
@@ -291,12 +300,91 @@ class Order_Fish {
 	}
 
 	/**
+	 * The offered fish whose name is NEARLY what was typed (a letter off —
+	 * Species::near(), the rule the lists' own second try follows), as
+	 * search-box items marked match 'near': each still says where it comes
+	 * from and carries its fish order's ref. Asked only when nothing
+	 * answered letter for letter.
+	 *
+	 * @param array[] $offered offered().
+	 * @param string  $term    Search text.
+	 * @param int     $limit   Row cap.
+	 * @return array[] suggestion()s with match 'near', the nearest first.
+	 */
+	public static function nearly( array $offered, $term, $limit = 10 ) {
+		$candidates = array();
+		$by_key     = array();
+		foreach ( $offered as $fish ) {
+			$name = is_array( $fish ) ? (string) ( $fish['name'] ?? '' ) : '';
+			$key  = Species::key( $name );
+			if ( '' === $key || isset( $by_key[ $key ] ) ) {
+				continue;
+			}
+			$variants = array(
+				array(
+					'text' => $name,
+					'kind' => 'title',
+				),
+			);
+			if ( '' !== trim( (string) ( $fish['sci'] ?? '' ) ) ) {
+				$variants[] = array(
+					'text' => (string) $fish['sci'],
+					'kind' => 'sci',
+				);
+			}
+			$by_key[ $key ] = $fish;
+			$candidates[]   = array(
+				'product_id' => null,
+				'name'       => $name,
+				'variants'   => $variants,
+			);
+		}
+
+		$out = array();
+		foreach ( Species::near( $term, $candidates, max( 1, (int) $limit ) ) as $item ) {
+			$key = Species::key( (string) ( $item['name'] ?? '' ) );
+			if ( isset( $by_key[ $key ] ) ) {
+				$out[] = array_merge( self::suggestion( $by_key[ $key ] ), array( 'match' => 'near' ) );
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Whether the lists themselves — products, Species rows, learned names
+	 * — answered a search letter for letter: an item that is neither a near
+	 * spelling nor a fish that only a fish order line or a group in a tank
+	 * names. What the hint about a product outside the fish categories
+	 * asks (Store::search_hint()).
+	 *
+	 * @param array[] $items A search's items.
+	 * @return bool
+	 */
+	public static function lists_answered( array $items ) {
+		foreach ( $items as $item ) {
+			if ( ! in_array( (string) ( $item['match'] ?? '' ), array( 'near', 'order', 'tank' ), true ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * Put the order-line fish a term finds into a suggestion list, BELOW
 	 * the products and the Species rows that answer the term as well: each
 	 * goes right after the last item already listed that answers at least
 	 * as well (item_quality()) as its own name does. The items already
 	 * listed keep their order; a fish whose name is already in the list (a
 	 * learned name of it, say) is not listed twice.
+	 *
+	 * A SIMILAR SPELLING stands under every letter-for-letter answer: the
+	 * listed items marked match 'near' (the lists' own second try, made
+	 * when no product, Species row or learned name answered) go under the
+	 * order-line fish that answer the term exactly; and when nothing at
+	 * all answered letter for letter, the order-line fish that are nearly
+	 * what was typed (nearly()) follow the lists' near answers. What the
+	 * lists answered is kept as it is; a fish of a fish order is offered
+	 * once, and not at all under a name the lists already answered with.
 	 *
 	 * @param array[] $items   Alias / product / species suggestions, in their order.
 	 * @param array[] $offered offered().
@@ -305,15 +393,25 @@ class Order_Fish {
 	 * @return array[]
 	 */
 	public static function place( array $items, array $offered, $term, $limit ) {
-		$items = array_values( $items );
 		$limit = max( 1, (int) $limit );
-		$fish  = self::matching( $offered, $term );
-		if ( ! $fish ) {
-			return array_slice( $items, 0, $limit );
+		$near  = array();
+		$exact = array();
+		foreach ( $items as $item ) {
+			if ( 'near' === (string) ( $item['match'] ?? '' ) ) {
+				$near[] = $item;
+			} else {
+				$exact[] = $item;
+			}
 		}
+		$items = $exact;
+		$fish  = self::matching( $offered, $term );
 
+		// What the lists answered is never dropped; a fish of a fish order named like one of them is.
 		$listed  = array();
 		$quality = array();
+		foreach ( $near as $item ) {
+			$listed[ Species::key( (string) ( $item['name'] ?? '' ) ) ] = true;
+		}
 		foreach ( $items as $index => $item ) {
 			$listed[ Species::key( (string) ( $item['name'] ?? '' ) ) ] = true;
 			$quality[ $index ] = self::item_quality( $item, $term );
@@ -354,6 +452,17 @@ class Order_Fish {
 				$out[] = $items[ $n ];
 			}
 		}
+
+		// The similar spellings, under whatever answered letter for letter: the lists' first, then the order-line fish's.
+		$nearly = ! $out && count( $near ) < $limit ? self::nearly( $offered, $term, $limit ) : array();
+		$out    = array_merge( $out, $near );
+		foreach ( $nearly as $one ) {
+			$key = Species::key( $one['name'] );
+			if ( ! isset( $listed[ $key ] ) ) {
+				$listed[ $key ] = true;
+				$out[]          = $one;
+			}
+		}
 		return array_slice( $out, 0, $limit );
 	}
 
@@ -362,7 +471,9 @@ class Order_Fish {
 	 * an unlisted, named fish that came alive, is no longer alive, or
 	 * stands in another tank now. (A group with a product or a "??" group
 	 * is never in the list; a count that only went from 5 to 4 changes
-	 * nothing.)
+	 * nothing. A group whose product is in the trash IS in the list, and
+	 * this rule cannot know it without a read: its "in tank …" may be up
+	 * to the list's ten minutes old.)
 	 *
 	 * @param array $before The stay before: product_id, needs_id, qty_live, tank_id.
 	 * @param array $after  The replayed state: qty_live, tank_id.

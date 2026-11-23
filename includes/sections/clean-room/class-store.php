@@ -3389,11 +3389,13 @@ class Store {
 	 * group in a tank names (Order_Fish::place()). Such an item has no
 	 * product and no species row — picking it is "use as an unlisted fish"
 	 * with its spelling — and `where` says where it comes from ("on fish
-	 * order 2026-9", "in tank 512").
+	 * order 2026-9", "in tank 512"). A similar spelling (match 'near')
+	 * stands under every letter-for-letter answer, and when nothing
+	 * answered letter for letter the order-line fish are tried nearly too.
 	 *
 	 * @param string $term  Search text.
 	 * @param int    $limit Row cap.
-	 * @return array[] species_suggestions() items, plus items with match order|tank and `where`.
+	 * @return array[] species_suggestions() items, plus items with `where`: match order|tank, or near.
 	 */
 	public function fish_search( $term, $limit = 10 ) {
 		$term = trim( (string) $term );
@@ -3408,7 +3410,10 @@ class Store {
 	/**
 	 * The fish that are in the system only because a fish order line that
 	 * is not closed names them, or because they are alive in a tank —
-	 * linked to no product and no species row (Order_Fish::offered()).
+	 * linked to no product and no species row (Order_Fish::offered()). A
+	 * group's link to a product that is in the trash, or deleted, is no
+	 * link: the product search does not find that product, and "Fish with
+	 * no product yet" lists the fish — so the search offers it.
 	 * Two reads over the section's own tables, bounded however long the
 	 * history is, kept for 10 minutes; clear_order_fish_cache() drops the
 	 * list on every write that changes it. A read that fails is not kept.
@@ -3426,9 +3431,13 @@ class Store {
 
 		global $wpdb;
 
+		// A group's product counts while it still EXISTS — the rule of "Fish with no product yet" (No_Product::GONE):
+		// a product in the trash, or deleted, is none, so its fish is an unlisted fish here as it is on that list.
+		$product = "%1\$s.ID = %2\$s.product_id AND %1\$s.post_type = 'product' AND %1\$s.post_status NOT IN ('" . implode( "','", No_Product::GONE ) . "')";
+
 		try {
-			$lines = $wpdb->get_results( $wpdb->prepare( 'SELECT l.id, l.species, l.sci_name, l.needs_id, l.species_id, st.product_id AS stay_product_id, o.ref AS order_ref, o.status AS order_status FROM ' . self::table( 'order_lines' ) . ' l INNER JOIN ' . self::table( 'orders' ) . ' o ON o.id = l.order_id LEFT JOIN ' . self::table( 'stays' ) . " st ON st.id = l.stay_id WHERE o.status <> 'closed' AND l.species_id IS NULL AND l.needs_id = 0 AND l.species <> '' AND st.product_id IS NULL ORDER BY l.id DESC LIMIT %d", Order_Fish::MAX_LINES ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-			$stays = $wpdb->get_results( $wpdb->prepare( 'SELECT s.id, s.species, s.needs_id, s.product_id, s.qty_live, s.status, t.number AS tank_number, ol.sci_name, ol.species_id AS line_species_id FROM ' . self::table( 'stays' ) . ' s LEFT JOIN ' . self::table( 'tanks' ) . ' t ON t.id = s.tank_id LEFT JOIN ' . self::table( 'order_lines' ) . " ol ON ol.id = s.order_line_id WHERE s.status <> 'closed' AND s.qty_live > 0 AND s.product_id IS NULL AND s.needs_id = 0 AND s.species <> '' AND ol.species_id IS NULL ORDER BY s.id DESC LIMIT %d", Order_Fish::MAX_STAYS ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			$lines = $wpdb->get_results( $wpdb->prepare( 'SELECT l.id, l.species, l.sci_name, l.needs_id, l.species_id, sp.ID AS stay_product_id, o.ref AS order_ref, o.status AS order_status FROM ' . self::table( 'order_lines' ) . ' l INNER JOIN ' . self::table( 'orders' ) . ' o ON o.id = l.order_id LEFT JOIN ' . self::table( 'stays' ) . ' st ON st.id = l.stay_id LEFT JOIN ' . $wpdb->posts . ' sp ON ' . sprintf( $product, 'sp', 'st' ) . " WHERE o.status <> 'closed' AND l.species_id IS NULL AND l.needs_id = 0 AND l.species <> '' AND sp.ID IS NULL ORDER BY l.id DESC LIMIT %d", Order_Fish::MAX_LINES ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			$stays = $wpdb->get_results( $wpdb->prepare( 'SELECT s.id, s.species, s.needs_id, p.ID AS product_id, s.qty_live, s.status, t.number AS tank_number, ol.sci_name, ol.species_id AS line_species_id FROM ' . self::table( 'stays' ) . ' s LEFT JOIN ' . self::table( 'tanks' ) . ' t ON t.id = s.tank_id LEFT JOIN ' . self::table( 'order_lines' ) . ' ol ON ol.id = s.order_line_id LEFT JOIN ' . $wpdb->posts . ' p ON ' . sprintf( $product, 'p', 's' ) . " WHERE s.status <> 'closed' AND s.qty_live > 0 AND p.ID IS NULL AND s.needs_id = 0 AND s.species <> '' AND ol.species_id IS NULL ORDER BY s.id DESC LIMIT %d", Order_Fish::MAX_STAYS ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		} catch ( \Throwable $e ) {
 			return array();
 		}
@@ -3705,21 +3714,22 @@ class Store {
 	}
 
 	/**
-	 * What a search box says under its answer when the search found no
-	 * fish letter for letter: a product of that name the shop has
-	 * OUTSIDE the fish categories, and what to do about it. '' when the
-	 * search found fish, or the shop has no such product. One query, and
-	 * only then.
+	 * What a search box says under its answer when the lists — products,
+	 * Species rows, learned names — found no fish letter for letter: a
+	 * product of that name the shop has OUTSIDE the fish categories, and
+	 * what to do about it. '' when the lists found fish, or the shop has
+	 * no such product. A similar spelling, or a fish that only a fish order
+	 * line or a group in a tank names, is no answer of the lists: the hint
+	 * is the more useful beside one (the fish typed on the order HAS a
+	 * product, in the wrong category). One query, and only then.
 	 *
 	 * @param string  $term  Search text.
-	 * @param array[] $items species_suggestions() for that text.
+	 * @param array[] $items species_suggestions() or fish_search() for that text.
 	 * @return string
 	 */
 	public function search_hint( $term, array $items ) {
-		foreach ( $items as $item ) {
-			if ( 'near' !== (string) ( $item['match'] ?? '' ) ) {
-				return '';
-			}
+		if ( Order_Fish::lists_answered( $items ) ) {
+			return '';
 		}
 		try {
 			return Species::elsewhere_hint( $this->products_elsewhere( $term ), self::fish_category_slugs() );

@@ -1059,10 +1059,8 @@ class Fake_Store {
 	}
 
 	public function search_hint( $term, array $items ) {
-		foreach ( $items as $item ) {
-			if ( 'near' !== (string) ( $item['match'] ?? '' ) ) {
-				return '';
-			}
+		if ( Order_Fish::lists_answered( $items ) ) {
+			return '';
 		}
 		return Species::elsewhere_hint( $this->products_elsewhere( $term ), Store::FISH_CATEGORIES );
 	}
@@ -1195,7 +1193,7 @@ class Fake_Store {
 	 */
 	private function fish_products() {
 		$out = array();
-		foreach ( array_diff_key( $this->products, array_flip( $this->not_fish ) ) as $id => $title ) {
+		foreach ( $this->searched_products() as $id => $title ) {
 			$out[] = array(
 				'product_id' => (int) $id,
 				'name'       => (string) $title,
@@ -1228,7 +1226,7 @@ class Fake_Store {
 				);
 			}
 		}
-		foreach ( array_diff_key( $this->products, array_flip( $this->not_fish ) ) as $id => $title ) {
+		foreach ( $this->searched_products() as $id => $title ) {
 			if ( false !== stripos( $title, $term ) ) {
 				$items[] = array(
 					'product_id' => (int) $id,
@@ -1303,7 +1301,7 @@ class Fake_Store {
 				array(
 					'order_ref'       => $order ? (string) $order['ref'] : '',
 					'order_status'    => $order ? (string) $order['status'] : 'closed',
-					'stay_product_id' => isset( $this->stays[ $stay_id ] ) ? $this->stays[ $stay_id ]['product_id'] : null,
+					'stay_product_id' => isset( $this->stays[ $stay_id ] ) ? $this->existing_product( $this->stays[ $stay_id ]['product_id'] ) : null,
 				)
 			);
 		}
@@ -1314,13 +1312,44 @@ class Fake_Store {
 			$stays[] = array_merge(
 				$stay,
 				array(
+					'product_id'      => $this->existing_product( $stay['product_id'] ?? null ),
 					'tank_number'     => $tank ? (int) $tank['number'] : 0,
 					'sci_name'        => isset( $this->lines[ $line_id ] ) ? (string) $this->lines[ $line_id ]['sci_name'] : '',
 					'line_species_id' => isset( $this->lines[ $line_id ] ) ? $this->lines[ $line_id ]['species_id'] : null,
 				)
 			);
 		}
-		return Order_Fish::offered( $lines, $stays, Order_Fish::known( array_values( $this->products ), array_column( $this->species, 'name' ) ) );
+		return Order_Fish::offered( $lines, $stays, Order_Fish::known( array_values( $this->searched_products() ), array_column( $this->species, 'name' ) ) );
+	}
+
+	/**
+	 * A product id as Store::order_fish() reads it: the id while the
+	 * product exists, null once it is in the trash or deleted
+	 * (No_Product::GONE — spelled out here: the Requests section's tests
+	 * load this stand-in without that class).
+	 */
+	private function existing_product( $product_id ) {
+		$id = (int) $product_id;
+		if ( $id <= 0 || ! isset( $this->products[ $id ] ) ) {
+			return null;
+		}
+		return in_array( isset( $this->product_statuses[ $id ] ) ? (string) $this->product_statuses[ $id ] : 'publish', array( 'trash', 'auto-draft' ), true ) ? null : $id;
+	}
+
+	/**
+	 * The products the fish search reads (Store::product_select()): in a
+	 * fish category, and not in the trash.
+	 *
+	 * @return array<int, string> id => title.
+	 */
+	private function searched_products() {
+		$out = array();
+		foreach ( array_diff_key( $this->products, array_flip( $this->not_fish ) ) as $id => $title ) {
+			if ( null !== $this->existing_product( $id ) ) {
+				$out[ (int) $id ] = (string) $title;
+			}
+		}
+		return $out;
 	}
 
 	/**

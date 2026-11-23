@@ -2073,6 +2073,19 @@ carries the exact name of one (it is found as that — so a
 fish that later gets a product or a Species row stops being offered this
 way), an unknown "??" fish (it has no name), a closed order's fish that
 is no longer in a tank.
+"A product" is one that still exists — the rule of *Fish with no
+product yet* below: a group still linked to a product that is in the
+trash, or was deleted, is an unlisted fish here (the product search does
+not find that product, so the fish would otherwise be found nowhere),
+as that list shows it.
+A **similar spelling** stands under every letter-for-letter answer:
+when no product, Species row or learned name answers and the lists fall
+back to their near spellings (see *The fish search* below), those go
+under the order-line fish that are spelled as typed; and when nothing
+at all answers letter for letter, the order-line fish are tried by the
+same near-spelling rule (`Order_Fish::nearly()`) and follow the lists'
+near answers — still saying where they come from, and marked *similar
+spelling*.
 
 The list is two reads over the section's own tables, each with a row
 cap and neither growing with the history (closed orders and empty or
@@ -2215,18 +2228,34 @@ order (a line).
   *Link to it* and no draft button (with several namesakes: no offer,
   the owner picks).
 
-**The fish search** (`Store::species_suggestions()` — the order page,
-the Stays tab, Identify, the phone, this list's product box) reads the
+**The fish search** (`Store::species_suggestions()` — this list's
+product box and the Species tab's *Link product* ask it as it is; the
+order page, the Stays tab, Identify and the phone ask
+`Store::fish_search()`, which adds the fish of the fish orders, see
+*A fish that is on a fish order is in the system* above) reads the
 products of the fish categories and of EVERY category under them
 (`Store::with_descendants()`; it used to stop one level down, so a
 product ticked only in "Quarantined Fish → Wrasses → Flasher Wrasses"
-was no fish product). When nothing matches letter for letter it tries a
+was no fish product) — the names an order line is held against to
+decide whether it is an unlisted fish are read by the same categories.
+When nothing matches letter for letter it tries a
 near spelling (`Species::near()`: every typed word in one of the fish's
 names, a word of four letters or more one slip off, two from eight
 letters on) and marks the answer *similar spelling*. When the shop has
 a product of that name outside the fish categories, the box says so and
-what to do (`Store::search_hint()`); the product box has its own
+what to do (`Store::search_hint()`) — also when the only answer is a
+fish typed on a fish order: that fish HAS a product, in the wrong
+category; the product box has its own
 "nothing found" that says where it looks.
+
+**The list and the search go by the same fish.** Every fish on this
+list is found by its name in the fish search, and a fish the search
+offers as a fish order's or a tank's own is a row here, under the same
+key (the name, case and spacing aside). After *Link to a product…* or
+*Start a draft product* the fish is found as that product, once: the
+link is written through the Store (the Species row, the lines, the
+groups), and each of those writes drops the search's kept list
+(`tests/search-together-test.php`).
 
 **A draft is invisible to customers**, and the section reads it
 sensibly: the phone's and the editor's fish search list it (they read

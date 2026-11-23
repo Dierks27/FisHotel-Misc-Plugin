@@ -75,6 +75,7 @@ php  includes/sections/clean-room/tests/order-import-admin-test.php
 php  includes/sections/clean-room/tests/order-import-tidy-test.php
 php  includes/sections/clean-room/tests/shop-price-test.php
 php  includes/sections/clean-room/tests/no-product-test.php
+php  includes/sections/clean-room/tests/search-together-test.php
 php  includes/sections/clean-room/tests/splits-test.php
 node includes/sections/clean-room/tests/front-desk.test.js
 node includes/sections/clean-room/tests/clean-room-admin.test.js
@@ -697,6 +698,23 @@ system temp directory (`FH_TEST_TMP` overrides).
   nonce, one product, a second click and a later page open the first, a
   draft started before is adopted, one in the trash is not, a shop that
   fails, two clicks at once.
+- **search-together-test.php** — the fish search and "Fish with no
+  product yet", together (`Order_Fish::place()`, `Order_Fish::nearly()`,
+  `Store::search_hint()`, `No_Product`): the ranking — what answers
+  letter for letter first (the lists, then the order-line fish), every
+  similar spelling under it, an order-line fish found by a similar
+  spelling when nothing else answers, each fish once, the row cap; the
+  hint about a product outside the fish categories beside a fish typed
+  on a fish order; on the fake store, that every fish on the list is
+  found by the search and every unlisted fish the search offers is a
+  row of the list under the same key, a group whose product is in the
+  trash or deleted being an unlisted fish in both; that a fish linked
+  to a product, given a draft or linked to its namesake outside the fish
+  categories is then found as that product, once, and is off the list;
+  and on the REAL `Store` against a database stand-in: the product reads
+  ask every category under the fish categories and leave the trash out,
+  the two order-fish reads count a group's product only while it
+  exists, and each write the link makes drops the kept list.
 - **shop-price-test.php** — the shop price of an order line, read
   (`Shop_Price`): the sources in their order (the variation of the
   line's size, the lowest price, a simple product, the species list,
@@ -1650,3 +1668,20 @@ line's `split` field holds anything (`fields_before`) — and one press on
     what they were. On the Species list, link the fish to another
     product: its group on the Stays tab shows the new one. A tagged
     order line is as tall as its neighbours.
+37. The search and the list together. On a fish order that is not
+    closed type "Sample Filimented Wrasse" (a slip of your own) while
+    the shop has the product "Sample Filamented Wrasse": in the phone's
+    Arrival type "filimented" — the order's fish comes first ("on fish
+    order <ref>"), the product under it, marked *similar spelling*. Type
+    a fish that is only on a fish order with one letter wrong: it is
+    found, with "on fish order <ref>" and *similar spelling*. Type the
+    name of a fish from step 36's list: it is found; link it there
+    (**Link to a product…**) and search again at once — the product
+    answers, once, and "on fish order …" is gone; the same after
+    **Start a draft product** (the draft answers). Move the product of
+    a group that is in a tank to the trash: the fish is back on the
+    list AND the search finds it as "in tank <number>"; restore the
+    product: found as the product again. Type the name of a fish that
+    is on a fish order and whose product sits in no fish category: the
+    order's fish is offered and the line under the list says the shop
+    has the product and where to tick it.
