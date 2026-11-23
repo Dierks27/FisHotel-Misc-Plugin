@@ -93,6 +93,9 @@ $fh_temp_done = false;
 		<span class="fh-cr-chip"><strong><?php echo esc_html( $totals['empty'] ); ?></strong> / <?php echo esc_html( $totals['tanks'] ); ?> <?php esc_html_e( 'tanks empty', 'fishotel-misc-plugin' ); ?></span>
 		<span class="fh-cr-summary__meta"><?php echo esc_html( $today ); ?></span>
 	</div>
+	<?php if ( ! empty( $todo['fast']['text'] ) ) : // A fish ships today and no tank group answers for it: no clean system is fed. ?>
+		<p class="fh-cr-fast fh-cr-fast--all"><strong><?php echo esc_html( $todo['fast']['text'] ); ?></strong> <?php echo esc_html( $todo['fast']['hint'] ); ?></p>
+	<?php endif; ?>
 
 	<?php foreach ( $groups as $fh_area => $fh_group ) : ?>
 		<?php
@@ -149,6 +152,10 @@ $fh_temp_done = false;
 							</span>
 						<?php endif; ?>
 					</header>
+
+					<?php if ( '' !== Todo::fast_text( $todo, (int) $fh_building['id'] ) ) : // Its fish ship today: no Feed, and why. ?>
+						<p class="fh-cr-fast"><?php echo esc_html( Todo::fast_text( $todo, (int) $fh_building['id'] ) ); ?></p>
+					<?php endif; ?>
 
 					<?php if ( ! $fh_entry['tanks'] ) : ?>
 						<p class="fh-cr-building__empty"><?php esc_html_e( 'No tanks yet.', 'fishotel-misc-plugin' ); ?></p>

@@ -83,6 +83,7 @@ class Settings {
 		'copper_target'        => 2.5,
 		'auto_confirm_seconds' => 4,
 		'voice_enabled'        => true,
+		'no_feed_on_ship_day'  => true, // Feeding::SETTING: a clean system is not fed on the day its fish ship.
 		'size_attribute'       => '',
 		'size_list'            => array(),
 		'medications'          => null,
@@ -318,6 +319,8 @@ class Settings {
 			'copper_target'        => $target,
 			'auto_confirm_seconds' => self::clamp( $settings['auto_confirm_seconds'] ?? null, self::AUTO_CONFIRM_MIN, self::AUTO_CONFIRM_MAX, self::DEFAULTS['auto_confirm_seconds'] ),
 			'voice_enabled'        => ! empty( $settings['voice_enabled'] ),
+			// On unless it was switched off: a settings array that never heard of it means on.
+			'no_feed_on_ship_day'  => array_key_exists( 'no_feed_on_ship_day', $settings ) ? ! empty( $settings['no_feed_on_ship_day'] ) : self::DEFAULTS['no_feed_on_ship_day'],
 			'size_attribute'       => isset( $settings['size_attribute'] ) && is_scalar( $settings['size_attribute'] ) && ! is_bool( $settings['size_attribute'] ) ? substr( trim( (string) $settings['size_attribute'] ), 0, 60 ) : '',
 			'size_list'            => Sizes::labels( isset( $settings['size_list'] ) && ( is_array( $settings['size_list'] ) || is_string( $settings['size_list'] ) ) ? $settings['size_list'] : array() ),
 			// The medication list as stored (null = never edited = the seed): carried, not
@@ -461,6 +464,7 @@ class Settings {
 				'copper_target'        => $target,
 				'auto_confirm_seconds' => $confirm,
 				'voice_enabled'        => ! empty( $raw['voice_enabled'] ),
+				'no_feed_on_ship_day'  => ! empty( $raw['no_feed_on_ship_day'] ),
 			)
 		);
 	}

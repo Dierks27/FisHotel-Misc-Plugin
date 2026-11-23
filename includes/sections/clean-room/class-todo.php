@@ -722,9 +722,10 @@ class Todo {
 	 * @param array[] $rows      The day's log rows.
 	 * @param string  $today     Site date.
 	 * @param array   $settings  Settings (copper_floor).
+	 * @param array   $fast      Feeding::plan(): the waters that go without food today (empty = none).
 	 * @return array|null
 	 */
-	public static function system_block( array $building, array $tanks, array $protocols, array $rows, $today, array $settings ) {
+	public static function system_block( array $building, array $tanks, array $protocols, array $rows, $today, array $settings, array $fast = array() ) {
 		$live = array();
 		$days = array();
 		$ids  = array();
@@ -779,7 +780,23 @@ class Todo {
 			'left'        => self::left( $items ),
 			'copper'      => $copper,
 			'flag'        => self::copper_flag( $label, $copper, self::copper_due( $items ), $today, Clean_Room::timezone(), self::copper_due( $items, true ) ),
+			// A Clean Room system whose fish ship today: the reason it has no Feed (never a line to tick).
+			'fast'        => self::fast_note( $fast, $building, $label ),
 		);
+	}
+
+	/**
+	 * Why a system has no Feed today, in words — or null on a day it is
+	 * fed (Feeding::block()).
+	 *
+	 * @param array  $fast     Feeding::plan().
+	 * @param array  $building Building.
+	 * @param string $label    Its name.
+	 * @return array|null
+	 */
+	private static function fast_note( array $fast, array $building, $label ) {
+		$why = $fast ? Feeding::for_building( $fast, $building ) : null;
+		return null !== $why ? Feeding::block( $label, $why ) : null;
 	}
 
 	/**
@@ -853,6 +870,8 @@ class Todo {
 			'left'        => self::left( $items ),
 			'copper'      => $copper,
 			'flag'        => self::copper_flag( $label . ( '' !== $name ? ' · ' . $name : '' ), $copper, self::copper_due( $items ), $today, Clean_Room::timezone(), self::copper_due( $items, true ) ),
+			// A clean temporary tank a shipping fish is in: the reason it has no Feed.
+			'fast'        => isset( $tank['fast'] ) && is_array( $tank['fast'] ) ? $tank['fast'] : null,
 		);
 	}
 
@@ -866,9 +885,13 @@ class Todo {
 	 * @param array[] $rows      The day's log rows (tank_id, building_id, kind, value, note, setup_id).
 	 * @param string  $today     Site date.
 	 * @param array   $settings  Settings (copper_floor).
-	 * @return array{date: string, blocks: array[], left: int, total: int, all_done: bool, flags: array[]}
+	 * @param array   $fast      Feeding::plan(): the waters that go without food today (empty = none). Their
+	 *                           tanks come without the open Feed already; here each gets its reason
+	 *                           (the block's 'fast' — shown, never ticked, never counted) and the list its
+	 *                           own ('fast': text, hint, words).
+	 * @return array{date: string, blocks: array[], left: int, total: int, all_done: bool, flags: array[], fast: array|null}
 	 */
-	public static function build( array $buildings, array $tanks, array $protocols, array $rows, $today, array $settings = array() ) {
+	public static function build( array $buildings, array $tanks, array $protocols, array $rows, $today, array $settings = array(), array $fast = array() ) {
 		$by_building = array();
 		foreach ( $tanks as $tank ) {
 			if ( 'offline' === (string) ( $tank['status'] ?? 'active' ) ) {
@@ -895,27 +918,32 @@ class Todo {
 				continue;
 			}
 
-			$block = self::system_block( $building, $mine, $protocols, $rows, $today, $settings );
+			$block = self::system_block( $building, $mine, $protocols, $rows, $today, $settings, $fast );
 			if ( null === $block && ! $active ) {
 				continue;
 			}
 			if ( 'spa' === (string) $building['area'] ) {
 				// Every quarantine system has its block, with fish or without.
 				$quarantine[] = null !== $block ? $block : self::empty_block( $building, $mine, $protocols, $settings );
-			} elseif ( null !== $block && $block['items'] ) {
+			} elseif ( null !== $block && ( $block['items'] || ! empty( $block['fast'] ) ) ) {
+				// Something is due — or nothing is, because its fish ship today: the block says so.
 				$clean[] = $block;
 			}
 		}
 
-		$blocks = array_merge( $quarantine, $temporary, $clean );
-		$left   = 0;
-		$total  = 0;
-		$flags  = array();
+		$blocks  = array_merge( $quarantine, $temporary, $clean );
+		$left    = 0;
+		$total   = 0;
+		$flags   = array();
+		$fasting = array();
 		foreach ( $blocks as $block ) {
 			$left  += (int) $block['left'];
 			$total += count( $block['items'] );
 			if ( ! empty( $block['flag'] ) ) {
 				$flags[] = $block['flag'];
+			}
+			if ( ! empty( $block['fast'] ) ) {
+				$fasting[] = (string) $block['label'];
 			}
 		}
 
@@ -926,6 +954,51 @@ class Todo {
 			'total'    => $total,
 			'all_done' => $total > 0 && 0 === $left,
 			'flags'    => $flags,
+			'fast'     => self::list_fast( $fast, $fasting ),
+		);
+	}
+
+	/**
+	 * The reason a building's block gives for having no Feed today ('' on
+	 * a day it is fed) — what its Board card shows too.
+	 *
+	 * @param array $list        build().
+	 * @param int   $building_id Building id.
+	 * @return string
+	 */
+	public static function fast_text( array $list, $building_id ) {
+		foreach ( (array) ( $list['blocks'] ?? array() ) as $block ) {
+			if ( 'system' === (string) ( $block['type'] ?? '' ) && (int) ( $block['building_id'] ?? 0 ) === (int) $building_id ) {
+				return isset( $block['fast']['text'] ) ? (string) $block['fast']['text'] : '';
+			}
+		}
+		return '';
+	}
+
+	/**
+	 * What the day's list says about feeding on a ship day, or null on a
+	 * day every tank is fed: text — the sentence at the top when a
+	 * shipping fish is in no tank the site knows ('' otherwise) —, hint —
+	 * how to end that —, and words — the few another screen adds to the
+	 * count ("no feeding in Clean Room 2 (ship day)").
+	 *
+	 * @param array    $fast   Feeding::plan().
+	 * @param string[] $labels The names of the blocks that go without food.
+	 * @return array{text: string, hint: string, words: string}|null
+	 */
+	private static function list_fast( array $fast, array $labels ) {
+		if ( ! $fast || ! Feeding::is_on( $fast ) ) {
+			return null;
+		}
+		$text  = Feeding::list_notice( $fast );
+		$words = Feeding::today_words( $fast, $labels );
+		if ( '' === $text && '' === $words ) {
+			return null;
+		}
+		return array(
+			'text'  => $text,
+			'hint'  => '' !== $text ? Feeding::list_hint() : '',
+			'words' => $words,
 		);
 	}
 
@@ -959,6 +1032,7 @@ class Todo {
 			'left'        => 0,
 			'copper'      => self::system_copper( $tanks, (float) ( $settings['copper_floor'] ?? 0 ) ),
 			'flag'        => null,
+			'fast'        => null,
 		);
 	}
 
@@ -1120,21 +1194,34 @@ class Todo {
 	 * all done" once everything is ticked — and null on a day with
 	 * nothing due at all, so a room without fish adds no line.
 	 *
+	 * On a day a Clean Room system goes without food because its fish
+	 * ship, the count leaves those feeds out and the line says so in a few
+	 * words ("no feeding in Clean Room 2 (ship day)") — also when nothing
+	 * else is due, so the missing Feed is never a riddle.
+	 *
 	 * @param array $summary summary().
 	 * @return array{key: string, text: string, detail: string, url: string, count: int, tone: string}|null
 	 */
 	public static function today_line( array $summary ) {
-		if ( (int) ( $summary['total'] ?? 0 ) <= 0 ) {
+		$fast = trim( (string) ( $summary['fast'] ?? '' ) );
+		if ( (int) ( $summary['total'] ?? 0 ) <= 0 && '' === $fast ) {
 			return null;
 		}
-		$flags = (int) ( $summary['flags'] ?? 0 );
-		$left  = (int) ( $summary['left'] ?? 0 );
+		$flags  = (int) ( $summary['flags'] ?? 0 );
+		$left   = (int) ( $summary['left'] ?? 0 );
+		$detail = array();
+		if ( $flags > 0 ) {
+			/* translators: %d: copper flags */
+			$detail[] = sprintf( _n( '%d copper flag', '%d copper flags', $flags, 'fishotel-misc-plugin' ), $flags );
+		}
+		if ( '' !== $fast ) {
+			$detail[] = $fast;
+		}
 		return array(
 			'key'    => self::TODAY_LINE_KEY,
 			'group'  => 'fish-room',
 			'text'   => (string) ( $summary['text'] ?? '' ),
-			/* translators: %d: copper flags */
-			'detail' => $flags > 0 ? sprintf( _n( '%d copper flag', '%d copper flags', $flags, 'fishotel-misc-plugin' ), $flags ) : '',
+			'detail' => implode( ' · ', $detail ),
 			'url'    => (string) ( $summary['url'] ?? '' ),
 			'count'  => $left,
 			'tone'   => $flags > 0 ? 'bad' : ( $left > 0 ? 'todo' : 'done' ),
@@ -1169,7 +1256,9 @@ class Todo {
 	 *
 	 * @param array  $list build().
 	 * @param string $url  The Board's To do tab.
-	 * @return array{left: int, total: int, all_done: bool, flags: int, text: string, url: string}
+	 * @return array{left: int, total: int, all_done: bool, flags: int, text: string, url: string, fast: string}
+	 *         fast: "no feeding in Clean Room 2 (ship day)" on a day a clean system goes without food
+	 *         because its fish ship (those feeds are in neither left nor total), else ''.
 	 */
 	public static function summary( array $list, $url = '' ) {
 		return array(
@@ -1179,6 +1268,7 @@ class Todo {
 			'flags'    => count( (array) ( $list['flags'] ?? array() ) ),
 			'text'     => self::headline( $list ),
 			'url'      => (string) $url,
+			'fast'     => isset( $list['fast']['words'] ) ? (string) $list['fast']['words'] : '',
 		);
 	}
 }

@@ -21,6 +21,7 @@
 namespace FisHotel\Misc\Sections\Clean_Room\Tests;
 
 use FisHotel\Misc\Sections\Clean_Room\Costing;
+use FisHotel\Misc\Sections\Clean_Room\Feeding;
 use FisHotel\Misc\Sections\Clean_Room\Import;
 use FisHotel\Misc\Sections\Clean_Room\Layout;
 use FisHotel\Misc\Sections\Clean_Room\Order_Fish;
@@ -28,6 +29,7 @@ use FisHotel\Misc\Sections\Clean_Room\Orders;
 use FisHotel\Misc\Sections\Clean_Room\Protocol;
 use FisHotel\Misc\Sections\Clean_Room\Replay;
 use FisHotel\Misc\Sections\Clean_Room\Settings;
+use FisHotel\Misc\Sections\Clean_Room\Ship_Lines;
 use FisHotel\Misc\Sections\Clean_Room\Species;
 use FisHotel\Misc\Sections\Clean_Room\Stats;
 use FisHotel\Misc\Sections\Clean_Room\Store;
@@ -443,9 +445,25 @@ class Fake_Store {
 		return Store::merge_copper( $rows, is_array( $tanks ) ? $tanks : $this->tanks() );
 	}
 
+	/**
+	 * The fish going out the door today (Feeding::shipping()) for a test
+	 * of the feeding rule; null = ask Ship_Lines, as the real Store does.
+	 *
+	 * @var array|null
+	 */
+	public $ship = null;
+
 	public function room( $today, array $settings, array $protocol = array() ) {
 		$tanks = $this->tanks();
-		return Store::assemble_room( $tanks, $this->buildings(), $this->open_stays( array(), $today, $settings ), $this->latest_copper( $tanks ), $this->day_logs( $today ), $today, $settings, $protocol );
+		$stays = $this->open_stays( array(), $today, $settings );
+		$fast  = array();
+		if ( isset( $protocol['templates'] ) ) {
+			$gone = function () use ( $today, $settings ) {
+				return $this->closed_stays( $today, $settings );
+			};
+			$fast = null !== $this->ship ? Feeding::plan( $this->ship, $stays, $tanks, $gone() ) : Ship_Lines::fast( $today, $settings, $stays, $tanks, $gone );
+		}
+		return Store::assemble_room( $tanks, $this->buildings(), $stays, $this->latest_copper( $tanks ), $this->day_logs( $today ), $today, $settings, $protocol, $fast );
 	}
 
 	public function tanks_with_occupants( $today, array $settings, array $protocol = array() ) {
@@ -536,6 +554,25 @@ class Fake_Store {
 		$stay           = Store::hydrate_stay( $this->joined_row( $this->stays[ (int) $id ] ), $today, $settings );
 		$stay['events'] = $this->events( (int) $id );
 		return $stay;
+	}
+
+	/**
+	 * Closed stays, most recently closed first (Store::closed_stays()).
+	 */
+	public function closed_stays( $today, array $settings, $limit = 200 ) {
+		$out = array();
+		foreach ( $this->stays as $row ) {
+			if ( 'closed' === $row['status'] && (int) $row['qty_arrived'] > 0 ) {
+				$out[] = Store::hydrate_stay( $this->joined_row( $row ), $today, $settings );
+			}
+		}
+		usort(
+			$out,
+			static function ( $a, $b ) {
+				return strcmp( (string) $b['closed_date'], (string) $a['closed_date'] ) ?: ( $b['id'] <=> $a['id'] );
+			}
+		);
+		return array_slice( $out, 0, max( 1, (int) $limit ) );
 	}
 
 	public function open_stays( array $filters, $today, array $settings ) {

@@ -312,6 +312,9 @@ require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-replay.php
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-protocol.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-temp-tanks.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-todo.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-sold-line.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-feeding.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-ship-lines.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-parser.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-qr.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-costing.php';

@@ -267,7 +267,7 @@ $empty = room( new Fake_Store() );
 check( 'an empty room: nothing due, not "all done"', 0 === $empty['todo']['total'] && ! $empty['todo']['all_done'] && 'Tanks: nothing due today' === Todo::headline( $empty['todo'] ) );
 check( 'every quarantine system still has its block, with fish or without; the Clean Room and the empty slots have none', array( 500, 600 ) === array_column( $empty['todo']['blocks'], 'number' ) && array( 0, 0 ) === array_column( $empty['todo']['blocks'], 'fish' ) && array() === $empty['todo']['blocks'][0]['items'] );
 $summary = Todo::summary( $room['todo'], 'https://example.test/wp-admin/admin.php?page=x&tab=todo' );
-check( 'the summary other sections read', array( 'left' => 0, 'total' => 8, 'all_done' => true, 'flags' => 0, 'text' => 'Tanks: all done', 'url' => 'https://example.test/wp-admin/admin.php?page=x&tab=todo' ) === $summary );
+check( 'the summary other sections read', array( 'left' => 0, 'total' => 8, 'all_done' => true, 'flags' => 0, 'text' => 'Tanks: all done', 'url' => 'https://example.test/wp-admin/admin.php?page=x&tab=todo', 'fast' => '' ) === $summary );
 
 /* ------------------------------------------------------------------ */
 echo "6. Copper readings: low, due, overdue\n";

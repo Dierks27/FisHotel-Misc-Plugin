@@ -34,9 +34,11 @@ defined( 'ABSPATH' ) || exit;
 use FisHotel\Misc\Sections\Clean_Room\Admin;
 use FisHotel\Misc\Sections\Clean_Room\Clean_Room;
 use FisHotel\Misc\Sections\Clean_Room\Costing;
+use FisHotel\Misc\Sections\Clean_Room\Feeding;
 use FisHotel\Misc\Sections\Clean_Room\Layout;
 use FisHotel\Misc\Sections\Clean_Room\Protocol;
 use FisHotel\Misc\Sections\Clean_Room\Settings;
+use FisHotel\Misc\Sections\Clean_Room\Ship_Lines;
 use FisHotel\Misc\Sections\Clean_Room\Sizes;
 use FisHotel\Misc\Sections\Clean_Room\Temp_Tanks;
 
@@ -94,6 +96,20 @@ $fh_from_attr = Sizes::SOURCE_ATTRIBUTE === $fh_standard['source'];
 				</div>
 				<label class="fishotel-misc-toggle">
 					<input type="checkbox" name="voice_enabled" value="1" <?php checked( ! empty( $settings['voice_enabled'] ) ); ?>>
+					<span class="slider"></span>
+				</label>
+			</div>
+			<?php $fh_feeding = Feeding::setting_text( Ship_Lines::state( array( Feeding::SETTING => true ) ) ); // What the tick does, and why it cannot right now. ?>
+			<div class="fh-cr-field fh-cr-field--row">
+				<div>
+					<span class="fh-cr-label"><?php echo esc_html( $fh_feeding['label'] ); ?></span>
+					<p class="fishotel-misc-card-desc"><?php echo esc_html( $fh_feeding['text'] ); ?></p>
+					<?php if ( '' !== $fh_feeding['why'] ) : ?>
+						<p class="fishotel-misc-card-desc fh-cr-feeding-why"><strong><?php echo esc_html( $fh_feeding['why'] ); ?></strong></p>
+					<?php endif; ?>
+				</div>
+				<label class="fishotel-misc-toggle">
+					<input type="checkbox" name="<?php echo esc_attr( Feeding::SETTING ); ?>" value="1" <?php checked( ! empty( $settings[ Feeding::SETTING ] ) ); ?>>
 					<span class="slider"></span>
 				</label>
 			</div>

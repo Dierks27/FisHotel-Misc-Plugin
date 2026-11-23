@@ -38,6 +38,16 @@
  *   - class-dose.php        the dose sum (per gallon, to a level, the
  *                           top-up), what the room fills in, the working
  *                           as the dose log's note.
+ *   - class-sold-line.php   PURE: which tank group a line of a customer's
+ *                           order comes out of (the Invoices link, the
+ *                           product and size, the exact name and size).
+ *   - class-feeding.php     PURE: a clean system is not fed on the day its
+ *                           fish ship — the orders going out today, their
+ *                           fish, the waters that go without, the words.
+ *   - class-ship-lines.php  that rule's edge: today's shipping fish, read
+ *                           from the shop through the readers the other
+ *                           sections already have, cached, dropped when an
+ *                           order changes.
  *   - class-parser.php      PURE: a spoken / typed phrase → structured
  *                           preview (verbs incl. loss / shipped / copper,
  *                           number words, tank references, fuzzy species
@@ -206,6 +216,9 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 			require_once self::path() . 'class-protocol.php';
 			require_once self::path() . 'class-temp-tanks.php';
 			require_once self::path() . 'class-todo.php';
+			require_once self::path() . 'class-sold-line.php';
+			require_once self::path() . 'class-feeding.php';
+			require_once self::path() . 'class-ship-lines.php';
 			require_once self::path() . 'class-parser.php';
 			require_once self::path() . 'class-qr.php';
 			require_once self::path() . 'class-costing.php';
@@ -288,6 +301,9 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 			// A past order line keeps the size text it was bought with, also after "Tidy up the sizes"
 			// removed that size from the list. The callback reads nothing unless an order line is shown.
 			add_filter( 'woocommerce_order_item_display_meta_value', array( Sizes::class, 'order_size_name' ), 10, 2 );
+			// A clean system is not fed on the day its fish ship: what was read of today's orders is dropped
+			// when an order changes. Nothing is read here — only where the day's to-do is shown.
+			Ship_Lines::register();
 
 			$front = new Front_Desk();
 			$front->init();

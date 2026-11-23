@@ -1222,15 +1222,24 @@ class Store {
 			return self::assemble_room( array(), array(), array(), array(), array(), $today, $settings, $protocol );
 		}
 
+		$stays = $this->open_stays( array(), $today, $settings );
+		// A group whose last fish was bagged today still says which water that fish was in — asked only
+		// on a day fish ship.
+		$gone = function () use ( $today, $settings ) {
+			return $this->closed_stays( $today, $settings, 200 );
+		};
+
 		return self::assemble_room(
 			$tanks,
 			isset( $protocol['templates'] ) ? $this->buildings() : array(),
-			$this->open_stays( array(), $today, $settings ),
+			$stays,
 			$this->latest_copper( $tanks ),
 			$this->day_logs( $today ),
 			$today,
 			$settings,
-			$protocol
+			$protocol,
+			// A clean system is not fed on the day its fish ship (Feeding) — asked only where the day's list is built.
+			isset( $protocol['templates'] ) ? Ship_Lines::fast( $today, $settings, $stays, $tanks, $gone ) : array()
 		);
 	}
 
@@ -1242,6 +1251,11 @@ class Store {
 	 * from its setup's own steps and own clock —, then the list by water
 	 * system is built and laid over the tanks (Todo::overlay()).
 	 *
+	 * On a day fish ship, $fast names the waters that go without food
+	 * (Feeding::plan()): the open Feed is taken off each of their tanks
+	 * — which then carries 'fast' (text, strip, fed), the reason its
+	 * screens show — and the list gives the reason in its place.
+	 *
 	 * @param array[] $tanks     tanks() — slots with their 'setup'.
 	 * @param array[] $buildings buildings() (needed for the per-building schedules and the list).
 	 * @param array[] $stays     Every open stay, hydrated.
@@ -1250,9 +1264,10 @@ class Store {
 	 * @param string  $today     Site date.
 	 * @param array   $settings  Settings.
 	 * @param array   $protocol  Settings::protocols(), or one steps list.
+	 * @param array   $fast      Feeding::plan() (empty = every tank is fed).
 	 * @return array{tanks: array[], todo: array|null}
 	 */
-	public static function assemble_room( array $tanks, array $buildings, array $stays, array $copper, array $rows, $today, array $settings, array $protocol ) {
+	public static function assemble_room( array $tanks, array $buildings, array $stays, array $copper, array $rows, $today, array $settings, array $protocol, array $fast = array() ) {
 		$per_building = isset( $protocol['templates'] );
 
 		$by_tank = array();
@@ -1298,6 +1313,12 @@ class Store {
 				// A step naming several medications is not done by one of them (Todo::settle_combos()).
 				$tank['todo'] = $steps ? Todo::settle_combos( Protocol::todo( $steps, $tank['occupants'], $today, (string) $tank['building']['area'], $mine ), $mine ) : array();
 			}
+			// Its fish ship today (or a shipping fish is in no tank the site knows): no Feed.
+			$why = $fast ? Feeding::for_tank( $fast, $tank ) : null;
+			if ( null !== $why && Feeding::has_fish( $tank['occupants'] ) ) {
+				$tank['todo'] = Feeding::without_feed( $tank['todo'], $mine, $why, $fast );
+				$tank['fast'] = Feeding::tank_note( $tank, $why );
+			}
 			$out[] = $tank;
 		}
 
@@ -1308,7 +1329,7 @@ class Store {
 			);
 		}
 
-		$list = Todo::build( $buildings, $out, $protocol, $rows, $today, $settings );
+		$list = Todo::build( $buildings, $out, $protocol, $rows, $today, $settings, $fast );
 
 		return array(
 			'tanks' => Todo::overlay( $out, $list ),
