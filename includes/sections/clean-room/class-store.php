@@ -168,6 +168,13 @@ class Store {
 	private $fish_product_names = null;
 
 	/**
+	 * fish_term_ids(), read once per request.
+	 *
+	 * @var int[]|null
+	 */
+	private $fish_term_ids = null;
+
+	/**
 	 * Transient caching the species candidate list for the parser.
 	 *
 	 * @var string
@@ -2157,7 +2164,7 @@ class Store {
 			unset( $e );
 		}
 		if ( Order_Fish::stay_changes( $stay, $state ) ) {
-			self::clear_order_fish_cache(); // An unlisted fish came alive, is gone, or stands in another tank.
+			self::clear_order_fish_cache(); // A fish came alive, is gone, or stands in another tank (it may be an unlisted one).
 		}
 
 		return $state;
@@ -3224,7 +3231,175 @@ class Store {
 		$words = preg_split( '/\s+/', $term );
 		$limit = max( 1, min( 50, (int) $limit ) );
 
-		return array_slice( $this->merge_species_suggestions( $this->product_suggestions( $term, $words, $limit ), $words, $limit ), 0, $limit );
+		$items = array_slice( $this->merge_species_suggestions( $this->product_suggestions( $term, $words, $limit ), $words, $limit ), 0, $limit );
+
+		return $items ? $items : $this->near_suggestions( $term, $limit );
+	}
+
+	/**
+	 * The search's second try, only when nothing matched letter for
+	 * letter: the fish whose name is NEARLY what was typed
+	 * (Species::near() — "filimented flasher" finds "Filamented Flasher
+	 * Wrasse"), from the cached candidate list. Each comes back marked
+	 * match 'near', a species row with its own fields.
+	 *
+	 * @param string $term  Search text.
+	 * @param int    $limit Row cap.
+	 * @return array[]
+	 */
+	private function near_suggestions( $term, $limit ) {
+		try {
+			$items = Species::near( $term, (array) $this->species_candidates(), $limit );
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+		if ( ! $items ) {
+			return array();
+		}
+		foreach ( $items as $index => $item ) {
+			$row = empty( $item['product_id'] ) ? $this->species_by_name( (string) $item['name'] ) : null;
+			if ( $row ) {
+				$items[ $index ] = array_merge( Species::suggestion( $row ), array( 'match' => 'near' ) );
+			}
+		}
+
+		return array_slice( $this->merge_species_suggestions( $items, array(), $limit ), 0, $limit );
+	}
+
+	/**
+	 * Products that match a search but are NOT fish products — in no fish
+	 * category, nor in one under them —, so the search box can say why a
+	 * product the owner knows is in the shop does not show: every word in
+	 * the title, the trash left out. Asked only when the search found
+	 * nothing.
+	 *
+	 * @param string $term  Search text.
+	 * @param int    $limit Row cap.
+	 * @return array[] product_id, name, status.
+	 */
+	public function products_elsewhere( $term, $limit = 3 ) {
+		$words = array_values( array_filter( (array) preg_split( '/\s+/', trim( (string) $term ) ), 'strlen' ) );
+		if ( ! $words ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		$where  = array();
+		$params = array();
+		foreach ( $words as $word ) {
+			$where[]  = 'p.post_title LIKE %s';
+			$params[] = '%' . $wpdb->esc_like( $word ) . '%';
+		}
+		$params[] = max( 1, min( 10, (int) $limit ) );
+		$term_ids = $this->fish_term_ids();
+		$not_fish = $term_ids
+			? ' AND p.ID NOT IN (SELECT tr.object_id FROM ' . $wpdb->term_relationships . ' tr INNER JOIN ' . $wpdb->term_taxonomy . " tt ON tt.term_taxonomy_id = tr.term_taxonomy_id WHERE tt.taxonomy = 'product_cat' AND tt.term_id IN (" . implode( ',', array_map( 'intval', $term_ids ) ) . '))'
+			: '';
+
+		try {
+			$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT p.ID, p.post_title, p.post_status FROM ' . $wpdb->posts . " p WHERE p.post_type = 'product' AND p.post_status IN ('" . implode( "','", self::PRODUCT_STATUSES ) . "') AND " . implode( ' AND ', $where ) . $not_fish . ' ORDER BY p.post_title ASC LIMIT %d', $params ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+
+		$out = array();
+		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
+			$out[] = array(
+				'product_id' => (int) $row['ID'],
+				'name'       => (string) $row['post_title'],
+				'status'     => (string) $row['post_status'],
+			);
+		}
+
+		return $out;
+	}
+
+	/**
+	 * The products called exactly like one of the names given — in ANY
+	 * category, the trash left out — by the name's key (Species::key()),
+	 * oldest first. What "Start a draft product" asks before it makes a
+	 * product, and what the list offers to link: a product the owner made
+	 * by hand outside the fish categories is still that fish's product.
+	 * One query for all the names.
+	 *
+	 * @param string[] $titles Names.
+	 * @return array<string, int[]> name key => product ids.
+	 */
+	public function products_titled( array $titles ) {
+		$titles = array_slice( array_values( array_unique( array_filter( array_map( 'strval', $titles ), 'strlen' ) ) ), 0, 200 );
+		if ( ! $titles ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		try {
+			$rows = $wpdb->get_results( $wpdb->prepare( 'SELECT ID, post_title FROM ' . $wpdb->posts . " WHERE post_type = 'product' AND post_status NOT IN ('trash', 'auto-draft') AND post_title IN (" . implode( ',', array_fill( 0, count( $titles ), '%s' ) ) . ') ORDER BY ID ASC LIMIT 1000', $titles ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+
+		$out = array();
+		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
+			$out[ Species::key( (string) $row['post_title'] ) ][] = (int) $row['ID'];
+		}
+
+		return $out;
+	}
+
+	/**
+	 * Take a named database lock (MySQL / MariaDB GET_LOCK) without
+	 * waiting: one request holds it, every other one is told no — so two
+	 * clicks that arrive in the same instant cannot both find "no draft
+	 * product yet". The lock belongs to this request's connection and
+	 * ends with it at the latest.
+	 *
+	 * @param string $name Lock name.
+	 * @return bool|null True: this request holds the lock now. False: another request does.
+	 *                   Null: the database could not say (it has no such thing) — nothing is held.
+	 */
+	public function lock( $name ) {
+		global $wpdb;
+
+		try {
+			$got = $wpdb->get_var( $wpdb->prepare( 'SELECT GET_LOCK(%s, 0)', self::lock_name( $name ) ) );
+		} catch ( \Throwable $e ) {
+			return null;
+		}
+		if ( null === $got ) {
+			return null;
+		}
+
+		return '1' === (string) $got;
+	}
+
+	/**
+	 * Give a named lock back.
+	 *
+	 * @param string $name Lock name.
+	 */
+	public function unlock( $name ) {
+		global $wpdb;
+
+		try {
+			$wpdb->get_var( $wpdb->prepare( 'SELECT RELEASE_LOCK(%s)', self::lock_name( $name ) ) );
+		} catch ( \Throwable $e ) {
+			unset( $e );
+		}
+	}
+
+	/**
+	 * The database's name for a lock: one per site (the database server
+	 * may hold several sites) and within its 64 characters.
+	 *
+	 * @param string $name Lock name.
+	 * @return string
+	 */
+	private static function lock_name( $name ) {
+		global $wpdb;
+
+		return 'fh_cleanroom_' . md5( ( defined( 'DB_NAME' ) ? DB_NAME : '' ) . '|' . ( is_object( $wpdb ) && isset( $wpdb->prefix ) ? $wpdb->prefix : '' ) . '|' . (string) $name );
 	}
 
 	/**
@@ -3235,11 +3410,13 @@ class Store {
 	 * group in a tank names (Order_Fish::place()). Such an item has no
 	 * product and no species row — picking it is "use as an unlisted fish"
 	 * with its spelling — and `where` says where it comes from ("on fish
-	 * order 2026-9", "in tank 512").
+	 * order 2026-9", "in tank 512"). A similar spelling (match 'near')
+	 * stands under every letter-for-letter answer, and when nothing
+	 * answered letter for letter the order-line fish are tried nearly too.
 	 *
 	 * @param string $term  Search text.
 	 * @param int    $limit Row cap.
-	 * @return array[] species_suggestions() items, plus items with match order|tank and `where`.
+	 * @return array[] species_suggestions() items, plus items with `where`: match order|tank, or near.
 	 */
 	public function fish_search( $term, $limit = 10 ) {
 		$term = trim( (string) $term );
@@ -3254,7 +3431,10 @@ class Store {
 	/**
 	 * The fish that are in the system only because a fish order line that
 	 * is not closed names them, or because they are alive in a tank —
-	 * linked to no product and no species row (Order_Fish::offered()).
+	 * linked to no product and no species row (Order_Fish::offered()). A
+	 * group's link to a product that is in the trash, or deleted, is no
+	 * link: the product search does not find that product, and "Fish with
+	 * no product yet" lists the fish — so the search offers it.
 	 * Two reads over the section's own tables, bounded however long the
 	 * history is, kept for 10 minutes; clear_order_fish_cache() drops the
 	 * list on every write that changes it. A read that fails is not kept.
@@ -3272,9 +3452,13 @@ class Store {
 
 		global $wpdb;
 
+		// A group's product counts while it still EXISTS — the rule of "Fish with no product yet" (No_Product::GONE):
+		// a product in the trash, or deleted, is none, so its fish is an unlisted fish here as it is on that list.
+		$product = "%1\$s.ID = %2\$s.product_id AND %1\$s.post_type = 'product' AND %1\$s.post_status NOT IN ('" . implode( "','", No_Product::GONE ) . "')";
+
 		try {
-			$lines = $wpdb->get_results( $wpdb->prepare( 'SELECT l.id, l.species, l.sci_name, l.needs_id, l.species_id, st.product_id AS stay_product_id, o.ref AS order_ref, o.status AS order_status FROM ' . self::table( 'order_lines' ) . ' l INNER JOIN ' . self::table( 'orders' ) . ' o ON o.id = l.order_id LEFT JOIN ' . self::table( 'stays' ) . " st ON st.id = l.stay_id WHERE o.status <> 'closed' AND l.species_id IS NULL AND l.needs_id = 0 AND l.species <> '' AND st.product_id IS NULL ORDER BY l.id DESC LIMIT %d", Order_Fish::MAX_LINES ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
-			$stays = $wpdb->get_results( $wpdb->prepare( 'SELECT s.id, s.species, s.needs_id, s.product_id, s.qty_live, s.status, t.number AS tank_number, ol.sci_name, ol.species_id AS line_species_id FROM ' . self::table( 'stays' ) . ' s LEFT JOIN ' . self::table( 'tanks' ) . ' t ON t.id = s.tank_id LEFT JOIN ' . self::table( 'order_lines' ) . " ol ON ol.id = s.order_line_id WHERE s.status <> 'closed' AND s.qty_live > 0 AND s.product_id IS NULL AND s.needs_id = 0 AND s.species <> '' AND ol.species_id IS NULL ORDER BY s.id DESC LIMIT %d", Order_Fish::MAX_STAYS ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			$lines = $wpdb->get_results( $wpdb->prepare( 'SELECT l.id, l.species, l.sci_name, l.needs_id, l.species_id, sp.ID AS stay_product_id, o.ref AS order_ref, o.status AS order_status FROM ' . self::table( 'order_lines' ) . ' l INNER JOIN ' . self::table( 'orders' ) . ' o ON o.id = l.order_id LEFT JOIN ' . self::table( 'stays' ) . ' st ON st.id = l.stay_id LEFT JOIN ' . $wpdb->posts . ' sp ON ' . sprintf( $product, 'sp', 'st' ) . " WHERE o.status <> 'closed' AND l.species_id IS NULL AND l.needs_id = 0 AND l.species <> '' AND sp.ID IS NULL ORDER BY l.id DESC LIMIT %d", Order_Fish::MAX_LINES ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			$stays = $wpdb->get_results( $wpdb->prepare( 'SELECT s.id, s.species, s.needs_id, p.ID AS product_id, s.qty_live, s.status, t.number AS tank_number, ol.sci_name, ol.species_id AS line_species_id FROM ' . self::table( 'stays' ) . ' s LEFT JOIN ' . self::table( 'tanks' ) . ' t ON t.id = s.tank_id LEFT JOIN ' . self::table( 'order_lines' ) . ' ol ON ol.id = s.order_line_id LEFT JOIN ' . $wpdb->posts . ' p ON ' . sprintf( $product, 'p', 's' ) . " WHERE s.status <> 'closed' AND s.qty_live > 0 AND p.ID IS NULL AND s.needs_id = 0 AND s.species <> '' AND ol.species_id IS NULL ORDER BY s.id DESC LIMIT %d", Order_Fish::MAX_STAYS ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		} catch ( \Throwable $e ) {
 			return array();
 		}
@@ -3458,7 +3642,7 @@ class Store {
 			$params[] = $like;
 			$params[] = $like;
 		}
-		$clause = '(' . implode( ' AND ', $where ) . ')';
+		$clause = $where ? '(' . implode( ' AND ', $where ) . ')' : '0 = 1'; // No words: only the rows that link one of the products.
 		if ( $product_ids ) {
 			$clause .= ' OR product_id IN (' . implode( ',', array_map( 'intval', $product_ids ) ) . ')';
 		}
@@ -3492,18 +3676,23 @@ class Store {
 	}
 
 	/**
-	 * The term ids of the fish categories.
+	 * The term ids of the fish categories and of EVERY category under
+	 * them, however deep ("Quarantined Fish → Wrasses → Flasher Wrasses"):
+	 * a product ticked only in a sub-sub-category is a fish product too —
+	 * the fish search, the name index and the candidate list all read by
+	 * these ids. Read once per request (two small queries).
 	 *
 	 * @return int[]
 	 */
 	private function fish_term_ids() {
+		if ( null !== $this->fish_term_ids ) {
+			return $this->fish_term_ids;
+		}
+
 		global $wpdb;
 
-		$slugs = self::FISH_CATEGORIES;
-		if ( function_exists( 'apply_filters' ) ) {
-			$slugs = (array) apply_filters( 'fishotel_ship_day_fish_categories', $slugs );
-		}
-		$slugs = array_values( array_filter( array_map( 'strval', $slugs ), 'strlen' ) );
+		$this->fish_term_ids = array();
+		$slugs               = self::fish_category_slugs();
 		if ( ! $slugs ) {
 			return array();
 		}
@@ -3514,11 +3703,88 @@ class Store {
 			$ids = $wpdb->get_col(
 				$wpdb->prepare( 'SELECT t.term_id FROM ' . $wpdb->terms . ' t INNER JOIN ' . $wpdb->term_taxonomy . " tt ON tt.term_id = t.term_id WHERE tt.taxonomy = 'product_cat' AND t.slug IN ({$placeholders})", $slugs ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 			);
+			$ids = array_map( 'intval', is_array( $ids ) ? $ids : array() );
+			if ( ! $ids ) {
+				return array();
+			}
+			$rows = $wpdb->get_results( 'SELECT term_id, parent FROM ' . $wpdb->term_taxonomy . " WHERE taxonomy = 'product_cat' AND parent > 0", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		} catch ( \Throwable $e ) {
 			return array();
 		}
 
-		return array_map( 'intval', is_array( $ids ) ? $ids : array() );
+		$parent_of = array();
+		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
+			$parent_of[ (int) $row['term_id'] ] = (int) $row['parent'];
+		}
+		$this->fish_term_ids = self::with_descendants( $ids, $parent_of );
+
+		return $this->fish_term_ids;
+	}
+
+	/**
+	 * The slugs of the fish categories (the shop's own filter applied).
+	 *
+	 * @return string[]
+	 */
+	public static function fish_category_slugs() {
+		$slugs = self::FISH_CATEGORIES;
+		if ( function_exists( 'apply_filters' ) ) {
+			$slugs = (array) apply_filters( 'fishotel_ship_day_fish_categories', $slugs );
+		}
+		return array_values( array_filter( array_map( 'strval', $slugs ), 'strlen' ) );
+	}
+
+	/**
+	 * What a search box says under its answer when the lists — products,
+	 * Species rows, learned names — found no fish letter for letter: a
+	 * product of that name the shop has OUTSIDE the fish categories, and
+	 * what to do about it. '' when the lists found fish, or the shop has
+	 * no such product. A similar spelling, or a fish that only a fish order
+	 * line or a group in a tank names, is no answer of the lists: the hint
+	 * is the more useful beside one (the fish typed on the order HAS a
+	 * product, in the wrong category). One query, and only then.
+	 *
+	 * @param string  $term  Search text.
+	 * @param array[] $items species_suggestions() or fish_search() for that text.
+	 * @return string
+	 */
+	public function search_hint( $term, array $items ) {
+		if ( Order_Fish::lists_answered( $items ) ) {
+			return '';
+		}
+		try {
+			return Species::elsewhere_hint( $this->products_elsewhere( $term ), self::fish_category_slugs() );
+		} catch ( \Throwable $e ) {
+			return ''; // A hint is never worth a broken search.
+		}
+	}
+
+	/**
+	 * A set of categories with every category under them (pure).
+	 *
+	 * @param int[]           $roots     Term ids.
+	 * @param array<int, int> $parent_of Term id => its parent's term id.
+	 * @return int[] The roots first, then their descendants level by level, each once.
+	 */
+	public static function with_descendants( array $roots, array $parent_of ) {
+		$out = array();
+		foreach ( $roots as $id ) {
+			if ( (int) $id > 0 ) {
+				$out[ (int) $id ] = true;
+			}
+		}
+		$level = array_keys( $out );
+		while ( $level ) {
+			$next = array();
+			foreach ( $parent_of as $id => $parent ) {
+				if ( (int) $id > 0 && ! isset( $out[ (int) $id ] ) && in_array( (int) $parent, $level, true ) ) {
+					$out[ (int) $id ] = true;
+					$next[]           = (int) $id;
+				}
+			}
+			$level = $next;
+		}
+		return array_keys( $out );
 	}
 
 	/**
@@ -3706,6 +3972,62 @@ class Store {
 		}
 
 		return $out;
+	}
+
+	/**
+	 * The post status of several products in one query, by id — what
+	 * "this fish has no product yet" asks (No_Product::alive()): a product
+	 * in the trash is none, and a product that is not in the answer was
+	 * deleted. At most PRICE_IDS_LIMIT ids are asked for; an id beyond
+	 * that reads as deleted.
+	 *
+	 * @param int[] $ids Product ids.
+	 * @return array<int, string> product id => post status.
+	 */
+	public function product_statuses( array $ids ) {
+		$ids = array_slice( array_values( array_unique( array_filter( array_map( 'intval', $ids ) ) ) ), 0, self::PRICE_IDS_LIMIT );
+		if ( ! $ids ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		$out = array();
+		foreach ( array_chunk( $ids, 500 ) as $chunk ) {
+			try {
+				$rows = $wpdb->get_results( 'SELECT ID, post_status FROM ' . $wpdb->posts . " WHERE post_type = 'product' AND ID IN (" . implode( ',', $chunk ) . ')', ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- ids cast to int above.
+			} catch ( \Throwable $e ) {
+				continue;
+			}
+			foreach ( is_array( $rows ) ? $rows : array() as $row ) {
+				$out[ (int) $row['ID'] ] = (string) $row['post_status'];
+			}
+		}
+
+		return $out;
+	}
+
+	/**
+	 * The product that carries a meta value — the draft "Start a draft
+	 * product" made for a fish (No_Product::DRAFT_META): the oldest one
+	 * that is not in the trash, 0 when there is none.
+	 *
+	 * @param string $meta_key   Meta key.
+	 * @param string $meta_value Meta value.
+	 * @return int
+	 */
+	public function product_with_meta( $meta_key, $meta_value ) {
+		if ( '' === (string) $meta_key || '' === (string) $meta_value ) {
+			return 0;
+		}
+
+		global $wpdb;
+
+		try {
+			return (int) $wpdb->get_var( $wpdb->prepare( 'SELECT p.ID FROM ' . $wpdb->posts . ' p INNER JOIN ' . $wpdb->postmeta . " m ON m.post_id = p.ID WHERE p.post_type = 'product' AND p.post_status NOT IN ('trash', 'auto-draft') AND m.meta_key = %s AND m.meta_value = %s ORDER BY p.ID ASC LIMIT 1", (string) $meta_key, (string) $meta_value ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		} catch ( \Throwable $e ) {
+			return 0;
+		}
 	}
 
 	/**
@@ -4181,7 +4503,7 @@ class Store {
 	}
 
 	private static function line_select() {
-		return 'SELECT l.*, sp.per_box AS species_per_box, sp.group_name AS species_group, sp.product_id AS species_product_id, sp.my_price AS species_my_price, st.qty_live AS stay_live, st.status AS stay_status, t.number AS tank_number FROM ' . self::table( 'order_lines' ) . ' l LEFT JOIN ' . self::table( 'species' ) . ' sp ON sp.id = l.species_id LEFT JOIN ' . self::table( 'stays' ) . ' st ON st.id = l.stay_id LEFT JOIN ' . self::table( 'tanks' ) . ' t ON t.id = l.tank_id';
+		return 'SELECT l.*, sp.per_box AS species_per_box, sp.group_name AS species_group, sp.product_id AS species_product_id, sp.my_price AS species_my_price, st.qty_live AS stay_live, st.status AS stay_status, st.product_id AS stay_product_id, st.species AS stay_species, t.number AS tank_number FROM ' . self::table( 'order_lines' ) . ' l LEFT JOIN ' . self::table( 'species' ) . ' sp ON sp.id = l.species_id LEFT JOIN ' . self::table( 'stays' ) . ' st ON st.id = l.stay_id LEFT JOIN ' . self::table( 'tanks' ) . ' t ON t.id = l.tank_id';
 	}
 
 	/**
@@ -4197,7 +4519,9 @@ class Store {
 	/**
 	 * Order headers, newest first.
 	 *
-	 * @param array $filters year (int), status (string), supplier (string), limit (int).
+	 * @param array $filters year (int), status (string), supplier (string), open (bool: every
+	 *                       status but closed), refs (string[]: only the orders with these refs),
+	 *                       limit (int).
 	 * @return array[] Hydrated headers (+ line_count).
 	 */
 	public function orders( array $filters = array() ) {
@@ -4220,6 +4544,18 @@ class Store {
 		if ( ! empty( $filters['supplier'] ) ) {
 			$where[]  = 'o.supplier = %s';
 			$params[] = (string) $filters['supplier'];
+		}
+		if ( ! empty( $filters['open'] ) ) {
+			$where[] = "o.status <> 'closed'"; // Draft, ordered or received: what "Fish with no product yet" reads by default.
+		}
+		if ( isset( $filters['refs'] ) ) {
+			// The orders some groups name by their ref ("Fish with no product yet"): no ref, no order.
+			$refs = array_values( array_unique( array_filter( array_map( 'trim', array_map( 'strval', array_filter( (array) $filters['refs'], 'is_scalar' ) ) ), 'strlen' ) ) );
+			if ( ! $refs ) {
+				return array();
+			}
+			$where[] = 'o.ref IN (' . implode( ',', array_fill( 0, count( $refs ), '%s' ) ) . ')';
+			$params  = array_merge( $params, $refs );
 		}
 		$params[] = isset( $filters['limit'] ) ? max( 1, min( self::ORDERS_LIMIT, (int) $filters['limit'] ) ) : self::ORDERS_LIMIT;
 
@@ -4528,6 +4864,62 @@ class Store {
 		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
 			$line                         = self::hydrate_line( $row );
 			$out[ $line['order_id'] ][]   = $line;
+		}
+
+		return $out;
+	}
+
+	/**
+	 * Every line of ONE fish, on every order — closed ones too —, each with
+	 * its order's ref, status and dates (order_ref, order_status,
+	 * order_date, received_date, order_created): the lines that carry a
+	 * species-list id, and the lines typed with one of the names given.
+	 * The comparison is the database's (case-blind); the caller keeps the
+	 * lines whose fish key is the fish's (Stats::fish_key()). A fish that
+	 * still has to be identified is left out.
+	 *
+	 * @param int      $species_id Species-list id (0 = none).
+	 * @param string[] $names      Names the fish is typed with.
+	 * @param int      $limit      Row cap.
+	 * @return array[] Hydrated lines (+ the order fields above).
+	 */
+	public function lines_of_fish( $species_id, array $names, $limit = 5000 ) {
+		$names = array_slice( array_values( array_unique( array_filter( array_map( 'strval', $names ), 'strlen' ) ) ), 0, 50 );
+		if ( ! self::tables_exist() || ( (int) $species_id <= 0 && ! $names ) ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		$where  = array();
+		$params = array();
+		if ( (int) $species_id > 0 ) {
+			$where[]  = 'l.species_id = %d';
+			$params[] = (int) $species_id;
+		}
+		if ( $names ) {
+			$where[] = 'l.species IN (' . implode( ',', array_fill( 0, count( $names ), '%s' ) ) . ')';
+			$params  = array_merge( $params, $names );
+		}
+		$params[] = max( 1, min( 20000, (int) $limit ) );
+		$sql      = str_replace( ' FROM ' . self::table( 'order_lines' ) . ' l ', ', o.ref AS order_ref, o.status AS order_status, o.order_date AS order_date, o.received_date AS received_date, o.created_at AS order_created FROM ' . self::table( 'order_lines' ) . ' l INNER JOIN ' . self::table( 'orders' ) . ' o ON o.id = l.order_id ', self::line_select() )
+			. ' WHERE l.needs_id = 0 AND (' . implode( ' OR ', $where ) . ') ORDER BY l.order_id ASC, l.sort ASC, l.id ASC LIMIT %d';
+
+		try {
+			$rows = $wpdb->get_results( $wpdb->prepare( $sql, $params ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+
+		$out = array();
+		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
+			$line                  = self::hydrate_line( $row );
+			$line['order_ref']     = (string) ( $row['order_ref'] ?? '' );
+			$line['order_status']  = (string) ( $row['order_status'] ?? '' );
+			$line['order_date']    = self::date_or_null( $row['order_date'] ?? null );
+			$line['received_date'] = self::date_or_null( $row['received_date'] ?? null );
+			$line['order_created'] = (string) ( $row['order_created'] ?? '' );
+			$out[]                 = $line;
 		}
 
 		return $out;
@@ -6211,6 +6603,8 @@ class Store {
 			'species_my_price'   => self::money_or_null( $row['species_my_price'] ?? null ),
 			'stay_live'          => self::int_or_null( $row['stay_live'] ?? null ),
 			'stay_status'        => isset( $row['stay_status'] ) && null !== $row['stay_status'] ? (string) $row['stay_status'] : null,
+			'stay_product_id'    => ! empty( $row['stay_product_id'] ) ? (int) $row['stay_product_id'] : null,
+			'stay_species'       => isset( $row['stay_species'] ) && null !== $row['stay_species'] ? (string) $row['stay_species'] : null,
 		);
 	}
 }

@@ -25,6 +25,7 @@
 defined( 'ABSPATH' ) || exit;
 
 use FisHotel\Misc\Sections\Clean_Room\Admin;
+use FisHotel\Misc\Sections\Clean_Room\Admin_No_Product;
 use FisHotel\Misc\Sections\Clean_Room\Admin_Temp;
 use FisHotel\Misc\Sections\Clean_Room\Board_Lines;
 use FisHotel\Misc\Sections\Clean_Room\Clean_Room;
@@ -88,6 +89,9 @@ $fh_temp_done = false;
 		<?php endif; ?>
 		<?php if ( $totals['needs_id'] > 0 ) : ?>
 			<a class="fh-cr-chip fh-cr-chip--warn" href="<?php echo esc_url( Admin::page_url( 'stays', array( 'needs_id' => '1' ) ) ); ?>" title="<?php esc_attr_e( 'Fish nobody knows yet (their name starts with ??). Name them with Identify… on the Stays tab, or on the phone.', 'fishotel-misc-plugin' ); ?>"><strong><?php echo esc_html( $totals['needs_id'] ); ?></strong> <?php echo esc_html( _n( 'needs identifying', 'need identifying', (int) $totals['needs_id'], 'fishotel-misc-plugin' ) ); ?></a>
+		<?php endif; ?>
+		<?php if ( isset( $no_product ) && (int) $no_product > 0 ) : ?>
+			<a class="fh-cr-chip fh-cr-chip--warn fh-cr-chip--noproduct" href="<?php echo esc_url( Admin_No_Product::url() ); ?>" title="<?php esc_attr_e( 'Fish on a fish order that is not closed, or alive in a tank, that are not linked to a product of the shop yet. Opens the list: link each one to its product, or start a draft product for it.', 'fishotel-misc-plugin' ); ?>"><strong><?php echo esc_html( (int) $no_product ); ?></strong> <?php echo esc_html( _n( 'fish with no product yet', 'fish with no product yet', (int) $no_product, 'fishotel-misc-plugin' ) ); ?> &rarr;</a>
 		<?php endif; ?>
 		<span class="fh-cr-chip"><strong><?php echo esc_html( $totals['live'] ); ?></strong> <?php esc_html_e( 'fish alive', 'fishotel-misc-plugin' ); ?></span>
 		<span class="fh-cr-chip"><strong><?php echo esc_html( $totals['empty'] ); ?></strong> / <?php echo esc_html( $totals['tanks'] ); ?> <?php esc_html_e( 'tanks empty', 'fishotel-misc-plugin' ); ?></span>

@@ -2192,6 +2192,19 @@ carries the exact name of one (it is found as that — so a
 fish that later gets a product or a Species row stops being offered this
 way), an unknown "??" fish (it has no name), a closed order's fish that
 is no longer in a tank.
+"A product" is one that still exists — the rule of *Fish with no
+product yet* below: a group still linked to a product that is in the
+trash, or was deleted, is an unlisted fish here (the product search does
+not find that product, so the fish would otherwise be found nowhere),
+as that list shows it.
+A **similar spelling** stands under every letter-for-letter answer:
+when no product, Species row or learned name answers and the lists fall
+back to their near spellings (see *The fish search* below), those go
+under the order-line fish that are spelled as typed; and when nothing
+at all answers letter for letter, the order-line fish are tried by the
+same near-spelling rule (`Order_Fish::nearly()`) and follow the lists'
+near answers — still saying where they come from, and marked *similar
+spelling*.
 
 The list is two reads over the section's own tables, each with a row
 cap and neither growing with the history (closed orders and empty or
@@ -2201,8 +2214,13 @@ candidate cache for ten minutes and dropped with it by every product,
 species and alias save — and, alone, by every write that changes the
 answer: a fish order saved, imported into or deleted, its status
 changed (the check-in, a close), a line's fish corrected, a group
-checked in, identified, corrected, moved to another tank or emptied. A
-loss that leaves fish alive drops nothing. The voice parser's and the
+checked in, identified, corrected, moved to another tank or emptied —
+any named group, with or without a product on it: a group whose product
+is in the trash is an unlisted fish, and the rule
+(`Order_Fish::stay_changes()`) cannot know that without a read. A
+loss that leaves fish alive drops nothing. A product deleted for good —
+no trash, so nothing saves it — drops both through `deleted_post`
+(`Clean_Room::product_deleted()`; any other post deleted drops nothing). The voice parser's and the
 importer's candidates are as they were (products, Species rows, learned
 names), and so are the names the Requests section suggests to a
 customer: `Store::species_suggestions()` is unchanged, and nobody
@@ -2213,6 +2231,186 @@ word), group filter, 50 per page, inline edit, add, *Link product* (a
 product search over the fish categories), delete — refused while an
 order line names the species —, the open-stays count (by product when
 linked, else by name).
+
+## Fish with no product yet
+
+"Is there a way that we can mark any of the fish/products that don't
+have anything tied to them yet so I can easily do that…" A new fish on
+an order has no product in the shop yet; this is where that is seen at a
+glance, and the way from there to a product.
+
+**One rule** (`class-no-product.php`, pure — every screen below asks it):
+
+- a **fish order line** has a product when its species-list row is
+  linked to one, else when exactly ONE fish product is named like the
+  line — `Shop_Price::product_of()`, the rule the shop price reads by —
+  and that product still exists;
+- an **open stay** has a product when its own product link points at one
+  that still exists;
+- a product **in the trash, or deleted, is none**; a **draft is a
+  product** (the owner is working on it);
+- a **"??" fish** is a different case: it needs identifying first, and
+  reads so — it is never counted as a fish without a product;
+- a **closed fish order** is history and is never written on: a line of
+  one that was only typed with a name of the species list reads its
+  product through the row of that name (`No_Product::through_list()`).
+
+Lines and stays are gathered into **fish** as the Stats gather lines
+(`Stats::fish_key()`): the species-list row — the line's own, or the row
+with the same name —, else the name as typed, case and spacing aside. A
+stay goes with its order line while it carries the line's name. One row
+per fish, never one per line.
+
+A group **put in a tank by hand** stands for no order line — the phone's
+Arrival of a fish picked as "on fish order 2026-9" writes that ref on
+the group (`order_ref`), and the Stays tab's Edit lets one be typed. It
+is that order's all the same (`No_Product::named_order()`, the ref's
+case and the spaces around it aside): its row names the order, and takes
+the scientific name, the sizes, the landed cost and the target price of
+the order's line of the same fish. On the list narrowed to one order it joins the
+fish that order's lines put there — its tank, its fish alive — and adds
+no row: the count beside the order counted the lines. An order that is
+not among the ones the list read — a closed one, by default — is read
+for it by its ref (`Store::orders()` with `refs`, one more read of
+orders whatever the groups, none when no group names such an order); a
+closed order's lines still make no row of their own.
+
+**The mark**, wherever the owner already looks — each for ONE read of
+the post statuses of the products involved (`Store::product_statuses()`),
+never a query per row:
+
+- on a fish order's lines, in **Entry and Numbers**: a small tag *no
+  product yet* beside the fish, whatever price was typed with the pencil.
+  A Save redraws it; it leads to the list narrowed to that order;
+- on the **Fish orders** list: *N without a product* beside the order's
+  status — its FISH, so the same fish in two sizes is one. It is the
+  list narrowed to that order, row for row: a line whose own group in
+  the tank lacks the link (`No_Product::group_lacks()` — the product was
+  added after the check-in) is counted and tagged too;
+- on the **Board**: one chip, *N fish with no product yet →*, hidden at 0
+  (it adds the lines of the orders that are not closed to the stays the
+  Board already has);
+- on the **Stays** tab: the old "no product" reads *no product yet* and
+  links to the list.
+
+Only what matters **now** is marked: a line of an order that is a draft,
+ordered or received — or of a closed one whose own group is still in a
+tank —, and every open stay. A closed order's other lines are history
+(the workbook import linked no species to a product, so nearly all of
+them are "without").
+
+**The list — Species → Fish with no product yet**
+(`?tab=species&view=no-product`; the Species tab is where the fish and
+their product links already live, and the tab now has a strip of two
+views). By default the fish that matter now; a button shows the fish of
+closed fish orders too (the newest 500 orders are read, 50 fish a page),
+and `order=<id>` narrows it to one order — what matters now of it, the
+fish its count counted; a closed order has a button for all of its
+fish. Per fish: the name as typed
+(the newest order's), the scientific name, the sizes seen, the fish
+orders by ref (each a link) and the tanks with how many are alive, what
+it cost landed per fish on its newest order that has a cost, that
+order's target price, and the planned prices — a price typed with the
+pencil on an order that is still open, said with the size of the line
+it was typed on. The fish in tanks come first,
+then by name. The "??" fish are a group of their own under the list,
+with the existing *Identify…* (a group in a tank) or a link to their
+order (a line).
+
+**From the list to a product**, two acts per fish
+(`class-admin-no-product.php`; AJAX `fishotel_cleanroom_no_product`):
+
+- **Link to a product…** — the Species tab's product search; on a pick
+  the fish's species-list row is linked (`Store::link_species_product()`
+  — a row is added under the name the fish was typed with when it had
+  none), every line of the fish on an order that is NOT closed, typed
+  with that name, gets the row's id — a closed order's line is left as
+  it is (the row's per box and group would come with the id and change
+  what that order cost; it follows through the row's name instead) —,
+  and every open stay without a product gets the link through
+  `Identify::stay()` — which, the name and size unchanged, writes the
+  link alone: no event, no label, no "mislabeled". No alias
+  is written: a species row linked to a product already folds its name
+  into that product's names in every search. When the species list or
+  the shop already has a product under the fish's name (a group typed as
+  unlisted never got the link), the row offers that product alone —
+  *Link to it* —: another pick would move every fish order line of the
+  fish as well, so it is refused and left to the Species list. There,
+  *Link product* now moves the open groups that carried the row's old
+  product too (`Admin_No_Product::species_relinked()`), so a wrong pick
+  is undone in one place; removing the link takes it off them.
+- **Start a draft product** — makes a WooCommerce product as a
+  **draft**, never published here, shaped as this shop's fish products
+  are: a product with variations, the `quarantined-fish` category on the
+  product itself, the scientific name in `_fh_scientific_name` and, in
+  italics, as the short description, the size attribute with one
+  variation per size seen (stock managed, 0 in stock), the regular price
+  of a size = the planned price typed FOR THAT SIZE, else empty — never
+  a guessed one, and a price typed on the 1-2" line is not put on the
+  2-3" variation; the shipping class is left to the theme, which sets
+  it on publish. A planned price with no variation to go on (a line
+  without a size) is put nowhere, and the reply says so. The fish is
+  then linked to it as
+  above, and the reply says what was made, what is left (photo,
+  description, price, stock, Publish) and links *Finish it in the shop
+  →*. It needs `edit_products` besides the section's capability and has
+  a nonce of its own. **A second click never makes a second product**:
+  the product the fish has is opened, and a draft started for it before
+  is found by its marker (`_fh_cleanroom_fish`, the fish's name key;
+  trash left out) and adopted. One click at a time per fish: the
+  database's own lock (`Store::lock()`, GET_LOCK asked without waiting),
+  and the fish is read again once it is held. **Nor a twin**: when the
+  shop already has a product called exactly like the fish — in ANY
+  category, the trash left out (`Store::products_titled()`) — nothing
+  is made and the product is named; the list shows such a fish with
+  *Link to it* and no draft button (with several namesakes: no offer,
+  the owner picks).
+
+**The fish search** (`Store::species_suggestions()` — this list's
+product box and the Species tab's *Link product* ask it as it is; the
+order page, the Stays tab, Identify and the phone ask
+`Store::fish_search()`, which adds the fish of the fish orders, see
+*A fish that is on a fish order is in the system* above) reads the
+products of the fish categories and of EVERY category under them
+(`Store::with_descendants()`; it used to stop one level down, so a
+product ticked only in "Quarantined Fish → Wrasses → Flasher Wrasses"
+was no fish product) — the names an order line is held against to
+decide whether it is an unlisted fish are read by the same categories.
+When nothing matches letter for letter it tries a
+near spelling (`Species::near()`: every typed word in one of the fish's
+names, a word of four letters or more one slip off, two from eight
+letters on) and marks the answer *similar spelling*. When the shop has
+a product of that name outside the fish categories, the box says so and
+what to do (`Store::search_hint()`) — also when the only answer is a
+fish typed on a fish order: that fish HAS a product, in the wrong
+category; the product box has its own
+"nothing found" that says where it looks.
+
+**The list and the search go by the same fish.** Every fish on this
+list is found by its name in the fish search, and a fish the search
+offers as a fish order's or a tank's own is a row here, under the same
+key (the name, case and spacing aside). After *Link to a product…* or
+*Start a draft product* the fish is found as that product, once: the
+link is written through the Store (the Species row, the lines, the
+groups), and each of those writes drops the search's kept list
+(`tests/search-together-test.php`).
+
+**A draft is invisible to customers**, and the section reads it
+sensibly: the phone's and the editor's fish search list it (they read
+drafts); the order's shop price reads its variations' regular prices,
+and says "no shop price yet" while they have none; the Stays tab's
+*Coming Soon* works on it; the Requests section links no customer to it
+until it is published.
+
+**A page that was open before the link.** The order page carries a
+line's species-list id in a hidden field; a page loaded before the link
+posts it empty. A line that still names the fish it already is keeps the
+id it has (`No_Product::keep_species_ids()`), so a late Save does not
+take the fish off its product again; a line typed to another fish is
+taken as typed.
+
+No table, no column, no option, no cron: the feature reads, and writes
+only what the Species tab's link and Identify already wrote.
 
 ## Stats
 
@@ -2872,6 +3070,14 @@ clean-room/
 ├── class-shop-price.php    what an order line's fish sells for, READ: the linked product (the
 │                           variation of the line's size, else its lowest price), else the species
 │                           list, else nothing — never stored (takes the store as a parameter)
+├── class-no-product.php    PURE: fish with no product yet — the one rule (a line, a stay, a product
+│                           in the trash, a draft, a "??" fish), lines and stays gathered into fish,
+│                           the list's rows and their order, the counts, the link of a fish to a
+│                           product (takes the store as a parameter), what a draft product is made
+│                           of, "a second click makes no second product"
+├── class-admin-no-product.php  Species → Fish with no product yet: its data and page, the marks' batch
+│                           reads, the AJAX behind "Link to a product…" and "Start a draft product",
+│                           and No_Product_Shop — the only WooCommerce calls that make a product
 ├── class-splits.php        a line laid out over tanks: the plan and its rules, the tanks a part may
 │                           go into, "1 per tank", the option that keeps the plans and the fish that
 │                           were split last time, the check-in's split-moves
@@ -2931,6 +3137,8 @@ clean-room/
 │          board-temp.php (the Board's Temporary area), board-lines.php (the lines of one tank
 │          card, rack or temporary), todo.php (the To do tab),
 │          temp-history.php (the setups taken down, or one in full), settings-temp.php (the slots),
+│          no-product.php (Species → Fish with no product yet), species-nav.php (the strip of the
+│          Species tab's two views),
 │          stats-nav.php + stats-head.php (the strip of Stats views), stats-compare.php,
 │          stats-species.php, stats-prices.php, stats-sales.php, settings-sales.php (the Sales
 │          statuses card of the Settings tab)

@@ -77,6 +77,8 @@ php  includes/sections/clean-room/tests/order-import-layouts-test.php
 php  includes/sections/clean-room/tests/order-import-admin-test.php
 php  includes/sections/clean-room/tests/order-import-tidy-test.php
 php  includes/sections/clean-room/tests/shop-price-test.php
+php  includes/sections/clean-room/tests/no-product-test.php
+php  includes/sections/clean-room/tests/search-together-test.php
 php  includes/sections/clean-room/tests/splits-test.php
 node includes/sections/clean-room/tests/front-desk.test.js
 node includes/sections/clean-room/tests/clean-room-admin.test.js
@@ -680,6 +682,53 @@ system temp directory (`FH_TEST_TMP` overrides).
   at 1280 and at 1024 px, "More columns" still fitting 1280 px, and the
   scientific name that reads under the fish on a narrow window. With `--harness=<dir>` it also writes static copies of the page
   for a real browser (see *The order page in a browser* below).
+- **no-product-test.php** — fish with no product yet (`No_Product`,
+  `Admin_No_Product`): the one rule (a line by its species-list row or
+  the one product named like it, a stay by its own link, a product in
+  the trash or deleted is none, a draft is one, a "??" fish is a case of
+  its own, a closed order asked directly); lines and stays gathered into
+  fish (two lines of one fish, a stay with its line, a group on no
+  order, the product a row can offer); what matters now, closed orders
+  too, one order, a page, the sort, the "??" group; the Board's chip,
+  the Fish orders list's count, the tag on an order's lines in both
+  views and in a Save's reply, the Stays tab — each for ONE read of the
+  statuses; the list as it renders (with and without the right to make
+  products); "Link to a product…" (the species row, every line, every
+  open stay, no event and no label, the numbers unchanged, a second
+  link refused); the page that was open before the link; what a draft
+  is made of (name, scientific name, sizes → variations, the planned
+  price or none, a typed size list, a size that left the list); and
+  "Start a draft product" on a fake shop — its capability and its own
+  nonce, one product, a second click and a later page open the first, a
+  draft started before is adopted, one in the trash is not, a shop that
+  fails, two clicks at once.
+- **search-together-test.php** — the fish search and "Fish with no
+  product yet", together (`Order_Fish::place()`, `Order_Fish::nearly()`,
+  `Store::search_hint()`, `No_Product`): the ranking — what answers
+  letter for letter first (the lists, then the order-line fish), every
+  similar spelling under it, an order-line fish found by a similar
+  spelling when nothing else answers, each fish once, the row cap; the
+  hint about a product outside the fish categories beside a fish typed
+  on a fish order; on the fake store, that every fish on the list is
+  found by the search and every unlisted fish the search offers is a
+  row of the list under the same key, a group whose product is in the
+  trash or deleted being an unlisted fish in both; that a fish linked
+  to a product, given a draft or linked to its namesake outside the fish
+  categories is then found as that product, once, and is off the list;
+  and on the REAL `Store` against a database stand-in: the product reads
+  ask every category under the fish categories and leave the trash out,
+  the two order-fish reads count a group's product only while it
+  exists, and each write the link makes drops the kept list. And what
+  the review of the two together found: a fish picked on the phone as
+  "on fish order …" (the group carries the ref, and no order line) is
+  ONE row with its fish order and its tank — on the list narrowed to
+  that order too, which still has exactly the fish the order's count
+  counted — and still names the order, with its line's landed cost,
+  target price, scientific name and size, once the order is closed (one more
+  read of orders, by ref; none when no group needs it); a group that
+  carries a product in the trash and moves says its new tank; a product
+  deleted for good drops both kept lists (`Clean_Room::product_deleted()`),
+  any other post deleted drops nothing.
 - **shop-price-test.php** — the shop price of an order line, read
   (`Shop_Price`): the sources in their order (the variation of the
   line's size, the lowest price, a simple product, the species list,
@@ -1664,7 +1713,74 @@ line's `split` field holds anything (`fields_before`) — and one press on
     a fish that is only on a fish order is NOT suggested there. With the
     phone in flight mode the search simply suggests nothing, as before;
     the Shop App's PIN screen is as it was.
-36. No feeding on a ship day (needs the Batch Manager, so that orders
+36. Fish with no product yet. Put a fish the shop has no product for on
+    a fish order (type it, "use as typed"), in two sizes, and Save: both
+    lines carry *no product yet* in Entry and in Numbers; type a planned
+    price with the pencil and Save: the tag stays. The Fish orders list
+    says *1 without a product* beside that order; the Board has the chip
+    *N fish with no product yet →*. All three lead to **Species → Fish
+    with no product yet**: one row for the fish, both sizes, the order
+    by its ref, the planned price. Check the order in: the row moves to
+    the top with its tank and "N alive", and the Stays tab says *no
+    product yet* under the group. Press **Start a draft product**: the
+    reply names each size with its price — the size the price was typed
+    on has it, the other says "no price" — and what is left to do;
+    *Finish it in the shop →* opens a DRAFT product — with variations,
+    in Quarantined Fish, the scientific name under the title, one
+    variation per size, the planned price on its own size only, 0 in
+    stock, no shipping class — that a logged-out visitor cannot open. Reload the list: the fish is gone,
+    the tags and the count are gone, the order's Numbers read the
+    draft's price where no price was typed. Press the button twice
+    quickly on another fish, and once more from a second tab that still
+    shows it: Products holds ONE draft for it. On a third fish use
+    **Link to a product…**, pick an existing product: the fish leaves
+    the list, its group on the Stays tab shows the product, the Events
+    tab has no new line, and the phone's Arrival search finds the
+    product under the name the fish was typed with. Save an order page
+    that was open before that link: the tag does not come back. Move a
+    linked product to the trash: its fish is back on the list. Press
+    *Show the fish of closed fish orders too*: the history's fish
+    appear, 50 a page. A "??" fish is in the group under the list with
+    *Identify…*, never among the rows. Open the list on a phone: each
+    fish is a card and nothing scrolls sideways. As a user without the
+    right to edit products: no *Start a draft product*, and the footnote
+    says why. Make a product by hand named exactly like a fish on the
+    list, in no fish category: the row says the shop has it, offers
+    *Link to it* and no draft; Products still holds one. Tick a product
+    only in a category two levels under Quarantined Fish: the Stays
+    tab's "Add fish already here" search finds it. Type a fish's name
+    with one letter wrong there: it is found, marked *similar spelling*.
+    Link a fish that is also on a CLOSED order: that order's Numbers are
+    what they were. On the Species list, link the fish to another
+    product: its group on the Stays tab shows the new one. A tagged
+    order line is as tall as its neighbours.
+37. The search and the list together. On a fish order that is not
+    closed type "Sample Filimented Wrasse" (a slip of your own) while
+    the shop has the product "Sample Filamented Wrasse": in the phone's
+    Arrival type "filimented" — the order's fish comes first ("on fish
+    order <ref>"), the product under it, marked *similar spelling*. Type
+    a fish that is only on a fish order with one letter wrong: it is
+    found, with "on fish order <ref>" and *similar spelling*. Type the
+    name of a fish from step 36's list: it is found; link it there
+    (**Link to a product…**) and search again at once — the product
+    answers, once, and "on fish order …" is gone; the same after
+    **Start a draft product** (the draft answers). Move the product of
+    a group that is in a tank to the trash: the fish is back on the
+    list AND the search finds it as "in tank <number>"; restore the
+    product: found as the product again. Type the name of a fish that
+    is on a fish order and whose product sits in no fish category: the
+    order's fish is offered and the line under the list says the shop
+    has the product and where to tick it. On the phone, Arrival, pick a
+    fish offered as "on fish order <ref>" into a tank: the list shows it
+    once, "Fish order <ref> · Tank <number> · 1 alive" — the same on the
+    list opened from *N without a product →* beside that order (not
+    "not in a tank"); close the order: the row still names the fish
+    order and its landed cost. With a group whose product is in the
+    trash, move the group to another tank on the phone and search at
+    once: "in tank <the new number>". Delete that product for good
+    (empty the trash) and search: the fish is still found, as the
+    unlisted fish in its tank.
+38. No feeding on a ship day (needs the Batch Manager, so that orders
     carry a delivery date). Settings → Numbers: the tick *Don't feed a
     clean system on a day its fish ship* is there and on, with two
     sentences under it (with the Batch Manager switched off it says

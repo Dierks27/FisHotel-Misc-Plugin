@@ -1044,8 +1044,86 @@ class Fake_Store {
 		return $out;
 	}
 
+	/**
+	 * Products of $products that are in NO fish category (ids): the shop
+	 * has them, but the fish search, the name index and the candidate list
+	 * do not read them.
+	 *
+	 * @var int[]
+	 */
+	public $not_fish = array();
+
 	public function fish_product_names() {
-		return array_map( 'strval', $this->products );
+		return array_map( 'strval', array_diff_key( $this->products, array_flip( $this->not_fish ) ) );
+	}
+
+	/** As the real store: the products called exactly like a name, any category, the trash left out, oldest first. */
+	public function products_titled( array $titles ) {
+		$keys = array_map( array( Species::class, 'key' ), $titles );
+		$ids  = array_keys( $this->products );
+		sort( $ids );
+		$out = array();
+		foreach ( $ids as $id ) {
+			$status = isset( $this->product_statuses[ $id ] ) ? (string) $this->product_statuses[ $id ] : 'publish';
+			$key    = Species::key( (string) $this->products[ $id ] );
+			if ( 'trash' !== $status && in_array( $key, $keys, true ) ) {
+				$out[ $key ][] = (int) $id;
+			}
+		}
+		return $out;
+	}
+
+	/** As the real store: the products outside the fish categories whose title has every word. */
+	public function products_elsewhere( $term, $limit = 3 ) {
+		$words = array_values( array_filter( (array) preg_split( '/\s+/', trim( (string) $term ) ), 'strlen' ) );
+		$out   = array();
+		foreach ( $this->not_fish as $id ) {
+			$title  = isset( $this->products[ $id ] ) ? (string) $this->products[ $id ] : '';
+			$status = isset( $this->product_statuses[ $id ] ) ? (string) $this->product_statuses[ $id ] : 'publish';
+			$every  = '' !== $title && 'trash' !== $status && (bool) $words;
+			foreach ( $words as $word ) {
+				$every = $every && false !== stripos( $title, $word );
+			}
+			if ( $every ) {
+				$out[] = array(
+					'product_id' => (int) $id,
+					'name'       => $title,
+					'status'     => $status,
+				);
+			}
+		}
+		return array_slice( $out, 0, max( 1, (int) $limit ) );
+	}
+
+	public function search_hint( $term, array $items ) {
+		if ( Order_Fish::lists_answered( $items ) ) {
+			return '';
+		}
+		return Species::elsewhere_hint( $this->products_elsewhere( $term ), Store::FISH_CATEGORIES );
+	}
+
+	/**
+	 * The named locks held (name => true) — a test sets one to stand for
+	 * another request at work. $has_locks false: a database without them.
+	 *
+	 * @var array<string, bool>
+	 */
+	public $locks     = array();
+	public $has_locks = true;
+
+	public function lock( $name ) {
+		if ( ! $this->has_locks ) {
+			return null;
+		}
+		if ( isset( $this->locks[ (string) $name ] ) ) {
+			return false;
+		}
+		$this->locks[ (string) $name ] = true;
+		return true;
+	}
+
+	public function unlock( $name ) {
+		unset( $this->locks[ (string) $name ] );
 	}
 
 	public function product_title( $product_id ) {
@@ -1060,6 +1138,48 @@ class Fake_Store {
 			}
 		}
 		return $out;
+	}
+
+	/**
+	 * The post status of a product, seeded by a test (id => status): a
+	 * product of $products without one is published; 'trash' is a product
+	 * in the trash, and one that was deleted is simply not in $products.
+	 *
+	 * @var string[]
+	 */
+	public $product_statuses = array();
+
+	/**
+	 * The meta of products, seeded by a test or by a test's shop: id => array( key => value ).
+	 *
+	 * @var array[]
+	 */
+	public $product_meta = array();
+
+	/** How often the statuses were read: the mark costs ONE read per page, never one per row. */
+	public $status_reads = 0;
+
+	public function product_statuses( array $ids ) {
+		$this->status_reads++;
+		$out = array();
+		foreach ( array_unique( array_map( 'intval', $ids ) ) as $id ) {
+			if ( isset( $this->products[ $id ] ) ) {
+				$out[ $id ] = isset( $this->product_statuses[ $id ] ) ? (string) $this->product_statuses[ $id ] : 'publish';
+			}
+		}
+		return $out;
+	}
+
+	public function product_with_meta( $meta_key, $meta_value ) {
+		$ids = array_keys( $this->products );
+		sort( $ids );
+		foreach ( $ids as $id ) {
+			$status = isset( $this->product_statuses[ $id ] ) ? (string) $this->product_statuses[ $id ] : 'publish';
+			if ( 'trash' !== $status && isset( $this->product_meta[ $id ][ $meta_key ] ) && (string) $this->product_meta[ $id ][ $meta_key ] === (string) $meta_value ) {
+				return (int) $id;
+			}
+		}
+		return 0;
 	}
 
 	public function add_alias( $alias, $product_id, $species ) {
@@ -1110,7 +1230,7 @@ class Fake_Store {
 	 */
 	private function fish_products() {
 		$out = array();
-		foreach ( $this->products as $id => $title ) {
+		foreach ( $this->searched_products() as $id => $title ) {
 			$out[] = array(
 				'product_id' => (int) $id,
 				'name'       => (string) $title,
@@ -1143,7 +1263,7 @@ class Fake_Store {
 				);
 			}
 		}
-		foreach ( $this->products as $id => $title ) {
+		foreach ( $this->searched_products() as $id => $title ) {
 			if ( false !== stripos( $title, $term ) ) {
 				$items[] = array(
 					'product_id' => (int) $id,
@@ -1167,7 +1287,25 @@ class Fake_Store {
 				$rows[] = $row;
 			}
 		}
-		return array_slice( Store::fold_species_rows( $items, $rows ), 0, max( 1, (int) $limit ) );
+		$found = array_slice( Store::fold_species_rows( $items, $rows ), 0, max( 1, (int) $limit ) );
+		if ( $found ) {
+			return $found;
+		}
+		// Nothing letter for letter: the near matches, as the real store — a species row with its own fields.
+		$near = Species::near( $term, $this->species_candidates(), $limit );
+		$rows = array();
+		foreach ( $near as $index => $item ) {
+			$row = empty( $item['product_id'] ) ? $this->species_by_name( (string) $item['name'] ) : null;
+			if ( $row ) {
+				$near[ $index ] = array_merge( Species::suggestion( $row ), array( 'match' => 'near' ) );
+			}
+		}
+		foreach ( $this->species as $row ) {
+			if ( $row['product_id'] && in_array( (int) $row['product_id'], array_map( 'intval', array_column( $near, 'product_id' ) ), true ) ) {
+				$rows[] = $row;
+			}
+		}
+		return array_slice( Store::fold_species_rows( $near, $rows ), 0, max( 1, (int) $limit ) );
 	}
 
 	/**
@@ -1200,7 +1338,7 @@ class Fake_Store {
 				array(
 					'order_ref'       => $order ? (string) $order['ref'] : '',
 					'order_status'    => $order ? (string) $order['status'] : 'closed',
-					'stay_product_id' => isset( $this->stays[ $stay_id ] ) ? $this->stays[ $stay_id ]['product_id'] : null,
+					'stay_product_id' => isset( $this->stays[ $stay_id ] ) ? $this->existing_product( $this->stays[ $stay_id ]['product_id'] ) : null,
 				)
 			);
 		}
@@ -1211,13 +1349,44 @@ class Fake_Store {
 			$stays[] = array_merge(
 				$stay,
 				array(
+					'product_id'      => $this->existing_product( $stay['product_id'] ?? null ),
 					'tank_number'     => $tank ? (int) $tank['number'] : 0,
 					'sci_name'        => isset( $this->lines[ $line_id ] ) ? (string) $this->lines[ $line_id ]['sci_name'] : '',
 					'line_species_id' => isset( $this->lines[ $line_id ] ) ? $this->lines[ $line_id ]['species_id'] : null,
 				)
 			);
 		}
-		return Order_Fish::offered( $lines, $stays, Order_Fish::known( array_values( $this->products ), array_column( $this->species, 'name' ) ) );
+		return Order_Fish::offered( $lines, $stays, Order_Fish::known( array_values( $this->searched_products() ), array_column( $this->species, 'name' ) ) );
+	}
+
+	/**
+	 * A product id as Store::order_fish() reads it: the id while the
+	 * product exists, null once it is in the trash or deleted
+	 * (No_Product::GONE — spelled out here: the Requests section's tests
+	 * load this stand-in without that class).
+	 */
+	private function existing_product( $product_id ) {
+		$id = (int) $product_id;
+		if ( $id <= 0 || ! isset( $this->products[ $id ] ) ) {
+			return null;
+		}
+		return in_array( isset( $this->product_statuses[ $id ] ) ? (string) $this->product_statuses[ $id ] : 'publish', array( 'trash', 'auto-draft' ), true ) ? null : $id;
+	}
+
+	/**
+	 * The products the fish search reads (Store::product_select()): in a
+	 * fish category, and not in the trash.
+	 *
+	 * @return array<int, string> id => title.
+	 */
+	private function searched_products() {
+		$out = array();
+		foreach ( array_diff_key( $this->products, array_flip( $this->not_fish ) ) as $id => $title ) {
+			if ( null !== $this->existing_product( $id ) ) {
+				$out[ (int) $id ] = (string) $title;
+			}
+		}
+		return $out;
 	}
 
 	/**
@@ -1420,6 +1589,8 @@ class Fake_Store {
 					'species_my_price'   => $species ? $species['my_price'] : null,
 					'stay_live'          => $stay ? $stay['qty_live'] : null,
 					'stay_status'        => $stay ? $stay['status'] : null,
+					'stay_product_id'    => $stay ? ( $stay['product_id'] ?? null ) : null,
+					'stay_species'       => $stay ? $stay['species'] : null,
 					'tank_number'        => $tank ? $tank['number'] : null,
 				)
 			)
@@ -1444,6 +1615,12 @@ class Fake_Store {
 				continue;
 			}
 			if ( ! empty( $filters['supplier'] ) && $order['supplier'] !== (string) $filters['supplier'] ) {
+				continue;
+			}
+			if ( ! empty( $filters['open'] ) && 'closed' === $order['status'] ) {
+				continue;
+			}
+			if ( isset( $filters['refs'] ) && ! in_array( strtolower( trim( (string) $order['ref'] ) ), array_map( 'strtolower', array_map( 'trim', array_map( 'strval', (array) $filters['refs'] ) ) ), true ) ) {
 				continue;
 			}
 			$out[] = $order;
@@ -1567,6 +1744,38 @@ class Fake_Store {
 	public function order_lines( $order_id ) {
 		$by_order = $this->lines_for_orders( array( (int) $order_id ) );
 		return isset( $by_order[ (int) $order_id ] ) ? $by_order[ (int) $order_id ] : array();
+	}
+
+	/** As the real store: the lines with a species-list id or one of the names (case-blind), with their order's fields. */
+	public function lines_of_fish( $species_id, array $names, $limit = 5000 ) {
+		$keys = array_map( array( Species::class, 'key' ), $names );
+		$out  = array();
+		foreach ( $this->lines as $row ) {
+			if ( ! empty( $row['needs_id'] ) || ! isset( $this->orders[ (int) $row['order_id'] ] ) ) {
+				continue;
+			}
+			if ( ! ( (int) $species_id > 0 && (int) $row['species_id'] === (int) $species_id ) && ! in_array( Species::key( (string) $row['species'] ), $keys, true ) ) {
+				continue;
+			}
+			$order = $this->orders[ (int) $row['order_id'] ];
+			$out[] = array_merge(
+				$this->line_row( $row ),
+				array(
+					'order_ref'     => (string) $order['ref'],
+					'order_status'  => (string) $order['status'],
+					'order_date'    => $order['order_date'] ? (string) $order['order_date'] : null,
+					'received_date' => $order['received_date'] ? (string) $order['received_date'] : null,
+					'order_created' => (string) $order['created_at'],
+				)
+			);
+		}
+		usort(
+			$out,
+			static function ( $a, $b ) {
+				return ( $a['order_id'] <=> $b['order_id'] ) ?: ( ( $a['sort'] <=> $b['sort'] ) ?: ( $a['id'] <=> $b['id'] ) );
+			}
+		);
+		return array_slice( $out, 0, max( 1, (int) $limit ) );
 	}
 
 	public function lines_for_orders( array $order_ids ) {
