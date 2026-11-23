@@ -246,6 +246,10 @@ $nested = array(
 	905 => order( 905, array( row( 'Mock Blenny', 1 ) ) ),
 );
 check_same( 'a box inside a box is not read as an order; an order on its own beside them is', array( 901, 905 ), array_keys( Feeding::going_out( $nested, $today ) ) );
+$orphan = array( 900 => order( 900, array( row( 'A copy of a Tang', 2 ) ), array( 'status' => 'fulfillment', 'wrapper' => true, 'sources' => array( 4040, 4041 ) ) ) );
+check_same( 'a box none of whose orders can be read: its own copied lines are all there is — better no feed than a fed fish in a bag', array( array( 900 ), 2 ), array( array_keys( Feeding::going_out( $orphan, $today ) ), Feeding::shipping( Feeding::going_out( $orphan, $today ), $today, $cats )['fish'] ) );
+$dead = array( 900 => order( 900, array( row( 'A copy of a Tang', 2 ) ), array( 'status' => 'fulfillment', 'wrapper' => true, 'sources' => array( 901 ) ) ), 901 => order( 901, array( row( 'Test Tang', 2 ) ), array( 'folded' => true, 'status' => 'cancelled' ) ) );
+check_same( '… but a box whose every order is cancelled ships nothing', array(), array_keys( Feeding::going_out( $dead, $today ) ) );
 
 /* ------------------------------------------------------------------ */
 echo "4. Which lines are fish\n";

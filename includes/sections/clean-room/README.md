@@ -944,9 +944,10 @@ stands where Feed would be:
   there on purpose: ShipTracker turns an order to it the moment tracking
   is saved, and the fast lasts **the whole site day** — Feed does not
   come back in the evening once the boxes have left. A combined box is
-  read through the orders in it (never by its own copied lines; a
-  cancelled, refunded or failed one in it ships nothing), and an order
-  folded into a box follows the box's date.
+  read through the orders in it (not by its own copied lines — those
+  only when none of its orders can be read; a cancelled, refunded or
+  failed one in it ships nothing), and an order folded into a box
+  follows the box's date.
 - **Which lines are fish.** A product in a fish category (the list the
   Ship Day page and the Today page use: `quarantined-fish`, `inverts`,
   filter `fishotel_ship_day_fish_categories`) or a fish line out of an

@@ -15,9 +15,9 @@
  *                 processing, on hold, a combined box or already marked
  *                 shipped (tracking is added during the day; Feed must
  *                 not come back when it is). A combined box is read
- *                 through the orders in it, never by its own copied
- *                 lines; an order folded into a box is read through
- *                 that box.
+ *                 through the orders in it, not by its own copied lines
+ *                 (those only when none of its orders can be read); an
+ *                 order folded into a box is read through that box.
  *   fish_lines()  the lines of such an order that are fish: a product in
  *                 a fish category, or a fish line out of an invoice —
  *                 never a line marked "not available", never one fully
@@ -150,7 +150,8 @@ class Feeding {
 	 *                                their boxes.
 	 * @param string        $today    Site date.
 	 * @param string[]|null $statuses The statuses that count (null = STATUSES).
-	 * @return array[] The orders to read fish from, by id — never a box itself.
+	 * @return array[] The orders to read fish from, by id — a box itself only when none of the orders in
+	 *                 it can be read.
 	 */
 	public static function going_out( array $orders, $today, $statuses = null ) {
 		$delivery = self::delivery_for( $today );
@@ -172,15 +173,21 @@ class Feeding {
 			}
 			if ( ! empty( $order['wrapper'] ) ) {
 				// A combined box: its own lines are copies. The orders in it are read — the live ones.
+				$known = 0;
 				foreach ( (array) ( $order['sources'] ?? array() ) as $source_id ) {
 					$source_id = (int) $source_id;
-					if ( $source_id === $id || ! isset( $by_id[ $source_id ] ) || ! empty( $by_id[ $source_id ]['wrapper'] ) ) {
+					if ( $source_id === $id || ! isset( $by_id[ $source_id ] ) ) {
 						continue;
 					}
-					if ( in_array( self::status( $by_id[ $source_id ]['status'] ?? '' ), self::DEAD_STATUSES, true ) ) {
-						continue;
+					$known++;
+					if ( ! empty( $by_id[ $source_id ]['wrapper'] ) || in_array( self::status( $by_id[ $source_id ]['status'] ?? '' ), self::DEAD_STATUSES, true ) ) {
+						continue; // Never a box as an order; never an order that ships nothing.
 					}
 					$out[ $source_id ] = $by_id[ $source_id ];
+				}
+				if ( 0 === $known ) {
+					// Not one of its orders can be read: the copies are all there is (as the Today page counts it).
+					$out[ $id ] = $order;
 				}
 				continue;
 			}

@@ -184,7 +184,7 @@ $ship  = Ship_Lines::read( $today );
 $lines = by_name( $ship );
 check_same( 'the fish that go out today — and nothing else', array( 'Test Tang - Medium', 'Half Refunded Chromis', 'Sample Angel', 'Test Snail', 'Boxed Blenny', 'Snapshot Tang', 'Linked Wrasse' ), array_column( $ship['lines'], 'name' ) );
 check_same( '… counted: 6 orders, 13 fish, for today', array( $today, 6, 13 ), array( $ship['date'], $ship['orders'], $ship['fish'] ) );
-check_same( 'one query for the date; the orders inside the box are loaded by id', array( 1, 3 ), array( $GLOBALS['fh_shop_queries'], $GLOBALS['fh_shop_loads'] ) );
+check_same( 'one query for the date; the orders inside the box are loaded by id (1499 does not exist; the box\'s copies are not read)', array( 1, 3 ), array( $GLOBALS['fh_shop_queries'], $GLOBALS['fh_shop_loads'] ) );
 check_same( 'a shop fish: its product and variation, its size as it was bought, its own title, its order', array( 'order_id' => 1234, 'number' => '1234', 'created' => 1700000000, 'qty' => 2, 'product_id' => 501, 'variation_id' => 502, 'size_slug' => 'medium', 'names' => array( 'Test Tang' ) ), array_intersect_key( $lines['Test Tang - Medium'], array( 'order_id' => 1, 'number' => 1, 'created' => 1, 'qty' => 1, 'product_id' => 1, 'variation_id' => 1, 'size_slug' => 1, 'names' => 1 ) ) );
 check_same( 'a refund is netted', 2, $lines['Half Refunded Chromis']['qty'] );
 check_same( 'the fish of the box come from the order in it, under that order\'s number', array( '1401', 1 ), array( $lines['Boxed Blenny']['number'], $lines['Boxed Blenny']['qty'] ) );
