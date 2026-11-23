@@ -72,6 +72,8 @@
  *                           statuses that count and the cache flush).
  *   - class-species.php     PURE: the species master row and its merge into
  *                           the candidate list.
+ *   - class-order-fish.php  PURE: the fish only a fish order line or a group
+ *                           in a tank names, offered by every fish search.
  *   - class-identify.php    unknown ("??") and mislabeled fish: the one
  *                           correction of a stay and its order line together,
  *                           what the label said, the split rule.
@@ -215,6 +217,7 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 			require_once self::path() . 'class-stats-prices.php';
 			require_once self::path() . 'class-stats-sales.php';
 			require_once self::path() . 'class-species.php';
+			require_once self::path() . 'class-order-fish.php';
 			require_once self::path() . 'class-identify.php';
 			require_once self::path() . 'class-board-lines.php';
 			require_once self::path() . 'class-orders.php';

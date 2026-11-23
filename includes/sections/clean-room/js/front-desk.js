@@ -854,7 +854,42 @@
 		return ((building && building.tanks) || []).filter(function (tk) { return !tk.free; });
 	}
 
+	/**
+	 * The small line under a fish the search suggests: the learned name
+	 * that found it, else its common names, else its scientific name — and,
+	 * for a fish that only a fish order line or a group in a tank names,
+	 * where it comes from ("on fish order 2026-9", "in tank 512").
+	 *
+	 * @param {Object} item A suggestion (Store::fish_search()).
+	 * @return {string}
+	 */
+	function suggestSub(item) {
+		item = item || {};
+		var sub = item.match === 'alias' ? ('"' + item.alias + '"') : (item.common || item.sci || '');
+		if (item.where) {
+			sub = sub ? sub + ' · ' + item.where : String(item.where);
+		}
+		return sub;
+	}
+
+	/**
+	 * What picking a fish sets on a form: its name as it is spelled, its
+	 * product (0 = none: an unlisted fish, as "Use as an unlisted fish"
+	 * gives one) and whether it is an unknown fish. A fish of a fish order
+	 * line has no product, so it is an unlisted fish with the line's own
+	 * spelling.
+	 *
+	 * @param {Object} item A suggestion, a recent chip or what was typed.
+	 * @return {{species: string, productId: number, unknown: boolean}}
+	 */
+	function pickedFish(item) {
+		item = item || {};
+		return { species: String(item.name || ''), productId: parseInt(item.product_id, 10) || 0, unknown: !!item.unknown };
+	}
+
 	var api = {
+		suggestSub: suggestSub,
+		pickedFish: pickedFish,
 		normalizeNumberWords: normalizeNumberWords,
 		previewSentence: previewSentence,
 		tankValue: tankValue,
@@ -2147,9 +2182,10 @@
 			}
 		});
 		function choose(item) {
-			f.species = item.name;
-			f.productId = item.product_id || 0;
-			f.unknown = !!item.unknown;
+			var picked = pickedFish(item);
+			f.species = picked.species;
+			f.productId = picked.productId;
+			f.unknown = picked.unknown;
 			onChange();
 		}
 		wrap.appendChild(input);
@@ -2192,7 +2228,7 @@
 				list.removeChild(list.firstChild);
 			}
 			(data.items || []).forEach(function (item) {
-				var sub = item.match === 'alias' ? ('"' + item.alias + '"') : (item.common || item.sci || '');
+				var sub = suggestSub(item);
 				list.appendChild(el('li', {}, [
 					el('button', { type: 'button', on: { click: function () { choose(item); } } }, [item.name, sub ? el('small', { text: sub }) : null])
 				]));

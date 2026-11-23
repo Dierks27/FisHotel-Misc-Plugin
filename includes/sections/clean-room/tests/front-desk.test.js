@@ -185,6 +185,18 @@ check( '… a date typed: that date', 'clear' === cs.act && '2025-03-04' === cs.
 cs = helpers.clearedSaveFields( { stayId: 7, clearedDate: '2025-03-04', clearedUnknown: false }, '', 121 );
 check( '… a dated group, the box emptied: unset, as before', 1 === cs.unset && ! ( 'date' in cs ), JSON.stringify( cs ) );
 
+console.log( '12. The fish search: a fish of a fish order' );
+var onOrder = { product_id: null, name: 'Golden Sample Tang', common: '', sci: 'Samplus aureus', match: 'order', alias: '', where: 'on fish order 2026-9' };
+check( 'the line under it: its scientific name, then where it comes from', 'Samplus aureus · on fish order 2026-9' === helpers.suggestSub( onOrder ) );
+check( '… without a scientific name: where it comes from alone', 'in tank 512' === helpers.suggestSub( { name: 'Hand Sample Puffer', sci: '', common: '', match: 'tank', alias: '', where: 'in tank 512' } ) );
+check( 'a product, a Species-list fish and a learned name read as they always did', 'Test Clown' === helpers.suggestSub( { name: 'Orange Test Clown', common: 'Test Clown', sci: 'Amphiprion testus', match: 'title', alias: '' } ) && 'Ecsenius testus' === helpers.suggestSub( { name: 'Green Test Blenny', common: '', sci: 'Ecsenius testus', match: 'species', alias: '' } ) && '"pj"' === helpers.suggestSub( { name: 'Pajama Test Cardinal', common: '', sci: '', match: 'alias', alias: 'pj' } ) && '' === helpers.suggestSub( { name: 'x' } ) && '' === helpers.suggestSub() );
+var asPicked = helpers.pickedFish( onOrder );
+var asTyped  = helpers.pickedFish( { name: 'Golden Sample Tang', product_id: 0 } ); // What "Use as an unlisted fish: Golden Sample Tang" hands over.
+check( 'picking it sets exactly what "Use as an unlisted fish" sets with that spelling: the name, no product, not unknown', 'Golden Sample Tang' === asPicked.species && 0 === asPicked.productId && false === asPicked.unknown && JSON.stringify( asPicked ) === JSON.stringify( asTyped ) );
+check( '… so "Add fish already here" posts the same fields either way', JSON.stringify( helpers.existingFields( { species: asPicked.species, productId: asPicked.productId, unknown: asPicked.unknown, qty: 2 }, 512, false ) ) === JSON.stringify( helpers.existingFields( { species: asTyped.species, productId: asTyped.productId, unknown: asTyped.unknown, qty: 2 }, 512, false ) ) && 0 === helpers.existingFields( { species: asPicked.species, productId: asPicked.productId }, 512, false ).product_id );
+var prod = helpers.pickedFish( { name: 'Blue Test Wrasse', product_id: 12 } );
+check( 'a product still carries its product; an unknown fish its flag', 12 === prod.productId && 'Blue Test Wrasse' === prod.species && true === helpers.pickedFish( { name: '?? small wrasse', product_id: 0, unknown: true } ).unknown && '' === helpers.pickedFish().species );
+
 console.log( '' );
 console.log( failures ? failures + ' of ' + checks + ' checks FAILED' : 'All ' + checks + ' checks passed' );
 process.exit( failures ? 1 : 0 );

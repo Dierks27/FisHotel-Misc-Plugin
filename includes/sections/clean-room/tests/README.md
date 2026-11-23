@@ -42,6 +42,7 @@ php  includes/sections/clean-room/tests/stats-prices-test.php
 php  includes/sections/clean-room/tests/stats-sales-test.php
 php  includes/sections/clean-room/tests/stats-admin-test.php
 php  includes/sections/clean-room/tests/species-test.php
+php  includes/sections/clean-room/tests/order-fish-test.php
 php  includes/sections/clean-room/tests/orders-test.php
 php  includes/sections/clean-room/tests/xlsx-test.php
 php  includes/sections/clean-room/tests/workbook-admin-test.php
@@ -363,6 +364,24 @@ system temp directory (`FH_TEST_TMP` overrides).
   appended, the Front Desk item shape intact); the parser finding a
   species that is not a product and a product by its row's scientific
   name; the product link, the open-stays counts, delete-or-refuse.
+- **order-fish-test.php** — the fish of the fish orders in the fish
+  search (`Order_Fish`, `Store::fish_search()`): which are offered (a
+  line of a draft, ordered or received order; not a closed order's, not
+  a line linked to a Species row or named like one or like a product,
+  not a "??" line; an unlisted fish alive in a tank; one fish on three
+  lines spelled three ways offered once in its newest line's spelling),
+  the words "on fish order 2026-9" / "in tank 512", the item (no
+  product, no Species row), the match on name and scientific name, the
+  ranking under the products and the Species rows of the same quality;
+  on the fake store: found, picked — the same answer as a typed unlisted
+  name, an Arrival and "Add fish already here" with it, nothing created
+  —, the order closed, the last fish gone, a Species row or a product of
+  that name; that the endpoints ask `fish_search()` while the Requests
+  section and the parser's candidates do not; and the cache on the REAL
+  `Store` against a database stand-in that records what it is asked:
+  two bounded reads, kept, dropped by each write that changes the answer
+  and by nothing else, the product list left alone, a failed read not
+  kept.
 - **orders-test.php** — on the fake store: the header and lines from a
   form (typed, defaulted, empty species dropped); create with the next
   "YYYY-N" ref, a duplicate ref refused; save lines (upsert by id,
@@ -1537,3 +1556,26 @@ line's `split` field holds anything (`fields_before`) — and one press on
     kept together the offer is gone. Two lines, the first left on auto,
     the second split "1 per tank": after the check-in no tank holds both
     lines.
+35. A fish of a fish order in the fish search. On a fish order that is
+    not closed, type a line for a fish that is no product and not in the
+    Species list — "Golden Sample Tang", with a scientific name — and
+    Save (or import a sheet and leave such a row on *use as typed
+    (unlisted fish)*). On the phone open a quarantine tank → Arrival and
+    type "golden": the fish is suggested, with its scientific name and
+    "on fish order <ref>", under any product or Species-list fish that
+    answers as well. Pick it, Save: the tank's group is "Golden Sample
+    Tang" exactly as the line spells it, with no product; the Species
+    tab has no new row and the shop no new product. The same from *+ Add
+    fish already here*, from Identify on a "??" group, and in wp-admin
+    from another order's line (its scientific name is filled in), from
+    the Stays tab's *Add fish already here* and from *Identify*. Type
+    the same fish in other capitals on a second order: still suggested
+    once, in the newer line's spelling. Set the order to *closed* while
+    the fish is alive in a tank: it now says "in tank <number>"; once
+    the group is empty it is no longer suggested. Add the fish to the
+    Species list (or give it a product of that exact name): it is found
+    as that — "list" / the product's id — and only once. A "??" line is
+    never suggested. On the Requests page (as a customer) type "golden":
+    a fish that is only on a fish order is NOT suggested there. With the
+    phone in flight mode the search simply suggests nothing, as before;
+    the Shop App's PIN screen is as it was.

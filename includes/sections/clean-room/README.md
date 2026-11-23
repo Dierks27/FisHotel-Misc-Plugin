@@ -2027,8 +2027,53 @@ like one, folds into that product (its scientific name fills a missing
 one, a different common name joins the product's common names, its per
 box and price ride along); any other row is an entry of its own, with its
 product link (which may point outside the fish categories) or none. The
-candidate cache is dropped by every product, species and alias save. The
-Species tab: search by a prefix of the name or the scientific name (any
+candidate cache is dropped by every product, species and alias save.
+
+**A fish that is on a fish order is in the system.** A fish typed on a
+fish order line — *use as typed (unlisted fish)* in the importer, or a
+name typed on a line — is linked to no product and to no Species row,
+and the search used to miss it. Every search box of the section — the
+phone's Arrival, *Add fish already here* and Identify, the order line's
+own suggestions and the Identify and *Add fish already here* panels in
+wp-admin — now also offers (`Store::fish_search()`, `Order_Fish`):
+
+- the fish named on the lines of the fish orders that are **not closed**
+  (draft, ordered, received), and
+- any unlisted fish that is **alive in a tank** (the fish of an order
+  closed since, or one added by hand),
+
+each **once** — case and spacing aside, in the spelling of its newest
+line —, with its scientific name when a line has one and a word saying
+where it comes from: "on fish order 2026-9" (the order's ref) or "in
+tank 512". They rank **below** the products and the Species rows that
+answer the term as well (a name that is what was typed, then one that
+starts with it, then one that holds every word, then anything found by
+another name); the entries that were listed before keep their order.
+**Picking one is "use as an unlisted fish" with that exact spelling** —
+no product, no Species row, nothing created —, and on an order line its
+scientific name fills an empty field: the group in the tank and the
+order line read as the same fish wherever fish are grouped by name.
+Never offered: a line or a group that is linked to a product or a
+Species row or carries the exact name of one (it is found as that — so a
+fish that later gets a product or a Species row stops being offered this
+way), an unknown "??" fish (it has no name), a closed order's fish that
+is no longer in a tank.
+
+The list is two reads over the section's own tables, each with a row
+cap and neither growing with the history (closed orders and empty or
+closed groups are out in the query itself); it is kept beside the
+candidate cache for ten minutes and dropped with it by every product,
+species and alias save — and, alone, by every write that changes the
+answer: a fish order saved, imported into or deleted, its status
+changed (the check-in, a close), a line's fish corrected, a group
+checked in, identified, corrected, moved to another tank or emptied. A
+loss that leaves fish alive drops nothing. The voice parser's and the
+importer's candidates are as they were (products, Species rows, learned
+names), and so are the names the Requests section suggests to a
+customer: `Store::species_suggestions()` is unchanged, and nobody
+outside the section's own search boxes is told what is on a fish order.
+
+The Species tab: search by a prefix of the name or the scientific name (any
 word), group filter, 50 per page, inline edit, add, *Link product* (a
 product search over the fish categories), delete — refused while an
 order line names the species —, the open-stays count (by product when
@@ -2664,6 +2709,10 @@ clean-room/
 │                           invoice lines, the exact-name matching, "not matched", the sales beside
 │                           the landed cost (pure but for the statuses option and the cache flush)
 ├── class-species.php       PURE: a species row normalised, the merge into the candidate list
+├── class-order-fish.php    PURE: the fish only a fish order line (of an order that is not closed) or
+│                           a group alive in a tank names — which are offered, where the search says
+│                           they come from, their place under the products and the Species rows, and
+│                           which stay writes change the list
 ├── class-board-lines.php   PURE: a tank's stays → the lines of its Board card — the order (name,
 │                           size, check-in), the same fish, size and state gathered, the day as a
 │                           number or a range, the foot's "Sale date not set" count, the quarantine

@@ -23,6 +23,7 @@ namespace FisHotel\Misc\Sections\Clean_Room\Tests;
 use FisHotel\Misc\Sections\Clean_Room\Costing;
 use FisHotel\Misc\Sections\Clean_Room\Import;
 use FisHotel\Misc\Sections\Clean_Room\Layout;
+use FisHotel\Misc\Sections\Clean_Room\Order_Fish;
 use FisHotel\Misc\Sections\Clean_Room\Orders;
 use FisHotel\Misc\Sections\Clean_Room\Protocol;
 use FisHotel\Misc\Sections\Clean_Room\Replay;
@@ -1130,6 +1131,53 @@ class Fake_Store {
 			}
 		}
 		return array_slice( Store::fold_species_rows( $items, $rows ), 0, max( 1, (int) $limit ) );
+	}
+
+	/**
+	 * The section's own search boxes (Store::fish_search()): the lists,
+	 * then the fish only a fish order line or a group in a tank names.
+	 */
+	public function fish_search( $term, $limit = 10 ) {
+		$term = trim( (string) $term );
+		if ( '' === $term ) {
+			return array();
+		}
+		$limit = max( 1, min( 50, (int) $limit ) );
+		return Order_Fish::place( $this->species_suggestions( $term, $limit ), $this->order_fish(), $term, $limit );
+	}
+
+	/**
+	 * The fish only a fish order line or a group in a tank names
+	 * (Store::order_fish(), without its transient): EVERY line and every
+	 * stay is handed over, so the rule itself (Order_Fish::offered())
+	 * leaves out the closed orders, the linked lines, the "??" fish and
+	 * the groups that are gone.
+	 */
+	public function order_fish() {
+		$lines = array();
+		foreach ( $this->lines as $line ) {
+			$order   = isset( $this->orders[ (int) $line['order_id'] ] ) ? $this->orders[ (int) $line['order_id'] ] : null;
+			$lines[] = array_merge(
+				$line,
+				array(
+					'order_ref'    => $order ? (string) $order['ref'] : '',
+					'order_status' => $order ? (string) $order['status'] : 'closed',
+				)
+			);
+		}
+		$stays = array();
+		foreach ( $this->stays as $stay ) {
+			$tank    = ! empty( $stay['tank_id'] ) ? $this->tank( (int) $stay['tank_id'] ) : null;
+			$line_id = (int) ( $stay['order_line_id'] ?? 0 );
+			$stays[] = array_merge(
+				$stay,
+				array(
+					'tank_number' => $tank ? (int) $tank['number'] : 0,
+					'sci_name'    => isset( $this->lines[ $line_id ] ) ? (string) $this->lines[ $line_id ]['sci_name'] : '',
+				)
+			);
+		}
+		return Order_Fish::offered( $lines, $stays, Order_Fish::known( array_values( $this->products ), array_column( $this->species, 'name' ) ) );
 	}
 
 	/**

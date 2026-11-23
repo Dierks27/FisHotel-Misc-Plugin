@@ -175,6 +175,16 @@ class Store {
 	const SPECIES_TRANSIENT = 'fishotel_cleanroom_species';
 
 	/**
+	 * Transient caching the fish that only a fish order line or a group
+	 * in a tank names (Order_Fish) — the search's part of the candidate
+	 * cache, dropped with it and by every order, line and stay write that
+	 * changes the answer.
+	 *
+	 * @var string
+	 */
+	const ORDER_FISH_TRANSIENT = 'fishotel_cleanroom_order_fish';
+
+	/**
 	 * Product categories whose products are fish for the species search.
 	 *
 	 * @var string[]
@@ -901,11 +911,25 @@ class Store {
 
 	/**
 	 * Drop the cached species list (a product, a species row or an alias
-	 * was saved).
+	 * was saved) — and, with it, the fish named only on fish order lines:
+	 * a fish that got a product or a Species row is no longer one of them.
 	 */
 	public static function clear_species_cache() {
 		if ( function_exists( 'delete_transient' ) ) {
 			delete_transient( self::SPECIES_TRANSIENT );
+		}
+		self::clear_order_fish_cache();
+	}
+
+	/**
+	 * Drop the cached list of the fish named only on fish order lines or
+	 * alive in a tank (a fish order or one of its lines was saved, imported
+	 * or deleted; a group was checked in, identified, corrected, moved or
+	 * emptied). The product list is left alone.
+	 */
+	public static function clear_order_fish_cache() {
+		if ( function_exists( 'delete_transient' ) ) {
+			delete_transient( self::ORDER_FISH_TRANSIENT );
 		}
 	}
 
@@ -1682,6 +1706,10 @@ class Store {
 			return false !== $wpdb->update( self::table( 'stays' ), $data, array( 'id' => (int) $stay_id ) );
 		} catch ( \Throwable $e ) {
 			return false;
+		} finally {
+			if ( Order_Fish::stay_fields_change( $data ) ) {
+				self::clear_order_fish_cache(); // The group's fish, its product or its "??" changed.
+			}
 		}
 	}
 
@@ -2106,6 +2134,9 @@ class Store {
 			);
 		} catch ( \Throwable $e ) {
 			unset( $e );
+		}
+		if ( Order_Fish::stay_changes( $stay, $state ) ) {
+			self::clear_order_fish_cache(); // An unlisted fish came alive, is gone, or stands in another tank.
 		}
 
 		return $state;
@@ -3154,7 +3185,9 @@ class Store {
 	 * name, plus matching learned aliases and matching species rows (one
 	 * entry per lower-cased name; a species row linked to a listed product,
 	 * or named like one, lends it its species_id / per box / price instead
-	 * of a second entry) — for the arrival search box and the order editor.
+	 * of a second entry) — what the lists know. The section's own search
+	 * boxes ask fish_search(), which adds the fish of the fish orders; the
+	 * Requests section reads this one, and names nothing else to a customer.
 	 *
 	 * @param string $term  Search text.
 	 * @param int    $limit Row cap.
@@ -3171,6 +3204,70 @@ class Store {
 		$limit = max( 1, min( 50, (int) $limit ) );
 
 		return array_slice( $this->merge_species_suggestions( $this->product_suggestions( $term, $words, $limit ), $words, $limit ), 0, $limit );
+	}
+
+	/**
+	 * The fish search of the section's own search boxes — the phone's
+	 * Arrival, Add fish already here and Identify, the order line and the
+	 * panels in wp-admin: species_suggestions(), and BELOW the entries that
+	 * answer the term as well, the fish that only a fish order line or a
+	 * group in a tank names (Order_Fish::place()). Such an item has no
+	 * product and no species row — picking it is "use as an unlisted fish"
+	 * with its spelling — and `where` says where it comes from ("on fish
+	 * order 2026-9", "in tank 512").
+	 *
+	 * @param string $term  Search text.
+	 * @param int    $limit Row cap.
+	 * @return array[] species_suggestions() items, plus items with match order|tank and `where`.
+	 */
+	public function fish_search( $term, $limit = 10 ) {
+		$term = trim( (string) $term );
+		if ( '' === $term ) {
+			return array();
+		}
+		$limit = max( 1, min( 50, (int) $limit ) );
+
+		return Order_Fish::place( $this->species_suggestions( $term, $limit ), $this->order_fish(), $term, $limit );
+	}
+
+	/**
+	 * The fish that are in the system only because a fish order line that
+	 * is not closed names them, or because they are alive in a tank —
+	 * linked to no product and no species row (Order_Fish::offered()).
+	 * Two reads over the section's own tables, bounded however long the
+	 * history is, kept for 10 minutes; clear_order_fish_cache() drops the
+	 * list on every write that changes it. A read that fails is not kept.
+	 *
+	 * @return array[] name, sci, from (order|tank), ref, tank.
+	 */
+	public function order_fish() {
+		$cached = get_transient( self::ORDER_FISH_TRANSIENT );
+		if ( is_array( $cached ) ) {
+			return $cached;
+		}
+		if ( ! self::tables_exist() ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		try {
+			$lines = $wpdb->get_results( $wpdb->prepare( 'SELECT l.id, l.species, l.sci_name, l.needs_id, l.species_id, o.ref AS order_ref, o.status AS order_status FROM ' . self::table( 'order_lines' ) . ' l INNER JOIN ' . self::table( 'orders' ) . " o ON o.id = l.order_id WHERE o.status <> 'closed' AND l.species_id IS NULL AND l.needs_id = 0 AND l.species <> '' ORDER BY l.id DESC LIMIT %d", Order_Fish::MAX_LINES ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			$stays = $wpdb->get_results( $wpdb->prepare( 'SELECT s.id, s.species, s.needs_id, s.product_id, s.qty_live, s.status, t.number AS tank_number, ol.sci_name FROM ' . self::table( 'stays' ) . ' s LEFT JOIN ' . self::table( 'tanks' ) . ' t ON t.id = s.tank_id LEFT JOIN ' . self::table( 'order_lines' ) . " ol ON ol.id = s.order_line_id WHERE s.status <> 'closed' AND s.qty_live > 0 AND s.product_id IS NULL AND s.needs_id = 0 AND s.species <> '' ORDER BY s.id DESC LIMIT %d", Order_Fish::MAX_STAYS ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+		if ( ! is_array( $lines ) || ! is_array( $stays ) ) {
+			return array();
+		}
+
+		$fish = array();
+		if ( $lines || $stays ) {
+			$fish = Order_Fish::offered( $lines, $stays, Order_Fish::known( $this->fish_product_names(), array_column( $this->species_brief(), 'name' ) ) );
+		}
+		set_transient( self::ORDER_FISH_TRANSIENT, $fish, 10 * MINUTE_IN_SECONDS );
+
+		return $fish;
 	}
 
 	/**
@@ -4281,6 +4378,8 @@ class Store {
 			return $ok ? (int) $wpdb->insert_id : false;
 		} catch ( \Throwable $e ) {
 			return false;
+		} finally {
+			self::clear_order_fish_cache(); // Its ref or its status (closed or not) may have changed.
 		}
 	}
 
@@ -4334,6 +4433,10 @@ class Store {
 			return false !== $wpdb->update( self::table( 'orders' ), $data, array( 'id' => (int) $id ), null, array( '%d' ) );
 		} catch ( \Throwable $e ) {
 			return false;
+		} finally {
+			if ( isset( $data['status'] ) ) {
+				self::clear_order_fish_cache(); // Closed, or open again.
+			}
 		}
 	}
 
@@ -4361,6 +4464,8 @@ class Store {
 			$ok = $wpdb->delete( self::table( 'orders' ), array( 'id' => (int) $id ), array( '%d' ) );
 		} catch ( \Throwable $e ) {
 			return false;
+		} finally {
+			self::clear_order_fish_cache();
 		}
 
 		return (bool) $ok;
@@ -4492,6 +4597,8 @@ class Store {
 			}
 		} catch ( \Throwable $e ) {
 			return false;
+		} finally {
+			self::clear_order_fish_cache(); // Lines typed, imported or removed: the fish they name.
 		}
 
 		return array(
@@ -4605,6 +4712,10 @@ class Store {
 			return false !== $wpdb->update( self::table( 'order_lines' ), $data, array( 'id' => (int) $line_id ), null, array( '%d' ) );
 		} catch ( \Throwable $e ) {
 			return false;
+		} finally {
+			if ( array_intersect_key( $data, array_flip( array( 'species_id', 'species', 'sci_name', 'needs_id' ) ) ) ) {
+				self::clear_order_fish_cache(); // A correction: who the line's fish is.
+			}
 		}
 	}
 

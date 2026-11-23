@@ -597,7 +597,50 @@
 		};
 	}
 
+	/**
+	 * The small tag beside a fish the search suggests (pure): where a fish
+	 * that only a fish order line or a group in a tank names comes from
+	 * ("on fish order 2026-9", "in tank 512"); else the product's id, "list"
+	 * for a fish of the Species list, or how it was found.
+	 *
+	 * @param {Object} item A suggestion (Store::fish_search()).
+	 * @return {string}
+	 */
+	function suggestTag(item) {
+		item = item || {};
+		if (item.where) {
+			return String(item.where);
+		}
+		var tag = item.product_id ? '#' + item.product_id : (item.match === 'species' ? 'list' : (item.match || ''));
+		if (item.species_id && item.product_id) {
+			tag += ' · list';
+		}
+		return tag;
+	}
+
+	/**
+	 * What picking a suggestion writes on an order line (pure): the fish's
+	 * name as it is spelled, its Species row ('' = none — a fish of a fish
+	 * order line is an unlisted fish, as a typed name is) and the
+	 * scientific name, which only fills an empty field.
+	 *
+	 * @param {Object} item A suggestion.
+	 * @param {string} sci  The line's scientific name as it stands.
+	 * @return {{species: string, species_id: (number|string), sci_name: string}}
+	 */
+	function linePick(item, sci) {
+		item = item || {};
+		var typed = String(sci === null || typeof sci === 'undefined' ? '' : sci);
+		return {
+			species: String(item.name || ''),
+			species_id: item.species_id || '',
+			sci_name: !typed.replace(/^\s+|\s+$/g, '') && item.sci ? String(item.sci) : typed
+		};
+	}
+
 	var api = {
+		suggestTag: suggestTag,
+		linePick: linePick,
 		existingPost: existingPost,
 		packLines: packLines,
 		wellFormed: wellFormed,
@@ -707,11 +750,7 @@
 			if (item.sci) {
 				$li.append(' ').append($('<em></em>').text(item.sci));
 			}
-			var tag = item.product_id ? '#' + item.product_id : (item.match === 'species' ? 'list' : (item.match || ''));
-			if (item.species_id && item.product_id) {
-				tag += ' · list';
-			}
-			$li.append(' ').append($('<span class="fh-cr-sub fh-cr-sub--inline"></span>').text(tag));
+			$li.append(' ').append($('<span class="fh-cr-sub fh-cr-sub--inline"></span>').text(suggestTag(item)));
 			$li.on('mousedown', function (e) {
 				e.preventDefault();
 				onPick($input, item);
@@ -1602,12 +1641,11 @@
 
 			attachSuggest($lines, '.fh-cr-species', 'suggest', function ($input, item) {
 				var $tr = $input.closest('tr');
-				$input.val(item.name || '');
-				$tr.find('input[name$="[species_id]"]').val(item.species_id || '');
 				var $sci = $tr.find('input[name$="[sci_name]"]');
-				if (!$.trim($sci.val()) && item.sci) {
-					$sci.val(item.sci);
-				}
+				var pick = linePick(item, $sci.val());
+				$input.val(pick.species);
+				$tr.find('input[name$="[species_id]"]').val(pick.species_id);
+				$sci.val(pick.sci_name);
 				if (item.per_box) {
 					$tr.find('input[name$="[per_box]"]').attr('placeholder', item.per_box);
 				}
