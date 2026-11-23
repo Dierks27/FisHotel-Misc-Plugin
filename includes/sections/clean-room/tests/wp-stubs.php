@@ -326,6 +326,7 @@ require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-identify.p
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-board-lines.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-orders.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-shop-price.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-no-product.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-splits.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-xlsx.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-workbook.php';
@@ -342,6 +343,7 @@ require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-admin-stat
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-admin-import.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-admin-order-import.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-admin-temp.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-admin-no-product.php';
 require_once __DIR__ . '/fake-store.php';
 
 /**

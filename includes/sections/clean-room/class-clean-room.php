@@ -222,6 +222,7 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 			require_once self::path() . 'class-board-lines.php';
 			require_once self::path() . 'class-orders.php';
 			require_once self::path() . 'class-shop-price.php';
+			require_once self::path() . 'class-no-product.php';
 			require_once self::path() . 'class-splits.php';
 			require_once self::path() . 'class-xlsx.php';
 			require_once self::path() . 'class-workbook.php';
@@ -274,6 +275,8 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 			add_filter( Todo::SUMMARY_FILTER, array( self::class, 'filter_todo' ), 10, 1 );
 			add_filter( Todo::TODAY_FILTER, array( self::class, 'filter_today_lines' ), 10, 1 );
 			add_action( 'save_post_product', array( Store::class, 'clear_species_cache' ), 10, 0 );
+			// A product deleted for good, without the trash, is saved by nothing: its fish is an unlisted fish at once.
+			add_action( 'deleted_post', array( self::class, 'product_deleted' ), 10, 2 );
 			// Cron runs outside wp-admin: the uploaded workbook's cleanup is hooked on every request.
 			add_action( self::IMPORT_CLEANUP_HOOK, array( self::class, 'import_cleanup' ), 10, 0 );
 			// The Stats tab's Real sales keeps what it read from WooCommerce in a transient: drop it when an
@@ -302,6 +305,8 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 				require_once self::path() . 'class-import-layouts.php';
 				require_once self::path() . 'class-admin-order-import.php';
 				require_once self::path() . 'class-admin-temp.php';
+				// "Fish with no product yet": the Species tab's view, the marks, the two acts.
+				require_once self::path() . 'class-admin-no-product.php';
 
 				$settings = new Settings();
 				$settings->init();
@@ -320,6 +325,9 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 
 				$order_import = new Admin_Order_Import();
 				$order_import->init();
+
+				$no_product = new Admin_No_Product();
+				$no_product->init();
 
 				// Settings → Sizes → "Tidy up the sizes": its AJAX and assets. It does nothing until a button is pressed.
 				require_once self::path() . 'class-admin-sizes-tidy.php';
@@ -546,6 +554,26 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 				return null;
 			}
 			return $facts;
+		}
+
+		/**
+		 * deleted_post: a product was deleted for good (the trash emptied, or
+		 * a delete that went around the trash). Nothing saves it, so
+		 * save_post_product never hears of it: drop the kept fish lists here.
+		 * Its groups in the tanks are unlisted fish from now on — the list
+		 * "Fish with no product yet" says so at once, and so must the search.
+		 * Any other post that is deleted (an order, a revision) is none of
+		 * this section's business.
+		 *
+		 * @param int   $post_id The post that was deleted.
+		 * @param mixed $post    Its row as it was (WP_Post), when WordPress hands it over.
+		 */
+		public static function product_deleted( $post_id = 0, $post = null ) {
+			unset( $post_id );
+			if ( is_object( $post ) && isset( $post->post_type ) && 'product' !== (string) $post->post_type ) {
+				return;
+			}
+			Store::clear_species_cache();
 		}
 
 		/**

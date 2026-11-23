@@ -252,4 +252,160 @@ class Species {
 			'group_name' => (string) ( $row['group_name'] ?? '' ),
 		);
 	}
+
+	/**
+	 * The fish whose name is NEARLY what was typed (pure) — the search's
+	 * second try, when nothing matches letter for letter: "filimented
+	 * flasher" still finds "Filamented Flasher Wrasse".
+	 *
+	 * Every typed word has to be in ONE of a fish's names (its title, a
+	 * common name, its scientific name, an alias): as it stands, or — a
+	 * word of four letters or more — one slip off (two, from eight
+	 * letters on) from a word of that name, or from the beginning of one
+	 * (the word is still being typed). A slip is a letter changed, dropped
+	 * or added, or two letters swapped. The closest come first.
+	 *
+	 * @param string  $term       What was typed.
+	 * @param array[] $candidates Store::species_candidates(): product_id, name, variants (text, kind).
+	 * @param int     $limit      Row cap.
+	 * @return array[] product_id, name, common, sci, match ('near'), alias.
+	 */
+	public static function near( $term, array $candidates, $limit = 10 ) {
+		$words = array_values( array_filter( (array) preg_split( '/[^a-z0-9]+/', strtolower( (string) $term ) ), 'strlen' ) );
+		if ( ! $words ) {
+			return array();
+		}
+
+		$found = array();
+		foreach ( $candidates as $candidate ) {
+			$best = null;
+			$sci  = '';
+			foreach ( (array) ( $candidate['variants'] ?? array() ) as $variant ) {
+				$text = (string) ( $variant['text'] ?? '' );
+				if ( 'sci' === (string) ( $variant['kind'] ?? '' ) ) {
+					$sci = $text;
+				}
+				$off = self::letters_off( $words, $text );
+				if ( null !== $off && ( null === $best || $off < $best ) ) {
+					$best = $off;
+				}
+			}
+			$name = (string) ( $candidate['name'] ?? '' );
+			if ( null === $best || '' === $name ) {
+				continue;
+			}
+			$found[] = array(
+				'off'  => $best,
+				'item' => array(
+					'product_id' => isset( $candidate['product_id'] ) && (int) $candidate['product_id'] > 0 ? (int) $candidate['product_id'] : null,
+					'name'       => $name,
+					'common'     => '',
+					'sci'        => $sci,
+					'match'      => 'near',
+					'alias'      => '',
+				),
+			);
+		}
+
+		usort(
+			$found,
+			static function ( $a, $b ) {
+				return ( $a['off'] <=> $b['off'] ) ?: strnatcasecmp( $a['item']['name'], $b['item']['name'] );
+			}
+		);
+
+		return array_column( array_slice( $found, 0, max( 1, (int) $limit ) ), 'item' );
+	}
+
+	/**
+	 * How many letters the typed words are off from one name (pure): null
+	 * when a word is not in it, not even nearly.
+	 *
+	 * @param string[] $words Typed words, lower-case.
+	 * @param string   $text  A name.
+	 * @return int|null
+	 */
+	private static function letters_off( array $words, $text ) {
+		$text   = strtolower( (string) $text );
+		$tokens = array_values( array_filter( (array) preg_split( '/[^a-z0-9]+/', $text ), 'strlen' ) );
+		if ( ! $tokens ) {
+			return null;
+		}
+		$total = 0;
+		foreach ( $words as $word ) {
+			if ( false !== strpos( $text, $word ) ) {
+				continue;
+			}
+			$length = strlen( $word );
+			if ( $length < 4 || $length > 60 ) {
+				return null;
+			}
+			$allowed = $length >= 8 ? 2 : 1;
+			$best    = null;
+			foreach ( $tokens as $token ) {
+				if ( strlen( $token ) > 60 ) {
+					continue;
+				}
+				$off = self::typing_distance( $word, $token );
+				if ( strlen( $token ) > $length ) {
+					$off = min( $off, self::typing_distance( $word, substr( $token, 0, $length ) ) );
+				}
+				if ( null === $best || $off < $best ) {
+					$best = $off;
+				}
+			}
+			if ( null === $best || $best > $allowed ) {
+				return null;
+			}
+			$total += $best;
+		}
+		return $total;
+	}
+
+	/**
+	 * How far one word is from another, as a typing slip (pure): letters
+	 * changed, dropped or added — and two letters swapped ("tset" for
+	 * "test") count as ONE slip, not two.
+	 *
+	 * @param string $a A word.
+	 * @param string $b A word.
+	 * @return int
+	 */
+	private static function typing_distance( $a, $b ) {
+		$off = levenshtein( $a, $b );
+		if ( 2 === $off && strlen( $a ) === strlen( $b ) ) {
+			for ( $i = 0, $n = strlen( $a ) - 1; $i < $n; $i++ ) {
+				if ( $a[ $i ] !== $b[ $i ] ) {
+					return $a[ $i ] === $b[ $i + 1 ] && $a[ $i + 1 ] === $b[ $i ] && substr( $a, $i + 2 ) === substr( $b, $i + 2 ) ? 1 : 2;
+				}
+			}
+		}
+		return $off;
+	}
+
+	/**
+	 * Why a product the shop has does not show in the fish search, in a
+	 * sentence (pure): it is in no fish category. '' when there is none.
+	 *
+	 * @param array[]  $elsewhere Store::products_elsewhere(): product_id, name.
+	 * @param string[] $slugs     The fish categories' slugs.
+	 * @return string
+	 */
+	public static function elsewhere_hint( array $elsewhere, array $slugs ) {
+		$named = array();
+		foreach ( $elsewhere as $product ) {
+			if ( is_array( $product ) && '' !== (string) ( $product['name'] ?? '' ) ) {
+				$named[] = sprintf( '"%s" (#%d)', (string) $product['name'], (int) ( $product['product_id'] ?? 0 ) );
+			}
+		}
+		if ( ! $named ) {
+			return '';
+		}
+		$categories = array();
+		foreach ( $slugs as $slug ) {
+			$categories[] = ucwords( str_replace( '-', ' ', (string) $slug ) );
+		}
+		/* translators: 1: products, 2: category names */
+		return sprintf( __( 'The shop has %1$s, but not as a fish: the product is in no fish category (%2$s, or one under them). Tick one on the product and it shows here.', 'fishotel-misc-plugin' ), implode( ', ', $named ), implode( ', ', $categories ) );
+	}
 }

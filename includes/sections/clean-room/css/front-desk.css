@@ -627,6 +627,13 @@ button.fh-fd-occ:active {
 	color: var(--fd-muted);
 }
 
+/* A product of that name outside the fish categories: said under the answers, never offered. */
+.fh-fd-suggest__hint {
+	padding: 4px 2px;
+	font-size: 14px;
+	color: var(--fd-muted);
+}
+
 .fh-fd-chosen {
 	display: flex;
 	align-items: center;

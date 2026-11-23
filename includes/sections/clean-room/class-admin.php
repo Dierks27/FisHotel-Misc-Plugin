@@ -231,6 +231,7 @@ class Admin {
 			$sizes        = Sizes::standard( $store, $settings )['sizes'];
 			$fish_tanks   = $tables_ok ? self::existing_tanks( $store->tanks( false ) ) : array();
 			$picks        = $tables_ok ? Front_Desk::picks( $store ) : array( 'suppliers' => array(), 'origins' => array() );
+			$product_states = Admin_No_Product::stay_states( $store, array_merge( $stays, $closed_stays ) ); // One read: which stays have no product yet.
 
 			include Clean_Room::path() . 'views/stays.php';
 			return;
@@ -256,6 +257,7 @@ class Admin {
 		$sizes     = Sizes::standard( $store, $settings )['sizes'];
 		$temp      = Admin_Temp::board( $store, $tanks, $protocols, $today );
 		$origins   = self::origins( $store, $tanks ); // The quarantine tank each cleared group came out of.
+		$no_product = Admin_No_Product::board_count( $store, $tanks ); // Fish with no product yet: the chip.
 
 		include Clean_Room::path() . 'views/board.php';
 	}
@@ -752,6 +754,7 @@ class Admin {
 				'nonce'         => wp_create_nonce( self::NONCE_AJAX ),
 				'settingsNonce' => wp_create_nonce( Settings::NONCE_ACTION ),
 				'boxRates'      => $on_page ? Settings::box_rates() : array(),
+				'noProduct'     => $on_page ? Admin_No_Product::js_config() : array(),
 				'i18n'          => array(
 					'saved'          => __( 'Saved.', 'fishotel-misc-plugin' ),
 					'error'          => __( 'Something went wrong. Please try again.', 'fishotel-misc-plugin' ),
@@ -776,6 +779,8 @@ class Admin {
 					'unsavedLines'   => __( 'Save the order first.', 'fishotel-misc-plugin' ),
 					'noRate'         => __( 'No box rate for this supplier and origin (Settings → Box rates), or no box count.', 'fishotel-misc-plugin' ),
 					'noMatch'        => __( 'No match — type the name to use it as an unlisted species.', 'fishotel-misc-plugin' ),
+					'noProduct'      => __( 'No fish product matches. This box looks at the products in Quarantined Fish and Inverts (and every category under them), and every word typed has to be in the product\'s name — try fewer words.', 'fishotel-misc-plugin' ),
+					'near'           => __( 'similar spelling', 'fishotel-misc-plugin' ),
 					'linked'         => __( 'Linked', 'fishotel-misc-plugin' ),
 					'yes'            => __( 'Yes', 'fishotel-misc-plugin' ),
 					'no'             => __( 'No', 'fishotel-misc-plugin' ),

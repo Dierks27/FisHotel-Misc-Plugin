@@ -858,16 +858,22 @@
 	 * The small line under a fish the search suggests: the learned name
 	 * that found it, else its common names, else its scientific name — and,
 	 * for a fish that only a fish order line or a group in a tank names,
-	 * where it comes from ("on fish order 2026-9", "in tank 512").
+	 * where it comes from ("on fish order 2026-9", "in tank 512"). A fish
+	 * found by a near match only (a letter off) says so, so the pick is a
+	 * knowing one.
 	 *
 	 * @param {Object} item A suggestion (Store::fish_search()).
+	 * @param {string} near The words for a near match (English fallback).
 	 * @return {string}
 	 */
-	function suggestSub(item) {
+	function suggestSub(item, near) {
 		item = item || {};
 		var sub = item.match === 'alias' ? ('"' + item.alias + '"') : (item.common || item.sci || '');
 		if (item.where) {
 			sub = sub ? sub + ' · ' + item.where : String(item.where);
+		}
+		if (item.match === 'near') {
+			sub = (sub ? sub + ' · ' : '') + (near || 'similar spelling');
 		}
 		return sub;
 	}
@@ -2230,11 +2236,15 @@
 				list.removeChild(list.firstChild);
 			}
 			(data.items || []).forEach(function (item) {
-				var sub = suggestSub(item);
+				var sub = suggestSub(item, t('near', 'similar spelling'));
 				list.appendChild(el('li', {}, [
 					el('button', { type: 'button', on: { click: function () { choose(item); } } }, [item.name, sub ? el('small', { text: sub }) : null])
 				]));
 			});
+			if (data.hint) {
+				// A product of that name the shop has outside the fish categories: said, not offered.
+				list.appendChild(el('li', { class: 'fh-fd-suggest__hint', text: data.hint }));
+			}
 		}).catch(function () { /* suggestions are optional */ });
 	}
 
