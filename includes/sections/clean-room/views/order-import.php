@@ -58,7 +58,7 @@ $fh_open    = isset( $_GET['import'] ) && '1' === (string) wp_unslash( $_GET['im
 			<p class="fh-cr-import__too-wrap" <?php echo $fh_invoice ? 'hidden' : ''; ?>>
 				<label><input type="checkbox" class="fh-cr-import__too" <?php checked( $fh_arrived ); ?>> <?php esc_html_e( 'These fish have arrived — use the quantity as received too', 'fishotel-misc-plugin' ); ?></label>
 			</p>
-			<p class="fh-cr-sub" data-for-mode="ordered" <?php echo $fh_invoice ? 'hidden' : ''; ?>><?php esc_html_e( 'A whole price list is fine: only the rows with an order quantity above 0 become lines, and the supplier\'s stock column is never taken for a quantity. Nothing is saved before you confirm, and nothing already on the order is changed.', 'fishotel-misc-plugin' ); ?></p>
+			<p class="fh-cr-sub" data-for-mode="ordered" <?php echo $fh_invoice ? 'hidden' : ''; ?>><?php esc_html_e( 'A whole price list is fine: only the rows with an order quantity above 0 become lines, and the supplier\'s stock column is never taken for a quantity. When the sheet has a received column too, a fish that arrived without being ordered becomes a line as well (ordered 0). Nothing is saved before you confirm, and nothing already on the order is changed.', 'fishotel-misc-plugin' ); ?></p>
 			<p class="fh-cr-sub" data-for-mode="arrived" <?php echo $fh_invoice ? '' : 'hidden'; ?>><?php esc_html_e( 'Nothing is saved before you confirm. Confirming writes the received counts on the order; it never removes a line, never changes a line that is already checked in, and never checks anything in.', 'fishotel-misc-plugin' ); ?></p>
 		</div>
 

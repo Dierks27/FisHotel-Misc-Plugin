@@ -701,4 +701,73 @@ $ctx['settings']['size_list'] = $keep_sizes;
 $std = fh_ask( fh_store(), fh_form( fh_store(), 0 ), 'preview', array( 'text' => "Fish\tSize\tQty\nGreen Test Chromis\tM\t3\n", 'mode' => 'ordered' ) );
 check( 'a size column\'s size that IS a standard size goes into the Size, with no note', 'medium' === $std['rows'][0]['size']['slug'] && '' === $std['rows'][0]['size']['note'] );
 
+echo "22. \"This is what I ORDERED\", and a fish that arrived without being ordered\n";
+$came_text = "fish\tordered\treceived\tprice\nBlue Test Wrasse\t4\t3\t2.50\nZzyzx Whatsit\t0\t2\t9.00\nPale Test Tang\t\t1\t30\nGreen Test Chromis\t0\t0\t0.75\nRed Test Goby\t\t\t1.25\n";
+$came_dir  = fh_test_tmp_dir();
+$came_xlsx = static function () use ( $came_dir ) {
+	return fh_test_write_xlsx(
+		$came_dir . '/came.xlsx',
+		array(
+			'Order' => array(
+				'A1' => 'fish', 'B1' => 'ordered', 'C1' => 'received', 'D1' => 'price',
+				'A2' => 'Blue Test Wrasse', 'B2' => 4, 'C2' => 3, 'D2' => 2.5,
+				'A3' => 'Zzyzx Whatsit', 'B3' => 0, 'C3' => 2, 'D3' => 9,
+				'A4' => 'Pale Test Tang', 'C4' => 1, 'D4' => 30,
+				'A5' => 'Green Test Chromis', 'B5' => 0, 'C5' => 0, 'D5' => 0.75,
+				'A6' => 'Red Test Goby', 'D6' => 1.25,
+			),
+		)
+	);
+};
+$came_block = implode( "\n", array( OI::block_header(), "Blue Test Wrasse\t\t\t4\t3\t2.50\t\t1\t\t\tXA1\t\t", "Zzyzx Whatsit\t\t\t0\t2\t9.00\t\t1\t\t\tXA3\t\t", "Pale Test Tang\t\t\t\t1\t30\t\t1\t\t\t\t\t", "Green Test Chromis\t\t\t0\t0\t0.75\t\t\t\t\t\t\t", "Red Test Goby\t\t\t\t\t1.25\t\t\t\t\t\t\t" ) );
+$came_ask   = static function ( $route, $store, $op, array $import ) use ( $came_text, $came_block, $came_xlsx, $ctx ) {
+	if ( 'file' === $route && empty( $import['grid'] ) ) {
+		return AOI::request( $store, array_merge( fh_form( $store, 0 ), array( 'op' => $op, 'import' => wp_json_encode( $import ) ) ), array_merge( $ctx, array( 'file' => array( 'path' => $came_xlsx(), 'name' => 'came.xlsx' ) ) ) );
+	}
+	if ( empty( $import['grid'] ) ) {
+		$import['text'] = 'block' === $route ? $came_block : $came_text;
+	}
+	return fh_ask( $store, fh_form( $store, 0 ), $op, $import );
+};
+$came_lines = array();
+foreach ( array( 'pasted', 'file', 'block' ) as $route ) {
+	foreach ( array( 0, 1 ) as $tick ) {
+		$sc = fh_store();
+		$pc = $came_ask( $route, $sc, 'preview', array( 'mode' => 'ordered', 'arrived_too' => $tick ) );
+		$on = $tick ? 'with the tick' : 'without the tick';
+		check_same( "$route, $on: the two rows with a received count and no order quantity are kept — ordered 0, their received count, and the row says so; the rows with neither are left out", array( array( 'Blue Test Wrasse', 'Zzyzx Whatsit', 'Pale Test Tang' ), array( 4, 0, 0 ), array( $tick ? 3 : null, 2, 1 ), array( false, true, true ) ), array( array_column( $pc['rows'], 'typed' ), array_column( $pc['rows'], 'ordered' ), array_column( $pc['rows'], 'received' ), array_column( $pc['rows'], 'unasked' ) ) );
+		check_same( "$route, $on: the summary counts them, the foot counts their lines (and no ordered fish), no other button is offered", array( '1 of 5 rows have an order quantity · 2 more arrived without being ordered', '3 lines · 4 fish', null, true ), array( $pc['summary'], $pc['foot'], $pc['switch'], $pc['can_confirm'] ) );
+		$dc = $came_ask( $route, $sc, 'confirm', array( 'grid' => $pc['grid'], 'mode' => 'ordered', 'arrived_too' => $tick, 'token' => $pc['token'] ) );
+		$oc = $sc->order( (int) $dc['order_id'] );
+		check_same( "$route, $on: confirmed — three lines; the fish nobody ordered are ordered 0 with their received count" . ( $tick ? '' : ', the ordered line\'s received is left empty as it always was' ), array( array( 'Blue Test Wrasse', 'Zzyzx Whatsit', 'Pale Test Tang' ), array( 4, 0, 0 ), array( $tick ? 3 : null, 2, 1 ) ), array( array_column( $oc['lines'], 'species' ), array_column( $oc['lines'], 'qty_ordered' ), array_column( $oc['lines'], 'qty_received' ) ) );
+		$came_lines[ $route . $tick ] = array( $oc['lines'][1]['qty_ordered'], $oc['lines'][1]['qty_received'], $oc['lines'][1]['unit_price'], $oc['lines'][2]['species_id'], $oc['lines'][2]['qty_received'] );
+	}
+}
+check( 'the three routes and the tick agree on those lines, to the field', 1 === count( array_unique( array_map( 'wp_json_encode', $came_lines ) ) ) && array( 0, 2, 9.0, 2, 1 ) === $came_lines['pasted0'] );
+fh_test_rmdir( $came_dir );
+
+// The same fish as an "Extra / substituted" line of the ARRIVED mode: one shape, one fill rate.
+$se  = fh_store();
+$pe  = fh_ask( $se, fh_form( $se, 0 ), 'preview', array( 'text' => "fish\tordered\nBlue Test Wrasse\t4\n", 'mode' => 'ordered' ) );
+$de  = fh_ask( $se, fh_form( $se, 0 ), 'confirm', array( 'grid' => $pe['grid'], 'mode' => 'ordered', 'token' => $pe['token'] ) );
+$ide = (int) $de['order_id'];
+$pa  = fh_ask( $se, fh_form( $se, $ide ), 'preview', array( 'text' => "fish\treceived\tprice\nBlue Test Wrasse\t3\t2.50\nZzyzx Whatsit\t2\t9.00\nPale Test Tang\t1\t30\n", 'mode' => 'arrived' ) );
+$da  = fh_ask( $se, fh_form( $se, $ide ), 'confirm', array( 'grid' => $pa['grid'], 'mode' => 'arrived', 'token' => $pa['token'] ) );
+$so  = fh_store();
+$po  = fh_ask( $so, fh_form( $so, 0 ), 'preview', array( 'text' => $came_text, 'mode' => 'ordered', 'arrived_too' => 1 ) );
+$do  = fh_ask( $so, fh_form( $so, 0 ), 'confirm', array( 'grid' => $po['grid'], 'mode' => 'ordered', 'arrived_too' => 1, 'token' => $po['token'] ) );
+$pick = static function ( array $line ) {
+	return array( $line['species'], $line['species_id'], $line['qty_ordered'], $line['qty_received'], $line['unit_price'], $line['qty_doa'], $line['needs_id'], $line['notes'] );
+};
+$extras = array_map( $pick, array_slice( $se->order( $ide )['lines'], 1 ) );
+check( 'the line it becomes is the line an "Extra / substituted" row of the ARRIVED mode becomes — field for field', 2 === count( fh_group( $pa, 'extra' ) ) && empty( $da['error'] ) && $extras === array_map( $pick, array_slice( $so->order( (int) $do['order_id'] )['lines'], 1 ) ) && array( 'Zzyzx Whatsit', null, 0, 2, 9.0, 0, false, '' ) === $extras[0], json_encode( $extras ) );
+$fe = Stats::build( Admin_Workbook::resolved_orders( $se, array() ) )['orders'][0];
+$fo = Stats::build( Admin_Workbook::resolved_orders( $so, array() ) )['orders'][0];
+check( '… so the fill rate reads the same either way: ordered 4, received 6 — 150%', 4 === $fo['ordered'] && 6 === $fo['received'] && abs( $fo['fill_rate'] - 1.5 ) < 1e-9 && array( $fe['ordered'], $fe['received'], $fe['fill_rate'] ) === array( $fo['ordered'], $fo['received'], $fo['fill_rate'] ) );
+check( '… and the order page\'s own figures agree', Admin_Workbook::figures( Admin_Workbook::resolve_order( $se, $se->order( $ide ) ) )['order']['fill_rate'] === Admin_Workbook::figures( Admin_Workbook::resolve_order( $so, $so->order( (int) $do['order_id'] ) ) )['order']['fill_rate'] );
+$sn = fh_store();
+$pn = fh_ask( $sn, fh_form( $sn, 0 ), 'preview', array( 'text' => "fish\tordered\treceived\nBlue Test Wrasse\t\t3\nZzyzx Whatsit\t0\t2\n", 'mode' => 'ordered' ) );
+check( 'a sheet where NOT ONE row has an order quantity is what ARRIVED: nothing is listed and the other button is offered, as before', '0 of 2 rows have an order quantity' === $pn['summary'] && array() === $pn['rows'] && is_array( $pn['switch'] ) && 'arrived' === $pn['switch']['mode'] && false === $pn['can_confirm'] );
+check( 'the page has the words for it, and draws them on the row', 'arrived without being ordered' === AOI::js_config()['i18n']['unasked'] && '' !== AOI::js_config()['i18n']['unaskedTitle'] && false !== strpos( (string) file_get_contents( Clean_Room::path() . 'js/order-import.js' ), 'if (row.unasked) {' ) && false !== strpos( (string) file_get_contents( Clean_Room::path() . 'views/order-import.php' ), 'a fish that arrived without being ordered becomes a line as well (ordered 0)' ) );
+
 fh_finish();

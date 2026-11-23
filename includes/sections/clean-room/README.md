@@ -1264,7 +1264,19 @@ quantity anywhere: the preview says so and offers the other button
   order becomes *ordered*. A row that names a fish and size already on
   the order (or the same code) is a **duplicate**: skipped unless set to
   *add anyway*. The tick *These fish have arrived — use the quantity as
-  received too* is for an order that was never entered before it landed.
+  received too* is for an order that was never entered before it landed:
+  with it every line's received is the sheet's received column when it
+  has one, else its ordered count. **A fish that arrived without being
+  ordered** — a row with no order quantity (empty or 0) and a count of 1
+  or more in a received column of its own — is a line too, with or
+  without that tick: **ordered 0 and its received count**, exactly the
+  line an *Extra / substituted* row of the arrived mode becomes, so the
+  fill rate and every figure read it the same way. The row says "arrived
+  without being ordered" and the summary counts it ("61 of 1,188 rows
+  have an order quantity · 1 more arrived without being ordered"); a
+  price-list row with neither is left out as ever. When NOT ONE row has
+  an order quantity the sheet is what arrived: nothing is listed and the
+  preview offers *Read it as what ARRIVED*.
 - **This is what ARRIVED** — the supplier's invoice or packing list when
   the boxes land. Every row is **paired with a line already on the
   order**: as the owner says (a pairing made by hand wins), else by the

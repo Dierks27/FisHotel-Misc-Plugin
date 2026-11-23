@@ -1469,13 +1469,20 @@ class Order_Import {
 	 * layout to leave out ($opts['junk']), and — in the ordered mode — a
 	 * price-list row without an order quantity (counted, not listed).
 	 *
+	 * In the ordered mode a row with no order quantity but a received
+	 * count of 1 or more — the sheet has a received column of its own —
+	 * is KEPT, flagged `unasked`, with ordered 0: a fish that arrived
+	 * without being ordered, the same line an extra of the arrived mode
+	 * becomes. Unless no row at all has an order quantity: that sheet is
+	 * what ARRIVED, and nothing is listed (the preview offers that mode).
+	 *
 	 * A box number or an origin that is filled only on a box's first row,
 	 * or stands in a heading above it, is carried down.
 	 *
 	 * @param string[][] $grid The grid.
 	 * @param array      $opts mode, map (column → role), header_row (int|null), junk (string[]),
 	 *                         sizes (the standard list).
-	 * @return array rows, left_out, fees, subtotal, total, sections, data_rows, with_qty, received.
+	 * @return array rows, left_out, fees, subtotal, total, sections, data_rows, with_qty, received, unasked.
 	 */
 	public static function analyse( array $grid, array $opts ) {
 		$mode   = isset( $opts['mode'] ) && 'arrived' === $opts['mode'] ? 'arrived' : 'ordered';
@@ -1501,6 +1508,7 @@ class Order_Import {
 			'data_rows' => 0,
 			'with_qty'  => 0,
 			'received'  => 0, // Rows with a received count above 0 — a sheet of what ARRIVED has those.
+			'unasked'   => 0, // Ordered mode: rows kept with no order quantity and a received count.
 		);
 
 		$box     = '';
@@ -1768,7 +1776,12 @@ class Order_Import {
 			$counted  = 'arrived' === $mode ? $arrived : $ordered;
 			$bad_qty  = ! empty( $flags['ordered'] ) || ! empty( $flags['qty'] ) || ! empty( $flags['received'] );
 
-			if ( ( null === $counted || $counted < 1 ) && ! $bad_qty ) {
+			// "This is what I ORDERED", on a sheet with a received column of its own: a fish that came
+			// without being ordered (no order quantity, a received count) is a line too — ordered 0,
+			// as an extra of the ARRIVED mode is.
+			$unasked = 'ordered' === $mode && ! $bad_qty && ( null === $counted || $counted < 1 ) && null !== $received && $received >= 1;
+
+			if ( ( null === $counted || $counted < 1 ) && ! $bad_qty && ! $unasked ) {
 				// A price-list row nobody ordered (counted, not listed) — or, on an invoice, a fish
 				// with no count: left out, and named so the owner can look at the invoice.
 				if ( 'arrived' === $mode && '' !== $fish ) {
@@ -1776,7 +1789,12 @@ class Order_Import {
 				}
 				continue;
 			}
-			$out['with_qty']++;
+			if ( $unasked ) {
+				$out['unasked']++;
+				$ordered = 0;
+			} else {
+				$out['with_qty']++;
+			}
 
 			// The box and the origin: the row's own, else the one above.
 			$own_box = $get( $row, 'box' );
@@ -1835,7 +1853,16 @@ class Order_Import {
 				'fee_word' => $fee_word,
 				'flags'    => array_keys( $flags ),
 				'bad_qty'  => $bad_qty,
+				'unasked'  => $unasked,
 			);
+		}
+
+		// Not one row has an order quantity: this is no order with a fish that came on top, it is a
+		// sheet of what ARRIVED. Nothing is listed, as before — the preview offers the other button.
+		if ( 0 === $out['with_qty'] && $out['unasked'] > 0 ) {
+			$out['rows']     = array();
+			$out['sections'] = array();
+			$out['unasked']  = 0;
 		}
 
 		return $out;

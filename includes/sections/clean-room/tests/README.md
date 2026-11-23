@@ -715,7 +715,13 @@ system temp directory (`FH_TEST_TMP` overrides).
   one fish in one size (the row to the line with its price or written
   as it is, two boxes on one line, both rows left for the owner when
   nothing tells the lines apart, lines with stays as before), two sizes
-  that share a slug (3-5" and 3.5"+) and a bare number that is no size.
+  that share a slug (3-5" and 3.5"+) and a bare number that is no size;
+  and, in the ordered mode on a sheet with a received column, a row with
+  no order quantity and a received count kept as ordered 0 (an "order"
+  or a plain "qty" column), the row with neither still left out, a
+  received count that will not parse still only flagged, the sheet on
+  which not one row has an order quantity listed as before — and the
+  arrived mode as it was.
 - **order-import-layouts-test.php** — the saved layouts
   (`Import_Layouts`): built from a hand-set mapping, recognised the next
   time with and without a header, an ordered and an arrived layout side
@@ -741,7 +747,13 @@ system temp directory (`FH_TEST_TMP` overrides).
   and the capabilities; a section that is switched off; arrival day on
   an ordered order (the button that fits, the offer to switch), an
   invoice's code kept on a line that had none, a price compared to the
-  cent, "1 line".
+  cent, "1 line"; and a fish that arrived without being ordered, in the
+  ordered mode — pasted, from a file and from the assistant's block,
+  each with and without the arrived-too tick: the row and the summary
+  say so, the line is ordered 0 with its received count, the same line
+  (field for field) and the same fill rate as an extra of the arrived
+  mode, and the sheet without any order quantity still offers the other
+  button.
 - **order-import-tidy-test.php** — the order import and "Tidy up the
   sizes" on one shop (the shop of `tidy-fixture.php`, its fish as the
   in-memory store's products): an order sheet on the long list of sizes
@@ -1462,7 +1474,13 @@ line's `split` field holds anything (`fields_before`) — and one press on
     *Read it*: the preview says "N of M rows have an order quantity",
     lists only those rows, each with *matched: …* or a flag, the size
     lifted out of the name when it is one of your sizes, and the foot
-    counts lines and fish. A sheet whose headings nobody knows shows a
+    counts lines and fish. On a sheet that also has a *received* column,
+    give one fish an order quantity of 0 (or none) and a received count
+    of 1: its row is listed with "arrived without being ordered", the
+    summary ends "· 1 more arrived without being ordered", and after the
+    confirm its line reads ordered 0 · received 1 — with and without
+    *These fish have arrived* ticked; a row with neither number is not
+    listed. A sheet whose headings nobody knows shows a
     dropdown above each column: set the fish and the quantity, leave
     *Remember this layout for <supplier>* ticked, confirm. The order is
     saved as *ordered*, every line with received empty and its `[code …]`
