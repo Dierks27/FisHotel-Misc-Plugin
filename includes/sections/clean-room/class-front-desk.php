@@ -1358,7 +1358,7 @@ class Front_Desk {
 	 */
 	private static function posted_fish( array $ctx, array $raw ) {
 		$store      = $ctx['store'];
-		$species    = self::text( $raw, 'species', 120 );
+		$species    = wp_specialchars_decode( self::text( $raw, 'species', 120 ) ); // "Goby <1in" keeps its "<", as an order line does.
 		$product_id = max( 0, self::int( $raw, 'product_id' ) );
 		$qty        = self::int( $raw, 'qty', 1 );
 		$unknown    = ( ! empty( $raw['unknown'] ) && '0' !== (string) $raw['unknown'] ) || Identify::is_unknown_name( $species );
@@ -2489,7 +2489,7 @@ class Front_Desk {
 
 		$store = new Store();
 
-		wp_send_json_success( array( 'items' => $store->species_suggestions( $term, 8 ) ) );
+		wp_send_json_success( array( 'items' => $store->fish_search( $term, 8 ) ) );
 	}
 
 	/**

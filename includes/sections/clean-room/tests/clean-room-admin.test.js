@@ -148,6 +148,18 @@ check( 'typing after the pick drops the product', 0 === ep.product_id );
 ep = helpers.existingPost( { tank: 122, area: 'clean', text: 'small wrasse', unknown: true, picked: { name: 'small wrasse', product_id: 5 }, cleared: '2025-06-01', supplier: 'Test Supplier' } );
 check( 'an unknown fish: "?? small wrasse", no product; a cleared date and a supplier', '?? small wrasse' === ep.species && 1 === ep.unknown && 0 === ep.product_id && '2025-06-01' === ep.cleared && 'Test Supplier' === ep.supplier, JSON.stringify( ep ) );
 
+console.log( '9. The fish search: a fish of a fish order' );
+var onOrder = { product_id: null, name: 'Golden Sample Tang', common: '', sci: 'Samplus aureus', match: 'order', alias: '', where: 'on fish order 2026-9' };
+check( 'its tag says where it comes from', 'on fish order 2026-9' === helpers.suggestTag( onOrder ) && 'in tank 512' === helpers.suggestTag( { name: 'x', match: 'tank', where: 'in tank 512' } ) );
+check( 'the other tags are as they were: a product\'s id, "list", both, a learned name', '#12' === helpers.suggestTag( { product_id: 12, match: 'title' } ) && 'list' === helpers.suggestTag( { product_id: null, match: 'species', species_id: 3 } ) && '#12 · list' === helpers.suggestTag( { product_id: 12, match: 'title', species_id: 3 } ) && 'alias' === helpers.suggestTag( { product_id: null, match: 'alias' } ) && '' === helpers.suggestTag() );
+var pick = helpers.linePick( onOrder, '' );
+check( 'picked on an order line: the name as it is spelled, NO Species row — an unlisted fish, as a typed name is — and its scientific name', 'Golden Sample Tang' === pick.species && '' === pick.species_id && 'Samplus aureus' === pick.sci_name );
+check( '… a scientific name already typed on the line is kept', 'Typed name' === helpers.linePick( onOrder, 'Typed name' ).sci_name && 'Samplus aureus' === helpers.linePick( onOrder, '  ' ).sci_name );
+check( 'a Species-list fish still brings its row', 3 === helpers.linePick( { name: 'Green Test Blenny', species_id: 3, sci: '' }, 'kept' ).species_id && 'kept' === helpers.linePick( { name: 'Green Test Blenny', species_id: 3, sci: '' }, 'kept' ).sci_name );
+ep = helpers.existingPost( { tank: 521, area: 'spa', text: 'Golden Sample Tang', picked: { name: onOrder.name, product_id: onOrder.product_id || 0 }, qty: '2' } );
+var typed = helpers.existingPost( { tank: 521, area: 'spa', text: 'Golden Sample Tang', qty: '2' } );
+check( 'picked in "Add fish already here" or in Identify: what a typed, unlisted name posts — the same spelling, no product', JSON.stringify( ep ) === JSON.stringify( typed ) && 'Golden Sample Tang' === ep.species && 0 === ep.product_id && 0 === ep.unknown );
+
 console.log( '' );
 console.log( failures ? failures + ' of ' + checks + ' checks FAILED' : 'All ' + checks + ' checks passed' );
 process.exit( failures ? 1 : 0 );

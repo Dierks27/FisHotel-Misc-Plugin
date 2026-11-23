@@ -292,7 +292,7 @@ class Identify {
 	 */
 	public static function fish_from( $store, array $raw, array $settings, array $current = array() ) {
 		$name       = isset( $raw['species'] ) && is_scalar( $raw['species'] ) && ! is_bool( $raw['species'] ) ? sanitize_text_field( (string) preg_replace( '/\s+/', ' ', (string) $raw['species'] ) ) : '';
-		$name       = (string) substr( $name, 0, self::MAX_NAME );
+		$name       = wp_specialchars_decode( (string) substr( $name, 0, self::MAX_NAME ) ); // "Goby <1in" keeps its "<", as an order line does.
 		$unknown    = isset( $raw['unknown'] ) && is_scalar( $raw['unknown'] ) && ! in_array( strtolower( trim( (string) $raw['unknown'] ) ), array( '', '0', 'false', 'no' ), true );
 		$product_id = isset( $raw['product_id'] ) && is_scalar( $raw['product_id'] ) && is_numeric( $raw['product_id'] ) ? max( 0, (int) $raw['product_id'] ) : 0;
 
