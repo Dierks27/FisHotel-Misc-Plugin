@@ -1583,6 +1583,9 @@ class Fake_Store {
 			if ( ! empty( $filters['open'] ) && 'closed' === $order['status'] ) {
 				continue;
 			}
+			if ( isset( $filters['refs'] ) && ! in_array( strtolower( trim( (string) $order['ref'] ) ), array_map( 'strtolower', array_map( 'trim', array_map( 'strval', (array) $filters['refs'] ) ) ), true ) ) {
+				continue;
+			}
 			$out[] = $order;
 		}
 		usort(

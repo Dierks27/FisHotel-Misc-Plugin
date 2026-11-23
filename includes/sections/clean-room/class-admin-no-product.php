@@ -309,6 +309,9 @@ class Admin_No_Product {
 		}
 
 		$stays    = (array) $store->open_stays( array( 'limit' => 2000 ), $today, $settings );
+		// A group put in a tank by hand names its fish order by a ref only. An order that is not at hand
+		// — a closed one — is read for it (one more read of orders, whatever the groups; none without one).
+		$refs     = $one ? array() : No_Product::missing_refs( $stays, $orders );
 		$gathered = self::gathered(
 			$store,
 			$orders,
@@ -316,6 +319,7 @@ class Admin_No_Product {
 			array(
 				'closed_too' => $closed_too,
 				'order_id'   => $order_id,
+				'ref_orders' => $refs ? Admin_Workbook::resolved_orders( $store, array( 'refs' => $refs ) ) : array(),
 				'sizes'      => Sizes::standard( $store, $settings )['sizes'],
 			)
 		);

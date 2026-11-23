@@ -714,7 +714,17 @@ system temp directory (`FH_TEST_TMP` overrides).
   and on the REAL `Store` against a database stand-in: the product reads
   ask every category under the fish categories and leave the trash out,
   the two order-fish reads count a group's product only while it
-  exists, and each write the link makes drops the kept list.
+  exists, and each write the link makes drops the kept list. And what
+  the review of the two together found: a fish picked on the phone as
+  "on fish order …" (the group carries the ref, and no order line) is
+  ONE row with its fish order and its tank — on the list narrowed to
+  that order too, which still has exactly the fish the order's count
+  counted — and still names the order, with its line's landed cost,
+  target price and scientific name, once the order is closed (one more
+  read of orders, by ref; none when no group needs it); a group that
+  carries a product in the trash and moves says its new tank; a product
+  deleted for good drops both kept lists (`Clean_Room::product_deleted()`),
+  any other post deleted drops nothing.
 - **shop-price-test.php** — the shop price of an order line, read
   (`Shop_Price`): the sources in their order (the variation of the
   line's size, the lowest price, a simple product, the species list,
@@ -1684,4 +1694,13 @@ line's `split` field holds anything (`fields_before`) — and one press on
     product: found as the product again. Type the name of a fish that
     is on a fish order and whose product sits in no fish category: the
     order's fish is offered and the line under the list says the shop
-    has the product and where to tick it.
+    has the product and where to tick it. On the phone, Arrival, pick a
+    fish offered as "on fish order <ref>" into a tank: the list shows it
+    once, "Fish order <ref> · Tank <number> · 1 alive" — the same on the
+    list opened from *N without a product →* beside that order (not
+    "not in a tank"); close the order: the row still names the fish
+    order and its landed cost. With a group whose product is in the
+    trash, move the group to another tank on the phone and search at
+    once: "in tank <the new number>". Delete that product for good
+    (empty the trash) and search: the fish is still found, as the
+    unlisted fish in its tank.

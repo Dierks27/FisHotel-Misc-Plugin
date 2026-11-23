@@ -458,12 +458,22 @@ class No_Product {
 	 * of them, or with closed_too all — and the stays checked in from it:
 	 * the rows the count beside that order counted.
 	 *
+	 * A group put in a tank by hand — the phone's Arrival of a fish picked
+	 * as "on fish order …" — stands for no order line: it carries its fish
+	 * order as a ref only (order_ref). It is that order's all the same: its
+	 * row names the order, and takes the scientific name and the landed
+	 * cost of the order's line of the same fish. With order_id it joins
+	 * the fish that order's lines put on the list (its tank, its fish
+	 * alive) and adds no row of its own: the count counted the lines.
+	 *
 	 * @param array[] $orders Orders with their lines — resolved (Orders::resolve(): landed_per_fish,
 	 *                        suggested_price) for the cost and the target price; without, those are null.
 	 * @param array[] $stays  The open stays (hydrated).
 	 * @param array   $ctx    names (Shop_Price::name_index()), alive (alive() or null), species (rows:
 	 *                        id, name, sci_name, product_id), sizes (the standard sizes in their order),
-	 *                        closed_too (bool), order_id (int).
+	 *                        closed_too (bool), order_id (int), ref_orders (orders that are not among
+	 *                        $orders and that a stay names by its ref — closed ones, as a rule —, with
+	 *                        their lines when the cost is wanted: they name the order, and make no row).
 	 * @return array{fish: array[], unknown: array[]} fish: key, name, sci_name, species_id, sizes
 	 *               (slug, label), orders (id, ref, status), tanks (numbers), alive, in_tank, line_ids,
 	 *               stay_ids, cost (float|null), target (float|null), cost_ref, planned (float|null — the
@@ -490,6 +500,26 @@ class No_Product {
 				$open_line[ (int) $stay['order_line_id'] ] = true;
 			}
 		}
+		$by_ref   = array(); // An order's ref => the order, for a group that carries its fish order as a ref only.
+		$of_order = array(); // Order id => fish key => what that order's line knows of the fish (line_facts()).
+		foreach ( isset( $ctx['ref_orders'] ) && is_array( $ctx['ref_orders'] ) ? $ctx['ref_orders'] : array() as $order ) {
+			if ( ! is_array( $order ) || (int) ( $order['id'] ?? 0 ) <= 0 ) {
+				continue;
+			}
+			$brief = self::order_brief( $order );
+			if ( '' !== self::ref_key( $brief['ref'] ) ) {
+				$by_ref[ self::ref_key( $brief['ref'] ) ] = $brief;
+			}
+			foreach ( (array) ( $order['lines'] ?? array() ) as $line ) {
+				if ( ! is_array( $line ) ) {
+					continue;
+				}
+				$line = self::through_list( $order, $line, $listed );
+				if ( 'unknown' !== self::line_state( $line, $names, $alive ) ) {
+					self::note_line( $of_order, $brief['id'], Stats::fish_key( $line, $index['names'] ), $line );
+				}
+			}
+		}
 
 		foreach ( $orders as $order ) {
 			if ( ! is_array( $order ) ) {
@@ -497,11 +527,10 @@ class No_Product {
 			}
 			$order_id = (int) ( $order['id'] ?? 0 );
 			$when     = Stats::order_date( $order ) . '#' . str_pad( (string) $order_id, 10, '0', STR_PAD_LEFT );
-			$brief    = array(
-				'id'     => $order_id,
-				'ref'    => (string) ( $order['ref'] ?? '' ),
-				'status' => (string) ( $order['status'] ?? '' ),
-			);
+			$brief    = self::order_brief( $order );
+			if ( $order_id > 0 && '' !== self::ref_key( $brief['ref'] ) ) {
+				$by_ref[ self::ref_key( $brief['ref'] ) ] = $brief; // The order at hand, whatever ref_orders said.
+			}
 			foreach ( (array) ( $order['lines'] ?? array() ) as $line ) {
 				if ( ! is_array( $line ) ) {
 					continue;
@@ -516,6 +545,9 @@ class No_Product {
 						'sci_name' => trim( (string) ( $line['sci_name'] ?? '' ) ),
 						'order'    => $brief,
 					);
+				}
+				if ( '' !== $key && $order_id > 0 ) {
+					self::note_line( $of_order, $order_id, $key, $line );
 				}
 				if ( 'linked' === $state || ( $only > 0 && $only !== $order_id ) || ( ! $closed_too && ! self::is_current( $order, $line ) ) ) {
 					continue;
@@ -556,10 +588,11 @@ class No_Product {
 					$row['sci_name'] = $sci;
 					$row['sci_at']   = $when;
 				}
-				$cost = isset( $line['landed_per_fish'] ) && is_numeric( $line['landed_per_fish'] ) && (float) $line['landed_per_fish'] > 0 ? (float) $line['landed_per_fish'] : null;
+				$facts = self::line_facts( $line );
+				$cost  = $facts['cost'];
 				if ( null !== $cost && $when > $row['cost_at'] ) {
 					$row['cost']     = $cost;
-					$row['target']   = isset( $line['suggested_price'] ) && is_numeric( $line['suggested_price'] ) && (float) $line['suggested_price'] > 0 ? (float) $line['suggested_price'] : null;
+					$row['target']   = $facts['target'];
 					$row['cost_ref'] = $brief['ref'];
 					$row['cost_at']  = $when;
 				}
@@ -586,7 +619,14 @@ class No_Product {
 		}
 
 		foreach ( $stays as $stay ) {
-			if ( ! is_array( $stay ) || ( $only > 0 && $only !== (int) ( $stay['batch_order_id'] ?? 0 ) ) ) {
+			if ( ! is_array( $stay ) ) {
+				continue;
+			}
+			// Its fish order: the order of its line — or, for a group that stands for no line, the order its ref names.
+			$batch_id = (int) ( $stay['batch_order_id'] ?? 0 );
+			$named    = $batch_id > 0 ? null : self::named_order( $stay, $by_ref );
+			$of_id    = $batch_id > 0 ? $batch_id : ( $named ? (int) $named['id'] : 0 );
+			if ( $only > 0 && $only !== $of_id ) {
 				continue;
 			}
 			$state = self::stay_state( $stay, $alive );
@@ -601,8 +641,8 @@ class No_Product {
 					'name'       => (string) ( $stay['species'] ?? '' ),
 					'size_slug'  => (string) ( $stay['size_slug'] ?? '' ),
 					'size_label' => (string) ( $stay['size_label'] ?? '' ),
-					'order_id'   => (int) ( $stay['batch_order_id'] ?? 0 ),
-					'order_ref'  => (string) ( $stay['batch_order_ref'] ?? '' ),
+					'order_id'   => $of_id,
+					'order_ref'  => $named ? (string) $named['ref'] : (string) ( $stay['batch_order_ref'] ?? '' ),
 					'tank'       => $tank > 0 ? $tank : null,
 					'alive'      => (int) ( $stay['qty_live'] ?? 0 ),
 				);
@@ -611,6 +651,9 @@ class No_Product {
 
 			$key = self::stay_key( $stay, $index['names'], $line_keys );
 			if ( ! isset( $fish[ $key ] ) ) {
+				if ( $only > 0 && $named ) {
+					continue; // One order's rows are the fish its count counted: a group by hand joins one, and adds none.
+				}
 				$fish[ $key ] = self::blank_row( $key, $index );
 			}
 			$row               = &$fish[ $key ];
@@ -630,12 +673,25 @@ class No_Product {
 			if ( $of_line && (int) $of_line['order']['id'] > 0 && ! isset( $row['orders'][ (int) $of_line['order']['id'] ] ) ) {
 				$row['orders'][ (int) $of_line['order']['id'] ] = $of_line['order'];
 			}
-			if ( (int) ( $stay['batch_order_id'] ?? 0 ) > 0 && ! isset( $row['orders'][ (int) $stay['batch_order_id'] ] ) ) {
-				$row['orders'][ (int) $stay['batch_order_id'] ] = array(
-					'id'     => (int) $stay['batch_order_id'],
+			if ( $batch_id > 0 && ! isset( $row['orders'][ $batch_id ] ) ) {
+				$row['orders'][ $batch_id ] = array(
+					'id'     => $batch_id,
 					'ref'    => (string) ( $stay['batch_order_ref'] ?? '' ),
 					'status' => '',
 				);
+			}
+			// A group by hand: the order its ref names, and what that order's line of this fish knows.
+			$facts = $named && isset( $of_order[ (int) $named['id'] ][ $key ] ) ? $of_order[ (int) $named['id'] ][ $key ] : null;
+			if ( $named && ! isset( $row['orders'][ (int) $named['id'] ] ) ) {
+				$row['orders'][ (int) $named['id'] ] = $named;
+			}
+			if ( $facts && '' === $row['sci_name'] ) {
+				$row['sci_name'] = $facts['sci_name'];
+			}
+			if ( $facts && null === $row['cost'] && null !== $facts['cost'] ) {
+				$row['cost']     = $facts['cost'];
+				$row['target']   = $facts['target'];
+				$row['cost_ref'] = (string) $named['ref'];
 			}
 			self::add_size( $row, $stay );
 			if ( '' === $row['name'] ) {
@@ -678,6 +734,118 @@ class No_Product {
 			'fish'    => self::sort( $rows ),
 			'unknown' => self::sort_unknown( $unknown ),
 		);
+	}
+
+	/**
+	 * An order as a fish's row names it (pure).
+	 *
+	 * @param array $order id, ref, status.
+	 * @return array{id: int, ref: string, status: string}
+	 */
+	private static function order_brief( array $order ) {
+		return array(
+			'id'     => (int) ( $order['id'] ?? 0 ),
+			'ref'    => (string) ( $order['ref'] ?? '' ),
+			'status' => (string) ( $order['status'] ?? '' ),
+		);
+	}
+
+	/**
+	 * A fish order's ref as two spellings of it are held together (pure):
+	 * the case and the spaces around it aside.
+	 *
+	 * @param mixed $ref The ref.
+	 * @return string
+	 */
+	public static function ref_key( $ref ) {
+		return is_scalar( $ref ) ? strtolower( trim( (string) $ref ) ) : '';
+	}
+
+	/**
+	 * The fish order a group that stands for no order line names by its
+	 * own ref (pure) — the phone's Arrival of a fish picked as "on fish
+	 * order …" writes the ref, and the Stays tab lets it be typed.
+	 *
+	 * @param array   $stay   batch_order_id, order_ref.
+	 * @param array[] $by_ref ref_key() => the order (id, ref, status).
+	 * @return array|null The order, or null: the group has its line's order, no ref, or a ref no order at hand has.
+	 */
+	public static function named_order( array $stay, array $by_ref ) {
+		if ( (int) ( $stay['batch_order_id'] ?? 0 ) > 0 ) {
+			return null;
+		}
+		$ref = self::ref_key( $stay['order_ref'] ?? '' );
+		return '' !== $ref && isset( $by_ref[ $ref ] ) ? $by_ref[ $ref ] : null;
+	}
+
+	/**
+	 * The refs the groups by hand name and no order at hand has (pure):
+	 * what the list reads besides its orders, so that such a group still
+	 * names its fish order once that order is closed.
+	 *
+	 * @param array[] $stays  Open stays.
+	 * @param array[] $orders The orders at hand (ref).
+	 * @param int     $limit  At most this many refs.
+	 * @return string[] Refs as the stays spell them, one per order.
+	 */
+	public static function missing_refs( array $stays, array $orders, $limit = 200 ) {
+		$have = array();
+		foreach ( $orders as $order ) {
+			if ( is_array( $order ) ) {
+				$have[ self::ref_key( $order['ref'] ?? '' ) ] = true;
+			}
+		}
+		$refs = array();
+		foreach ( $stays as $stay ) {
+			if ( ! is_array( $stay ) || (int) ( $stay['batch_order_id'] ?? 0 ) > 0 ) {
+				continue;
+			}
+			$ref = self::ref_key( $stay['order_ref'] ?? '' );
+			if ( '' !== $ref && ! isset( $have[ $ref ] ) && ! isset( $refs[ $ref ] ) && count( $refs ) < (int) $limit ) {
+				$refs[ $ref ] = trim( (string) $stay['order_ref'] );
+			}
+		}
+		return array_values( $refs );
+	}
+
+	/**
+	 * What an order's line knows of its fish besides the name (pure).
+	 *
+	 * @param array $line sci_name, landed_per_fish, suggested_price (a resolved line; without, the two are null).
+	 * @return array{sci_name: string, cost: float|null, target: float|null}
+	 */
+	private static function line_facts( array $line ) {
+		return array(
+			'sci_name' => trim( (string) ( $line['sci_name'] ?? '' ) ),
+			'cost'     => isset( $line['landed_per_fish'] ) && is_numeric( $line['landed_per_fish'] ) && (float) $line['landed_per_fish'] > 0 ? (float) $line['landed_per_fish'] : null,
+			'target'   => isset( $line['suggested_price'] ) && is_numeric( $line['suggested_price'] ) && (float) $line['suggested_price'] > 0 ? (float) $line['suggested_price'] : null,
+		);
+	}
+
+	/**
+	 * Keep what a line knows of its fish under its order: the first line
+	 * of the fish, a later one filling what it left empty.
+	 *
+	 * @param array  $of_order Order id => fish key => line_facts() (by reference).
+	 * @param int    $order_id The order.
+	 * @param string $key      The fish key.
+	 * @param array  $line     The line.
+	 */
+	private static function note_line( array &$of_order, $order_id, $key, array $line ) {
+		$facts = self::line_facts( $line );
+		if ( ! isset( $of_order[ $order_id ][ $key ] ) ) {
+			$of_order[ $order_id ][ $key ] = $facts;
+			return;
+		}
+		$have = &$of_order[ $order_id ][ $key ];
+		if ( '' === $have['sci_name'] ) {
+			$have['sci_name'] = $facts['sci_name'];
+		}
+		if ( null === $have['cost'] && null !== $facts['cost'] ) {
+			$have['cost']   = $facts['cost'];
+			$have['target'] = $facts['target'];
+		}
+		unset( $have );
 	}
 
 	/**

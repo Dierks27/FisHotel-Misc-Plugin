@@ -2143,7 +2143,7 @@ class Store {
 			unset( $e );
 		}
 		if ( Order_Fish::stay_changes( $stay, $state ) ) {
-			self::clear_order_fish_cache(); // An unlisted fish came alive, is gone, or stands in another tank.
+			self::clear_order_fish_cache(); // A fish came alive, is gone, or stands in another tank (it may be an unlisted one).
 		}
 
 		return $state;
@@ -4499,7 +4499,8 @@ class Store {
 	 * Order headers, newest first.
 	 *
 	 * @param array $filters year (int), status (string), supplier (string), open (bool: every
-	 *                       status but closed), limit (int).
+	 *                       status but closed), refs (string[]: only the orders with these refs),
+	 *                       limit (int).
 	 * @return array[] Hydrated headers (+ line_count).
 	 */
 	public function orders( array $filters = array() ) {
@@ -4525,6 +4526,15 @@ class Store {
 		}
 		if ( ! empty( $filters['open'] ) ) {
 			$where[] = "o.status <> 'closed'"; // Draft, ordered or received: what "Fish with no product yet" reads by default.
+		}
+		if ( isset( $filters['refs'] ) ) {
+			// The orders some groups name by their ref ("Fish with no product yet"): no ref, no order.
+			$refs = array_values( array_unique( array_filter( array_map( 'trim', array_map( 'strval', array_filter( (array) $filters['refs'], 'is_scalar' ) ) ), 'strlen' ) ) );
+			if ( ! $refs ) {
+				return array();
+			}
+			$where[] = 'o.ref IN (' . implode( ',', array_fill( 0, count( $refs ), '%s' ) ) . ')';
+			$params  = array_merge( $params, $refs );
 		}
 		$params[] = isset( $filters['limit'] ) ? max( 1, min( self::ORDERS_LIMIT, (int) $filters['limit'] ) ) : self::ORDERS_LIMIT;
 

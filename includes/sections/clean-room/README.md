@@ -2095,8 +2095,13 @@ candidate cache for ten minutes and dropped with it by every product,
 species and alias save — and, alone, by every write that changes the
 answer: a fish order saved, imported into or deleted, its status
 changed (the check-in, a close), a line's fish corrected, a group
-checked in, identified, corrected, moved to another tank or emptied. A
-loss that leaves fish alive drops nothing. The voice parser's and the
+checked in, identified, corrected, moved to another tank or emptied —
+any named group, with or without a product on it: a group whose product
+is in the trash is an unlisted fish, and the rule
+(`Order_Fish::stay_changes()`) cannot know that without a read. A
+loss that leaves fish alive drops nothing. A product deleted for good —
+no trash, so nothing saves it — drops both through `deleted_post`
+(`Clean_Room::product_deleted()`; any other post deleted drops nothing). The voice parser's and the
 importer's candidates are as they were (products, Species rows, learned
 names), and so are the names the Requests section suggests to a
 customer: `Store::species_suggestions()` is unchanged, and nobody
@@ -2136,6 +2141,20 @@ Lines and stays are gathered into **fish** as the Stats gather lines
 with the same name —, else the name as typed, case and spacing aside. A
 stay goes with its order line while it carries the line's name. One row
 per fish, never one per line.
+
+A group **put in a tank by hand** stands for no order line — the phone's
+Arrival of a fish picked as "on fish order 2026-9" writes that ref on
+the group (`order_ref`), and the Stays tab's Edit lets one be typed. It
+is that order's all the same (`No_Product::named_order()`, the ref's
+case and the spaces around it aside): its row names the order, and takes
+the scientific name, the landed cost and the target price of the order's
+line of the same fish. On the list narrowed to one order it joins the
+fish that order's lines put there — its tank, its fish alive — and adds
+no row: the count beside the order counted the lines. An order that is
+not among the ones the list read — a closed one, by default — is read
+for it by its ref (`Store::orders()` with `refs`, one more read of
+orders whatever the groups, none when no group names such an order); a
+closed order's lines still make no row of their own.
 
 **The mark**, wherever the owner already looks — each for ONE read of
 the post statuses of the products involved (`Store::product_statuses()`),

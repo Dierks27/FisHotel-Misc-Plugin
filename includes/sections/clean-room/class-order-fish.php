@@ -468,19 +468,20 @@ class Order_Fish {
 
 	/**
 	 * Whether a stay as it was and as a replay left it changes the list:
-	 * an unlisted, named fish that came alive, is no longer alive, or
-	 * stands in another tank now. (A group with a product or a "??" group
-	 * is never in the list; a count that only went from 5 to 4 changes
-	 * nothing. A group whose product is in the trash IS in the list, and
-	 * this rule cannot know it without a read: its "in tank …" may be up
-	 * to the list's ten minutes old.)
+	 * a named fish that came alive, is no longer alive, or stands in
+	 * another tank now. (A "??" group is never in the list; a count that
+	 * only went from 5 to 4 changes nothing. A group that carries a
+	 * product is in the list when that product is in the trash or deleted
+	 * — the group is an unlisted fish then —, and this rule cannot know
+	 * that without a read: so a product on the group is no reason to keep
+	 * the list, and its "in tank …" is never the old tank's.)
 	 *
-	 * @param array $before The stay before: product_id, needs_id, qty_live, tank_id.
+	 * @param array $before The stay before: needs_id, qty_live, tank_id.
 	 * @param array $after  The replayed state: qty_live, tank_id.
 	 * @return bool
 	 */
 	public static function stay_changes( array $before, array $after ) {
-		if ( (int) ( $before['product_id'] ?? 0 ) > 0 || ! empty( $before['needs_id'] ) ) {
+		if ( ! empty( $before['needs_id'] ) ) {
 			return false;
 		}
 		$was = (int) ( $before['qty_live'] ?? 0 ) > 0;

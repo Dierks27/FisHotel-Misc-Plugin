@@ -29,6 +29,8 @@ require_once __DIR__ . '/wp-stubs.php';
 
 use FisHotel\Misc\Sections\Clean_Room\Admin_No_Product;
 use FisHotel\Misc\Sections\Clean_Room\Admin_Workbook;
+use FisHotel\Misc\Sections\Clean_Room\Clean_Room;
+use FisHotel\Misc\Sections\Clean_Room\Front_Desk;
 use FisHotel\Misc\Sections\Clean_Room\No_Product;
 use FisHotel\Misc\Sections\Clean_Room\Order_Fish;
 use FisHotel\Misc\Sections\Clean_Room\Orders;
@@ -412,6 +414,139 @@ $np_source = (string) file_get_contents( dirname( __DIR__ ) . '/class-no-product
 check( '… and those are the writes "Link to a product…" and "Start a draft product" make: nothing of the link goes around the Store', false !== strpos( $np_source, '$store->link_species_product( $species_id, $product_id )' ) && false !== strpos( $np_source, '$store->save_species(' ) && false !== strpos( $np_source, "\$store->update_line_fields( \$line_id, array( 'species_id' => \$species_id ) )" ) && false !== strpos( $np_source, 'Identify::stay(' ) && false === strpos( $np_source, '$wpdb' ) );
 $room_source = (string) file_get_contents( dirname( __DIR__ ) . '/class-clean-room.php' );
 check( 'a product saved in the shop — a draft made, a product moved to the trash or back — drops both kept lists', false !== strpos( $room_source, "add_action( 'save_post_product', array( Store::class, 'clear_species_cache' ), 10, 0 );" ) && 1 === preg_match( '/function clear_species_cache\(\) \{.*?self::clear_order_fish_cache\(\);\s*\}/s', $real_source ) );
+/* ------------------------------------------------------------------ */
+echo "6. A fish picked on the phone as \"on fish order …\": the list knows its fish order\n";
+
+/** A stand-in that notes which orders the list asked for. */
+class Fh_Together_Spy extends Fake_Store {
+	public $asked = array();
+
+	public function orders( array $filters = array() ) {
+		$this->asked[] = $filters;
+		return parent::orders( $filters );
+	}
+}
+
+$sea = new Fh_Together_Spy( array( 21 => 'Lined Test Wrasse' ) );
+$ten = fh_tg_save(
+	$sea,
+	array(
+		fh_tg_row( 'Pale Sample Tang', array( 'sci_name' => 'Samplus pallidus' ) ),
+		fh_tg_row( 'Lined Test Wrasse' ),
+	),
+	array( 'order_date' => '2026-11-10', 'ref' => '2026-10' )
+);
+$eleven = fh_tg_save(
+	$sea,
+	array(
+		fh_tg_row( 'Filimented Test Goby', array( 'sci_name' => 'Testus filum', 'qty_received' => '4' ) ),
+		fh_tg_row( 'Other Test Blenny', array( 'qty_received' => '6' ) ),
+	),
+	array( 'order_date' => '2026-11-12', 'received_date' => '2026-11-15', 'status' => 'received', 'ref' => '2026-11' )
+);
+$phone = static function ( $tank_number, $term, $qty ) use ( $sea, $today, $settings ) {
+	$picked = $sea->fish_search( $term, 8 )[0];
+	$done   = Front_Desk::perform(
+		'arrival',
+		array( 'store' => $sea, 'settings' => $settings, 'today' => $today, 'tank' => $sea->tank_by_number( $tank_number ), 'base' => array( 'actor_id' => 7, 'source' => 'qr' ) ),
+		array( 'species' => $picked['name'], 'product_id' => 0, 'qty' => $qty, 'order_ref' => (string) ( $picked['ref'] ?? '' ) )
+	);
+	return array( $picked, $done );
+};
+$page  = static function ( array $request ) use ( $sea, $today, $settings ) {
+	$data = Admin_No_Product::data( $sea, $request, $today, $settings );
+	return array_column( $data['rows'], null, 'key' );
+};
+$count = static function ( $order_id ) use ( $sea ) {
+	foreach ( Admin_No_Product::mark_orders( $sea, Admin_No_Product::open_orders( $sea ) ) as $order ) {
+		if ( (int) $order['id'] === (int) $order_id ) {
+			return (int) $order['no_product'];
+		}
+	}
+	return null;
+};
+
+list( $pale, $pale_done ) = $phone( 513, 'pale sample', 1 );
+list( $goby, $goby_done ) = $phone( 522, 'filimented', 2 );
+$pale_stay                = $sea->open_stays( array( 'species' => 'Pale Sample Tang', 'limit' => 5 ), $today, $settings )[0];
+check( 'the phone\'s Arrival of a fish picked as "on fish order 2026-10": the group carries that ref, and stands for no order line', empty( $pale_done['error'] ) && empty( $goby_done['error'] ) && 'on fish order 2026-10' === $pale['where'] && '2026-10' === $pale_stay['order_ref'] && null === $pale_stay['batch_order_id'] && null === $pale_stay['order_line_id'] );
+
+$sea->asked = array();
+$full       = $page( array() );
+$row        = $full['n:pale sample tang'] ?? array();
+check( 'the full list: that fish ONCE, with its fish order and its tank', isset( $full['n:pale sample tang'] ) && array( (int) $ten['order_id'] ) === array_column( $row['orders'], 'id' ) && array( 513 ) === $row['tanks'] && 1 === $row['alive'] && true === $row['in_tank'] && 1 === count( $row['stay_ids'] ) && 1 === count( $row['line_ids'] ) );
+check( '… no order is read for it while its fish order is at hand: the same reads as before', array() === array_values( array_filter( $sea->asked, static function ( $filters ) { return isset( $filters['refs'] ); } ) ) );
+
+$narrow = $page( array( 'order' => (string) $ten['order_id'] ) );
+$row    = $narrow['n:pale sample tang'] ?? array();
+check( 'the list narrowed to that fish order ("… without a product →"): the same fish IN ITS TANK — it was "not in a tank" there', isset( $narrow['n:pale sample tang'] ) && true === $row['in_tank'] && array( 513 ) === $row['tanks'] && 1 === $row['alive'] && array( (int) $ten['order_id'] ) === array_column( $row['orders'], 'id' ) );
+check( '… and no group of another fish order: the goby of 2026-11 is not there', ! isset( $narrow['n:filimented test goby'] ) && isset( $page( array( 'order' => (string) $eleven['order_id'] ) )['n:filimented test goby'] ) && array( 522 ) === $page( array( 'order' => (string) $eleven['order_id'] ) )['n:filimented test goby']['tanks'] );
+
+// A ref typed on a group whose fish that order never named: the order's count counted its lines.
+$stray = $sea->create_stay( array( 'species' => 'Stray Test Chromis', 'checkin_date' => $today, 'tank_id' => (int) $sea->tank_by_number( 512 )['id'], 'source' => 'manual', 'order_ref' => ' 2026-10 ' ) );
+$sea->record_event( $stray, array( 'type' => 'arrival', 'qty' => 2, 'to_tank_id' => (int) $sea->tank_by_number( 512 )['id'], 'event_at' => Store::site_noon_utc( $today ) ), $today, $settings );
+$full   = $page( array() );
+$narrow = $page( array( 'order' => (string) $ten['order_id'] ) );
+check( 'a group that names the fish order by hand, of a fish the order does not have: on the full list with that order — and the narrowed list still has exactly the fish the order\'s count counted', isset( $full['n:stray test chromis'] ) && array( (int) $ten['order_id'] ) === array_column( $full['n:stray test chromis']['orders'], 'id' ) && ! isset( $narrow['n:stray test chromis'] ) && count( $narrow ) === $count( $ten['order_id'] ) && 1 === count( $narrow ) );
+
+$before = $page( array() )['n:filimented test goby'] ?? array();
+$sea->update_order_fields( (int) $eleven['order_id'], array( 'status' => 'closed' ) );
+$sea->asked = array();
+$after      = $page( array() )['n:filimented test goby'] ?? array();
+$read       = array_values( array_filter( $sea->asked, static function ( $filters ) { return isset( $filters['refs'] ); } ) );
+check( 'while its fish order is open the goby\'s row has the order, its landed cost per fish and its scientific name', $before && array( '2026-11' ) === array_column( $before['orders'], 'ref' ) && null !== $before['cost'] && $before['cost'] > 0 && '2026-11' === $before['cost_ref'] && 'Testus filum' === $before['sci_name'] );
+check( 'the fish order CLOSED, the group still alive: the row still names fish order 2026-11 — it showed none, while the Stays tab said 2026-11', $after && array( array( (int) $eleven['order_id'], '2026-11', 'closed' ) ) === array_map( 'array_values', $after['orders'] ) && array( 522 ) === $after['tanks'] && 2 === $after['alive'] );
+check_same( '… with the landed cost and the target price that order\'s line of the fish has, and its scientific name — not "landed cost not known yet"', array( $before['cost'], $before['target'], '2026-11', 'Testus filum' ), array( $after['cost'], $after['target'], $after['cost_ref'], $after['sci_name'] ) );
+check( '… the closed order\'s lines make no row of their own: the blenny that only that order names is not on the list', ! isset( $page( array() )['n:other test blenny'] ) && array() === $after['line_ids'] );
+check_same( '… read in ONE more read of orders, by the refs the groups name and no open order has', array( array( 'refs' => array( '2026-11' ) ) ), $read );
+
+check_same( 'which refs are asked for (pure): a group by hand whose ref no order at hand has — each once, as spelled, the case and the spaces aside; never a group that has its line\'s order, or no ref', array( '2025-4', 'T-9' ), No_Product::missing_refs( array( array( 'order_ref' => ' 2025-4 ' ), array( 'order_ref' => '2025-4' ), array( 'order_ref' => 't-9', 'batch_order_id' => 6 ), array( 'order_ref' => 'T-9' ), array( 'order_ref' => '2026-10' ), array( 'order_ref' => null ), array( 'order_ref' => '' ), 'x' ), array( array( 'ref' => '2026-10' ) ) ) );
+check( '… capped', 1 === count( No_Product::missing_refs( array( array( 'order_ref' => 'a' ), array( 'order_ref' => 'b' ) ), array(), 1 ) ) );
+check( 'which order a group names (pure): by its own ref when it stands for no line — never over its line\'s order, never an order nobody handed in', array( 'id' => 4, 'ref' => 'T-4', 'status' => 'received' ) === No_Product::named_order( array( 'order_ref' => ' t-4' ), array( 't-4' => array( 'id' => 4, 'ref' => 'T-4', 'status' => 'received' ) ) ) && null === No_Product::named_order( array( 'order_ref' => 'T-4', 'batch_order_id' => 9 ), array( 't-4' => array( 'id' => 4, 'ref' => 'T-4', 'status' => '' ) ) ) && null === No_Product::named_order( array( 'order_ref' => 'T-5' ), array( 't-4' => array( 'id' => 4, 'ref' => 'T-4', 'status' => '' ) ) ) && null === No_Product::named_order( array(), array() ) );
+
+$unknown = No_Product::gather( array( array( 'id' => 4, 'ref' => 'T-4', 'status' => 'received', 'lines' => array() ) ), array( array( 'id' => 8, 'species' => '?? small goby', 'needs_id' => true, 'qty_live' => 2, 'tank_number' => 311, 'order_ref' => 'T-4' ) ) )['unknown'];
+check( 'a "??" group that names its fish order by a ref: listed under "Not identified yet" with that order', 1 === count( $unknown ) && 4 === $unknown[0]['order_id'] && 'T-4' === $unknown[0]['order_ref'] && 311 === $unknown[0]['tank'] );
+
+$db->queries = array();
+$real->orders( array( 'refs' => array( '2026-11', ' 2025-4 ', '2026-11', '', array( 'x' ) ) ) );
+$asked = $db->queries;
+check( 'the real Store reads those orders in one query, by their refs', 1 === count( $asked ) && false !== strpos( $asked[0], 'o.ref IN (2026-11,2025-4)' ) );
+$db->queries = array();
+check( '… and asks nothing when no ref is left', array() === $real->orders( array( 'refs' => array( ' ', '' ) ) ) && array() === $db->queries );
+
+/* ------------------------------------------------------------------ */
+echo "7. A group whose product is in the trash, or deleted for good: never stale in the search\n";
+
+$trashed = $world->fish_search( 'binned test', 8 );
+$binned  = $world->open_stays( array( 'species' => 'Binned Test Puffer', 'limit' => 5 ), $today, $settings )[0];
+$world->record_event( (int) $binned['id'], array( 'type' => 'move', 'from_tank_id' => (int) $world->tank_by_number( 122 )['id'], 'to_tank_id' => (int) $world->tank_by_number( 111 )['id'], 'event_at' => Store::site_noon_utc( $today ) ), $today, $settings );
+$moved = $world->fish_search( 'binned test', 8 );
+check( 'the group whose product is in the trash, moved to another tank: the search says the new tank', 28 === $binned['product_id'] && 1 === count( $trashed ) && 'in tank 122' === $trashed[0]['where'] && 1 === count( $moved ) && 'in tank 111' === $moved[0]['where'] );
+check( '… and the rule that drops the search\'s kept list says so for a group that carries a product: it cannot know the product is in the trash', true === Order_Fish::stay_changes( array( 'product_id' => 28, 'qty_live' => 2, 'tank_id' => 1 ), array( 'qty_live' => 2, 'tank_id' => 2 ) ) && true === Order_Fish::stay_changes( array( 'product_id' => 28, 'qty_live' => 0, 'tank_id' => 1 ), array( 'qty_live' => 2, 'tank_id' => 1 ) ) && false === Order_Fish::stay_changes( array( 'product_id' => 28, 'qty_live' => 3, 'tank_id' => 1 ), array( 'qty_live' => 2, 'tank_id' => 1 ) ) && false === Order_Fish::stay_changes( array( 'needs_id' => 1, 'qty_live' => 0, 'tank_id' => 1 ), array( 'qty_live' => 2, 'tank_id' => 2 ) ) );
+
+$both_kept = static function () {
+	set_transient( Store::SPECIES_TRANSIENT, array( 'kept' ), 600 );
+	set_transient( Store::ORDER_FISH_TRANSIENT, array( 'kept' ), 600 );
+};
+$any_kept  = static function () {
+	return array( false !== get_transient( Store::SPECIES_TRANSIENT ), false !== get_transient( Store::ORDER_FISH_TRANSIENT ) );
+};
+check( 'a product deleted for good (no trash) is saved by nothing — WordPress says "deleted_post", and the section listens', false !== strpos( $room_source, "add_action( 'deleted_post', array( self::class, 'product_deleted' ), 10, 2 );" ) );
+$both_kept();
+Clean_Room::product_deleted( 14, (object) array( 'ID' => 14, 'post_type' => 'product' ) );
+check_same( '… a product deleted: both kept lists are dropped — its fish is found as the unlisted fish in its tank at once', array( false, false ), $any_kept() );
+$both_kept();
+Clean_Room::product_deleted( 15, (object) array( 'ID' => 15, 'post_type' => 'shop_order' ) );
+Clean_Room::product_deleted( 16, (object) array( 'ID' => 16, 'post_type' => 'revision' ) );
+check_same( '… any other post deleted (a shop order, a revision): both kept', array( true, true ), $any_kept() );
+Clean_Room::product_deleted( 17 );
+check_same( '… a WordPress that hands no post over: dropped, to be safe', array( false, false ), $any_kept() );
+$GLOBALS['fh_actions']['deleted_post'] = array( array( array( Clean_Room::class, 'product_deleted' ), 2 ) );
+$both_kept();
+do_action( 'deleted_post', 14, (object) array( 'ID' => 14, 'post_type' => 'product' ) );
+check_same( '… through the hook as WordPress fires it', array( false, false ), $any_kept() );
+unset( $GLOBALS['fh_actions']['deleted_post'] );
+
 unset( $GLOBALS['wpdb'] );
 
 fh_finish();
