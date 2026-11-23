@@ -13,6 +13,10 @@
  *                       the line — and that product still exists;
  *   an open stay        has a product when its own product link points at
  *                       a product that still exists;
+ *   a closed order      is history, and nothing here writes on it: a line
+ *                       of one that was only TYPED with a name of the
+ *                       species list reads its product through the row
+ *                       of that name (through_list());
  *   "still exists"      a product in the trash, or deleted, is none
  *                       (alive()). A DRAFT is a product: the owner is
  *                       working on it;
@@ -26,7 +30,10 @@
  * list row — the line's own, or the row with the same name —, else the
  * name as typed, case and spacing aside. A stay goes with its order line
  * while it still carries the line's name, else by its own name. One row
- * per fish (gather()), never one per line.
+ * per fish (gather()), never one per line. An order's own count and its
+ * lines' tags go by the same gathering: a line whose group in the tank
+ * lacks the link is marked too, so the count beside a fish order is the
+ * list narrowed to that order.
  *
  * What matters NOW (is_current(), gather() without closed_too): a line of
  * a fish order that is a draft, ordered or received — or of a closed one
@@ -39,9 +46,12 @@
  *   link()        the species-list row of the fish (the one it has, else
  *                 a new one under the name it was typed with) is linked to
  *                 the product — Store::link_species_product(), the Species
- *                 tab's own "Link product" —, every line of the fish typed
- *                 with the row's name gets the row's id, so the line reads
- *                 the product through it, and every open stay gets the
+ *                 tab's own "Link product" —, every line of the fish on an
+ *                 order that is NOT closed, typed with the row's name,
+ *                 gets the row's id, so the line reads the product through
+ *                 it (a closed order's line is left as it is: the row's
+ *                 per box and group would come with the id and rewrite the
+ *                 order's numbers), and every open stay gets the
  *                 product link through Identify::stay(), which writes the
  *                 link and nothing else when the name and the size are
  *                 unchanged (no event, no label, the line untouched). The
@@ -51,10 +61,12 @@
  *                 (Species::merge_candidates()).
  *   draft_plan()  what a DRAFT product for the fish is made of — the name,
  *                 the scientific name, the fish category, one variation
- *                 per size seen on its lines and stays, the planned price
- *                 typed on the order or none (never a guessed one) — and
- *                 draft_decision(): a second click opens the first product
- *                 instead of making a second.
+ *                 per size seen on its lines and stays, each at the planned
+ *                 price typed for THAT size or at none (never a guessed
+ *                 one) — and draft_decision(): a second click opens the
+ *                 first product instead of making a second; a product the
+ *                 shop already has under the fish's name, in whatever
+ *                 category, is never doubled (the act 'twin').
  *
  * Nothing here touches the database or WooCommerce: link() takes the store it
  * writes to, like Identify::stay(); the product itself is created by
@@ -240,21 +252,86 @@ class No_Product {
 	}
 
 	/**
+	 * The species list's products by name (pure): the key of a row's name
+	 * => the product the row is linked to, for the rows that have one.
+	 *
+	 * @param array[] $species Species rows (id, name, product_id).
+	 * @return array<string, int>
+	 */
+	public static function listed_products( array $species ) {
+		$out = array();
+		foreach ( $species as $row ) {
+			$key = is_array( $row ) ? Species::key( (string) ( $row['name'] ?? '' ) ) : '';
+			if ( '' !== $key && ! isset( $out[ $key ] ) && (int) ( $row['product_id'] ?? 0 ) > 0 ) {
+				$out[ $key ] = (int) $row['product_id'];
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * A line as the rule reads it (pure). A closed order is history:
+	 * "Link to a product…" never writes on its lines — the species row's
+	 * per box and group would come with the row's id and change what the
+	 * order cost. So a closed order's line that was only TYPED with a name
+	 * of the species list (it carries no row of its own) reads its product
+	 * through the row of that name. Every other line is returned as it is.
+	 *
+	 * @param array              $order  The line's order (status).
+	 * @param array              $line   The line.
+	 * @param array<string, int> $listed listed_products().
+	 * @return array The line.
+	 */
+	public static function through_list( array $order, array $line, array $listed ) {
+		if ( ! $listed || 'closed' !== (string) ( $order['status'] ?? '' ) || (int) ( $line['species_id'] ?? 0 ) > 0 || (int) ( $line['species_product_id'] ?? 0 ) > 0 ) {
+			return $line;
+		}
+		$key = Species::key( (string) ( $line['species'] ?? '' ) );
+		if ( isset( $listed[ $key ] ) ) {
+			$line['species_product_id'] = (int) $listed[ $key ];
+		}
+		return $line;
+	}
+
+	/**
+	 * Whether a line's own group in a tank lacks a product (pure): the
+	 * line was checked in, the group is still open and still carries the
+	 * line's name — it is the line's fish —, and its own product link
+	 * points at nothing that exists. The line itself may have a product by
+	 * its name all the same; the list then offers "Link to it".
+	 *
+	 * @param array      $line  The line (stay_id, stay_status, stay_species, stay_product_id).
+	 * @param array|null $alive alive().
+	 * @return bool
+	 */
+	public static function group_lacks( array $line, $alive = null ) {
+		$status = isset( $line['stay_status'] ) && null !== $line['stay_status'] ? (string) $line['stay_status'] : '';
+		if ( empty( $line['stay_id'] ) || '' === $status || 'closed' === $status || ! isset( $line['stay_species'] ) || self::is_unknown( $line ) ) {
+			return false;
+		}
+		return Identify::same_fish( $line['species'] ?? '', $line['stay_species'] ) && ! self::exists( $line['stay_product_id'] ?? 0, $alive );
+	}
+
+	/**
 	 * Every product id the rule has to ask about, for ONE read of their
 	 * statuses (pure).
 	 *
-	 * @param array[] $orders Orders, each with 'lines'.
-	 * @param array[] $stays  Stays.
-	 * @param array   $names  Shop_Price::name_index().
+	 * @param array[]            $orders Orders, each with 'lines'.
+	 * @param array[]            $stays  Stays.
+	 * @param array              $names  Shop_Price::name_index().
+	 * @param array<string, int> $listed listed_products().
 	 * @return int[]
 	 */
-	public static function product_ids( array $orders, array $stays, array $names ) {
+	public static function product_ids( array $orders, array $stays, array $names, array $listed = array() ) {
 		$ids = array();
 		foreach ( $orders as $order ) {
 			foreach ( (array) ( $order['lines'] ?? array() ) as $line ) {
-				$id = is_array( $line ) && ! self::is_unknown( $line ) ? Shop_Price::product_of( $line, $names ) : null;
+				$id = is_array( $line ) && ! self::is_unknown( $line ) ? Shop_Price::product_of( self::through_list( (array) $order, $line, $listed ), $names ) : null;
 				if ( null !== $id ) {
 					$ids[ (int) $id ] = true;
+				}
+				if ( is_array( $line ) && (int) ( $line['stay_product_id'] ?? 0 ) > 0 ) {
+					$ids[ (int) $line['stay_product_id'] ] = true;
 				}
 			}
 		}
@@ -295,17 +372,24 @@ class No_Product {
 
 	/**
 	 * The lines of an order that are marked "no product yet" (pure): a
-	 * known fish, no product, and the line matters now.
+	 * known fish that matters now, and no product — on the line itself,
+	 * or on its own group in the tank (group_lacks()): the list shows that
+	 * fish for this order too.
 	 *
-	 * @param array      $order The order with its lines.
-	 * @param array      $names Shop_Price::name_index().
-	 * @param array|null $alive alive().
+	 * @param array              $order  The order with its lines.
+	 * @param array              $names  Shop_Price::name_index().
+	 * @param array|null         $alive  alive().
+	 * @param array<string, int> $listed listed_products().
 	 * @return array<int, bool> Index of the line in $order['lines'] => true.
 	 */
-	public static function marked_lines( array $order, array $names, $alive = null ) {
+	public static function marked_lines( array $order, array $names, $alive = null, array $listed = array() ) {
 		$out = array();
 		foreach ( array_values( (array) ( $order['lines'] ?? array() ) ) as $index => $line ) {
-			if ( is_array( $line ) && self::is_current( $order, $line ) && 'none' === self::line_state( $line, $names, $alive ) ) {
+			if ( ! is_array( $line ) || ! self::is_current( $order, $line ) ) {
+				continue;
+			}
+			$state = self::line_state( self::through_list( $order, $line, $listed ), $names, $alive );
+			if ( 'none' === $state || ( 'linked' === $state && self::group_lacks( $line, $alive ) ) ) {
 				$out[ $index ] = true;
 			}
 		}
@@ -320,12 +404,13 @@ class No_Product {
 	 * @param array              $names   Shop_Price::name_index().
 	 * @param array|null         $alive   alive().
 	 * @param array<string, int> $species Stats::species_index()['names'].
+	 * @param array<string, int> $listed  listed_products().
 	 * @return int
 	 */
-	public static function order_count( array $order, array $names, $alive = null, array $species = array() ) {
+	public static function order_count( array $order, array $names, $alive = null, array $species = array(), array $listed = array() ) {
 		$lines = array_values( (array) ( $order['lines'] ?? array() ) );
 		$fish  = array();
-		foreach ( array_keys( self::marked_lines( $order, $names, $alive ) ) as $index ) {
+		foreach ( array_keys( self::marked_lines( $order, $names, $alive, $listed ) ) as $index ) {
 			$fish[ Stats::fish_key( $lines[ $index ], $species ) ] = true;
 		}
 		return count( $fish );
@@ -339,21 +424,22 @@ class No_Product {
 	 * @param array              $names   Shop_Price::name_index().
 	 * @param array|null         $alive   alive().
 	 * @param array<string, int> $species Stats::species_index()['names'].
+	 * @param array<string, int> $listed  listed_products().
 	 * @return array[]
 	 */
-	public static function mark_orders( array $orders, array $names, $alive = null, array $species = array() ) {
+	public static function mark_orders( array $orders, array $names, $alive = null, array $species = array(), array $listed = array() ) {
 		foreach ( $orders as $o => $order ) {
 			if ( ! is_array( $order ) ) {
 				continue;
 			}
-			$marked = self::marked_lines( $order, $names, $alive );
+			$marked = self::marked_lines( $order, $names, $alive, $listed );
 			foreach ( array_values( (array) ( $order['lines'] ?? array() ) ) as $index => $line ) {
 				if ( is_array( $line ) ) {
 					$orders[ $o ]['lines'][ $index ]               = $line;
 					$orders[ $o ]['lines'][ $index ]['no_product'] = isset( $marked[ $index ] );
 				}
 			}
-			$orders[ $o ]['no_product'] = self::order_count( $order, $names, $alive, $species );
+			$orders[ $o ]['no_product'] = self::order_count( $order, $names, $alive, $species, $listed );
 		}
 		return $orders;
 	}
@@ -368,8 +454,9 @@ class No_Product {
 	 *
 	 * By default only what matters now: the lines is_current() keeps, and
 	 * the open stays handed in. With closed_too every line of every order
-	 * handed in. With order_id only that order's lines (closed or not) and
-	 * the stays checked in from it.
+	 * handed in. With order_id only that order's lines — what matters now
+	 * of them, or with closed_too all — and the stays checked in from it:
+	 * the rows the count beside that order counted.
 	 *
 	 * @param array[] $orders Orders with their lines — resolved (Orders::resolve(): landed_per_fish,
 	 *                        suggested_price) for the cost and the target price; without, those are null.
@@ -379,21 +466,24 @@ class No_Product {
 	 *                        closed_too (bool), order_id (int).
 	 * @return array{fish: array[], unknown: array[]} fish: key, name, sci_name, species_id, sizes
 	 *               (slug, label), orders (id, ref, status), tanks (numbers), alive, in_tank, line_ids,
-	 *               stay_ids, cost (float|null), target (float|null), cost_ref, planned (float|null),
-	 *               candidate (a product the species list or the shop already has under this name:
-	 *               id|null). unknown: kind (stay|line), id, name, size_label, order_id, order_ref,
-	 *               tank, alive, size_slug.
+	 *               stay_ids, cost (float|null), target (float|null), cost_ref, planned (float|null — the
+	 *               newest planned price), planned_sizes (the planned price typed for each size: slug ('' =
+	 *               a line without a size), label, price), candidate (a product the species list or the
+	 *               shop already has under this name: id|null). unknown: kind (stay|line), id, name,
+	 *               size_label, order_id, order_ref, tank, alive, size_slug.
 	 */
 	public static function gather( array $orders, array $stays, array $ctx = array() ) {
 		$names      = isset( $ctx['names'] ) && is_array( $ctx['names'] ) ? $ctx['names'] : array();
 		$alive      = array_key_exists( 'alive', $ctx ) && is_array( $ctx['alive'] ) ? $ctx['alive'] : null;
 		$index      = Stats::species_index( isset( $ctx['species'] ) && is_array( $ctx['species'] ) ? $ctx['species'] : array() );
+		$listed     = self::listed_products( $index['rows'] );
 		$closed_too = ! empty( $ctx['closed_too'] );
 		$only       = isset( $ctx['order_id'] ) ? (int) $ctx['order_id'] : 0;
 
 		$fish      = array();
 		$unknown   = array();
 		$line_keys = array();
+		$line_info = array(); // Order line id => what a group in a tank takes from its line: the scientific name, the order.
 		$open_line = array(); // Order line id => true: an open stay stands for it.
 		foreach ( $stays as $stay ) {
 			if ( is_array( $stay ) && (int) ( $stay['order_line_id'] ?? 0 ) > 0 ) {
@@ -416,13 +506,18 @@ class No_Product {
 				if ( ! is_array( $line ) ) {
 					continue;
 				}
+				$line    = self::through_list( $order, $line, $listed );
 				$line_id = (int) ( $line['id'] ?? 0 );
 				$state   = self::line_state( $line, $names, $alive );
 				$key     = 'unknown' === $state ? '' : Stats::fish_key( $line, $index['names'] );
 				if ( '' !== $key && $line_id > 0 ) {
 					$line_keys[ $line_id ] = array( $key, (string) ( $line['species'] ?? '' ) );
+					$line_info[ $line_id ] = array(
+						'sci_name' => trim( (string) ( $line['sci_name'] ?? '' ) ),
+						'order'    => $brief,
+					);
 				}
-				if ( 'linked' === $state || ( $only > 0 ? $only !== $order_id : ( ! $closed_too && ! self::is_current( $order, $line ) ) ) ) {
+				if ( 'linked' === $state || ( $only > 0 && $only !== $order_id ) || ( ! $closed_too && ! self::is_current( $order, $line ) ) ) {
 					continue;
 				}
 				if ( 'unknown' === $state ) {
@@ -469,11 +564,22 @@ class No_Product {
 					$row['cost_at']  = $when;
 				}
 				// A price typed with the pencil on an order that is still open: a planned price. (A
-				// closed order's price is the one it was closed with, which nobody planned.)
+				// closed order's price is the one it was closed with, which nobody planned.) It was
+				// typed on a line of ONE size, and is the planned price of that size only.
 				$typed = isset( $line['worth'] ) && is_numeric( $line['worth'] ) ? (float) $line['worth'] : 0.0;
-				if ( $typed > 0 && 'closed' !== $brief['status'] && $when > $row['planned_at'] ) {
-					$row['planned']    = $typed;
-					$row['planned_at'] = $when;
+				if ( $typed > 0 && 'closed' !== $brief['status'] ) {
+					if ( $when > $row['planned_at'] ) {
+						$row['planned']    = $typed;
+						$row['planned_at'] = $when;
+					}
+					$slug = isset( $line['size_slug'] ) && null !== $line['size_slug'] ? trim( (string) $line['size_slug'] ) : '';
+					if ( ! isset( $row['planned_sizes'][ $slug ] ) || $when > $row['planned_sizes'][ $slug ]['at'] ) {
+						$row['planned_sizes'][ $slug ] = array(
+							'slug'  => $slug,
+							'price' => $typed,
+							'at'    => $when,
+						);
+					}
 				}
 				unset( $row );
 			}
@@ -514,6 +620,16 @@ class No_Product {
 			if ( $tank > 0 ) {
 				$row['tanks'][ $tank ] = $tank;
 			}
+			// Its own line, when it is at hand and the group still is the line's fish: the line may have a
+			// product by its name (it is on no row then), and still knows the scientific name and the order.
+			$line_id = (int) ( $stay['order_line_id'] ?? 0 );
+			$of_line = $line_id > 0 && isset( $line_info[ $line_id ], $line_keys[ $line_id ] ) && $line_keys[ $line_id ][0] === $key ? $line_info[ $line_id ] : null;
+			if ( $of_line && '' === $row['sci_name'] ) {
+				$row['sci_name'] = $of_line['sci_name'];
+			}
+			if ( $of_line && (int) $of_line['order']['id'] > 0 && ! isset( $row['orders'][ (int) $of_line['order']['id'] ] ) ) {
+				$row['orders'][ (int) $of_line['order']['id'] ] = $of_line['order'];
+			}
 			if ( (int) ( $stay['batch_order_id'] ?? 0 ) > 0 && ! isset( $row['orders'][ (int) $stay['batch_order_id'] ] ) ) {
 				$row['orders'][ (int) $stay['batch_order_id'] ] = array(
 					'id'     => (int) $stay['batch_order_id'],
@@ -538,6 +654,19 @@ class No_Product {
 		foreach ( $fish as $row ) {
 			$row['candidate'] = self::candidate( $row, $index, $names, $alive );
 			$row['sizes']     = self::order_sizes( $row['sizes'], $sizes );
+			$seen             = array_column( $row['sizes'], 'label', 'slug' );
+			// The planned prices in the sizes' own order, the one typed on a line without a size last.
+			$planned = array();
+			foreach ( array_merge( array_column( $row['sizes'], 'slug' ), array( '' ) ) as $slug ) {
+				if ( isset( $row['planned_sizes'][ $slug ] ) ) {
+					$planned[] = array(
+						'slug'  => (string) $slug,
+						'label' => '' !== (string) $slug && isset( $seen[ $slug ] ) ? (string) $seen[ $slug ] : '',
+						'price' => (float) $row['planned_sizes'][ $slug ]['price'],
+					);
+				}
+			}
+			$row['planned_sizes'] = $planned;
 			$row['orders']    = array_values( $row['orders'] );
 			sort( $row['tanks'] );
 			$row['tanks'] = array_values( $row['tanks'] );
@@ -563,26 +692,27 @@ class No_Product {
 		$species_id = 0 === strpos( $key, 's:' ) ? (int) substr( $key, 2 ) : 0;
 		$listed     = $species_id > 0 && isset( $index['rows'][ $species_id ] ) ? (array) $index['rows'][ $species_id ] : array();
 		return array(
-			'key'        => (string) $key,
-			'name'       => '',
-			'sci_name'   => trim( (string) ( $listed['sci_name'] ?? '' ) ),
-			'species_id' => $species_id > 0 ? $species_id : null,
-			'sizes'      => array(),
-			'orders'     => array(),
-			'tanks'      => array(),
-			'alive'      => 0,
-			'in_tank'    => false,
-			'line_ids'   => array(),
-			'stay_ids'   => array(),
-			'cost'       => null,
-			'target'     => null,
-			'cost_ref'   => '',
-			'planned'    => null,
-			'candidate'  => null,
-			'named_at'   => '',
-			'sci_at'     => '',
-			'cost_at'    => '',
-			'planned_at' => '',
+			'key'           => (string) $key,
+			'name'          => '',
+			'sci_name'      => trim( (string) ( $listed['sci_name'] ?? '' ) ),
+			'species_id'    => $species_id > 0 ? $species_id : null,
+			'sizes'         => array(),
+			'orders'        => array(),
+			'tanks'         => array(),
+			'alive'         => 0,
+			'in_tank'       => false,
+			'line_ids'      => array(),
+			'stay_ids'      => array(),
+			'cost'          => null,
+			'target'        => null,
+			'cost_ref'      => '',
+			'planned'       => null,
+			'planned_sizes' => array(),
+			'candidate'     => null,
+			'named_at'      => '',
+			'sci_at'        => '',
+			'cost_at'       => '',
+			'planned_at'    => '',
 		);
 	}
 
@@ -840,13 +970,17 @@ class No_Product {
 	 * through Identify::stay() — update_stay_fields().
 	 *
 	 * The lines: one that carries the row's id already follows by itself;
-	 * one typed with the row's name gets the row's id. The stays: the
-	 * product link, through Identify::stay() with the stay's own name and
-	 * size — which writes the link alone.
+	 * one typed with the row's name gets the row's id — unless its order
+	 * is closed. A closed order is history and is not written on: the
+	 * row's per box and group would come with the id and change what that
+	 * order cost and where the Stats count it. Such a line reads the
+	 * product through the row of its name instead (through_list()). The
+	 * stays: the product link, through Identify::stay() with the stay's
+	 * own name and size — which writes the link alone.
 	 *
 	 * @param object  $store      Store or stand-in.
 	 * @param array   $fish       The fish's row (find()): key, name, sci_name, species_id.
-	 * @param array[] $lines      Every line of the fish (id, species_id, species), closed orders included.
+	 * @param array[] $lines      Every line of the fish (id, species_id, species, order_status), closed orders included.
 	 * @param array[] $stays      Every open stay of the fish (hydrated).
 	 * @param int     $product_id The product — the caller has checked that it exists.
 	 * @param array   $ctx        today, settings, actor_id, source (as Identify::stay()).
@@ -899,7 +1033,10 @@ class No_Product {
 
 		foreach ( $lines as $line ) {
 			$line_id = is_array( $line ) ? (int) ( $line['id'] ?? 0 ) : 0;
-			if ( $line_id > 0 && (int) ( $line['species_id'] ?? 0 ) !== $species_id && ! self::is_unknown( $line ) && $store->update_line_fields( $line_id, array( 'species_id' => $species_id ) ) ) {
+			if ( $line_id <= 0 || 'closed' === (string) ( $line['order_status'] ?? '' ) ) {
+				continue; // A closed order's line is never written on.
+			}
+			if ( (int) ( $line['species_id'] ?? 0 ) !== $species_id && ! self::is_unknown( $line ) && $store->update_line_fields( $line_id, array( 'species_id' => $species_id ) ) ) {
 				$out['lines'][] = $line_id;
 			}
 		}
@@ -929,6 +1066,56 @@ class No_Product {
 		}
 
 		$out['ok'] = true;
+		return $out;
+	}
+
+	/**
+	 * The open stays of a fish follow its species-list row from one
+	 * product to another (0 = to none): when the Species tab's "Link
+	 * product" changes — or removes — a row's product, the groups in the
+	 * tanks that carried the OLD product go with it, so a wrong pick is
+	 * undone in one place. A group linked to some other product, or to
+	 * none, is left as it is. Through Identify::stay() with the stay's own
+	 * name and size: the link alone is written — no event, no label.
+	 *
+	 * @param object  $store      Store or stand-in.
+	 * @param array[] $stays      Open stays of the fish (hydrated).
+	 * @param int     $from       The product the row was linked to.
+	 * @param int     $to         The product it is linked to now (0 = none).
+	 * @param int     $species_id The row.
+	 * @param array   $ctx        today, settings, actor_id, source (as Identify::stay()).
+	 * @return int[] The stays that followed.
+	 */
+	public static function relink_stays( $store, array $stays, $from, $to, $species_id, array $ctx = array() ) {
+		$from = (int) $from;
+		$to   = max( 0, (int) $to );
+		$out  = array();
+		if ( $from <= 0 || $from === $to ) {
+			return $out;
+		}
+		foreach ( $stays as $stay ) {
+			if ( ! is_array( $stay ) || self::is_unknown( $stay ) || (int) ( $stay['product_id'] ?? 0 ) !== $from ) {
+				continue;
+			}
+			$size = isset( $stay['size_slug'] ) && '' !== (string) $stay['size_slug'] ? (string) $stay['size_slug'] : null;
+			$done = Identify::stay(
+				$store,
+				$stay,
+				array(
+					'name'       => (string) ( $stay['species'] ?? '' ),
+					'unknown'    => false,
+					'product_id' => $to,
+					'species_id' => (int) $species_id,
+					'sci_name'   => null,
+					'size_slug'  => $size,
+					'size_label' => null !== $size && isset( $stay['size_label'] ) ? (string) $stay['size_label'] : null,
+				),
+				$ctx
+			);
+			if ( ! empty( $done['changed'] ) ) {
+				$out[] = (int) $stay['id'];
+			}
+		}
 		return $out;
 	}
 
@@ -965,18 +1152,20 @@ class No_Product {
 	 * short description (the line under the title), one variation per size
 	 * seen on the fish's lines and stays, the price on the variations.
 	 *
-	 * The price is the planned price typed on the fish order, or none:
-	 * never a guessed one. A size becomes a variation only when the
-	 * standard sizes are the shop's size attribute and the size is one of
-	 * its terms; without a size there is no variation, and then there is
-	 * nowhere to put a price either — the plan says so.
+	 * The price of a size is the planned price typed on the fish order
+	 * FOR THAT SIZE, or none: never a guessed one — a price typed on the
+	 * 1-2" line says nothing about the 2-3" fish. A size becomes a
+	 * variation only when the standard sizes are the shop's size attribute
+	 * and the size is one of its terms; a planned price that has no
+	 * variation to go on (typed on a line without a size, or for a size
+	 * that is no term) is put nowhere, and the plan says so.
 	 *
-	 * @param array $fish     The fish's row (gather()): name, sci_name, sizes, planned.
+	 * @param array $fish     The fish's row (gather()): name, sci_name, sizes, planned_sizes.
 	 * @param array $standard Sizes::standard(): attribute (the taxonomy, '' = a typed list), sizes.
 	 * @return array name, sci_name, short_description, status, category, marker, taxonomy, sizes
-	 *               (slug, label — the variations), skipped (labels of sizes that are no term),
-	 *               price ('' = none), priced (the price was put on the variations), left (what is
-	 *               left to do, in words).
+	 *               (slug, label, price ('' = none) — the variations), skipped (labels of sizes that
+	 *               are no term), priced (how many variations got a price), unplaced (planned prices
+	 *               that were put nowhere, as money strings), left (what is left to do, in words).
 	 */
 	public static function draft_plan( array $fish, array $standard ) {
 		$name     = trim( (string) preg_replace( '/\s+/', ' ', (string) ( $fish['name'] ?? '' ) ) );
@@ -996,21 +1185,41 @@ class No_Product {
 				$sizes[] = array(
 					'slug'  => $size['slug'],
 					'label' => $terms[ $size['slug'] ],
+					'price' => '',
 				);
 			} else {
 				$skipped[] = (string) $size['label'];
 			}
 		}
 
-		$planned = isset( $fish['planned'] ) && is_numeric( $fish['planned'] ) && (float) $fish['planned'] > 0 ? round( (float) $fish['planned'], 2 ) : null;
-		$price   = null !== $planned ? number_format( $planned, 2, '.', '' ) : '';
-		$priced  = '' !== $price && (bool) $sizes;
+		// Each planned price goes on the variation of the size it was typed for — and on no other.
+		$priced   = 0;
+		$unplaced = array();
+		foreach ( (array) ( $fish['planned_sizes'] ?? array() ) as $planned ) {
+			$amount = is_array( $planned ) && is_numeric( $planned['price'] ?? null ) && (float) $planned['price'] > 0 ? number_format( round( (float) $planned['price'], 2 ), 2, '.', '' ) : '';
+			if ( '' === $amount ) {
+				continue;
+			}
+			$placed = false;
+			foreach ( $sizes as $index => $size ) {
+				if ( '' !== (string) ( $planned['slug'] ?? '' ) && (string) $planned['slug'] === (string) $size['slug'] ) {
+					$sizes[ $index ]['price'] = $amount;
+					$placed                   = true;
+					++$priced;
+				}
+			}
+			if ( ! $placed ) {
+				$unplaced[] = $amount;
+			}
+		}
 
 		$left = array( __( 'a photo', 'fishotel-misc-plugin' ), __( 'the description', 'fishotel-misc-plugin' ) );
 		if ( ! $sizes ) {
 			$left[] = __( 'its sizes and their prices (none was known here)', 'fishotel-misc-plugin' );
-		} elseif ( ! $priced ) {
+		} elseif ( 0 === $priced ) {
 			$left[] = __( 'the price of each size (none was typed on the fish order)', 'fishotel-misc-plugin' );
+		} elseif ( $priced < count( $sizes ) ) {
+			$left[] = __( 'the price of the sizes that have none, and a look at the others', 'fishotel-misc-plugin' );
 		} else {
 			$left[] = __( 'a look at the price of each size', 'fishotel-misc-plugin' );
 		}
@@ -1032,8 +1241,8 @@ class No_Product {
 			'taxonomy'          => $sizes ? $taxonomy : '',
 			'sizes'             => $sizes,
 			'skipped'           => $skipped,
-			'price'             => $price,
 			'priced'            => $priced,
+			'unplaced'          => $unplaced,
 			'left'              => $left,
 		);
 	}
@@ -1054,14 +1263,17 @@ class No_Product {
 	 * product it is linked to already — a second click, a second tab, a
 	 * page loaded before the first click —, 'adopt' the draft that was
 	 * started for it and link the fish to it (the first click made the
-	 * product but the link did not get written), or 'create' one. Never a
-	 * second product.
+	 * product but the link did not get written), refuse because the shop
+	 * has a product of exactly that name already — in whatever category,
+	 * a 'twin': it is named, never doubled, and never linked without being
+	 * asked —, or 'create' one. Never a second product.
 	 *
 	 * @param int|null $linked The product the fish is linked to now, when it exists.
 	 * @param int|null $marked The product that carries the fish's marker (DRAFT_META), trash left out.
+	 * @param int|null $twin   A product called exactly like the fish (Store::products_titled()), trash left out.
 	 * @return array{act: string, product_id: int}
 	 */
-	public static function draft_decision( $linked, $marked ) {
+	public static function draft_decision( $linked, $marked, $twin = 0 ) {
 		if ( (int) $linked > 0 ) {
 			return array(
 				'act'        => 'open',
@@ -1074,10 +1286,29 @@ class No_Product {
 				'product_id' => (int) $marked,
 			);
 		}
+		if ( (int) $twin > 0 ) {
+			return array(
+				'act'        => 'twin',
+				'product_id' => (int) $twin,
+			);
+		}
 		return array(
 			'act'        => 'create',
 			'product_id' => 0,
 		);
+	}
+
+	/**
+	 * Why no draft was made: the shop has a product of that name (pure).
+	 *
+	 * @param string $name   The fish.
+	 * @param int    $twin   The product's id.
+	 * @param string $status Its post status.
+	 * @return string
+	 */
+	public static function twin_message( $name, $twin, $status = '' ) {
+		/* translators: 1: fish, 2: product id, 3: ", a draft" or nothing */
+		return sprintf( __( 'The shop already has a product called "%1$s" (#%2$d%3$s) — no second one was made. If it is this fish, link the fish to it ("Link to it" on its row, after a reload). If it is something else, rename one of the two first.', 'fishotel-misc-plugin' ), (string) $name, (int) $twin, 'draft' === (string) $status ? __( ', a draft', 'fishotel-misc-plugin' ) : '' );
 	}
 
 	/**
@@ -1097,20 +1328,30 @@ class No_Product {
 			/* translators: %s: fish */
 			$text = sprintf( __( 'A draft product for %s was started here before — nothing new was made. The fish is linked to it now.', 'fishotel-misc-plugin' ), $name );
 		} else {
-			$sizes = array_column( (array) ( $plan['sizes'] ?? array() ), 'label' );
+			$sizes    = array_column( (array) ( $plan['sizes'] ?? array() ), 'label' );
+			$unplaced = array_map( array( Costing::class, 'money' ), (array) ( $plan['unplaced'] ?? array() ) );
 			/* translators: %s: fish */
 			$text = sprintf( __( 'A draft product "%s" was made and the fish is linked to it.', 'fishotel-misc-plugin' ), $name );
-			if ( $sizes ) {
-				$text .= ' ' . ( ! empty( $plan['priced'] )
-					/* translators: 1: sizes, 2: price */
-					? sprintf( __( 'Sizes: %1$s, each at the planned price of %2$s.', 'fishotel-misc-plugin' ), implode( ', ', $sizes ), Costing::money( $plan['price'] ) )
-					/* translators: %s: sizes */
-					: sprintf( __( 'Sizes: %s. Price not set.', 'fishotel-misc-plugin' ), implode( ', ', $sizes ) ) );
+			if ( $sizes && ! empty( $plan['priced'] ) ) {
+				$said = array();
+				foreach ( (array) $plan['sizes'] as $size ) {
+					$said[] = '' !== (string) ( $size['price'] ?? '' )
+						/* translators: 1: size, 2: price */
+						? sprintf( __( '%1$s at the planned price of %2$s', 'fishotel-misc-plugin' ), (string) $size['label'], Costing::money( $size['price'] ) )
+						/* translators: %s: size */
+						: sprintf( __( '%s with no price (none was typed for that size)', 'fishotel-misc-plugin' ), (string) $size['label'] );
+				}
+				/* translators: %s: sizes, each with its price */
+				$text .= ' ' . sprintf( __( 'Sizes: %s.', 'fishotel-misc-plugin' ), implode( '; ', $said ) );
+			} elseif ( $sizes ) {
+				/* translators: %s: sizes */
+				$text .= ' ' . sprintf( __( 'Sizes: %s. Price not set.', 'fishotel-misc-plugin' ), implode( ', ', $sizes ) );
 			} else {
-				$text .= ' ' . ( '' !== (string) ( $plan['price'] ?? '' )
-					/* translators: %s: price */
-					? sprintf( __( 'No size was known, so it has no sizes yet and the planned price of %s could not be put on it: price not set.', 'fishotel-misc-plugin' ), Costing::money( $plan['price'] ) )
-					: __( 'No size was known, so it has no sizes yet. Price not set.', 'fishotel-misc-plugin' ) );
+				$text .= ' ' . __( 'No size was known, so it has no sizes yet. Price not set.', 'fishotel-misc-plugin' );
+			}
+			if ( $unplaced ) {
+				/* translators: %s: prices */
+				$text .= ' ' . sprintf( _n( 'The planned price of %s was typed on a line that is no size of the product, so it was put nowhere: price not set there.', 'The planned prices of %s were typed on lines that are no size of the product, so they were put nowhere: price not set there.', count( $unplaced ), 'fishotel-misc-plugin' ), implode( ', ', $unplaced ) );
 			}
 			if ( ! empty( $plan['skipped'] ) ) {
 				/* translators: %s: sizes */

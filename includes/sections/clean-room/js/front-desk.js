@@ -2193,10 +2193,18 @@
 			}
 			(data.items || []).forEach(function (item) {
 				var sub = item.match === 'alias' ? ('"' + item.alias + '"') : (item.common || item.sci || '');
+				if (item.match === 'near') {
+					// Found by a near match only (a letter off): said, so the pick is a knowing one.
+					sub = (sub ? sub + ' · ' : '') + t('near', 'similar spelling');
+				}
 				list.appendChild(el('li', {}, [
 					el('button', { type: 'button', on: { click: function () { choose(item); } } }, [item.name, sub ? el('small', { text: sub }) : null])
 				]));
 			});
+			if (data.hint) {
+				// A product of that name the shop has outside the fish categories: said, not offered.
+				list.appendChild(el('li', { class: 'fh-fd-suggest__hint', text: data.hint }));
+			}
 		}).catch(function () { /* suggestions are optional */ });
 	}
 

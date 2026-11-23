@@ -1642,6 +1642,23 @@ class Admin_Workbook {
 	/* ============================================================== */
 
 	/**
+	 * What the Species tab's "Link product" did, in a sentence (pure).
+	 *
+	 * @param string $title The product's title ('' = the link was removed).
+	 * @param int[]  $stays The groups in the tanks that followed (Admin_No_Product::species_relinked()).
+	 * @return string
+	 */
+	public static function species_link_message( $title, array $stays ) {
+		/* translators: %s: product title */
+		$text = '' !== (string) $title ? sprintf( __( 'Linked to "%s".', 'fishotel-misc-plugin' ), (string) $title ) : __( 'Product link removed.', 'fishotel-misc-plugin' );
+		if ( $stays ) {
+			/* translators: %d: groups in tanks */
+			$text .= ' ' . sprintf( _n( '%d group in the tanks that carried the old product follows.', '%d groups in the tanks that carried the old product follow.', count( $stays ), 'fishotel-misc-plugin' ), count( $stays ) );
+		}
+		return $text;
+	}
+
+	/**
 	 * AJAX: suggest (the search box: products, aliases and species rows),
 	 * products (products only, for the product link), save, delete, link.
 	 */
@@ -1658,6 +1675,7 @@ class Admin_Workbook {
 				case 'products':
 					$term  = isset( $raw['term'] ) ? substr( sanitize_text_field( (string) $raw['term'] ), 0, 80 ) : '';
 					$items = $store->species_suggestions( $term, self::SUGGEST_LIMIT );
+					$hint  = $store->search_hint( $term, $items ); // A product of that name outside the fish categories: said, so it is not a riddle.
 					if ( 'products' === $op ) {
 						$items = array_values(
 							array_filter(
@@ -1668,7 +1686,12 @@ class Admin_Workbook {
 							)
 						);
 					}
-					wp_send_json_success( array( 'items' => $items ) );
+					wp_send_json_success(
+						array(
+							'items' => $items,
+							'hint'  => $hint,
+						)
+					);
 					break;
 
 				case 'save':
@@ -1714,7 +1737,8 @@ class Admin_Workbook {
 				case 'link':
 					$id         = isset( $raw['id'] ) ? absint( $raw['id'] ) : 0;
 					$product_id = isset( $raw['product_id'] ) ? absint( $raw['product_id'] ) : 0;
-					if ( ! $store->species( $id ) ) {
+					$before = $store->species( $id );
+					if ( ! $before ) {
 						wp_send_json_error( array( 'message' => __( 'That species no longer exists.', 'fishotel-misc-plugin' ) ), 404 );
 					}
 					$title = $product_id > 0 ? $store->product_title( $product_id ) : '';
@@ -1726,8 +1750,7 @@ class Admin_Workbook {
 					}
 					wp_send_json_success(
 						array(
-							/* translators: %s: product title */
-							'message' => $product_id > 0 ? sprintf( __( 'Linked to "%s".', 'fishotel-misc-plugin' ), $title ) : __( 'Product link removed.', 'fishotel-misc-plugin' ),
+							'message' => self::species_link_message( $title, Admin_No_Product::species_relinked( $store, $before, $product_id, Clean_Room::today(), Settings::get() ) ),
 							'title'   => $title,
 						)
 					);

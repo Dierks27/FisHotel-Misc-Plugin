@@ -1006,8 +1006,88 @@ class Fake_Store {
 		return $out;
 	}
 
+	/**
+	 * Products of $products that are in NO fish category (ids): the shop
+	 * has them, but the fish search, the name index and the candidate list
+	 * do not read them.
+	 *
+	 * @var int[]
+	 */
+	public $not_fish = array();
+
 	public function fish_product_names() {
-		return array_map( 'strval', $this->products );
+		return array_map( 'strval', array_diff_key( $this->products, array_flip( $this->not_fish ) ) );
+	}
+
+	/** As the real store: the products called exactly like a name, any category, the trash left out, oldest first. */
+	public function products_titled( array $titles ) {
+		$keys = array_map( array( Species::class, 'key' ), $titles );
+		$ids  = array_keys( $this->products );
+		sort( $ids );
+		$out = array();
+		foreach ( $ids as $id ) {
+			$status = isset( $this->product_statuses[ $id ] ) ? (string) $this->product_statuses[ $id ] : 'publish';
+			$key    = Species::key( (string) $this->products[ $id ] );
+			if ( 'trash' !== $status && in_array( $key, $keys, true ) ) {
+				$out[ $key ][] = (int) $id;
+			}
+		}
+		return $out;
+	}
+
+	/** As the real store: the products outside the fish categories whose title has every word. */
+	public function products_elsewhere( $term, $limit = 3 ) {
+		$words = array_values( array_filter( (array) preg_split( '/\s+/', trim( (string) $term ) ), 'strlen' ) );
+		$out   = array();
+		foreach ( $this->not_fish as $id ) {
+			$title  = isset( $this->products[ $id ] ) ? (string) $this->products[ $id ] : '';
+			$status = isset( $this->product_statuses[ $id ] ) ? (string) $this->product_statuses[ $id ] : 'publish';
+			$every  = '' !== $title && 'trash' !== $status && (bool) $words;
+			foreach ( $words as $word ) {
+				$every = $every && false !== stripos( $title, $word );
+			}
+			if ( $every ) {
+				$out[] = array(
+					'product_id' => (int) $id,
+					'name'       => $title,
+					'status'     => $status,
+				);
+			}
+		}
+		return array_slice( $out, 0, max( 1, (int) $limit ) );
+	}
+
+	public function search_hint( $term, array $items ) {
+		foreach ( $items as $item ) {
+			if ( 'near' !== (string) ( $item['match'] ?? '' ) ) {
+				return '';
+			}
+		}
+		return Species::elsewhere_hint( $this->products_elsewhere( $term ), Store::FISH_CATEGORIES );
+	}
+
+	/**
+	 * The named locks held (name => true) — a test sets one to stand for
+	 * another request at work. $has_locks false: a database without them.
+	 *
+	 * @var array<string, bool>
+	 */
+	public $locks     = array();
+	public $has_locks = true;
+
+	public function lock( $name ) {
+		if ( ! $this->has_locks ) {
+			return null;
+		}
+		if ( isset( $this->locks[ (string) $name ] ) ) {
+			return false;
+		}
+		$this->locks[ (string) $name ] = true;
+		return true;
+	}
+
+	public function unlock( $name ) {
+		unset( $this->locks[ (string) $name ] );
 	}
 
 	public function product_title( $product_id ) {
@@ -1114,7 +1194,7 @@ class Fake_Store {
 	 */
 	private function fish_products() {
 		$out = array();
-		foreach ( $this->products as $id => $title ) {
+		foreach ( array_diff_key( $this->products, array_flip( $this->not_fish ) ) as $id => $title ) {
 			$out[] = array(
 				'product_id' => (int) $id,
 				'name'       => (string) $title,
@@ -1147,7 +1227,7 @@ class Fake_Store {
 				);
 			}
 		}
-		foreach ( $this->products as $id => $title ) {
+		foreach ( array_diff_key( $this->products, array_flip( $this->not_fish ) ) as $id => $title ) {
 			if ( false !== stripos( $title, $term ) ) {
 				$items[] = array(
 					'product_id' => (int) $id,
@@ -1171,7 +1251,25 @@ class Fake_Store {
 				$rows[] = $row;
 			}
 		}
-		return array_slice( Store::fold_species_rows( $items, $rows ), 0, max( 1, (int) $limit ) );
+		$found = array_slice( Store::fold_species_rows( $items, $rows ), 0, max( 1, (int) $limit ) );
+		if ( $found ) {
+			return $found;
+		}
+		// Nothing letter for letter: the near matches, as the real store — a species row with its own fields.
+		$near = Species::near( $term, $this->species_candidates(), $limit );
+		$rows = array();
+		foreach ( $near as $index => $item ) {
+			$row = empty( $item['product_id'] ) ? $this->species_by_name( (string) $item['name'] ) : null;
+			if ( $row ) {
+				$near[ $index ] = array_merge( Species::suggestion( $row ), array( 'match' => 'near' ) );
+			}
+		}
+		foreach ( $this->species as $row ) {
+			if ( $row['product_id'] && in_array( (int) $row['product_id'], array_map( 'intval', array_column( $near, 'product_id' ) ), true ) ) {
+				$rows[] = $row;
+			}
+		}
+		return array_slice( Store::fold_species_rows( $near, $rows ), 0, max( 1, (int) $limit ) );
 	}
 
 	/**
@@ -1374,6 +1472,8 @@ class Fake_Store {
 					'species_my_price'   => $species ? $species['my_price'] : null,
 					'stay_live'          => $stay ? $stay['qty_live'] : null,
 					'stay_status'        => $stay ? $stay['status'] : null,
+					'stay_product_id'    => $stay ? ( $stay['product_id'] ?? null ) : null,
+					'stay_species'       => $stay ? $stay['species'] : null,
 					'tank_number'        => $tank ? $tank['number'] : null,
 				)
 			)

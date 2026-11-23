@@ -36,8 +36,10 @@ class Admin_No_Product {
 	const DRAFT_CAPABILITY = 'edit_products';
 
 	/**
-	 * A short lock per fish while its draft is being made, so two clicks
-	 * that arrive together do not both find "no draft yet".
+	 * One click at a time per fish while its draft is being made: the
+	 * database's own lock (Store::lock()), which is taken or refused in a
+	 * single step. This transient only stands in where the database has no
+	 * such lock.
 	 *
 	 * @var string
 	 */
@@ -119,13 +121,14 @@ class Admin_No_Product {
 	 * @param array[] $orders Orders with lines.
 	 * @param array[] $stays  Stays.
 	 * @param array   $names  names().
+	 * @param array   $listed No_Product::listed_products().
 	 * @return array|null No_Product::alive().
 	 */
-	public static function alive_for( $store, array $orders, array $stays, array $names ) {
+	public static function alive_for( $store, array $orders, array $stays, array $names, array $listed = array() ) {
 		if ( ! is_object( $store ) || ! method_exists( $store, 'product_statuses' ) ) {
 			return null;
 		}
-		$ids = No_Product::product_ids( $orders, $stays, $names );
+		$ids = No_Product::product_ids( $orders, $stays, $names, $listed );
 		return $ids ? No_Product::alive( (array) $store->product_statuses( $ids ) ) : array();
 	}
 
@@ -133,7 +136,8 @@ class Admin_No_Product {
 	 * Orders with the mark on their lines and their count of fish
 	 * (No_Product::mark_orders()) — for the Fish orders list and an
 	 * order's own page. One read of the statuses, and — only when the
-	 * counts are wanted — one of the species list.
+	 * counts are wanted, or an order is closed (its lines read their
+	 * product through the species list) — one of the species list.
 	 *
 	 * @param object  $store  Store or stand-in.
 	 * @param array[] $orders Orders with lines.
@@ -145,9 +149,11 @@ class Admin_No_Product {
 			return $orders;
 		}
 		try {
-			$names   = self::names( $store );
-			$species = $counts && is_object( $store ) && method_exists( $store, 'species_brief' ) ? Stats::species_index( (array) $store->species_brief() )['names'] : array();
-			return No_Product::mark_orders( $orders, $names, self::alive_for( $store, $orders, array(), $names ), $species );
+			$names  = self::names( $store );
+			$closed = in_array( 'closed', array_column( $orders, 'status' ), true );
+			$rows   = ( $counts || $closed ) && is_object( $store ) && method_exists( $store, 'species_brief' ) ? (array) $store->species_brief() : array();
+			$listed = No_Product::listed_products( $rows );
+			return No_Product::mark_orders( $orders, $names, self::alive_for( $store, $orders, array(), $names, $listed ), Stats::species_index( $rows )['names'], $listed );
 		} catch ( \Throwable $e ) {
 			return $orders; // A mark is never worth a broken page.
 		}
@@ -252,7 +258,8 @@ class Admin_No_Product {
 	 * @return array No_Product::gather().
 	 */
 	public static function gathered( $store, array $orders, array $stays, array $ctx ) {
-		$names = self::names( $store );
+		$names   = self::names( $store );
+		$species = isset( $ctx['species'] ) && is_array( $ctx['species'] ) ? $ctx['species'] : ( method_exists( $store, 'species_brief' ) ? (array) $store->species_brief() : array() );
 		return No_Product::gather(
 			$orders,
 			$stays,
@@ -260,8 +267,8 @@ class Admin_No_Product {
 				$ctx,
 				array(
 					'names'   => $names,
-					'alive'   => self::alive_for( $store, $orders, $stays, $names ),
-					'species' => isset( $ctx['species'] ) && is_array( $ctx['species'] ) ? $ctx['species'] : ( method_exists( $store, 'species_brief' ) ? (array) $store->species_brief() : array() ),
+					'alive'   => self::alive_for( $store, $orders, $stays, $names, No_Product::listed_products( $species ) ),
+					'species' => $species,
 				)
 			)
 		);
@@ -285,7 +292,7 @@ class Admin_No_Product {
 
 		$one = $order_id > 0 ? $store->order( $order_id ) : null;
 		if ( $one ) {
-			$orders = array( Admin_Workbook::resolve_order( $store, $one ) );
+			$orders = array( Admin_Workbook::resolve_order( $store, $one ) ); // What matters now of it — the fish its count counted —, or with "closed" all.
 		} else {
 			$order_id = 0;
 			$orders   = Admin_Workbook::resolved_orders( $store, $closed_too ? array() : array( 'open' => true ) );
@@ -313,6 +320,7 @@ class Admin_No_Product {
 			)
 		);
 		$page     = No_Product::page( $gathered['fish'], $paged );
+		$page     = array_merge( $page, array( 'rows' => self::with_twins( $store, $page['rows'] ) ) );
 
 		return array(
 			'rows'          => $page['rows'],
@@ -326,6 +334,42 @@ class Admin_No_Product {
 			'orders_read'   => count( $orders ),
 			'orders_capped' => ! $one && count( $orders ) >= Store::ORDERS_LIMIT,
 		);
+	}
+
+	/**
+	 * The rows of one page with the product the shop ALREADY has under a
+	 * fish's exact name, wherever it is — a product the owner made by hand
+	 * outside the fish categories is invisible to the rule and to the fish
+	 * search, and "Start a draft product" would otherwise be offered for a
+	 * fish that has one. One query for the page; the row gets twins (how
+	 * many products carry its name) and, when there is exactly one,
+	 * candidate (that product) and elsewhere (true: the rule did not see
+	 * it, so another pick stays possible). With several, none is offered:
+	 * the owner picks.
+	 *
+	 * @param object  $store Store or stand-in.
+	 * @param array[] $rows  A page of gather()'s fish.
+	 * @return array[]
+	 */
+	public static function with_twins( $store, array $rows ) {
+		$ask = array();
+		foreach ( $rows as $row ) {
+			if ( empty( $row['candidate'] ) && '' !== (string) ( $row['name'] ?? '' ) ) {
+				$ask[] = (string) $row['name'];
+			}
+		}
+		$titled = $ask && is_object( $store ) && method_exists( $store, 'products_titled' ) ? (array) $store->products_titled( $ask ) : array();
+		foreach ( $rows as $index => $row ) {
+			$key                         = Species::key( (string) ( $row['name'] ?? '' ) );
+			$found                       = empty( $row['candidate'] ) && ! empty( $titled[ $key ] ) ? array_values( (array) $titled[ $key ] ) : array();
+			$rows[ $index ]['elsewhere'] = false;
+			$rows[ $index ]['twins']     = count( $found );
+			if ( 1 === count( $found ) ) {
+				$rows[ $index ]['candidate'] = (int) $found[0];
+				$rows[ $index ]['elsewhere'] = true;
+			}
+		}
+		return $rows;
 	}
 
 	/**
@@ -496,6 +540,36 @@ class Admin_No_Product {
 	}
 
 	/**
+	 * The Species tab's own "Link product" changed — or removed — a row's
+	 * product: the open groups of that fish that carried the product the
+	 * row had go with it (No_Product::relink_stays()). Without this a
+	 * wrong pick made on "Fish with no product yet" could be put right for
+	 * the fish order lines only, and the groups in the tanks kept the
+	 * wrong product for good.
+	 *
+	 * @param object $store      Store or stand-in.
+	 * @param array  $row        The species row as it was BEFORE the link (id, name, product_id).
+	 * @param int    $product_id The product it is linked to now (0 = none).
+	 * @param string $today      Site date.
+	 * @param array  $settings   Settings.
+	 * @return int[] The stays that followed.
+	 */
+	public static function species_relinked( $store, array $row, $product_id, $today, array $settings ) {
+		$from = (int) ( $row['product_id'] ?? 0 );
+		$name = (string) ( $row['name'] ?? '' );
+		if ( $from <= 0 || $from === (int) $product_id || '' === trim( $name ) ) {
+			return array();
+		}
+		$stays = array();
+		foreach ( (array) $store->open_stays( array( 'species' => $name, 'limit' => 2000 ), $today, $settings ) as $stay ) {
+			if ( Species::key( (string) ( $stay['species'] ?? '' ) ) === Species::key( $name ) ) {
+				$stays[] = $stay; // The search is "contains": only the groups called exactly like the row.
+			}
+		}
+		return No_Product::relink_stays( $store, $stays, $from, (int) $product_id, (int) ( $row['id'] ?? 0 ), self::write_ctx( $today, $settings ) );
+	}
+
+	/**
 	 * "Link to a product…" — the testable half of the AJAX: the fish the
 	 * page named, the product picked, and No_Product::link().
 	 *
@@ -552,8 +626,10 @@ class Admin_No_Product {
 	 * draft's own nonce first; then the fish, what its draft is made of
 	 * (No_Product::draft_plan()), and No_Product::draft_decision(): the
 	 * product it has already is opened, a draft started for it before is
-	 * adopted, and only otherwise one is made — a draft, never published
-	 * here. The fish is then linked to it as "Link to a product…" does.
+	 * adopted, a product the shop has under exactly that name — in
+	 * whatever category — is named and nothing is made, and only otherwise
+	 * one is made: a draft, never published here. The fish is then linked
+	 * to it as "Link to a product…" does.
 	 *
 	 * @param object $store    Store or stand-in.
 	 * @param object $shop     No_Product_Shop or a test's: create( array $plan ) → array( ok, id, error ), edit_url( int ).
@@ -589,22 +665,57 @@ class Admin_No_Product {
 			return $refuse( __( 'That fish has no name to make a product from.', 'fishotel-misc-plugin' ) );
 		}
 
-		$lock = self::LOCK_TRANSIENT . md5( $plan['marker'] );
-		if ( false !== get_transient( $lock ) ) {
-			return $refuse( __( 'A draft for this fish is being made right now — give it a moment, then reload the list.', 'fishotel-misc-plugin' ), 409 );
+		// One click at a time per fish. The database's own lock is taken or refused in ONE step, so two clicks
+		// that arrive in the same instant cannot both find "no draft yet"; where the database has no such lock,
+		// the short transient stands in as before.
+		$busy   = __( 'A draft for this fish is being made right now — give it a moment, then reload the list.', 'fishotel-misc-plugin' );
+		$name   = 'draft:' . $plan['marker'];
+		$lock   = self::LOCK_TRANSIENT . md5( $plan['marker'] );
+		$held   = method_exists( $store, 'lock' ) ? $store->lock( $name ) : null;
+		$unlock = static function () use ( $store, $name, $lock, $held ) {
+			if ( true === $held ) {
+				$store->unlock( $name );
+			} else {
+				delete_transient( $lock );
+			}
+		};
+		if ( false === $held ) {
+			return $refuse( $busy, 409 );
 		}
-		set_transient( $lock, 1, self::LOCK_SECONDS );
+		if ( null === $held ) {
+			if ( false !== get_transient( $lock ) ) {
+				return $refuse( $busy, 409 );
+			}
+			set_transient( $lock, 1, self::LOCK_SECONDS );
+		}
 
 		try {
+			// Read the fish again, now that no other click can be at work on it: the one before may just have linked it.
+			$hand = self::fish_at_hand( $store, $raw['key'] ?? '', $raw['name'] ?? '', $today, $settings );
+			$fish = $hand['fish'];
+			if ( $fish ) {
+				$plan = No_Product::draft_plan( $fish, $standard );
+			}
+
 			// The product the fish has already: the one it is linked to, else the one the species list or the shop has under its name.
-			$has      = null !== $hand['linked'] ? (int) $hand['linked'] : ( $fish && ! empty( $fish['candidate'] ) ? (int) $fish['candidate'] : null );
-			$decision = No_Product::draft_decision( $has, method_exists( $store, 'product_with_meta' ) ? (int) $store->product_with_meta( No_Product::DRAFT_META, $plan['marker'] ) : 0 );
+			$has    = null !== $hand['linked'] ? (int) $hand['linked'] : ( $fish && ! empty( $fish['candidate'] ) ? (int) $fish['candidate'] : null );
+			$marked = method_exists( $store, 'product_with_meta' ) ? (int) $store->product_with_meta( No_Product::DRAFT_META, $plan['marker'] ) : 0;
+			// A product of exactly that name anywhere in the shop — the fish search does not reach every category.
+			$titled   = null === $has && 0 === $marked && method_exists( $store, 'products_titled' ) ? (array) $store->products_titled( array( $plan['name'] ) ) : array();
+			$twin     = isset( $titled[ Species::key( $plan['name'] ) ][0] ) ? (int) $titled[ Species::key( $plan['name'] ) ][0] : 0;
+			$decision = No_Product::draft_decision( $has, $marked, $twin );
 			$id       = (int) $decision['product_id'];
+
+			if ( 'twin' === $decision['act'] ) {
+				$unlock();
+				$status = method_exists( $store, 'product_statuses' ) ? (array) $store->product_statuses( array( $id ) ) : array();
+				return $refuse( No_Product::twin_message( $plan['name'], $id, (string) ( $status[ $id ] ?? '' ) ), 409 );
+			}
 
 			if ( 'create' === $decision['act'] ) {
 				$made = (array) $shop->create( $plan );
 				if ( empty( $made['ok'] ) || (int) ( $made['id'] ?? 0 ) <= 0 ) {
-					delete_transient( $lock );
+					$unlock();
 					return $refuse( '' !== (string) ( $made['error'] ?? '' ) ? (string) $made['error'] : __( 'The draft product could not be made.', 'fishotel-misc-plugin' ), 500 );
 				}
 				$id = (int) $made['id'];
@@ -619,10 +730,10 @@ class Admin_No_Product {
 				}
 			}
 		} catch ( \Throwable $e ) {
-			delete_transient( $lock );
+			$unlock();
 			return $refuse( $e->getMessage(), 500 );
 		}
-		delete_transient( $lock );
+		$unlock();
 
 		return array(
 			'status'     => 200,
@@ -686,9 +797,9 @@ class Admin_No_Product {
  * shaped as this shop's fish products are: a product with variations,
  * the fish category on the product itself, the scientific name in its
  * meta and as the short description, the size attribute with one
- * variation per size (managed stock, 0 in stock, the price when one was
- * planned). The shipping class is left unset: the theme gives a fish its
- * class when it is published.
+ * variation per size (managed stock, 0 in stock, the price planned for
+ * that size when there is one). The shipping class is left unset: the
+ * theme gives a fish its class when it is published.
  */
 class No_Product_Shop {
 
@@ -717,6 +828,7 @@ class No_Product_Shop {
 
 		// The size terms, by the slugs the plan names; a slug that is no term (any more) is left out.
 		$taxonomy = (string) ( $plan['taxonomy'] ?? '' );
+		$prices   = array_map( 'strval', array_column( (array) ( $plan['sizes'] ?? array() ), 'price', 'slug' ) );
 		$terms    = array();
 		if ( '' !== $taxonomy && taxonomy_exists( $taxonomy ) ) {
 			foreach ( (array) ( $plan['sizes'] ?? array() ) as $size ) {
@@ -755,8 +867,8 @@ class No_Product_Shop {
 				$variation = new \WC_Product_Variation();
 				$variation->set_parent_id( $id );
 				$variation->set_attributes( array( $taxonomy => (string) $term->slug ) );
-				if ( ! empty( $plan['priced'] ) && '' !== (string) $plan['price'] ) {
-					$variation->set_regular_price( (string) $plan['price'] );
+				if ( isset( $prices[ (string) $term->slug ] ) && '' !== $prices[ (string) $term->slug ] ) {
+					$variation->set_regular_price( $prices[ (string) $term->slug ] ); // The price planned for THIS size; a size without one stays empty.
 				}
 				$variation->set_manage_stock( true );
 				$variation->set_stock_quantity( 0 );

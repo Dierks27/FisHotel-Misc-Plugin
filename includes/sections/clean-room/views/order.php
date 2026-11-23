@@ -134,11 +134,8 @@ $fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks,
 			<?php // On a window too narrow for its column the scientific name reads here, under the fish (its field: "More columns"). ?>
 			<span class="fh-cr-sub fh-cr-line__sci fh-cr-c-entry"><?php echo esc_html( $value( 'sci_name' ) ); ?></span>
 			<span class="fh-cr-line__read fh-cr-c-numbers"><?php echo esc_html( $value( 'species' ) ); ?><?php if ( '' !== $value( 'size_label' ) ) : ?> <span class="fh-cr-sub fh-cr-sub--inline"><?php echo esc_html( $value( 'size_label' ) ); ?></span><?php endif; ?></span>
-			<?php // The fish is not linked to a product of the shop yet — said in both views, whatever its price. Empty = no tag; a Save fills it in again. ?>
-			<a class="fh-cr-sub fh-cr-noproduct" data-f="no_product" href="<?php echo esc_url( $fh_np_url ); ?>" title="<?php esc_attr_e( 'This fish is not linked to a product of the shop yet. Opens "Fish with no product yet", where it can be linked to a product or get a draft product.', 'fishotel-misc-plugin' ); ?>"><?php echo esc_html( isset( $fig['no_product'] ) ? (string) $fig['no_product'] : '' ); ?></a>
-			<?php if ( $linked ) : ?>
-				<span class="fh-cr-sub"><a href="<?php echo esc_url( Admin::page_url( 'stays', array( 's' => $value( 'species' ) ) ) ); ?>"><?php echo esc_html( sprintf( /* translators: %d: stay id */ __( 'stay #%d', 'fishotel-misc-plugin' ), (int) $line['stay_id'] ) ); ?></a></span>
-			<?php endif; ?>
+			<?php // The fish is not linked to a product of the shop yet — said in both views, whatever its price. Empty = no tag; a Save fills it in again. It shares the line of "stay #N", so a tagged row is no taller than the others. ?>
+			<span class="fh-cr-sub fh-cr-line__marks"><?php if ( $linked ) : ?><a href="<?php echo esc_url( Admin::page_url( 'stays', array( 's' => $value( 'species' ) ) ) ); ?>"><?php echo esc_html( sprintf( /* translators: %d: stay id */ __( 'stay #%d', 'fishotel-misc-plugin' ), (int) $line['stay_id'] ) ); ?></a> <?php endif; ?><a class="fh-cr-noproduct" data-f="no_product" href="<?php echo esc_url( $fh_np_url ); ?>" title="<?php esc_attr_e( 'This fish is not linked to a product of the shop yet. Opens "Fish with no product yet", where it can be linked to a product or get a draft product.', 'fishotel-misc-plugin' ); ?>"><?php echo esc_html( isset( $fig['no_product'] ) ? (string) $fig['no_product'] : '' ); ?></a></span>
 			<?php if ( $unknown ) : ?>
 				<span class="fh-cr-sub"><?php echo Admin::unknown_html( $line ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by unknown_html(). ?></span>
 			<?php endif; ?>

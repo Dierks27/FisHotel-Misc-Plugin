@@ -29,6 +29,7 @@ $fh_rows         = (array) $data['rows'];
 $fh_unknown      = (array) $data['unknown'];
 $fh_order        = is_array( $data['order'] ) ? $data['order'] : null;
 $fh_closed       = ! empty( $data['closed_too'] );
+$fh_order_closed = $fh_order && 'closed' === (string) ( $fh_order['status'] ?? '' );
 $fh_keep         = array_filter(
 	array(
 		'closed' => $fh_closed ? '1' : '',
@@ -56,7 +57,9 @@ $fh_keep         = array_filter(
 		<h2 class="fh-cr-np__title"><?php esc_html_e( 'Fish with no product yet', 'fishotel-misc-plugin' ); ?></h2>
 		<p class="fh-cr-np__intro">
 			<?php
-			if ( $fh_order ) {
+			if ( $fh_order && $fh_order_closed && ! $fh_closed ) {
+				echo esc_html( sprintf( /* translators: %s: order ref */ __( 'Fish order %s is closed: only its fish that are still alive in a tank and are not linked to a product of the shop — the ones its count counted.', 'fishotel-misc-plugin' ), (string) $fh_order['ref'] ) );
+			} elseif ( $fh_order ) {
 				echo esc_html( sprintf( /* translators: %s: order ref */ __( 'Only the fish of fish order %s that are not linked to a product of the shop.', 'fishotel-misc-plugin' ), (string) $fh_order['ref'] ) );
 			} elseif ( $fh_closed ) {
 				esc_html_e( 'Every fish that is not linked to a product of the shop — the fish of closed fish orders too.', 'fishotel-misc-plugin' );
@@ -67,6 +70,9 @@ $fh_keep         = array_filter(
 		</p>
 		<p class="fh-cr-np__switch">
 			<?php if ( $fh_order ) : ?>
+				<?php if ( $fh_order_closed && ! $fh_closed ) : ?>
+					<a class="button" href="<?php echo esc_url( Admin_No_Product::url( array( 'order' => (int) $fh_order['id'], 'closed' => '1' ) ) ); ?>"><?php esc_html_e( 'Show every fish of this closed order', 'fishotel-misc-plugin' ); ?></a>
+				<?php endif; ?>
 				<a class="button" href="<?php echo esc_url( Admin_No_Product::url() ); ?>"><?php esc_html_e( 'Show the fish of every order', 'fishotel-misc-plugin' ); ?></a>
 				<a class="button" href="<?php echo esc_url( Admin_Workbook::order_url( (int) $fh_order['id'] ) ); ?>"><?php echo esc_html( sprintf( /* translators: %s: order ref */ __( 'Back to fish order %s', 'fishotel-misc-plugin' ), (string) $fh_order['ref'] ) ); ?></a>
 			<?php elseif ( $fh_closed ) : ?>
@@ -101,6 +107,8 @@ $fh_keep         = array_filter(
 					<?php
 					$fh_candidate = (int) ( $fh_fish['candidate'] ?? 0 );
 					$fh_title     = $fh_candidate > 0 && isset( $data['titles'][ $fh_candidate ] ) ? (string) $data['titles'][ $fh_candidate ] : '';
+					$fh_elsewhere = $fh_candidate > 0 && ! empty( $fh_fish['elsewhere'] ); // A product of this name outside the fish categories.
+					$fh_twins     = 0 === $fh_candidate ? (int) ( $fh_fish['twins'] ?? 0 ) : 0;  // Several products of this name: none is offered, none is made.
 					?>
 					<tr class="fh-cr-np-row<?php echo ! empty( $fh_fish['in_tank'] ) ? ' is-in-tank' : ''; ?>" data-key="<?php echo esc_attr( $fh_fish['key'] ); ?>" data-name="<?php echo esc_attr( $fh_fish['name'] ); ?>">
 						<td class="fh-cr-np-fish" data-label="<?php esc_attr_e( 'Fish', 'fishotel-misc-plugin' ); ?>">
@@ -125,8 +133,9 @@ $fh_keep         = array_filter(
 							<?php if ( $fh_fish['orders'] ) : ?>
 								<span class="fh-cr-np-line">
 									<?php esc_html_e( 'Fish order', 'fishotel-misc-plugin' ); ?>
+									<?php // Each order ends with its own comma, so none stands after a space. ?>
 									<?php foreach ( $fh_fish['orders'] as $fh_n => $fh_o ) : ?>
-										<?php echo $fh_n > 0 ? ', ' : ''; ?><a href="<?php echo esc_url( Admin_Workbook::order_url( (int) $fh_o['id'] ) ); ?>"><?php echo esc_html( '' !== $fh_o['ref'] ? $fh_o['ref'] : '#' . (int) $fh_o['id'] ); ?></a><?php if ( '' !== $fh_o['status'] ) : ?> <span class="fh-cr-muted">(<?php echo esc_html( $fh_o['status'] ); ?>)</span><?php endif; ?>
+										<a href="<?php echo esc_url( Admin_Workbook::order_url( (int) $fh_o['id'] ) ); ?>"><?php echo esc_html( '' !== $fh_o['ref'] ? $fh_o['ref'] : '#' . (int) $fh_o['id'] ); ?></a><?php if ( '' !== $fh_o['status'] ) : ?> <span class="fh-cr-muted">(<?php echo esc_html( $fh_o['status'] ); ?>)</span><?php endif; ?><?php echo $fh_n < count( $fh_fish['orders'] ) - 1 ? ',' : ''; ?>
 									<?php endforeach; ?>
 								</span>
 							<?php endif; ?>
@@ -157,20 +166,33 @@ $fh_keep         = array_filter(
 							<?php if ( null !== $fh_fish['target'] ) : ?>
 								<span class="fh-cr-np-line" title="<?php esc_attr_e( 'The landed cost per fish times the fish order\'s markup, to the nearest 5 — the order page\'s target price.', 'fishotel-misc-plugin' ); ?>"><?php echo esc_html( sprintf( /* translators: %s: money */ __( 'Target price %s', 'fishotel-misc-plugin' ), Costing::num( $fh_fish['target'], '—', 0 ) ) ); ?></span>
 							<?php endif; ?>
-							<?php if ( null !== $fh_fish['planned'] ) : ?>
-								<span class="fh-cr-np-line"><strong><?php echo esc_html( sprintf( /* translators: %s: money */ __( 'Planned price %s', 'fishotel-misc-plugin' ), Costing::money( $fh_fish['planned'] ) ) ); ?></strong></span>
-							<?php endif; ?>
+							<?php // A planned price belongs to the size of the line it was typed on. ?>
+							<?php foreach ( (array) ( $fh_fish['planned_sizes'] ?? array() ) as $fh_planned ) : ?>
+								<span class="fh-cr-np-line"><strong><?php echo esc_html( sprintf( /* translators: %s: money */ __( 'Planned price %s', 'fishotel-misc-plugin' ), Costing::money( $fh_planned['price'] ) ) ); ?></strong><?php echo '' !== (string) $fh_planned['label'] && count( $fh_fish['sizes'] ) > 1 ? ' ' . esc_html( sprintf( /* translators: %s: size */ __( 'for %s', 'fishotel-misc-plugin' ), (string) $fh_planned['label'] ) ) : ''; ?></span>
+							<?php endforeach; ?>
 						</td>
 						<td class="fh-cr-np-acts" data-label="<?php esc_attr_e( 'Give it a product', 'fishotel-misc-plugin' ); ?>">
 							<?php if ( $fh_candidate > 0 ) : ?>
 								<span class="fh-cr-np-line">
-									<?php echo esc_html( sprintf( /* translators: %s: product title */ __( 'The shop has "%s" under this name.', 'fishotel-misc-plugin' ), '' !== $fh_title ? $fh_title : '#' . $fh_candidate ) ); ?>
+									<?php
+									echo esc_html(
+										$fh_elsewhere
+											/* translators: 1: product title, 2: product id */
+											? sprintf( __( 'The shop has a product called "%1$s" (#%2$d), but not in a fish category — so no second one is made here.', 'fishotel-misc-plugin' ), '' !== $fh_title ? $fh_title : $fh_fish['name'], $fh_candidate )
+											/* translators: %s: product title */
+											: sprintf( __( 'The shop has "%s" under this name.', 'fishotel-misc-plugin' ), '' !== $fh_title ? $fh_title : '#' . $fh_candidate )
+									);
+									?>
 								</span>
 								<button type="button" class="button button-primary fh-cr-np-candidate" data-product="<?php echo esc_attr( $fh_candidate ); ?>"><?php esc_html_e( 'Link to it', 'fishotel-misc-plugin' ); ?></button>
-							<?php else : ?>
-								<button type="button" class="button button-primary fh-cr-np-link-open"><?php esc_html_e( 'Link to a product…', 'fishotel-misc-plugin' ); ?></button>
 							<?php endif; ?>
-							<?php if ( $can_draft && 0 === $fh_candidate ) : ?>
+							<?php if ( $fh_twins > 1 ) : ?>
+								<span class="fh-cr-np-line"><?php echo esc_html( sprintf( /* translators: 1: how many, 2: fish */ __( 'The shop has %1$d products called "%2$s". Link the fish to the right one — no further one is made here.', 'fishotel-misc-plugin' ), $fh_twins, $fh_fish['name'] ) ); ?></span>
+							<?php endif; ?>
+							<?php if ( 0 === $fh_candidate || $fh_elsewhere ) : ?>
+								<button type="button" class="button<?php echo $fh_elsewhere ? '' : ' button-primary'; ?> fh-cr-np-link-open"><?php echo esc_html( $fh_elsewhere ? __( 'Link to another product…', 'fishotel-misc-plugin' ) : __( 'Link to a product…', 'fishotel-misc-plugin' ) ); ?></button>
+							<?php endif; ?>
+							<?php if ( $can_draft && 0 === $fh_candidate && 0 === $fh_twins ) : ?>
 								<button type="button" class="button fh-cr-np-draft" title="<?php esc_attr_e( 'Makes a product for this fish as a DRAFT — customers cannot see it — with its name, scientific name, the fish category and its sizes, and links the fish to it. You finish it in the shop: photo, description, price, Publish.', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'Start a draft product', 'fishotel-misc-plugin' ); ?></button>
 							<?php endif; ?>
 							<span class="fh-cr-suggest-wrap fh-cr-np-linkbox" hidden>
@@ -238,7 +260,7 @@ $fh_keep         = array_filter(
 	<?php endif; ?>
 
 	<p class="fh-cr-footnote">
-		<?php esc_html_e( 'A fish has a product when its row on the species list is linked to one, or when exactly one fish product of the shop carries its name; a group in a tank has one when it is linked to it. A product in the trash does not count; a draft does — you are still working on it. "Link to a product…" ties the fish, every fish order line of it and its groups in the tanks to the product you pick. "Start a draft product" makes the product as a draft that customers cannot see, and never publishes it.', 'fishotel-misc-plugin' ); ?>
+		<?php esc_html_e( 'A fish has a product when its row on the species list is linked to one, or when exactly one fish product of the shop carries its name; a group in a tank has one when it is linked to it. A product in the trash does not count; a draft does — you are still working on it. "Link to a product…" ties the fish, every fish order line of it and its groups in the tanks to the product you pick. "Start a draft product" makes the product as a draft that customers cannot see, and never publishes it; it is not offered for a fish the shop already has a product for under exactly its name, in whatever category. A closed fish order is never written on: its lines follow through the species list. The search looks at the products in Quarantined Fish and Inverts and every category under them.', 'fishotel-misc-plugin' ); ?>
 		<?php if ( ! $can_draft ) : ?>
 			<?php esc_html_e( 'Your account may not make products, so only "Link to a product…" is offered.', 'fishotel-misc-plugin' ); ?>
 		<?php endif; ?>

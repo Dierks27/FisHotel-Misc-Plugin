@@ -291,6 +291,7 @@ class Front_Desk {
 			'species'     => __( 'Species', 'fishotel-misc-plugin' ),
 			'searchHint'  => __( 'Type a fish name…', 'fishotel-misc-plugin' ),
 			'unlisted'    => __( 'Use as an unlisted fish', 'fishotel-misc-plugin' ),
+			'near'        => __( 'similar spelling', 'fishotel-misc-plugin' ),
 			'recent'      => __( 'Recent', 'fishotel-misc-plugin' ),
 			'headCount'   => __( 'Full recount', 'fishotel-misc-plugin' ),
 			'noteHint'    => __( 'What happened?', 'fishotel-misc-plugin' ),
@@ -2489,7 +2490,14 @@ class Front_Desk {
 
 		$store = new Store();
 
-		wp_send_json_success( array( 'items' => $store->species_suggestions( $term, 8 ) ) );
+		$items = $store->species_suggestions( $term, 8 );
+
+		wp_send_json_success(
+			array(
+				'items' => $items,
+				'hint'  => $store->search_hint( $term, $items ),
+			)
+		);
 	}
 
 	/**

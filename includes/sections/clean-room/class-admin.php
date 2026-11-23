@@ -779,6 +779,8 @@ class Admin {
 					'unsavedLines'   => __( 'Save the order first.', 'fishotel-misc-plugin' ),
 					'noRate'         => __( 'No box rate for this supplier and origin (Settings → Box rates), or no box count.', 'fishotel-misc-plugin' ),
 					'noMatch'        => __( 'No match — type the name to use it as an unlisted species.', 'fishotel-misc-plugin' ),
+					'noProduct'      => __( 'No fish product matches. This box looks at the products in Quarantined Fish and Inverts (and every category under them), and every word typed has to be in the product\'s name — try fewer words.', 'fishotel-misc-plugin' ),
+					'near'           => __( 'similar spelling', 'fishotel-misc-plugin' ),
 					'linked'         => __( 'Linked', 'fishotel-misc-plugin' ),
 					'yes'            => __( 'Yes', 'fishotel-misc-plugin' ),
 					'no'             => __( 'No', 'fishotel-misc-plugin' ),

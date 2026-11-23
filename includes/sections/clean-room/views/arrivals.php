@@ -103,7 +103,7 @@ $tab = 'arrivals';
 									<a class="fh-cr-sub fh-cr-warn fh-cr-unknown" href="<?php echo esc_url( Admin_Workbook::order_url( (int) $fh_order['id'] ) ); ?>"><?php echo esc_html( sprintf( /* translators: %d: order lines */ __( '?? %d to identify', 'fishotel-misc-plugin' ), (int) $fh_order['to_identify'] ) ); ?></a>
 								<?php endif; ?>
 								<?php if ( ! empty( $fh_order['no_product'] ) ) : ?>
-									<a class="fh-cr-sub fh-cr-noproduct" href="<?php echo esc_url( Admin_No_Product::url( array( 'order' => (int) $fh_order['id'] ) ) ); ?>" title="<?php esc_attr_e( 'Fish of this order that are not linked to a product of the shop yet. Opens the list, where each can be linked to a product or get a draft product.', 'fishotel-misc-plugin' ); ?>"><?php echo esc_html( No_Product::count_text( (int) $fh_order['no_product'] ) ); ?> &rarr;</a>
+									<a class="fh-cr-sub fh-cr-noproduct fh-cr-noproduct--count" href="<?php echo esc_url( Admin_No_Product::url( array( 'order' => (int) $fh_order['id'] ) ) ); ?>" title="<?php esc_attr_e( 'Fish of this order that are not linked to a product of the shop yet. Opens the list, where each can be linked to a product or get a draft product.', 'fishotel-misc-plugin' ); ?>"><?php echo esc_html( No_Product::count_text( (int) $fh_order['no_product'] ) ); ?> &rarr;</a>
 								<?php endif; ?>
 							</td>
 							<td>

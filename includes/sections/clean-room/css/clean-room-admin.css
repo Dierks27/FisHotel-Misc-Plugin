@@ -1132,6 +1132,11 @@ a.fh-cr-chip--muted {
 	color: var(--fh-text-secondary, #a0a0a0);
 }
 
+/* A product of that name outside the fish categories: said under the answers, never offered. */
+.fh-cr-suggest__hint {
+	border-top: 1px solid var(--fh-border, rgba(255, 255, 255, 0.15));
+}
+
 .fh-cr-species-add {
 	margin: 0 0 14px;
 }
@@ -1278,6 +1283,18 @@ a.fh-cr-chip--muted {
 
 .fh-cr-wrap a.fh-cr-noproduct:empty {
 	display: none;
+}
+
+/* On an order line the tag stands on the line of "stay #N" — a tagged row is no taller than its neighbours. */
+.fh-cr-wrap .fh-cr-line__marks a.fh-cr-noproduct {
+	margin-top: 0;
+	vertical-align: baseline;
+}
+
+/* Beside a fish order on the list the count may break onto a second line: it never widens the table. */
+.fh-cr-wrap a.fh-cr-noproduct--count {
+	max-width: 100%;
+	white-space: normal;
 }
 
 /* The list (Species → Fish with no product yet). */

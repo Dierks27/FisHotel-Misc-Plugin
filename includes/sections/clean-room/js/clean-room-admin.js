@@ -637,6 +637,8 @@
 	var api = {
 		existingPost: existingPost,
 		noProductPost: noProductPost,
+		emptyText: emptyText,
+		suggestTag: suggestTag,
 		packLines: packLines,
 		wellFormed: wellFormed,
 		renumber: renumber,
@@ -733,11 +735,46 @@
 		$('.fh-cr-suggest').remove();
 	}
 
-	function renderSuggest($input, items, onPick) {
+	/**
+	 * What a suggestion list says when the search found nothing: the box
+	 * that links a PRODUCT has its own words (there is no "unlisted
+	 * species" to type there) — where it looked and how it reads.
+	 *
+	 * @param {string} op      'suggest' or 'products'.
+	 * @param {Object} strings noMatch, noProduct (English fallbacks).
+	 * @return {string}
+	 */
+	function emptyText(op, strings) {
+		var s = strings || {};
+		return op === 'products' ? (s.noProduct || 'No fish product matches.') : (s.noMatch || 'No match.');
+	}
+
+	/**
+	 * The small text after a suggestion: its product, "list" for a species
+	 * row, and "similar spelling" when it was found by a near match only.
+	 *
+	 * @param {Object} item    A suggestion.
+	 * @param {Object} strings near (English fallback).
+	 * @return {string}
+	 */
+	function suggestTag(item, strings) {
+		var it = item || {};
+		var near = it.match === 'near';
+		var tag = it.product_id ? '#' + it.product_id : ((it.match === 'species' || (near && it.species_id)) ? 'list' : (near ? '' : (it.match || '')));
+		if (it.species_id && it.product_id) {
+			tag += ' · list';
+		}
+		if (near) {
+			tag += (tag ? ' · ' : '') + ((strings && strings.near) || 'similar spelling');
+		}
+		return tag;
+	}
+
+	function renderSuggest($input, items, onPick, hint, op) {
 		closeSuggest();
 		var $list = $('<ul class="fh-cr-suggest"></ul>');
 		if (!items.length) {
-			$list.append($('<li class="fh-cr-suggest__empty"></li>').text(i18n.noMatch || 'No match.'));
+			$list.append($('<li class="fh-cr-suggest__empty"></li>').text(emptyText(op, i18n)));
 		}
 		items.forEach(function (item) {
 			var $li = $('<li class="fh-cr-suggest__item"></li>');
@@ -745,11 +782,7 @@
 			if (item.sci) {
 				$li.append(' ').append($('<em></em>').text(item.sci));
 			}
-			var tag = item.product_id ? '#' + item.product_id : (item.match === 'species' ? 'list' : (item.match || ''));
-			if (item.species_id && item.product_id) {
-				tag += ' · list';
-			}
-			$li.append(' ').append($('<span class="fh-cr-sub fh-cr-sub--inline"></span>').text(tag));
+			$li.append(' ').append($('<span class="fh-cr-sub fh-cr-sub--inline"></span>').text(suggestTag(item, i18n)));
 			$li.on('mousedown', function (e) {
 				e.preventDefault();
 				onPick($input, item);
@@ -757,6 +790,10 @@
 			});
 			$list.append($li);
 		});
+		if (hint) {
+			// A product of that name the shop has outside the fish categories: said, not offered.
+			$list.append($('<li class="fh-cr-suggest__empty fh-cr-suggest__hint"></li>').text(hint));
+		}
 		$input.after($list);
 	}
 
@@ -776,7 +813,7 @@
 						if (!res || !res.success || !$input.is(':focus')) {
 							return;
 						}
-						renderSuggest($input, (res.data && res.data.items) || [], onPick);
+						renderSuggest($input, (res.data && res.data.items) || [], onPick, (res.data && res.data.hint) || '', op);
 					});
 			}, 220);
 		});
