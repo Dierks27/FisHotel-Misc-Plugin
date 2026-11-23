@@ -616,7 +616,7 @@ class Admin {
 
 		/* translators: 1: product name, 2: comma-separated category slugs */
 		return sprintf(
-			__( '%1$s is in the %2$s category, which the theme uses to pick cart/checkout wording. This theme version counts sticker lines too, so a sticker in that category makes a fish order fall back to the generic wording. A newer FisHotel theme skips sticker lines — update the theme and this goes away by itself; otherwise move the product to a category the theme does not map (e.g. "stickers").', 'fishotel-misc-plugin' ),
+			__( '%1$s is in the %2$s category, which the theme uses to pick cart/checkout wording. This theme version counts sticker lines too, so a sticker in that category makes a customer\'s order that has fish in it fall back to the generic wording. A newer FisHotel theme skips sticker lines — update the theme and this goes away by itself; otherwise move the product to a category the theme does not map (e.g. "stickers").', 'fishotel-misc-plugin' ),
 			(string) $name,
 			implode( ', ', $in_preset )
 		);

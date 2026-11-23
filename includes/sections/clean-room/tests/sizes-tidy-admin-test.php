@@ -165,7 +165,7 @@ check( 'a size of the short list has no dropdown: it stays', 1 === preg_match( '
 check_contains( 'an in-between word starts on "take off the products"', 'data-key="g:medium-large" data-shown="remove"', $html );
 check_contains( 'a row counts in plain words', '1 product · 1 variation', $html );
 check_contains( 'an "and up" size is marked quietly', 'was open-ended (“and up”)', $html );
-check_contains( 'where else a size is stored', '2 stays · 1 fish order line · 1 fish request · 2 lost-fish cases · 1 draft invoice line · 1 box share · 14 past order lines', $html );
+check_contains( 'where else a size is stored', '2 stays · 1 line on fish orders · 1 fish request · 2 lost-fish cases · 1 draft invoice line · 1 box share · 14 past order lines', $html );
 check_contains( 'the fish for sale today, counted', '3 fish for sale today carry a size that is being taken off', $html );
 check( '…named, with their stock, and the three choices — "leave" first and ticked', false !== strpos( $html, 'Golden Wrasse' ) && false !== strpos( $html, '2 in stock' ) && 1 === preg_match( '/name="instock" value="leave"\s+checked="checked"/', $html ) && false !== strpos( $html, 'Move them to a size I pick' ) && false !== strpos( $html, 'Take them off the shop now' ) );
 check_contains( 'the out-of-stock ones are taken off now', '2 variations that are out of stock — nobody can buy them anyway — are switched off and lose their size', $html );

@@ -124,7 +124,7 @@ class Sticker_Giveaway {
 	public static function get_section_info() {
 		return array(
 			'name'        => __( 'Sticker Giveaway', 'fishotel-misc-plugin' ),
-			'description' => __( 'Let customers pick a free FisHotel sticker at checkout on fish orders, with an optional add-on sticker upsell.', 'fishotel-misc-plugin' ),
+			'description' => __( 'Let customers pick a free FisHotel sticker at checkout on orders that have fish in them, with an optional add-on sticker upsell.', 'fishotel-misc-plugin' ),
 			'icon'        => 'dashicons-tag',
 		);
 	}

@@ -272,9 +272,9 @@ $fh_open_states = Rules::is_open( $fh_state );
 						?>
 						<?php if ( (int) $request['cr_order_id'] > 0 ) : ?>
 							<?php if ( '' !== $detail['order_url'] ) : ?>
-								<a href="<?php echo esc_url( $detail['order_url'] ); ?>"><?php echo esc_html( sprintf( /* translators: %s: order ref */ __( 'Fish order %s', 'fishotel-misc-plugin' ), '' !== $detail['ref'] ? $detail['ref'] : '#' . (int) $request['cr_order_id'] ) ); ?></a>
+								<a href="<?php echo esc_url( $detail['order_url'] ); ?>"><?php echo esc_html( '' !== $detail['ref'] ? sprintf( /* translators: %s: fish order ref */ __( 'Fish order %s', 'fishotel-misc-plugin' ), $detail['ref'] ) : sprintf( /* translators: %d: fish order id */ __( 'Fish order no. %d (from the supplier)', 'fishotel-misc-plugin' ), (int) $request['cr_order_id'] ) ); ?></a>
 							<?php else : ?>
-								<?php echo esc_html( sprintf( /* translators: %d: fish order id */ __( 'Fish order #%d', 'fishotel-misc-plugin' ), (int) $request['cr_order_id'] ) ); ?>
+								<?php echo esc_html( sprintf( /* translators: %d: fish order id */ __( 'Fish order no. %d (from the supplier)', 'fishotel-misc-plugin' ), (int) $request['cr_order_id'] ) ); ?>
 							<?php endif; ?>
 							<?php if ( ! empty( $request['link_manual'] ) ) : ?>
 								<span class="fh-rq-sub fh-rq-sub--inline"><?php esc_html_e( 'matched by hand', 'fishotel-misc-plugin' ); ?></span>

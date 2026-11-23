@@ -59,7 +59,7 @@ $fh_table = static function ( array $rows, $open ) use ( $today, $sizes ) {
 				<th scope="col"><?php esc_html_e( 'Cleared', 'fishotel-misc-plugin' ); ?></th>
 				<th scope="col"><?php esc_html_e( 'On sale', 'fishotel-misc-plugin' ); ?></th>
 				<th scope="col"><?php esc_html_e( 'Tank', 'fishotel-misc-plugin' ); ?></th>
-				<th scope="col"><?php esc_html_e( 'Supplier / order', 'fishotel-misc-plugin' ); ?></th>
+				<th scope="col"><?php esc_html_e( 'Supplier / fish order', 'fishotel-misc-plugin' ); ?></th>
 				<th scope="col"></th>
 			</tr>
 		</thead>
@@ -153,7 +153,7 @@ $fh_table = static function ( array $rows, $open ) use ( $today, $sizes ) {
 								<label><?php esc_html_e( 'Product ID', 'fishotel-misc-plugin' ); ?> <input type="number" class="fh-cr-input fh-cr-input--num" name="product_id" value="<?php echo esc_attr( (string) $fh_stay['product_id'] ); ?>" min="0"></label>
 								<label><?php esc_html_e( 'Check-in', 'fishotel-misc-plugin' ); ?> <input type="date" class="fh-cr-input" name="checkin_date" value="<?php echo esc_attr( $fh_stay['checkin_date'] ); ?>" max="<?php echo esc_attr( $today ); ?>"></label>
 								<label><?php esc_html_e( 'Supplier', 'fishotel-misc-plugin' ); ?> <input type="text" class="fh-cr-input" name="supplier" value="<?php echo esc_attr( (string) $fh_stay['supplier'] ); ?>"></label>
-								<label><?php esc_html_e( 'Order ref', 'fishotel-misc-plugin' ); ?> <input type="text" class="fh-cr-input" name="order_ref" value="<?php echo esc_attr( (string) $fh_stay['order_ref'] ); ?>"></label>
+								<label><?php esc_html_e( 'Fish order ref', 'fishotel-misc-plugin' ); ?> <input type="text" class="fh-cr-input" name="order_ref" value="<?php echo esc_attr( (string) $fh_stay['order_ref'] ); ?>"></label>
 								<label><?php esc_html_e( 'Landed cost', 'fishotel-misc-plugin' ); ?> <input type="number" step="0.01" min="0" class="fh-cr-input fh-cr-input--num" name="landed_cost" value="<?php echo esc_attr( null !== $fh_stay['landed_cost'] ? number_format( (float) $fh_stay['landed_cost'], 2, '.', '' ) : '' ); ?>"></label>
 								<label class="fh-cr-fields__note"><?php esc_html_e( 'Note', 'fishotel-misc-plugin' ); ?> <input type="text" class="fh-cr-input" name="note" value="" placeholder="<?php esc_attr_e( 'adds a note event', 'fishotel-misc-plugin' ); ?>"></label>
 								<button type="button" class="button button-primary fh-cr-fields-save"><?php esc_html_e( 'Save', 'fishotel-misc-plugin' ); ?></button>

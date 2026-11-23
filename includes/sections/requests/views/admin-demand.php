@@ -33,7 +33,7 @@ use FisHotel\Misc\Sections\Requests\Rules;
 			<?php
 			echo esc_html(
 				$ctx['cleanroom']
-					? __( 'Requests taken here, beside what your past fish orders from suppliers (Clean Room → Fish orders) ordered of the same fish each year. Those orders were all customer requests, so what was ordered is what was asked for.', 'fishotel-misc-plugin' )
+					? __( 'Requests taken here, beside how many of the same fish you ordered from suppliers each year (Clean Room → Fish orders). Those orders were all customer requests, so what was ordered is what was asked for.', 'fishotel-misc-plugin' )
 					: __( 'Requests taken here. The quantities ordered from suppliers on past fish orders would stand beside them, but the Clean Room section is switched off.', 'fishotel-misc-plugin' )
 			);
 			?>

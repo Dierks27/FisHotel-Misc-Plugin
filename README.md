@@ -45,7 +45,7 @@ One word for one thing, on every screen of these sections:
 | **building** | a numbered group of tanks that share one water — 100, 200, … (Clean Room README, *The numbering rule*) | rack, room |
 | **system** | the water a building's tanks share (sump included): "whole system" doses and readings, "system gallons" | building (the place), tank |
 | **tank group** | the fish of one species that arrived and live together — a *stay* on the Clean Room's Stays tab | batch (a fish order) |
-| **fish order** | one order of fish placed with a supplier, with its lines — Clean Room → **Fish orders** (the tab once called Supplier orders) | supplier order, arrival |
+| **fish order** | one order of fish placed with a supplier, with its lines — Clean Room → **Fish orders** (the tab once called Supplier orders). One exception, kept because customers read it: the Sticker Giveaway's own wording to the customer ("Free with your fish order") means the customer's order; the admin screens say "a customer's order that has fish in it" | supplier order, arrival |
 | **bag** | the bag one fish is packed in; its standard sizes are Packing → Bags | pouch |
 | **box** | the shipping box an order goes out in (its list is ShipTracker's); a supplier's box only in the Clean Room's *Box rates* | carton, shipper |
 | **case** | Lost Fish: one paid-for fish (or several) that was lost, and what the customer is offered | claim, ticket |

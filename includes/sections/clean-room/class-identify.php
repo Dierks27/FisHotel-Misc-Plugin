@@ -773,9 +773,9 @@ class Identify {
 				$parts[] = sprintf( _n( '%d stay follows', '%d stays follow', $stays, 'fishotel-misc-plugin' ), $stays );
 			}
 		} elseif ( 'followed' === $out['line'] ) {
-			$parts[] = __( 'the order line follows', 'fishotel-misc-plugin' );
+			$parts[] = __( 'the fish order line follows', 'fishotel-misc-plugin' );
 		} elseif ( 'part' === $out['line'] ) {
-			$parts[] = __( 'its order line keeps its name: the group was split and another stay of that line is a different fish — correct that one too, or the whole line on its order', 'fishotel-misc-plugin' );
+			$parts[] = __( 'its fish order line keeps its name: the group was split and another stay of that line is a different fish — correct that one too, or the whole line on its fish order', 'fishotel-misc-plugin' );
 		}
 		if ( null !== $out['label'] ) {
 			/* translators: %s: what the supplier's label called the fish */

@@ -90,7 +90,7 @@ echo "2. In the tanks now\n";
 $in_tanks = group( $groups, 'tanks' );
 check_same( 'the groups with fish alive whose species matches — a closed, empty group is not offered', array( 'Blue Test Tang (Medium)', 'Blue Test Tang (Jumbo)', '?? grey Test Tang' ), array_column( $in_tanks['items'], 'name' ) );
 $medium = item( $in_tanks, 'Blue Test Tang (Medium)' );
-check_same( 'species and size in the name; alive, tank, fish order and what other open invoices hold in the detail', '5 alive · tank 121 · order 2026-3 · 2 on other open invoices', $medium['detail'] );
+check_same( 'species and size in the name; alive, tank, fish order and what other open invoices hold in the detail', '5 alive · tank 121 · fish order 2026-3 · 2 on other open invoices', $medium['detail'] );
 check( 'it keeps the ids of where it came from: the tank group, its product, the variation of that size', 'tank' === $medium['source'] && 21 === $medium['stay_id'] && $tang === $medium['product_id'] && $tang_m === $medium['variation_id'] && 'medium' === $medium['size_slug'] && 'Medium' === $medium['size_label'] );
 check( 'the price fills in from the variation of that size', 45.0 === $medium['price'] && 'variation' === $medium['price_from'] );
 check( 'alive and reserved are numbers the page can warn with; a paid invoice\'s fish are not "reserved"', 5 === $medium['alive'] && 2 === $medium['reserved'] );

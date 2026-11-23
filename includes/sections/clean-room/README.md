@@ -210,7 +210,7 @@ sale date — empty goes back to the batch's, a "suggested …" chip fills
 the picker) and **Identify** (*Correct the fish* on a fish that has a
 name): the Arrival sheet's species search and the Size dropdown — or
 *Unknown fish (??)* with what it looks like —, one Save, the toast
-"Identified: ?? small wrasse → … · the order line follows", and no Undo:
+"Identified: ?? small wrasse → … · the fish order line follows", and no Undo:
 who a fish is is corrected again, not reversed (see *Unknown and
 mislabeled fish*).
 
@@ -2112,9 +2112,8 @@ by those columns, and exports empty cells.
 
 ### Prices to raise
 
-**Read-only — nothing here ever changes a price.** One row per fish that
-has a fish order line which received fish at a price
-(`Stats_Prices`, pure):
+**Read-only — nothing here ever changes a price.** One row per fish
+received at a price on a fish order (`Stats_Prices`, pure):
 
 - **landed / fish, latest** — Σ landed ÷ Σ received over the fish's
   lines in the latest order that has it (by the order's date, then its

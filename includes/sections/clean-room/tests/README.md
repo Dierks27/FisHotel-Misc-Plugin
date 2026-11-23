@@ -1340,14 +1340,14 @@ line's `split` field holds anything (`fields_before`) — and one press on
     Settings → Box shares has no row for it. Phone, on its tank: the
     row says "needs identifying"; tap it → Identify → type the real
     fish, pick it, a size, Save: the toast "Identified: ?? small wrasse
-    → … · the order line follows", no Undo; the Events tab has
+    → … · the fish order line follows", no Undo; the Events tab has
     "identified: ?? small wrasse → …" with your name; the order line
     has the fish, its scientific name and size; Settings → Box shares
     now has its row. On another checked-in line, Stays tab → Correct
     fish… → another fish: the order line shows "arrived labeled: <the
     old name>"; correct it again — the label does not change. Move 1 of
     a group of 3 to another tank (a split), then Identify the 1 as
-    another fish: the order line keeps its name and shows "[part of this
+    another fish: the fish order line keeps its name and shows "[part of this
     line is … — stay #N]"; identify the other 2 as that same fish: the
     line follows and the note is gone. Phone → Arrival → "Unknown fish
     (??)": a "??" group with no product.

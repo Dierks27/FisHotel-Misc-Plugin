@@ -175,7 +175,7 @@ class Search {
 			}
 			if ( '' !== $group['order_ref'] ) {
 				/* translators: %s: fish order reference */
-				$detail[] = sprintf( __( 'order %s', 'fishotel-misc-plugin' ), $group['order_ref'] );
+				$detail[] = sprintf( __( 'fish order %s', 'fishotel-misc-plugin' ), $group['order_ref'] );
 			}
 			if ( $on_other > 0 ) {
 				/* translators: %d: fish */

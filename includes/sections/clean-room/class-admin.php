@@ -1619,7 +1619,7 @@ class Admin {
 		if ( empty( $row['needs_id'] ) ) {
 			return '';
 		}
-		return '<span class="fh-cr-warn fh-cr-unknown" title="' . esc_attr__( 'Nobody knows yet what this fish is. Name it with Identify… — its order line and the remembered box share follow.', 'fishotel-misc-plugin' ) . '">' . esc_html__( 'needs identifying', 'fishotel-misc-plugin' ) . '</span>';
+		return '<span class="fh-cr-warn fh-cr-unknown" title="' . esc_attr__( 'Nobody knows yet what this fish is. Name it with Identify… — its fish order line and the remembered box share follow.', 'fishotel-misc-plugin' ) . '">' . esc_html__( 'needs identifying', 'fishotel-misc-plugin' ) . '</span>';
 	}
 
 	/**

@@ -86,7 +86,7 @@ foreach ( $stays as $fh_stay ) {
 							<?php if ( ! empty( $fh_stay['batch_order_id'] ) ) : ?>
 								<a href="<?php echo esc_url( Admin_Workbook::order_url( (int) $fh_stay['batch_order_id'] ) ); ?>"><?php echo esc_html( (string) $fh_stay['batch_order_ref'] ); ?></a>
 							<?php else : ?>
-								<span class="fh-cr-metabox__muted"><?php esc_html_e( 'no fish order', 'fishotel-misc-plugin' ); ?></span>
+								<span class="fh-cr-metabox__muted"><?php esc_html_e( 'not from a fish order', 'fishotel-misc-plugin' ); ?></span>
 							<?php endif; ?>
 							<?php if ( $fh_stay['tank_number'] ) : ?>
 								· <a href="<?php echo esc_url( Clean_Room::front_desk_url( (int) $fh_stay['tank_number'] ) ); ?>" target="_blank" rel="noopener"><?php echo esc_html( sprintf( /* translators: %d: tank number */ __( 'Tank %d', 'fishotel-misc-plugin' ), (int) $fh_stay['tank_number'] ) ); ?></a>

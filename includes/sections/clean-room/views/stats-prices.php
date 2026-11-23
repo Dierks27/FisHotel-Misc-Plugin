@@ -96,7 +96,7 @@ $fh_counts     = $data['counts'];
 		<div class="fishotel-misc-empty"><span class="dashicons dashicons-yes-alt"></span><p>
 			<?php
 			if ( 0 === (int) $fh_counts['all'] ) {
-				esc_html_e( 'No fish order line here has received fish at a price yet.', 'fishotel-misc-plugin' );
+				esc_html_e( 'No fish has been received at a price on a fish order yet.', 'fishotel-misc-plugin' );
 			} else {
 				esc_html_e( 'No fish here is priced under what its latest order suggests. Tick "Show all fish" to see every one.', 'fishotel-misc-plugin' );
 			}
@@ -167,7 +167,7 @@ $fh_counts     = $data['counts'];
 		echo esc_html(
 			sprintf(
 				/* translators: %d: the step a suggested price is rounded to */
-				__( 'One row per fish that has a fish order line which received fish at a price. Latest = the newest order by its received date (else its order date). Suggested = the landed cost per fish of that order × its markup, to the nearest %d — exactly the order page\'s figure. FisHotel\'s price = the linked product\'s current price when the species is linked and the product has one (for a product with variations: the variation of the size the fish came in, when one matches; else its lowest variation price), else the species list\'s price. A fish with no price on file is listed only under "Show all fish". The supplier filter costs every fish from that supplier\'s orders alone.', 'fishotel-misc-plugin' ),
+				__( 'One row per fish received at a price on a fish order. Latest = the newest order by its received date (else its order date). Suggested = the landed cost per fish of that order × its markup, to the nearest %d — exactly the order page\'s figure. FisHotel\'s price = the linked product\'s current price when the species is linked and the product has one (for a product with variations: the variation of the size the fish came in, when one matches; else its lowest variation price), else the species list\'s price. A fish with no price on file is listed only under "Show all fish". The supplier filter costs every fish from that supplier\'s orders alone.', 'fishotel-misc-plugin' ),
 				Costing::PRICE_STEP
 			)
 		);
