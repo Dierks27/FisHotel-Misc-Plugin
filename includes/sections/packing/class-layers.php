@@ -160,7 +160,7 @@ class Layers {
 	 * @param string[] $texts A fish's name, its category names.
 	 * @return string The word, '' when none is found.
 	 */
-	public static function match( array $words, array $texts ) {
+	public static function find_word( array $words, array $texts ) {
 		foreach ( $words as $word ) {
 			$word = is_scalar( $word ) ? trim( (string) $word ) : '';
 			if ( '' === $word ) {
@@ -202,7 +202,7 @@ class Layers {
 			);
 		}
 
-		$word = self::match( $words, array_merge( array( is_scalar( $name ) ? (string) $name : '' ), $categories ) );
+		$word = self::find_word( $words, array_merge( array( is_scalar( $name ) ? (string) $name : '' ), $categories ) );
 		if ( '' !== $word ) {
 			return array(
 				'layers' => self::TRIPLE,
