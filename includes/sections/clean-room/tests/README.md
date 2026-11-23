@@ -1550,11 +1550,12 @@ line's `split` field holds anything (`fields_before`) — and one press on
     by its ref, the planned price. Check the order in: the row moves to
     the top with its tank and "N alive", and the Stays tab says *no
     product yet* under the group. Press **Start a draft product**: the
-    reply names the sizes and the price and what is left to do; *Finish
-    it in the shop →* opens a DRAFT product — with variations, in
-    Quarantined Fish, the scientific name under the title, one variation
-    per size at the planned price, 0 in stock, no shipping class — that
-    a logged-out visitor cannot open. Reload the list: the fish is gone,
+    reply names each size with its price — the size the price was typed
+    on has it, the other says "no price" — and what is left to do;
+    *Finish it in the shop →* opens a DRAFT product — with variations,
+    in Quarantined Fish, the scientific name under the title, one
+    variation per size, the planned price on its own size only, 0 in
+    stock, no shipping class — that a logged-out visitor cannot open. Reload the list: the fish is gone,
     the tags and the count are gone, the order's Numbers read the
     draft's price where no price was typed. Press the button twice
     quickly on another fish, and once more from a second tab that still
@@ -1570,4 +1571,13 @@ line's `split` field holds anything (`fields_before`) — and one press on
     *Identify…*, never among the rows. Open the list on a phone: each
     fish is a card and nothing scrolls sideways. As a user without the
     right to edit products: no *Start a draft product*, and the footnote
-    says why.
+    says why. Make a product by hand named exactly like a fish on the
+    list, in no fish category: the row says the shop has it, offers
+    *Link to it* and no draft; Products still holds one. Tick a product
+    only in a category two levels under Quarantined Fish: the Stays
+    tab's "Add fish already here" search finds it. Type a fish's name
+    with one letter wrong there: it is found, marked *similar spelling*.
+    Link a fish that is also on a CLOSED order: that order's Numbers are
+    what they were. On the Species list, link the fish to another
+    product: its group on the Stays tab shows the new one. A tagged
+    order line is as tall as its neighbours.
