@@ -1105,7 +1105,12 @@ class Settings {
 			return $denied;
 		}
 
-		$result = self::apply_words( self::get(), $raw['triple_words'] ?? '' );
+		$typed = $raw['triple_words'] ?? '';
+		if ( ! is_string( $typed ) ) {
+			return self::refused( array( __( 'the list of words could not be read', 'fishotel-misc-plugin' ) ) );
+		}
+
+		$result = self::apply_words( self::get(), $typed );
 		if ( $result['errors'] ) {
 			return self::refused( $result['errors'] );
 		}

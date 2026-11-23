@@ -208,12 +208,8 @@ if ( $fh_confirmed && $fh_can_use ) {
 		}
 		?>
 		<p class="fh-pack-box__pull">
-			<strong>
-				<?php
-				/* translators: %d: number of single bags */
-				echo esc_html( sprintf( _n( '%d bag to pull', '%d bags to pull', (int) $result['pull_total'], 'fishotel-misc-plugin' ), (int) $result['pull_total'] ) );
-				?>
-			</strong>
+			<?php /* translators: %d: number of single bags */ ?>
+			<strong><?php echo esc_html( sprintf( _n( '%d bag to pull', '%d bags to pull', (int) $result['pull_total'], 'fishotel-misc-plugin' ), (int) $result['pull_total'] ) ); ?></strong>
 			<?php echo esc_html( implode( ' · ', $fh_pull ) ); ?>
 			<span class="fh-pack-box__sub"><?php esc_html_e( 'every fish is double-bagged, triple-bagged for spines', 'fishotel-misc-plugin' ); ?></span>
 		</p>
