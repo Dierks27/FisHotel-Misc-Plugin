@@ -16,7 +16,7 @@
  *
  * "Bagging" says in how many layers this fish's bag is used: Auto (double,
  * or triple when its name or category has one of the "Triple-bag these"
- * words), Double or Triple. Auto stores nothing; the other two store '2'
+ * words — the option says which it is for this product), Double or Triple. Auto stores nothing; the other two store '2'
  * or '3' (decide_layers()). It is shown, like the Bag size, only while the
  * checkbox is ticked.
  *
@@ -605,6 +605,20 @@ class Product {
 			$auto = __( 'Auto: double-bagged (the “Triple-bag these” list under FisHotel Tools → Packing → Bags is empty).', 'fishotel-misc-plugin' );
 		}
 
+		// What Auto comes to for this product as it was last saved, said on the option itself.
+		$auto_option = __( 'Auto', 'fishotel-misc-plugin' );
+		$name        = null !== $product && method_exists( $product, 'get_name' ) ? trim( (string) $product->get_name() ) : '';
+		$categories  = null !== $product ? Layers::category_names( $product ) : array();
+		if ( '' !== $name || $categories ) {
+			$now = Layers::decide( '', $words, $name, $categories );
+			if ( Layers::TRIPLE === $now['layers'] ) {
+				/* translators: %s: the word of the "Triple-bag these" list that was found */
+				$auto_option = sprintf( __( 'Auto — triple for this fish (“%s” is on the list)', 'fishotel-misc-plugin' ), substr( $now['why'], strlen( Layers::WHY_WORD ) ) );
+			} else {
+				$auto_option = __( 'Auto — double for this fish', 'fishotel-misc-plugin' );
+			}
+		}
+
 		woocommerce_wp_select(
 			array(
 				'id'            => self::FIELD_LAYERS,
@@ -612,7 +626,7 @@ class Product {
 				'label'         => __( 'Bagging', 'fishotel-misc-plugin' ),
 				'value'         => $current,
 				'options'       => array(
-					''  => __( 'Auto', 'fishotel-misc-plugin' ),
+					''  => $auto_option,
 					'2' => __( 'Double — two bags', 'fishotel-misc-plugin' ),
 					'3' => __( 'Triple — three bags (sharp spines, a scalpel)', 'fishotel-misc-plugin' ),
 				),

@@ -145,10 +145,10 @@ $fh_next  = count( $fh_bags ) + $fh_spare;
 		<h2 class="fishotel-misc-card-title"><?php esc_html_e( 'Triple-bag these', 'fishotel-misc-plugin' ); ?></h2>
 	</div>
 	<p class="fishotel-misc-card-desc">
-		<?php esc_html_e( 'Every fish is double-bagged. A fish with sharp spines or a scalpel is triple-bagged: one whose name, or one of whose product categories, has a word of this list. A word counts whole, whatever the capitals, and so does its plural — “tang” finds “Yellow Tang” and “Tangs”, never “Tangerine”.', 'fishotel-misc-plugin' ); ?>
+		<?php esc_html_e( 'Every fish is double-bagged. A fish with sharp spines or a scalpel is triple-bagged: one whose name, or one of whose product categories, has a word of this list. A word counts whole, whatever the capitals, and one or many makes no difference — “tang” (or “tangs”) finds “Yellow Tang” and “Tangs”, never “Tangerine”.', 'fishotel-misc-plugin' ); ?>
 	</p>
 	<p class="fishotel-misc-card-desc">
-		<?php esc_html_e( 'One word per line, or separated by commas. To set one fish by hand, use Bagging (Auto / Double / Triple) in its product\'s Shipping tab: that beats this list. The order\'s Packing box shows the result on every fish line — ×2 or ×3 — and how many bags to pull in all.', 'fishotel-misc-plugin' ); ?>
+		<?php esc_html_e( 'One word per line, or separated by commas. A name is read as it is written: if your invoices say “Flame Angel”, “Niger Trigger” or “Volitan Lion”, add “angel”, “trigger” and “lion” — “angelfish” alone does not find them. To set one fish by hand, use Bagging (Auto / Double / Triple) in its product\'s Shipping tab: that beats this list. The order\'s Packing box shows the result on every fish line — ×2 or ×3 — and how many bags to pull in all.', 'fishotel-misc-plugin' ); ?>
 	</p>
 
 	<form class="fh-pack-form" method="post" action="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>">

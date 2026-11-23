@@ -14,8 +14,9 @@
  *   2. a word of the "Triple-bag these" list (Packing → Bags), found as a
  *      WHOLE word, whatever the letter case, in the order line's name or in
  *      one of its product's category names — so it also reaches the fish
- *      of an opened-up Invoice and a fish line with no product. A plural
- *      counts as its word: "tang" finds "Tangs", never "Tangerine";
+ *      of an opened-up Invoice and a fish line with no product. One or
+ *      many makes no difference: "tang" finds "Tangs" and "tangs" finds
+ *      "Tang" — never "Tangerine";
  *   3. otherwise 2.
  *
  * The filter fishotel_packing_bag_layers has the last word (for_line()).
@@ -152,13 +153,37 @@ class Layers {
 	}
 
 	/**
+	 * A listed word as it is looked for (pure): the word itself, and — when
+	 * it was typed as a plural — the word without its "s" or "es", so that
+	 * "tangs" on the list finds "Yellow Tang" just as "tang" finds "Tangs".
+	 * A word of three letters or fewer, and one ending in "ss", is taken as
+	 * it is.
+	 *
+	 * @param string $word A word of the list.
+	 * @return string[] The spellings to look for, the word itself first.
+	 */
+	public static function stems( $word ) {
+		$word = trim( (string) $word );
+		$out  = array( $word );
+		if ( '' === $word || 1 !== preg_match( '/^(.{3,}?)(e?)s$/is', $word, $m ) || 1 === preg_match( '/s$/i', $m[1] . $m[2] ) ) {
+			return '' === $word ? array() : $out;
+		}
+		$out[] = $m[1] . $m[2];
+		if ( '' !== $m[2] ) {
+			$out[] = $m[1];
+		}
+		return $out;
+	}
+
+	/**
 	 * The first word of the list found in one of the texts (pure) — as a
-	 * whole word, whatever the letter case; the word's plural counts
-	 * ("tang" finds "Blue Tangs"), a longer word does not ("Tangerine").
+	 * whole word, whatever the letter case; one or many makes no difference
+	 * ("tang" finds "Blue Tangs", "tangs" finds "Blue Tang"), a longer word
+	 * does not count ("Tangerine").
 	 *
 	 * @param string[] $words The list.
 	 * @param string[] $texts A fish's name, its category names.
-	 * @return string The word, '' when none is found.
+	 * @return string The word as the list has it, '' when none is found.
 	 */
 	public static function find_word( array $words, array $texts ) {
 		foreach ( $words as $word ) {
@@ -166,7 +191,11 @@ class Layers {
 			if ( '' === $word ) {
 				continue;
 			}
-			$quoted = preg_quote( $word, '/' );
+			$quoted = array();
+			foreach ( self::stems( $word ) as $stem ) {
+				$quoted[] = preg_quote( $stem, '/' );
+			}
+			$quoted = '(?:' . implode( '|', $quoted ) . ')';
 			foreach ( $texts as $text ) {
 				if ( ! is_scalar( $text ) || '' === (string) $text ) {
 					continue;
@@ -357,7 +386,7 @@ class Layers {
 		}
 		if ( self::WHY_FILTER === $why ) {
 			/* translators: %s: "Double-bagged" or "Triple-bagged" */
-			return sprintf( __( '%s: set by other code', 'fishotel-misc-plugin' ), $times );
+			return sprintf( __( '%s: set by another plugin', 'fishotel-misc-plugin' ), $times );
 		}
 		/* translators: %s: "Double-bagged" */
 		return sprintf( __( '%s: every fish is, unless it has spines', 'fishotel-misc-plugin' ), $times );

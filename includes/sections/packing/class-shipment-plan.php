@@ -21,8 +21,8 @@
  *     a pickup, the materials recorded with a new tracking number, the REST
  *     answer — without ShipTracker changing.
  *
- * build(), standard_for() and bags_for_count() are pure. Nothing here
- * writes anything, and nothing here may throw past its caller.
+ * build(), standard_for(), bags_for_count() and bags_for_open() are pure.
+ * Nothing here writes anything, and nothing here may throw past its caller.
  *
  * @package FisHotel\Misc\Sections\Packing
  */
@@ -42,8 +42,9 @@ class Shipment_Plan {
 
 	/**
 	 * What fish_count() read in this request, by order id: `items` (order
-	 * line id → its whole quantity) and `layers` (order line id → the single
-	 * bags it takes). False for an order with no fish line. Kept only while
+	 * line id → its whole quantity), `layers` (order line id → the single
+	 * bags it takes) and `orders` (the orders those lines are on — the
+	 * source orders of a combined box). False for an order with no fish line. Kept only while
 	 * the request reads (Order_Packing::reading()): the order screen asks
 	 * line by line.
 	 *
@@ -343,10 +344,11 @@ class Shipment_Plan {
 	 * a refund itself. A combined box is read through its source orders.
 	 *
 	 * @param object $order WC_Order.
-	 * @return array{items: array<int, int>, layers: array<int, int>}|null
+	 * @return array{items: array<int, int>, layers: array<int, int>, orders: int[]}|null
 	 */
 	public static function item_layers( $order ) {
 		$order_id = is_object( $order ) && method_exists( $order, 'get_id' ) ? (int) $order->get_id() : 0;
+		$asked_id = $order_id;
 		if ( ! Order_Packing::reading() ) {
 			$order_id = 0; // A request that may write: read the order again each time.
 		}
@@ -369,6 +371,7 @@ class Shipment_Plan {
 			$known = array(
 				'items'  => isset( $read['items'] ) && is_array( $read['items'] ) ? $read['items'] : array(),
 				'layers' => $layers,
+				'orders' => ! empty( $read['sources'] ) ? array_map( 'intval', $read['sources'] ) : array( $asked_id ),
 			);
 		}
 
@@ -388,7 +391,9 @@ class Shipment_Plan {
 	 *     read through other lines than these: left alone.
 	 *   - no ids, the count is the order's whole quantity: all its bags.
 	 *   - no ids, a smaller count (ShipTracker's "not in a box yet"): that
-	 *     share of the bags, to a whole bag.
+	 *     share of the bags, to a whole bag — the fallback of fish_count(),
+	 *     which first asks ShipTracker's shipments which lines are left
+	 *     (bags_for_open()).
 	 *
 	 * @param mixed      $count    ShipTracker's count.
 	 * @param array      $items    Order line id → its whole quantity.
@@ -431,6 +436,80 @@ class Shipment_Plan {
 	}
 
 	/**
+	 * The single bags of the lines that are in no box yet (pure) — the exact
+	 * answer to ShipTracker's "next box" question, in place of a share.
+	 * Null unless those lines add up to ShipTracker's own count: only then
+	 * were the same lines read as open on both sides.
+	 *
+	 * @param mixed $count   ShipTracker's count: the quantities of its open lines.
+	 * @param array $items   Order line id → its whole quantity.
+	 * @param array $layers  Order line id → its single bags.
+	 * @param array $covered The line ids a shipment already lists.
+	 * @return int|null
+	 */
+	public static function bags_for_open( $count, array $items, array $layers, array $covered ) {
+		if ( ! is_numeric( $count ) || (float) $count <= 0 ) {
+			return null;
+		}
+
+		$gone = array();
+		foreach ( $covered as $id ) {
+			if ( is_scalar( $id ) ) {
+				$gone[ (int) $id ] = true;
+			}
+		}
+
+		$open = 0;
+		$bags = 0;
+		foreach ( $items as $id => $qty ) {
+			if ( isset( $gone[ (int) $id ] ) ) {
+				continue;
+			}
+			$open += (float) $qty;
+			$bags += (int) ( $layers[ $id ] ?? 0 );
+		}
+
+		return abs( $open - (float) $count ) < 0.0001 ? $bags : null;
+	}
+
+	/**
+	 * The order lines ShipTracker's shipments already list, for the given
+	 * orders — read the way ShipTracker tells which lines are "not in a box
+	 * yet" (a shipment that lists no lines marks none). Null when
+	 * ShipTracker cannot be asked.
+	 *
+	 * @param int[]  $order_ids The orders the lines are on.
+	 * @param string $class     ShipTracker's shipment class (a test passes a stand-in).
+	 * @return int[]|null
+	 */
+	public static function covered_item_ids( array $order_ids, $class = 'FST_Shipment' ) {
+		if ( ! is_string( $class ) || ! class_exists( $class ) || ! method_exists( $class, 'get_by_order' ) ) {
+			return null;
+		}
+
+		$covered = array();
+		try {
+			foreach ( $order_ids as $order_id ) {
+				$order_id = (int) $order_id;
+				$rows     = $order_id > 0 ? call_user_func( array( $class, 'get_by_order' ), $order_id ) : array();
+				foreach ( is_array( $rows ) ? $rows : array() as $row ) {
+					$ids = is_object( $row ) && ! empty( $row->line_item_ids ) ? $row->line_item_ids : null;
+					$ids = is_string( $ids ) ? json_decode( $ids, true ) : $ids;
+					foreach ( is_array( $ids ) ? $ids : array() as $id ) {
+						if ( is_scalar( $id ) ) {
+							$covered[] = (int) $id;
+						}
+					}
+				}
+			}
+		} catch ( \Throwable $e ) {
+			return null;
+		}
+
+		return array_values( array_unique( $covered ) );
+	}
+
+	/**
 	 * The callback of ShipTracker's filter `fst_box_fish_count`: the single
 	 * bags (layers) of the order — or of some of its lines — in place of
 	 * the fish. The count comes back unchanged for an order Packing has no
@@ -450,7 +529,15 @@ class Shipment_Plan {
 			if ( null === $known ) {
 				return $count;
 			}
-			$bags = self::bags_for_count( $count, $known['items'], $known['layers'], $item_ids );
+			$bags = null;
+			if ( null === $item_ids && is_numeric( $count ) && (float) $count > 0 && (float) $count < array_sum( $known['items'] ) - 0.0001 ) {
+				// "Not in a box yet": the bags of exactly those lines, when ShipTracker's shipments say which.
+				$covered = self::covered_item_ids( $known['orders'] ?? array() );
+				$bags    = null === $covered ? null : self::bags_for_open( $count, $known['items'], $known['layers'], $covered );
+			}
+			if ( null === $bags ) {
+				$bags = self::bags_for_count( $count, $known['items'], $known['layers'], $item_ids );
+			}
 
 			return null === $bags ? $count : $bags;
 		} catch ( \Throwable $e ) {

@@ -342,16 +342,22 @@ pure). How a fish is known, in this order:
    product editor's Shipping tab, under *Livestock — packed in a bag*. It
    is stored on the **parent** product as the hidden meta `_fh_bag_layers`
    (`2` or `3`); **Auto stores nothing**. A variation is read from its
-   parent. Double on a tang is respected: the owner said so.
+   parent. Double on a tang is respected: the owner said so. The Auto
+   option says what it comes to for the product as it was last saved —
+   "Auto — double for this fish", or "Auto — triple for this fish (“tang”
+   is on the list)".
 2. **A word of the *Triple-bag these* list** (Packing → Bags), found in the
    order line's **name** or in one of its product's **category names**.
    Because it reads the line's name, it also reaches a fish with no
    product and each fish of an opened-up Invoice.
 3. Otherwise **2**.
 
-**How a word matches.** As a whole word, whatever the capitals — and its
-plural counts as the word: "tang" finds "Yellow Tang", "Yellow Tang-Medium"
-and a category called "Tangs", never "Tangerine" or "Mustang". A short
+**How a word matches.** As a whole word, whatever the capitals — and one
+or many makes no difference: "tang" finds "Yellow Tang", "Yellow Tang-Medium"
+and a category called "Tangs", and "tangs" on the list finds them just the
+same; neither finds "Tangerine" or "Mustang". A word is not its short
+form, though: "angelfish" does not find an invoice line written "Flame
+Angel" — add "angel" for that (the card says so). A short
 phrase ("powder blue") is a word too. A category with no name to read is
 read by its slug, the hyphens as spaces.
 
@@ -447,7 +453,10 @@ not changed**.
   ShipTracker counted its quantity.
 - **The whole order** (`null`): all of it. When ShipTracker's count is
   **below** the order's whole quantity — its "not in a box yet" count — the
-  same share of the bags, rounded to a whole bag.
+  bags of exactly the lines no shipment lists yet, read from ShipTracker's
+  own shipments (`FST_Shipment::get_by_order()`). When that cannot be told
+  — ShipTracker cannot be asked, or what its shipments list does not add
+  up to its count — the same share of the bags, rounded to a whole bag.
 - **Every line counts whole**, whatever happened to it: a shipped line (the
   card of the box that left asks about it) and a refunded one (the theme
   scales a refund itself). This is the one place that differs from the
@@ -601,6 +610,13 @@ into a combined box has none of its own — ask the combined box
   changed.
 - `fishotel_packing_box_cleared` — `$order_id` after it was cleared.
 
+**In the browser** — each time the Packing box of an order is drawn again
+(a box confirmed, changed or cleared, a line's bag changed, a refresh, a
+refused Confirm) `js/packing-admin.js` triggers the jQuery event
+`fishotel-packing-changed` on `document`, with `{ orderId }`. The theme's
+Shipments box listens and asks for the plan again, so a box changed here is
+the box the Add Shipment form holds — without reloading the page.
+
 **REST routes**: none. **Public AJAX**: none. The admin AJAX actions
 (`manage_woocommerce` + a nonce each): `fishotel_packing_bags`,
 `fishotel_packing_boxes`, `fishotel_packing_fits`, `fishotel_packing_map`,
@@ -723,6 +739,7 @@ packing/
 - **Prefilling the shipment form** is the theme's part: it reads
   `fishotel_packing_shipment_plan()`. This section only answers.
 - **Which lines are still open** is ShipTracker's to know: for "the next
-  box" it hands this section a number, not the lines, so the bags are that
-  share of the order's — a ballpark when the order mixes fish and dry
-  goods; tick the lines in the form for the exact count.
+  box" it hands this section a number, not the lines. The section looks the
+  lines up in ShipTracker's shipments; only when they do not add up to that
+  number are the bags a share of the order's — a ballpark when the order
+  mixes fish and dry goods; tick the lines in the form for the exact count.

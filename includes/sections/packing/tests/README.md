@@ -208,7 +208,8 @@ helper files exit cleanly when they are run directly (the CI runs every
 - **layers-test.php** — bag layers: the rule by the numbers (the
   product's *Bagging* choice first — Triple on a fish no word knows, Double
   on a tang; else a word of the list as a WHOLE word in the name or a
-  category name — any letter case, its plural, punctuation around it,
+  category name — any letter case, its plural, a word typed as a plural
+  finding the one fish ("tangs" → "Yellow Tang"), punctuation around it,
   never inside a longer word such as Tangerine or Mustang, a phrase, a
   name that is not UTF-8; else 2); the list of words (what it starts with,
   what a word is, the most it keeps; who may save it and with which nonce,
@@ -244,7 +245,10 @@ helper files exit cleanly when they are run directly (the CI runs every
   the contract's filter (nonsense and a throwing filter ignored);
   ShipTracker's `fst_box_fish_count` answered with the bags to pull —
   hooked outside wp-admin too, lines given, the whole order, dry goods 0,
-  an unknown line id, a smaller count scaled and rounded to a whole bag,
+  an unknown line id, a smaller count ("the next box") answered exactly
+  from the lines ShipTracker's shipments list — a stand-in for
+  `FST_Shipment::get_by_order()` — and scaled and rounded to a whole bag
+  when they say nothing, do not add up or fail,
   a shipped and a refunded line counted whole, an Invoice kept as one
   line, a credit, an order with no plan left as ShipTracker counted it, a
   combined box through its sources, an order read once however many lines
@@ -262,9 +266,13 @@ helper files exit cleanly when they are run directly (the CI runs every
   redraw the page being stopped while another form holds unsaved changes,
   the product editor's checkbox following the product's categories only
   while no choice is stored and the box was not touched, and a box the
-  owner clicked being marked on the form as a choice.
+  owner clicked being marked on the form as a choice; and, against a
+  stand-in for jQuery, the Packing box telling the document
+  (`fishotel-packing-changed`, with the order) each time an answer draws
+  it again — a refusal that hands the box back included, a failed post
+  not.
 
-907 checks in the fourteen PHP files and 49 in the node test. Since 0.46.15
+921 checks in the fourteen PHP files and 58 in the node test. Since 0.46.15
 the storefront test expects one hook outside wp-admin (ShipTracker's own
 filter for the fish of a box, which no storefront page fires) and the
 settings test five saves. Since 0.46.5

@@ -96,6 +96,32 @@ function fh_fst_open_count( $order, array $lines, array $covered ) {
 }
 
 /**
+ * ShipTracker's shipment class, as far as Packing meets it: the shipment
+ * rows of an order, each with the order lines it lists (a JSON list, as
+ * ShipTracker stores it; none = every line).
+ */
+class FST_Shipment {
+
+	public static function get_by_order( $order_id ) {
+		if ( 'throw' === $GLOBALS['fh_fst_shipments'] ) {
+			throw new \RuntimeException( 'ShipTracker failed' );
+		}
+		return $GLOBALS['fh_fst_shipments'][ (int) $order_id ] ?? array();
+	}
+}
+$GLOBALS['fh_fst_shipments'] = array();
+
+/**
+ * A shipment row listing some order lines.
+ *
+ * @param int[]|null $ids The lines (null = the row lists none).
+ * @return object
+ */
+function fh_fst_row( $ids ) {
+	return (object) array( 'line_item_ids' => null === $ids ? null : wp_json_encode( $ids ) );
+}
+
+/**
  * ShipTracker's three invented boxes, in its own spelling.
  *
  * @return array[]
@@ -403,6 +429,19 @@ check( 'the next box, nothing boxed yet (ShipTracker\'s count is the whole order
 check( 'the next box, every line boxed (ShipTracker falls back on the whole order): all 12', 12 === fh_fst_open_count( $order, $lines, array( 7001, 7002, 7003 ) ) );
 check( 'the next box with the tangs gone — ShipTracker counts 4 of 6 still open: that share of the bags, 12 × 4 ÷ 6 = 8', 8 === fh_fst_open_count( $order, $lines, array( 7001 ) ) );
 check( 'the share is rounded to a whole bag: 1 of 6 open is 2 bags, 5 of 6 is 10', 2 === fh_fst_open_count( $order, $lines, array( 7001, 7002 ) ) && 10 === fh_fst_open_count( $order, $lines, array( 7003 ) ) );
+$GLOBALS['fh_fst_shipments'] = array( 5001 => array( fh_fst_row( array( 7001 ) ) ) );
+check( 'with the shipment on record the next box is exact: the tangs left in a box of their own, so the 3 gobies\' 6 bags are left — not the share of 8', 6 === fh_fst_open_count( $order, $lines, array( 7001 ) ) );
+$GLOBALS['fh_fst_shipments'] = array( 5001 => array( fh_fst_row( array( 7002 ) ), fh_fst_row( array( '7003' ) ) ) );
+check( '— the gobies and the salt gone, in two boxes: the 2 tangs\' 6 bags', 6 === fh_fst_open_count( $order, $lines, array( 7002, 7003 ) ) );
+$GLOBALS['fh_fst_shipments'] = array( 5001 => array( fh_fst_row( null ) ) );
+check( 'a shipment that lists no lines says nothing about what is left: the share again', 8 === fh_fst_open_count( $order, $lines, array( 7001 ) ) );
+$GLOBALS['fh_fst_shipments'] = array( 5001 => array( fh_fst_row( array( 7002 ) ) ) );
+check( 'shipments that do not add up to ShipTracker\'s count are not believed: the share', 8 === fh_fst_open_count( $order, $lines, array( 7001 ) ) );
+$GLOBALS['fh_fst_shipments'] = 'throw';
+check( 'ShipTracker failing while it is asked: the share, and no exception', 8 === fh_fst_open_count( $order, $lines, array( 7001 ) ) );
+$GLOBALS['fh_fst_shipments'] = array( 5001 => array( fh_fst_row( array( 7001 ) ) ) );
+check( 'the lines of a box are still counted line by line, shipped or not', 6 === FST_Supplies::fish_count( $order, array( 7001 ) ) && 12 === FST_Supplies::fish_count( $order ) );
+$GLOBALS['fh_fst_shipments'] = array();
 check( 'a count above the order\'s quantity is the whole order, not more', 12 === apply_filters( 'fst_box_fish_count', 60, $order, null ) );
 check( 'a count that is no number, or none, is handed back as it came', 'abc' === apply_filters( 'fst_box_fish_count', 'abc', $order, null ) && 0 === apply_filters( 'fst_box_fish_count', 0, $order, null ) && null === apply_filters( 'fst_box_fish_count', null, $order, null ) );
 check( 'item ids that are not a list are not read as "the whole order"', 4 === apply_filters( 'fst_box_fish_count', 4, $order, '7001' ) );
@@ -474,6 +513,8 @@ echo "11. The pure halves\n";
 $items  = array( 1 => 2, 2 => 3, 3 => 1 );
 $layers = array( 1 => 6, 2 => 6 );
 check( 'the bags behind a count: lines given, the whole order, a share of it', 6 === Shipment_Plan::bags_for_count( 2, $items, $layers, array( 1 ) ) && 12 === Shipment_Plan::bags_for_count( 6, $items, $layers ) && 6 === Shipment_Plan::bags_for_count( 3, $items, $layers ) && 12 === Shipment_Plan::bags_for_count( 5.99999, $items, $layers ) );
+check( 'the bags of the lines in no box yet: exact when they add up to the count, nothing to say when they do not', 6 === Shipment_Plan::bags_for_open( 4, $items, $layers, array( 1 ) ) && 0 === Shipment_Plan::bags_for_open( 1, $items, $layers, array( '1', 2 ) ) && null === Shipment_Plan::bags_for_open( 3, $items, $layers, array( 1 ) ) && null === Shipment_Plan::bags_for_open( 0, $items, $layers, array() ) && null === Shipment_Plan::bags_for_open( 'x', $items, $layers, array() ) );
+check( 'the lines ShipTracker\'s shipments list: none without ShipTracker, and never an exception', null === Shipment_Plan::covered_item_ids( array( 5001 ), 'No_Such_Class' ) && array() === Shipment_Plan::covered_item_ids( array( 5001 ) ) && array() === Shipment_Plan::covered_item_ids( array( 0, -1 ) ) );
 check( 'and when it cannot say: no count, no quantity on the order, none of the lines known', null === Shipment_Plan::bags_for_count( 0, $items, $layers ) && null === Shipment_Plan::bags_for_count( 'x', $items, $layers ) && null === Shipment_Plan::bags_for_count( 2, array(), array() ) && null === Shipment_Plan::bags_for_count( 2, $items, $layers, array( 8, 9 ) ) );
 $built = Shipment_Plan::build( array( 'lines' => array(), 'packed_with' => 0 ), array(), null, 12 );
 check( 'a suggestion with no fish line builds "no plan"; with ShipTracker absent a box has no row', 'no_plan' === $built['reason'] && null === Shipment_Plan::build( fishotel_packing_suggest( 5001 ), Settings::get()['bags'], null, 5001 )['boxes'][0]['standard'] );

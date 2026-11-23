@@ -4,7 +4,8 @@
  * button of the Packing box posts, what a form's save may and may not do
  * to the page (a second post, another form's unsaved numbers), and when
  * the product editor's "Livestock — packed in a bag" checkbox follows the
- * product's categories — and that a box the owner clicked is stored.
+ * product's categories — and that a box the owner clicked is stored —
+ * and that the Packing box tells the document each time it is drawn again.
  *
  * Runs js/packing-admin.js without jQuery or a DOM: the file exports its
  * helpers and skips the DOM wiring when jQuery is absent.
@@ -34,7 +35,7 @@ function same( a, b ) {
 }
 
 console.log( '1. Exports' );
-check( 'the helpers are exported for node', helpers && [ 'fmt', 'rowFromTemplate', 'fillStep', 'nowLine', 'confirmPayload', 'bagPayload', 'afterSave', 'unsavedElsewhere', 'livestockFromCategories', 'drawnAsAfterClick' ].every( function ( name ) {
+check( 'the helpers are exported for node', helpers && [ 'fmt', 'rowFromTemplate', 'fillStep', 'nowLine', 'confirmPayload', 'bagPayload', 'afterSave', 'unsavedElsewhere', 'livestockFromCategories', 'drawnAsAfterClick', 'changedDetail' ].every( function ( name ) {
 	return typeof helpers[ name ] === 'function';
 } ) );
 check( 'and hung on the global for the browser', globalThis.fhPacking && globalThis.fhPacking.helpers === helpers );
@@ -121,6 +122,109 @@ check( 'no box at all: left alone', helpers.livestockFromCategories( null, fishI
 
 console.log( '9. drawnAsAfterClick(): a box the owner clicked is a choice' );
 check( 'the form then says the box was drawn the other way round, so the save stores what it is now — also when it was clicked off and on again', helpers.drawnAsAfterClick( true ) === 'no' && helpers.drawnAsAfterClick( false ) === 'yes' );
+
+console.log( '10. The Packing box says when it was drawn again' );
+check( 'the event has a name others can listen for, and carries the order', helpers.CHANGED_EVENT === 'fishotel-packing-changed' && same( helpers.changedDetail( '5001' ), { orderId: 5001 } ) && same( helpers.changedDetail( 5001 ), { orderId: 5001 } ) );
+check( 'what is not an order id is 0', same( helpers.changedDetail( '' ), { orderId: 0 } ) && same( helpers.changedDetail( undefined ), { orderId: 0 } ) && same( helpers.changedDetail( 'abc' ), { orderId: 0 } ) && same( helpers.changedDetail( '-4' ), { orderId: 0 } ) && same( helpers.changedDetail( '12abc' ), { orderId: 0 } ) );
+
+// The wiring itself, against a stand-in for jQuery: a click on a button of
+// the box posts, and each answer that draws the box again tells the document.
+( function () {
+	var handlers = {};
+	var posts    = [];
+	var heard    = [];
+	var drawn    = [];
+
+	function chain( attrs ) {
+		var me = {
+			length: 1,
+			attr: function ( name ) {
+				return attrs[ name ];
+			},
+			val: function () {
+				return '';
+			},
+			replaceWith: function ( html ) {
+				drawn.push( html );
+				return me;
+			},
+			on: function ( events, selector, handler ) {
+				handlers[ events + ' ' + selector ] = handler;
+				return me;
+			},
+			trigger: function ( name, args ) {
+				heard.push( [ name, args ] );
+				return me;
+			}
+		};
+		[ 'closest', 'find', 'prop', 'removeClass', 'addClass', 'text', 'last', 'first', 'data', 'toggleClass' ].forEach( function ( name ) {
+			me[ name ] = function () {
+				return me;
+			};
+		} );
+		return me;
+	}
+
+	var page = chain( { 'data-op': 'view', 'data-order-id': '5001', 'data-nonce': 'n' } );
+	var none = chain( {} );
+	none.length = 0;
+
+	function $( what ) {
+		if ( typeof what === 'function' ) {
+			what();
+			return page;
+		}
+		return what === '#fh_packs_in_bag' ? none : page;
+	}
+	$.post = function ( url, payload ) {
+		var call = { payload: payload };
+		posts.push( call );
+		return {
+			done: function ( fn ) {
+				call.done = fn;
+				return this;
+			},
+			fail: function ( fn ) {
+				call.fail = fn;
+				return this;
+			}
+		};
+	};
+
+	var file = path.join( __dirname, '..', 'js', 'packing-admin.js' );
+	delete require.cache[ require.resolve( file ) ];
+	global.jQuery   = $;
+	global.document = {};
+	require( file );
+	delete global.jQuery;
+
+	var click = handlers[ 'click .fh-pack-box .fh-pack-confirm' ];
+	check( 'the box\'s buttons are wired', typeof click === 'function' );
+	if ( typeof click !== 'function' ) {
+		delete global.document;
+		return;
+	}
+	var event = { preventDefault: function () {} };
+
+	click.call( {}, event );
+	check( 'a click posts the order of the box', posts.length === 1 && posts[ 0 ].payload.order_id === '5001' && posts[ 0 ].payload.op === 'view' );
+	check( 'nothing is said before the answer is there', heard.length === 0 );
+	posts[ 0 ].done( { success: true, data: { html: '<div>new</div>' } } );
+	check( 'the answer draws the box again and tells the document, with the order', same( drawn, [ '<div>new</div>' ] ) && same( heard, [ [ 'fishotel-packing-changed', [ { orderId: 5001 } ] ] ] ), JSON.stringify( heard ) );
+
+	click.call( {}, event );
+	posts[ 1 ].done( { success: false, data: { message: 'No.' } } );
+	check( 'an answer that draws nothing says nothing', drawn.length === 1 && heard.length === 1 );
+
+	click.call( {}, event );
+	posts[ 2 ].fail( { responseJSON: { data: { html: '<div>as it stands</div>' } } } );
+	check( 'a refusal that hands the box back as it stands now is a redraw too', drawn.length === 2 && heard.length === 2 && heard[ 1 ][ 0 ] === 'fishotel-packing-changed' );
+
+	click.call( {}, event );
+	posts[ 3 ].fail( null );
+	check( 'a failed post is not', drawn.length === 2 && heard.length === 2 );
+	delete global.document;
+}() );
 
 console.log( '\n' + ( failures ? failures + ' of ' + checks + ' checks FAILED' : 'All ' + checks + ' checks passed' ) );
 process.exit( failures ? 1 : 0 );
