@@ -463,7 +463,7 @@ $fh_item = static function ( array $change ) use ( $fh_mark ) {
 <?php endif; ?>
 
 <ul class="fh-tidy__list fh-tidy__small">
-	<li><?php esc_html_e( 'The Clean Room\'s stays and supplier order lines, fish requests, lost-fish cases, draft invoices, box shares and the Packing size map follow a size that BECOMES another. A size that is taken off stays on the fish in the tanks as it is — it shows as "not a standard size".', 'fishotel-misc-plugin' ); ?></li>
+	<li><?php esc_html_e( 'The Clean Room\'s stays and fish order lines, fish requests, lost-fish cases, draft invoices, box shares and the Packing size map follow a size that BECOMES another. A size that is taken off stays on the fish in the tanks as it is — it shows as "not a standard size".', 'fishotel-misc-plugin' ); ?></li>
 	<li><?php esc_html_e( 'Past orders are not touched: an order line keeps the size text it was bought with. Open baskets are not rewritten either — but WooCommerce itself takes a fish out of a basket once its size has another name or it is off the shop: the shopper is told it "has since been modified" and is given a link to add it back. A quiet hour is the best time to tidy up.', 'fishotel-misc-plugin' ); ?></li>
 	<li><?php esc_html_e( 'An old size is removed from the list only once no product and no variation uses it any more — a product in the trash counts: the trash is left alone.', 'fishotel-misc-plugin' ); ?></li>
 </ul>

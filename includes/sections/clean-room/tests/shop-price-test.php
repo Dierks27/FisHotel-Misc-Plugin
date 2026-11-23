@@ -174,7 +174,7 @@ check( 'the costing says nothing about such a line (null, not a loss)', null ===
 $c = $order['costing'];
 check( 'the order counts them: 3 lines, 120.00 landed', 3 === $c['unpriced'] && near( $c['unpriced_landed'], 120 ) && near( $c['total'], 400 ) );
 check( 'they are left out of the revenue and of "up or down"', near( $c['revenue'], 2975 ) && near( $c['up_down_priced'], 2695 ) && near( $c['up_down'], 2575 ) && near( $c['ratio_priced'], 2975 / 280 ) );
-check( 'the page and the Arrivals list show the figure without them', '+2,695.00' === $f['order']['up_down'] && 'up' === $f['order']['up_down_flag'] && '10.63' === $f['order']['ratio'] && near( Orders::summary( $order )['up_down'], 2695 ) && 3 === Orders::summary( $order )['unpriced'] );
+check( 'the page and the Fish orders list show the figure without them', '+2,695.00' === $f['order']['up_down'] && 'up' === $f['order']['up_down_flag'] && '10.63' === $f['order']['ratio'] && near( Orders::summary( $order )['up_down'], 2695 ) && 3 === Orders::summary( $order )['unpriced'] );
 check( 'the Numbers panel says how many lines that is', '3' === $f['order']['unpriced'] && '3 lines have no shop price yet: they are left out of the revenue and of "up or down".' === $f['order']['no_price'] );
 check( '… one line reads in the singular, none says nothing', '1 line has no shop price yet: it is left out of the revenue and of "up or down".' === Admin_Workbook::unpriced_text( 1 ) && '' === Admin_Workbook::unpriced_text( 0 ) );
 check( 'the grand total still holds every line: a fish without a price was still paid for', '400.00' === $f['order']['grand_total'] );
@@ -212,7 +212,7 @@ $order = Admin_Workbook::resolve_order( $store, $store->order( $saved['order_id'
 $l     = $order['lines'];
 check( 'emptying the field follows the shop again (31.00)', null === $l[0]['worth'] && 'product' === $l[0]['worth_from'] && near( $l[0]['profit'], 270 ) );
 $listed = Admin_Workbook::resolved_orders( $store, array() );
-check( 'the Arrivals list and the Stats read the same prices in one go', 1 === count( $listed ) && near( $listed[0]['lines'][1]['shop_price'], 66 ) && near( $listed[0]['costing']['revenue'], $order['costing']['revenue'] ) && near( $listed[0]['costing']['up_down_priced'], $order['costing']['up_down_priced'] ) );
+check( 'the Fish orders list and the Stats read the same prices in one go', 1 === count( $listed ) && near( $listed[0]['lines'][1]['shop_price'], 66 ) && near( $listed[0]['costing']['revenue'], $order['costing']['revenue'] ) && near( $listed[0]['costing']['up_down_priced'], $order['costing']['up_down_priced'] ) );
 
 echo "6. An order whose lines all carry a typed worth is costed as before — to the cent\n";
 /* The worked example of costing-test.php, section 1: the same order, the same expected figures. */
@@ -327,7 +327,7 @@ check( '… a closed order is not read for at all: its unpriced line stays "no s
 $f9 = Admin_Workbook::figures( $later );
 check( '… and the tooltip says why', false !== strpos( $f9['lines'][0]['shop_note'], 'The price this order was closed with' ) && false !== strpos( $f9['lines'][1]['shop_note'], 'a closed order does not follow the shop' ) );
 $year = Admin_Workbook::resolved_orders( $shop, array() );
-check( 'the Arrivals list and the Stats read the same frozen figures', near( $year[0]['costing']['revenue'], $later['costing']['revenue'] ) && near( \FisHotel\Misc\Sections\Clean_Room\Stats::build( $year )['totals']['revenue'], $later['costing']['revenue'] ) );
+check( 'the Fish orders list and the Stats read the same frozen figures', near( $year[0]['costing']['revenue'], $later['costing']['revenue'] ) && near( \FisHotel\Misc\Sections\Clean_Room\Stats::build( $year )['totals']['revenue'], $later['costing']['revenue'] ) );
 fh_save( $shop, $form9(), array( 'status' => 'closed' ), $oid );
 check( 'saving a closed order again freezes nothing anew: the line that had no price still has none', null === $shop->order( $oid )['lines'][1]['worth'] && near( $shop->order( $oid )['lines'][0]['worth'], 60 ) );
 $history = fh_shop();

@@ -109,7 +109,7 @@ function fh_render( $store, array $get ) {
 }
 
 /*
- * The store. Supplier orders, no fees (landed = received × price):
+ * The store. Fish orders, no fees (landed = received × price):
  *
  *   2024-1  Test Supplier One, Testland   wrasse 10 ordered / 9 received / 9 survived, price 5, worth 40
  *   2025-1  Test Supplier Two, Testland   goby 5 / 5 / survivors not typed, price 4, worth 20
@@ -277,6 +277,14 @@ check( 'the workbook admin hands these four to this class: its export link works
 echo "7. The screens: By year\n";
 $html = fh_render( $store, array( 'year' => '2026' ) );
 check( 'it renders (no notice, no error)', false === strpos( $html, 'RENDER FAILED' ) && false !== strpos( $html, 'fh-cr-wrap' ), substr( $html, 0, 300 ) );
+check( 'the tab of the orders of fish is named "Fish orders"; its address is unchanged (tab=arrivals)', 1 === preg_match( '/<a class="fh-cr-tab[^"]*" href="[^"]*tab=arrivals[^"]*">Fish orders<\/a>/', $html ), substr( $html, 0, 1200 ) );
+$fh_old_name = array();
+foreach ( array_merge( glob( dirname( __DIR__ ) . '/*.php' ), glob( dirname( __DIR__ ) . '/views/*.php' ), glob( dirname( __DIR__ ) . '/js/*.js' ), glob( dirname( __DIR__, 2 ) . '/requests/*.php' ), glob( dirname( __DIR__, 2 ) . '/requests/views/*.php' ) ) as $fh_file ) {
+	if ( 1 === preg_match( '/supplier\s+orders?\b/i', (string) file_get_contents( $fh_file ) ) ) {
+		$fh_old_name[] = basename( $fh_file );
+	}
+}
+check( 'one name everywhere: no screen of the Clean Room or of Requests still says "supplier order"', array() === $fh_old_name, implode( ', ', $fh_old_name ) );
 check( 'the strip of the five views, "By year" current', 4 === substr_count( $html, 'class="fh-cr-subtab"' ) && 1 === substr_count( $html, 'class="fh-cr-subtab is-active"' ) && false !== strpos( $html, 'aria-current="page">By year<' ) && false !== strpos( $html, 'view=compare' ) && false !== strpos( $html, 'view=sales' ) );
 check( 'it SAYS which figures are estimates: the legend, "Est. revenue", "Est. up / down", "Estimated up or down" — and points at Real sales', false !== strpos( $html, 'fh-cr-kind--est' ) && false !== strpos( $html, 'are estimates' ) && false !== strpos( $html, 'Est. revenue' ) && false !== strpos( $html, 'Est. up / down' ) && false !== strpos( $html, 'Estimated up or down' ) && false !== strpos( $html, 'under Real sales' ) && false === strpos( $html, '>Revenue<' ) );
 
@@ -304,7 +312,7 @@ check( 'one year picked: the notice, and the last two shown', false !== strpos( 
 $html = fh_render( new Fake_Store(), array( 'view' => 'compare' ) );
 check( 'no orders at all: it says so instead of an empty table', false === strpos( $html, 'RENDER FAILED' ) && false !== strpos( $html, 'nothing to compare' ) && false === strpos( $html, 'fh-cr-compare__year' ) );
 $html = fh_render( $one_year, array( 'view' => 'compare' ) );
-check( 'one year of orders: its figures and a note that there is no change yet', false === strpos( $html, 'RENDER FAILED' ) && false !== strpos( $html, 'Only one year has supplier orders' ) && false === strpos( $html, 'fh-cr-compare__change' ) );
+check( 'one year of orders: its figures and a note that there is no change yet', false === strpos( $html, 'RENDER FAILED' ) && false !== strpos( $html, 'Only one year has fish orders' ) && false === strpos( $html, 'fh-cr-compare__change' ) );
 
 echo "9. The screens: Species\n";
 $html = fh_render( $store, array( 'view' => 'species', 'year' => '0' ) );
@@ -395,7 +403,7 @@ delete_transient( Stats_Sales::TRANSIENT );
 $p = Admin_Stats::prices_data( $big, array( 'all' => true ) );
 check( 'Prices to raise keeps to the newest orders — a fish\'s latest order and its last three — and its data says on how many it rests (0 while every order fits)', 500 === $p['window'] && 0 === Admin_Stats::prices_data( $store, array() )['window'] && 1 === count( $p['rows'] ) && '2026-23' === $p['rows'][0]['latest_ref'] && '2026-12-24' === $p['rows'][0]['latest_date'], json_encode( array( $p['window'], $p['rows'][0]['latest_ref'] ?? null ) ) );
 $html = fh_render( $big, array( 'view' => 'prices', 'all' => '1' ) );
-check( '… and the screen says so; a store under the limit shows no such note', false === strpos( $html, 'RENDER FAILED' ) && false !== strpos( $html, 'rests on the newest 500 supplier orders' ) && false === strpos( fh_render( $store, array( 'view' => 'prices', 'all' => '1' ) ), 'rests on the newest' ) );
+check( '… and the screen says so; a store under the limit shows no such note', false === strpos( $html, 'RENDER FAILED' ) && false !== strpos( $html, 'rests on the newest 500 fish orders' ) && false === strpos( fh_render( $store, array( 'view' => 'prices', 'all' => '1' ) ), 'rests on the newest' ) );
 
 echo "14. Species: a group adds up to the same group on \"By year\"\n";
 $typed = new Fake_Store();

@@ -1,6 +1,6 @@
 <?php
 /**
- * Clean Room stats — PURE: the yearly figures over the supplier orders,
+ * Clean Room stats — PURE: the yearly figures over the fish orders,
  * both ways the question can be answered.
  *
  *   weighted      Σ ÷ Σ over every order: fill = Σ received ÷ Σ ordered,
@@ -258,7 +258,7 @@ class Stats {
 			'total'           => (float) $costing['total'],
 			'grand_total'     => (float) $costing['grand_total'],
 			'revenue'         => (float) $costing['revenue'],
-			// "Up or down" as the order page, the Arrivals list and the export say it: the revenue
+			// "Up or down" as the order page, the Fish orders list and the export say it: the revenue
 			// against what the lines WITH a price cost. A line without a shop price has no revenue
 			// yet, and its cost is not counted as a loss (unpriced_landed says how much that is).
 			'up_down'         => (float) ( $costing['up_down_priced'] ?? $costing['up_down'] ),
@@ -1037,7 +1037,7 @@ class Stats {
 	 * what is alive, shipped and lost, and they are left out of every
 	 * figure that needs a date or a batch — the yearly figures, the
 	 * survival per batch, the landed cost, the days in QT — because they
-	 * belong to no supplier order. Says how many were left out, and how
+	 * belong to no fish order. Says how many were left out, and how
 	 * many of the groups still in tanks have no arrival date or no
 	 * cleared date.
 	 *
@@ -1086,7 +1086,7 @@ class Stats {
 				}
 			}
 		}
-		// None of them is on a supplier order: every one is left out of the batch figures.
+		// None of them is on a fish order: every one is left out of the batch figures.
 		$out['left_out_groups'] = $out['groups'];
 		$out['left_out_fish']   = $out['added'];
 

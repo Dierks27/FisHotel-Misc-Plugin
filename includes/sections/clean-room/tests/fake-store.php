@@ -521,7 +521,7 @@ class Fake_Store {
 	}
 
 	/**
-	 * The supplier order a stay row belongs to (its order line's order), or 0.
+	 * The fish order a stay row belongs to (its order line's order), or 0.
 	 */
 	private function batch_of( array $row ) {
 		$line = ! empty( $row['order_line_id'] ) && isset( $this->lines[ (int) $row['order_line_id'] ] ) ? $this->lines[ (int) $row['order_line_id'] ] : null;
@@ -1296,7 +1296,7 @@ class Fake_Store {
 		return $out;
 	}
 
-	/* ---- supplier orders ------------------------------------------ */
+	/* ---- fish orders ------------------------------------------ */
 
 	private function order_row( array $row ) {
 		$building = $row['building_id'] ? $this->building( $row['building_id'] ) : null;

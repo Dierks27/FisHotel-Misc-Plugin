@@ -144,7 +144,7 @@ class Layout {
 			case 'today':
 				return __( 'The next delivery days and everything that is waiting on you, from every section that is on — as a page and a dashboard widget. Starts nothing by itself.', 'fishotel-misc-plugin' );
 			case 'clean-room':
-				return __( 'Where every fish is, from landing to shipping: tanks with QR labels, the phone screen, the day\'s to-do list, supplier orders, check-in and stats. Starts nothing by itself: it sends no e-mail and calls nothing outside the site.', 'fishotel-misc-plugin' );
+				return __( 'Where every fish is, from landing to shipping: tanks with QR labels, the phone screen, the day\'s to-do list, fish orders from suppliers, check-in and stats. Starts nothing by itself: it sends no e-mail and calls nothing outside the site.', 'fishotel-misc-plugin' );
 			case 'invoices':
 				return __( 'Build a customer\'s invoice by picking fish and publish it as the hidden product they pay; it is marked paid when its order is paid. Starts nothing by itself and sends no e-mail.', 'fishotel-misc-plugin' );
 			case 'requests':

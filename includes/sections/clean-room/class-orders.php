@@ -1,6 +1,6 @@
 <?php
 /**
- * Clean Room orders — the supplier order (what the workbook's "Recieved
+ * Clean Room orders — the fish order (what the workbook's "Recieved
  * (N)" sheet held) on top of the Store: the sanitised header and lines
  * from a form, the live figures of a line that was checked in, the
  * costing of an order, and the check-in itself.
@@ -621,7 +621,7 @@ class Orders {
 				$occupied[] = (int) $stay['tank_id'];
 			}
 		}
-		// The Arrivals button writes source 'order'; the workbook import 'import'.
+		// The check-in button of a fish order writes source 'order'; the workbook import 'import'.
 		$source = 'import' === (string) ( $base['source'] ?? '' ) ? 'import' : 'order';
 		$base   = array_merge( $base, array( 'source' => $source ) );
 		// The splits planned on the order page (the workbook import has none).

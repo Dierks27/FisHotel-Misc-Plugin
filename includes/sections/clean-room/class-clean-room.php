@@ -28,7 +28,7 @@
  *                           losses − shipped, recount overrides; cleared by
  *                           the first move from the Spa into the Clean Room;
  *                           for sale from a CHOSEN date — the stay's own,
- *                           else its batch's on the supplier order; splits),
+ *                           else its batch's on the fish order; splits),
  *                           the day math, the compensating (undo) event.
  *   - class-protocol.php    PURE: the editable treatment template → each
  *                           tank's daily to-do (feeding + due steps). It
@@ -50,7 +50,7 @@
  *   - class-admin.php       the Room Board page (Board / Stays / Events /
  *                           Settings), CSV, the label print page, the
  *                           product meta box.
- *   - class-costing.php     PURE: the supplier order's landed-cost maths,
+ *   - class-costing.php     PURE: the fish order's landed-cost maths,
  *                           replicating the workbook's order sheet; a line's
  *                           percent of a box, and the per-box summary.
  *   - class-sizes.php       PURE: the standard fish sizes (the product
@@ -66,7 +66,7 @@
  *   - class-splits.php      a line laid out over tanks at its check-in: the
  *                           plan, "1 per tank", the fish split last time.
  *   - class-stats-prices.php  PURE: the fish priced under what their latest
- *                           supplier order suggests (read-only).
+ *                           fish order suggests (read-only).
  *   - class-stats-sales.php   what customers actually paid per fish and year,
  *                           from WooCommerce's paid orders (pure maths; the
  *                           statuses that count and the cache flush).
@@ -88,7 +88,7 @@
  *   - class-import.php      the mapped workbook into the Store (species upsert,
  *                           box rates, orders + lines, recent batches as stays,
  *                           treatment logs), idempotent; preview() pure.
- *   - class-admin-workbook.php  the Arrivals / Species / Stats tabs, their
+ *   - class-admin-workbook.php  the Fish orders / Species / Stats tabs, their
  *                           AJAX and the XLSX / CSV exports.
  *   - class-admin-stats.php  the Stats tab's further views — Compare years,
  *                           Species, Prices to raise, Real sales — and their
@@ -189,7 +189,7 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 		public static function get_section_info() {
 			return array(
 				'name'        => __( 'Clean Room', 'fishotel-misc-plugin' ),
-				'description' => __( 'Where every fish is, from landing to shipping: buildings and tanks with QR labels, a one-thumb phone screen with voice, a room board, stays with day counts and clearing, supplier orders with the workbook\'s landed-cost maths and a check-in that creates the stays, a species master, yearly stats, Excel exports, and the facts the fish page reads.', 'fishotel-misc-plugin' ),
+				'description' => __( 'Where every fish is, from landing to shipping: buildings and tanks with QR labels, a one-thumb phone screen with voice, a room board, stays with day counts and clearing, fish orders from suppliers with the workbook\'s landed-cost maths and a check-in that creates the stays, a species master, yearly stats, Excel exports, and the facts the fish page reads.', 'fishotel-misc-plugin' ),
 				'icon'        => 'dashicons-location-alt',
 			);
 		}
@@ -581,7 +581,7 @@ namespace {
 		 * meta), never zeros.
 		 *
 		 * Each stay's sale_ready_date is its effective sale date — its own
-		 * date, else its batch's (the supplier order's "Goes on sale"),
+		 * date, else its batch's (the fish order's "Goes on sale"),
 		 * else NULL: a stay without a chosen date is not for sale, so a
 		 * theme must handle null (it used to be a computed string).
 		 * sale_date_source says where the date comes from ('own' /

@@ -122,7 +122,8 @@ taken and no wallet credited.
 With the Clean Room section on, the daily check (and *Run the daily check
 now*) moves requests by itself:
 
-- **waiting → on_order** when a supplier order that is a *draft* or
+- **waiting → on_order** when a fish order (an order of fish placed
+  with a supplier: Clean Room → Fish orders) that is a *draft* or
   *ordered* has a line of that fish — the species-list entry when both
   have one, else the product, else the same name; and the same size when
   both have one. The oldest request first; never more fish than the line
@@ -145,10 +146,10 @@ now*) moves requests by itself:
   line: that match is the owner's to undo), and a request that was
   already told is never taken back.
 
-On a request's page the owner can **match it by hand** to a supplier
+On a request's page the owner can **match it by hand** to a fish
 order line (also on an order that is already received) and **take it
 off** again; taken off by hand, it is left alone until *Let it match by
-itself again*. The Clean Room's supplier order page shows **Requested
+itself again*. The Clean Room's fish order page shows **Requested
 by: …** under each line.
 
 Without the Clean Room nothing follows by itself: the screens say so,
@@ -217,7 +218,7 @@ $request = fishotel_requests_get( $id ); // array|null
   `fishotel_requests_mail_link_hosts` (the hosts an e-mail may link to —
   the site's own), `fishotel_requests_mail` ( args, kind, request ).
 - **Clean Room**: `do_action( 'fishotel_cleanroom_order_line', $line )`
-  under each line's fish on the supplier order page (the one line this
+  under each line's fish on the fish order page (the one line this
   section added outside its folder).
 - **Meta**: order line `_fh_request_fee`, `_fh_request_fee_amount`;
   order `_fishotel_request_fee`; cart item key `fh_request_fee`.

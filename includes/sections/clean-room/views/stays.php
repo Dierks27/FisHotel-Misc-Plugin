@@ -15,7 +15,7 @@
  * @var array   $filters      area, species, ready, needs_id, no_sale, tank (what a Board card links with).
  * @var array[] $sizes        The standard sizes (slug, label).
  * @var array[] $fish_tanks   The tanks "Add fish already here" offers (Admin::existing_tanks()).
- * @var array   $picks        suppliers, origins the supplier orders already name.
+ * @var array   $picks        suppliers, origins the fish orders already name.
  * @var string  $csv_url      Nonced CSV URL.
  * @var array   $settings     Settings.
  * @var string  $today        Site date.
@@ -131,7 +131,7 @@ $fh_table = static function ( array $rows, $open ) use ( $today, $sizes ) {
 							<?php if ( $fh_stay['product_id'] && Replay::is_date( $fh_stay['sale_ready_date'] ) ) : ?>
 								<button type="button" class="button button-small fh-cr-release" title="<?php esc_attr_e( 'Set the product\'s Coming Soon countdown to this sale date', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'Coming Soon', 'fishotel-misc-plugin' ); ?></button>
 							<?php endif; ?>
-							<button type="button" class="button button-small fh-cr-identify-open<?php echo ! empty( $fh_stay['needs_id'] ) ? ' button-primary' : ''; ?>" data-stay="<?php echo esc_attr( $fh_stay['id'] ); ?>" data-size="<?php echo esc_attr( (string) $fh_stay['size_slug'] ); ?>" data-size-label="<?php echo esc_attr( (string) $fh_stay['size_label'] ); ?>" title="<?php esc_attr_e( 'Name the real fish and its size: the stay and its supplier order line are corrected together.', 'fishotel-misc-plugin' ); ?>"><?php echo esc_html( ! empty( $fh_stay['needs_id'] ) ? __( 'Identify…', 'fishotel-misc-plugin' ) : __( 'Correct fish…', 'fishotel-misc-plugin' ) ); ?></button>
+							<button type="button" class="button button-small fh-cr-identify-open<?php echo ! empty( $fh_stay['needs_id'] ) ? ' button-primary' : ''; ?>" data-stay="<?php echo esc_attr( $fh_stay['id'] ); ?>" data-size="<?php echo esc_attr( (string) $fh_stay['size_slug'] ); ?>" data-size-label="<?php echo esc_attr( (string) $fh_stay['size_label'] ); ?>" title="<?php esc_attr_e( 'Name the real fish and its size: the stay and its fish order line are corrected together.', 'fishotel-misc-plugin' ); ?>"><?php echo esc_html( ! empty( $fh_stay['needs_id'] ) ? __( 'Identify…', 'fishotel-misc-plugin' ) : __( 'Correct fish…', 'fishotel-misc-plugin' ) ); ?></button>
 							<button type="button" class="button button-small fh-cr-fields-toggle"><?php esc_html_e( 'Edit', 'fishotel-misc-plugin' ); ?></button>
 						<?php endif; ?>
 					</td>
@@ -235,7 +235,7 @@ $fh_table = static function ( array $rows, $open ) use ( $today, $sizes ) {
 	<?php if ( $tables_ok && ! empty( $fish_tanks ) ) : ?>
 		<details class="fh-cr-existing">
 			<summary><?php esc_html_e( 'Add fish already here', 'fishotel-misc-plugin' ); ?></summary>
-			<p class="fh-cr-sub"><?php esc_html_e( 'Fish that are already in a tank — in the Clean Room for a long time, say — go straight in, with no Spa step. Anything you do not know stays Unknown (never a guessed date); fill it in later with Edit or Cleared…. They are marked "already here" and belong to no supplier order.', 'fishotel-misc-plugin' ); ?></p>
+			<p class="fh-cr-sub"><?php esc_html_e( 'Fish that are already in a tank — in the Clean Room for a long time, say — go straight in, with no Spa step. Anything you do not know stays Unknown (never a guessed date); fill it in later with Edit or Cleared…. They are marked "already here" and belong to no fish order.', 'fishotel-misc-plugin' ); ?></p>
 			<div class="fh-cr-fields__row fh-cr-existing__row">
 				<label><?php esc_html_e( 'Tank', 'fishotel-misc-plugin' ); ?>
 					<select class="fh-cr-input fh-cr-existing-tank">
@@ -315,6 +315,6 @@ $fh_table = static function ( array $rows, $open ) use ( $today, $sizes ) {
 	<?php endif; ?>
 
 	<p class="fh-cr-footnote">
-		<?php esc_html_e( 'Lost / Shipped / Count / Move… write events (the counts stay editable at any time — the order itself is edited in WooCommerce). Cleared… sets the cleared date by hand (empty removes it). A group is on sale from its own date (Sale date…, the product page, or Dates on the phone) or else its batch\'s date (Goes on sale, on the supplier order); Sale date… with nothing typed goes back to the batch\'s. Identify… / Correct fish… names the real fish and its size — the stay, its supplier order line (which keeps what the label said, for the mislabel stats) and the remembered box share follow; a fish nobody knows yet reads "??" and is marked "needs identifying". Edit corrects the species and the size the same way (one of the standard sizes, Settings → Sizes), and the check-in date and the supplier fields. Coming Soon sets the product\'s release countdown to the sale date at 09:00. A mistake is undone from the Events tab. The CSV guards every cell against spreadsheet formulas.', 'fishotel-misc-plugin' ); ?>
+		<?php esc_html_e( 'Lost / Shipped / Count / Move… write events (the counts stay editable at any time — a customer\'s order itself is edited in WooCommerce). Cleared… sets the cleared date by hand (empty removes it). A group is on sale from its own date (Sale date…, the product page, or Dates on the phone) or else its batch\'s date (Goes on sale, on its fish order — Fish orders tab); Sale date… with nothing typed goes back to the batch\'s. Identify… / Correct fish… names the real fish and its size — the stay, its fish order line (which keeps what the label said, for the mislabel stats) and the remembered box share follow; a fish nobody knows yet reads "??" and is marked "needs identifying". Edit corrects the species and the size the same way (one of the standard sizes, Settings → Sizes), and the check-in date and the supplier fields. Coming Soon sets the product\'s release countdown to the sale date at 09:00. A mistake is undone from the Events tab. The CSV guards every cell against spreadsheet formulas.', 'fishotel-misc-plugin' ); ?>
 	</p>
 </div>

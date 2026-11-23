@@ -1,8 +1,8 @@
 <?php
 /**
  * Demand: the most requested fish (open and all-time) beside the
- * quantities ordered on past supplier orders per year (the Clean Room's
- * order lines — past supplier orders were all customer requests), and
+ * quantities ordered on past fish orders per year (the Clean Room's
+ * order lines — past fish orders were all customer requests), and
  * who has waited longest.
  *
  * @package FisHotel\Misc\Sections\Requests
@@ -33,14 +33,14 @@ use FisHotel\Misc\Sections\Requests\Rules;
 			<?php
 			echo esc_html(
 				$ctx['cleanroom']
-					? __( 'Requests taken here, beside what past supplier orders ordered of the same fish each year. Those orders were all customer requests, so what was ordered is what was asked for.', 'fishotel-misc-plugin' )
-					: __( 'Requests taken here. The quantities ordered on past supplier orders would stand beside them, but the Clean Room section is switched off.', 'fishotel-misc-plugin' )
+					? __( 'Requests taken here, beside what your past fish orders from suppliers (Clean Room → Fish orders) ordered of the same fish each year. Those orders were all customer requests, so what was ordered is what was asked for.', 'fishotel-misc-plugin' )
+					: __( 'Requests taken here. The quantities ordered from suppliers on past fish orders would stand beside them, but the Clean Room section is switched off.', 'fishotel-misc-plugin' )
 			);
 			?>
 		</p>
 
 		<?php if ( ! $demand['rows'] ) : ?>
-			<p class="fh-rq-sub"><?php esc_html_e( 'Nothing was requested yet, and no supplier order has a line.', 'fishotel-misc-plugin' ); ?></p>
+			<p class="fh-rq-sub"><?php esc_html_e( 'Nothing was requested yet, and no fish order (Clean Room → Fish orders) has a line.', 'fishotel-misc-plugin' ); ?></p>
 		<?php else : ?>
 			<div class="fh-rq-scroll">
 				<table class="widefat fh-rq-table fh-rq-demand">
@@ -50,7 +50,7 @@ use FisHotel\Misc\Sections\Requests\Rules;
 							<th scope="colgroup" colspan="2" class="fh-rq-num"><?php esc_html_e( 'Open now', 'fishotel-misc-plugin' ); ?></th>
 							<th scope="colgroup" colspan="2" class="fh-rq-num"><?php esc_html_e( 'All-time', 'fishotel-misc-plugin' ); ?></th>
 							<?php if ( $demand['years'] ) : ?>
-								<th scope="colgroup" colspan="<?php echo esc_attr( count( $demand['years'] ) + 1 ); ?>" class="fh-rq-num"><?php esc_html_e( 'Ordered on supplier orders', 'fishotel-misc-plugin' ); ?></th>
+								<th scope="colgroup" colspan="<?php echo esc_attr( count( $demand['years'] ) + 1 ); ?>" class="fh-rq-num"><?php esc_html_e( 'Ordered from suppliers (fish orders)', 'fishotel-misc-plugin' ); ?></th>
 							<?php endif; ?>
 						</tr>
 						<tr>

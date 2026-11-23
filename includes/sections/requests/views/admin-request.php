@@ -1,7 +1,7 @@
 <?php
 /**
  * One request's own page: who and what, the next step for its state
- * (approve / decline, the invoice, the match to a supplier order, tell
+ * (approve / decline, the invoice, the match to a fish order, tell
  * them, filled, cancel, reopen), an edit form, and its whole history from
  * the log with a note field.
  *
@@ -250,9 +250,9 @@ $fh_open_states = Rules::is_open( $fh_state );
 					</form>
 
 				<?php elseif ( 'waiting' === $fh_state ) : ?>
-					<p><?php esc_html_e( 'It is on the list. When a supplier order that is a draft or ordered has a line of this fish, the daily check puts it on order by itself.', 'fishotel-misc-plugin' ); ?></p>
+					<p><?php esc_html_e( 'It is on the list. When a fish order (Clean Room → Fish orders) that is a draft or ordered has a line of this fish, the daily check puts it on order by itself.', 'fishotel-misc-plugin' ); ?></p>
 					<?php if ( empty( $request['auto_match'] ) ) : ?>
-						<p class="fh-rq-warn"><?php esc_html_e( 'Matching by itself is OFF for this request (you took it off a supplier order).', 'fishotel-misc-plugin' ); ?></p>
+						<p class="fh-rq-warn"><?php esc_html_e( 'Matching by itself is OFF for this request (you took it off a fish order).', 'fishotel-misc-plugin' ); ?></p>
 						<?php $fh_open( 'auto', 'fh-rq-inline' ); ?>
 							<input type="hidden" name="on" value="1">
 							<button type="submit" class="button"><?php esc_html_e( 'Let it match by itself again', 'fishotel-misc-plugin' ); ?></button>
@@ -263,7 +263,7 @@ $fh_open_states = Rules::is_open( $fh_state );
 					<p>
 						<?php
 						$fh_words = array(
-							'on_order'      => __( 'A supplier order carries it.', 'fishotel-misc-plugin' ),
+							'on_order'      => __( 'A fish order from a supplier carries it.', 'fishotel-misc-plugin' ),
 							'in_quarantine' => __( 'Its fish is in a tank, in quarantine.', 'fishotel-misc-plugin' ),
 							'ready'         => __( 'Its tank group is on sale: the fish is ready, and the person has not been told yet.', 'fishotel-misc-plugin' ),
 							'offered'       => __( 'The person was told the fish is ready.', 'fishotel-misc-plugin' ),
@@ -272,9 +272,9 @@ $fh_open_states = Rules::is_open( $fh_state );
 						?>
 						<?php if ( (int) $request['cr_order_id'] > 0 ) : ?>
 							<?php if ( '' !== $detail['order_url'] ) : ?>
-								<a href="<?php echo esc_url( $detail['order_url'] ); ?>"><?php echo esc_html( sprintf( /* translators: %s: order ref */ __( 'Supplier order %s', 'fishotel-misc-plugin' ), '' !== $detail['ref'] ? $detail['ref'] : '#' . (int) $request['cr_order_id'] ) ); ?></a>
+								<a href="<?php echo esc_url( $detail['order_url'] ); ?>"><?php echo esc_html( sprintf( /* translators: %s: order ref */ __( 'Fish order %s', 'fishotel-misc-plugin' ), '' !== $detail['ref'] ? $detail['ref'] : '#' . (int) $request['cr_order_id'] ) ); ?></a>
 							<?php else : ?>
-								<?php echo esc_html( sprintf( /* translators: %d: supplier order id */ __( 'Supplier order #%d', 'fishotel-misc-plugin' ), (int) $request['cr_order_id'] ) ); ?>
+								<?php echo esc_html( sprintf( /* translators: %d: fish order id */ __( 'Fish order #%d', 'fishotel-misc-plugin' ), (int) $request['cr_order_id'] ) ); ?>
 							<?php endif; ?>
 							<?php if ( ! empty( $request['link_manual'] ) ) : ?>
 								<span class="fh-rq-sub fh-rq-sub--inline"><?php esc_html_e( 'matched by hand', 'fishotel-misc-plugin' ); ?></span>
@@ -296,7 +296,7 @@ $fh_open_states = Rules::is_open( $fh_state );
 					<?php endif; ?>
 					<?php if ( 'offered' !== $fh_state ) : ?>
 						<?php $fh_open( 'unlink', 'fh-rq-inline' ); ?>
-							<button type="submit" class="button" data-confirm="<?php esc_attr_e( 'Take this request off its supplier order? It goes back to waiting and is no longer matched by itself until you switch that back on.', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'Take it off this order', 'fishotel-misc-plugin' ); ?></button>
+							<button type="submit" class="button" data-confirm="<?php esc_attr_e( 'Take this request off its fish order? It goes back to waiting and is no longer matched by itself until you switch that back on.', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'Take it off this fish order', 'fishotel-misc-plugin' ); ?></button>
 						</form>
 					<?php endif; ?>
 
@@ -308,11 +308,11 @@ $fh_open_states = Rules::is_open( $fh_state );
 				<?php endif; ?>
 
 				<?php if ( in_array( $fh_state, array( 'waiting', 'on_order', 'in_quarantine', 'ready' ), true ) ) : ?>
-					<h4 class="fh-rq-card__sub"><?php esc_html_e( 'Match it to a supplier order line by hand', 'fishotel-misc-plugin' ); ?></h4>
+					<h4 class="fh-rq-card__sub"><?php esc_html_e( 'Match it by hand to a line of a fish order (Clean Room → Fish orders)', 'fishotel-misc-plugin' ); ?></h4>
 					<?php if ( ! $ctx['cleanroom'] ) : ?>
 						<p class="fh-rq-sub"><?php esc_html_e( 'Unavailable: the Clean Room section is switched off.', 'fishotel-misc-plugin' ); ?></p>
 					<?php elseif ( ! $detail['candidates'] ) : ?>
-						<p class="fh-rq-sub"><?php esc_html_e( 'No recent supplier order (draft, ordered or received) has a line with this fish or a name like it.', 'fishotel-misc-plugin' ); ?></p>
+						<p class="fh-rq-sub"><?php esc_html_e( 'No recent fish order (draft, ordered or received) has a line with this fish or a name like it.', 'fishotel-misc-plugin' ); ?></p>
 					<?php else : ?>
 						<?php $fh_open( 'link' ); ?>
 							<select class="fh-rq-input" name="line">

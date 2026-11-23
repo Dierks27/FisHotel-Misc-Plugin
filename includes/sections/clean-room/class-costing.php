@@ -1,6 +1,6 @@
 <?php
 /**
- * Clean Room costing — PURE: the landed-cost maths of a supplier order,
+ * Clean Room costing — PURE: the landed-cost maths of a fish order,
  * replicating the workbook's order sheet exactly so Jeff's numbers do not
  * change when the sheet retires.
  *

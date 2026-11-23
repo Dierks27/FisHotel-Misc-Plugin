@@ -1,7 +1,7 @@
 <?php
 /**
  * Identify — unknown and mislabeled fish, and the one correction that
- * puts a stay and its supplier order line right together. With invented
+ * puts a stay and its fish order line right together. With invented
  * fish, suppliers and numbers on the in-memory Fake_Store: the "??" name
  * of an unknown fish, the schema (the flag on a line and on a stay, the
  * label a line keeps, version 1.5 and its gate), an unknown fish on the

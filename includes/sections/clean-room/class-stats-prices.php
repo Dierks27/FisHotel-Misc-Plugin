@@ -1,7 +1,7 @@
 <?php
 /**
  * Clean Room stats, prices to raise — PURE and READ-ONLY: per fish, what
- * the latest supplier order says it should sell for, beside what FisHotel
+ * the latest fish order says it should sell for, beside what FisHotel
  * charges now. Nothing here writes a price anywhere.
  *
  * One row per fish that has a line which RECEIVED fish at a PRICE (a

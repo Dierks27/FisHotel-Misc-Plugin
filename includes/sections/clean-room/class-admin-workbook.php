@@ -1,7 +1,7 @@
 <?php
 /**
- * Clean Room admin — the workbook tabs of the Room Board page: Arrivals
- * (the supplier orders list and the order editor with the sheet's
+ * Clean Room admin — the workbook tabs of the Room Board page: Fish orders
+ * (the fish orders list and the order editor with the sheet's
  * costing and the check-in that creates the stays), Species (the species
  * master with inline edit and the product link) and Stats (the yearly
  * figures, weighted and as the spreadsheet averaged them — its further
@@ -23,7 +23,7 @@
  * fish can be corrected — "Correct the fish…" (identify_line()), or, once
  * it became a stay, simply by changing its species, its "??" box or its
  * size in the grid: the stays follow, the line keeps what the label said
- * (Identify). The Arrivals list marks the orders with fish still to
+ * (Identify). The Fish orders list marks the orders with fish still to
  * identify; the Stats tab counts the mislabeled lines per supplier and
  * per origin.
  *
@@ -237,7 +237,7 @@ class Admin_Workbook {
 			return;
 		}
 
-		// Arrivals: the editor when an order is named, else the list.
+		// Fish orders: the editor when an order is named, else the list.
 		$which = isset( $_GET['order'] ) ? sanitize_text_field( wp_unslash( $_GET['order'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		if ( 'new' === $which || absint( $which ) > 0 ) {
 			$order_id = 'new' === $which ? 0 : absint( $which );
@@ -430,7 +430,7 @@ class Admin_Workbook {
 
 	/**
 	 * How many lines of an order are fish that still have to be identified
-	 * (pure) — the marker on the Arrivals list and on the order page.
+	 * (pure) — the marker on the Fish orders list and on the order page.
 	 *
 	 * @param array $order The order with its lines.
 	 * @return int
@@ -798,7 +798,7 @@ class Admin_Workbook {
 	}
 
 	/**
-	 * The Arrivals list's "On sale" cell (pure): the batch's date or "not
+	 * The Fish orders list's "On sale" cell (pure): the batch's date or "not
 	 * set", and a note when some of its groups in tanks have their own.
 	 *
 	 * @param array $order  The order (sale_date).
@@ -1843,7 +1843,7 @@ class Admin_Workbook {
 			'fishotel_log',
 			'info',
 			'clean-room',
-			sprintf( 'Sale date of supplier order %1$s changed by %2$s: %3$s → %4$s', $ref, $login, null !== $old ? $old : 'not set', null !== $new ? $new : 'not set' ),
+			sprintf( 'Sale date of fish order %1$s changed by %2$s: %3$s → %4$s', $ref, $login, null !== $old ? $old : 'not set', null !== $new ? $new : 'not set' ),
 			array(
 				'order_id'   => $order_id,
 				'order_ref'  => $ref,

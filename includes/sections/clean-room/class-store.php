@@ -18,7 +18,7 @@
  *                           down — the row stays as the setup's history
  *   {prefix}fh_stays        the cached state of one group of one species
  *                           (+ supplier, order_ref, landed_cost, order_line_id —
- *                           the seam a supplier order's check-in fills; its size
+ *                           the seam a fish order's check-in fills; its size
  *                           as a slug + a label snapshot; needs_id, set while
  *                           nobody knows what the fish is)
  *   {prefix}fh_stay_events  the history: every change to a stay is an event
@@ -32,7 +32,7 @@
  *   {prefix}fh_aliases      spoken words → product / species, learned on the phone
  *   {prefix}fh_species      the species master (the workbook's Fishlist): name,
  *                           scientific name, group, per box, prices, product link
- *   {prefix}fh_orders       a supplier order's header: ref, supplier, origin, dates,
+ *   {prefix}fh_orders       a fish order's header: ref, supplier, origin, dates,
  *                           status, cost mode, tariffs / flight / import fees / credit,
  *                           sale_date (the day the batch goes on sale, chosen by hand)
  *   {prefix}fh_order_lines  its lines: species, size, ordered / received / DOA /
@@ -59,7 +59,7 @@
  * sister stay with backdated arrival / clear / own-sale-date events so its
  * history reads the same.
  *
- * Every stay read joins its order line and supplier order, so a hydrated
+ * Every stay read joins its order line and fish order, so a hydrated
  * stay carries its batch (batch_order_id / batch_order_ref) and the
  * batch's sale date, and Replay::effective() gives every reader the same
  * effective sale date: the stay's own, else the batch's, else none.
@@ -1298,7 +1298,7 @@ class Store {
 
 	/**
 	 * The base SELECT for stays with their tank / building columns and
-	 * their batch: the supplier order the stay was checked in from (its
+	 * their batch: the fish order the stay was checked in from (its
 	 * order line → the order) with that order's sale date. Every join is
 	 * on a primary key.
 	 *
@@ -1313,7 +1313,7 @@ class Store {
 	 * number and the effective state for today.
 	 *
 	 * @param array  $filters  area (clean|spa), species (search), product_id, tank_id, building_id,
-	 *                         order_id (the batch: the supplier order the stays were checked in from),
+	 *                         order_id (the batch: the fish order the stays were checked in from),
 	 *                         needs_id (bool: only the fish that still have to be identified),
 	 *                         status (in_qt|cleared — effective), ready (bool: for sale today — the
 	 *                         effective sale date has come), include_closed (bool), limit (int).
@@ -1495,7 +1495,7 @@ class Store {
 	}
 
 	/**
-	 * Every stay of a supplier order line — the stay its check-in made and
+	 * Every stay of a fish order line — the stay its check-in made and
 	 * the sister stays split off it —, open and closed, oldest first: what
 	 * a correction of the fish looks at to decide whether the line follows
 	 * (Identify).
@@ -1563,7 +1563,7 @@ class Store {
 	 * Create a stay row. The first arrival event (record_event) fills the
 	 * cached counts; this only needs the identity and the check-in date.
 	 * supplier / order_ref / landed_cost / order_line_id are the seam the
-	 * supplier-order import will fill; all may be null.
+	 * fish-order import will fill; all may be null.
 	 *
 	 * @param array $fields product_id, species, size_slug, size_label, needs_id (the fish still has to
 	 *                      be identified), checkin_date, tank_id, source, order_line_id, supplier,
@@ -3508,7 +3508,7 @@ class Store {
 
 	/**
 	 * The fish products by id with their titles (read once per request) —
-	 * what a supplier order's check-in matches a line's name against.
+	 * what a fish order's check-in matches a line's name against.
 	 *
 	 * @return array<int, string> product id => title.
 	 */
@@ -4055,7 +4055,7 @@ class Store {
 	}
 
 	/* ============================================================== */
-	/*  Supplier orders                                                */
+	/*  Fish orders                                                    */
 	/* ============================================================== */
 
 	private static function order_select() {
@@ -4707,8 +4707,8 @@ class Store {
 	}
 
 	/**
-	 * Per supplier order, its open stays (groups still in tanks) and how
-	 * many of them carry their own sale date — the Arrivals list's "On
+	 * Per fish order, its open stays (groups still in tanks) and how
+	 * many of them carry their own sale date — the Fish orders list's "On
 	 * sale" column, in one query.
 	 *
 	 * @return array<int, array{open: int, own: int}> order id → counts.

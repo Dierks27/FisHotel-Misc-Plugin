@@ -11,7 +11,7 @@
  *   needs_you()   the strip at the top: new requests to approve, payments
  *                 overdue, people to tell, owed fish to send
  *   demand()      the Demand tab: the most requested fish (open and
- *                 all-time) beside what past supplier orders ordered per year
+ *                 all-time) beside what past fish orders ordered per year
  *   longest()     who has waited longest
  *
  * @package FisHotel\Misc\Sections\Requests
@@ -322,7 +322,7 @@ class Listing {
 
 	/**
 	 * The Demand table: the requested fish (open and all-time) beside the
-	 * quantities ordered on past supplier orders, per year. A fish that
+	 * quantities ordered on past fish orders, per year. A fish that
 	 * was ordered but never requested here is listed too — that is past
 	 * demand.
 	 *

@@ -46,7 +46,7 @@
  * @var array   $batch         Admin_Workbook::batch_sale_panel() (empty for a new order).
  * @var array   $view          Admin_Workbook::order_view(): view (entry|numbers), stage, more.
  * @var array   $split         Admin_Workbook::split_panel(): tanks, fields, offers.
- * @var string  $list_url      The Arrivals list URL.
+ * @var string  $list_url      The Fish orders list URL.
  * @var string  $flash         One-time notice.
  * @var string  $today         Site date.
  * @var bool    $tables_ok     Whether the tables exist.
@@ -244,9 +244,9 @@ $fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks,
 		<input type="hidden" name="order_id" value="<?php echo esc_attr( (int) $order['id'] ); ?>">
 
 		<div class="fh-cr-toolbar fh-cr-toolbar--order">
-			<a class="button" href="<?php echo esc_url( $list_url ); ?>">&larr; <?php esc_html_e( 'Orders', 'fishotel-misc-plugin' ); ?></a>
+			<a class="button" href="<?php echo esc_url( $list_url ); ?>">&larr; <?php esc_html_e( 'Fish orders', 'fishotel-misc-plugin' ); ?></a>
 			<h2 class="fh-cr-order__title">
-				<?php echo $is_new ? esc_html__( 'New order', 'fishotel-misc-plugin' ) : esc_html( sprintf( /* translators: %s: order ref */ __( 'Order %s', 'fishotel-misc-plugin' ), $order['ref'] ) ); ?>
+				<?php echo $is_new ? esc_html__( 'New fish order', 'fishotel-misc-plugin' ) : esc_html( sprintf( /* translators: %s: fish order ref */ __( 'Fish order %s', 'fishotel-misc-plugin' ), $order['ref'] ) ); ?>
 				<span class="fh-cr-badge fh-cr-badge--order-<?php echo esc_attr( $order['status'] ); ?> fh-cr-order__status"><?php echo esc_html( $order['status'] ); ?></span>
 				<?php if ( $fh_unknown > 0 ) : ?>
 					<span class="fh-cr-warn fh-cr-unknown"><?php echo esc_html( sprintf( /* translators: %d: order lines */ __( '?? %d to identify', 'fishotel-misc-plugin' ), $fh_unknown ) ); ?></span>

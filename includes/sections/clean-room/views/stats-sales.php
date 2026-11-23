@@ -2,7 +2,7 @@
 /**
  * Stats tab — Real sales: what customers ACTUALLY paid per fish in a
  * year, from WooCommerce's paid orders (net of refunds), beside the
- * estimate and the landed cost of the supplier orders of the same year —
+ * estimate and the landed cost of the fish orders of the same year —
  * and everything that could not be matched to a fish, with its units and
  * its money, so the totals always add up.
  *
@@ -92,7 +92,7 @@ $fh_th = static function ( $key, $label, $kind = '', $text = false, $title = '' 
 
 	<?php if ( ! $data['available'] ) : ?>
 		<div class="fishotel-misc-notice fishotel-misc-notice--error">
-			<?php esc_html_e( 'Real sales are not available on this site: WooCommerce\'s order tables (wc_order_stats and wc_order_product_lookup, which WooCommerce Analytics keeps) were not found. Nothing below is an actual figure — the estimates and the landed costs still are what the supplier orders say.', 'fishotel-misc-plugin' ); ?>
+			<?php esc_html_e( 'Real sales are not available on this site: WooCommerce\'s order tables (wc_order_stats and wc_order_product_lookup, which WooCommerce Analytics keeps) were not found. Nothing below is an actual figure — the estimates and the landed costs still are what your fish orders from suppliers (the Fish orders tab) say.', 'fishotel-misc-plugin' ); ?>
 		</div>
 	<?php endif; ?>
 
@@ -112,7 +112,7 @@ $fh_th = static function ( $key, $label, $kind = '', $text = false, $title = '' 
 		<?php endif; ?>
 		<br>
 		<span class="fh-cr-kind fh-cr-kind--est"><?php esc_html_e( 'Estimate', 'fishotel-misc-plugin' ); ?></span>
-		<?php esc_html_e( 'Est. revenue is the spreadsheet\'s figure for the same year: survivors × the FisHotel price typed on the supplier order line. List price is today\'s price, not what was charged then.', 'fishotel-misc-plugin' ); ?>
+		<?php esc_html_e( 'Est. revenue is the spreadsheet\'s figure for the same year: survivors × the FisHotel price typed on the line of your fish order from the supplier. List price is today\'s price, not what was charged then.', 'fishotel-misc-plugin' ); ?>
 	</p>
 
 	<?php if ( $data['available'] ) : ?>
@@ -188,7 +188,7 @@ $fh_th = static function ( $key, $label, $kind = '', $text = false, $title = '' 
 
 	<h2 class="fh-cr-h2"><?php esc_html_e( 'By species', 'fishotel-misc-plugin' ); ?></h2>
 	<?php if ( ! $data['rows'] ) : ?>
-		<div class="fishotel-misc-empty"><span class="dashicons dashicons-chart-bar"></span><p><?php echo esc_html( $data['all'] > 0 ? __( 'No fish matches that search.', 'fishotel-misc-plugin' ) : __( 'No sale matched to a species and no supplier order in this year.', 'fishotel-misc-plugin' ) ); ?></p></div>
+		<div class="fishotel-misc-empty"><span class="dashicons dashicons-chart-bar"></span><p><?php echo esc_html( $data['all'] > 0 ? __( 'No fish matches that search.', 'fishotel-misc-plugin' ) : __( 'No sale matched to a species and no fish order from a supplier in this year.', 'fishotel-misc-plugin' ) ); ?></p></div>
 	<?php else : ?>
 		<div class="fh-cr-grid-wrap">
 			<table class="widefat striped fh-cr-table">
@@ -201,8 +201,8 @@ $fh_th = static function ( $key, $label, $kind = '', $text = false, $title = '' 
 						$fh_th( 'revenue', __( 'Actual revenue', 'fishotel-misc-plugin' ), 'actual', false, __( 'Actual: what was paid for those lines after discounts, before tax and shipping, net of refunds.', 'fishotel-misc-plugin' ) );
 						$fh_th( 'avg_paid', __( 'Avg paid', 'fishotel-misc-plugin' ), 'actual', false, __( 'Actual revenue ÷ units sold.', 'fishotel-misc-plugin' ) );
 						$fh_th( 'list_price', __( 'List price', 'fishotel-misc-plugin' ), '', false, __( 'FisHotel\'s price today: the linked product\'s current price, else the species list\'s.', 'fishotel-misc-plugin' ) );
-						$fh_th( 'est_revenue', __( 'Est. revenue', 'fishotel-misc-plugin' ), 'est', false, __( 'Estimate: survivors × the price typed on that year\'s supplier order lines.', 'fishotel-misc-plugin' ) );
-						$fh_th( 'landed_per_fish', __( 'Landed / fish', 'fishotel-misc-plugin' ), '', false, __( 'That year\'s average landed cost of the fish: landed ÷ received over its supplier order lines of the year.', 'fishotel-misc-plugin' ) );
+						$fh_th( 'est_revenue', __( 'Est. revenue', 'fishotel-misc-plugin' ), 'est', false, __( 'Estimate: survivors × the price typed on the lines of that year\'s fish orders from suppliers.', 'fishotel-misc-plugin' ) );
+						$fh_th( 'landed_per_fish', __( 'Landed / fish', 'fishotel-misc-plugin' ), '', false, __( 'That year\'s average landed cost of the fish: landed ÷ received over its lines on the year\'s fish orders from suppliers.', 'fishotel-misc-plugin' ) );
 						$fh_th( 'cost_sold', __( 'Cost of units sold', 'fishotel-misc-plugin' ), '', false, __( 'Units sold × landed per fish.', 'fishotel-misc-plugin' ) );
 						$fh_th( 'profit', __( 'Actual profit', 'fishotel-misc-plugin' ), 'actual', false, __( 'Actual revenue − the cost of the units sold. Not shown for a fish that sold in a year in which none landed.', 'fishotel-misc-plugin' ) );
 						?>

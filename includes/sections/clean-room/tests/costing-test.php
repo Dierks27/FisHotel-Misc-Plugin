@@ -1,6 +1,6 @@
 <?php
 /**
- * Costing — the landed-cost maths of a supplier order in both modes,
+ * Costing — the landed-cost maths of a fish order in both modes,
  * worked by hand with invented fish and invented numbers; the suggested
  * price to the nearest 5; every zero / blank guard; the display helpers;
  * and the percent of a box: a line's typed percent in place of received

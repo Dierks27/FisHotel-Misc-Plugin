@@ -130,7 +130,7 @@ Each helper exits 0 when CI runs it directly.
   temporary tanks' setup and take-down, the day's list's ticks — get past
   the Front Desk's guard; inside it the session holds the Front Desk's
   capability, not the Settings one (the medications editor refuses it);
-  every Settings, Board, Stays, Arrivals and Species action sees a
+  every Settings, Board, Stays, Fish orders and Species action sees a
   visitor; outside the wp-admin screens nothing on the act path asks
   for a capability of its own; and the screen: the Front Desk says
   everything in the status line of its own button bar (in the page as it

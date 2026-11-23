@@ -1,6 +1,6 @@
 <?php
 /**
- * Orders — the supplier order on the in-memory Fake_Store: the header
+ * Orders — the fish order on the in-memory Fake_Store: the header
  * and lines from a form, create / save (upsert + delete), the check-in
  * that creates the stays and the DOA loss with the seam fields filled, a
  * second check-in that creates nothing, the per-line live figures from

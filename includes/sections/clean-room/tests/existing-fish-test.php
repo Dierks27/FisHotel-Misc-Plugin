@@ -458,7 +458,7 @@ $sp = array( 'id' => 5, 'type' => 'arrival', 'qty' => 1, 'event_at' => '2026-01-
 check( 'split_from(): "split from #7", "arrived:unknown · split from #7"; an ordinary arrival 0; only the first arrival counts', 7 === Replay::split_from( array( array_merge( $sp, array( 'note' => 'split from #7' ) ) ) ) && 7 === Replay::split_from( array( array_merge( $sp, array( 'note' => Replay::NOTE_ARRIVED_UNKNOWN . ' · split from #7' ) ) ) ) && 0 === Replay::split_from( array( array_merge( $sp, array( 'note' => Replay::NOTE_ARRIVED_UNKNOWN . ' · already here' ) ) ) ) && 0 === Replay::split_from( array( array_merge( $sp, array( 'note' => 'already here' ) ), array_merge( $sp, array( 'id' => 6, 'event_at' => '2026-01-02 12:00:00', 'note' => 'split from #7' ) ) ) ) && 0 === Replay::split_from( array() ) );
 check( 'nothing at all: zeros', 0 === Stats::existing_stock( array() )['groups'] && 0 === Stats::existing_stock( array() )['live'] );
 $stats = Stats::build( array() );
-check( 'the yearly figures are built from the supplier orders alone — no order, nothing to count there', 0 === (int) ( $stats['totals']['received'] ?? 0 ) );
+check( 'the yearly figures are built from the fish orders alone — no order, nothing to count there', 0 === (int) ( $stats['totals']['received'] ?? 0 ) );
 
 /* ------------------------------------------------------------------ */
 echo "10. The phone's screen, the Board's words, the exports\n";
@@ -470,7 +470,7 @@ act( $store, 521, 'existing', array( 'species' => 'Test Wrasse', 'qty' => 1 ) );
 $screen = Front_Desk::screen_from( $store, 121, $settings, $today );
 $o      = $screen['tank']['occupants'][0];
 check( 'the occupant: arrival unknown, cleared on an unknown date, no day, added as already here', true === $o['checkinUnknown'] && true === $o['clearedUnknown'] && '' === $o['checkinDate'] && null === $o['clearedDate'] && null === $o['day'] && true === $o['existing'] && '' === $o['saleSuggested'], json_encode( $o ) );
-check( 'the sheet\'s choices: the suppliers and origins the supplier orders name', array( 'Test Supplier' ) === $screen['picks']['suppliers'] && array( 'Testland' ) === $screen['picks']['origins'], json_encode( $screen['picks'] ) );
+check( 'the sheet\'s choices: the suppliers and origins the fish orders name', array( 'Test Supplier' ) === $screen['picks']['suppliers'] && array( 'Testland' ) === $screen['picks']['origins'], json_encode( $screen['picks'] ) );
 check( 'the strings the sheet needs are there', isset( $screen ) && '' !== Front_Desk::i18n()['existingAdd'] && 'day ?' === Front_Desk::i18n()['dayUnknown'] && 'treatment day unknown — set the arrival date' === Front_Desk::i18n()['treatUnknown'] );
 $spa = Front_Desk::screen_from( $store, 521, $settings, $today )['tank']['occupants'][0];
 check( 'a Spa group: in QT, arrival unknown', 'in_qt' === $spa['status'] && $spa['checkinUnknown'] && ! $spa['clearedUnknown'] );

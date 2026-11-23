@@ -1,6 +1,6 @@
 <?php
 /**
- * The supplier order screen (views/order.php).
+ * The fish order screen (views/order.php).
  *
  * Read as text: the "Goes on sale" card sits under the order's own
  * title, inside the order form, while its date and buttons still post to

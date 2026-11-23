@@ -1,6 +1,6 @@
 <?php
 /**
- * Sizes — the one list of fish sizes a supplier order line and a stay
+ * Sizes — the one list of fish sizes a fish order line and a stay
  * are sized with, the same one the product variations use. With invented
  * attributes, terms, fish and numbers on the in-memory Fake_Store: where
  * the list comes from (the product attribute that matches "size", the

@@ -69,7 +69,7 @@ $fh_from_attr = Sizes::SOURCE_ATTRIBUTE === $fh_standard['source'];
 				<div class="fishotel-misc-card-icon"><span class="dashicons dashicons-calendar"></span></div>
 				<h2 class="fishotel-misc-card-title"><?php esc_html_e( 'Numbers', 'fishotel-misc-plugin' ); ?></h2>
 			</div>
-			<p class="fishotel-misc-card-desc"><?php esc_html_e( 'A stay is cleared the day it moves from the Spa into the Clean Room (editable per stay). A group goes on sale on the date you choose: its batch\'s date ("Goes on sale" on the supplier order, Supplier orders tab) or its own date (the Clean room box on the product page, or Dates on the phone). The number below never puts anything on sale: it is only the suggested date (check-in + this many days) shown next to the date pickers, which a tap on "suggested …" fills in.', 'fishotel-misc-plugin' ); ?></p>
+			<p class="fishotel-misc-card-desc"><?php esc_html_e( 'A stay is cleared the day it moves from the Spa into the Clean Room (editable per stay). A group goes on sale on the date you choose: its batch\'s date ("Goes on sale" on the fish order, Fish orders tab) or its own date (the Clean room box on the product page, or Dates on the phone). The number below never puts anything on sale: it is only the suggested date (check-in + this many days) shown next to the date pickers, which a tap on "suggested …" fills in.', 'fishotel-misc-plugin' ); ?></p>
 
 			<div class="fh-cr-field fh-cr-field--row">
 				<label class="fh-cr-label" for="fh-cr-days"><?php esc_html_e( 'Suggested sale date: days after check-in (1–120)', 'fishotel-misc-plugin' ); ?></label>
@@ -335,7 +335,7 @@ $fh_from_attr = Sizes::SOURCE_ATTRIBUTE === $fh_standard['source'];
 				<div class="fishotel-misc-card-icon"><span class="dashicons dashicons-editor-expand"></span></div>
 				<h2 class="fishotel-misc-card-title"><?php esc_html_e( 'Sizes', 'fishotel-misc-plugin' ); ?></h2>
 			</div>
-			<p class="fishotel-misc-card-desc"><?php esc_html_e( 'One list of fish sizes for supplier order lines and stays — the same list the product variations use, so everything matches. It is the product attribute with "size" in its name; its terms are the sizes, in the order and with the labels (in inches) they have there. Nothing in this card changes a product; the tool below, "Tidy up the sizes", is the one thing that can.', 'fishotel-misc-plugin' ); ?></p>
+			<p class="fishotel-misc-card-desc"><?php esc_html_e( 'One list of fish sizes for the lines of fish orders and for stays — the same list the product variations use, so everything matches. It is the product attribute with "size" in its name; its terms are the sizes, in the order and with the labels (in inches) they have there. Nothing in this card changes a product; the tool below, "Tidy up the sizes", is the one thing that can.', 'fishotel-misc-plugin' ); ?></p>
 
 			<?php if ( $fh_from_attr ) : ?>
 				<div class="fh-cr-field fh-cr-field--row">
@@ -427,7 +427,7 @@ $fh_from_attr = Sizes::SOURCE_ATTRIBUTE === $fh_standard['source'];
 			</div>
 			<p class="fishotel-misc-card-desc"><?php esc_html_e( 'What the site remembers about how much of a box ONE fish takes, per supplier, origin, fish and size — learned from the "% of box" typed on received order lines (the percent ÷ the received count; the latest order wins). The next order from the same place offers it back as "suggested N%". Change a value or forget a row here; a forgotten row comes back the next time such a line is saved.', 'fishotel-misc-plugin' ); ?></p>
 			<?php if ( ! $shares ) : ?>
-				<p class="fh-cr-sub"><?php esc_html_e( 'Nothing remembered yet. Type a % of box on a received line of a supplier order and save it.', 'fishotel-misc-plugin' ); ?></p>
+				<p class="fh-cr-sub"><?php esc_html_e( 'Nothing remembered yet. Type a % of box on a received line of a fish order and save it.', 'fishotel-misc-plugin' ); ?></p>
 			<?php else : ?>
 				<table class="widefat striped fh-cr-table fh-cr-shares">
 					<thead>

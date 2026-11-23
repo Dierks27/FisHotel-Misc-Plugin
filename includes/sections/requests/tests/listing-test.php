@@ -151,7 +151,7 @@ $ordered = array(
 $table   = Listing::demand( $demand, $ordered, 5 );
 check_same( 'the five newest years, newest first', array( 2026, 2025, 2024, 2023, 2022 ), $table['years'] );
 check_same( 'the most requested fish comes first', 'Blue Test Wrasse', $table['rows'][0]['fish'] );
-check_same( 'beside what past supplier orders ordered, per year', array( 2026 => 2, 2025 => 4 ), $table['rows'][0]['ordered'] );
+check_same( 'beside what past fish orders ordered, per year', array( 2026 => 2, 2025 => 4 ), $table['rows'][0]['ordered'] );
 $tang = null;
 foreach ( $table['rows'] as $fh_demand_row ) {
 	if ( array( 2024 => 3 ) === $fh_demand_row['ordered'] ) {

@@ -44,7 +44,8 @@ One word for one thing, on every screen of these sections:
 | **tank** | one tank, numbered by the rule *hundreds = building, tens = level, ones = position* (tank 521 is in building 500). A temporary tank is a numbered **slot** in building 900. | aquarium |
 | **building** | a numbered group of tanks that share one water — 100, 200, … (Clean Room README, *The numbering rule*) | rack, room |
 | **system** | the water a building's tanks share (sump included): "whole system" doses and readings, "system gallons" | building (the place), tank |
-| **tank group** | the fish of one species that arrived and live together — a *stay* on the Clean Room's Stays tab | batch (a supplier order) |
+| **tank group** | the fish of one species that arrived and live together — a *stay* on the Clean Room's Stays tab | batch (a fish order) |
+| **fish order** | one order of fish placed with a supplier, with its lines — Clean Room → **Fish orders** (the tab once called Supplier orders) | supplier order, arrival |
 | **bag** | the bag one fish is packed in; its standard sizes are Packing → Bags | pouch |
 | **box** | the shipping box an order goes out in (its list is ShipTracker's); a supplier's box only in the Clean Room's *Box rates* | carton, shipper |
 | **case** | Lost Fish: one paid-for fish (or several) that was lost, and what the customer is offered | claim, ticket |
@@ -82,8 +83,8 @@ fishotel-misc-plugin/
 │       ├── weather/                # Nightly delivery-day weather notes + packing actions
 │       ├── health/                 # Shared error log, failure capture, FisHotel Health widget + page
 │       ├── today/                  # Today at FisHotel: next delivery days, holds / UPS Store, missing weather / invoice / tracking; one line for the tanks' to-do list when the Clean Room is on
-│       ├── clean-room/             # Where every fish is: Spa / Clean Room tanks, stays with replayed events, QR + voice Front Desk, protocol to-do, room board, supplier orders, chosen sale dates, standard sizes, percent-of-a-box costing with remembered shares, unknown / mislabeled fish with one correction, a dose calculator over an editable medication list, temporary (hospital) tanks with their own schedules, one To do list by water system, Stats views (compare years, species, prices to raise, real sales)
-│       ├── requests/               # Requests: a request sheet for the fish people ask for — private links, added by hand or by another section, an optional fee, a state that follows the fish from the supplier order to "ready"
+│       ├── clean-room/             # Where every fish is: Spa / Clean Room tanks, stays with replayed events, QR + voice Front Desk, protocol to-do, room board, fish orders, chosen sale dates, standard sizes, percent-of-a-box costing with remembered shares, unknown / mislabeled fish with one correction, a dose calculator over an editable medication list, temporary (hospital) tanks with their own schedules, one To do list by water system, Stats views (compare years, species, prices to raise, real sales)
+│       ├── requests/               # Requests: a request sheet for the fish people ask for — private links, added by hand or by another section, an optional fee, a state that follows the fish from the fish order placed with a supplier to "ready"
 │       ├── lost-fish/              # Lost Fish: a paid-for fish that is lost — the tanks checked for a spare, else a case with the numbers for every choice, the e-mail behind one click, the customer's private page
 │       ├── invoices/               # Invoices: a customer's invoice built from a pick list (tank groups, shop products, the species list, typed), pre-checked against what the customer already has, published as the hidden product
 │       ├── packing/                # Packing: the standard bags, a bag size per fish, how many bags fit each box, the box suggested for an order and the one confirmed

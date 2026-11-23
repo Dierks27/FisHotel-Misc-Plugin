@@ -12,7 +12,7 @@
  *                     waits for the owner: Approve or Decline
  *   awaiting_payment  approved with a fee; the invoice is out
  *   waiting           approved (and paid, when there was a fee): on the list
- *   on_order          a supplier order that is a draft or ordered carries it
+ *   on_order          a fish order that is a draft or ordered carries it
  *   in_quarantine     that order line was checked in to a tank
  *   ready             that tank group's sale date has come
  *   offered           the requester was told the fish is ready
@@ -50,7 +50,7 @@ class Rules {
 	const FOLLOW_STATES = array( 'waiting', 'on_order', 'in_quarantine', 'ready', 'offered' );
 
 	/**
-	 * The states in which a request is matched to a supplier order line.
+	 * The states in which a request is matched to a fish order line.
 	 *
 	 * @var string[]
 	 */
