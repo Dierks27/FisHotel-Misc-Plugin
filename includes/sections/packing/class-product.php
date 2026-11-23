@@ -1,16 +1,24 @@
 <?php
 /**
- * The product editor: the "Livestock — packed in a bag" checkbox (Shipping
- * tab, simple and variable products) and the "Bag size" dropdown — on
- * every variation, and on a simple product (Shipping tab).
+ * The product editor: the "Livestock — packed in a bag" checkbox and the
+ * "Bagging" choice (Shipping tab, simple and variable products) and the
+ * "Bag size" dropdown — on every variation, and on a simple product
+ * (Shipping tab).
  *
- * Both are RECORDS, strictly: the hidden product meta `_fh_packs_in_bag`
- * ('yes' / 'no', on the parent product) and `_fh_bag_size` (a bag id).
- * Neither is a product attribute, creates a variation or a term, and
+ * All are RECORDS, strictly: the hidden product meta `_fh_packs_in_bag`
+ * ('yes' / 'no', on the parent product), `_fh_bag_layers` ('2' / '3', on
+ * the parent product) and `_fh_bag_size` (a bag id).
+ * None is a product attribute, creates a variation or a term, and
  * nothing on the storefront, in the cart, at checkout, in an e-mail, on an
  * invoice, in My Account or in the customer-facing REST / Store API reads
  * them — this section registers no hook outside wp-admin and never adds
  * anything to an order line.
+ *
+ * "Bagging" says in how many layers this fish's bag is used: Auto (double,
+ * or triple when its name or category has one of the "Triple-bag these"
+ * words), Double or Triple. Auto stores nothing; the other two store '2'
+ * or '3' (decide_layers()). It is shown, like the Bag size, only while the
+ * checkbox is ticked.
  *
  * The checkbox says whether the product is something that goes in a bag
  * at all (fish and other livestock do; medication, food and dry goods do
@@ -35,7 +43,7 @@
  * choice too: the variation then follows the size → bag map, and the
  * first option says which bag that is right now.
  *
- * decide() and decide_packs() are the pure rules of a save; the save
+ * decide(), decide_packs() and decide_layers() are the pure rules of a save; the save
  * handlers read the posted values, ask them, and write through the product
  * object.
  *
@@ -73,6 +81,11 @@ class Product {
 	 */
 	const FIELD_PACKS       = 'fh_packs_in_bag';
 	const FIELD_PACKS_SHOWN = 'fh_packs_in_bag_shown';
+
+	/**
+	 * Form field of the "Bagging" choice: '' (Auto), '2' or '3'.
+	 */
+	const FIELD_LAYERS = 'fh_bag_layers';
 
 	/**
 	 * The class the product-data box carries while the checkbox is off:
@@ -233,6 +246,48 @@ class Product {
 		return array(
 			'action' => 'set',
 			'value'  => $posted,
+		);
+	}
+
+	/**
+	 * What a posted "Bagging" choice does to the stored one (pure). Auto
+	 * stores nothing — it removes a stored choice; Double and Triple store
+	 * '2' and '3'. A save that does not carry the field (quick edit, another
+	 * screen), or carries anything else, changes nothing.
+	 *
+	 * @param mixed $posted  The posted value: '' (Auto) | '2' | '3' (null = the field was not on the form).
+	 * @param mixed $current The stored choice ('2' | '3' | '' = Auto).
+	 * @return array{action: string, value: string} action = keep | set | delete.
+	 */
+	public static function decide_layers( $posted, $current ) {
+		$stored = Layers::choice( $current );
+		$keep   = array(
+			'action' => 'keep',
+			'value'  => $stored > 0 ? (string) $stored : '',
+		);
+
+		if ( null === $posted || ! is_scalar( $posted ) || is_bool( $posted ) ) {
+			return $keep;
+		}
+		$posted = trim( (string) $posted );
+
+		if ( '' === $posted ) {
+			return $stored > 0
+				? array(
+					'action' => 'delete',
+					'value'  => '',
+				)
+				: $keep;
+		}
+
+		$choice = Layers::choice( $posted );
+		if ( $choice < 1 || $choice === $stored ) {
+			return $keep; // Not a choice of the list, or stored already.
+		}
+
+		return array(
+			'action' => 'set',
+			'value'  => (string) $choice,
 		);
 	}
 
@@ -528,12 +583,81 @@ class Product {
 	}
 
 	/* ============================================================== */
+	/*  Bagging: Auto / Double / Triple                                */
+	/* ============================================================== */
+
+	/**
+	 * The "Bagging" choice (Shipping tab, simple and variable products),
+	 * right under the checkbox. It carries the Bag size fields' class, so
+	 * it shows only while the checkbox is ticked.
+	 *
+	 * @param object|null $product WC_Product.
+	 */
+	private function render_layers_field( $product ) {
+		$settings = $this->settings();
+		$current  = null !== $product ? Layers::stored( $product ) : '';
+		$words    = $settings['triple_words'];
+
+		if ( $words ) {
+			/* translators: %s: the "Triple-bag these" words, separated by commas */
+			$auto = sprintf( __( 'Auto: double-bagged, or triple when the fish\'s name or category has one of these words — %s (the list is under FisHotel Tools → Packing → Bags).', 'fishotel-misc-plugin' ), implode( ', ', $words ) );
+		} else {
+			$auto = __( 'Auto: double-bagged (the “Triple-bag these” list under FisHotel Tools → Packing → Bags is empty).', 'fishotel-misc-plugin' );
+		}
+
+		woocommerce_wp_select(
+			array(
+				'id'            => self::FIELD_LAYERS,
+				'name'          => self::FIELD_LAYERS,
+				'label'         => __( 'Bagging', 'fishotel-misc-plugin' ),
+				'value'         => $current,
+				'options'       => array(
+					''  => __( 'Auto', 'fishotel-misc-plugin' ),
+					'2' => __( 'Double — two bags', 'fishotel-misc-plugin' ),
+					'3' => __( 'Triple — three bags (sharp spines, a scalpel)', 'fishotel-misc-plugin' ),
+				),
+				'desc_tip'      => true,
+				'description'   => $auto . ' ' . __( 'For your records and the packing counts only: customers never see this.', 'fishotel-misc-plugin' ),
+				'wrapper_class' => 'show_if_simple show_if_variable fh-bag-size-field',
+			)
+		);
+	}
+
+	/**
+	 * Save the "Bagging" choice onto the product object WooCommerce is
+	 * about to save (the parent product — a variation has none of its own).
+	 *
+	 * @param object $product WC_Product.
+	 * @param array  $raw     Unslashed POST (the nonce and the capability were checked).
+	 * @return bool Whether the object changed.
+	 */
+	private function save_layers( $product, array $raw ) {
+		if ( ! method_exists( $product, 'update_meta_data' ) || ! method_exists( $product, 'delete_meta_data' ) || ! method_exists( $product, 'get_meta' ) ) {
+			return false;
+		}
+		if ( method_exists( $product, 'is_type' ) && $product->is_type( 'variation' ) ) {
+			return false;
+		}
+
+		$decision = self::decide_layers( $raw[ self::FIELD_LAYERS ] ?? null, $product->get_meta( Packing::META_LAYERS, true ) );
+		if ( 'set' === $decision['action'] ) {
+			$product->update_meta_data( Packing::META_LAYERS, (string) $decision['value'] );
+			return true;
+		}
+		if ( 'delete' === $decision['action'] ) {
+			$product->delete_meta_data( Packing::META_LAYERS );
+			return true;
+		}
+		return false;
+	}
+
+	/* ============================================================== */
 	/*  Simple products                                                */
 	/* ============================================================== */
 
 	/**
 	 * The Shipping tab (with the weight and the dimensions): the checkbox,
-	 * then the dropdown of a simple product.
+	 * the "Bagging" choice, then the Bag size dropdown of a simple product.
 	 */
 	public function render_simple_field() {
 		global $product_object;
@@ -551,6 +675,7 @@ class Product {
 		$mapped   = Bags::resolve( '', $size, $settings, $standard['sizes'] );
 
 		$this->render_packs_field( $product );
+		$this->render_layers_field( $product );
 
 		woocommerce_wp_select(
 			array(
@@ -568,9 +693,9 @@ class Product {
 	}
 
 	/**
-	 * Save the Shipping tab's two fields onto the product object
-	 * WooCommerce is about to save: the checkbox (simple and variable
-	 * products), and a simple product's Bag size.
+	 * Save the Shipping tab's fields onto the product object WooCommerce is
+	 * about to save: the checkbox and the "Bagging" choice (simple and
+	 * variable products), and a simple product's Bag size.
 	 *
 	 * @param object $product WC_Product.
 	 */
@@ -581,6 +706,7 @@ class Product {
 		}
 
 		$this->save_packs( $product, $raw );
+		$this->save_layers( $product, $raw );
 		$this->save_simple( $product, $raw );
 	}
 

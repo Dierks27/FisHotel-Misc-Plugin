@@ -48,11 +48,13 @@ check( 'WordPress has loaded the section\'s own file and nothing else of it', ar
 $GLOBALS['fh_is_admin']     = false;
 $GLOBALS['fh_option_reads'] = 0;
 Packing::boot();
-check( 'boot() hooks nothing at all', array() === $GLOBALS['fh_hooks'], fh_test_export( array_keys( $GLOBALS['fh_hooks'] ) ) );
+check( 'boot() hooks one thing only: ShipTracker\'s own filter for the fish of a box — fired by its order screen and its staff-only REST routes, never by a page a customer opens', array( 'fst_box_fish_count' ) === array_keys( $GLOBALS['fh_hooks'] ), fh_test_export( array_keys( $GLOBALS['fh_hooks'] ) ) );
+check( 'that callback is a method of the one file that is loaded, and takes ShipTracker\'s three arguments', array( array( array( Packing::class, 'box_fish_count' ), 3, 'filter' ) ) === $GLOBALS['fh_hooks']['fst_box_fish_count'] && is_callable( array( Packing::class, 'box_fish_count' ) ) );
 check( 'it reads no option — the request costs no query here', 0 === $GLOBALS['fh_option_reads'] );
+check( 'and that filter, fired with nothing to count, hands the number back without loading or reading anything', 4 === apply_filters( 'fst_box_fish_count', 4, null, null ) && 0 === $GLOBALS['fh_option_reads'] );
 check( 'it loads no further file', array( 'class-packing.php' ) === fh_loaded() );
 check( 'it writes no option and enqueues nothing', array() === $GLOBALS['fh_option_writes'] && array() === $GLOBALS['fh_enqueued'] );
-check( 'the section counts as switched on, so the contracts answer when somebody calls them', true === Packing::enabled() && function_exists( 'fishotel_packing_suggest' ) && function_exists( 'fishotel_packing_bag_for_item' ) && function_exists( 'fishotel_packing_confirmed_box' ) && function_exists( 'fishotel_packing_bag_for_product' ) && function_exists( 'fishotel_packing_bag_for_size' ) );
+check( 'the section counts as switched on, so the contracts answer when somebody calls them', true === Packing::enabled() && function_exists( 'fishotel_packing_suggest' ) && function_exists( 'fishotel_packing_bag_for_item' ) && function_exists( 'fishotel_packing_confirmed_box' ) && function_exists( 'fishotel_packing_bag_for_product' ) && function_exists( 'fishotel_packing_bag_for_size' ) && function_exists( 'fishotel_packing_shipment_plan' ) );
 
 echo "2. A wp-admin request\n";
 $GLOBALS['fh_is_admin'] = true;
@@ -64,6 +66,7 @@ $expected = array(
 	'add_meta_boxes',
 	'admin_enqueue_scripts',
 	'fishotel_today_lines', // Its line on the Today page (read only by that page and its widget).
+	'fst_box_fish_count', // ShipTracker's filter: the bags to pull for a box (see 1.).
 	'postbox_classes_product_woocommerce-product-data', // The classes of the product-data box, on the product edit screen.
 	'woocommerce_admin_process_product_object',
 	'woocommerce_product_after_variable_attributes',
@@ -76,8 +79,9 @@ $expected = array(
 	'wp_ajax_fishotel_packing_fill_run',
 	'wp_ajax_fishotel_packing_fits',
 	'wp_ajax_fishotel_packing_map',
+	'wp_ajax_fishotel_packing_words',
 );
-check_same( 'the hooks are exactly: the product editor, the order screen, the page\'s assets, the admin AJAX saves and the Today line', $expected, $hooks );
+check_same( 'the hooks are exactly: the product editor, the order screen, the page\'s assets, the admin AJAX saves, the Today line and ShipTracker\'s fish count', $expected, $hooks );
 check( 'booting in wp-admin reads no option either — only a screen that shows something does', 0 === $GLOBALS['fh_option_reads'] );
 
 // The hooks WooCommerce and WordPress use to show something to a customer.
@@ -223,9 +227,10 @@ foreach ( $code as $name => $text ) {
 	}
 }
 ksort( $meta_writes );
-check_same( 'the only meta ever written: the bag size and the "packed in a bag" choice on a product, the confirmed box (and its name) and the bags chosen by hand on an order', array( 'Packing::META_BAG', 'Packing::META_BAGS', 'Packing::META_BOX', 'Packing::META_BOX_NAME', 'Packing::META_PACKS' ), array_keys( $meta_writes ) );
+check_same( 'the only meta ever written: the bag size, the "packed in a bag" choice and the "Bagging" choice on a product, the confirmed box (and its name) and the bags chosen by hand on an order', array( 'Packing::META_BAG', 'Packing::META_BAGS', 'Packing::META_BOX', 'Packing::META_BOX_NAME', 'Packing::META_LAYERS', 'Packing::META_PACKS' ), array_keys( $meta_writes ) );
 check( 'the bag size is written by the product editor and the fill tool only; the box and the bags chosen by hand by the order packing only', array( 'class-fill.php', 'class-product.php' ) === array_values( array_unique( $meta_writes['Packing::META_BAG'] ) ) && array( 'class-order-packing.php' ) === array_values( array_unique( $meta_writes['Packing::META_BOX'] ) ) && array( 'class-order-packing.php' ) === array_values( array_unique( $meta_writes['Packing::META_BAGS'] ) ), fh_test_export( $meta_writes ) );
 check( 'the "packed in a bag" choice is written by the product editor only — the fill tool, the order screen and the contracts only read it', array( 'class-product.php' ) === array_values( array_unique( $meta_writes['Packing::META_PACKS'] ) ), fh_test_export( $meta_writes ) );
+check( 'the "Bagging" choice (double / triple) is written by the product editor only, and its key is spelled in one place', array( 'class-product.php' ) === array_values( array_unique( $meta_writes['Packing::META_LAYERS'] ) ) && array( 'class-packing.php' ) === array_values( array_filter( array_keys( $code ), static function ( $name ) use ( $code ) { return false !== strpos( $code[ $name ], '_fh_bag_layers' ); } ) ), fh_test_export( $meta_writes ) );
 $names_key = array_values( array_filter( array_keys( $code ), static function ( $name ) use ( $code ) { return false !== strpos( $code[ $name ], '_fh_packs_in_bag' ); } ) );
 check( 'the key itself is spelled in one place, the section\'s constant: no view, no script and no other class names it', array( 'class-packing.php' ) === $names_key, implode( ', ', $names_key ) );
 $views = array_values( array_filter( array_keys( $code ), static function ( $name ) use ( $code ) { return 0 === strpos( $name, 'views/' ) && ( false !== strpos( $code[ $name ], 'META_PACKS' ) || false !== strpos( $code[ $name ], 'fh_packs_in_bag' ) ); } ) );
@@ -242,6 +247,7 @@ check( 'the bag size is hidden meta: the underscore keeps it out of every list o
 check( 'so is the "Livestock — packed in a bag" choice: hidden product meta, on the parent product — never on a variation, never on an order line', '_fh_packs_in_bag' === Packing::META_PACKS && '_' === Packing::META_PACKS[0] );
 check( 'the confirmed box is hidden order meta', '_fh_packing_box' === Packing::META_BOX && '_fh_packing_box_name' === Packing::META_BOX_NAME );
 check( 'so are the bags chosen by hand: hidden order meta, never on an order line', '_fh_packing_bags' === Packing::META_BAGS && '_' === Packing::META_BAGS[0] );
+check( 'so is the "Bagging" choice: hidden product meta, on the parent product', '_fh_bag_layers' === Packing::META_LAYERS && '_' === Packing::META_LAYERS[0] );
 
 Packing::load();
 fh_test_settings();

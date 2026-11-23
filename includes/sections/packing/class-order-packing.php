@@ -64,7 +64,7 @@ class Order_Packing {
 	const MAX_OVERRIDES = 200;
 
 	/**
-	 * The plans bag_to_use() worked out in this request, by order id.
+	 * The suggestions worked out in this request (plan_of()), by order id.
 	 *
 	 * @var array<int, array>
 	 */
@@ -183,14 +183,17 @@ class Order_Packing {
 		$lines  = self::with_use( $lines, $packed, $settings );
 
 		$used = array();
+		$pull = array();
 		foreach ( $lines as $line ) {
 			foreach ( $line['use'] as $row ) {
 				$used[ $row['id'] ] = ( $used[ $row['id'] ] ?? 0 ) + $row['count'];
+				$pull[ $row['id'] ] = ( $pull[ $row['id'] ] ?? 0 ) + $row['count'] * (int) $line['layers'];
 			}
 		}
 
 		$bags      = array();
 		$bags_used = array();
+		$bags_pull = array();
 		$unplaced  = array();
 		foreach ( $settings['bags'] as $bag ) {
 			$id = (int) $bag['id'];
@@ -212,6 +215,11 @@ class Order_Packing {
 					'length' => (string) $bag['length'],
 					'label'  => Bags::label( $bag ),
 					'count'  => (int) $used[ $id ],
+				);
+				$bags_pull[] = array(
+					'id'    => $id,
+					'name'  => (string) $bag['name'],
+					'count' => (int) $pull[ $id ],
 				);
 			}
 			if ( ! empty( $plan['unplaced'][ $id ] ) ) {
@@ -235,6 +243,8 @@ class Order_Packing {
 			'bags'           => $bags,
 			'bag_total'      => $plan['bag_total'],
 			'bags_used'      => $bags_used,
+			'bags_pull'      => $bags_pull,
+			'pull_total'     => (int) array_sum( $pull ),
 			'packed'         => self::packed_summary( $packed ),
 			'overrides'      => $overrides,
 			'unplaced'       => $unplaced,
@@ -466,7 +476,9 @@ class Order_Packing {
 	 * "2 × Large + Medium"), `upsized` (fish of the line were moved up),
 	 * `chosen` (the bag id chosen by hand, 0 = Auto) and `tie_off` (the
 	 * usable height of the box when a bag stands taller — tie it off at
-	 * about that; null otherwise).
+	 * about that; null otherwise), `in_boxes` (box index → bag id → how many
+	 * of the line's bags are in that box), and the layers: `layers` (2 or 3),
+	 * `layers_why` and `layers_label` ("Medium ×2", "Large ×3 — spines").
 	 *
 	 * @param array[] $lines    The keyed fish lines.
 	 * @param array   $packed   Plan::build().
@@ -480,6 +492,7 @@ class Order_Packing {
 			$row = $packed['lines'][ $index ] ?? array(
 				'use'    => array(),
 				'boxes'  => array(),
+				'in_box' => array(),
 				'moved'  => 0,
 				'chosen' => 0,
 			);
@@ -507,11 +520,24 @@ class Order_Packing {
 				}
 			}
 
-			$lines[ $index ]['use']      = $use;
-			$lines[ $index ]['use_name'] = self::use_name( $use );
-			$lines[ $index ]['upsized']  = $row['moved'] > 0;
-			$lines[ $index ]['chosen']   = (int) $row['chosen'];
-			$lines[ $index ]['tie_off']  = $tie_off;
+			$in_boxes = array();
+			foreach ( isset( $row['in_box'] ) && is_array( $row['in_box'] ) ? $row['in_box'] : array() as $b => $load ) {
+				ksort( $load );
+				$in_boxes[ (int) $b ] = array_map( 'intval', $load );
+			}
+			ksort( $in_boxes );
+
+			$layers = isset( $line['layers'] ) ? (int) $line['layers'] : Layers::DOUBLE;
+
+			$lines[ $index ]['use']          = $use;
+			$lines[ $index ]['use_name']     = self::use_name( $use );
+			$lines[ $index ]['upsized']      = $row['moved'] > 0;
+			$lines[ $index ]['chosen']       = (int) $row['chosen'];
+			$lines[ $index ]['tie_off']      = $tie_off;
+			$lines[ $index ]['in_boxes']     = $in_boxes;
+			$lines[ $index ]['layers']       = $layers;
+			$lines[ $index ]['layers_why']   = (string) ( $line['layers_why'] ?? Layers::WHY_DEFAULT );
+			$lines[ $index ]['layers_label'] = $use ? Layers::label( self::use_name( $use ), $layers, count( $use ) > 1 ) : '';
 		}
 
 		return $lines;
@@ -561,8 +587,9 @@ class Order_Packing {
 	 * @param object $item WC_Order_Item_Product.
 	 * @param array  $min  Its minimum bag (Bags::describe()).
 	 * @return array|null Bags::describe() of the bag to use, plus min,
-	 *                    upsized, chosen_by_hand, mixed and bags (each: id,
-	 *                    name, label, count).
+	 *                    upsized, chosen_by_hand, mixed, bags (each: id,
+	 *                    name, label, count), layers (2 or 3 — the highest
+	 *                    of the line's fish) and layers_label.
 	 */
 	public static function bag_to_use( $item, array $min ) {
 		if ( ! is_object( $item ) || ! method_exists( $item, 'get_order_id' ) || ! method_exists( $item, 'get_id' ) ) {
@@ -584,19 +611,17 @@ class Order_Packing {
 			}
 		}
 
-		$owner_id = method_exists( $owner, 'get_id' ) ? (int) $owner->get_id() : 0;
-		if ( ! isset( self::$plans[ $owner_id ] ) ) {
-			self::$plans[ $owner_id ] = self::for_order( $owner );
-		}
-		$result = self::$plans[ $owner_id ];
+		$result = self::plan_of( $owner );
 
 		$counts = array();
 		$moved  = false;
 		$chosen = 0;
+		$layers = array();
 		foreach ( $result['lines'] as $line ) {
 			if ( (int) $line['order_id'] !== $order_id || (int) $line['item_id'] !== $item_id || empty( $line['use'] ) ) {
 				continue;
 			}
+			$layers[ (int) $line['layers'] ] = true;
 			foreach ( $line['use'] as $bag ) {
 				$counts[ $bag['id'] ] = ( $counts[ $bag['id'] ] ?? 0 ) + $bag['count'];
 			}
@@ -649,14 +674,39 @@ class Order_Packing {
 			'chosen_by_hand' => $chosen > 0,
 			'mixed'          => count( $use ) > 1,
 			'bags'           => $use,
+			'layers'         => (int) max( array_keys( $layers ) ),
+			'layers_label'   => Layers::label( self::use_name( $use ), (int) max( array_keys( $layers ) ), count( $use ) > 1, count( $layers ) > 1 ),
 		);
 	}
 
 	/**
-	 * Drop the plans worked out for bag_to_use() in this request.
+	 * The suggestion of an order, worked out once per request: the order's
+	 * Packing box, fishotel_packing_bag_for_item() and
+	 * fishotel_packing_shipment_plan() all read this one. Every write of
+	 * this class drops it (forget()).
+	 *
+	 * @param object $order WC_Order.
+	 * @return array for_order().
+	 */
+	public static function plan_of( $order ) {
+		$order_id = is_object( $order ) && method_exists( $order, 'get_id' ) ? (int) $order->get_id() : 0;
+		if ( $order_id < 1 ) {
+			return self::for_order( $order );
+		}
+		if ( ! isset( self::$plans[ $order_id ] ) ) {
+			self::$plans[ $order_id ] = self::for_order( $order );
+		}
+		return self::$plans[ $order_id ];
+	}
+
+	/**
+	 * Drop the plans worked out in this request.
 	 */
 	public static function forget() {
 		self::$plans = array();
+		if ( class_exists( __NAMESPACE__ . '\\Shipment_Plan', false ) ) {
+			Shipment_Plan::forget();
+		}
 	}
 
 	/**

@@ -20,6 +20,7 @@ defined( 'ABSPATH' ) || exit;
 
 use FisHotel\Misc\Sections\Packing\Bags;
 use FisHotel\Misc\Sections\Packing\Boxes;
+use FisHotel\Misc\Sections\Packing\Layers;
 use FisHotel\Misc\Sections\Packing\Livestock;
 use FisHotel\Misc\Sections\Packing\Order_Packing;
 use FisHotel\Misc\Sections\Packing\Plan;
@@ -98,6 +99,16 @@ if ( $fh_confirmed && $fh_can_use ) {
 								$fh_from     = Bags::SOURCE_OWN === $fh_line['bag']['source'] ? __( 'set on the product', 'fishotel-misc-plugin' ) : __( 'from the size map', 'fishotel-misc-plugin' );
 								?>
 								<strong class="fh-pack-box__use"><?php echo esc_html( $fh_use_name ); ?></strong>
+							<?php
+							// In how many layers the bag is used: ×2, or ×3 for a fish with spines.
+							$fh_layers = (int) ( $fh_line['layers'] ?? Layers::DOUBLE );
+							$fh_times  = Layers::words( $fh_layers );
+							if ( count( (array) ( $fh_line['use'] ?? array() ) ) > 1 ) {
+								/* translators: %s: the layers, as "×2" */
+								$fh_times = sprintf( __( 'each %s', 'fishotel-misc-plugin' ), $fh_times );
+							}
+							?>
+							<span class="fh-pack-box__layers<?php echo $fh_layers >= Layers::TRIPLE ? ' is-triple' : ''; ?>" title="<?php echo esc_attr( Layers::why_text( $fh_layers, (string) ( $fh_line['layers_why'] ?? '' ) ) ); ?>"><?php echo esc_html( $fh_times ); ?></span>
 								<?php if ( (int) $fh_line['bags'] !== (int) $fh_line['qty'] ) : ?>
 									<span class="fh-pack-box__sub">
 										<?php
@@ -186,6 +197,25 @@ if ( $fh_confirmed && $fh_can_use ) {
 				echo esc_html( sprintf( _n( '%d bag in all', '%d bags in all', (int) $result['bag_total'], 'fishotel-misc-plugin' ), (int) $result['bag_total'] ) );
 				?>
 			</span>
+		</p>
+	<?php endif; ?>
+
+	<?php if ( (int) ( $result['pull_total'] ?? 0 ) > 0 ) : ?>
+		<?php
+		$fh_pull = array();
+		foreach ( (array) ( $result['bags_pull'] ?? array() ) as $fh_bag ) {
+			$fh_pull[] = (int) $fh_bag['count'] . ' × ' . $fh_bag['name'];
+		}
+		?>
+		<p class="fh-pack-box__pull">
+			<strong>
+				<?php
+				/* translators: %d: number of single bags */
+				echo esc_html( sprintf( _n( '%d bag to pull', '%d bags to pull', (int) $result['pull_total'], 'fishotel-misc-plugin' ), (int) $result['pull_total'] ) );
+				?>
+			</strong>
+			<?php echo esc_html( implode( ' · ', $fh_pull ) ); ?>
+			<span class="fh-pack-box__sub"><?php esc_html_e( 'every fish is double-bagged, triple-bagged for spines', 'fishotel-misc-plugin' ); ?></span>
 		</p>
 	<?php endif; ?>
 
@@ -297,7 +327,16 @@ if ( $fh_confirmed && $fh_can_use ) {
 				?>
 			</span>
 			<ul class="fh-pack-box__boxes">
-				<?php foreach ( $result['packed']['boxes'] as $fh_box ) : ?>
+				<?php
+				// The single bags to pull for each box: its bags, each in its fish's layers.
+				$fh_box_pull = array();
+				foreach ( $result['lines'] as $fh_line ) {
+					foreach ( (array) ( $fh_line['in_boxes'] ?? array() ) as $fh_b => $fh_load ) {
+						$fh_box_pull[ (int) $fh_b ] = ( $fh_box_pull[ (int) $fh_b ] ?? 0 ) + (int) array_sum( (array) $fh_load ) * (int) ( $fh_line['layers'] ?? Layers::DOUBLE );
+					}
+				}
+				?>
+				<?php foreach ( $result['packed']['boxes'] as $fh_box_index => $fh_box ) : ?>
 					<?php
 					$fh_parts = array();
 					foreach ( array_reverse( $settings['bags'] ) as $fh_bag ) {
@@ -309,6 +348,14 @@ if ( $fh_confirmed && $fh_can_use ) {
 					<li class="<?php echo $fh_box['over'] ? 'is-over' : ''; ?>">
 						<strong><?php echo esc_html( $fh_box['name'] ); ?></strong>
 						<?php echo esc_html( $fh_parts ? ': ' . implode( ' + ', $fh_parts ) : '' ); ?>
+						<?php if ( $fh_many && ! empty( $fh_box_pull[ $fh_box_index ] ) ) : ?>
+							<span class="fh-pack-box__sub">
+								<?php
+								/* translators: %d: number of single bags */
+								echo esc_html( sprintf( _n( '%d bag to pull', '%d bags to pull', (int) $fh_box_pull[ $fh_box_index ], 'fishotel-misc-plugin' ), (int) $fh_box_pull[ $fh_box_index ] ) );
+								?>
+							</span>
+						<?php endif; ?>
 						&mdash;
 						<?php
 						if ( null === $fh_box['fill_pct'] ) {

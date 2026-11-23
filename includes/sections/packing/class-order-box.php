@@ -105,7 +105,7 @@ class Order_Box {
 			return;
 		}
 
-		echo self::render_body( $order ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- the view escapes every value.
+		echo self::render_body( $order, '', false, true ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- the view escapes every value.
 	}
 
 	/**
@@ -114,14 +114,17 @@ class Order_Box {
 	 * @param object $order   WC_Order.
 	 * @param string $message A line to show at the top (the outcome of a save).
 	 * @param bool   $error   Whether that line is an error.
+	 * @param bool   $shared  Whether to take the plan this request already worked out for the order
+	 *                        (the order screen: the theme's Shipments box asks for the same one through
+	 *                        fishotel_packing_shipment_plan()). The AJAX reply always works it out again.
 	 * @return string HTML.
 	 */
-	public static function render_body( $order, $message = '', $error = false ) {
+	public static function render_body( $order, $message = '', $error = false, $shared = false ) {
 		$settings = Settings::get();
 		$current  = Boxes::current( $settings );
 
 		try {
-			$result = Order_Packing::for_order( $order, $settings, null, $current );
+			$result = $shared ? Order_Packing::plan_of( $order ) : Order_Packing::for_order( $order, $settings, null, $current );
 		} catch ( \Throwable $e ) {
 			$result = Packing::unavailable( method_exists( $order, 'get_id' ) ? (int) $order->get_id() : 0, 'error' );
 		}

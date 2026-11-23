@@ -20,8 +20,8 @@
  * ShipTracker, or the move from the own list to ShipTracker's, keeps what
  * was typed.
  *
- * Everything here is pure except from_shiptracker() and the filter in
- * current().
+ * Everything here is pure except from_shiptracker(), shiptracker_rows()
+ * and the filter in current().
  *
  * @package FisHotel\Misc\Sections\Packing
  */
@@ -211,6 +211,29 @@ class Boxes {
 		}
 
 		return is_array( $rows ) ? self::rows( $rows, self::SOURCE_SHIPTRACKER ) : null;
+	}
+
+	/**
+	 * ShipTracker's standard boxes exactly as it answers them — its own
+	 * names and sizes, untouched — or null when the active build does not
+	 * provide them. For the shipment plan, which hands ShipTracker's own
+	 * spelling of a box back to the forms that select it by that.
+	 *
+	 * @param string $class ShipTracker's settings class (a parameter so a test can stand in for it).
+	 * @return array[]|null
+	 */
+	public static function shiptracker_rows( $class = 'FST_Settings' ) {
+		if ( ! is_string( $class ) || ! class_exists( $class ) || ! method_exists( $class, 'get_standard_boxes' ) ) {
+			return null;
+		}
+
+		try {
+			$rows = call_user_func( array( $class, 'get_standard_boxes' ) );
+		} catch ( \Throwable $e ) {
+			return null;
+		}
+
+		return is_array( $rows ) ? array_values( array_filter( $rows, 'is_array' ) ) : null;
 	}
 
 	/**

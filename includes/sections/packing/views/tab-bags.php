@@ -1,6 +1,7 @@
 <?php
 /**
- * Packing page — Bags: the standard bags.
+ * Packing page — Bags: the standard bags, and the "Triple-bag these"
+ * words.
  *
  * @package FisHotel\Misc\Sections\Packing
  *
@@ -14,6 +15,7 @@ defined( 'ABSPATH' ) || exit;
 use FisHotel\Misc\Sections\Packing\Admin;
 use FisHotel\Misc\Sections\Packing\Boxes;
 use FisHotel\Misc\Sections\Packing\Fit;
+use FisHotel\Misc\Sections\Packing\Layers;
 use FisHotel\Misc\Sections\Packing\Settings;
 
 $fh_bags  = $settings['bags'];
@@ -135,4 +137,38 @@ $fh_next  = count( $fh_bags ) + $fh_spare;
 		);
 		?>
 	</p>
+</div>
+
+<div class="fishotel-misc-card fh-pack-card">
+	<div class="fishotel-misc-card-header">
+		<div class="fishotel-misc-card-icon"><span class="dashicons dashicons-shield"></span></div>
+		<h2 class="fishotel-misc-card-title"><?php esc_html_e( 'Triple-bag these', 'fishotel-misc-plugin' ); ?></h2>
+	</div>
+	<p class="fishotel-misc-card-desc">
+		<?php esc_html_e( 'Every fish is double-bagged. A fish with sharp spines or a scalpel is triple-bagged: one whose name, or one of whose product categories, has a word of this list. A word counts whole, whatever the capitals, and so does its plural — “tang” finds “Yellow Tang” and “Tangs”, never “Tangerine”.', 'fishotel-misc-plugin' ); ?>
+	</p>
+	<p class="fishotel-misc-card-desc">
+		<?php esc_html_e( 'One word per line, or separated by commas. To set one fish by hand, use Bagging (Auto / Double / Triple) in its product\'s Shipping tab: that beats this list. The order\'s Packing box shows the result on every fish line — ×2 or ×3 — and how many bags to pull in all.', 'fishotel-misc-plugin' ); ?>
+	</p>
+
+	<form class="fh-pack-form" method="post" action="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>">
+		<?php wp_nonce_field( Settings::NONCE_ACTION ); ?>
+		<input type="hidden" name="action" value="fishotel_packing_words">
+
+		<p>
+			<label class="screen-reader-text" for="fh-pack-triple-words"><?php esc_html_e( 'Words that mean a fish is triple-bagged', 'fishotel-misc-plugin' ); ?></label>
+			<textarea id="fh-pack-triple-words" class="fh-pack-input fh-pack-words" name="triple_words" rows="<?php echo esc_attr( max( 6, min( 16, count( $settings['triple_words'] ) + 2 ) ) ); ?>" cols="40" spellcheck="false"><?php echo esc_textarea( implode( "\n", $settings['triple_words'] ) ); ?></textarea>
+		</p>
+		<p class="fishotel-misc-card-desc">
+			<?php
+			/* translators: %s: the words the list starts with, separated by commas */
+			echo esc_html( sprintf( __( 'The list it started with: %s.', 'fishotel-misc-plugin' ), implode( ', ', Layers::default_words() ) ) );
+			?>
+		</p>
+
+		<p class="fh-pack-actions">
+			<button type="submit" class="button button-primary"><?php esc_html_e( 'Save the list', 'fishotel-misc-plugin' ); ?></button>
+			<span class="fh-pack-status" role="status" aria-live="polite"></span>
+		</p>
+	</form>
 </div>
