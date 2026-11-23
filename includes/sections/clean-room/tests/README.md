@@ -42,6 +42,7 @@ php  includes/sections/clean-room/tests/stats-prices-test.php
 php  includes/sections/clean-room/tests/stats-sales-test.php
 php  includes/sections/clean-room/tests/stats-admin-test.php
 php  includes/sections/clean-room/tests/species-test.php
+php  includes/sections/clean-room/tests/order-fish-test.php
 php  includes/sections/clean-room/tests/orders-test.php
 php  includes/sections/clean-room/tests/xlsx-test.php
 php  includes/sections/clean-room/tests/workbook-admin-test.php
@@ -364,6 +365,27 @@ system temp directory (`FH_TEST_TMP` overrides).
   appended, the Front Desk item shape intact); the parser finding a
   species that is not a product and a product by its row's scientific
   name; the product link, the open-stays counts, delete-or-refuse.
+- **order-fish-test.php** — the fish of the fish orders in the fish
+  search (`Order_Fish`, `Store::fish_search()`): which are offered (a
+  line of a draft, ordered or received order; not a closed order's, not
+  a line linked to a Species row or named like one or like a product,
+  not a "??" line; an unlisted fish alive in a tank; one fish on three
+  lines spelled three ways offered once in its newest line's spelling),
+  the words "on fish order 2026-9" / "in tank 512", the item (no
+  product, no Species row, the order's ref), the match on name and
+  scientific name, the ranking under the products and the Species rows
+  of the same quality (a product found by a learned or a common name
+  included), a group whose line is a renamed Species row, the cap that
+  cuts the oldest lines' fish, a name with a "<" stored as spelled;
+  on the fake store: found, picked — the same answer as a typed unlisted
+  name, an Arrival and "Add fish already here" with it, nothing created
+  —, the order closed, the last fish gone, a Species row or a product of
+  that name; that the endpoints ask `fish_search()` while the Requests
+  section and the parser's candidates do not; and the cache on the REAL
+  `Store` against a database stand-in that records what it is asked:
+  two bounded reads, kept, dropped by each write that changes the answer
+  and by nothing else, the product list left alone, a failed read not
+  kept.
 - **orders-test.php** — on the fake store: the header and lines from a
   form (typed, defaulted, empty species dropped); create with the next
   "YYYY-N" ref, a duplicate ref refused; save lines (upsert by id,
@@ -736,7 +758,14 @@ system temp directory (`FH_TEST_TMP` overrides).
   one fish in one size (the row to the line with its price or written
   as it is, two boxes on one line, both rows left for the owner when
   nothing tells the lines apart, lines with stays as before), two sizes
-  that share a slug (3-5" and 3.5"+) and a bare number that is no size.
+  that share a slug (3-5" and 3.5"+) and a bare number that is no size;
+  and, in the ordered mode on a sheet with a received column, a row with
+  no order quantity and a received count kept as ordered 0 (an "order"
+  or a plain "qty" column), the row with neither still left out, a
+  received count that will not parse still only flagged, a sum under
+  the received column with no fish beside it left out, the sheet on
+  which not one row has an order quantity (one unreadable cell or not)
+  listed as before — and the arrived mode as it was.
 - **order-import-layouts-test.php** — the saved layouts
   (`Import_Layouts`): built from a hand-set mapping, recognised the next
   time with and without a header, an ordered and an arrived layout side
@@ -762,7 +791,13 @@ system temp directory (`FH_TEST_TMP` overrides).
   and the capabilities; a section that is switched off; arrival day on
   an ordered order (the button that fits, the offer to switch), an
   invoice's code kept on a line that had none, a price compared to the
-  cent, "1 line".
+  cent, "1 line"; and a fish that arrived without being ordered, in the
+  ordered mode — pasted, from a file and from the assistant's block,
+  each with and without the arrived-too tick: the row and the summary
+  say so, the line is ordered 0 with its received count, the same line
+  (field for field) and the same fill rate as an extra of the arrived
+  mode, and the sheet without any order quantity still offers the other
+  button.
 - **order-import-tidy-test.php** — the order import and "Tidy up the
   sizes" on one shop (the shop of `tidy-fixture.php`, its fish as the
   in-memory store's products): an order sheet on the long list of sizes
@@ -1483,7 +1518,14 @@ line's `split` field holds anything (`fields_before`) — and one press on
     *Read it*: the preview says "N of M rows have an order quantity",
     lists only those rows, each with *matched: …* or a flag, the size
     lifted out of the name when it is one of your sizes, and the foot
-    counts lines and fish. A sheet whose headings nobody knows shows a
+    counts lines and fish. On a sheet that also has a *received* column,
+    give one fish an order quantity of 0 (or none) and a received count
+    of 1: its row is listed with "arrived without being ordered", the
+    summary ends "· 1 more arrived without being ordered", and after the
+    confirm its line reads ordered 0 · received 1 — with and without
+    *These fish have arrived* ticked; a row with neither number is not
+    listed, and neither is a sum under the received column with no fish
+    beside it. A sheet whose headings nobody knows shows a
     dropdown above each column: set the fish and the quantity, leave
     *Remember this layout for <supplier>* ticked, confirm. The order is
     saved as *ordered*, every line with received empty and its `[code …]`
@@ -1540,7 +1582,34 @@ line's `split` field holds anything (`fields_before`) — and one press on
     kept together the offer is gone. Two lines, the first left on auto,
     the second split "1 per tank": after the check-in no tank holds both
     lines.
-35. Fish with no product yet. Put a fish the shop has no product for on
+35. A fish of a fish order in the fish search. On a fish order that is
+    not closed, type a line for a fish that is no product and not in the
+    Species list — "Golden Sample Tang", with a scientific name — and
+    Save (or import a sheet and leave such a row on *use as typed
+    (unlisted fish)*). On the phone open a quarantine tank → Arrival and
+    type "golden": the fish is suggested, with its scientific name and
+    "on fish order <ref>", under any product or Species-list fish that
+    answers as well. Pick it, Save: the tank's group is "Golden Sample
+    Tang" exactly as the line spells it, with no product, and the
+    Stays tab shows the order's ref beside it; the Species tab has no
+    new row and the shop no new product. (That group is linked to no
+    line: do NOT also press *Check in* for that line on the order — it
+    would put the same fish in a tank a second time. The fish of a fish
+    order normally go in through its Check in.) The same from *+ Add
+    fish already here*, from Identify on a "??" group, and in wp-admin
+    from another order's line (its scientific name is filled in), from
+    the Stays tab's *Add fish already here* and from *Identify*. Type
+    the same fish in other capitals on a second order: still suggested
+    once, in the newer line's spelling. Set the order to *closed* while
+    the fish is alive in a tank: it now says "in tank <number>"; once
+    the group is empty it is no longer suggested. Add the fish to the
+    Species list (or give it a product of that exact name): it is found
+    as that — "list" / the product's id — and only once. A "??" line is
+    never suggested. On the Requests page (as a customer) type "golden":
+    a fish that is only on a fish order is NOT suggested there. With the
+    phone in flight mode the search simply suggests nothing, as before;
+    the Shop App's PIN screen is as it was.
+36. Fish with no product yet. Put a fish the shop has no product for on
     a fish order (type it, "use as typed"), in two sizes, and Save: both
     lines carry *no product yet* in Entry and in Numbers; type a planned
     price with the pencil and Save: the tag stays. The Fish orders list

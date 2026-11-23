@@ -115,6 +115,8 @@ class Admin_Order_Import {
 				/* translators: 1: lines (one), 2: fish */
 				'footOne'        => __( '%1$s line · %2$s fish', 'fishotel-misc-plugin' ),
 				'feeWord'        => __( '? a fee\'s word in a fish\'s name', 'fishotel-misc-plugin' ),
+				'unasked'        => __( 'arrived without being ordered', 'fishotel-misc-plugin' ),
+				'unaskedTitle'   => __( 'This row has no order quantity but a received count. It becomes a line with ordered 0 and that received count.', 'fishotel-misc-plugin' ),
 				'feeWordTitle'   => __( 'This row carries a supplier\'s code or a scientific name, so it is kept as a fish — but its name holds a word fee lines use. Untick it if it is a fee after all.', 'fishotel-misc-plugin' ),
 				/* translators: %s: lines */
 				'addOne'         => __( 'Add %s line to the order', 'fishotel-misc-plugin' ),
@@ -749,7 +751,10 @@ class Admin_Order_Import {
 				}
 			}
 			if ( 'ordered' === $mode ) {
-				$row['received'] = $too ? ( null !== $row['received'] ? $row['received'] : $row['ordered'] ) : null;
+				// Received is left empty unless the fish have arrived (the tick) — but a fish that arrived
+				// without being ordered is a line only BECAUSE of its received count: that count is kept
+				// either way, so the tick and no tick agree on it (ordered 0, received as the sheet says).
+				$row['received'] = ( $too || ! empty( $row['unasked'] ) ) ? ( null !== $row['received'] ? $row['received'] : $row['ordered'] ) : null;
 			}
 			$rows[] = $row;
 		}
@@ -1074,6 +1079,10 @@ class Admin_Order_Import {
 		if ( $plan['complete'] && 'ordered' === $mode ) {
 			/* translators: 1: rows with an order quantity, 2: rows read */
 			$summary = sprintf( __( '%1$s of %2$s rows have an order quantity', 'fishotel-misc-plugin' ), number_format( $a['with_qty'] ), number_format( $a['data_rows'] ) );
+			if ( ! empty( $a['unasked'] ) ) {
+				/* translators: %s: rows */
+				$summary .= ' · ' . sprintf( _n( '%s more arrived without being ordered', '%s more arrived without being ordered', (int) $a['unasked'], 'fishotel-misc-plugin' ), number_format( (int) $a['unasked'] ) );
+			}
 		} elseif ( $plan['complete'] ) {
 			/* translators: %s: rows */
 			$summary = sprintf( __( '%s rows of fish read', 'fishotel-misc-plugin' ), number_format( $a['with_qty'] ) );
@@ -1219,6 +1228,7 @@ class Admin_Order_Import {
 			'flags'      => array_values( array_unique( $row['flags'] ) ),
 			'check'      => (bool) $row['check'],
 			'fee_word'   => ! empty( $row['fee_word'] ),
+			'unasked'    => ! empty( $row['unasked'] ),
 			'on'         => (bool) $row['on'],
 			'junk'       => (bool) $row['junk'],
 			'dup'        => isset( $row['dup'] ) ? $row['dup'] : '',

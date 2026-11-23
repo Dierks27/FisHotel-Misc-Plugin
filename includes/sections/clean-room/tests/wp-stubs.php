@@ -67,6 +67,10 @@ function sanitize_text_field( $text ) {
 	return trim( strip_tags( $text ) );
 }
 
+function wp_specialchars_decode( $text, $quote_style = ENT_NOQUOTES ) {
+	return htmlspecialchars_decode( (string) $text, $quote_style );
+}
+
 function sanitize_textarea_field( $text ) {
 	return trim( strip_tags( (string) $text ) );
 }
@@ -317,6 +321,7 @@ require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-stats.php'
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-stats-prices.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-stats-sales.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-species.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-order-fish.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-identify.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-board-lines.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-orders.php';

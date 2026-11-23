@@ -786,7 +786,7 @@ class Admin {
 					'no'             => __( 'No', 'fishotel-misc-plugin' ),
 					'confirmShare'   => __( 'Forget this remembered share? It comes back the next time an order with that fish and size is saved with a percent.', 'fishotel-misc-plugin' ),
 					'whichFish'      => __( 'Which fish? Type or pick one — or tick "Still unknown (??)".', 'fishotel-misc-plugin' ),
-					'fishHint'       => __( 'the real fish: type for products and the species list, or a name of your own', 'fishotel-misc-plugin' ),
+					'fishHint'       => __( 'the real fish: type for products, the species list and the fish of your fish orders, or a name of your own', 'fishotel-misc-plugin' ),
 					'unknownHint'    => __( 'what it looks like (optional)', 'fishotel-misc-plugin' ),
 					'notStandard'    => __( 'not a standard size', 'fishotel-misc-plugin' ),
 					'box'            => Admin_Workbook::box_strings(),

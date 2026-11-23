@@ -148,7 +148,19 @@ check( 'typing after the pick drops the product', 0 === ep.product_id );
 ep = helpers.existingPost( { tank: 122, area: 'clean', text: 'small wrasse', unknown: true, picked: { name: 'small wrasse', product_id: 5 }, cleared: '2025-06-01', supplier: 'Test Supplier' } );
 check( 'an unknown fish: "?? small wrasse", no product; a cleared date and a supplier', '?? small wrasse' === ep.species && 1 === ep.unknown && 0 === ep.product_id && '2025-06-01' === ep.cleared && 'Test Supplier' === ep.supplier, JSON.stringify( ep ) );
 
-console.log( '9. "Fish with no product yet": what the page posts for one fish' );
+console.log( '9. The fish search: a fish of a fish order' );
+var onOrder = { product_id: null, name: 'Golden Sample Tang', common: '', sci: 'Samplus aureus', match: 'order', alias: '', where: 'on fish order 2026-9' };
+check( 'its tag says where it comes from', 'on fish order 2026-9' === helpers.suggestTag( onOrder ) && 'in tank 512' === helpers.suggestTag( { name: 'x', match: 'tank', where: 'in tank 512' } ) );
+check( 'the other tags are as they were: a product\'s id, "list", both, a learned name', '#12' === helpers.suggestTag( { product_id: 12, match: 'title' } ) && 'list' === helpers.suggestTag( { product_id: null, match: 'species', species_id: 3 } ) && '#12 · list' === helpers.suggestTag( { product_id: 12, match: 'title', species_id: 3 } ) && 'alias' === helpers.suggestTag( { product_id: null, match: 'alias' } ) && '' === helpers.suggestTag() );
+var pick = helpers.linePick( onOrder, '' );
+check( 'picked on an order line: the name as it is spelled, NO Species row — an unlisted fish, as a typed name is — and its scientific name', 'Golden Sample Tang' === pick.species && '' === pick.species_id && 'Samplus aureus' === pick.sci_name );
+check( '… a scientific name already typed on the line is kept', 'Typed name' === helpers.linePick( onOrder, 'Typed name' ).sci_name && 'Samplus aureus' === helpers.linePick( onOrder, '  ' ).sci_name );
+check( 'a Species-list fish still brings its row', 3 === helpers.linePick( { name: 'Green Test Blenny', species_id: 3, sci: '' }, 'kept' ).species_id && 'kept' === helpers.linePick( { name: 'Green Test Blenny', species_id: 3, sci: '' }, 'kept' ).sci_name );
+ep = helpers.existingPost( { tank: 521, area: 'spa', text: 'Golden Sample Tang', picked: { name: onOrder.name, product_id: onOrder.product_id || 0 }, qty: '2' } );
+var typed = helpers.existingPost( { tank: 521, area: 'spa', text: 'Golden Sample Tang', qty: '2' } );
+check( 'picked in "Add fish already here" or in Identify: what a typed, unlisted name posts — the same spelling, no product', JSON.stringify( ep ) === JSON.stringify( typed ) && 'Golden Sample Tang' === ep.species && 0 === ep.product_id && 0 === ep.unknown );
+
+console.log( '10. "Fish with no product yet": what the page posts for one fish' );
 var nonces = { page: 'page-nonce', draft: 'draft-nonce', action: 'fishotel_cleanroom_no_product' };
 var np = helpers.noProductPost( 'link', { key: 'n:orange test dart', name: 'Orange Test Dart' }, '31', nonces );
 check( 'a link: the fish by its key and name, the product, the page\'s own nonce', same( { action: 'fishotel_cleanroom_no_product', op: 'link', nonce: 'page-nonce', key: 'n:orange test dart', name: 'Orange Test Dart', product_id: 31 }, np ), JSON.stringify( np ) );
@@ -156,11 +168,12 @@ np = helpers.noProductPost( 'draft', { key: 's:7', name: 'Blue Test Wrasse' }, 0
 check( 'a draft: under the draft\'s own nonce, and it names no product', same( { action: 'fishotel_cleanroom_no_product', op: 'draft', nonce: 'draft-nonce', key: 's:7', name: 'Blue Test Wrasse' }, np ), JSON.stringify( np ) );
 check( 'nothing is posted without a fish, without a product to link, or for a draft by a user who may not make products (no draft nonce)', null === helpers.noProductPost( 'link', { key: '', name: 'x' }, 3, nonces ) && null === helpers.noProductPost( 'link', { key: 's:7' }, 0, nonces ) && null === helpers.noProductPost( 'draft', { key: 's:7' }, 0, { page: 'page-nonce', draft: '' } ) && null === helpers.noProductPost( 'publish', { key: 's:7' }, 3, nonces ) && null === helpers.noProductPost() );
 
-console.log( '10. The search boxes: what "nothing found" says, and how a near spelling is marked' );
+console.log( '11. The search boxes: what "nothing found" says, and how a near spelling is marked' );
 var words = { noMatch: 'No match — type the name to use it as an unlisted species.', noProduct: 'No fish product matches.', near: 'similar spelling' };
 check( 'the box that links a PRODUCT has its own empty answer — never "type the name to use it as an unlisted species"', words.noProduct === helpers.emptyText( 'products', words ) && words.noMatch === helpers.emptyText( 'suggest', words ) && 'No fish product matches.' === helpers.emptyText( 'products' ) && 'No match.' === helpers.emptyText( 'suggest', {} ) );
 check( 'a suggestion\'s tag: its product, "list" for a species row — as before', '#31' === helpers.suggestTag( { product_id: 31, match: 'title' }, words ) && '#31 · list' === helpers.suggestTag( { product_id: 31, species_id: 4, match: 'title' }, words ) && 'list' === helpers.suggestTag( { match: 'species', species_id: 4 }, words ) && 'alias' === helpers.suggestTag( { match: 'alias' }, words ) );
 check( '… and one found by a near spelling only says so', '#31 · similar spelling' === helpers.suggestTag( { product_id: 31, match: 'near' }, words ) && 'list · similar spelling' === helpers.suggestTag( { species_id: 4, match: 'near' }, words ) && 'similar spelling' === helpers.suggestTag( { match: 'near' } ) && '' === helpers.suggestTag() );
+check( 'a fish of a fish order found by a near spelling: where it comes from, and that the spelling is only similar', 'on fish order 2026-9 · similar spelling' === helpers.suggestTag( { name: 'Golden Sample Tang', match: 'near', where: 'on fish order 2026-9' }, words ) && 'in tank 512 · similar spelling' === helpers.suggestTag( { name: 'x', match: 'near', where: 'in tank 512' } ) && 'on fish order 2026-9' === helpers.suggestTag( onOrder, words ) );
 
 console.log( '' );
 console.log( failures ? failures + ' of ' + checks + ' checks FAILED' : 'All ' + checks + ' checks passed' );

@@ -1674,7 +1674,8 @@ class Admin_Workbook {
 				case 'suggest':
 				case 'products':
 					$term  = isset( $raw['term'] ) ? substr( sanitize_text_field( (string) $raw['term'] ), 0, 80 ) : '';
-					$items = $store->species_suggestions( $term, self::SUGGEST_LIMIT );
+					// The search boxes also find the fish of the fish orders; the product link looks at products only.
+					$items = 'products' === $op ? $store->species_suggestions( $term, self::SUGGEST_LIMIT ) : $store->fish_search( $term, self::SUGGEST_LIMIT );
 					$hint  = $store->search_hint( $term, $items ); // A product of that name outside the fish categories: said, so it is not a riddle.
 					if ( 'products' === $op ) {
 						$items = array_values(

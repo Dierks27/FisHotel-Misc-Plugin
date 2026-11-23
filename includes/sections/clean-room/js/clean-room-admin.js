@@ -634,11 +634,32 @@
 		return fields;
 	}
 
+	/**
+	 * What picking a suggestion writes on an order line (pure): the fish's
+	 * name as it is spelled, its Species row ('' = none — a fish of a fish
+	 * order line is an unlisted fish, as a typed name is) and the
+	 * scientific name, which only fills an empty field.
+	 *
+	 * @param {Object} item A suggestion.
+	 * @param {string} sci  The line's scientific name as it stands.
+	 * @return {{species: string, species_id: (number|string), sci_name: string}}
+	 */
+	function linePick(item, sci) {
+		item = item || {};
+		var typed = String(sci === null || typeof sci === 'undefined' ? '' : sci);
+		return {
+			species: String(item.name || ''),
+			species_id: item.species_id || '',
+			sci_name: !typed.replace(/^\s+|\s+$/g, '') && item.sci ? String(item.sci) : typed
+		};
+	}
+
 	var api = {
+		suggestTag: suggestTag,
+		linePick: linePick,
 		existingPost: existingPost,
 		noProductPost: noProductPost,
 		emptyText: emptyText,
-		suggestTag: suggestTag,
 		packLines: packLines,
 		wellFormed: wellFormed,
 		renumber: renumber,
@@ -750,19 +771,27 @@
 	}
 
 	/**
-	 * The small text after a suggestion: its product, "list" for a species
-	 * row, and "similar spelling" when it was found by a near match only.
+	 * The small tag beside a fish the search suggests (pure): where a fish
+	 * that only a fish order line or a group in a tank names comes from
+	 * ("on fish order 2026-9", "in tank 512"); else the product's id, "list"
+	 * for a fish of the Species list, or how it was found. One found by a
+	 * near match only (a letter off) says "similar spelling" as well.
 	 *
-	 * @param {Object} item    A suggestion.
+	 * @param {Object} item    A suggestion (Store::fish_search()).
 	 * @param {Object} strings near (English fallback).
 	 * @return {string}
 	 */
 	function suggestTag(item, strings) {
 		var it = item || {};
 		var near = it.match === 'near';
-		var tag = it.product_id ? '#' + it.product_id : ((it.match === 'species' || (near && it.species_id)) ? 'list' : (near ? '' : (it.match || '')));
-		if (it.species_id && it.product_id) {
-			tag += ' · list';
+		var tag;
+		if (it.where) {
+			tag = String(it.where);
+		} else {
+			tag = it.product_id ? '#' + it.product_id : ((it.match === 'species' || (near && it.species_id)) ? 'list' : (near ? '' : (it.match || '')));
+			if (it.species_id && it.product_id) {
+				tag += ' · list';
+			}
 		}
 		if (near) {
 			tag += (tag ? ' · ' : '') + ((strings && strings.near) || 'similar spelling');
@@ -1680,12 +1709,11 @@
 
 			attachSuggest($lines, '.fh-cr-species', 'suggest', function ($input, item) {
 				var $tr = $input.closest('tr');
-				$input.val(item.name || '');
-				$tr.find('input[name$="[species_id]"]').val(item.species_id || '');
 				var $sci = $tr.find('input[name$="[sci_name]"]');
-				if (!$.trim($sci.val()) && item.sci) {
-					$sci.val(item.sci);
-				}
+				var pick = linePick(item, $sci.val());
+				$input.val(pick.species);
+				$tr.find('input[name$="[species_id]"]').val(pick.species_id);
+				$sci.val(pick.sci_name);
 				if (item.per_box) {
 					$tr.find('input[name$="[per_box]"]').attr('placeholder', item.per_box);
 				}

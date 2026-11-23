@@ -500,6 +500,9 @@
 			if (row.fee_word) {
 				$cell.append(' ').append(el('span', 'fh-cr-warn fh-cr-import__check', t.feeWord).attr('title', t.feeWordTitle));
 			}
+			if (row.unasked) {
+				$cell.append(' ').append(el('span', 'fh-cr-warn fh-cr-import__check', t.unasked).attr('title', t.unaskedTitle));
+			}
 			$cell.append(el('span', 'fh-cr-sub fh-cr-import__match' + (row.match.flag ? ' is-flag' : ''), row.match.text + (row.kind === 'fish' && !row.match.flag ? ': ' + row.name : '')));
 			$cell.append(fishSelect(row));
 			if (row.size && row.size.note) {
