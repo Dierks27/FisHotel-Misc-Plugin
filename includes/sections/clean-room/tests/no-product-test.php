@@ -471,8 +471,40 @@ check( 'a Save answers with the tags as they are now, for the page to redraw', '
 
 $states = Admin_No_Product::stay_states( $store, $stays );
 check( 'the Stays tab: each stay\'s state from one read', 'none' === $states[ $by_name['Blue Test Tang']['id'] ] && 'linked' === $states[ $by_name['Powder Test Tang']['id'] ] && 'unknown' === $states[ $by_name['?? small wrasse']['id'] ] && 'none' === $states[ $w['grey'] ] );
+/** The Stays tab as Admin::render_page() draws it, on the test's store. */
+function fh_np_stays_html( Fake_Store $store, $show_closed = false ) {
+	global $today, $settings;
+	$tab            = 'stays';
+	$can_settings   = false;
+	$tables_ok      = true;
+	$filters        = Admin::filters_from_request( array() );
+	$stays          = Admin::narrow_stays( $store->open_stays( $filters, $today, $settings ), $filters );
+	$closed_stays   = $show_closed ? $store->open_stays( array( 'include_closed' => true ), $today, $settings ) : array();
+	$csv_url        = 'https://example.test/csv';
+	$xlsx_url       = 'https://example.test/xlsx';
+	$flash          = '';
+	$sizes          = Sizes::standard( $store, $settings )['sizes'];
+	$fish_tanks     = Admin::existing_tanks( $store->tanks( false ) );
+	$picks          = array( 'suppliers' => array(), 'origins' => array() );
+	$product_states = Admin_No_Product::stay_states( $store, array_merge( $stays, $closed_stays ) );
+	ob_start();
+	include FISHOTEL_MISC_PATH . 'includes/sections/clean-room/views/stays.php';
+	return (string) ob_get_clean();
+}
+$trashed    = fh_np_group( $store, 123, 'Binned Test Basslet', 1, 23 ); // Linked to the product that is in the trash.
+$stays_html = fh_np_stays_html( $store );
+$stay_row   = static function ( $id ) use ( $stays_html ) {
+	$from = strpos( $stays_html, 'id="fh-cr-stay-' . (int) $id . '"' );
+	return false === $from ? '' : substr( $stays_html, $from, strpos( $stays_html, '</tr>', $from ) - $from );
+};
+check( 'the Stays tab as it renders: a group without a product says "no product yet" and leads to the list; a linked one names its product', 1 === preg_match( '/class="fh-cr-sub fh-cr-noproduct" href="[^"]*view=no-product[^"]*"[^>]*>no product yet &rarr;</', $stay_row( $by_name['Blue Test Tang']['id'] ) ) && false === strpos( $stay_row( $by_name['Powder Test Tang']['id'] ), 'no product' ) && false !== strpos( $stay_row( $by_name['Powder Test Tang']['id'] ), 'product #22' ) );
+check( '… a group linked to a product in the trash says it too — the states read for the page reach the rows', false !== strpos( $stay_row( $trashed ), 'no product yet &rarr;' ) && false === strpos( $stay_row( $trashed ), 'product #23' ) );
+check( '… and a "??" group says "needs identifying", not "no product"', false === strpos( $stay_row( $by_name['?? small wrasse']['id'] ), 'no product' ) && false !== strpos( $stay_row( $by_name['?? small wrasse']['id'] ), 'needs identifying' ) );
+$store->update_stay_fields( $trashed, array( 'product_id' => 0 ) );
+$store->stays[ $trashed ]['status'] = 'closed'; // Out of the room again: the lists below count what the world() made.
 $stays_src = (string) file_get_contents( Clean_Room::path() . 'views/stays.php' );
-check( '… where "no product" now reads "no product yet" and links to the list', false === strpos( $stays_src, "'no product'" ) && false !== strpos( $stays_src, 'No_Product::tag_text()' ) && false !== strpos( $stays_src, 'Admin_No_Product::url()' ) );
+check( '… where an open stay\'s "no product" now reads "no product yet" and links to the list, from the states read once for the page', false !== strpos( $stays_src, 'No_Product::tag_text()' ) && false !== strpos( $stays_src, 'Admin_No_Product::url()' ) && false !== strpos( $stays_src, 'use ( $today, $sizes, $fh_states )' ) && false !== strpos( $stays_src, '$fh_states[ (int) $fh_stay[\'id\'] ]' ) );
+check( '… a closed stay is history: it keeps the quiet "no product", unmarked', false !== strpos( $stays_src, "'none' === \$fh_np && ! \$open" ) );
 
 /* ------------------------------------------------------------------ */
 echo "6. The list as it renders\n";

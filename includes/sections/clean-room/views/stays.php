@@ -12,6 +12,7 @@
  * @var array[] $stays        Open stays.
  * @var bool    $show_closed  Whether closed stays are listed.
  * @var array[] $closed_stays Closed stays (when shown).
+ * @var array   $product_states Stay id => unknown|linked|none (Admin_No_Product::stay_states()).
  * @var array   $filters      area, species, ready, needs_id, no_sale, tank (what a Board card links with).
  * @var array[] $sizes        The standard sizes (slug, label).
  * @var array[] $fish_tanks   The tanks "Add fish already here" offers (Admin::existing_tanks()).
@@ -43,7 +44,9 @@ $tab = 'stays';
  * @param array[] $rows  Stays.
  * @param bool    $open  Whether these are open stays (edits offered).
  */
-$fh_table = static function ( array $rows, $open ) use ( $today, $sizes ) {
+// Which stays have no product yet (Admin_No_Product::stay_states(): one read for the page).
+$fh_states = isset( $product_states ) && is_array( $product_states ) ? $product_states : array();
+$fh_table  = static function ( array $rows, $open ) use ( $today, $sizes, $fh_states ) {
 	$fh_unknown = '<span class="fh-cr-muted">' . esc_html__( 'unknown', 'fishotel-misc-plugin' ) . '</span>';
 	if ( ! $rows ) {
 		echo '<div class="fishotel-misc-empty"><span class="dashicons dashicons-location-alt"></span><p>' . esc_html__( 'Nothing here.', 'fishotel-misc-plugin' ) . '</p></div>';
@@ -75,10 +78,12 @@ $fh_table = static function ( array $rows, $open ) use ( $today, $sizes ) {
 						<?php echo Admin::unknown_html( $fh_stay ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by unknown_html(). ?>
 						<?php
 						// One rule for "no product yet" (No_Product): a product in the trash is none; a "??" fish needs a name first.
-						$fh_np = isset( $product_states[ (int) $fh_stay['id'] ] ) ? (string) $product_states[ (int) $fh_stay['id'] ] : ( $fh_stay['product_id'] ? 'linked' : ( No_Product::is_unknown( $fh_stay ) ? 'unknown' : 'none' ) );
+						$fh_np = isset( $fh_states[ (int) $fh_stay['id'] ] ) ? (string) $fh_states[ (int) $fh_stay['id'] ] : ( $fh_stay['product_id'] ? 'linked' : ( No_Product::is_unknown( $fh_stay ) ? 'unknown' : 'none' ) );
 						?>
 						<?php if ( 'linked' === $fh_np ) : ?>
 							<span class="fh-cr-sub"><a href="<?php echo esc_url( get_edit_post_link( (int) $fh_stay['product_id'] ) ?: '#' ); ?>"><?php echo esc_html( sprintf( /* translators: %d: product id */ __( 'product #%d', 'fishotel-misc-plugin' ), (int) $fh_stay['product_id'] ) ); ?></a></span>
+						<?php elseif ( 'none' === $fh_np && ! $open ) : ?>
+							<span class="fh-cr-sub"><?php esc_html_e( 'no product', 'fishotel-misc-plugin' ); ?></span><?php // A closed stay is history: said, not marked. ?>
 						<?php elseif ( 'none' === $fh_np ) : ?>
 							<a class="fh-cr-sub fh-cr-noproduct" href="<?php echo esc_url( Admin_No_Product::url() ); ?>" title="<?php esc_attr_e( 'This fish is not linked to a product of the shop yet. Opens "Fish with no product yet", where it can be linked to a product or get a draft product.', 'fishotel-misc-plugin' ); ?>"><?php echo esc_html( No_Product::tag_text() ); ?> &rarr;</a>
 						<?php endif; ?>
