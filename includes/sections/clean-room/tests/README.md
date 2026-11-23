@@ -73,6 +73,7 @@ php  includes/sections/clean-room/tests/order-import-layouts-test.php
 php  includes/sections/clean-room/tests/order-import-admin-test.php
 php  includes/sections/clean-room/tests/order-import-tidy-test.php
 php  includes/sections/clean-room/tests/shop-price-test.php
+php  includes/sections/clean-room/tests/no-product-test.php
 php  includes/sections/clean-room/tests/splits-test.php
 node includes/sections/clean-room/tests/front-desk.test.js
 node includes/sections/clean-room/tests/clean-room-admin.test.js
@@ -654,6 +655,26 @@ system temp directory (`FH_TEST_TMP` overrides).
   at 1280 and at 1024 px, "More columns" still fitting 1280 px, and the
   scientific name that reads under the fish on a narrow window. With `--harness=<dir>` it also writes static copies of the page
   for a real browser (see *The order page in a browser* below).
+- **no-product-test.php** — fish with no product yet (`No_Product`,
+  `Admin_No_Product`): the one rule (a line by its species-list row or
+  the one product named like it, a stay by its own link, a product in
+  the trash or deleted is none, a draft is one, a "??" fish is a case of
+  its own, a closed order asked directly); lines and stays gathered into
+  fish (two lines of one fish, a stay with its line, a group on no
+  order, the product a row can offer); what matters now, closed orders
+  too, one order, a page, the sort, the "??" group; the Board's chip,
+  the Fish orders list's count, the tag on an order's lines in both
+  views and in a Save's reply, the Stays tab — each for ONE read of the
+  statuses; the list as it renders (with and without the right to make
+  products); "Link to a product…" (the species row, every line, every
+  open stay, no event and no label, the numbers unchanged, a second
+  link refused); the page that was open before the link; what a draft
+  is made of (name, scientific name, sizes → variations, the planned
+  price or none, a typed size list, a size that left the list); and
+  "Start a draft product" on a fake shop — its capability and its own
+  nonce, one product, a second click and a later page open the first, a
+  draft started before is adopted, one in the trash is not, a shop that
+  fails, two clicks at once.
 - **shop-price-test.php** — the shop price of an order line, read
   (`Shop_Price`): the sources in their order (the variation of the
   line's size, the lowest price, a simple product, the species list,
@@ -1519,3 +1540,34 @@ line's `split` field holds anything (`fields_before`) — and one press on
     kept together the offer is gone. Two lines, the first left on auto,
     the second split "1 per tank": after the check-in no tank holds both
     lines.
+35. Fish with no product yet. Put a fish the shop has no product for on
+    a fish order (type it, "use as typed"), in two sizes, and Save: both
+    lines carry *no product yet* in Entry and in Numbers; type a planned
+    price with the pencil and Save: the tag stays. The Fish orders list
+    says *1 without a product* beside that order; the Board has the chip
+    *N fish with no product yet →*. All three lead to **Species → Fish
+    with no product yet**: one row for the fish, both sizes, the order
+    by its ref, the planned price. Check the order in: the row moves to
+    the top with its tank and "N alive", and the Stays tab says *no
+    product yet* under the group. Press **Start a draft product**: the
+    reply names the sizes and the price and what is left to do; *Finish
+    it in the shop →* opens a DRAFT product — with variations, in
+    Quarantined Fish, the scientific name under the title, one variation
+    per size at the planned price, 0 in stock, no shipping class — that
+    a logged-out visitor cannot open. Reload the list: the fish is gone,
+    the tags and the count are gone, the order's Numbers read the
+    draft's price where no price was typed. Press the button twice
+    quickly on another fish, and once more from a second tab that still
+    shows it: Products holds ONE draft for it. On a third fish use
+    **Link to a product…**, pick an existing product: the fish leaves
+    the list, its group on the Stays tab shows the product, the Events
+    tab has no new line, and the phone's Arrival search finds the
+    product under the name the fish was typed with. Save an order page
+    that was open before that link: the tag does not come back. Move a
+    linked product to the trash: its fish is back on the list. Press
+    *Show the fish of closed fish orders too*: the history's fish
+    appear, 50 a page. A "??" fish is in the group under the list with
+    *Identify…*, never among the rows. Open the list on a phone: each
+    fish is a card and nothing scrolls sideways. As a user without the
+    right to edit products: no *Start a draft product*, and the footnote
+    says why.

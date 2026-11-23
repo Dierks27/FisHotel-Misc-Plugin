@@ -1382,8 +1382,19 @@ a.fh-cr-chip--muted {
 	opacity: 0.75;
 }
 
-/* A narrow window (a phone): every fish is a card, nothing scrolls sideways. */
+.fh-cr-wrap a.fh-cr-np-go {
+	color: var(--fh-accent, #00a0d2);
+	font-weight: 600;
+	text-decoration: none;
+}
+
+/* A narrow window (a phone): every fish is a card, nothing scrolls sideways —
+   the tab strip of this page wraps instead of running off the screen. */
 @media (max-width: 782px) {
+	.fh-cr-np .fh-cr-tabs {
+		flex-wrap: wrap;
+	}
+
 	.fh-cr-np-table,
 	.fh-cr-np-table tbody,
 	.fh-cr-np-table tr,

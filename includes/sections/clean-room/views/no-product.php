@@ -223,7 +223,7 @@ $fh_keep         = array_filter(
 							<?php if ( 'stay' === $fh_u['kind'] ) : ?>
 								<button type="button" class="button fh-cr-identify-open" data-stay="<?php echo esc_attr( (int) $fh_u['id'] ); ?>" data-size="<?php echo esc_attr( $fh_u['size_slug'] ); ?>" data-size-label="<?php echo esc_attr( $fh_u['size_label'] ); ?>"><?php esc_html_e( 'Identify…', 'fishotel-misc-plugin' ); ?></button>
 							<?php else : ?>
-								<a class="button" href="<?php echo esc_url( Admin_Workbook::order_url( (int) $fh_u['order_id'] ) ); ?>"><?php esc_html_e( 'Identify it on its fish order →', 'fishotel-misc-plugin' ); ?></a>
+								<a class="fh-cr-np-go" href="<?php echo esc_url( Admin_Workbook::order_url( (int) $fh_u['order_id'] ) ); ?>"><?php esc_html_e( 'Identify it on its fish order →', 'fishotel-misc-plugin' ); ?></a>
 							<?php endif; ?>
 						</td>
 					</tr>
