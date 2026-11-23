@@ -2054,7 +2054,8 @@ no product, no Species row, nothing created —, and on an order line its
 scientific name fills an empty field: the group in the tank and the
 order line read as the same fish wherever fish are grouped by name.
 Never offered: a line or a group that is linked to a product or a
-Species row or carries the exact name of one (it is found as that — so a
+Species row — by its link, by the group it was checked in as — or
+carries the exact name of one (it is found as that — so a
 fish that later gets a product or a Species row stops being offered this
 way), an unknown "??" fish (it has no name), a closed order's fish that
 is no longer in a tank.

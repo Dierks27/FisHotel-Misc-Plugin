@@ -60,16 +60,17 @@ $lines = array(
 	$line( 8, '?? small wrasse', '2026-9', 'received', array( 'needs_id' => 1 ) ),
 	$line( 9, '??', '2026-9', 'received' ),
 	$line( 10, '', '2026-9', 'received' ),
+	$line( 11, 'Hippo Sample Tang', '2026-9', 'received', array( 'stay_product_id' => 12 ) ),
 );
 $fish  = Order_Fish::offered( $lines, array(), $known );
 check_same( 'the fish of the lines of the orders that are not closed — draft, ordered, received —, by name', array( 'Dusky Sample Eel', 'Golden Sample Tang', 'Zebra Sample Goby' ), array_column( $fish, 'name' ) );
-check( 'not offered: a line of a closed order, a line linked to a Species row, a line named like a Species row or like a product (any case, any spacing), a "??" line — flagged or only named so —, a line with no name', ! array_intersect( array( 'Closed Sample Fish', 'Listed Sample Fish', 'green test BLENNY', 'blue test wrasse', '?? small wrasse', '??', '' ), array_column( $fish, 'name' ) ) );
+check( 'not offered: a line of a closed order, a line linked to a Species row, a line named like a Species row or like a product (any case, any spacing), a line whose group in the tank is a product (checked in under a learned name), a "??" line — flagged or only named so —, a line with no name', ! array_intersect( array( 'Closed Sample Fish', 'Listed Sample Fish', 'green test BLENNY', 'blue test wrasse', 'Hippo Sample Tang', '?? small wrasse', '??', '' ), array_column( $fish, 'name' ) ) );
 check_same( 'each with its scientific name when the line has one, and the order it is on', array( array( 'name' => 'Golden Sample Tang', 'sci' => 'Samplus aureus', 'from' => 'order', 'ref' => '2026-8', 'tank' => null ) ), array_values( array_filter( $fish, static function ( $one ) { return 'Golden Sample Tang' === $one['name']; } ) ) );
 
 $twice = Order_Fish::offered(
 	array(
 		$line( 3, 'golden sample tang', '2026-8', 'ordered', array( 'sci_name' => 'Samplus aureus' ) ),
-		$line( 11, 'Golden  Sample TANG', '2026-11', 'draft' ),
+		$line( 12, 'Golden  Sample TANG', '2026-11', 'draft' ),
 		$line( 7, 'Golden Sample Tang', '2026-9', 'received' ),
 	),
 	array(),
@@ -94,7 +95,7 @@ check_same( 'plus any unlisted fish that is ALIVE IN A TANK — the fish of a cl
 check( '… with the scientific name of the line it was checked in from', 'Samplus manus' === array_column( $fish, 'sci', 'name' )['Hand Sample Puffer'] );
 check( 'not offered: a group that is gone or closed, a group with a product, a "??" group, a group named like a Species row', ! array_intersect( array( 'Gone Sample Fish', 'Shipped Sample Fish', 'Blue Test Wrasse', 'Linked Sample Fish', '?? odd eel', 'Green Test Blenny' ), array_column( $fish, 'name' ) ) );
 check( 'a fish that is on an open order AND in a tank is offered once, as the order line\'s', 1 === count( array_keys( array_column( $fish, 'name' ), 'Dusky Sample Eel', true ) ) && 'order' === array_column( $fish, 'from', 'name' )['Dusky Sample Eel'] && '2026-9' === array_column( $fish, 'ref', 'name' )['Dusky Sample Eel'] );
-check( 'the rows may come in any order: the newest line is found by its id', $twice === Order_Fish::offered( array( $line( 11, 'Golden  Sample TANG', '2026-11', 'draft' ), $line( 7, 'Golden Sample Tang', '2026-9', 'received' ), $line( 3, 'golden sample tang', '2026-8', 'ordered', array( 'sci_name' => 'Samplus aureus' ) ) ), array(), $known ) );
+check( 'the rows may come in any order: the newest line is found by its id', $twice === Order_Fish::offered( array( $line( 12, 'Golden  Sample TANG', '2026-11', 'draft' ), $line( 7, 'Golden Sample Tang', '2026-9', 'received' ), $line( 3, 'golden sample tang', '2026-8', 'ordered', array( 'sci_name' => 'Samplus aureus' ) ) ), array(), $known ) );
 $many = array();
 for ( $i = 1; $i <= Order_Fish::MAX_OFFERED + 50; $i++ ) {
 	$many[] = $line( $i, sprintf( 'Sample Fish %04d', $i ), '2026-1' );
@@ -318,7 +319,7 @@ $fill = static function () use ( $real ) {
 $first = $real->order_fish();
 check_same( 'read from the lines of the open orders and from the groups alive in tanks; a line named like a product or like a Species row is not offered', array( array( 'Golden Sample Tang', 'order', '2026-9' ), array( 'Hand Sample Puffer', 'tank', 512 ) ), array( array( $first[0]['name'], $first[0]['from'], $first[0]['ref'] ), array( $first[1]['name'], $first[1]['from'], $first[1]['tank'] ) ) );
 $reads = array_values( array_filter( $db->queries, static function ( $q ) { return 0 === strpos( $q, 'SELECT l.id, l.species' ) || 0 === strpos( $q, 'SELECT s.id, s.species' ); } ) );
-check( 'two reads, bounded however long the history is: closed orders and closed or empty groups are out in the query itself, linked and "??" rows too, and each read has its row cap', 2 === count( $reads ) && false !== strpos( $reads[0], "o.status <> 'closed' AND l.species_id IS NULL AND l.needs_id = 0" ) && false !== strpos( $reads[0], 'LIMIT ' . Order_Fish::MAX_LINES ) && false !== strpos( $reads[1], "s.status <> 'closed' AND s.qty_live > 0 AND s.product_id IS NULL AND s.needs_id = 0" ) && false !== strpos( $reads[1], 'LIMIT ' . Order_Fish::MAX_STAYS ) );
+check( 'two reads, bounded however long the history is: closed orders and closed or empty groups are out in the query itself, linked and "??" rows too, and each read has its row cap', 2 === count( $reads ) && false !== strpos( $reads[0], "o.status <> 'closed' AND l.species_id IS NULL AND l.needs_id = 0 AND l.species <> '' AND st.product_id IS NULL" ) && false !== strpos( $reads[0], 'LIMIT ' . Order_Fish::MAX_LINES ) && false !== strpos( $reads[1], "s.status <> 'closed' AND s.qty_live > 0 AND s.product_id IS NULL AND s.needs_id = 0" ) && false !== strpos( $reads[1], 'LIMIT ' . Order_Fish::MAX_STAYS ) );
 $asked = count( $db->queries );
 check( 'kept: the next search asks the database nothing for it (10 minutes at most)', $first === $real->order_fish() && $asked === count( $db->queries ) && 600 === $GLOBALS['fh_transients'][ Store::ORDER_FISH_TRANSIENT ][1] );
 $found = $real->fish_search( 'sample', 8 );
@@ -332,6 +333,7 @@ $drops = array(
 	'a fish order\'s lines saved — typed, or imported'     => static function () use ( $real ) { $real->save_order_lines( 4, array( array( 'species' => 'Zebra Sample Goby', 'qty_ordered' => 2 ) ) ); },
 	'a fish order deleted'                                 => static function () use ( $real ) { $real->delete_order( 4 ); },
 	'a check-in or a close that changes the order\'s status' => static function () use ( $real ) { $real->update_order_fields( 4, array( 'status' => 'received', 'received_date' => '2026-03-02' ) ); },
+	'a line linked to the group it became (the check-in)'  => static function () use ( $real ) { $real->set_line_stay( 5, 3, 1 ); },
 	'a correction of a line\'s fish'                       => static function () use ( $real ) { $real->update_line_fields( 5, array( 'species' => 'Golden Sample Tang', 'species_id' => 3 ) ); },
 	'a line\'s "??" flag'                                  => static function () use ( $real ) { $real->update_line_fields( 5, array( 'needs_id' => 1 ) ); },
 	'a group identified or corrected'                      => static function () use ( $real ) { $real->update_stay_fields( 3, array( 'species' => 'Hand Sample Puffer', 'product_id' => 12 ) ); },
@@ -347,7 +349,6 @@ foreach ( $drops as $what => $write ) {
 $keeps = array(
 	'an order\'s sale date or notes'       => static function () use ( $real ) { $real->update_order_fields( 4, array( 'sale_date' => '2026-04-01', 'notes' => 'x' ) ); },
 	'a line\'s cached landed total'        => static function () use ( $real ) { $real->cache_line_total( 5, 12.5 ); },
-	'a line linked to its stay'            => static function () use ( $real ) { $real->set_line_stay( 5, 3, 1 ); },
 	'a line\'s notes, label or size'       => static function () use ( $real ) { $real->update_line_fields( 5, array( 'notes' => 'x', 'label_name' => 'y', 'size_slug' => 'small' ) ); },
 	'a group\'s supplier, notes or size'   => static function () use ( $real ) { $real->update_stay_fields( 3, array( 'supplier' => 'Example Aquatics', 'notes' => 'x', 'size_slug' => 'small' ) ); },
 );

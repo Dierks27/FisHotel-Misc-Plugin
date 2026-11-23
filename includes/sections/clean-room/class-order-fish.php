@@ -18,8 +18,8 @@
  * where it comes from ("on fish order 2026-9", "in tank 512").
  *
  * Never offered: a line or a group linked to a product or a Species row
- * (by its link, or by carrying the exact name of one — it is found as
- * that), an unknown "??" fish (it has no name), a line of a closed
+ * (by its link, by the group it was checked in as, or by carrying the
+ * exact name of one — it is found as that), an unknown "??" fish (it has no name), a line of a closed
  * order whose fish is no longer in a tank.
  *
  * Picking one is "use as an unlisted fish" with that exact spelling:
@@ -88,7 +88,8 @@ class Order_Fish {
 	/**
 	 * The fish to offer, from the order lines and the stays.
 	 *
-	 * @param array[] $lines id, species, sci_name, needs_id, species_id, order_ref, order_status.
+	 * @param array[] $lines id, species, sci_name, needs_id, species_id, stay_product_id (the product
+	 *                       of the group the line became, if any), order_ref, order_status.
 	 * @param array[] $stays id, species, sci_name (its order line's), needs_id, product_id, qty_live,
 	 *                       status, tank_number.
 	 * @param array   $known known().
@@ -126,8 +127,8 @@ class Order_Fish {
 		};
 
 		foreach ( $lines as $line ) {
-			if ( 'closed' === (string) ( $line['order_status'] ?? '' ) || (int) ( $line['species_id'] ?? 0 ) > 0 ) {
-				continue;
+			if ( 'closed' === (string) ( $line['order_status'] ?? '' ) || (int) ( $line['species_id'] ?? 0 ) > 0 || (int) ( $line['stay_product_id'] ?? 0 ) > 0 ) {
+				continue; // A closed order's; a Species-list fish; a line whose group in the tank is a product.
 			}
 			$add( $line, 'order' );
 		}

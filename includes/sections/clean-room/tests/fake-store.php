@@ -1157,11 +1157,13 @@ class Fake_Store {
 		$lines = array();
 		foreach ( $this->lines as $line ) {
 			$order   = isset( $this->orders[ (int) $line['order_id'] ] ) ? $this->orders[ (int) $line['order_id'] ] : null;
+			$stay_id = (int) ( $line['stay_id'] ?? 0 );
 			$lines[] = array_merge(
 				$line,
 				array(
-					'order_ref'    => $order ? (string) $order['ref'] : '',
-					'order_status' => $order ? (string) $order['status'] : 'closed',
+					'order_ref'       => $order ? (string) $order['ref'] : '',
+					'order_status'    => $order ? (string) $order['status'] : 'closed',
+					'stay_product_id' => isset( $this->stays[ $stay_id ] ) ? $this->stays[ $stay_id ]['product_id'] : null,
 				)
 			);
 		}

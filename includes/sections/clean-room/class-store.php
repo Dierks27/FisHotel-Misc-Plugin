@@ -3252,7 +3252,7 @@ class Store {
 		global $wpdb;
 
 		try {
-			$lines = $wpdb->get_results( $wpdb->prepare( 'SELECT l.id, l.species, l.sci_name, l.needs_id, l.species_id, o.ref AS order_ref, o.status AS order_status FROM ' . self::table( 'order_lines' ) . ' l INNER JOIN ' . self::table( 'orders' ) . " o ON o.id = l.order_id WHERE o.status <> 'closed' AND l.species_id IS NULL AND l.needs_id = 0 AND l.species <> '' ORDER BY l.id DESC LIMIT %d", Order_Fish::MAX_LINES ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			$lines = $wpdb->get_results( $wpdb->prepare( 'SELECT l.id, l.species, l.sci_name, l.needs_id, l.species_id, st.product_id AS stay_product_id, o.ref AS order_ref, o.status AS order_status FROM ' . self::table( 'order_lines' ) . ' l INNER JOIN ' . self::table( 'orders' ) . ' o ON o.id = l.order_id LEFT JOIN ' . self::table( 'stays' ) . " st ON st.id = l.stay_id WHERE o.status <> 'closed' AND l.species_id IS NULL AND l.needs_id = 0 AND l.species <> '' AND st.product_id IS NULL ORDER BY l.id DESC LIMIT %d", Order_Fish::MAX_LINES ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 			$stays = $wpdb->get_results( $wpdb->prepare( 'SELECT s.id, s.species, s.needs_id, s.product_id, s.qty_live, s.status, t.number AS tank_number, ol.sci_name FROM ' . self::table( 'stays' ) . ' s LEFT JOIN ' . self::table( 'tanks' ) . ' t ON t.id = s.tank_id LEFT JOIN ' . self::table( 'order_lines' ) . " ol ON ol.id = s.order_line_id WHERE s.status <> 'closed' AND s.qty_live > 0 AND s.product_id IS NULL AND s.needs_id = 0 AND s.species <> '' ORDER BY s.id DESC LIMIT %d", Order_Fish::MAX_STAYS ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
 		} catch ( \Throwable $e ) {
 			return array();
@@ -4653,6 +4653,8 @@ class Store {
 			return false !== $wpdb->update( self::table( 'order_lines' ), $data, array( 'id' => (int) $line_id ), null, array( '%d' ) );
 		} catch ( \Throwable $e ) {
 			return false;
+		} finally {
+			self::clear_order_fish_cache(); // The line is the group it became now (which may be a product).
 		}
 	}
 
