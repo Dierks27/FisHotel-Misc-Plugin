@@ -953,27 +953,53 @@ stands where Feed would be:
   filter `fishotel_ship_day_fish_categories`) or a fish line out of an
   invoice, in any of its shapes; refunds are taken off; a line the theme
   marks "not available" and an invoice's "Adjustment" are no fish.
+- **Inverts need not be found.** A product that is in no fish category
+  but `inverts` (`Feeding::LOOSE_CATEGORIES`, filter
+  `fishotel_cleanroom_loose_categories`) makes the system it is logged
+  in go without, like a fish; one that is in no clean tank on the site
+  changes nothing — snails and shrimp are often in no tank on the site
+  at all, and a ship day with a snail in the box would otherwise stop
+  the feeding of every clean system, for ever. A fish is never loose.
 - **Which water a fish is in** — the ladder `Sold_Line::stays()`,
   strongest first: the tank group the Invoices section tied the line to;
   else the open groups of the same shop product and the same size (when
   none has that size, the ones whose size nobody wrote down); else the
   groups whose species is, word for word, the line's name, and the size.
   Every group that fits counts: the same fish in two clean systems makes
-  **both** fast.
-- **The Spa is fed as always.** A shipping fish found only in a
-  quarantine tank counts as found and changes nothing.
-- **A shipping fish in no tank the site knows → no Clean Room system is
-  fed today**, and the To do tab and the Board say which fish:
+  **both** fast — and since both count it, each then says "**Up to** 3
+  fish ship from this system" and the fish reads "(tank 121, also in
+  another system, #1234)".
+- **A clean tank answers before a quarantine one.** By product or by
+  name the site only guesses, and a fish for sale is in a clean tank:
+  the ladder is asked over the groups in clean water first, so a Spa
+  group that fits better (the arrival, logged with its product and
+  size) does not hide the group in the clean tank (logged by name).
+- **The Spa is fed as always** — it never goes without. A fish the
+  Invoices section tied to a quarantine group is found there and
+  changes nothing.
+- **A shipping fish in no CLEAN tank the site knows → no Clean Room
+  system is fed today**, and the To do tab and the Board say which fish:
 
-  > No feeding in the clean tanks today — 4 fish ship and the site
-  > doesn't know their tank: 2 × Blue Tang (#1250), 2 × Royal Gramma
-  > (#1251).
+  > No feeding in the Clean Room systems today — 4 fish ship and the
+  > site doesn't know their tank: 2 × Blue Tang (#1250), 2 × Royal
+  > Gramma (#1251).
 
+  That is a fish in no tank at all, and also one the site only guesses
+  into a quarantine tank: fish that ship come out of clean tanks, so
+  its clean tank is simply not logged yet (the group was moved by hand
+  and not on the site). The sentence then names where the site has it:
+  "1 × Firefish (#1280, on the site only in quarantine tank 512)".
   Not feeding a fish that is about to be bagged matters more than a
   missed feed, and it is what is done by hand today. The rule narrows by
-  itself: add the fish to the tank it is in (*Add fish already here*)
-  and only that system goes without. A long list is cut after four fish
-  ("and 6 more").
+  itself, and the line under the sentence says how — in this order, so
+  that no fish is counted twice: a fish that is already on the site
+  under another name (the supplier's spelling) or still in a quarantine
+  tank is corrected or moved (*Identify…*, *Correct the fish…*, *Move*);
+  only a fish that is nowhere is added to the tank it is in (*Add fish
+  already here*). Then only that system goes without. A long list is
+  cut after four fish, and says how many FISH it left out ("and 12 more
+  fish"), so the sentence adds up to the number it opened with. It says
+  "systems", not "tanks": a clean temporary tank is still fed (below).
 - **Bagging a fish does not lose it.** A group whose last fish is
   logged as shipped (or lost) today is closed, and would no longer be
   found; the groups closed today are therefore asked too — the system
@@ -1003,9 +1029,13 @@ stands where Feed would be:
   `fishotel_cleanroom_ship_lines`) and dropped whenever an order changes
   — the three order hooks the Today section listens to
   (`woocommerce_order_status_changed`, `woocommerce_update_order`,
-  `woocommerce_order_note_added`) and `woocommerce_new_order` — so a new
-  order takes Feed off on the next page load and a cancelled one brings
-  it back. A miss is one order query for tomorrow's delivery date plus
+  `woocommerce_order_note_added`), `woocommerce_new_order`, an order
+  trashed, restored or deleted (`trashed_post`, `untrashed_post`,
+  `deleted_post`, and the orders tables' `woocommerce_trash_order`,
+  `woocommerce_untrash_order`, `woocommerce_delete_order`) and a line's
+  status written straight onto the order item (`_fishotel_line_status`
+  — no other item meta) — so a new order takes Feed off on the next page
+  load and a cancelled or trashed one brings it back. A miss is one order query for tomorrow's delivery date plus
   the lines of that day's orders; nothing per tank; on a day fish ship,
   one more read of the stays closed lately. Nothing on the storefront,
   no cron, no table, no column.
@@ -1015,7 +1045,9 @@ out, their fish, the waters, the words); `class-sold-line.php` is the
 ladder, pure — **the one place that answers "which tank group does this
 order line come out of"**, meant to be asked again when a sold fish is
 reserved in its tank, listed to pull, or taken out of its tank once
-shipped (none of which is done yet); `class-ship-lines.php` reads the
+shipped (none of which is done yet). It answers over the groups it is
+given: `Feeding::plan()` gives it the groups in clean water first and
+all of them only for the Invoices section's own link; `class-ship-lines.php` reads the
 shop, and asks the readers the plugin already has rather than being a
 third one: the Weather section's order query
 (`Checker::open_orders()`, what the Today page runs), the Lost Fish

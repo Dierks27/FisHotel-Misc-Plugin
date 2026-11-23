@@ -31,6 +31,12 @@
  * An empty answer means the site does not know where the fish is — no
  * guess is made.
  *
+ * It answers over the groups it is GIVEN, and the strongest rung wins
+ * among those only. A caller for whom one place counts more than a
+ * better fit asks twice: the feeding rule gives it the groups in clean
+ * water first (a fish for sale is in a clean tank), and all of them only
+ * to follow the Invoices section's own link.
+ *
  * No WordPress, no WooCommerce: a line and the stays are plain arrays.
  *
  * @package FisHotel\Misc\Sections\Clean_Room

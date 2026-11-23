@@ -982,14 +982,21 @@ system temp directory (`FH_TEST_TMP` overrides).
   skipped, a box inside a box never read as an order, a folded order
   following the box's date, a cancelled box; which lines are fish (a
   product by category, each shape of an invoice's fish, refunds netted,
-  "not available" and fully refunded left out); the fasting set — one
-  system, two for the same fish in two, the Spa only (nothing changes),
-  the Spa and a clean system (the clean one), **all clean systems for a
-  fish in no tank**, none, the Invoices link naming one group among two;
+  "not available" and fully refunded left out, **an invert marked as
+  one**); the fasting set — one system, two for the same fish in two
+  (each saying "up to" and "also in another system"), the Spa and a
+  clean system (the clean one — **also when the Spa group fits better**:
+  product and size there, only the name or no size in the clean tank),
+  **all clean systems for a fish in no tank, and for one the site only
+  guesses into a quarantine tank** (that tank named), the Invoices link
+  to a Spa group (nothing changes), none, the Invoices link naming one
+  group among two; **inverts** (found in a clean tank: that system;
+  found nowhere: nothing changes; with no loose category: like fish);
   a fish logged as shipped still found through the day's closed groups;
   temporary tanks (a clean one with a shipping fish alone; a quarantine
   one and the others left as they are, also when a fish cannot be
-  found); the tick (on by default, off when unticked) and the days the
+  found or is only guessed into a quarantine one — the words then say
+  "systems", not "tanks"); the tick (on by default, off when unticked) and the days the
   rule cannot run (the tick off, no Batch Manager, no WooCommerce) with
   the words under the tick; the to-do — no Feed on every tank of the
   fasting system, the reason on its block, **not a line and in neither
@@ -998,7 +1005,10 @@ system temp directory (`FH_TEST_TMP` overrides).
   the rule narrows once the fish are logged; **a feed ticked before the
   order came in** (kept, "Fed at 7:40, before order #1251 came in.", the
   first order placed after the feed, none, no time known, a whole system
-  ticked at once); every sentence (singular, two tanks, "and 6 more");
+  ticked at once); every sentence (singular, two tanks, a long list that
+  **adds up** — "and 12 more fish" counts the fish left out, not the
+  lines —, and the line that says how to end it: correct or move a fish
+  that is already on the site BEFORE adding one);
   the summary and the Today line (beside a copper flag, on a day nothing
   else is due, never on an ordinary day); and **the To do tab and the
   Board rendered**: the reason once, no button in the fasting block, the
@@ -1016,11 +1026,14 @@ system temp directory (`FH_TEST_TMP` overrides).
   statuses left out, a combined box through its live order, the Invoices
   link to a tank group — in **one query** for the date; the cache (kept
   five minutes, no query on a later ask, read again past midnight) and
-  **each order hook dropping it**; and the whole way through the room:
+  **each order hook dropping it** — a status change, a save, a note, a
+  new order, an order trashed, restored or deleted, and a line status
+  written straight onto an item (any other item meta does not); and the whole way through the room:
   an order comes in → no Feed and the reason on the next page load,
   "shipped" keeps it off, a moved delivery date and a cancelled order
-  bring Feed back, a new order for a fish in no tank, the tick switched
-  off at once; the day's closed groups asked for only on a day fish
+  bring Feed back, a new order for a fish in no tank, an order of
+  inverts that are in no tank (nothing changes), the tick switched off
+  at once; the day's closed groups asked for only on a day fish
   ship.
 - **front-desk-feeding.test.js** — the same on the phone, the script run
   against a small stand-in DOM: the Today strip's one line and, opened,
@@ -1805,13 +1818,27 @@ line's `split` field holds anything (`fields_before`) — and one press on
     day; log the fish as shipped on the phone (the group closes) —
     still no Feed, and no notice about an unknown tank; move the
     order's delivery date to next week — Feed is back; move it back and
-    cancel the order — Feed is back. Give tomorrow's date to an order
+    cancel the order — Feed is back; put the order in the trash
+    instead, and take it out again — Feed is back, then gone, each on
+    the next load. Give tomorrow's date to an order
     with a fish that is in no tank on the site: every clean building
     loses its Feed, the Spa keeps it, and the top of the To do tab and
-    of the Board reads "No feeding in the clean tanks today — 1 fish
-    ships and the site doesn't know its tank: 1 × … (#…)."; add that
+    of the Board reads "No feeding in the Clean Room systems today — 1
+    fish ships and the site doesn't know its tank: 1 × … (#…).", with
+    the line under it that says to correct or move a group that is
+    already there before adding one; add that
     fish to its tank with *Add fish already here* — only that building
-    goes without now. Tick Feed on a clean tank FIRST, then give an
+    goes without now. The same with a fish that is on the site only in
+    a Spa tank (same product and size): every clean building goes
+    without and the sentence ends "(#…, on the site only in quarantine
+    tank 512)"; add the fish to a clean tank by its name only — that
+    building alone goes without, though the Spa group fits better. An
+    order of snails (a product only in Inverts) that are in no tank:
+    nothing changes; put the snails in a clean tank — that building
+    goes without. The same fish in two clean buildings: both say "Up to
+    N fish ship from this system" and "(tank …, also in another system,
+    #…)". More than four fish in one sentence: the "and N more fish" at
+    its end and the fish named add up to the number it opens with. Tick Feed on a clean tank FIRST, then give an
     order for a fish in that building tomorrow's date: that tank's tick
     stays and reads "Fed at …, before order #… came in."; the building's
     other tanks have no Feed. A combined box (two orders folded into

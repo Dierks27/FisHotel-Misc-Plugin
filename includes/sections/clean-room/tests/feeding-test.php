@@ -279,7 +279,7 @@ $lines = Feeding::fish_lines(
 );
 check_same( 'a product in a fish category, a fish out of an invoice in each shape — and nothing else', array( 'Test Tang - Medium', 'Test Snail', 'Invoice fish', 'Fish of an invoice kept whole', 'Fish the Invoices section lists', 'Half refunded Tang', 'Tang already in the box' ), array_column( $lines, 'name' ) );
 check_same( 'a refund is taken off; a line marked "not available" and a fully refunded one are no fish to bag', array( 2, 3, 1, 2, 1, 2, 1 ), array_column( $lines, 'qty' ) );
-check_same( 'a line carries its order, its product, its size and what the Invoices section linked', array( 'order_id' => 1234, 'number' => '1234', 'created' => 1700000000, 'name' => 'Test Tang - Medium', 'qty' => 2, 'product_id' => 501, 'variation_id' => 502, 'size_slug' => 'medium', 'size_label' => 'medium', 'names' => array( 'Test Tang' ), 'link' => array() ), $lines[0] );
+check_same( 'a line carries its order, its product, its size and what the Invoices section linked', array( 'order_id' => 1234, 'number' => '1234', 'created' => 1700000000, 'name' => 'Test Tang - Medium', 'qty' => 2, 'product_id' => 501, 'variation_id' => 502, 'size_slug' => 'medium', 'size_label' => 'medium', 'names' => array( 'Test Tang' ), 'link' => array(), 'loose' => false ), $lines[0] );
 check_same( '… the link', array( 'stay_id' => 12 ), $lines[4]['link'] );
 check_same( 'with no fish category at all, only invoice fish are fish', array( 'Invoice fish', 'Fish of an invoice kept whole', 'Fish the Invoices section lists' ), array_column( Feeding::fish_lines( order( 1, array( row( 'Test Tang', 1 ), row( 'Invoice fish', 1, array( 'type' => 'invoice_fish' ) ), row( 'Fish of an invoice kept whole', 1, array( 'type' => 'invoice_line' ) ), row( 'Fish the Invoices section lists', 1, array( 'type' => 'invoice' ) ) ) ), array() ), 'name' ) );
 
@@ -312,7 +312,10 @@ check_same( 'the same fish in two clean systems: both fast, each naming its own 
 check_same( '… building 100 is fed', array( 2, 3 ), array_keys( $two['buildings'] ) );
 
 $spa = plan( $store, ship( array( order( 1260, array( row( 'Spa Goby', 2 ) ) ) ) ) );
-check_same( 'a fish found only in the Spa is located and changes nothing: quarantine is fed as always', array( array(), array(), false, 0, false ), array( $spa['buildings'], $spa['tanks'], $spa['all'], $spa['unlocated']['fish'], Feeding::is_on( $spa ) ) );
+check_same( 'a fish the site only guesses into the Spa (by its name): its clean tank is not logged yet — every clean system fasts, and the quarantine tank is named', array( array(), true, 2, array( 521 ), true ), array( $spa['buildings'], $spa['all'], $spa['unlocated']['fish'], $spa['unlocated']['lines'][0]['quarantine'], Feeding::is_on( $spa ) ) );
+check( '… the Spa itself is fed as always', null === Feeding::for_building( $spa, $store->building( 5 ) ) && null !== Feeding::for_building( $spa, $store->building( 1 ) ) );
+$spa_link = plan( $store, ship( array( order( 1260, array( row( 'Invoice fish', 2, array( 'type' => 'invoice_fish', 'link' => array( 'stay_id' => $goby ) ) ) ) ) ) ) );
+check_same( 'a fish the Invoices section tied to a Spa group is located there and changes nothing: quarantine is fed as always', array( array(), array(), false, 0, false ), array( $spa_link['buildings'], $spa_link['tanks'], $spa_link['all'], $spa_link['unlocated']['fish'], Feeding::is_on( $spa_link ) ) );
 
 $both = plan( $store, ship( array( order( 1261, array( row( 'Both Chromis', 1 ) ) ) ) ) );
 check_same( 'candidates in a clean system and in the Spa: the clean one fasts, the Spa is fed', array( array( 3 ), array( 321 ) ), array( array_keys( $both['buildings'] ), $both['buildings'][3]['lines'][0]['tanks'] ) );
@@ -324,6 +327,59 @@ check( '… 100 for its own fish too, 200 and 300 because of the unknown one; th
 
 $closed = plan( $store, ship( array( order( 1262, array( row( 'Invoice fish', 1, array( 'type' => 'invoice_fish', 'link' => array( 'stay_id' => $wras2 ) ) ) ) ) ) ) );
 check_same( 'the Invoices section\'s link names the group: only that system, though the same fish is in another', array( 3 ), array_keys( $closed['buildings'] ) );
+
+// A better-fitting group in the Spa must not hide the group in a clean tank (the arrivals are logged with
+// their product and size; the fish for sale beside them often only by name).
+$store = new Fake_Store();
+place( $store, 512, 'Firefish Test', 6, array( 'product_id' => 880, 'size_slug' => '1-2', 'size_label' => '1-2"' ) );
+$named = place( $store, 312, 'Firefish Test', 2 );
+$line  = row( 'Firefish Test - 1-2"', 1, array( 'product_id' => 880, 'size_slug' => '1-2', 'size_label' => '1-2"', 'title' => 'Firefish Test' ) );
+$hid   = plan( $store, ship( array( order( 1280, array( $line ) ) ) ) );
+check_same( 'the Spa group has the product and the size, the clean group only the name: the clean system fasts', array( array( 3 ), array( 312 ), false, 0 ), array( array_keys( $hid['buildings'] ), $hid['buildings'][3]['lines'][0]['tanks'], $hid['all'], $hid['unlocated']['fish'] ) );
+check( '… and it is not marked as being in another system: the Spa is none', ! isset( $hid['buildings'][3]['lines'][0]['elsewhere'] ) );
+$store = new Fake_Store();
+place( $store, 512, 'Firefish Test', 6, array( 'product_id' => 880, 'size_slug' => '1-2', 'size_label' => '1-2"' ) );
+place( $store, 312, 'Firefish Test', 2, array( 'product_id' => 880 ) );
+$hid = plan( $store, ship( array( order( 1280, array( $line ) ) ) ) );
+check_same( '… the same when the clean group has the product but no size written down', array( array( 3 ), false ), array( array_keys( $hid['buildings'] ), $hid['all'] ) );
+$store = new Fake_Store();
+$spa_f = place( $store, 512, 'Firefish Test', 6, array( 'product_id' => 880, 'size_slug' => '1-2', 'size_label' => '1-2"' ) );
+place( $store, 312, 'Firefish Test', 2 );
+$tied = plan( $store, ship( array( order( 1280, array( array_merge( $line, array( 'type' => 'invoice_fish', 'link' => array( 'stay_id' => $spa_f ) ) ) ) ) ) ) );
+check_same( '… but the Invoices section\'s link to the Spa group is no guess: nothing changes', array( array(), false ), array( $tied['buildings'], Feeding::is_on( $tied ) ) );
+$store = new Fake_Store();
+place( $store, 512, 'Firefish Test', 6, array( 'product_id' => 880, 'size_slug' => '1-2', 'size_label' => '1-2"' ) );
+place( $store, 513, 'Firefish Test', 1, array( 'product_id' => 880, 'size_slug' => '1-2', 'size_label' => '1-2"' ) );
+place( $store, 121, 'Bystander Blenny', 1 );
+$store->ship = ship( array( order( 1280, array( $line ) ) ) );
+$rm          = room( $store );
+check_same( 'guessed into the Spa only, in the room: no clean Feed, the Spa fed, and the sentence says where the site has the fish', array( array(), array( 'feed' ), 'No feeding in the Clean Room systems today — 1 fish ships and the site doesn\'t know its tank: 1 × Firefish Test - 1-2" (#1280, on the site only in quarantine tanks 512 and 513).' ), array( kinds( tank_of( $rm, 121 )['todo'] ), kinds( tank_of( $rm, 512 )['todo'] ), $rm['todo']['fast']['text'] ) );
+
+// Inverts: found in a clean tank, that system goes without; found nowhere, nothing changes.
+$store = new Fake_Store();
+place( $store, 121, 'Test Tang', 2 );
+place( $store, 221, 'Sample Snail', 9, array( 'product_id' => 640 ) );
+place( $store, 521, 'Spa Shrimp', 4 );
+$snail  = row( 'Sample Snail', 3, array( 'product_id' => 640, 'categories' => array( 'inverts' ) ) );
+$crab   = row( 'Unlogged Crab', 5, array( 'categories' => array( 'inverts' ) ) );
+$shrimp = row( 'Spa Shrimp', 1, array( 'categories' => array( 'inverts' ) ) );
+check_same( 'a product only in the inverts\' category is marked; one that is also a fish is a fish', array( true, false, false ), array( Feeding::fish_lines( order( 1, array( $snail ) ), $cats )[0]['loose'], Feeding::fish_lines( order( 1, array( row( 'Both', 1, array( 'categories' => array( 'inverts', 'quarantined-fish' ) ) ) ) ), $cats )[0]['loose'], Feeding::fish_lines( order( 1, array( row( 'Invoice fish', 1, array( 'type' => 'invoice_fish', 'categories' => array() ) ) ) ), $cats )[0]['loose'] ) );
+$inv = plan( $store, ship( array( order( 1290, array( $snail, $crab, $shrimp ) ) ) ) );
+check_same( 'an invert found in a clean tank: its system goes without', array( array( 2 ), 3, array( 221 ) ), array( array_keys( $inv['buildings'] ), $inv['buildings'][2]['fish'], $inv['buildings'][2]['lines'][0]['tanks'] ) );
+check_same( '… the ones in no clean tank the site knows change nothing: no "the site doesn\'t know their tank", the other systems fed', array( false, 0, array() ), array( $inv['all'], $inv['unlocated']['fish'], $inv['unlocated']['lines'] ) );
+$inv = plan( $store, ship( array( order( 1291, array( $crab ) ) ) ) );
+check_same( 'only unlogged inverts ship: an ordinary day', array( false, array(), false ), array( Feeding::is_on( $inv ), $inv['buildings'], $inv['all'] ) );
+$inv = plan( $store, Feeding::shipping( Feeding::going_out( array( 1291 => order( 1291, array( $crab ) ) ), $today ), $today, $cats, array() ) );
+check_same( '… unless the shop says inverts are to be found like fish (no loose category): then every clean system fasts', array( true, 5 ), array( $inv['all'], $inv['unlocated']['fish'] ) );
+
+// The same fish in two clean systems: both go without — and neither says all of them ship from it.
+$store = new Fake_Store();
+place( $store, 121, 'Many Chromis', 60, array( 'product_id' => 910 ) );
+place( $store, 221, 'Many Chromis', 60, array( 'product_id' => 910 ) );
+place( $store, 222, 'Sample Angel', 1 );
+$store->ship = ship( array( order( 1295, array( row( 'Many Chromis', 180, array( 'product_id' => 910 ) ), row( 'Sample Angel', 1 ) ) ) ) );
+$rm          = room( $store );
+check_same( 'two systems hold the fish: each says "up to", and that the fish is in another system too', array( 'Building 100 — no feeding today. Up to 180 fish ship from this system: 180 × Many Chromis (tank 121, also in another system, #1295).', 'Building 200 — no feeding today. Up to 181 fish ship from this system: 180 × Many Chromis (tank 221, also in another system, #1295), 1 × Sample Angel (tank 222, #1295).' ), array( block( $rm['todo'], 100 )['fast']['text'], block( $rm['todo'], 200 )['fast']['text'] ) );
 
 // The fish is bagged and logged as shipped: the group closes — and the fish is not thereby "lost".
 $store = new Fake_Store();
@@ -350,22 +406,28 @@ set_up( $store, array( 'name' => 'Holding A', 'kind' => 'clean', 'gallons' => 20
 set_up( $store, array( 'name' => 'Hospital B', 'kind' => 'quarantine', 'gallons' => 10 ) ); // 902
 set_up( $store, array( 'name' => 'Holding C', 'kind' => 'clean', 'gallons' => 20 ) );      // 903
 place( $store, 901, 'Held Tang', 2 );
-place( $store, 902, 'Sick Goby', 1 );
+$sick = place( $store, 902, 'Sick Goby', 1 );
 place( $store, 903, 'Other Angel', 1 );
 place( $store, 121, 'Rack Wrasse', 1 );
 
 $t901 = $store->tank_by_number( 901 );
 $t903 = $store->tank_by_number( 903 );
-$temp = plan( $store, ship( array( order( 1270, array( row( 'Held Tang', 1 ), row( 'Sick Goby', 1 ) ) ) ) ) );
+$temp = plan( $store, ship( array( order( 1270, array( row( 'Held Tang', 1 ), row( 'Sick Goby', 1, array( 'type' => 'invoice_fish', 'link' => array( 'stay_id' => $sick ) ) ) ) ) ) ) );
 check_same( 'a clean temporary tank a shipping fish is in fasts — it alone: it is its own water', array( array( (int) $t901['id'] ), array() ), array( array_keys( $temp['tanks'] ), $temp['buildings'] ) );
 check_same( '… a quarantine one is fed as always', 1, $temp['tanks'][ (int) $t901['id'] ]['fish'] );
 $r = $store;
-$r->ship = ship( array( order( 1270, array( row( 'Held Tang', 1 ), row( 'Sick Goby', 1 ) ) ) ) );
+$r->ship = ship( array( order( 1270, array( row( 'Held Tang', 1 ), row( 'Sick Goby', 1, array( 'type' => 'invoice_fish', 'link' => array( 'stay_id' => $sick ) ) ) ) ) ) );
 $rm      = room( $r );
 check_same( 'its to-do: no Feed, the reason on the tank', array( array(), 'TEMP 1 · 901 · Holding A — no feeding today. 1 fish ships from this tank: 1 × Held Tang (tank 901, #1270).', 'No feeding today — fish ship from here.' ), array( kinds( tank_of( $rm, 901 )['todo'] ), tank_of( $rm, 901 )['fast']['text'], tank_of( $rm, 901 )['fast']['strip'] ) );
 check_same( '… the other temporary tanks and the rack are fed', array( array( 'feed' ), array( 'feed' ), array( 'feed' ), false, false ), array( kinds( tank_of( $rm, 902 )['todo'] ), kinds( tank_of( $rm, 903 )['todo'] ), kinds( tank_of( $rm, 121 )['todo'] ), isset( tank_of( $rm, 902 )['fast'] ), isset( tank_of( $rm, 121 )['fast'] ) ) );
 check_same( '… its block in the day\'s list carries the reason and counts nothing', array( array(), 0, 'TEMP 1 · 901 · Holding A — no feeding today. 1 fish ships from this tank: 1 × Held Tang (tank 901, #1270).' ), array( block( $rm['todo'], 901 )['items'], block( $rm['todo'], 901 )['left'], block( $rm['todo'], 901 )['fast']['text'] ) );
 check_same( '… and the Today words name it', 'no feeding in TEMP 1 · 901 (ship day)', $rm['todo']['fast']['words'] );
+$guess = plan( $store, ship( array( order( 1271, array( row( 'Sick Goby', 1 ) ) ) ) ) );
+check_same( 'a fish the site only guesses into a quarantine temporary tank: every Clean Room building fasts — the clean temporary tanks are their own water and are fed', array( true, array(), array( 902 ) ), array( $guess['all'], $guess['tanks'], $guess['unlocated']['lines'][0]['quarantine'] ) );
+$r->ship = ship( array( order( 1271, array( row( 'Sick Goby', 1 ) ) ) ) );
+$rg      = room( $r );
+check_same( '… in the room: the rack has no Feed, both clean temporary tanks and the quarantine one have', array( array(), array( 'feed' ), array( 'feed' ), array( 'feed' ) ), array( kinds( tank_of( $rg, 121 )['todo'] ), kinds( tank_of( $rg, 901 )['todo'] ), kinds( tank_of( $rg, 902 )['todo'] ), kinds( tank_of( $rg, 903 )['todo'] ) ) );
+check_same( '… and the words say "systems", not "tanks": a clean temporary tank is still fed', array( 'no feeding in the Clean Room systems (ship day)', true ), array( $rg['todo']['fast']['words'], 0 === strpos( $rg['todo']['fast']['text'], 'No feeding in the Clean Room systems today' ) ) );
 
 $r->ship = ship( array( order( 1271, array( row( 'Unlogged Clownfish', 1 ) ) ) ) );
 $rm      = room( $r );
@@ -391,7 +453,7 @@ foreach ( array( Feeding::STATE_OFF, Feeding::STATE_NO_BATCH, Feeding::STATE_NO_
 }
 $text = Feeding::setting_text( Feeding::STATE_ON );
 check_same( 'the tick\'s name', 'Don\'t feed a clean system on a day its fish ship', $text['label'] );
-check( 'two plain sentences: what it does, and what happens when the site does not know a shipping fish\'s tank', 2 === substr_count( $text['text'], '. ' ) + 1 && false !== strpos( $text['text'], 'Feed is left off' ) && false !== strpos( $text['text'], 'does not know which tank' ) && '' === $text['why'] );
+check( 'two plain sentences: what it does, and what happens when the site does not know a shipping fish\'s tank', 2 === substr_count( $text['text'], '. ' ) + 1 && false !== strpos( $text['text'], 'Feed is left off' ) && false !== strpos( $text['text'], 'does not know which Clean Room tank' ) && false !== strpos( $text['text'], 'under another name' ) && '' === $text['why'] );
 check_contains( 'without the Batch Manager the tick says why it does nothing', 'Batch Manager plugin is not active', Feeding::setting_text( Feeding::STATE_NO_BATCH )['why'] );
 check_contains( 'without WooCommerce too', 'WooCommerce is not active', Feeding::setting_text( Feeding::STATE_NO_SHOP )['why'] );
 
@@ -444,12 +506,12 @@ place( $store, 521, 'Spa Goby', 5 );
 $store->ship = ship( array( order( 1250, array( row( 'Unlogged Clownfish', 2 ) ) ), order( 1251, array( row( 'Unlogged Dottyback', 2 ) ) ) ) );
 $all         = room( $store );
 check_same( 'no Feed in either clean system; the Spa is fed', array( array(), array(), array( 'feed' ) ), array( block( $all['todo'], 100 )['items'], block( $all['todo'], 200 )['items'], kinds( block( $all['todo'], 500 )['items'] ) ) );
-check_same( 'the sentence at the top names the fish', 'No feeding in the clean tanks today — 4 fish ship and the site doesn\'t know their tank: 2 × Unlogged Clownfish (#1250), 2 × Unlogged Dottyback (#1251).', $all['todo']['fast']['text'] );
+check_same( 'the sentence at the top names the fish', 'No feeding in the Clean Room systems today — 4 fish ship and the site doesn\'t know their tank: 2 × Unlogged Clownfish (#1250), 2 × Unlogged Dottyback (#1251).', $all['todo']['fast']['text'] );
 check_contains( '… and how to end it', 'Add fish already here', $all['todo']['fast']['hint'] );
-check_same( 'each clean block says why it has no Feed', 'Building 200 — no feeding today. A fish ships today and the site doesn\'t know its tank, so no clean system is fed.', block( $all['todo'], 200 )['fast']['text'] );
+check_same( 'each clean block says why it has no Feed', 'Building 200 — no feeding today. A fish ships today and the site doesn\'t know its tank, so no Clean Room system is fed.', block( $all['todo'], 200 )['fast']['text'] );
 check_same( '… and each of its tanks', 'No feeding today — a fish ships and the site doesn\'t know its tank.', tank_of( $all, 221 )['fast']['strip'] );
 check_same( 'the count: the Spa\'s feed alone', array( 1, 1 ), array( $all['todo']['left'], $all['todo']['total'] ) );
-check_same( 'the words for other screens', 'no feeding in the clean tanks (ship day)', $all['todo']['fast']['words'] );
+check_same( 'the words for other screens', 'no feeding in the Clean Room systems (ship day)', $all['todo']['fast']['words'] );
 
 // The rule narrows by itself: the fish gets logged in its tank.
 place( $store, 222, 'Unlogged Clownfish', 2 );
@@ -460,7 +522,7 @@ check_same( 'once the fish are logged in their tanks, only their system goes wit
 $empty       = new Fake_Store();
 $empty->ship = $store->ship;
 $bare        = room( $empty );
-check_same( 'a room with no fish logged at all: no block to change, the sentence still stands', array( 0, 'no feeding in the clean tanks (ship day)' ), array( $bare['todo']['total'], $bare['todo']['fast']['words'] ) );
+check_same( 'a room with no fish logged at all: no block to change, the sentence still stands', array( 0, 'no feeding in the Clean Room systems (ship day)' ), array( $bare['todo']['total'], $bare['todo']['fast']['words'] ) );
 check_contains( '… naming the fish', 'Unlogged Clownfish', $bare['todo']['fast']['text'] );
 
 /* ------------------------------------------------------------------ */
@@ -512,10 +574,20 @@ $many = array();
 for ( $i = 1; $i <= 10; $i++ ) {
 	$many[] = array( 'qty' => 1, 'name' => 'Fish ' . $i, 'number' => (string) ( 1300 + $i ), 'tanks' => array() );
 }
-check_same( 'a long list is shortened', '1 × Fish 1 (#1301), 1 × Fish 2 (#1302), 1 × Fish 3 (#1303), 1 × Fish 4 (#1304) and 6 more', Feeding::lines_text( $many ) );
-check_same( '… in the sentence at the top', 'No feeding in the clean tanks today — 10 fish ship and the site doesn\'t know their tank: 1 × Fish 1 (#1301), 1 × Fish 2 (#1302), 1 × Fish 3 (#1303), 1 × Fish 4 (#1304) and 6 more.', Feeding::list_notice( array( 'state' => 'on', 'all' => true, 'unlocated' => array( 'fish' => 10, 'lines' => $many ), 'buildings' => array(), 'tanks' => array() ) ) );
-check_same( '… one fish: "its tank"', 'No feeding in the clean tanks today — 1 fish ships and the site doesn\'t know its tank: 1 × Fish 1 (#1301).', Feeding::list_notice( array( 'state' => 'on', 'all' => true, 'unlocated' => array( 'fish' => 1, 'lines' => array( $many[0] ) ), 'buildings' => array(), 'tanks' => array() ) ) );
+check_same( 'a long list is shortened', '1 × Fish 1 (#1301), 1 × Fish 2 (#1302), 1 × Fish 3 (#1303), 1 × Fish 4 (#1304) and 6 more fish', Feeding::lines_text( $many ) );
+check_same( '… in the sentence at the top', 'No feeding in the Clean Room systems today — 10 fish ship and the site doesn\'t know their tank: 1 × Fish 1 (#1301), 1 × Fish 2 (#1302), 1 × Fish 3 (#1303), 1 × Fish 4 (#1304) and 6 more fish.', Feeding::list_notice( array( 'state' => 'on', 'all' => true, 'unlocated' => array( 'fish' => 10, 'lines' => $many ), 'buildings' => array(), 'tanks' => array() ) ) );
+check_same( '… one fish: "its tank"', 'No feeding in the Clean Room systems today — 1 fish ships and the site doesn\'t know its tank: 1 × Fish 1 (#1301).', Feeding::list_notice( array( 'state' => 'on', 'all' => true, 'unlocated' => array( 'fish' => 1, 'lines' => array( $many[0] ) ), 'buildings' => array(), 'tanks' => array() ) ) );
 check_same( 'a fish without a name still stands in the list', '1 × a fish without a name (#1301)', Feeding::lines_text( array( array( 'qty' => 1, 'name' => ' ', 'number' => '1301' ) ) ) );
+$uneven = array();
+foreach ( array( 1, 2, 3, 1, 1, 2, 3, 1, 2, 3 ) as $i => $qty ) {
+	$uneven[] = array( 'qty' => $qty, 'name' => 'Fish ' . ( $i + 1 ), 'number' => '1260', 'tanks' => array() );
+}
+check_same( 'the sentence adds up: 19 fish, 7 named, "and 12 more fish" — the fish left out, not the lines', '1 × Fish 1 (#1260), 2 × Fish 2 (#1260), 3 × Fish 3 (#1260), 1 × Fish 4 (#1260) and 12 more fish', Feeding::lines_text( $uneven ) );
+check_same( '… on a system\'s line too', 'Clean Room 2 — no feeding today. 7 fish ship from this system: 1 × A (tank 121, #1), 1 × B (tank 121, #1), 1 × C (tank 121, #1), 1 × D (tank 121, #1) and 3 more fish.', Feeding::block( 'Clean Room 2', array( 'fish' => 7, 'lines' => array( array( 'qty' => 1, 'name' => 'A', 'number' => '1', 'tanks' => array( 121 ) ), array( 'qty' => 1, 'name' => 'B', 'number' => '1', 'tanks' => array( 121 ) ), array( 'qty' => 1, 'name' => 'C', 'number' => '1', 'tanks' => array( 121 ) ), array( 'qty' => 1, 'name' => 'D', 'number' => '1', 'tanks' => array( 121 ) ), array( 'qty' => 2, 'name' => 'E', 'number' => '1', 'tanks' => array( 121 ) ), array( 'qty' => 1, 'name' => 'F', 'number' => '1', 'tanks' => array( 121 ) ) ), 'all' => false ) )['text'] );
+check_same( 'a fish in another clean system too: "up to", and the fish says so — one temporary tank the same', array( 'Clean Room 2 — no feeding today. Up to 1 fish ships from this system: 1 × Flame Angel (tank 118, also in another system, #1240).', 'TEMP 1 · 901 — no feeding today. Up to 2 fish ship from this tank: 2 × Flame Angel (tank 901, also in another system, #1240).' ), array( Feeding::block( 'Clean Room 2', array( 'fish' => 1, 'lines' => array( array( 'qty' => 1, 'name' => 'Flame Angel', 'number' => '1240', 'tanks' => array( 118 ), 'elsewhere' => true ) ), 'all' => false ) )['text'], Feeding::block( 'TEMP 1 · 901', array( 'fish' => 2, 'lines' => array( array( 'qty' => 2, 'name' => 'Flame Angel', 'number' => '1240', 'tanks' => array( 901 ), 'elsewhere' => true ) ), 'all' => false ), true )['text'] ) );
+check_same( 'a fish the site only has in quarantine names that tank', '1 × Firefish Test (#1280, on the site only in quarantine tank 512)', Feeding::lines_text( array( array( 'qty' => 1, 'name' => 'Firefish Test', 'number' => '1280', 'tanks' => array(), 'quarantine' => array( 512 ) ) ) ) );
+$hint = Feeding::list_hint();
+check( 'how to end it: a fish already on the site under another name (or still in quarantine) is corrected or moved FIRST — adding it again would count it twice; only then "add"', false !== strpos( $hint, 'under another name' ) && false !== strpos( $hint, 'do not add it again' ) && false !== strpos( $hint, 'Identify…' ) && false !== strpos( $hint, 'Correct the fish…' ) && strpos( $hint, 'under another name' ) < strpos( $hint, 'Add fish already here' ) );
 
 $on = array( 'state' => 'on', 'all' => false, 'buildings' => array( 2 => array( 'fish' => 1, 'lines' => array() ) ), 'tanks' => array() );
 check_same( 'the few words for the Today page: one system', 'no feeding in Clean Room 2 (ship day)', Feeding::today_words( $on, array( 'Clean Room 2' ) ) );
@@ -607,9 +679,9 @@ check( 'the Board: the fasting system\'s card reads the same sentence, once', 1 
 
 $store->ship = ship( array( order( 1250, array( row( 'Unlogged Clownfish', 4 ) ) ) ) );
 $html        = fh_todo_html( $store );
-$notice      = esc_html( 'No feeding in the clean tanks today — 4 fish ship and the site doesn\'t know their tank: 4 × Unlogged Clownfish (#1250).' );
+$notice      = esc_html( 'No feeding in the Clean Room systems today — 4 fish ship and the site doesn\'t know their tank: 4 × Unlogged Clownfish (#1250).' );
 check( 'a fish the site cannot find: the notice at the top of the To do tab, once', 1 === substr_count( $html, 'fh-cr-fast--all' ) && false !== strpos( $html, '<strong>' . $notice . '</strong>' ) );
-check( '… both clean blocks say why; neither can be ticked; the Spa can', false !== strpos( fh_block_html( $html, 'Clean Room · Building 100' ), 'so no clean system is fed.' ) && false !== strpos( fh_block_html( $html, 'Clean Room · Building 200' ), 'so no clean system is fed.' ) && false === strpos( fh_block_html( $html, 'Clean Room · Building 100' ), 'fh-cr-todo-tick' ) && false === strpos( fh_block_html( $html, 'Clean Room · Building 200' ), 'fh-cr-todo-tick' ) && false !== strpos( fh_block_html( $html, 'Spa · Building 500' ), 'fh-cr-todo-tick' ) );
+check( '… both clean blocks say why; neither can be ticked; the Spa can', false !== strpos( fh_block_html( $html, 'Clean Room · Building 100' ), 'so no Clean Room system is fed.' ) && false !== strpos( fh_block_html( $html, 'Clean Room · Building 200' ), 'so no Clean Room system is fed.' ) && false === strpos( fh_block_html( $html, 'Clean Room · Building 100' ), 'fh-cr-todo-tick' ) && false === strpos( fh_block_html( $html, 'Clean Room · Building 200' ), 'fh-cr-todo-tick' ) && false !== strpos( fh_block_html( $html, 'Spa · Building 500' ), 'fh-cr-todo-tick' ) );
 $board = fh_board_html( $store );
 check( '… and on the Board: the notice once, a line on each clean system with fish', 1 === substr_count( $board, 'fh-cr-fast--all' ) && false !== strpos( $board, $notice ) && 2 === substr_count( $board, 'class="fh-cr-fast"' ) );
 

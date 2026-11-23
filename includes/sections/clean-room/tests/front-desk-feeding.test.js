@@ -197,7 +197,7 @@ function start( config ) {
 var REASON = 'Building 700 — no feeding today. 2 fish ship from this system: 2 × Invented Tang (tank 721, #1234).';
 var STRIP  = 'No feeding today — fish ship from here.';
 var FED    = 'Fed at 7:40, before order #1251 came in.';
-var NOTICE = 'No feeding in the clean tanks today — 4 fish ship and the site doesn\'t know their tank: 4 × Unlogged Clownfish (#1250).';
+var NOTICE = 'No feeding in the Clean Room systems today — 4 fish ship and the site doesn\'t know their tank: 4 × Unlogged Clownfish (#1250).';
 var HINT   = 'Add each one to the tank it is in (on the phone: Add fish already here) and only that system goes without.';
 
 function feedLine( building, done ) {

@@ -25,12 +25,20 @@
  *   plan()        each fish line → the tank group it comes out of
  *                 (Sold_Line::stays()) → the water that group is in. A
  *                 Clean Room building holding one FASTS; so does a clean
- *                 temporary tank holding one. A fish found only in the
- *                 Spa changes nothing: quarantine is fed as always. A
- *                 fish the site cannot find in any tank makes EVERY
- *                 Clean Room building fast — not feeding a fish that is
- *                 about to be bagged matters more than a missed feed,
- *                 and the rule narrows by itself as tanks get logged.
+ *                 temporary tank holding one. A group in a clean water
+ *                 answers before one in quarantine: by product or by name
+ *                 the site only guesses, and a fish for sale is in a
+ *                 clean tank. A fish the Invoices section tied to a
+ *                 quarantine group changes nothing: quarantine is fed as
+ *                 always. A fish the site cannot find in any CLEAN tank —
+ *                 in no tank at all, or only guessed into a quarantine
+ *                 one — makes EVERY Clean Room building fast: not feeding
+ *                 a fish that is about to be bagged matters more than a
+ *                 missed feed, and the rule narrows by itself as tanks
+ *                 get logged. An invert (LOOSE_CATEGORIES) makes the
+ *                 system it is found in fast and, when it is found
+ *                 nowhere, changes nothing — inverts are often in no tank
+ *                 on the site, and that would never narrow.
  *
  * The fast lasts the whole site day. What the to-do does with it:
  * for_tank() / without_feed() take the open Feed off a fasting tank (a
@@ -84,7 +92,18 @@ class Feeding {
 	const LINE_NOT_AVAILABLE = 'na';
 
 	/**
-	 * How many fish a sentence names before it says "and N more".
+	 * The categories whose animals need not be found in a tank: an invert
+	 * that ships makes the system it is logged in go without, but one
+	 * logged nowhere does not stop the feeding of every clean system (a
+	 * fish does). A product that is also in another fish category is a
+	 * fish.
+	 *
+	 * @var string[]
+	 */
+	const LOOSE_CATEGORIES = array( 'inverts' );
+
+	/**
+	 * How many fish a sentence names before it says "and N more fish".
 	 *
 	 * @var int
 	 */
@@ -213,10 +232,15 @@ class Feeding {
 	 *                                  categories (the product's category slugs), line_status (the theme's),
 	 *                                  size_slug, size_label, title (the product's own title).
 	 * @param string[] $fish_categories The category slugs that are fish.
-	 * @return array[] order_id, number, created, name, qty, product_id, variation_id, size_slug, size_label, names, link.
+	 * @param string[]|null $loose      Of those, the ones whose animals need not be found in a tank (null =
+	 *                                  LOOSE_CATEGORIES).
+	 * @return array[] order_id, number, created, name, qty, product_id, variation_id, size_slug, size_label, names, link,
+	 *                 loose (an invert: when no tank answers for it, nothing changes).
 	 */
-	public static function fish_lines( array $order, array $fish_categories ) {
-		$out = array();
+	public static function fish_lines( array $order, array $fish_categories, $loose = null ) {
+		$out             = array();
+		$fish_categories = array_map( 'strval', $fish_categories );
+		$loose           = array_map( 'strval', is_array( $loose ) ? $loose : self::LOOSE_CATEGORIES );
 		foreach ( isset( $order['rows'] ) && is_array( $order['rows'] ) ? $order['rows'] : array() as $row ) {
 			if ( ! is_array( $row ) || self::LINE_NOT_AVAILABLE === (string) ( $row['line_status'] ?? '' ) ) {
 				continue;
@@ -225,12 +249,15 @@ class Feeding {
 			if ( $qty <= 0 ) {
 				continue;
 			}
-			$type = (string) ( $row['type'] ?? 'product' );
+			$type   = (string) ( $row['type'] ?? 'product' );
+			$invert = false;
 			if ( 'product' === $type ) {
 				// A shop product is a fish by its category (the list the Ship Day page and the Today page use).
-				if ( ! array_intersect( array_map( 'strval', (array) ( $row['categories'] ?? array() ) ), array_map( 'strval', $fish_categories ) ) ) {
+				$mine = array_intersect( array_map( 'strval', (array) ( $row['categories'] ?? array() ) ), $fish_categories );
+				if ( ! $mine ) {
 					continue;
 				}
+				$invert = ! array_diff( $mine, $loose ); // In no fish category but the inverts'.
 			} elseif ( ! in_array( $type, array( 'invoice_fish', 'invoice_line', 'invoice' ), true ) ) {
 				continue;
 			}
@@ -248,6 +275,7 @@ class Feeding {
 				'size_label'   => (string) ( $row['size_label'] ?? '' ),
 				'names'        => '' !== $title ? array( $title ) : array(),
 				'link'         => isset( $row['link'] ) && is_array( $row['link'] ) ? $row['link'] : array(),
+				'loose'        => $invert,
 			);
 		}
 		return $out;
@@ -259,14 +287,15 @@ class Feeding {
 	 * @param array[]  $going_out       going_out(): the orders to read, each with its rows.
 	 * @param string   $today           Site date.
 	 * @param string[] $fish_categories The category slugs that are fish.
+	 * @param string[]|null $loose      Of those, the inverts' (null = LOOSE_CATEGORIES) — see fish_lines().
 	 * @return array{date: string, orders: int, fish: int, lines: array[]}
 	 */
-	public static function shipping( array $going_out, $today, array $fish_categories ) {
+	public static function shipping( array $going_out, $today, array $fish_categories, $loose = null ) {
 		$lines = array();
 		$count = 0;
 		$fish  = 0;
 		foreach ( $going_out as $order ) {
-			$mine = is_array( $order ) ? self::fish_lines( $order, $fish_categories ) : array();
+			$mine = is_array( $order ) ? self::fish_lines( $order, $fish_categories, $loose ) : array();
 			if ( ! $mine ) {
 				continue;
 			}
@@ -323,8 +352,11 @@ class Feeding {
 	 * @return array{state: string, date: string, orders: int, fish: int, buildings: array<int, array>,
 	 *               tanks: array<int, array>, unlocated: array{fish: int, lines: array[]}, all: bool}
 	 *         buildings: Clean Room building id => { fish, lines[] }; tanks: clean temporary tank id => the
-	 *         same; a line: qty, name, number, created, tanks (the tank numbers it may come out of);
-	 *         unlocated: the fish no tank group answers for; all: every Clean Room building fasts.
+	 *         same; a line: qty, name, number, created, tanks (the tank numbers it may come out of) and,
+	 *         only when it is so, elsewhere (true: the same fish is in another clean water too — each of
+	 *         them goes without, and each counts it); unlocated: the fish no clean tank group answers for
+	 *         — a line of it may carry quarantine (the quarantine tank numbers the site guesses it in);
+	 *         all: every Clean Room building fasts.
 	 */
 	public static function plan( array $ship, array $stays, array $tanks, array $gone = array() ) {
 		$out           = self::none( self::STATE_ON, (string) ( $ship['date'] ?? '' ) );
@@ -337,6 +369,13 @@ class Feeding {
 		foreach ( $tanks as $tank ) {
 			if ( is_array( $tank ) && Layout::is_slot( $tank ) ) {
 				$slots[ (int) $tank['id'] ] = Temp_Tanks::effective_area( $tank );
+			}
+		}
+		// The groups in a clean water: a Clean Room building, or a clean temporary tank.
+		$clean = array();
+		foreach ( $stays as $stay ) {
+			if ( is_array( $stay ) && '' !== self::water( $stay, $slots ) ) {
+				$clean[] = $stay;
 			}
 		}
 
@@ -354,7 +393,25 @@ class Feeding {
 			);
 
 			$found = Sold_Line::stays( $line, $stays );
+			if ( Sold_Line::RUNG_INVOICE !== $found['rung'] ) {
+				// By product or by name the site only guesses, and a fish for sale is in a clean tank: a
+				// group in a clean water answers before a better-fitting one in quarantine. Guessed into
+				// quarantine only, the fish is in no clean tank the site knows — its clean tank is simply
+				// not logged yet — and the quarantine tanks are named so the group can be moved.
+				$guess = $found['stays'];
+				$found = Sold_Line::stays( $line, $clean );
+				if ( ! $found['stays'] ) {
+					$numbers = array_values( array_unique( array_filter( array_map( 'intval', array_column( $guess, 'tank_number' ) ) ) ) );
+					sort( $numbers );
+					if ( $numbers ) {
+						$entry['quarantine'] = $numbers;
+					}
+				}
+			}
 			if ( ! $found['stays'] ) {
+				if ( ! empty( $line['loose'] ) ) {
+					continue; // An invert in no clean tank the site knows: nothing changes.
+				}
 				$out['unlocated']['fish']   += $qty;
 				$out['unlocated']['lines'][] = $entry;
 				continue;
@@ -362,18 +419,14 @@ class Feeding {
 
 			$waters = array();
 			foreach ( $found['stays'] as $stay ) {
-				$tank_id = (int) ( $stay['tank_id'] ?? 0 );
-				$number  = (int) ( $stay['tank_number'] ?? 0 );
-				if ( ! empty( $stay['own_water'] ) || isset( $slots[ $tank_id ] ) ) {
-					if ( 'clean' === ( $slots[ $tank_id ] ?? '' ) ) {
-						$waters[ 'tanks:' . $tank_id ][] = $number;
-					}
-					continue; // A quarantine temporary tank: fed as always.
+				$water = self::water( $stay, $slots );
+				if ( '' !== $water ) {
+					$waters[ $water ][] = (int) ( $stay['tank_number'] ?? 0 );
 				}
-				if ( 'clean' === (string) ( $stay['area'] ?? '' ) && (int) ( $stay['building_id'] ?? 0 ) > 0 ) {
-					$waters[ 'buildings:' . (int) $stay['building_id'] ][] = $number;
-				}
-				// In the Spa: located, and nothing changes.
+				// In quarantine by the Invoices section's own link: located, and nothing changes.
+			}
+			if ( count( $waters ) > 1 ) {
+				$entry['elsewhere'] = true; // The same fish in two clean waters: both go without, both count it.
 			}
 			foreach ( $waters as $key => $numbers ) {
 				list( $kind, $id ) = explode( ':', $key );
@@ -393,6 +446,26 @@ class Feeding {
 		$out['all'] = $out['unlocated']['fish'] > 0;
 
 		return $out;
+	}
+
+	/**
+	 * The clean water a tank group is in: "buildings:<id>" for a Clean
+	 * Room building, "tanks:<id>" for a clean temporary tank — '' for a
+	 * group in quarantine (the Spa, a quarantine temporary tank).
+	 *
+	 * @param array                $stay  Hydrated stay (tank_id, building_id, area, own_water).
+	 * @param array<int, string>   $slots Temporary tank id => the area it behaves as.
+	 * @return string
+	 */
+	private static function water( array $stay, array $slots ) {
+		$tank_id = (int) ( $stay['tank_id'] ?? 0 );
+		if ( ! empty( $stay['own_water'] ) || isset( $slots[ $tank_id ] ) ) {
+			return 'clean' === ( $slots[ $tank_id ] ?? '' ) ? 'tanks:' . $tank_id : '';
+		}
+		if ( 'clean' === (string) ( $stay['area'] ?? '' ) && (int) ( $stay['building_id'] ?? 0 ) > 0 ) {
+			return 'buildings:' . (int) $stay['building_id'];
+		}
+		return '';
 	}
 
 	/**
@@ -657,9 +730,12 @@ class Feeding {
 	/**
 	 * The fish of a sentence: "2 × Yellow Tang (tank 121, #1234), 1 ×
 	 * Flame Angel (tank 118, #1240)" — the first LIST_MAX of them, then
-	 * "and 6 more".
+	 * "and 6 more fish": the FISH of the lines left out, so the sentence
+	 * adds up to the number it opened with. A fish that is in another
+	 * clean system too says so; one the site only guesses in quarantine
+	 * names that tank.
 	 *
-	 * @param array[] $lines Lines (qty, name, number, tanks).
+	 * @param array[] $lines Lines (qty, name, number, tanks, elsewhere, quarantine).
 	 * @return string
 	 */
 	public static function lines_text( array $lines ) {
@@ -674,17 +750,28 @@ class Feeding {
 				/* translators: %s: tank numbers, e.g. "121 and 122" */
 				$where[] = sprintf( __( 'tanks %s', 'fishotel-misc-plugin' ), self::sentence_list( array_map( 'strval', $tanks ) ) );
 			}
+			if ( $tanks && ! empty( $line['elsewhere'] ) ) {
+				$where[] = __( 'also in another system', 'fishotel-misc-plugin' );
+			}
 			if ( '' !== (string) ( $line['number'] ?? '' ) ) {
 				$where[] = '#' . (string) $line['number'];
+			}
+			$quarantine = array_values( array_filter( array_map( 'intval', (array) ( $line['quarantine'] ?? array() ) ) ) );
+			if ( ! $tanks && $quarantine ) {
+				/* translators: %s: one or more tank numbers, e.g. "512" or "512 and 513" */
+				$where[] = sprintf( _n( 'on the site only in quarantine tank %s', 'on the site only in quarantine tanks %s', count( $quarantine ), 'fishotel-misc-plugin' ), self::sentence_list( array_map( 'strval', $quarantine ) ) );
 			}
 			$name    = '' !== trim( (string) ( $line['name'] ?? '' ) ) ? trim( (string) $line['name'] ) : __( 'a fish without a name', 'fishotel-misc-plugin' );
 			$parts[] = (int) ( $line['qty'] ?? 0 ) . ' × ' . $name . ( $where ? ' (' . implode( ', ', $where ) . ')' : '' );
 		}
 		$text = implode( ', ', $parts );
-		$more = count( $lines ) - count( $parts );
+		$more = 0;
+		foreach ( array_slice( $lines, self::LIST_MAX ) as $line ) {
+			$more += max( 0, (int) ( $line['qty'] ?? 0 ) );
+		}
 		if ( $more > 0 ) {
-			/* translators: %d: how many more fish lines there are */
-			$text .= ' ' . sprintf( __( 'and %d more', 'fishotel-misc-plugin' ), $more );
+			/* translators: %d: how many more fish there are than the sentence names */
+			$text .= ' ' . sprintf( __( 'and %d more fish', 'fishotel-misc-plugin' ), $more );
 		}
 		return $text;
 	}
@@ -693,7 +780,10 @@ class Feeding {
 	 * What a fasting system's block says, and the same on its Board card:
 	 * "Clean Room 2 — no feeding today. 3 fish ship from this system:
 	 * 2 × Yellow Tang (tank 121, #1234), 1 × Flame Angel (tank 118,
-	 * #1240)." A system that fasts only because a shipping fish is in no
+	 * #1240)." When one of those fish is in another clean system too, both
+	 * go without and both count it, so each says "Up to 3 fish ship from
+	 * this system" and the fish reads "(tank 121, also in another system,
+	 * #1234)". A system that fasts only because a shipping fish is in no
 	 * tank the site knows says that instead.
 	 *
 	 * @param string $label The system's (or the temporary tank's) name.
@@ -706,8 +796,19 @@ class Feeding {
 		$fish  = (int) ( $why['fish'] ?? 0 );
 		$lines = (array) ( $why['lines'] ?? array() );
 
+		$shared = false;
+		foreach ( $lines as $line ) {
+			$shared = $shared || ! empty( $line['elsewhere'] );
+		}
+
 		if ( $fish > 0 && $lines ) {
-			if ( $tank ) {
+			if ( $shared && $tank ) {
+				/* translators: 1: tank name, 2: number of fish, 3: the fish, e.g. "2 × Yellow Tang (tank 901, also in another system, #1234)" */
+				$text = sprintf( _n( '%1$s — no feeding today. Up to %2$d fish ships from this tank: %3$s.', '%1$s — no feeding today. Up to %2$d fish ship from this tank: %3$s.', $fish, 'fishotel-misc-plugin' ), (string) $label, $fish, self::lines_text( $lines ) );
+			} elseif ( $shared ) {
+				/* translators: 1: building name, 2: number of fish, 3: the fish, e.g. "2 × Yellow Tang (tank 121, also in another system, #1234)" */
+				$text = sprintf( _n( '%1$s — no feeding today. Up to %2$d fish ships from this system: %3$s.', '%1$s — no feeding today. Up to %2$d fish ship from this system: %3$s.', $fish, 'fishotel-misc-plugin' ), (string) $label, $fish, self::lines_text( $lines ) );
+			} elseif ( $tank ) {
 				/* translators: 1: tank name, 2: number of fish, 3: the fish, e.g. "2 × Yellow Tang (tank 901, #1234)" */
 				$text = sprintf( _n( '%1$s — no feeding today. %2$d fish ships from this tank: %3$s.', '%1$s — no feeding today. %2$d fish ship from this tank: %3$s.', $fish, 'fishotel-misc-plugin' ), (string) $label, $fish, self::lines_text( $lines ) );
 			} else {
@@ -717,7 +818,7 @@ class Feeding {
 			$strip = __( 'No feeding today — fish ship from here.', 'fishotel-misc-plugin' );
 		} else {
 			/* translators: %s: building name */
-			$text  = sprintf( __( '%s — no feeding today. A fish ships today and the site doesn\'t know its tank, so no clean system is fed.', 'fishotel-misc-plugin' ), (string) $label );
+			$text  = sprintf( __( '%s — no feeding today. A fish ships today and the site doesn\'t know its tank, so no Clean Room system is fed.', 'fishotel-misc-plugin' ), (string) $label );
 			$strip = __( 'No feeding today — a fish ships and the site doesn\'t know its tank.', 'fishotel-misc-plugin' );
 		}
 
@@ -731,9 +832,11 @@ class Feeding {
 
 	/**
 	 * The sentence at the top of the day's list when a shipping fish is
-	 * in no tank the site knows: "No feeding in the clean tanks today —
-	 * 4 fish ship and the site doesn't know their tank: 2 × Blue Tang
-	 * (#1250), 2 × Royal Gramma (#1251)." — '' on any other day.
+	 * in no clean tank the site knows: "No feeding in the Clean Room
+	 * systems today — 4 fish ship and the site doesn't know their tank:
+	 * 2 × Blue Tang (#1250), 2 × Royal Gramma (#1251)." — '' on any other
+	 * day. ("Systems", not "tanks": a clean temporary tank is its own
+	 * water and is fed unless a shipping fish is found in it.)
 	 *
 	 * @param array $fast plan().
 	 * @return string
@@ -744,16 +847,19 @@ class Feeding {
 		}
 		$fish = (int) ( $fast['unlocated']['fish'] ?? 0 );
 		/* translators: 1: number of fish, 2: the fish, e.g. "2 × Blue Tang (#1250)" */
-		return sprintf( _n( 'No feeding in the clean tanks today — %1$d fish ships and the site doesn\'t know its tank: %2$s.', 'No feeding in the clean tanks today — %1$d fish ship and the site doesn\'t know their tank: %2$s.', $fish, 'fishotel-misc-plugin' ), $fish, self::lines_text( (array) ( $fast['unlocated']['lines'] ?? array() ) ) );
+		return sprintf( _n( 'No feeding in the Clean Room systems today — %1$d fish ships and the site doesn\'t know its tank: %2$s.', 'No feeding in the Clean Room systems today — %1$d fish ship and the site doesn\'t know their tank: %2$s.', $fish, 'fishotel-misc-plugin' ), $fish, self::lines_text( (array) ( $fast['unlocated']['lines'] ?? array() ) ) );
 	}
 
 	/**
-	 * How to end it — said once, under list_notice().
+	 * How to end it — said once, under list_notice(). A fish that is on
+	 * the site already — under its supplier's spelling, or still in the
+	 * quarantine tank it arrived in — is corrected or moved first: adding
+	 * it again would count it twice.
 	 *
 	 * @return string
 	 */
 	public static function list_hint() {
-		return __( 'Add each one to the tank it is in (on the phone: Add fish already here) and only that system goes without.', 'fishotel-misc-plugin' );
+		return __( 'If one is already in a tank on the site under another name, or still in a quarantine tank there, correct or move that group (Identify… / Correct the fish… / Move) — do not add it again. Otherwise add it to the tank it is in (on the phone: Add fish already here). Then only that system goes without.', 'fishotel-misc-plugin' );
 	}
 
 	/**
@@ -769,7 +875,7 @@ class Feeding {
 			return '';
 		}
 		if ( ! empty( $fast['all'] ) ) {
-			return __( 'no feeding in the clean tanks (ship day)', 'fishotel-misc-plugin' );
+			return __( 'no feeding in the Clean Room systems (ship day)', 'fishotel-misc-plugin' );
 		}
 		$labels = array_values( array_unique( array_filter( array_map( 'strval', $labels ), 'strlen' ) ) );
 		if ( ! $labels ) {
@@ -795,7 +901,7 @@ class Feeding {
 		}
 		return array(
 			'label' => __( 'Don\'t feed a clean system on a day its fish ship', 'fishotel-misc-plugin' ),
-			'text'  => __( 'On a day a customer\'s fish go out the door, Feed is left off the to-do of the Clean Room system those fish are in, with the reason shown in its place; the Spa is fed as always. When the site does not know which tank a shipping fish is in, no Clean Room system gets Feed that day and the To do tab names the fish — add it to its tank and only that system goes without.', 'fishotel-misc-plugin' ),
+			'text'  => __( 'On a day a customer\'s fish go out the door, Feed is left off the to-do of the Clean Room system those fish are in, with the reason shown in its place; the Spa is fed as always. When the site does not know which Clean Room tank a shipping fish is in, no Clean Room system gets Feed that day and the To do tab names the fish — correct or move its group if it is on the site under another name or still in quarantine, else add it to its tank, and only that system goes without.', 'fishotel-misc-plugin' ),
 			'why'   => $why,
 		);
 	}

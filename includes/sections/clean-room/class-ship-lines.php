@@ -24,8 +24,9 @@
  * or Lost Fish is on by these classes being there.
  *
  * Cost: today() is cached in one transient for CACHE_SECONDS and
- * dropped whenever an order changes (HOOKS), so a new order takes Feed
- * off on the next page load and a cancelled one brings it back. A cache
+ * dropped whenever an order changes (HOOKS, ITEM_META_HOOKS), so a new
+ * order takes Feed off on the next page load and a cancelled or trashed
+ * one brings it back. A cache
  * miss is one order query for tomorrow's delivery date plus the lines
  * of that day's orders. With the tick in Settings off, or without the
  * Batch Manager (no order has a ship day), nothing is asked at all.
@@ -58,12 +59,34 @@ class Ship_Lines {
 
 	/**
 	 * The order events that drop it: the three the Today section listens
-	 * to, and a new order (one created straight into "processing" changes
-	 * no status).
+	 * to, a new order (one created straight into "processing" changes no
+	 * status), and an order put in the trash, taken out of it or deleted
+	 * — none of which is a status change to WooCommerce (the first two of
+	 * each kind are the posts table's, the others the orders tables').
 	 *
 	 * @var string[]
 	 */
-	const HOOKS = array( 'woocommerce_order_status_changed', 'woocommerce_update_order', 'woocommerce_order_note_added', 'woocommerce_new_order' );
+	const HOOKS = array(
+		'woocommerce_order_status_changed',
+		'woocommerce_update_order',
+		'woocommerce_order_note_added',
+		'woocommerce_new_order',
+		'trashed_post',
+		'untrashed_post',
+		'deleted_post',
+		'woocommerce_trash_order',
+		'woocommerce_untrash_order',
+		'woocommerce_delete_order',
+	);
+
+	/**
+	 * A line's own change that drops it: its line status written straight
+	 * onto the order item ("not available": that fish is not coming),
+	 * which saves no order.
+	 *
+	 * @var string[]
+	 */
+	const ITEM_META_HOOKS = array( 'added_order_item_meta', 'updated_order_item_meta', 'deleted_order_item_meta' );
 
 	/**
 	 * Order and item meta read here (written by the Batch Manager and the
@@ -98,6 +121,42 @@ class Ship_Lines {
 		foreach ( self::HOOKS as $hook ) {
 			add_action( $hook, array( self::class, 'flush' ), 10, 0 );
 		}
+		foreach ( self::ITEM_META_HOOKS as $hook ) {
+			add_action( $hook, array( self::class, 'flush_for_item_meta' ), 10, 3 );
+		}
+	}
+
+	/**
+	 * Forget today's shipping fish when a line's status was written — and
+	 * only then: an order writes many item metas, and none of the others
+	 * says whether a fish ships.
+	 *
+	 * @param mixed $meta_id  Meta id(s) (unused).
+	 * @param mixed $item_id  Order item id (unused).
+	 * @param mixed $meta_key The key written.
+	 */
+	public static function flush_for_item_meta( $meta_id = 0, $item_id = 0, $meta_key = '' ) {
+		if ( self::META_LINE_STATUS === $meta_key ) {
+			self::flush();
+		}
+	}
+
+	/**
+	 * The fish categories whose animals need not be found in a tank
+	 * (Feeding::LOOSE_CATEGORIES — the inverts): filterable, as the fish
+	 * categories themselves are.
+	 *
+	 * @return string[]
+	 */
+	public static function loose_categories() {
+		$loose = function_exists( 'apply_filters' ) ? apply_filters( 'fishotel_cleanroom_loose_categories', Feeding::LOOSE_CATEGORIES ) : Feeding::LOOSE_CATEGORIES;
+		$out   = array();
+		foreach ( is_array( $loose ) ? $loose : array() as $slug ) {
+			if ( is_scalar( $slug ) && '' !== trim( (string) $slug ) ) {
+				$out[] = trim( (string) $slug );
+			}
+		}
+		return $out;
 	}
 
 	/**
@@ -230,7 +289,7 @@ class Ship_Lines {
 			$going[ $id ]['rows'] = self::rows( $objects[ $id ] );
 		}
 
-		return Feeding::shipping( $going, $today, \FisHotel\Misc\Sections\Today\Collector::fish_categories() );
+		return Feeding::shipping( $going, $today, \FisHotel\Misc\Sections\Today\Collector::fish_categories(), self::loose_categories() );
 	}
 
 	/**

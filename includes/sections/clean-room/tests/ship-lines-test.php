@@ -224,7 +224,17 @@ check_same( 'past midnight the kept answer is yesterday\'s: the shop is read aga
 
 check_same( 'nothing is hooked until the section boots', array(), array_values( array_intersect( Ship_Lines::HOOKS, array_keys( $GLOBALS['fh_actions'] ) ) ) );
 Ship_Lines::register();
-check_same( 'the order hooks the Today section listens to, and a new order', array( 'woocommerce_order_status_changed', 'woocommerce_update_order', 'woocommerce_order_note_added', 'woocommerce_new_order' ), Ship_Lines::HOOKS );
+check_same( 'the order hooks the Today section listens to, a new order, and an order trashed, restored or deleted (in the posts table and in the orders tables)', array( 'woocommerce_order_status_changed', 'woocommerce_update_order', 'woocommerce_order_note_added', 'woocommerce_new_order', 'trashed_post', 'untrashed_post', 'deleted_post', 'woocommerce_trash_order', 'woocommerce_untrash_order', 'woocommerce_delete_order' ), Ship_Lines::HOOKS );
+foreach ( Ship_Lines::ITEM_META_HOOKS as $hook ) {
+	Ship_Lines::today( $today );
+	$before = $GLOBALS['fh_shop_queries'];
+	do_action( $hook, 77, 501, '_qty', '2' );
+	$kept = false !== get_transient( Ship_Lines::TRANSIENT );
+	do_action( $hook, 77, 501, Ship_Lines::META_LINE_STATUS, 'na' );
+	$dropped = false === get_transient( Ship_Lines::TRANSIENT );
+	Ship_Lines::today( $today );
+	check( $hook . ': a line status written straight onto the item drops it; any other item meta does not', $kept && $dropped && $before + 1 === $GLOBALS['fh_shop_queries'] );
+}
 foreach ( Ship_Lines::HOOKS as $hook ) {
 	Ship_Lines::today( $today );
 	$before = $GLOBALS['fh_shop_queries'];
@@ -291,7 +301,18 @@ $other = fh_shop_order( new WC_Order( 1251, 'processing', array( '_fishotel_ship
 $other->add_item( 'Unlogged Clownfish', 2, new Fh_Shop_Product( 99, 'Unlogged Clownfish', array( 'quarantined-fish' ) ) );
 do_action( 'woocommerce_new_order', 1251 );
 $room = $store->room( $today, $settings, $protocols );
-check_same( 'a new order for a fish the site cannot find: no clean system is fed, and the list says which fish', array( 1, 'No feeding in the clean tanks today — 2 fish ship and the site doesn\'t know their tank: 2 × Unlogged Clownfish (#1251).' ), array( $room['todo']['total'], $room['todo']['fast']['text'] ) );
+check_same( 'a new order for a fish the site cannot find: no clean system is fed, and the list says which fish', array( 1, 'No feeding in the Clean Room systems today — 2 fish ship and the site doesn\'t know their tank: 2 × Unlogged Clownfish (#1251).' ), array( $room['todo']['total'], $room['todo']['fast']['text'] ) );
+
+$other->set_status( 'cancelled' );
+$snails = fh_shop_order( new WC_Order( 1252, 'processing', array( '_fishotel_shipping_date' => $tomorrow ) ) );
+$snails->add_item( 'Unlogged Snail', 3, new Fh_Shop_Product( 98, 'Unlogged Snail', array( 'inverts' ) ) );
+do_action( 'woocommerce_new_order', 1252 );
+$room = $store->room( $today, $settings, $protocols );
+check_same( 'an order of inverts that are in no tank on the site: nothing changes — Feed everywhere, no notice', array( 3, null ), array( $room['todo']['total'], $room['todo']['fast'] ) );
+check_same( '… the reader marked them', array( true ), array_column( Ship_Lines::today( $today )['lines'], 'loose' ) );
+$snails->set_status( 'cancelled' );
+$other->set_status( 'processing' );
+do_action( 'woocommerce_update_order', 1251 );
 
 $queries = $GLOBALS['fh_shop_queries'];
 $room    = $store->room( $today, array_merge( $settings, array( Feeding::SETTING => false ) ), $protocols );
