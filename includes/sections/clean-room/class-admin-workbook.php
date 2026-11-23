@@ -1131,7 +1131,7 @@ class Admin_Workbook {
 					Box_Shares::release_lines( $store, (array) ( $current['lines'] ?? array() ) ); // Its percents are no longer remembered.
 					Splits::forget( array_column( (array) ( $current['lines'] ?? array() ), 'id' ) );
 					$result = array(
-						'message'  => __( 'Order deleted.', 'fishotel-misc-plugin' ),
+						'message'  => __( 'Fish order deleted.', 'fishotel-misc-plugin' ),
 						'redirect' => Admin::page_url( 'arrivals' ),
 					);
 					break;
@@ -1498,7 +1498,7 @@ class Admin_Workbook {
 		self::cache_landed_totals( $store, $order );
 		Box_Shares::remember( $store, $order, array_values( $before ), $today );
 
-		$message = __( 'Order saved.', 'fishotel-misc-plugin' );
+		$message = __( 'Fish order saved.', 'fishotel-misc-plugin' );
 		if ( $followed > 0 ) {
 			/* translators: %d: stays */
 			$message .= ' ' . sprintf( _n( '%d stay follows its corrected line.', '%d stays follow their corrected lines.', $followed, 'fishotel-misc-plugin' ), $followed );

@@ -206,7 +206,7 @@ $saved    = Admin_Workbook::save_order(
 $order    = $store->order( $saved['order_id'] );
 check( 'the line stores the slug with the label the LIST has (never the posted one)', empty( $saved['error'] ) && '2-3' === $order['lines'][0]['size_slug'] && '2-3"' === $order['lines'][0]['size_label'] );
 check( 'a line without a size has none', null === $order['lines'][1]['size_slug'] && null === $order['lines'][1]['size_label'] );
-check( 'a slug that is not in the list: the order is saved, that line has no size, and the message says so', null === $order['lines'][2]['size_slug'] && 1 === count( $saved['warnings'] ) && false !== strpos( $saved['message'], 'line 3 (Green Test Blenny)' ) && 0 === strpos( $saved['message'], 'Order saved.' ) );
+check( 'a slug that is not in the list: the order is saved, that line has no size, and the message says so', null === $order['lines'][2]['size_slug'] && 1 === count( $saved['warnings'] ) && false !== strpos( $saved['message'], 'line 3 (Green Test Blenny)' ) && 0 === strpos( $saved['message'], 'Fish order saved.' ) );
 $out   = Orders::check_in( $store, $order, $today, $settings, array( 'actor_id' => 1 ) );
 $stays = array_column( $out['created'], 'stay_id' );
 $wrasse = $store->stay( $stays[0], $today, $settings );

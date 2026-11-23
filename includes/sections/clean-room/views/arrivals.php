@@ -64,7 +64,7 @@ $tab = 'arrivals';
 	<?php if ( ! $rows ) : ?>
 		<div class="fishotel-misc-empty"><span class="dashicons dashicons-cart"></span><p><?php esc_html_e( 'No fish orders yet. "New fish order" starts one; the lines take the species, the counts and the prices, and "Check in received fish" turns them into stays.', 'fishotel-misc-plugin' ); ?></p></div>
 	<?php else : ?>
-		<p class="fh-cr-count"><?php echo esc_html( sprintf( /* translators: %d: orders */ __( '%d orders · newest first', 'fishotel-misc-plugin' ), count( $rows ) ) ); ?></p>
+		<p class="fh-cr-count"><?php echo esc_html( sprintf( /* translators: %d: fish orders */ _n( '%d fish order', '%d fish orders · newest first', count( $rows ), 'fishotel-misc-plugin' ), count( $rows ) ) ); ?></p>
 		<div class="fh-cr-grid-wrap">
 			<table class="widefat striped fh-cr-table">
 				<thead>

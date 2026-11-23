@@ -398,7 +398,7 @@ check( 'the header\'s fields travel with either view', array() === array_diff( a
 
 foreach ( array( 'Entry' => $post_entry, 'Numbers' => $post_numbers ) as $name => $posted ) {
 	$result = Admin_Workbook::save_order( $store, fh_request( $posted ), $order_id, $today );
-	check( 'Save from ' . $name . ': saved, nothing refused', empty( $result['error'] ) && 'Order saved.' === $result['message'], json_encode( $result['error'] ?? $result['message'] ) );
+	check( 'Save from ' . $name . ': saved, nothing refused', empty( $result['error'] ) && 'Fish order saved.' === $result['message'], json_encode( $result['error'] ?? $result['message'] ) );
 	$after = fh_stored( $store, $order_id );
 	check( '… every stored line is as it was — every field, the notes with the code, the typed price, the stay', $before['lines'] === $after['lines'], json_encode( array_map( static function ( $a, $b ) { return array_diff_assoc( array_map( 'json_encode', $a ), array_map( 'json_encode', $b ) ); }, $before['lines'], $after['lines'] ) ) );
 	check( '… and so are the order\'s own fields and the split planned on the first line', $before['header'] === $after['header'] && $before['plans'] === $after['plans'], json_encode( array( $before['plans'], $after['plans'] ) ) );

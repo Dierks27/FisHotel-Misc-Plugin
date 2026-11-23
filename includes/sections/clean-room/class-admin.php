@@ -771,7 +771,7 @@ class Admin {
 					'whichTank'      => __( 'Move to which tank number?', 'fishotel-misc-plugin' ),
 					'whyMove'        => __( 'Why? (optional: clear building / bullying / pairing / hospital / other)', 'fishotel-misc-plugin' ),
 					'confirmCheckin' => __( 'Check the received fish in? One stay per line with fish (lines already checked in are skipped). The order becomes "received".', 'fishotel-misc-plugin' ),
-					'confirmDelete'  => __( 'Delete this order and its lines?', 'fishotel-misc-plugin' ),
+					'confirmDelete'  => __( 'Delete this fish order and its lines?', 'fishotel-misc-plugin' ),
 					'confirmSpecies' => __( 'Remove this species from the list?', 'fishotel-misc-plugin' ),
 					'unsavedLines'   => __( 'Save the order first.', 'fishotel-misc-plugin' ),
 					'noRate'         => __( 'No box rate for this supplier and origin (Settings → Box rates), or no box count.', 'fishotel-misc-plugin' ),

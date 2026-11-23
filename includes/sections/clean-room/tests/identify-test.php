@@ -385,11 +385,11 @@ $post = static function ( $store, $order_id, array $changes = array(), array $he
 };
 $events = $store->event_count();
 $saved  = $post( $store, $order_id );
-check( 'a save that changes no fish corrects nothing: no event, no stay touched, the line\'s notes and label kept (the grid has no field for them)', empty( $saved['error'] ) && 0 === $saved['followed'] && 'Order saved.' === $saved['message'] && $events === $store->event_count() && '[part of this line is Green Test Blenny — stay #' . $part . ']' === fh_line( $store, $order_id, 0 )['notes'] && 'Blue Test Tang' === fh_line( $store, $order_id, 0 )['label_name'] );
+check( 'a save that changes no fish corrects nothing: no event, no stay touched, the line\'s notes and label kept (the grid has no field for them)', empty( $saved['error'] ) && 0 === $saved['followed'] && 'Fish order saved.' === $saved['message'] && $events === $store->event_count() && '[part of this line is Green Test Blenny — stay #' . $part . ']' === fh_line( $store, $order_id, 0 )['notes'] && 'Blue Test Tang' === fh_line( $store, $order_id, 0 )['label_name'] );
 $saved = $post( $store, $order_id, array( 0 => array( 'species' => 'Lined Test Wrasse', 'species_id' => '1', 'size_slug' => '1-2' ) ) );
 $line  = fh_line( $store, $order_id, 0 );
 $stay  = $store->stay( $tang, $today, $settings );
-check( 'a line that became a stay, its species and size changed in the grid: one correction — the stay follows, with its event', empty( $saved['error'] ) && 1 === $saved['followed'] && 'Order saved. 1 stay follows its corrected line.' === $saved['message'] && 'Lined Test Wrasse' === $stay['species'] && 21 === $stay['product_id'] && '1-2' === $stay['size_slug'] && 'identified: Powder Test Tang → Lined Test Wrasse · 1-2"' === $store->last_event()['note'] && 'Lined Test Wrasse' === $line['species'] && 1 === $line['species_id'], $saved['message'] );
+check( 'a line that became a stay, its species and size changed in the grid: one correction — the stay follows, with its event', empty( $saved['error'] ) && 1 === $saved['followed'] && 'Fish order saved. 1 stay follows its corrected line.' === $saved['message'] && 'Lined Test Wrasse' === $stay['species'] && 21 === $stay['product_id'] && '1-2' === $stay['size_slug'] && 'identified: Powder Test Tang → Lined Test Wrasse · 1-2"' === $store->last_event()['note'] && 'Lined Test Wrasse' === $line['species'] && 1 === $line['species_id'], $saved['message'] );
 check( '…the label still the first one, the other sister still its own', 'Blue Test Tang' === $line['label_name'] && 'Green Test Blenny' === $store->stay( $part, $today, $settings )['species'] );
 $events = $store->event_count();
 $saved  = $post( $store, $order_id, array( 0 => array( 'size_slug' => '3-4' ) ) );
@@ -700,7 +700,7 @@ check( 'the page that was open is saved: both lines keep the fish they were corr
 check( '…their stays are not touched: the fish, the product link, no second event', 'Lined Test Wrasse' === $store->stay( $a, $today, $settings )['species'] && 21 === $store->stay( $a, $today, $settings )['product_id'] && '2-3' === $store->stay( $a, $today, $settings )['size_slug'] && 'Blue Test Tang' === $store->stay( $b, $today, $settings )['species'] && $events === $store->event_count() && 0 === $saved['followed'] );
 check( '…what the label said, the remembered shares and the mislabel count stand', 'Powder Test Tang' === $two['label_name'] && '?? small wrasse' === $one['label_name'] && $shares == $store->box_shares && 2 === count( $store->box_shares ) && array( 'received_lines' => 2, 'mislabeled' => 1, 'unidentified' => 0 ) === Stats::label_counts( $store->order( $order_id )['lines'] ) );
 check( '…and the rest of the row IS saved (the price that was typed)', 31.0 === (float) $two['unit_price'] );
-check( 'the reply says so and asks for a reload', 2 === $saved['kept'] && true === $saved['reload'] && array() === $saved['warnings'] && 'Order saved. 2 lines were corrected after this page was loaded and keep that fish.' === $saved['message'], $saved['message'] );
+check( 'the reply says so and asks for a reload', 2 === $saved['kept'] && true === $saved['reload'] && array() === $saved['warnings'] && 'Fish order saved. 2 lines were corrected after this page was loaded and keep that fish.' === $saved['message'], $saved['message'] );
 check( 'a kept line stays stale on that page (it still shows the old fish): the reply hands its own token back, not the stored line\'s', array_column( $open, 'seen' ) === $saved['seen'] && array_column( $page( $store, $order_id ), 'seen' ) !== $saved['seen'] && count( $saved['seen'] ) === count( $saved['line_ids'] ) );
 foreach ( $saved['seen'] as $i => $token ) {
 	$open[ $i ]['seen'] = $token; // What the page's JS does with the reply.
@@ -731,7 +731,7 @@ $open = $page( $store, $order_id );
 $phone( $store, $b, array( 'species' => 'Red Test Goby' ) );
 $open[1]['species'] = 'Red Test Goby'; // Typed to the very fish the line is now.
 $saved              = $save( $store, $order_id, $open );
-check( 'a stale row typed to the fish the line already is: nothing to keep, nothing to correct', 0 === $saved['kept'] && 0 === $saved['followed'] && 'Order saved.' === $saved['message'] && 'Red Test Goby' === fh_line( $store, $order_id, 1 )['species'] );
+check( 'a stale row typed to the fish the line already is: nothing to keep, nothing to correct', 0 === $saved['kept'] && 0 === $saved['followed'] && 'Fish order saved.' === $saved['message'] && 'Red Test Goby' === fh_line( $store, $order_id, 1 )['species'] );
 $draft = fh_identify_order( $store, array( array( 'species' => 'Red Test Goby', 'qty_ordered' => 5, 'qty_received' => 5, 'box_pct' => '10' ) ), $today, array( 'ref' => 'T-7' ) );
 $open  = $page( $store, $draft );
 Admin_Workbook::identify_line( $store, $store->order( $draft ), array( 'line_id' => fh_line( $store, $draft, 0 )['id'], 'species' => 'Lined Test Wrasse', 'product_id' => 21 ), $today, $settings, 7 );
