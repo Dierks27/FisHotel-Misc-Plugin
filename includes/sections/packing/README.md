@@ -424,9 +424,12 @@ Never throws; every key is always there; also the filter
   pack, and the boxes only what could be placed.
 - **Same-size boxes** (two of "Long 20") are two entries, in Packing's
   order; Packing cannot know which physical box a tracking number is.
-- **Worked out once per request.** The order's Packing box, this function
-  and `fishotel_packing_bag_for_item()` read one plan
-  (`Order_Packing::plan_of()`); every write of the box drops it.
+- **Worked out once while a page is drawn.** The order's Packing box, this
+  function and `fishotel_packing_bag_for_item()` read one plan
+  (`Order_Packing::plan_of()`); every write of the box drops it. In a
+  request that may write — a posted form, AJAX, REST — this function works
+  its answer out each time, because other code can change the order
+  between two questions (the same goes for the bag count below).
 
 ### ShipTracker's "fish count" becomes the bags to pull
 

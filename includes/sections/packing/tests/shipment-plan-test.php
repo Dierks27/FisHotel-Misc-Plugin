@@ -345,6 +345,17 @@ $fh_confirm( 5001, 'long 20' );
 $plan = fishotel_packing_shipment_plan( 5001 );
 check( 'a write drops it: the next answer is the new one', 'Long 20' === $plan['boxes'][0]['name'] && $worked > 2 );
 $fh_confirm( 5001, 'cube 12' );
+$before                    = $worked;
+$_SERVER['REQUEST_METHOD'] = 'POST';
+fishotel_packing_shipment_plan( 5001 );
+fishotel_packing_shipment_plan( 5001 );
+check( 'a request that may write (a posted form, AJAX, REST) keeps nothing: other code can change the order between two questions, so each answer is worked out', $before + 4 === $worked && false === Order_Packing::reading(), (string) ( $worked - $before ) );
+$_SERVER['REQUEST_METHOD'] = 'GET';
+$before                    = $worked;
+fishotel_packing_shipment_plan( 5001 );
+fishotel_packing_shipment_plan( 5001 );
+check( 'a page being drawn keeps it', $before + 2 === $worked && true === Order_Packing::reading() );
+unset( $_SERVER['REQUEST_METHOD'] );
 fh_reset_hooks();
 
 echo "9. The filter of the contract\n";
@@ -426,7 +437,12 @@ Order_Packing::forget();
 foreach ( array( array( 7001 ), array( 7002 ), array( 7003 ), null ) as $ids ) {
 	FST_Supplies::fish_count( $order, $ids );
 }
-check( 'an order is read once per request however many of its lines are asked about (the Add form asks line by line)', 2 === $read, (string) $read );
+check( 'while a page is drawn an order is read once however many of its lines are asked about (the Add form asks line by line)', 2 === $read, (string) $read );
+$_SERVER['REQUEST_METHOD'] = 'POST';
+FST_Supplies::fish_count( $order, array( 7001 ) );
+FST_Supplies::fish_count( $order, array( 7001 ) );
+check( '— and read again each time in a request that may write', 6 === $read, (string) $read );
+unset( $_SERVER['REQUEST_METHOD'] );
 
 /**
  * An order that fails when it is read.

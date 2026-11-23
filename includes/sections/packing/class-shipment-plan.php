@@ -43,7 +43,9 @@ class Shipment_Plan {
 	/**
 	 * What fish_count() read in this request, by order id: `items` (order
 	 * line id → its whole quantity) and `layers` (order line id → the single
-	 * bags it takes). False for an order with no fish line.
+	 * bags it takes). False for an order with no fish line. Kept only while
+	 * the request reads (Order_Packing::reading()): the order screen asks
+	 * line by line.
 	 *
 	 * @var array<int, array|false>
 	 */
@@ -302,9 +304,10 @@ class Shipment_Plan {
 	}
 
 	/**
-	 * The plan of an order by id — fishotel_packing_shipment_plan(). The
-	 * order's suggestion is the one its Packing box drew in this request
-	 * (Order_Packing::plan_of()), not worked out again.
+	 * The plan of an order by id — fishotel_packing_shipment_plan(). While
+	 * a page is being drawn the order's suggestion is the one its Packing
+	 * box drew in this request (Order_Packing::plan_of()), not worked out
+	 * again; in a request that may write it is worked out each time.
 	 *
 	 * @param int $order_id Order ID.
 	 * @return array
@@ -344,6 +347,9 @@ class Shipment_Plan {
 	 */
 	public static function item_layers( $order ) {
 		$order_id = is_object( $order ) && method_exists( $order, 'get_id' ) ? (int) $order->get_id() : 0;
+		if ( ! Order_Packing::reading() ) {
+			$order_id = 0; // A request that may write: read the order again each time.
+		}
 		if ( $order_id > 0 && isset( self::$counts[ $order_id ] ) ) {
 			return false === self::$counts[ $order_id ] ? null : self::$counts[ $order_id ];
 		}

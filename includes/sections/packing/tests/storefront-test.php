@@ -5,7 +5,9 @@
  * them:
  *
  *   - on a front-end request the section loads nothing but its own file,
- *     hooks nothing and reads no option (no query);
+ *     reads no option (no query) and hooks one thing only: ShipTracker's
+ *     own filter for the fish of a box, which no page a customer opens
+ *     fires;
  *   - in wp-admin it hooks only the product editor, the order screen, its
  *     own page and its admin AJAX — none of the hooks WooCommerce uses to
  *     print variation data, cart / checkout / e-mail / invoice / My

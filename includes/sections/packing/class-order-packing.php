@@ -611,7 +611,7 @@ class Order_Packing {
 			}
 		}
 
-		$result = self::plan_of( $owner );
+		$result = self::plan_of( $owner, true );
 
 		$counts = array();
 		$moved  = false;
@@ -680,17 +680,41 @@ class Order_Packing {
 	}
 
 	/**
+	 * Whether this request only reads — a page being drawn. What was worked
+	 * out for an order is then good for the whole request. A request that
+	 * may write (a posted form, AJAX, REST) is another matter: other code
+	 * can change the order between two questions — mark a line shipped,
+	 * record a box — and nothing here hears of it.
+	 *
+	 * @return bool
+	 */
+	public static function reading() {
+		if ( function_exists( 'wp_doing_ajax' ) && wp_doing_ajax() ) {
+			return false;
+		}
+		if ( defined( 'REST_REQUEST' ) && REST_REQUEST ) {
+			return false;
+		}
+		$method = isset( $_SERVER['REQUEST_METHOD'] ) && is_string( $_SERVER['REQUEST_METHOD'] ) ? strtoupper( $_SERVER['REQUEST_METHOD'] ) : 'GET';
+
+		return 'GET' === $method || 'HEAD' === $method;
+	}
+
+	/**
 	 * The suggestion of an order, worked out once per request: the order's
 	 * Packing box, fishotel_packing_bag_for_item() and
 	 * fishotel_packing_shipment_plan() all read this one. Every write of
 	 * this class drops it (forget()).
 	 *
-	 * @param object $order WC_Order.
+	 * @param object $order  WC_Order.
+	 * @param bool   $always Keep it whatever the request (the pick list asks line by line). Otherwise it
+	 *                       is kept only while the request reads (reading()) and worked out again in one
+	 *                       that may write.
 	 * @return array for_order().
 	 */
-	public static function plan_of( $order ) {
+	public static function plan_of( $order, $always = false ) {
 		$order_id = is_object( $order ) && method_exists( $order, 'get_id' ) ? (int) $order->get_id() : 0;
-		if ( $order_id < 1 ) {
+		if ( $order_id < 1 || ( ! $always && ! self::reading() ) ) {
 			return self::for_order( $order );
 		}
 		if ( ! isset( self::$plans[ $order_id ] ) ) {

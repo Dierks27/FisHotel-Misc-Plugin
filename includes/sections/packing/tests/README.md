@@ -239,7 +239,8 @@ helper files exit cleanly when they are run directly (the CI runs every
   hand); a combined box asked by its own id (the source orders' ids and
   line ids) and an order folded into one (no box, the owner named, its
   own lines); what is left to pack and a fish with no bag size; two fish
-  to a bag; the plan worked out once per request and dropped by a write;
+  to a bag; the plan worked out once while a page is drawn, dropped by a
+  write, and worked out each time in a request that may write;
   the contract's filter (nonsense and a throwing filter ignored);
   ShipTracker's `fst_box_fish_count` answered with the bags to pull —
   hooked outside wp-admin too, lines given, the whole order, dry goods 0,
@@ -247,7 +248,8 @@ helper files exit cleanly when they are run directly (the CI runs every
   a shipped and a refunded line counted whole, an Invoice kept as one
   line, a credit, an order with no plan left as ShipTracker counted it, a
   combined box through its sources, an order read once however many lines
-  are asked about, never an exception (an order that fails, something
+  are asked about (again each time in a request that may write), never an
+  exception (an order that fails, something
   that is not an order, other code failing underneath), the section off;
   the pure halves; nothing written.
 - **packing-admin.test.js** — the script's pure helpers: the tiny
@@ -262,7 +264,7 @@ helper files exit cleanly when they are run directly (the CI runs every
   while no choice is stored and the box was not touched, and a box the
   owner clicked being marked on the form as a choice.
 
-904 checks in the fourteen PHP files and 49 in the node test. Since 0.46.15
+907 checks in the fourteen PHP files and 49 in the node test. Since 0.46.15
 the storefront test expects one hook outside wp-admin (ShipTracker's own
 filter for the fish of a box, which no storefront page fires) and the
 settings test five saves. Since 0.46.5
