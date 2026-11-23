@@ -358,7 +358,7 @@ $store->update( $id, array( 'line_id' => 5, 'cr_order_id' => 2, 'state' => 'on_o
 
 check( 'the person cancels their own request', $service->cancel( $id, Service::customer( 7 ), '', true )['ok'] );
 $r = $store->get( $id );
-check_same( 'cancelled, and off its supplier order', array( 'cancelled', null, null ), array( $r['state'], $r['line_id'], $r['cr_order_id'] ) );
+check_same( 'cancelled, and off its fish order', array( 'cancelled', null, null ), array( $r['state'], $r['line_id'], $r['cr_order_id'] ) );
 check_contains( 'the log says who', 'by the person who asked', implode( ' | ', $store->notes( $id ) ) );
 check( 'a closed request cannot be cancelled again', ! $service->cancel( $id, Service::customer( 7 ), '', true )['ok'] );
 

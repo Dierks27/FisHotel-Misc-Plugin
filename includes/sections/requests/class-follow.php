@@ -2,7 +2,7 @@
 /**
  * Requests follow — the state of a request follows the fish by itself.
  *
- *   waiting       → on_order       a supplier order that is a draft or ordered
+ *   waiting       → on_order       a fish order that is a draft or ordered
  *                                  has a line of that fish (and size, when both
  *                                  have one): the oldest request first, never
  *                                  more fish than the line orders
@@ -18,7 +18,7 @@
  * for (the oldest requests keep their place; a request the owner matched by
  * hand goes first; a request that was already told is never taken back).
  *
- * plan() is PURE: requests + a snapshot of the supplier orders in, a list
+ * plan() is PURE: requests + a snapshot of the fish orders in, a list
  * of steps out. run() reads the snapshot through the Clean Room adapter
  * and applies the steps through the Service, which logs each one.
  *
@@ -35,7 +35,7 @@ defined( 'ABSPATH' ) || exit;
 class Follow {
 
 	/**
-	 * The supplier order statuses a waiting request may be matched to.
+	 * The fish order statuses a waiting request may be matched to.
 	 *
 	 * @var string[]
 	 */
@@ -46,7 +46,7 @@ class Follow {
 	/* ============================================================== */
 
 	/**
-	 * Whether a request and a supplier order line name the same fish: the
+	 * Whether a request and a fish order line name the same fish: the
 	 * species-list id when both have one, else the product, else the name
 	 * (compared without case) — and the size, when both have one. A line
 	 * whose fish still has to be identified never matches.
@@ -177,7 +177,7 @@ class Follow {
 	 * @param array[] $requests The requests in Rules::FOLLOW_STATES (id, state, fish, species_id,
 	 *                          product_id, size_slug, qty, line_id, stay_id, link_manual, auto_match,
 	 *                          created_at).
-	 * @param array[] $orders   The supplier orders that matter: every draft and ordered one, and the
+	 * @param array[] $orders   The fish orders that matter: every draft and ordered one, and the
 	 *                          order of every line a request is matched to — id, ref, status, date,
 	 *                          lines[] (id, species_id, species, species_product_id, size_slug,
 	 *                          qty_ordered, needs_id, stay_id, stays[] (id, qty_live, sale_ready, open,
@@ -245,13 +245,13 @@ class Follow {
 			}
 			if ( ! isset( $lines[ $line_id ] ) ) {
 				if ( 'offered' !== $request['state'] ) {
-					$why[ $id ] = __( 'Its supplier order line no longer exists — back to waiting.', 'fishotel-misc-plugin' );
+					$why[ $id ] = __( 'Its line on the fish order (Clean Room → Fish orders) no longer exists — back to waiting.', 'fishotel-misc-plugin' );
 				}
 				continue;
 			}
 			if ( 'missed' === self::phase( $order_of[ $line_id ], $lines[ $line_id ] ) && 'offered' !== $request['state'] ) {
 				/* translators: %s: order ref */
-				$why[ $id ] = sprintf( __( 'Supplier order %s arrived without this fish — back to waiting.', 'fishotel-misc-plugin' ), (string) ( $order_of[ $line_id ]['ref'] ?? '' ) );
+				$why[ $id ] = sprintf( __( 'Fish order %s arrived without this fish — back to waiting.', 'fishotel-misc-plugin' ), (string) ( $order_of[ $line_id ]['ref'] ?? '' ) );
 				continue;
 			}
 			if ( 'offered' !== $request['state'] && empty( $request['link_manual'] ) && ! self::same_fish( $request, $lines[ $line_id ] ) ) {
@@ -266,7 +266,7 @@ class Follow {
 				}
 				$why[ $id ] = sprintf(
 					/* translators: 1: order ref, 2: the fish (and size) now on the line */
-					__( 'Its line on supplier order %1$s now reads "%2$s" — not the fish or size that was asked for; back to waiting. (Match it by hand if it will do.)', 'fishotel-misc-plugin' ),
+					__( 'Its line on fish order %1$s now reads "%2$s" — not the fish or size that was asked for; back to waiting. (Match it by hand if it will do.)', 'fishotel-misc-plugin' ),
 					(string) ( $order_of[ $line_id ]['ref'] ?? '' ),
 					$reads
 				);
@@ -310,7 +310,7 @@ class Follow {
 				$why[ $id ] = 'tank' === $phase
 					? __( 'Fewer fish are alive in that tank group than were asked for — back to waiting (the oldest requests keep their place).', 'fishotel-misc-plugin' )
 					/* translators: %s: order ref */
-					: sprintf( __( 'Supplier order %s has fewer fish on that line than requests — back to waiting (the oldest requests keep their place).', 'fishotel-misc-plugin' ), (string) ( $order['ref'] ?? '' ) );
+					: sprintf( __( 'Fish order %s has fewer fish on that line than requests — back to waiting (the oldest requests keep their place).', 'fishotel-misc-plugin' ), (string) ( $order['ref'] ?? '' ) );
 			}
 		}
 
@@ -375,7 +375,7 @@ class Follow {
 						'order_id'   => null,
 						'stay_id'    => null,
 						'product_id' => null,
-						'why'        => isset( $why[ $id ] ) ? $why[ $id ] : __( 'No supplier order carries it any more — back to waiting.', 'fishotel-misc-plugin' ),
+						'why'        => isset( $why[ $id ] ) ? $why[ $id ] : __( 'No fish order from a supplier carries it any more — back to waiting.', 'fishotel-misc-plugin' ),
 					);
 				}
 				continue;
@@ -405,9 +405,9 @@ class Follow {
 				);
 				$said = isset( $matched[ $id ] )
 					/* translators: 1: order ref, 2: species on the line, 3: fish ordered */
-					? sprintf( __( 'Supplier order %1$s carries it (%2$s, %3$d ordered) — matched by itself.', 'fishotel-misc-plugin' ), $ref, (string) ( $line['species'] ?? '' ), (int) $line['qty_ordered'] )
+					? sprintf( __( 'Fish order %1$s carries it (%2$s, %3$d ordered) — matched by itself.', 'fishotel-misc-plugin' ), $ref, (string) ( $line['species'] ?? '' ), (int) $line['qty_ordered'] )
 					/* translators: %s: order ref */
-					: sprintf( __( 'Its line on supplier order %s is not in a tank (any more) — on order.', 'fishotel-misc-plugin' ), $ref );
+					: sprintf( __( 'Its line on fish order %s is not in a tank (any more) — on order.', 'fishotel-misc-plugin' ), $ref );
 			} else {
 				$taken   = isset( $ready_used[ $line_id ] ) ? $ready_used[ $line_id ] : 0;
 				$on_sale = $taken + $qty <= self::live( $line, true );
@@ -426,7 +426,7 @@ class Follow {
 					$said = 'ready' === $request['state']
 						? __( 'Its tank group is not on sale (any more) — back in quarantine.', 'fishotel-misc-plugin' )
 						/* translators: %s: order ref */
-						: sprintf( __( 'Checked in from supplier order %s — in quarantine.', 'fishotel-misc-plugin' ), $ref );
+						: sprintf( __( 'Checked in from fish order %s — in quarantine.', 'fishotel-misc-plugin' ), $ref );
 				}
 			}
 
@@ -458,7 +458,7 @@ class Follow {
 	/* ============================================================== */
 
 	/**
-	 * Follow the fish once: read the supplier orders, plan, apply.
+	 * Follow the fish once: read the fish orders, plan, apply.
 	 *
 	 * @param Service     $service   The service.
 	 * @param object|null $cleanroom The Clean Room adapter (snapshot()), or null when it is off.
@@ -482,7 +482,7 @@ class Follow {
 			$requests = $service->store->find( array( 'state' => Rules::FOLLOW_STATES ) );
 			$orders   = $cleanroom->snapshot( $requests );
 			if ( ! is_array( $orders ) ) {
-				// The supplier orders could not be read: change nothing rather than send everyone back.
+				// The fish orders could not be read: change nothing rather than send everyone back.
 				return $out;
 			}
 			$out['available'] = true;

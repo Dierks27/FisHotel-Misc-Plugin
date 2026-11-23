@@ -155,7 +155,7 @@ down a temporary tank — all of them acts of `fishotel_cleanroom_act`.
 What stays wp-admin only: the Board's own writes (`fishotel_cleanroom_temp`
 — the same acts, from the To do tab — and `fishotel_cleanroom_existing`,
 the Stays tab's "Add fish already here"), Settings (the medications list,
-the layout, the treatment schedules, sizes, box rates), Stays, Arrivals
+the layout, the treatment schedules, sizes, box rates), Stays, Fish orders
 and Species. `tests/front-desk-seam-test.php` reads both lists from the
 Clean Room's source, so a new action there has to be sorted before it
 ships.

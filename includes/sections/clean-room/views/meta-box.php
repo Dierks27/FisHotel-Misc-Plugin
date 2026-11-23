@@ -5,9 +5,9 @@
  * product (saved with the product's Update button — Admin::save_meta_box()),
  * the closed stays, and a link to the board.
  *
- * Each open stay shows its supplier order (linked), tank, check-in, live
+ * Each open stay shows its fish order (linked), tank, check-in, live
  * count and size (when it has one), and a date picker holding its effective sale date —
- * labelled "from the batch" (the supplier order's "Goes on sale") or
+ * labelled "from the batch" (the fish order's "Goes on sale") or
  * "own date" — with "Use the batch date" to drop its own date. The
  * hidden "shown" value is what the picker showed, so an untouched picker
  * (say, showing the batch's date) writes nothing.
@@ -61,7 +61,7 @@ foreach ( $stays as $fh_stay ) {
 					/* translators: 1: date, 2: tank path */
 					echo esc_html( sprintf( __( 'Next on sale %1$s (%2$s).', 'fishotel-misc-plugin' ), $facts['next']['sale_ready_date'], $facts['next']['tank'] ) );
 				} else {
-					esc_html_e( 'No sale date set yet: set the batch\'s on its supplier order (Clean Room → Supplier orders), or a group\'s own date below.', 'fishotel-misc-plugin' );
+					esc_html_e( 'No sale date set yet: set the batch\'s on its fish order (Clean Room → Fish orders), or a group\'s own date below.', 'fishotel-misc-plugin' );
 				}
 				?>
 			</p>
@@ -86,7 +86,7 @@ foreach ( $stays as $fh_stay ) {
 							<?php if ( ! empty( $fh_stay['batch_order_id'] ) ) : ?>
 								<a href="<?php echo esc_url( Admin_Workbook::order_url( (int) $fh_stay['batch_order_id'] ) ); ?>"><?php echo esc_html( (string) $fh_stay['batch_order_ref'] ); ?></a>
 							<?php else : ?>
-								<span class="fh-cr-metabox__muted"><?php esc_html_e( 'no supplier order', 'fishotel-misc-plugin' ); ?></span>
+								<span class="fh-cr-metabox__muted"><?php esc_html_e( 'not from a fish order', 'fishotel-misc-plugin' ); ?></span>
 							<?php endif; ?>
 							<?php if ( $fh_stay['tank_number'] ) : ?>
 								· <a href="<?php echo esc_url( Clean_Room::front_desk_url( (int) $fh_stay['tank_number'] ) ); ?>" target="_blank" rel="noopener"><?php echo esc_html( sprintf( /* translators: %d: tank number */ __( 'Tank %d', 'fishotel-misc-plugin' ), (int) $fh_stay['tank_number'] ) ); ?></a>

@@ -1,7 +1,7 @@
 <?php
 /**
  * Clean Room admin — the Room Board page under FisHotel Tools (Board /
- * Stays / Events / Settings; the Arrivals / Species / Stats tabs are
+ * Stays / Events / Settings; the Fish orders / Species / Stats tabs are
  * handed to Admin_Workbook, the To do tab, the Board's Temporary area and
  * the temporary tanks' history to Admin_Temp), the stays CSV, the
  * printable QR labels (a temporary slot prints "TEMP 1" and its number), the
@@ -22,7 +22,7 @@
  * "??") is counted on the Board ("need identifying", linked to the Stays
  * tab filtered to them) and marked on the Stays tab, where "Identify…" /
  * "Correct fish…" (identify_stay()) names the real fish and its size: the
- * stay, its supplier order line and the remembered box share follow in
+ * stay, its fish order line and the remembered box share follow in
  * one go (Identify). Changing the species or the size in the Stays tab's
  * Edit is the same correction.
  *
@@ -568,8 +568,8 @@ class Admin {
 			$lines[] = sprintf( __( 'Clean room: %1$s is not a date from %2$s to %3$s — ignored, that group keeps its sale date.', 'fishotel-misc-plugin' ), $label, Replay::SALE_DATE_MIN, Replay::sale_date_max( $today ) );
 		}
 		foreach ( $result['follows_batch'] as $row ) {
-			/* translators: 1: the group, 2: the batch's sale date, 3: supplier order ref */
-			$lines[] = sprintf( __( 'Clean room: %1$s follows the batch date (%2$s) — change or clear it on supplier order %3$s.', 'fishotel-misc-plugin' ), $row['label'], $row['date'], $row['ref'] );
+			/* translators: 1: the group, 2: the batch's sale date, 3: fish order ref */
+			$lines[] = sprintf( __( 'Clean room: %1$s follows the batch date (%2$s) — change or clear it on fish order %3$s (Clean Room → Fish orders).', 'fishotel-misc-plugin' ), $row['label'], $row['date'], $row['ref'] );
 		}
 		foreach ( $result['failed'] as $label ) {
 			/* translators: %s: the group */
@@ -589,7 +589,7 @@ class Admin {
 	 * to what the box showed → untouched (so the batch's date shown in the
 	 * picker is never copied into an own date); else empty → no own date
 	 * (a group that has none and shows its batch's date is reported in
-	 * follows_batch: that date lives on the supplier order); else a real
+	 * follows_batch: that date lives on the fish order); else a real
 	 * Y-m-d from Replay::SALE_DATE_MIN to two years after today → that own
 	 * date; anything else is reported and ignored. Only a stay whose own
 	 * date really changes gets an event — the same "sale_ready:" note
@@ -771,7 +771,7 @@ class Admin {
 					'whichTank'      => __( 'Move to which tank number?', 'fishotel-misc-plugin' ),
 					'whyMove'        => __( 'Why? (optional: clear building / bullying / pairing / hospital / other)', 'fishotel-misc-plugin' ),
 					'confirmCheckin' => __( 'Check the received fish in? One stay per line with fish (lines already checked in are skipped). The order becomes "received".', 'fishotel-misc-plugin' ),
-					'confirmDelete'  => __( 'Delete this order and its lines?', 'fishotel-misc-plugin' ),
+					'confirmDelete'  => __( 'Delete this fish order and its lines?', 'fishotel-misc-plugin' ),
 					'confirmSpecies' => __( 'Remove this species from the list?', 'fishotel-misc-plugin' ),
 					'unsavedLines'   => __( 'Save the order first.', 'fishotel-misc-plugin' ),
 					'noRate'         => __( 'No box rate for this supplier and origin (Settings → Box rates), or no box count.', 'fishotel-misc-plugin' ),
@@ -1261,7 +1261,7 @@ class Admin {
 	 * The Stays tab's "Identify…" / "Correct fish…" — the testable half of
 	 * ajax_stay()'s "identify": the real fish (a product, a species-list
 	 * fish, a typed name, or still unknown with a description) and its
-	 * size, read by Identify::fish_from(); the stay and its supplier order
+	 * size, read by Identify::fish_from(); the stay and its fish order
 	 * line are corrected together (Identify::stay()). Nothing is written
 	 * when the fish or the size is refused.
 	 *
@@ -1335,7 +1335,7 @@ class Admin {
 			wp_send_json_error( array( 'message' => __( 'This stay is not linked to a product.', 'fishotel-misc-plugin' ) ), 400 );
 		}
 		if ( ! Replay::is_date( $stay['sale_ready_date'] ?? null ) ) {
-			wp_send_json_error( array( 'message' => __( 'This stay has no sale date yet — set one on its supplier order (Clean Room → Supplier orders) or on the product page.', 'fishotel-misc-plugin' ) ), 400 );
+			wp_send_json_error( array( 'message' => __( 'This stay has no sale date yet — set one on its fish order (Clean Room → Fish orders) or on the product page.', 'fishotel-misc-plugin' ) ), 400 );
 		}
 
 		$product_id = (int) $stay['product_id'];
@@ -1619,7 +1619,7 @@ class Admin {
 		if ( empty( $row['needs_id'] ) ) {
 			return '';
 		}
-		return '<span class="fh-cr-warn fh-cr-unknown" title="' . esc_attr__( 'Nobody knows yet what this fish is. Name it with Identify… — its order line and the remembered box share follow.', 'fishotel-misc-plugin' ) . '">' . esc_html__( 'needs identifying', 'fishotel-misc-plugin' ) . '</span>';
+		return '<span class="fh-cr-warn fh-cr-unknown" title="' . esc_attr__( 'Nobody knows yet what this fish is. Name it with Identify… — its fish order line and the remembered box share follow.', 'fishotel-misc-plugin' ) . '">' . esc_html__( 'needs identifying', 'fishotel-misc-plugin' ) . '</span>';
 	}
 
 	/**

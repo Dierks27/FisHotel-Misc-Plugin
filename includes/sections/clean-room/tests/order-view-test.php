@@ -1,6 +1,6 @@
 <?php
 /**
- * The supplier order screen (views/order.php).
+ * The fish order screen (views/order.php).
  *
  * Read as text: the "Goes on sale" card sits under the order's own
  * title, inside the order form, while its date and buttons still post to
@@ -352,7 +352,7 @@ $kpi = static function ( $key ) use ( $numbers ) {
 	return trim( $numbers->query( '//div[@id="fh-cr-numbers-panel"]//*[@data-t="' . $key . '"]' )->item( 0 )->textContent );
 };
 $figures = Admin_Workbook::figures( Admin_Workbook::resolve_order( $store, $store->order( $order_id ) ) );
-check( '… with the order\'s own figures', $figures['order']['grand_total'] === $kpi( 'grand_total' ) && $figures['order']['up_down'] === $kpi( 'up_down' ) && $figures['order']['revenue'] === $kpi( 'revenue' ) && $figures['order']['fill_rate'] === $kpi( 'fill_rate' ) && $figures['order']['survival_rate'] === $kpi( 'survival_rate' ) && $figures['order']['doa_cost_sheet'] === $kpi( 'doa_cost_sheet' ) && $figures['order']['credit'] === $kpi( 'credit' ) && '10.00' === $kpi( 'credit' ) );
+check( '… with the order\'s own figures', $figures['order']['grand_total'] === $kpi( 'grand_total' ) && $figures['order']['up_down'] === $kpi( 'up_down' ) && $figures['order']['revenue'] === $kpi( 'revenue' ) && $figures['order']['fill_rate'] === $kpi( 'fill_rate' ) && $figures['order']['survival_rate'] === $kpi( 'survival_rate' ) && $figures['order']['doa_cost_per_fish'] === $kpi( 'doa_cost_per_fish' ) && 0 === $numbers->query( '//div[@id="fh-cr-numbers-panel"]//*[@data-t="doa_cost_sheet"]' )->length && $figures['order']['credit'] === $kpi( 'credit' ) && '10.00' === $kpi( 'credit' ) );
 check( 'the panel says how many lines have no shop price (the unknown fish and the damsel)', '2 lines have no shop price yet: they are left out of the revenue and of "up or down".' === $kpi( 'no_price' ) && ! $numbers->query( '//div[@id="fh-cr-numbers-panel"]//*[@data-t="no_price"]' )->item( 0 )->hasAttribute( 'hidden' ) );
 check( 'the worth-it rule in plain words, from the order\'s own threshold', 'Worth it when the shop price is more than 3.75× what the fish cost landed.' === $kpi( 'worth_rule' ) && 'Worth it when the shop price is more than 3.75× what the fish cost landed.' === $numbers->query( '//table[@id="fh-cr-lines"]/thead/tr/th[@data-rule="worth_rule"]' )->item( 0 )->getAttribute( 'title' ) );
 $shop = static function ( $n, $what ) use ( $numbers ) {
@@ -398,7 +398,7 @@ check( 'the header\'s fields travel with either view', array() === array_diff( a
 
 foreach ( array( 'Entry' => $post_entry, 'Numbers' => $post_numbers ) as $name => $posted ) {
 	$result = Admin_Workbook::save_order( $store, fh_request( $posted ), $order_id, $today );
-	check( 'Save from ' . $name . ': saved, nothing refused', empty( $result['error'] ) && 'Order saved.' === $result['message'], json_encode( $result['error'] ?? $result['message'] ) );
+	check( 'Save from ' . $name . ': saved, nothing refused', empty( $result['error'] ) && 'Fish order saved.' === $result['message'], json_encode( $result['error'] ?? $result['message'] ) );
 	$after = fh_stored( $store, $order_id );
 	check( '… every stored line is as it was — every field, the notes with the code, the typed price, the stay', $before['lines'] === $after['lines'], json_encode( array_map( static function ( $a, $b ) { return array_diff_assoc( array_map( 'json_encode', $a ), array_map( 'json_encode', $b ) ); }, $before['lines'], $after['lines'] ) ) );
 	check( '… and so are the order\'s own fields and the split planned on the first line', $before['header'] === $after['header'] && $before['plans'] === $after['plans'], json_encode( array( $before['plans'], $after['plans'] ) ) );

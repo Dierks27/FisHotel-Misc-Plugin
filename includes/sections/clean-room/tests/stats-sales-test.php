@@ -85,7 +85,7 @@ check( 'an empty saved list is no list: the suggestion applies', array( 'process
 delete_option( Stats_Sales::OPTION );
 $statuses = Stats_Sales::statuses();
 
-echo "2. The store: species, products, supplier orders, and WooCommerce's order tables\n";
+echo "2. The store: species, products, fish orders, and WooCommerce's order tables\n";
 $store = new Fake_Store(
 	array(
 		12 => 'Test Wrasse, Blue',       // linked to the wrasse: the shop's title differs from the species name
@@ -119,7 +119,7 @@ $store->product_prices = array(
 	),
 );
 
-// Supplier orders, no fees: landed = received × price.
+// Fish orders, no fees: landed = received × price.
 $save = static function ( array $header, array $lines ) use ( $store ) {
 	$id = $store->save_order( Orders::normalize_order( $header ) );
 	$store->save_order_lines( $id, Orders::normalize_lines( $lines ) );
@@ -432,13 +432,13 @@ check( 'a species id that is not in the list is not believed: the line falls bac
 	return $l;
 } )(), array( 10 => Stats_Sales::invoice_parts( array( array( 'id' => 0, 'product_id' => 50, 'lines' => array( array( 'kind' => 'fish', 'name' => 'Blue Test Wrasse', 'qty' => 1, 'unit_price' => 30.0, 'amount' => 30.0, 'species_id' => 99999 ) ) ) ) ) ) ), $ctx ), 99999 ) );
 
-echo "10. The view: sales beside the supplier orders of the year\n";
+echo "10. The view: sales beside the fish orders of the year\n";
 $data = Admin_Stats::sales_data( $store, array( 'year' => 2026 ) );
 $by   = array();
 foreach ( $data['rows'] as $row ) {
 	$by[ $row['name'] ] = $row;
 }
-check( 'available; 2026 shown; the years offered are those with sales or supplier orders; the statuses and their labels', true === $data['available'] && 2026 === $data['filters']['year'] && array( 2026, 2025 ) === $data['years'] && $statuses === $data['statuses'] && array( 'Processing', 'Completed', 'Shipped' ) === $data['labels'] && true === $data['invoices'] );
+check( 'available; 2026 shown; the years offered are those with sales or fish orders; the statuses and their labels', true === $data['available'] && 2026 === $data['filters']['year'] && array( 2026, 2025 ) === $data['years'] && $statuses === $data['statuses'] && array( 'Processing', 'Completed', 'Shipped' ) === $data['labels'] && true === $data['invoices'] );
 check( 'one row per fish that sold or landed in the year, most actual revenue first', array( 'Blue Test Wrasse', 'Green Test Blenny', 'Red Test Goby', 'Yellow Test Tang', 'Orange Test Clown' ) === array_column( $data['rows'], 'name' ) && 5 === $data['all'] );
 $r = $by['Blue Test Wrasse'];
 check( 'the wrasse — ACTUAL: 8 units, 333.00, 41.63 a fish on average; list price 45.00 (its product)', true === $r['sold'] && 8 === $r['units'] && near( $r['revenue'], 333 ) && near( $r['avg_paid'], 41.625 ) && near( $r['list_price'], 45 ) && 'product' === $r['price_source'] );
@@ -588,7 +588,7 @@ $store->wc_tables = false;
 delete_transient( Stats_Sales::TRANSIENT );
 $off = Admin_Stats::sales_data( $store, array( 'year' => 2026 ) );
 check( 'the view says the sales are not available, shows no sale — and still the landed costs and the estimates', false === $off['available'] && 0 === $off['totals']['units'] && near( $off['totals']['est_revenue'], 450 ) && 0 === $off['ledger']['rows'] && false === get_transient( Stats_Sales::TRANSIENT ) && array( 'Blue Test Wrasse', 'Orange Test Clown', 'Green Test Blenny' ) === array_column( $off['rows'], 'name' ) && true === $off['match']['totals']['balanced'] );
-check( 'the years offered are then the supplier orders\'', array( 2026, 2025 ) === $off['years'] );
+check( 'the years offered are then the fish orders\'', array( 2026, 2025 ) === $off['years'] );
 $store->wc_tables = true;
 
 echo "15. The export sheets\n";

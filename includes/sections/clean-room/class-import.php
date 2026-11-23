@@ -4,8 +4,8 @@
  * the Store: species upserted by lower-cased name (enriched from the stock
  * list), box rates merged into the option, orders created by ref with
  * their lines (the landed totals cached through the Costing), the recent
- * batches checked in as stays through the same path as the Arrivals
- * button, and the treatment logs as dose / copper / note logs on the Spa
+ * batches checked in as stays through the same path as the check-in
+ * button of a fish order, and the treatment logs as dose / copper / note logs on the Spa
  * building the sheet's "Tanks" column names.
  *
  * Pure apart from the store it is handed (the real Store or the tests'
@@ -14,7 +14,7 @@
  *
  * Sale dates: the workbook carries none, so an imported order has no
  * "Goes on sale" date and the groups checked in from it are not for sale
- * until one is chosen on the order (Arrivals) or per group on the product
+ * until one is chosen on the order (Fish orders) or per group on the product
  * page; the preview and the result count those groups and name the
  * orders. Nothing is ever computed for them.
  *
@@ -302,12 +302,12 @@ class Import {
 			$recent   = $days > 0 && self::within_days( (string) ( $order['received_date'] ?? '' ), $today, $days );
 			$existing = $store->order_by_ref( $ref );
 			if ( $existing && ! self::is_workbook_order( $existing, $order ) ) {
-				// Another order — made by hand under Arrivals, where the form offers
+				// Another order — made by hand under Fish orders, where the form offers
 				// the next free "2026-N" — holds this ref. It is not this batch:
 				// leave it alone (no check-in, no logs) and say what to do.
 				$result['orders']['skipped']++;
 				$result['errors'][] = sprintf(
-					'Batch %1$s of the workbook was NOT imported: the site already has a different order with that ref (%2$s). Give that order another Ref (Supplier orders → the order → Ref → Save), then import the same file again.',
+					'Batch %1$s of the workbook was NOT imported: the site already has a different order with that ref (%2$s). Give that order another Ref (Fish orders → the order → Ref → Save), then import the same file again.',
 					$ref,
 					self::describe_order( $existing )
 				);

@@ -1,11 +1,11 @@
 <?php
 /**
  * Clean Room identify — unknown and mislabeled fish, and the ONE
- * correction that puts a stay and its supplier order line right together.
+ * correction that puts a stay and its fish order line right together.
  *
  * Fish come in mislabeled, or with no usable label at all. So:
  *
- *   unknown   a supplier order line and a stay can be flagged needs_id
+ *   unknown   a fish order line and a stay can be flagged needs_id
  *             ("needs identifying"). Its name is then "??" followed by an
  *             optional description — "?? small wrasse" (unknown_name()) —
  *             so every screen, toast and export that prints a species
@@ -773,9 +773,9 @@ class Identify {
 				$parts[] = sprintf( _n( '%d stay follows', '%d stays follow', $stays, 'fishotel-misc-plugin' ), $stays );
 			}
 		} elseif ( 'followed' === $out['line'] ) {
-			$parts[] = __( 'the order line follows', 'fishotel-misc-plugin' );
+			$parts[] = __( 'the fish order line follows', 'fishotel-misc-plugin' );
 		} elseif ( 'part' === $out['line'] ) {
-			$parts[] = __( 'its order line keeps its name: the group was split and another stay of that line is a different fish — correct that one too, or the whole line on its order', 'fishotel-misc-plugin' );
+			$parts[] = __( 'its fish order line keeps its name: the group was split and another stay of that line is a different fish — correct that one too, or the whole line on its fish order', 'fishotel-misc-plugin' );
 		}
 		if ( null !== $out['label'] ) {
 			/* translators: %s: what the supplier's label called the fish */

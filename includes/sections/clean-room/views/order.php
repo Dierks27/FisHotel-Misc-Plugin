@@ -46,7 +46,7 @@
  * @var array   $batch         Admin_Workbook::batch_sale_panel() (empty for a new order).
  * @var array   $view          Admin_Workbook::order_view(): view (entry|numbers), stage, more.
  * @var array   $split         Admin_Workbook::split_panel(): tanks, fields, offers.
- * @var string  $list_url      The Arrivals list URL.
+ * @var string  $list_url      The Fish orders list URL.
  * @var string  $flash         One-time notice.
  * @var string  $today         Site date.
  * @var bool    $tables_ok     Whether the tables exist.
@@ -244,9 +244,9 @@ $fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks,
 		<input type="hidden" name="order_id" value="<?php echo esc_attr( (int) $order['id'] ); ?>">
 
 		<div class="fh-cr-toolbar fh-cr-toolbar--order">
-			<a class="button" href="<?php echo esc_url( $list_url ); ?>">&larr; <?php esc_html_e( 'Orders', 'fishotel-misc-plugin' ); ?></a>
+			<a class="button" href="<?php echo esc_url( $list_url ); ?>">&larr; <?php esc_html_e( 'Fish orders', 'fishotel-misc-plugin' ); ?></a>
 			<h2 class="fh-cr-order__title">
-				<?php echo $is_new ? esc_html__( 'New order', 'fishotel-misc-plugin' ) : esc_html( sprintf( /* translators: %s: order ref */ __( 'Order %s', 'fishotel-misc-plugin' ), $order['ref'] ) ); ?>
+				<?php echo $is_new ? esc_html__( 'New fish order', 'fishotel-misc-plugin' ) : esc_html( sprintf( /* translators: %s: fish order ref */ __( 'Fish order %s', 'fishotel-misc-plugin' ), $order['ref'] ) ); ?>
 				<span class="fh-cr-badge fh-cr-badge--order-<?php echo esc_attr( $order['status'] ); ?> fh-cr-order__status"><?php echo esc_html( $order['status'] ); ?></span>
 				<?php if ( $fh_unknown > 0 ) : ?>
 					<span class="fh-cr-warn fh-cr-unknown"><?php echo esc_html( sprintf( /* translators: %d: order lines */ __( '?? %d to identify', 'fishotel-misc-plugin' ), $fh_unknown ) ); ?></span>
@@ -391,7 +391,7 @@ $fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks,
 				<div class="fh-cr-kpi"><span class="fh-cr-kpi__label"><?php esc_html_e( 'Fill rate', 'fishotel-misc-plugin' ); ?></span><span class="fh-cr-kpi__value" data-t="fill_rate"><?php echo esc_html( $fh_totals['fill_rate'] ); ?></span></div>
 				<div class="fh-cr-kpi"><span class="fh-cr-kpi__label"><?php esc_html_e( 'Survival', 'fishotel-misc-plugin' ); ?></span><span class="fh-cr-kpi__value" data-t="survival_rate"><?php echo esc_html( $fh_totals['survival_rate'] ); ?></span></div>
 				<div class="fh-cr-kpi"><span class="fh-cr-kpi__label"><?php esc_html_e( 'DOA', 'fishotel-misc-plugin' ); ?></span><span class="fh-cr-kpi__value"><span data-t="doa"><?php echo esc_html( $fh_totals['doa'] ); ?></span> · <span data-t="doa_rate"><?php echo esc_html( $fh_totals['doa_rate'] ); ?></span></span></div>
-				<div class="fh-cr-kpi" title="<?php esc_attr_e( 'As the sheet counts it: the price of each DOA fish plus a whole box\'s fees per fish. The figure with the fees per fish is in the full list under the lines.', 'fishotel-misc-plugin' ); ?>"><span class="fh-cr-kpi__label"><?php esc_html_e( 'DOA cost', 'fishotel-misc-plugin' ); ?></span><span class="fh-cr-kpi__value" data-t="doa_cost_sheet"><?php echo esc_html( $fh_totals['doa_cost_sheet'] ); ?></span></div>
+				<div class="fh-cr-kpi" title="<?php esc_attr_e( 'What the DOA fish cost you: the price of each one plus its own share of the box\'s fees. (The old sheet charged every DOA fish a whole box\'s fees; that figure is in the full list under the lines.)', 'fishotel-misc-plugin' ); ?>"><span class="fh-cr-kpi__label"><?php esc_html_e( 'DOA cost', 'fishotel-misc-plugin' ); ?></span><span class="fh-cr-kpi__value" data-t="doa_cost_per_fish"><?php echo esc_html( $fh_totals['doa_cost_per_fish'] ); ?></span></div>
 				<div class="fh-cr-kpi"><span class="fh-cr-kpi__label"><?php esc_html_e( 'Credit', 'fishotel-misc-plugin' ); ?></span><span class="fh-cr-kpi__value" data-t="credit"><?php echo esc_html( $fh_totals['credit'] ); ?></span></div>
 			</div>
 			<p class="fh-cr-numbers-panel__note fh-cr-warn" data-t="no_price" <?php echo '' === $fh_totals['no_price'] ? 'hidden' : ''; ?>><?php echo esc_html( $fh_totals['no_price'] ); ?></p>
@@ -508,8 +508,8 @@ $fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks,
 				<div><dt><?php esc_html_e( 'Fill rate', 'fishotel-misc-plugin' ); ?></dt><dd data-t="fill_rate"><?php echo esc_html( $fh_totals['fill_rate'] ); ?></dd></div>
 				<div><dt><?php esc_html_e( 'Survival rate', 'fishotel-misc-plugin' ); ?></dt><dd data-t="survival_rate"><?php echo esc_html( $fh_totals['survival_rate'] ); ?></dd></div>
 				<div><dt><?php esc_html_e( 'DOA rate', 'fishotel-misc-plugin' ); ?></dt><dd data-t="doa_rate"><?php echo esc_html( $fh_totals['doa_rate'] ); ?></dd></div>
-				<div><dt><?php esc_html_e( 'DOA cost (as the sheet: a whole box\'s fees per fish)', 'fishotel-misc-plugin' ); ?></dt><dd data-t="doa_cost_sheet"><?php echo esc_html( $fh_totals['doa_cost_sheet'] ); ?></dd></div>
-				<div><dt><?php esc_html_e( 'DOA cost (fees per fish)', 'fishotel-misc-plugin' ); ?></dt><dd data-t="doa_cost_per_fish"><?php echo esc_html( $fh_totals['doa_cost_per_fish'] ); ?></dd></div>
+				<div><dt><?php esc_html_e( 'DOA cost (each fish\'s price plus its own share of the fees)', 'fishotel-misc-plugin' ); ?></dt><dd data-t="doa_cost_per_fish"><?php echo esc_html( $fh_totals['doa_cost_per_fish'] ); ?></dd></div>
+				<div><dt><?php esc_html_e( 'DOA cost as the old sheet counted it (a whole box\'s fees for every DOA fish)', 'fishotel-misc-plugin' ); ?></dt><dd data-t="doa_cost_sheet"><?php echo esc_html( $fh_totals['doa_cost_sheet'] ); ?></dd></div>
 				<div><dt data-t="fee_label"><?php echo esc_html( $fh_totals['fee_label'] ); ?></dt><dd data-t="fee_rate"><?php echo esc_html( $fh_totals['fee_rate'] ); ?></dd></div>
 				<div><dt data-t="units_label"><?php echo esc_html( $fh_totals['units_label'] ); ?></dt><dd data-t="units"><?php echo esc_html( $fh_totals['units'] ); ?></dd></div>
 			</dl>

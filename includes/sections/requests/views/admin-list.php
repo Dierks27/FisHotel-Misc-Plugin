@@ -387,7 +387,7 @@ $fh_head = static function () {
 	</form>
 
 	<?php if ( $filters['line_id'] > 0 ) : ?>
-		<p class="fh-rq-sub"><?php esc_html_e( 'Showing the requests matched to one supplier order line.', 'fishotel-misc-plugin' ); ?> <a href="<?php echo esc_url( Admin::page_url() ); ?>"><?php esc_html_e( 'Show all', 'fishotel-misc-plugin' ); ?></a></p>
+		<p class="fh-rq-sub"><?php esc_html_e( 'Showing the requests matched to one line of a fish order (Clean Room → Fish orders).', 'fishotel-misc-plugin' ); ?> <a href="<?php echo esc_url( Admin::page_url() ); ?>"><?php esc_html_e( 'Show all', 'fishotel-misc-plugin' ); ?></a></p>
 	<?php endif; ?>
 
 	<?php if ( $listing['capped'] ) : ?>

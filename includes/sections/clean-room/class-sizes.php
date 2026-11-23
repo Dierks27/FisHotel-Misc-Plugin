@@ -1,6 +1,6 @@
 <?php
 /**
- * Clean Room sizes — PURE: the ONE list of fish sizes a supplier order
+ * Clean Room sizes — PURE: the ONE list of fish sizes a fish order
  * line and a stay are sized with, which is the list the WooCommerce
  * product variations use, so everything matches.
  *

@@ -1586,7 +1586,7 @@
 			};
 
 			$order.on('click', '.fh-cr-order-delete', function () {
-				if (!root.confirm(i18n.confirmDelete || 'Delete this order?')) {
+				if (!root.confirm(i18n.confirmDelete || 'Delete this fish order and its lines?')) {
 					return;
 				}
 				$.post(ajaxUrl(), { action: 'fishotel_cleanroom_order', nonce: cfg.nonce, op: 'delete', order_id: $order.data('order') })

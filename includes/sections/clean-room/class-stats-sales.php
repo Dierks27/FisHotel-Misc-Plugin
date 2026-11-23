@@ -46,7 +46,7 @@
  * up to what was paid for it, to the cent; otherwise it stays whole,
  * under "not matched".
  *
- * rows() then sets the sales beside the supplier orders of the same year
+ * rows() then sets the sales beside the fish orders of the same year
  * (Stats::by_species()): units sold, actual revenue, the average price
  * paid beside the list price, the estimated revenue beside the actual,
  * and the actual profit = actual revenue − units sold × that year's
@@ -1111,7 +1111,7 @@ class Stats_Sales {
 	}
 
 	/* ============================================================== */
-	/*  Sales beside the supplier orders                               */
+	/*  Sales beside the fish orders                                   */
 	/* ============================================================== */
 
 	/**
@@ -1119,7 +1119,7 @@ class Stats_Sales {
 	 *
 	 *   units, revenue   ACTUAL — match();
 	 *   avg_paid         revenue ÷ units, beside list_price;
-	 *   est_revenue      the ESTIMATE of the supplier orders of that year
+	 *   est_revenue      the ESTIMATE of the fish orders of that year
 	 *                    (survivors × the price typed on the line) —
 	 *                    null when no order of that year has the fish, and
 	 *                    when it landed but none of its lines has a

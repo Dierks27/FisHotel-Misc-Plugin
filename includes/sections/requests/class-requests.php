@@ -31,7 +31,7 @@
  *   - class-fees.php       the fee through Batch Manager's wallet deposit:
  *                          the pay link, the cart line, the paid order.
  *   - class-cleanroom.php  the one place the Clean Room is read (behind
- *                          class_exists): names, sizes, supplier orders.
+ *                          class_exists): names, sizes, fish orders.
  *   - class-follow.php     PURE plan + the run: the state follows the fish.
  *   - class-cron.php       the daily job.
  *   - class-listing.php    PURE: filter, sort, group by fish, "Needs you",
@@ -41,7 +41,7 @@
  *                          the [fishotel_request_form] shortcode.
  *   - class-admin.php      FisHotel Tools → Requests: the list, Add, Links,
  *                          Demand, Settings; "Requested by" on the Clean
- *                          Room's supplier order page.
+ *                          Room's fish order page.
  *
  * The file uses bracketed namespaces because fishotel_requests_create()
  * must live in the global namespace.

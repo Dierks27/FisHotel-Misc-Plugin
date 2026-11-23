@@ -11,7 +11,7 @@
  *                                 only the hint the screens show and what a
  *                                 "suggested" tap fills a date picker with;
  *                                 a sale date is always chosen, on the
- *                                 supplier order or per stay), the
+ *                                 fish order or per stay), the
  *                                 copper floor and target the
  *                                 tank screen warns against (2.25 / 2.5),
  *                                 the voice preview's auto-confirm seconds

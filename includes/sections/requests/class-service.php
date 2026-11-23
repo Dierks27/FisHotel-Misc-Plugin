@@ -3,7 +3,7 @@
  * Requests service — everything that can happen to a request, in one
  * place: it is created (from a private link, by hand, by another
  * section), approved with or without a fee, declined, paid, matched to a
- * supplier order line, moved along with the fish, offered, filled,
+ * fish order line, moved along with the fish, offered, filled,
  * cancelled, kept, expired. Every change is written to the request's
  * append-only log with who did it.
  *
@@ -1069,7 +1069,7 @@ class Service {
 	/* ============================================================== */
 
 	/**
-	 * Match a request to a supplier order line.
+	 * Match a request to a fish order line.
 	 *
 	 * @param int   $id     Request id.
 	 * @param array $line   id, order_id, and for the log: ref, species.
@@ -1081,10 +1081,10 @@ class Service {
 		$request = $this->store->get( (int) $id );
 		$from    = array( 'waiting', 'on_order', 'in_quarantine', 'ready' );
 		if ( ! $request || ! in_array( $request['state'], $from, true ) ) {
-			return self::fail( __( 'Only a request that is on the list can be matched to a supplier order.', 'fishotel-misc-plugin' ) );
+			return self::fail( __( 'Only a request that is on the list can be matched to a fish order (Clean Room → Fish orders).', 'fishotel-misc-plugin' ) );
 		}
 		if ( (int) ( $line['id'] ?? 0 ) <= 0 ) {
-			return self::fail( __( 'That supplier order line does not exist.', 'fishotel-misc-plugin' ) );
+			return self::fail( __( 'That line of a fish order (Clean Room → Fish orders) does not exist.', 'fishotel-misc-plugin' ) );
 		}
 
 		$fields = array(
@@ -1096,7 +1096,7 @@ class Service {
 		);
 		$said = sprintf(
 			/* translators: 1: order ref, 2: species on the line */
-			$manual ? __( 'Matched by hand to supplier order %1$s (%2$s).', 'fishotel-misc-plugin' ) : __( 'Supplier order %1$s carries it (%2$s) — matched by itself.', 'fishotel-misc-plugin' ),
+			$manual ? __( 'Matched by hand to fish order %1$s (%2$s).', 'fishotel-misc-plugin' ) : __( 'Fish order %1$s carries it (%2$s) — matched by itself.', 'fishotel-misc-plugin' ),
 			(string) ( $line['ref'] ?? '#' . (int) ( $line['order_id'] ?? 0 ) ),
 			(string) ( $line['species'] ?? '' )
 		);
@@ -1105,11 +1105,11 @@ class Service {
 			return self::fail( __( 'That request was changed by somebody else in the meantime.', 'fishotel-misc-plugin' ) );
 		}
 
-		return self::ok( __( 'The request is matched to that supplier order line.', 'fishotel-misc-plugin' ) );
+		return self::ok( __( 'The request is matched to that line of the fish order.', 'fishotel-misc-plugin' ) );
 	}
 
 	/**
-	 * Take a request off its supplier order line: back to "waiting".
+	 * Take a request off its fish order line: back to "waiting".
 	 *
 	 * @param int    $id     Request id.
 	 * @param bool   $manual Whether the owner did it — the job then leaves the request alone
@@ -1122,7 +1122,7 @@ class Service {
 		$request = $this->store->get( (int) $id );
 		$from    = array( 'on_order', 'in_quarantine', 'ready' );
 		if ( ! $request || ! in_array( $request['state'], $from, true ) ) {
-			return self::fail( __( 'That request is not matched to a supplier order.', 'fishotel-misc-plugin' ) );
+			return self::fail( __( 'That request is not matched to a fish order (Clean Room → Fish orders).', 'fishotel-misc-plugin' ) );
 		}
 
 		$fields = array(
@@ -1134,7 +1134,7 @@ class Service {
 		if ( $manual ) {
 			$fields['auto_match'] = 0;
 		}
-		$said = '' !== (string) $why ? (string) $why : __( 'Taken off its supplier order.', 'fishotel-misc-plugin' );
+		$said = '' !== (string) $why ? (string) $why : __( 'Taken off its fish order (the order from the supplier).', 'fishotel-misc-plugin' );
 		if ( $manual ) {
 			$said .= ' ' . __( 'Matching by itself is off for this request until it is switched back on.', 'fishotel-misc-plugin' );
 		}

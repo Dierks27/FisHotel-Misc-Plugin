@@ -10,7 +10,7 @@ Tools; the **named treatment schedules** that turn into each tank's
 daily to-do, a **dose log** on the whole system or one tank with the
 **dose sum** for any medication of an editable list (and a Calculator
 that saves nothing); the
-**supplier orders** with the workbook's landed-cost maths and a check-in
+**fish orders** with the workbook's landed-cost maths and a check-in
 that turns an order's lines into stays; a **species master**; the yearly
 **stats** — with years side by side, a row per fish, the prices to
 raise and what customers really paid —; Excel exports; the **workbook
@@ -59,7 +59,7 @@ when they are not.
   suggested sale date follow from it.
 - **A group goes on sale the day it is marked to** — a date that is
   chosen, never computed (see *Sale dates* below): the batch's "Goes on
-  sale" date on its supplier order, or the group's own date on its
+  sale" date on its fish order, or the group's own date on its
   product page. From that date on it is *ready*, cleared or not; one
   whose date has come while it is still in the Spa says **still in the
   Spa** on every screen. Without a date it is not for sale; check-in + N
@@ -210,7 +210,7 @@ sale date — empty goes back to the batch's, a "suggested …" chip fills
 the picker) and **Identify** (*Correct the fish* on a fish that has a
 name): the Arrival sheet's species search and the Size dropdown — or
 *Unknown fish (??)* with what it looks like —, one Save, the toast
-"Identified: ?? small wrasse → … · the order line follows", and no Undo:
+"Identified: ?? small wrasse → … · the fish order line follows", and no Undo:
 who a fish is is corrected again, not reversed (see *Unknown and
 mislabeled fish*).
 
@@ -292,7 +292,7 @@ how many, the size (optional), then three questions, each with
 on* (in a clean tank — the Clean Room or a clean temporary tank — a fish
 counts as cleared: Unknown or a date; in a Spa or quarantine temporary
 tank: **Not cleared yet**, the default, or a date) and *Where it came
-from* (Unknown, or the supplier and the origin — the names the supplier
+from* (Unknown, or the supplier and the origin — the names the fish
 orders already use as chips, or typed). Save puts the group straight
 into THIS tank — any tank that holds fish — and the status line offers
 Undo like every other action. See *Fish already here*.
@@ -441,7 +441,7 @@ letters); an ambiguous or weak match asks "Which fish?" with the top three.
 
 ## The Room Board (FisHotel Tools → Clean Room)
 
-Tabs: **Board · To do · Stays · Arrivals · Species · Stats · Events ·
+Tabs: **Board · To do · Stays · Fish orders · Species · Stats · Events ·
 Settings**.
 
 **Board** — Area → Building → Level grid of tank cards (empty tanks dimmed;
@@ -485,7 +485,7 @@ copper reading, the to-do count and what is still due today (printed on
 the card — a tooltip is invisible on a tablet) per tank, area and species
 filters, a *Front Desk* link per tank, and in the summary the groups for
 sale, those for sale but still in the Spa, those without a sale date
-(linked to Arrivals) and those that **need identifying** (linked to the
+(linked to Fish orders) and those that **need identifying** (linked to the
 Stays tab filtered to them); the first chip of the summary is the day's
 count ("8 things to do →", to the To do tab), and under the two areas
 the **Temporary** area: *Set up a temporary tank*, the free slots as a
@@ -512,7 +512,7 @@ date shown as "unknown" and a day as "?", closed stays
 with a toggle, a CSV and an XLSX export with the formula-cell guard. A *Move…* that clears the
 group (out of quarantine into a clean tank — the Clean Room or a clean temporary tank) says so in
 its reply; an Undo or a Count that a taken-down temporary tank stands in the way of says why.
-**Arrivals**, **Species** and **Stats** — the workbook replacement, below.
+**Fish orders**, **Species** and **Stats** — the workbook replacement, below.
 **Events** — the latest 200 stay events and 100 tank-log entries in plain
 words (a dose row reads like the toast, working included — "Copper Power
 16.6 ml · 2.16 → 2.40 ppm, 100 gal · Building 600, whole system" — and a
@@ -803,7 +803,7 @@ layout take nothing.
 with the source **`existing`** (on the stay and on its events, so every
 report can tell these fish apart), the fish, its size, its product when
 one was picked, the supplier, and the origin as the stay's note
-("Origin: …"); it belongs to no supplier order. Then an `arrival` of the
+("Origin: …"); it belongs to no fish order. Then an `arrival` of the
 count — dated on the arrival date when it is known (the check-in then
 comes from it like any other), else written now with the note
 `arrived:unknown`, which the Replay reads as "no check-in date" — and,
@@ -850,7 +850,7 @@ Stays tab, and from then on the stay behaves exactly as any other.
   or no cleared date — and say how many were **left out** of everything
   that needs a date or a batch: the yearly figures, survival per batch,
   landed cost and days in QT (`Stats::existing_stock()`). They belong to
-  no supplier order, so the order-based figures never saw them.
+  no fish order, so the order-based figures never saw them.
 - **The fish page** reads null for a date nobody knows, never "unknown"
   (see *What the fish page will read*). Nothing for customers changes:
   the theme does not read these facts yet.
@@ -945,9 +945,9 @@ The **Today** section shows it: the Clean Room hooks that section's
 a day with something due. With the Today section off nobody asks; with
 the Clean Room off there is no line.
 
-## Supplier orders (the tab once called Arrivals)
+## Fish orders (the tab once called Supplier orders, and Arrivals before that)
 
-What the workbook's "Recieved (N)" sheet held: one **order** per
+What the workbook's "Recieved (N)" sheet held: one **fish order** per
 delivery (ref `YYYY-N`, supplier, origin, order and received dates,
 status draft → ordered → received → closed, the Spa building it lands in,
 the cost mode and the money: tariffs, domestic flight, import & re-ox
@@ -984,8 +984,11 @@ costing replicates the sheet exactly (`class-costing.php`, pure):
   Σ survived ÷ (Σ received − Σ DOA), undefined until a survivor count is
   known; DOA rate = Σ DOA ÷ Σ received; the sheet's DOA cost = Σ DOA ×
   price + Σ DOA × fee rate — in box mode the fee rate is a *whole box's*
-  fees, a carry-over from the bag version, so it is labelled and the
-  per-fish figure (fees per box ÷ per box) stands beside it;
+  fees, a carry-over from the bag version. The order's panel therefore
+  shows the per-fish figure as **DOA cost** — each DOA fish's price plus
+  its own share of the fees (fees per box ÷ per box, or the line's
+  percent of a box over its fish) — and the sheet's figure is kept,
+  labelled as the old sheet's, in the full list under the lines;
 - every division is guarded (an undefined ratio shows "—"); full float
   precision inside, rounding only on display and when a figure is
   stored.
@@ -1072,7 +1075,7 @@ but where that view shows the *active* price, an order is judged by the
 **regular** one: a week's sale must not turn "Worth it?" over.
 
 **While an order is open** the price is read again **every time the
-order is resolved** — the page, the Arrivals list, the Stats and the
+order is resolved** — the page, the Fish orders list, the Stats and the
 exports all see today's price — and nothing is stored. Numbers shows it
 with where it came from in its tooltip. The **pencil** beside it types a
 price of the owner's own for that line ("I sometimes plan a new price"):
@@ -1099,7 +1102,7 @@ cost), and the panel says how many lines that is. **The Stats count the
 same way** — an order's row, the totals, by supplier, by origin, by
 group and by species all compare the revenue with what the priced lines
 cost, and the totals say how many lines have no shop price and what they
-cost —, so the Stats, the order page, the Arrivals list and the export
+cost —, so the Stats, the order page, the Fish orders list and the export
 give one figure. An order whose lines
 all carry a typed worth — as the workbook's orders do wherever the sheet
 had a FisHotel price — is costed **to the cent as before**:
@@ -1226,8 +1229,8 @@ them from the Data sheet.
 could import." An order is 150 fish. **Import lines…** under the lines
 of an order — a new one or a saved one — takes rows instead of typing
 them: pasted (copied out of a spreadsheet, or comma-separated text, with
-or without a header row) or a file (CSV, TSV, XLSX, XLSM). *New order
-from pasted lines / a file* on the Arrivals list is the same page with
+or without a header row) or a file (CSV, TSV, XLSX, XLSM). *New fish
+order from pasted lines / a file* on the Fish orders list is the same page with
 the panel already open.
 
 Nothing is saved before **confirm**. An import never removes a line,
@@ -1527,7 +1530,7 @@ group's **effective sale date** is chosen, never computed:
 1. its **own date**, when it has one — set in the *Clean room* box on its
    product page (saved with the product's Update button), with *Sale
    date…* on the Stays tab, or under Dates on the phone;
-2. else its **batch's date** — the *Goes on sale* date of the supplier
+2. else its **batch's date** — the *Goes on sale* date of the fish
    order it was checked in from (its order line → the order's
    `sale_date`; a group split off another keeps that order line, so it
    keeps the batch);
@@ -1546,25 +1549,25 @@ the phone, and the state column of the stays CSV / XLSX ("ready (still
 in the Spa)"). The Board's building line counts the way its summary
 does: a group for sale counts as for sale, not as in QT.
 
-**Where to set them.** *Supplier orders → the order → Goes on sale*: a date
+**Where to set them.** *Fish orders → the order → Goes on sale*: a date
 picker (empty until chosen, the suggestion beside it), Save and Clear —
 its own nonce'd admin-post form, `manage_woocommerce` like every order
 edit, an invalid date refused with nothing changed, and every change
 written to the Health log through `fishotel_log` ("Sale date of
-supplier order 2026-7 changed by <login>: not set → 2026-10-30"). Under
+fish order 2026-7 changed by <login>: not set → 2026-10-30"). Under
 it: how many groups still in tanks the date applies to (and how many of
 those are still in the Spa), and the groups with their own date (product
 linked to its edit screen, tank, date, "still in the Spa").
-The Arrivals list's *On sale* column shows each order's date, "not
+The Fish orders list's *On sale* column shows each order's date, "not
 set", or "N of M groups have their own date". **The product page**: one
-row per open stay of the product — the supplier order (linked), tank,
+row per open stay of the product — the fish order (linked), tank,
 check-in, live count, a date picker holding the effective date labelled
 "from the batch" or "own date", and *Use the batch date* on a group with
 its own date. Only a group whose own date really changes gets an event;
 a picker left as shown (on the batch's date, say) writes nothing; an
 invalid date is ignored and named in a notice after the save; emptying a
 picker that shows the batch's date changes nothing, and the notice says
-to change or clear it on that supplier order.
+to change or clear it on that fish order.
 
 **Sensible dates only.** Every place a sale date is chosen — the order
 card, the product box, the Stays tab, the phone — takes a date from
@@ -1733,7 +1736,7 @@ its buttons do anything.
    `wc_delete_product_transients()`; terms through `wp_insert_term()` /
    `wp_delete_term()`; the short list's order as the attribute's custom
    order (`wc_set_term_order()`). **Every other place that stores a
-   size** follows a size that *becomes* another: the stays and supplier
+   size** follows a size that *becomes* another: the stays and fish
    order lines here (`fh_stays`, `fh_order_lines`), the remembered box
    shares (`fh_box_shares` — a share's key holds the size, and two
    shares that land on one key become one: the latest wins, the order
@@ -1891,7 +1894,7 @@ and when (`fh_box_shares`).
 of times they are mislabeled and I have to go back and correct what I
 actually got."
 
-**Unknown.** A supplier order line and a stay can be flagged *needs
+**Unknown.** A fish order line and a stay can be flagged *needs
 identifying*. Its name is then "??" followed by an optional description
 — "?? small wrasse" — so every screen, toast and export that prints a
 species prints the "??". It is set with the **??** box on an order line
@@ -1987,7 +1990,7 @@ half and at the order line.
 
 **Where it shows.** A *N need identifying* chip on the Board (linked to
 the Stays tab filtered to them), a *Needs identifying* filter and marker
-on the Stays tab, "?? N to identify" on the Arrivals list and by the
+on the Stays tab, "?? N to identify" on the Fish orders list and by the
 order's status, the marker on the order line, "needs identifying" on the
 phone's rows — and the "??" itself wherever the species is printed.
 
@@ -2028,7 +2031,7 @@ no `view` is *By year*, the tab as it always was).
 **Estimates and actuals.** Everything the first four views call revenue,
 "up or down", profit or margin is an ESTIMATE, as it was in the
 spreadsheet: survivors × what the fish sells for — the price typed on the
-supplier order line (`worth`) when there is one, else the shop price as
+fish order line (`worth`) when there is one, else the shop price as
 it is read today (see *The shop price is read*) —, less the landed cost.
 A line with no price at all adds no revenue; the order page leaves such
 a line out of its own "up or down", while the groupings here still count
@@ -2055,7 +2058,7 @@ rows, then the same figures two ways, both shown and both exported:
 a card **Fish already here (added by hand)** when there are any — the
 groups and fish added, alive now, shipped and lost (all years), how many
 groups in tanks have no arrival or no cleared date, and how many were
-left out of every figure here: they belong to no supplier order (see
+left out of every figure here: they belong to no fish order (see
 *Fish already here*) —, and the weighted figures by supplier, by origin and by species group
 (the species row's group; "(no group)" otherwise). By supplier and by
 origin also say how the labels held up: **Mislabeled** — the lines that
@@ -2112,9 +2115,8 @@ by those columns, and exports empty cells.
 
 ### Prices to raise
 
-**Read-only — nothing here ever changes a price.** One row per fish that
-has a supplier order line which received fish at a price
-(`Stats_Prices`, pure):
+**Read-only — nothing here ever changes a price.** One row per fish
+received at a price on a fish order (`Stats_Prices`, pure):
 
 - **landed / fish, latest** — Σ landed ÷ Σ received over the fish's
   lines in the latest order that has it (by the order's date, then its
@@ -2205,9 +2207,9 @@ the species list as it is then, so linking a species to its product (or
 giving it the product's exact title) shows at once.
 
 **Per fish:** units sold, actual revenue, the average price paid beside
-today's list price, the estimated revenue of that year's supplier orders
+today's list price, the estimated revenue of that year's fish orders
 beside the actual, that year's average landed cost per fish (landed ÷
-received over its supplier order lines of the year), the cost of the
+received over its fish order lines of the year), the cost of the
 units sold, and the **actual profit = actual revenue − units sold × that
 landed cost**. A fish that sold in a year in which none landed gets **no
 profit figure**: the cell says "no landed cost in 2026 (last landed:
@@ -2234,7 +2236,7 @@ query fails, the reading is then marked failed — the page says every
 figure is INCOMPLETE, the export's last row says so too — and it is
 **not cached**, so reopening the page reads the year again. The landed
 cost beside the sales is the whole year's even past the newest 500
-supplier orders (the year shown is then read by itself); the "last
+fish orders (the year shown is then read by itself); the "last
 landed" note about an earlier year rests on those newest orders.
 Without WooCommerce's tables the view says the sales are not
 available and still shows the landed costs and the estimates. The
@@ -2386,7 +2388,7 @@ whenever Jeff wants the latest Fishlist prices.
      name, so an imported line has none — whatever the sheet calls a
      fish — and remembers no box share;
    - **stays** for the batches within the cutoff, through the same
-     `Orders::check_in()` the Arrivals button uses — an arrival on the
+     `Orders::check_in()` the check-in button of a fish order uses — an arrival on the
      batch date into the line's tank, else the first empty Spa tank of the
      chosen building, else any empty one, a `doa` loss, the seam fields
      filled — with `source = import` on the stay and its events. The
@@ -2417,7 +2419,7 @@ a stay by `Orders::check_in()`, logs by the `import:<ref>#<row>` marker
 each carries at the end of its note (kept out of sight on the Events
 tab); the box rates merge to the same rows.
 
-**A ref taken by hand (0.44.1).** The New order form offers the next
+**A ref taken by hand (0.44.1).** The New fish order form offers the next
 free `YYYY-N`, the same refs the workbook's batches carry. An order on
 the site only counts as "this batch, imported before" when its notes
 still carry the import's line (`Imported from the workbook sheet …`) or
@@ -2491,9 +2493,9 @@ Lottery Draw section.
 
 Every stay carries `supplier`, `order_ref`, `landed_cost` and
 `order_line_id` (all nullable; editable on the Stays tab) and a `source`
-of `order` (the Arrivals button) / `import` (the workbook import) /
+of `order` (the check-in button of a fish order) / `import` (the workbook import) /
 `existing` (fish already here, added by hand — no order line). The
-check-in fills them (see *Supplier orders*): one stay per order line
+check-in fills them (see *Fish orders*): one stay per order line
 through `Store::create_stay()` + an `arrival` event
 (`Store::record_event()`), exactly as the Front Desk does — the Replay,
 the facts and the board need nothing new, and the workbook import creates
@@ -2533,7 +2535,7 @@ about the permanent buildings, tanks, stays, events and logs changes.
 - `{prefix}fh_tank_logs` — per tank, or per building: copper readings, doses (value = the amount, note "<Medication> <amount> <unit>"), test / water-change / feed tick-offs, tank notes; a building-level entry has tank_id 0 and building_id set and counts for every tank of the building (the day's to-do); since 1.6 a building is read as one water — the last copper reading of every tank of a shared building is the newest taken anywhere in it, on the building or on any of its tanks, and each reading says which tank it was taken on; an imported entry carries `import:<ref>#<row>` at the end of its note; setup_id (1.6) ties an entry on a slot to the setup that stood there — a slot's to-do, last reading and last doses read only its present setup's entries, and never a building-level one
 - `{prefix}fh_aliases` — spoken words → product / species
 - `{prefix}fh_species` — the species master: name (unique), sci_name, group_name, per_box, my_price, online_price, online_site, online_date, reef_safe, max_size, product_id, notes
-- `{prefix}fh_orders` — a supplier order: ref (unique), supplier, origin, order_date, received_date, sale_date (the batch's "Goes on sale", NULL = not set; added in 1.3), status, boxes, cost_mode, tariffs, domestic_flight, import_fees, credit, markup, worth_threshold, schedule, building_id, notes
+- `{prefix}fh_orders` — a fish order: ref (unique), supplier, origin, order_date, received_date, sale_date (the batch's "Goes on sale", NULL = not set; added in 1.3), status, boxes, cost_mode, tariffs, domestic_flight, import_fees, credit, markup, worth_threshold, schedule, building_id, notes
 - `{prefix}fh_order_lines` — its lines: order_id, species_id, species, sci_name, needs_id (1.5), label_name (1.5: what the label called a corrected fish — the "??" name of one that arrived unknown —, NULL = never corrected), size_slug + size_label (1.4), qty_ordered, qty_received, per_box, box_no + box_pct (1.4), bags, unit_price, worth, qty_doa, qty_survived, landed_total (a cache of the costing), stay_id, tank_id, share_key (1.4: the remembered share the line counts in), sort, notes (the "part of this line" notes of a split group live here)
 - `{prefix}fh_box_shares` (1.4) — the remembered shares: share_key (unique: location + fish + size), location_key (supplier + origin), supplier, origin, fish_key (`s:<species id>` or `n:<name>`), species_id, species, size_slug, size_label, pct_per_fish, order_count, last_line_id + last_date (the line and the order date the value came from), updated_at
 
@@ -2685,7 +2687,7 @@ clean-room/
 ├── class-admin.php         the Room Board page, CSV, labels, stay edits + move + undo + identify, the
 │                           Stays tab's "Add fish already here" (fishotel_cleanroom_existing), Coming
 │                           Soon release, the product meta box and its sale dates (save_post_product)
-├── class-admin-workbook.php  the Arrivals / Species / Stats tabs, their AJAX (an order's save, check-in,
+├── class-admin-workbook.php  the Fish orders / Species / Stats tabs, their AJAX (an order's save, check-in,
 │                           "Correct the fish…", the view a user left the page in), the order page's
 │                           figures as text, its two views and Split panel, the Boxes card, the
 │                           XLSX / CSV exports, the batch's "Goes on sale" (admin-post)

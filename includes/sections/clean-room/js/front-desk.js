@@ -29,7 +29,7 @@
  * "use as an unlisted fish": it reads "??" and what was typed
  * (unknownName) and its row says "needs identifying". A group's sheet has
  * Identify / Correct the fish: the same species search and the Size
- * dropdown, one post — the server corrects the stay and its supplier
+ * dropdown, one post — the server corrects the stay and its fish
  * order line together.
  *
  * The Dose sheet does the sum for any medication of the list the server
@@ -2026,7 +2026,7 @@
 		return wrap;
 	}
 
-	/* Supplier or origin: the names the supplier orders already use as chips, or typed; Unknown when empty. */
+	/* Supplier or origin: the names the fish orders already use as chips, or typed; Unknown when empty. */
 	function pickQuestion(f, key, label, list) {
 		var wrap = el('div', { class: 'fh-fd-sub-field' }, [el('span', { class: 'fh-fd-label', text: label })]);
 		var input = el('input', { class: 'fh-fd-input', type: 'text', value: f[key] || '', placeholder: t('unknownChoice', 'Unknown'), autocomplete: 'off', autocapitalize: 'words', on: { input: function (e) { f[key] = e.target.value; } } });
@@ -2287,7 +2287,7 @@
 	/*
 	 * Identify / Correct the fish: the real fish from the same search the
 	 * Arrival sheet uses (or still unknown, with what it looks like) and
-	 * its size. The server corrects the stay and its supplier order line
+	 * its size. The server corrects the stay and its fish order line
 	 * together and words the message; there is no Undo — correct it again.
 	 */
 	function renderIdentify() {
@@ -2308,7 +2308,7 @@
 		if (sizes) {
 			screen.appendChild(sizes);
 		}
-		screen.appendChild(el('p', { class: 'fh-fd-muted', text: t('identifyHint', 'Pick the real fish and its size: the tank row, its supplier order line and the remembered box share follow.') }));
+		screen.appendChild(el('p', { class: 'fh-fd-muted', text: t('identifyHint', 'Pick the real fish and its size: the tank row, its fish order line and the remembered box share follow.') }));
 		app.appendChild(screen);
 		bar([
 			button(t('cancel', 'Cancel'), 'fh-fd-btn--quiet', function () { go('occupant', { stay: o }); }),
@@ -2476,7 +2476,7 @@
 				button(t('save', 'Save'), 'fh-fd-btn--primary', function () { act({ act: 'ready', tank: tk.number, stay_id: o.stayId, date: f.ready || '', via: 'qr' }); })
 			]),
 			o.saleSuggested && o.saleSuggested !== f.ready ? el('button', { type: 'button', class: 'fh-fd-chip fh-fd-chip--ghost', text: fmt(t('suggestedOn', 'suggested %s'), o.saleSuggested), on: { click: function () { f.ready = o.saleSuggested; readyInput.value = o.saleSuggested; } } }) : null,
-			el('p', { class: 'fh-fd-muted', text: o.batchSaleDate ? fmt(t('readyBatch', 'Empty = the batch date (%s).'), o.batchSaleDate) : t('readyNone', 'Empty = no sale date: the batch has none yet (set it on the supplier order).') })
+			el('p', { class: 'fh-fd-muted', text: o.batchSaleDate ? fmt(t('readyBatch', 'Empty = the batch date (%s).'), o.batchSaleDate) : t('readyNone', 'Empty = no sale date: the batch has none yet (set it on its fish order: Clean Room → Fish orders).') })
 		]));
 		app.appendChild(screen);
 		bar([button(t('back', 'Back'), 'fh-fd-btn--quiet', function () { go('occupant', { stay: o }); })]);

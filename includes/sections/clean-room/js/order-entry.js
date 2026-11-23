@@ -1,6 +1,6 @@
 /**
  * The order page's two views and what belongs to them (Clean Room →
- * Arrivals → an order):
+ * Fish orders → an order):
  *
  *   - the Entry / Numbers tabs and the "More columns" switch — both views
  *     are the same rows of the same form (a hidden column is display:none

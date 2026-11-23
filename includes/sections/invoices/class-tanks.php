@@ -2,7 +2,7 @@
 /**
  * The tanks — this section's only way into the Clean Room section of the
  * same plugin: the groups of fish in the tanks now (species, size, how
- * many alive, tank, which supplier order) and the species list with its
+ * many alive, tank, which fish order) and the species list with its
  * prices.
  *
  * The Clean Room may be switched off, absent or older, so nothing here

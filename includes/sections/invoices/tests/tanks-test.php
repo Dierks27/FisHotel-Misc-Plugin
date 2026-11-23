@@ -3,7 +3,7 @@
  * Tanks — this section's only way into the Clean Room: here against
  * stand-ins for that section's three classes (its Store, its settings,
  * its "today"), which answer in the shapes the real ones do. What a tank
- * group is read as (species, size, how many alive, tank, which supplier
+ * group is read as (species, size, how many alive, tank, which fish
  * order — the batch's ref before the stay's own), the search by every
  * word, the species list and its price for a product or a name, and what
  * happens when the Clean Room throws, has no tables, or is an older
@@ -159,8 +159,8 @@ namespace {
 	echo "2. Searching the tanks\n";
 	$found = $tanks->search( 'tang' );
 	check_same( 'the groups with fish alive — a group with nothing alive and a closed one are not offered', array( 21, 22, 23 ), array_column( $found, 'stay_id' ) );
-	check_same( 'a tank group: species, size, how many alive, tank, supplier order, product, whether it is identified, open', array( 'stay_id' => 21, 'species' => 'Blue Test Tang', 'size_slug' => 'medium', 'size_label' => 'Medium', 'alive' => 5, 'tank' => 121, 'order_ref' => '2026-3', 'product_id' => 501, 'needs_id' => false, 'open' => true ), $found[0] );
-	check( 'the supplier order is the batch\'s ref; without one, the stay\'s own', '2026-3' === $found[0]['order_ref'] && '2026-1' === $found[1]['order_ref'] && '' === $found[2]['order_ref'] );
+	check_same( 'a tank group: species, size, how many alive, tank, fish order, product, whether it is identified, open', array( 'stay_id' => 21, 'species' => 'Blue Test Tang', 'size_slug' => 'medium', 'size_label' => 'Medium', 'alive' => 5, 'tank' => 121, 'order_ref' => '2026-3', 'product_id' => 501, 'needs_id' => false, 'open' => true ), $found[0] );
+	check( 'the fish order is the batch\'s ref; without one, the stay\'s own', '2026-3' === $found[0]['order_ref'] && '2026-1' === $found[1]['order_ref'] && '' === $found[2]['order_ref'] );
 	check( 'a group in no tank, of no product, of no size, still to be identified', null === $found[2]['tank'] && null === $found[2]['product_id'] && null === $found[2]['size_slug'] && true === $found[2]['needs_id'] );
 	check_same( 'every word must be in the species, in any order', array( 22 ), array_column( $tanks->search( 'tang powder' ), 'stay_id' ) );
 	check_same( 'case does not matter', array( 26 ), array_column( $tanks->search( 'CHROMIS' ), 'stay_id' ) );

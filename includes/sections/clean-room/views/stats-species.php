@@ -1,6 +1,6 @@
 <?php
 /**
- * Stats tab — Species: one row per fish and year over the supplier
+ * Stats tab — Species: one row per fish and year over the fish
  * orders — received, DOA, survived, landed, and the ESTIMATED revenue,
  * profit and margin — sortable by any column, with a search.
  *
@@ -75,7 +75,7 @@ $fh_th = static function ( $key, $label, $text = false, $title = '' ) use ( $fh_
 
 	<p class="fh-cr-legend">
 		<span class="fh-cr-kind fh-cr-kind--est"><?php esc_html_e( 'Estimate', 'fishotel-misc-plugin' ); ?></span>
-		<?php esc_html_e( 'Est. revenue, Est. profit and Est. margin are estimates, as in the spreadsheet: survivors × the FisHotel price typed on the supplier order line, less the landed cost. Received, DOA, survived and landed are counted from the supplier orders. What customers actually paid for each fish is under Real sales.', 'fishotel-misc-plugin' ); ?>
+		<?php esc_html_e( 'Est. revenue, Est. profit and Est. margin are estimates, as in the spreadsheet: survivors × the FisHotel price typed on the fish order line, less the landed cost. Received, DOA, survived and landed are counted from the fish orders. What customers actually paid for each fish is under Real sales.', 'fishotel-misc-plugin' ); ?>
 	</p>
 
 	<div class="fh-cr-summary">
@@ -87,7 +87,7 @@ $fh_th = static function ( $key, $label, $text = false, $title = '' ) use ( $fh_
 	</div>
 
 	<?php if ( ! $data['rows'] ) : ?>
-		<div class="fishotel-misc-empty"><span class="dashicons dashicons-chart-bar"></span><p><?php echo esc_html( $data['all'] > 0 ? __( 'No fish matches that search.', 'fishotel-misc-plugin' ) : __( 'No supplier order lines in this year.', 'fishotel-misc-plugin' ) ); ?></p></div>
+		<div class="fishotel-misc-empty"><span class="dashicons dashicons-chart-bar"></span><p><?php echo esc_html( $data['all'] > 0 ? __( 'No fish matches that search.', 'fishotel-misc-plugin' ) : __( 'No fish order lines in this year.', 'fishotel-misc-plugin' ) ); ?></p></div>
 	<?php else : ?>
 		<div class="fh-cr-grid-wrap">
 			<table class="widefat striped fh-cr-table">

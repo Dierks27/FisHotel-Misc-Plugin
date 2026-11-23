@@ -16,7 +16,7 @@
  *                             (amount, the invoice it is on, the order that paid
  *                             it and when), "owed", the order it came from, the
  *                             private link and the sheet it came through, the
- *                             supplier order line / order / tank group it is
+ *                             fish order line / order / tank group it is
  *                             matched to, and its dates
  *   {prefix}fh_request_links  the private links: token, label, an optional fee,
  *                             expiry and maximum uses, a use counter, active or

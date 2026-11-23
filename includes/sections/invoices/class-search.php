@@ -3,7 +3,7 @@
  * The picker's search — one box, the results in groups:
  *
  *   tanks     fish in the tanks now (Clean Room groups: species, size, how
- *             many alive, tank, which supplier order) — when that section
+ *             many alive, tank, which fish order) — when that section
  *             is on; with how many of the group already stand on other
  *             open invoices.
  *   products  shop products, each variable product as its size variations.
@@ -174,8 +174,8 @@ class Search {
 				$detail[] = sprintf( __( 'tank %d', 'fishotel-misc-plugin' ), $group['tank'] );
 			}
 			if ( '' !== $group['order_ref'] ) {
-				/* translators: %s: supplier order reference */
-				$detail[] = sprintf( __( 'order %s', 'fishotel-misc-plugin' ), $group['order_ref'] );
+				/* translators: %s: fish order reference */
+				$detail[] = sprintf( __( 'fish order %s', 'fishotel-misc-plugin' ), $group['order_ref'] );
 			}
 			if ( $on_other > 0 ) {
 				/* translators: %d: fish */

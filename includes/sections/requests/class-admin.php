@@ -12,7 +12,7 @@
  *              form and its whole history from the log.
  *   Add        a request by hand.
  *   Links      the private links: create, copy, switch off.
- *   Demand     the most requested fish beside what past supplier orders
+ *   Demand     the most requested fish beside what past fish orders
  *              ordered per year; who has waited longest.
  *   Settings   the switches, the timers, the "came from" list, the five
  *              e-mails (manage_options).
@@ -20,7 +20,7 @@
  * Every write goes through ONE admin-post action with a nonce and
  * manage_woocommerce (Settings: manage_options); perform() does the work
  * and takes its service as a parameter, so the tests drive every
- * operation. On the Clean Room's supplier order page each line reads
+ * operation. On the Clean Room's fish order page each line reads
  * "Requested by: …" through its fishotel_cleanroom_order_line action.
  *
  * @package FisHotel\Misc\Sections\Requests
@@ -89,7 +89,7 @@ class Admin {
 	);
 
 	/**
-	 * The requests of a supplier order, by line (memoised per order for
+	 * The requests of a fish order, by line (memoised per order for
 	 * the "Requested by" line).
 	 *
 	 * @var array<int, array<int, array[]>>
@@ -136,10 +136,10 @@ class Admin {
 	}
 
 	/**
-	 * The Clean Room's page of a supplier order ('' when the Clean Room
+	 * The Clean Room's page of a fish order ('' when the Clean Room
 	 * is not there).
 	 *
-	 * @param int $order_id Supplier order id.
+	 * @param int $order_id Fish order id.
 	 * @return string
 	 */
 	public static function supplier_order_url( $order_id ) {
@@ -667,12 +667,12 @@ class Admin {
 
 			case 'link':
 				if ( empty( $ctx['cleanroom'] ) ) {
-					return $fail( __( 'The Clean Room is not switched on, so there is no supplier order to match to.', 'fishotel-misc-plugin' ) );
+					return $fail( __( 'The Clean Room is not switched on, so there is no fish order to match to.', 'fishotel-misc-plugin' ) );
 				}
 				$parts = array_map( 'absint', explode( ':', $text( 'line' ) ) + array( 0, 0 ) );
 				$line  = $parts[0] > 0 && $parts[1] > 0 ? $ctx['cleanroom']->line( $parts[0], $parts[1] ) : null;
 				if ( ! $line ) {
-					return $fail( __( 'Pick a supplier order line to match to.', 'fishotel-misc-plugin' ) );
+					return $fail( __( 'Pick a line of a fish order (Clean Room → Fish orders) to match to.', 'fishotel-misc-plugin' ) );
 				}
 				$result = $service->link( $id, $line, true, $actor );
 				if ( $result['ok'] ) {
@@ -884,11 +884,11 @@ class Admin {
 	}
 
 	/* ============================================================== */
-	/*  The Clean Room's supplier order page                           */
+	/*  The Clean Room's fish order page                               */
 	/* ============================================================== */
 
 	/**
-	 * The people who asked for a supplier order line, in words.
+	 * The people who asked for a fish order line, in words.
 	 *
 	 * @param array[] $requests The requests matched to the line.
 	 * @return string "Pat Example (2), Sam Sample" ('' = nobody).
@@ -903,7 +903,7 @@ class Admin {
 	}
 
 	/**
-	 * "Requested by: …" under a line on the Clean Room's supplier order
+	 * "Requested by: …" under a line on the Clean Room's fish order
 	 * page (its fishotel_cleanroom_order_line action; one query per order).
 	 *
 	 * @param mixed $line The Clean Room's order line (id, order_id).

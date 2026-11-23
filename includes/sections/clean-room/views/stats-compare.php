@@ -117,16 +117,16 @@ $fh_table = static function ( array $rows, $label ) use ( $fh_years, $fh_labels 
 	<?php endif; ?>
 
 	<?php if ( ! $fh_years ) : ?>
-		<div class="fishotel-misc-empty"><span class="dashicons dashicons-chart-bar"></span><p><?php esc_html_e( 'No supplier orders yet: there is nothing to compare.', 'fishotel-misc-plugin' ); ?></p></div>
+		<div class="fishotel-misc-empty"><span class="dashicons dashicons-chart-bar"></span><p><?php esc_html_e( 'No fish orders yet: there is nothing to compare.', 'fishotel-misc-plugin' ); ?></p></div>
 	<?php else : ?>
 
 		<p class="fh-cr-legend">
 			<span class="fh-cr-kind fh-cr-kind--est"><?php esc_html_e( 'Estimate', 'fishotel-misc-plugin' ); ?></span>
-			<?php esc_html_e( 'Est. revenue and Est. up / down are estimates, as in the spreadsheet: survivors × the FisHotel price typed on each supplier order line. Everything else on this page is counted from the supplier orders. What customers actually paid is under Real sales.', 'fishotel-misc-plugin' ); ?>
+			<?php esc_html_e( 'Est. revenue and Est. up / down are estimates, as in the spreadsheet: survivors × the FisHotel price typed on each fish order line. Everything else on this page is counted from the fish orders. What customers actually paid is under Real sales.', 'fishotel-misc-plugin' ); ?>
 		</p>
 
 		<?php if ( count( $fh_years ) < 2 ) : ?>
-			<div class="fishotel-misc-notice fishotel-misc-notice--warning"><?php esc_html_e( 'Only one year has supplier orders so far, so there is no change to show yet.', 'fishotel-misc-plugin' ); ?></div>
+			<div class="fishotel-misc-notice fishotel-misc-notice--warning"><?php esc_html_e( 'Only one year has fish orders so far, so there is no change to show yet.', 'fishotel-misc-plugin' ); ?></div>
 		<?php endif; ?>
 
 		<h2 class="fh-cr-h2"><?php esc_html_e( 'Totals', 'fishotel-misc-plugin' ); ?></h2>

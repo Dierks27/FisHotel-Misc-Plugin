@@ -150,7 +150,7 @@ $fh_group_table = static function ( array $groups, $label, $labels = false ) use
 
 	<p class="fh-cr-legend">
 		<span class="fh-cr-kind fh-cr-kind--est"><?php esc_html_e( 'Estimate', 'fishotel-misc-plugin' ); ?></span>
-		<?php esc_html_e( 'Revenue, up / down and revenue ÷ landed on this page are estimates, as in the spreadsheet: survivors × the FisHotel price typed on each supplier order line. Everything else is counted from the supplier orders. What customers actually paid is under Real sales.', 'fishotel-misc-plugin' ); ?>
+		<?php esc_html_e( 'Revenue, up / down and revenue ÷ landed on this page are estimates, as in the spreadsheet: survivors × the FisHotel price typed on each fish order line. Everything else is counted from the fish orders. What customers actually paid is under Real sales.', 'fishotel-misc-plugin' ); ?>
 	</p>
 
 	<div class="fh-cr-summary">
@@ -226,7 +226,7 @@ $fh_group_table = static function ( array $groups, $label, $labels = false ) use
 				echo esc_html(
 					sprintf(
 						/* translators: 1: groups, 2: fish */
-						__( 'Left out of everything above and below — the yearly figures, survival per batch, landed cost and days in QT: %1$d groups, %2$d fish. They belong to no supplier order, and their dates are not always known. They count only here, in what is alive, shipped and lost (all years).', 'fishotel-misc-plugin' ),
+						__( 'Left out of everything above and below — the yearly figures, survival per batch, landed cost and days in QT: %1$d groups, %2$d fish. They belong to no fish order, and their dates are not always known. They count only here, in what is alive, shipped and lost (all years).', 'fishotel-misc-plugin' ),
 						(int) $existing['left_out_groups'],
 						(int) $existing['left_out_fish']
 					)
@@ -236,7 +236,7 @@ $fh_group_table = static function ( array $groups, $label, $labels = false ) use
 		</div>
 	<?php endif; ?>
 
-	<h2 class="fh-cr-h2"><?php esc_html_e( 'Orders', 'fishotel-misc-plugin' ); ?></h2>
+	<h2 class="fh-cr-h2"><?php esc_html_e( 'Fish orders', 'fishotel-misc-plugin' ); ?></h2>
 	<?php if ( ! $stats['orders'] ) : ?>
 		<div class="fishotel-misc-empty"><span class="dashicons dashicons-chart-bar"></span><p><?php esc_html_e( 'No orders in this year.', 'fishotel-misc-plugin' ); ?></p></div>
 	<?php else : ?>

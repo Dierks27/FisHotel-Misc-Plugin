@@ -327,7 +327,9 @@ system temp directory (`FH_TEST_TMP` overrides).
   the refunds, the years: marked failed, never cached, read again on
   the next view, the sheets ending with INCOMPLETE).
 - **stats-admin-test.php** — the Stats tab's further views on the fake
-  store: which view a request asks for, the years of a comparison (the
+  store: the tab named *Fish orders* at its old address (`tab=arrivals`)
+  and no screen of the Clean Room or of Requests still saying "supplier
+  order"; which view a request asks for, the years of a comparison (the
   last two with orders by default, one picked → the default and a
   notice, at most six), the comparison as sheets (a row per year, the
   change and change-% rows, empty cells for a missing year, the one
@@ -465,7 +467,7 @@ system temp directory (`FH_TEST_TMP` overrides).
   and old → new, unchanged = nothing written or logged, five invalid
   dates refused, a change, Clear, Clear with nothing set), the order
   editor's Save keeping the date, the order card / its status line /
-  the suggestion / the Arrivals "On sale" cell / the orders export; the
+  the suggestion / the Fish orders "On sale" cell / the orders export; the
   product page's `save_meta_box()` (no nonce field = no work, another
   product's nonce, no edit_post, no section capability, untouched pickers
   — the batch's date never copied —, the second save_post of the same
@@ -473,7 +475,7 @@ system temp directory (`FH_TEST_TMP` overrides).
   notice printed once, "Use the batch date", an invalid date ignored and
   named, a two-digit year (0026) and the day after two years from today
   refused, an emptied picker, an emptied picker that showed the batch's
-  date reported with its supplier order, a group without an own date, a
+  date reported with its fish order, a group without an own date, a
   closed group, a failing store caught and logged, an autosave); the
   date bounds (`sale_date_max()` with Feb 29, `is_sale_date_in_range()`,
   `own_sale_date_check()`), the batch calendar refusing dates outside
@@ -631,7 +633,7 @@ system temp directory (`FH_TEST_TMP` overrides).
   buildings (its own lines, marked, not ticked by a building's dose);
   the guards of a tick; the pool, the overlay, `spread_logs()` and
   `merge_copper()` for a slot; the list on the phone's screens.
-- **order-view-test.php** — the supplier order screen. Read as text:
+- **order-view-test.php** — the fish order screen. Read as text:
   the "Goes on sale" card under the order's title, its fields posting to
   their own form (no form inside a form), so the order's Save never
   carries the sale date. **Rendered** on the in-memory store
@@ -1238,7 +1240,7 @@ line's `split` field holds anything (`fields_before`) — and one press on
     product* → type a product title → pick it: the row shows the product
     link. Front Desk → Arrival → type the species' name: it is offered
     once (not twice when its name is a product's title).
-11. Supplier orders → New order: supplier, origin, box mode, tariffs / flight /
+11. Fish orders → New fish order: supplier, origin, box mode, tariffs / flight /
     import fees; two lines picked from the suggestions (the worth
     prefilled from the species' price), ordered / received / price;
     Save: the ref reads `2026-1`, the computed columns and the stats
@@ -1256,7 +1258,7 @@ line's `split` field holds anything (`fields_before`) — and one press on
 13. Stats: the year's orders, the weighted card and the "as the
     spreadsheet averaged them" card (the latter the unweighted average
     of the batch rates), by supplier / origin / species group. Export
-    XLSX on Arrivals, Species, Stats and Stays: Excel opens each
+    XLSX on Fish orders, Species, Stats and Stays: Excel opens each
     without a repair prompt, a species named "=1+1" shows as text.
 14. Settings → Treatment schedules: the picker lists 14 Day CM (default),
     14 Day CF, Xtra 14 Day CF, CQ and Trifecta; pick CQ — the editor shows
@@ -1283,19 +1285,19 @@ line's `split` field holds anything (`fields_before`) — and one press on
     estimate for the last 45 days) and the reader's warnings folded away;
     the file sits in wp-content/uploads/fishotel-private/ under a random
     name and the folder's URL answers 403; Import now with the defaults:
-    the result lines, Species / Arrivals / Stats filled, the recent
+    the result lines, Species / Fish orders / Stats filled, the recent
     batches' stays on the Board with supplier, ref and landed cost, the
     treatment logs on the Events tab under Building 500 / 600, Settings →
     Box rates filled; the file is gone. Upload the same file again and
     Import now: every count but the species updates is 0, nothing new on
     the Board or the Events tab. Upload and Discard: the file is gone.
-17. Sale dates. Supplier orders → an order with checked-in fish: the *Goes on
+17. Sale dates. Fish orders → an order with checked-in fish: the *Goes on
     sale* card shows an empty picker and "suggested <check-in + 28>";
     click the suggestion — the picker fills, nothing is saved; reload —
     still empty. Pick a date in the past and Save: the notice "Order … goes
     on sale … (was not set)", the line "Applies to N groups still in tanks
-    — for sale since …", the Arrivals list's *On sale* column shows the
-    date, FisHotel Health → Log has "Sale date of supplier order …
+    — for sale since …", the Fish orders list's *On sale* column shows the
+    date, FisHotel Health → Log has "Sale date of fish order …
     changed by <you>: not set → …". The Board: those groups read *ready*,
     the ones still in the Spa with "still in the Spa", the summary chip
     counts them. Post a bad date (for example with the browser's dev
@@ -1334,18 +1336,18 @@ line's `split` field holds anything (`fields_before`) — and one press on
     received count, a size and a percent, Save, Check in: the stay is on
     the Board as "?? small wrasse", the Board's summary has "1 needs
     identifying" (a click opens the Stays tab filtered to it), the
-    Arrivals list and the order title say "?? 1 to identify", and
+    Fish orders list and the order title say "?? 1 to identify", and
     Settings → Box shares has no row for it. Phone, on its tank: the
     row says "needs identifying"; tap it → Identify → type the real
     fish, pick it, a size, Save: the toast "Identified: ?? small wrasse
-    → … · the order line follows", no Undo; the Events tab has
+    → … · the fish order line follows", no Undo; the Events tab has
     "identified: ?? small wrasse → …" with your name; the order line
     has the fish, its scientific name and size; Settings → Box shares
     now has its row. On another checked-in line, Stays tab → Correct
     fish… → another fish: the order line shows "arrived labeled: <the
     old name>"; correct it again — the label does not change. Move 1 of
     a group of 3 to another tank (a split), then Identify the 1 as
-    another fish: the order line keeps its name and shows "[part of this
+    another fish: the fish order line keeps its name and shows "[part of this
     line is … — stay #N]"; identify the other 2 as that same fish: the
     line follows and the note is gone. Phone → Arrival → "Unknown fish
     (??)": a "??" group with no product.
@@ -1453,7 +1455,7 @@ line's `split` field holds anything (`fields_before`) — and one press on
     what is alive, shipped and lost and how many were left out. The
     product's page in the shop shows nothing new.
 
-32. Import lines. Arrivals → *New order from pasted lines / a file*:
+32. Import lines. Fish orders → *New fish order from pasted lines / a file*:
     the new order opens with **Import lines** showing, "This is what I
     ORDERED" on. Type the supplier, paste the supplier's price list
     with your order quantities filled in (title rows and all) and press

@@ -1,6 +1,6 @@
 <?php
 /**
- * Arrivals tab — the supplier orders of a year with their figures.
+ * Fish orders tab — the fish orders of a year with their figures.
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  *
@@ -54,17 +54,17 @@ $tab = 'arrivals';
 			<noscript><button type="submit" class="button"><?php esc_html_e( 'Filter', 'fishotel-misc-plugin' ); ?></button></noscript>
 		</form>
 		<div class="fh-cr-actions">
-			<a class="button button-primary" href="<?php echo esc_url( $new_url ); ?>"><?php esc_html_e( 'New order', 'fishotel-misc-plugin' ); ?></a>
-			<a class="button" href="<?php echo esc_url( add_query_arg( 'import', '1', $new_url ) ); ?>" title="<?php esc_attr_e( 'A new order with "Import lines" already open: paste your order sheet or pick the file.', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'New order from pasted lines / a file', 'fishotel-misc-plugin' ); ?></a>
+			<a class="button button-primary" href="<?php echo esc_url( $new_url ); ?>"><?php esc_html_e( 'New fish order', 'fishotel-misc-plugin' ); ?></a>
+			<a class="button" href="<?php echo esc_url( add_query_arg( 'import', '1', $new_url ) ); ?>" title="<?php esc_attr_e( 'A new order with "Import lines" already open: paste your order sheet or pick the file.', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'New fish order from pasted lines / a file', 'fishotel-misc-plugin' ); ?></a>
 			<a class="button" href="<?php echo esc_url( $exports['xlsx'] ); ?>"><?php esc_html_e( 'Export XLSX', 'fishotel-misc-plugin' ); ?></a>
 			<a class="button" href="<?php echo esc_url( $exports['csv'] ); ?>"><?php esc_html_e( 'Export lines CSV', 'fishotel-misc-plugin' ); ?></a>
 		</div>
 	</div>
 
 	<?php if ( ! $rows ) : ?>
-		<div class="fishotel-misc-empty"><span class="dashicons dashicons-cart"></span><p><?php esc_html_e( 'No supplier orders yet. "New order" starts one; the lines take the species, the counts and the prices, and "Check in received fish" turns them into stays.', 'fishotel-misc-plugin' ); ?></p></div>
+		<div class="fishotel-misc-empty"><span class="dashicons dashicons-cart"></span><p><?php esc_html_e( 'No fish orders yet. "New fish order" starts one; the lines take the species, the counts and the prices, and "Check in received fish" turns them into stays.', 'fishotel-misc-plugin' ); ?></p></div>
 	<?php else : ?>
-		<p class="fh-cr-count"><?php echo esc_html( sprintf( /* translators: %d: orders */ __( '%d orders · newest first', 'fishotel-misc-plugin' ), count( $rows ) ) ); ?></p>
+		<p class="fh-cr-count"><?php echo esc_html( sprintf( /* translators: %d: fish orders */ _n( '%d fish order', '%d fish orders · newest first', count( $rows ), 'fishotel-misc-plugin' ), count( $rows ) ) ); ?></p>
 		<div class="fh-cr-grid-wrap">
 			<table class="widefat striped fh-cr-table">
 				<thead>

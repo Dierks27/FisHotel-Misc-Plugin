@@ -6,7 +6,7 @@
  *   Compare years    two or more years side by side (Stats::compare());
  *   Species          one row per fish and year, sortable, with a search
  *                    (Stats::by_species());
- *   Prices to raise  the fish priced under what their latest supplier
+ *   Prices to raise  the fish priced under what their latest fish
  *                    order suggests (Stats_Prices) — read-only: no price
  *                    is ever changed from here;
  *   Real sales       what customers actually paid per fish and year, from
@@ -15,7 +15,7 @@
  *
  * The first three and every "estimate" on the tab are what the
  * spreadsheet computed: survivors × the FisHotel price typed on the
- * supplier order. Real sales is the only ACTUAL figure; every view says
+ * fish order. Real sales is the only ACTUAL figure; every view says
  * which is which.
  *
  * Real sales reads WooCommerce's order tables through the Store, a year
@@ -28,7 +28,7 @@
  * sale is gets decided on every view from the species list as it is now,
  * so linking a species to its product shows at once, without a refresh.
  *
- * One read of every supplier order stops at the store's newest 500:
+ * One read of every fish order stops at the store's newest 500:
  * Compare years and the landed costs of the year Real sales shows read
  * their years one at a time, as "By year" does; Prices to raise keeps to
  * that one read and says so when it came back full.
@@ -976,7 +976,7 @@ class Admin_Stats {
 
 	/**
 	 * The Real sales view of one year: the sales matched to the species
-	 * list as it is now, beside the supplier orders.
+	 * list as it is now, beside the fish orders.
 	 *
 	 * @param object $store   Store.
 	 * @param array  $filters year (0 = the latest with sales), search, sort, dir.

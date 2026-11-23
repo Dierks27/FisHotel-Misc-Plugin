@@ -5,7 +5,7 @@
  * make and switch a link, edit, note, paid by hand, cancel, reopen, the
  * daily check, the settings behind their own capability), what the list
  * shows for a state / a view / a page, where a handled form may go back
- * to, the "Requested by" line of the Clean Room's supplier order page,
+ * to, the "Requested by" line of the Clean Room's fish order page,
  * the My Account rewrite check — and every tab printed once, with no
  * PHP notice and nothing unescaped.
  *
@@ -184,7 +184,7 @@ echo "\nMatching by hand\n";
 $result = Admin::perform( 'link', array( 'id' => $sheet[0], 'line' => '3:9' ), fh_ctx( $service ) );
 check( 'without the Clean Room there is nothing to match to, and it says so', ! $result['ok'] && false !== strpos( $result['message'], 'Clean Room' ) );
 check_same( 'switching "match by itself" off and on', array( 0, 1 ), array( Admin::perform( 'auto', array( 'id' => $sheet[0] ), fh_ctx( $service ) )['ok'] ? $store->get( $sheet[0] )['auto_match'] : -1, Admin::perform( 'auto', array( 'id' => $sheet[0], 'on' => '1' ), fh_ctx( $service ) )['ok'] ? $store->get( $sheet[0] )['auto_match'] : -1 ) );
-check( 'a request that is not on a supplier order cannot be taken off one', ! Admin::perform( 'unlink', array( 'id' => $sheet[0] ), fh_ctx( $service ) )['ok'] );
+check( 'a request that is not on a fish order cannot be taken off one', ! Admin::perform( 'unlink', array( 'id' => $sheet[0] ), fh_ctx( $service ) )['ok'] );
 
 echo "\nPrivate links\n";
 $result = Admin::perform( 'link_create', array( 'label' => '', 'fee' => 'lots', 'expires' => '2026-13-40', 'max_uses' => 'x' ), fh_ctx( $service ) );
@@ -246,7 +246,7 @@ $paged = Admin::listing( $store, $open, $none, 'list', 'created', 'asc', 99, $GL
 check_same( 'a page past the end is the last page', array( 1, 1 ), array( $paged['pages'], $paged['paged'] ) );
 
 /* ================================================================== */
-echo "\nRequested by, on the Clean Room's supplier order page\n";
+echo "\nRequested by, on the Clean Room's fish order page\n";
 /* ================================================================== */
 
 check_same( 'names, with the quantity when it is more than one', 'Pat Example (2), reef_lee, lee@example.test', Admin::requested_by_words( array( array( 'name' => 'Pat Example', 'qty' => 2 ), array( 'name' => '', 'handle' => 'reef_lee', 'qty' => 1 ), array( 'name' => '', 'handle' => '', 'email' => 'lee@example.test', 'qty' => 1 ) ) ) );
@@ -386,7 +386,7 @@ $html = fh_admin_view( 'admin-links.php', array_merge( $base, array( 'tab' => 'l
 check_contains( 'Links: each link to copy', 'data-copy="https://example.test/?fh_request=' . $link['token'] . '"', $html );
 check_contains( 'Links: how many requests came through', 'Test batch', $html );
 $html = fh_admin_view( 'admin-demand.php', array_merge( $base, array( 'tab' => 'demand', 'demand' => Listing::demand( $store->demand(), array( 'years' => array( 2026, 2025 ), 'rows' => array( 't:blue test wrasse' => array( 'species' => 'Blue Test Wrasse', 'species_id' => null, 'years' => array( 2025 => 4 ), 'total' => 4 ) ) ) ), 'longest' => Listing::longest( $open, $GLOBALS['fh_clock'], 5 ) ) ) );
-check_contains( 'Demand: the years of past supplier orders', '<th scope="col" class="fh-rq-num">2025</th>', $html );
+check_contains( 'Demand: the years of past fish orders', '<th scope="col" class="fh-rq-num">2025</th>', $html );
 check_contains( 'Demand: who has waited longest', 'Who has waited longest', $html );
 check_lacks( 'Demand: nothing unescaped', '<b>Fish</b>', $html );
 $html = fh_admin_view( 'admin-settings.php', array_merge( $base, array( 'tab' => 'settings', 'labels' => Settings::mail_labels() ) ) );

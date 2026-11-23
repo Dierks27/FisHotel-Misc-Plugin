@@ -2,7 +2,7 @@
 /**
  * Requests ↔ Clean Room — the ONE place this section reads the Clean Room
  * section of the same plugin: the species suggestions, the standard
- * sizes, the supplier orders with their lines and tank groups, and the
+ * sizes, the fish orders with their lines and tank groups, and the
  * quantities ordered in past years.
  *
  * The Clean Room may be switched off, older or absent, so nothing here
@@ -31,7 +31,7 @@ class Cleanroom {
 	const NS = '\\FisHotel\\Misc\\Sections\\Clean_Room\\';
 
 	/**
-	 * How many supplier orders the past-demand table and the "match by
+	 * How many fish orders the past-demand table and the "match by
 	 * hand" list read.
 	 */
 	const DEMAND_ORDERS = 500;
@@ -232,11 +232,11 @@ class Cleanroom {
 	}
 
 	/* ============================================================== */
-	/*  Supplier orders                                                */
+	/*  Fish orders                                                    */
 	/* ============================================================== */
 
 	/**
-	 * A supplier order's header as the follower reads it.
+	 * A fish order's header as the follower reads it.
 	 *
 	 * @param array $order The Clean Room's order.
 	 * @return array id, ref, status, supplier, date, lines.
@@ -261,7 +261,7 @@ class Cleanroom {
 	}
 
 	/**
-	 * A supplier order line as the follower reads it.
+	 * A fish order line as the follower reads it.
 	 *
 	 * @param array $line The Clean Room's line.
 	 * @return array
@@ -283,7 +283,7 @@ class Cleanroom {
 	}
 
 	/**
-	 * Supplier orders with their lines, by id.
+	 * Fish orders with their lines, by id.
 	 *
 	 * @param array[] $headers The Clean Room's order headers.
 	 * @return array<int, array>
@@ -342,7 +342,7 @@ class Cleanroom {
 	}
 
 	/**
-	 * What Follow::plan() needs: every draft and ordered supplier order,
+	 * What Follow::plan() needs: every draft and ordered fish order,
 	 * the order of every line a request is matched to, their lines, and
 	 * the tank groups of the lines that matter. Null when the orders
 	 * cannot be read — the follower then changes nothing.
@@ -398,7 +398,7 @@ class Cleanroom {
 	}
 
 	/**
-	 * The supplier order lines a request could be matched to by hand: the
+	 * The fish order lines a request could be matched to by hand: the
 	 * same fish (or a name that resembles it) on a recent order that is a
 	 * draft, ordered or received.
 	 *
@@ -459,9 +459,9 @@ class Cleanroom {
 	}
 
 	/**
-	 * One supplier order line, for a match by hand.
+	 * One fish order line, for a match by hand.
 	 *
-	 * @param int $order_id Supplier order id.
+	 * @param int $order_id Fish order id.
 	 * @param int $line_id  Line id.
 	 * @return array|null id, order_id, ref, species.
 	 */
@@ -491,9 +491,9 @@ class Cleanroom {
 	}
 
 	/**
-	 * The refs of some supplier orders, by id.
+	 * The refs of some fish orders, by id.
 	 *
-	 * @param int[] $order_ids Supplier order ids.
+	 * @param int[] $order_ids Fish order ids.
 	 * @return array<int, string>
 	 */
 	public function refs( array $order_ids ) {
@@ -515,8 +515,8 @@ class Cleanroom {
 	}
 
 	/**
-	 * Past demand: the quantities ORDERED on supplier orders per species
-	 * and year. (The shop's past supplier orders were all customer
+	 * Past demand: the quantities ORDERED on fish orders per species
+	 * and year. (The shop's past fish orders were all customer
 	 * requests, so what was ordered is what was asked for.)
 	 *
 	 * @return array{years: int[], rows: array<string, array{species: string, species_id: int|null, years: array<int, int>, total: int}>}

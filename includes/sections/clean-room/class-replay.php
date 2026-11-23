@@ -33,7 +33,7 @@
  *     not clear it again;
  *   - the sale date is CHOSEN, never computed: the stay's own date (a note
  *     event "sale_ready:YYYY-MM-DD"; "sale_ready:" clears it) when set,
- *     else its batch's date (the supplier order it was checked in from —
+ *     else its batch's date (the fish order it was checked in from —
  *     the Store hands it in as the stay's batch_sale_date), else none;
  *     a stay is ready (for sale) once that date is set, the site-local
  *     today is that date or later and the stay is not closed — cleared or
@@ -261,7 +261,7 @@ class Replay {
 	 * batch's date, else none.
 	 *
 	 * @param string|null $own   The stay's own date (the note event's).
-	 * @param string|null $batch The batch's date (its supplier order's).
+	 * @param string|null $batch The batch's date (its fish order's).
 	 * @return string|null Y-m-d, or null when neither is set.
 	 */
 	public static function sale_date( $own, $batch ) {
@@ -435,7 +435,7 @@ class Replay {
 	 * Rebuild a stay's state from its events.
 	 *
 	 * @param array   $stay   The stay row (checkin_date as a fallback, tank_id as a fallback,
-	 *                        batch_sale_date = its supplier order's sale date, when it has one).
+	 *                        batch_sale_date = its fish order's sale date, when it has one).
 	 * @param array[] $events Its events (any order).
 	 * @param string  $today  Site date Y-m-d.
 	 * @param array   $opts   sale_ready_days (int, default 28 — the suggested date only),
@@ -680,10 +680,10 @@ class Replay {
 	/**
 	 * The effective state of a cached row today — the stored status plus
 	 * the day number and the sale fields (the only parts that move without
-	 * an event: today, and the batch's date on its supplier order).
+	 * an event: today, and the batch's date on its fish order).
 	 *
 	 * @param array  $row   Stay row (status, checkin_date, cleared_date, sale_ready_date = the stay's
-	 *                      own date, batch_sale_date = its supplier order's).
+	 *                      own date, batch_sale_date = its fish order's).
 	 * @param string $today Site date.
 	 * @param array  $opts  sale_ready_days (the suggested date only).
 	 * @return array{status: string, day: int|null, checkin_unknown: bool, cleared_unknown: bool,

@@ -1,12 +1,12 @@
 <?php
 /**
- * The state follows the fish. First the pure plan on hand-made supplier
+ * The state follows the fish. First the pure plan on hand-made fish
  * orders (the oldest request first, never more fish than the line orders,
  * the size when both have one, a line that was checked in, a tank group
  * that is on sale, fewer fish alive than asked for, an order that arrived
  * without the fish, a match made or undone by hand); then the whole run
  * against the Clean Room's own classes on its in-memory store: a real
- * supplier order, a real check-in, a real sale date — and the "ready"
+ * fish order, a real check-in, a real sale date — and the "ready"
  * e-mail going out by itself, or waiting for one click.
  *
  * Run from the plugin root:  php includes/sections/requests/tests/follow-test.php
@@ -45,7 +45,7 @@ function fh_req( $id, $state, array $more = array() ) {
 }
 
 /**
- * A supplier order line as the planner reads one.
+ * A fish order line as the planner reads one.
  */
 function fh_line( $id, array $more = array() ) {
 	return array_merge(
@@ -104,7 +104,7 @@ echo "\nWaiting → on order\n";
 /* ================================================================== */
 
 $steps = fh_steps( array( fh_req( 1, 'waiting' ) ), array( fh_order( 1, 'draft', array( fh_line( 11 ) ) ) ) );
-check_same( 'a draft supplier order with a line of the fish: on order', array( 'on_order', 11, 1 ), array( $steps[1]['to'], $steps[1]['line_id'], $steps[1]['order_id'] ) );
+check_same( 'a draft fish order with a line of the fish: on order', array( 'on_order', 11, 1 ), array( $steps[1]['to'], $steps[1]['line_id'], $steps[1]['order_id'] ) );
 check_contains( 'the log will name the order', '2026-1', $steps[1]['why'] );
 check_same( 'an ordered one too', 'on_order', fh_steps( array( fh_req( 1, 'waiting' ) ), array( fh_order( 1, 'ordered', array( fh_line( 11 ) ) ) ) )[1]['to'] );
 check_same( 'a received order is not matched by the job', array(), fh_steps( array( fh_req( 1, 'waiting' ) ), array( fh_order( 1, 'received', array( fh_line( 11 ) ) ) ) ) );
@@ -242,7 +242,7 @@ echo "\nOne run takes both steps\n";
 /* ================================================================== */
 
 /**
- * A stand-in for the Clean Room adapter: the supplier orders it is given.
+ * A stand-in for the Clean Room adapter: the fish orders it is given.
  */
 class Fh_Fake_Room {
 	public $orders = array();
@@ -318,7 +318,7 @@ $goby = $service->create( array( 'name' => 'Lee Local', 'fish' => 'Red Test Goby
 check( 'four requests are on the list', is_int( $pat ) && is_int( $sam ) && is_int( $lee ) && is_int( $goby ) );
 fh_take_mails();
 
-check_same( 'no supplier order yet: nothing moves', 0, Follow::run( $service, $adapter )['on_order'] );
+check_same( 'no fish order yet: nothing moves', 0, Follow::run( $service, $adapter )['on_order'] );
 
 $order_id = $room_store->save_order( Room_Orders::normalize_order( array( 'ref' => '2026-9', 'supplier' => 'Test Supplier One', 'status' => 'draft', 'order_date' => '2026-03-01' ) ) );
 $room_store->save_order_lines(
@@ -343,7 +343,7 @@ check_same( 'a second run changes nothing', 0, array_sum( array_slice( Follow::r
 check_same( 'nobody is e-mailed for being on order', array(), fh_take_mails() );
 
 $requested = $store->find( array( 'cr_order_id' => $order_id, 'state' => Rules::LINKED_STATES ) );
-check_same( '"Requested by" on the supplier order reads two requests for that line', array( $wrasse_id, $wrasse_id ), array_column( $requested, 'line_id' ) );
+check_same( '"Requested by" on the fish order reads two requests for that line', array( $wrasse_id, $wrasse_id ), array_column( $requested, 'line_id' ) );
 
 echo "\nBy hand: link and unlink\n";
 $candidates = $adapter->candidates( array( $store->get( $lee ), $store->get( $goby ) ) );
@@ -375,7 +375,7 @@ $stay_id = (int) $checked['created'][0]['stay_id'];
 $run = Follow::run( $service, $adapter );
 check_same( 'both requests are in quarantine', array( 2, 'in_quarantine', 'in_quarantine' ), array( $run['in_quarantine'], $store->get( $pat )['state'], $store->get( $sam )['state'] ) );
 check_same( 'on that tank group', $stay_id, $store->get( $pat )['stay_id'] );
-check_contains( 'the log says checked in', 'Checked in from supplier order 2026-9', implode( ' | ', $store->notes( $pat ) ) );
+check_contains( 'the log says checked in', 'Checked in from fish order 2026-9', implode( ' | ', $store->notes( $pat ) ) );
 check_same( 'the request waiting for room still waits (the order is received now)', 'waiting', $store->get( $lee )['state'] );
 check_same( 'nobody is e-mailed for a fish in quarantine', array(), fh_take_mails() );
 

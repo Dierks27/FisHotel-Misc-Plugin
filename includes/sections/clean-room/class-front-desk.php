@@ -15,7 +15,7 @@
  *   (with a quantity = a split, an optional reason), arrival (always into
  *   a Spa tank, with an optional size from the standard list — or as an
  *   unknown fish, "??" and what it looks like), identify (the real fish and
- *   its size on a group: the stay and its supplier order line together —
+ *   its size on a group: the stay and its fish order line together —
  *   Identify), clear (the cleared date by hand), checkin (the check-in
  *   date by hand), ready (the stay's own sale date; empty = back to the
  *   batch's), count (a full
@@ -344,7 +344,7 @@ class Front_Desk {
 			'checkinDate' => __( 'Check-in date', 'fishotel-misc-plugin' ),
 			'readyDate'   => __( 'Sale date (this group)', 'fishotel-misc-plugin' ),
 			'readyBatch'  => __( 'Empty = the batch date (%s).', 'fishotel-misc-plugin' ),
-			'readyNone'   => __( 'Empty = no sale date: the batch has none yet (set it on the supplier order).', 'fishotel-misc-plugin' ),
+			'readyNone'   => __( 'Empty = no sale date: the batch has none yet (set it on its fish order: Clean Room → Fish orders).', 'fishotel-misc-plugin' ),
 			'unsetDate'   => __( 'Not cleared', 'fishotel-misc-plugin' ),
 			'dates'       => __( 'Dates', 'fishotel-misc-plugin' ),
 			'tankNote'    => __( 'Tank note', 'fishotel-misc-plugin' ),
@@ -403,7 +403,7 @@ class Front_Desk {
 			'needsId'     => __( 'needs identifying', 'fishotel-misc-plugin' ),
 			'identify'    => __( 'Identify', 'fishotel-misc-plugin' ),
 			'correctFish' => __( 'Correct the fish', 'fishotel-misc-plugin' ),
-			'identifyHint' => __( 'Pick the real fish and its size: the tank row, its supplier order line and the remembered box share follow.', 'fishotel-misc-plugin' ),
+			'identifyHint' => __( 'Pick the real fish and its size: the tank row, its fish order line and the remembered box share follow.', 'fishotel-misc-plugin' ),
 			'existingAdd'    => __( 'Add fish already here', 'fishotel-misc-plugin' ),
 			'existingShort'  => __( 'Already here', 'fishotel-misc-plugin' ),
 			/* translators: %d: tank number */
@@ -681,7 +681,7 @@ class Front_Desk {
 
 	/**
 	 * The choices the "Add fish already here" sheet offers for where the
-	 * fish came from: the suppliers and the origins the supplier orders
+	 * fish came from: the suppliers and the origins the fish orders
 	 * already name (at most 12 of each; anything else is typed).
 	 *
 	 * @param object $store Store or stand-in.
@@ -1484,7 +1484,7 @@ class Front_Desk {
 	 * THIS tank, whatever its area: a Spa tank, a Clean Room tank, a
 	 * temporary tank that is set up. No Spa step. The stay's source is
 	 * 'existing' (Store::SOURCE_EXISTING), so every report can tell it
-	 * apart; it belongs to no supplier order.
+	 * apart; it belongs to no fish order.
 	 *
 	 * Written: the stay (check-in = the arrival date, or empty when
 	 * Unknown; the supplier; the origin as its note), an arrival of the
@@ -1596,7 +1596,7 @@ class Front_Desk {
 	 * Identify / Correct the fish: one group of this tank gets its real
 	 * fish (a product, a species-list fish, a typed name — or "Unknown
 	 * fish (??)" with what it looks like) and its size. The stay and its
-	 * supplier order line are corrected together and the remembered box
+	 * fish order line are corrected together and the remembered box
 	 * share follows (Identify::stay()). No undo: who a fish is is not an
 	 * event to reverse — correct it again.
 	 */
@@ -1908,7 +1908,7 @@ class Front_Desk {
 	/**
 	 * The toast after a sale date was set or removed (pure): "Pajama
 	 * Cardinalfish on sale 2026-10-30", "… back to the batch date
-	 * (2026-11-02)", "… no sale date now — set one on its supplier order",
+	 * (2026-11-02)", "… no sale date now — set one on its fish order",
 	 * with ", still in the Spa" when the date has come before the group
 	 * was cleared.
 	 *
@@ -1927,7 +1927,7 @@ class Front_Desk {
 			$text = sprintf( __( '%1$s back to the batch date (%2$s)', 'fishotel-misc-plugin' ), $species, $batch );
 		} else {
 			/* translators: %s: species */
-			$text = sprintf( __( '%s: no sale date now — set one on its supplier order', 'fishotel-misc-plugin' ), $species );
+			$text = sprintf( __( '%s: no sale date now — set one on its fish order', 'fishotel-misc-plugin' ), $species );
 		}
 		if ( ! empty( $state['ready_in_spa'] ) ) {
 			$text .= ' · ' . __( 'still in the Spa', 'fishotel-misc-plugin' );

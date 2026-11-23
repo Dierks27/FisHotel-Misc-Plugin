@@ -144,7 +144,7 @@ class Layout {
 			case 'today':
 				return __( 'The next delivery days and everything that is waiting on you, from every section that is on — as a page and a dashboard widget. Starts nothing by itself.', 'fishotel-misc-plugin' );
 			case 'clean-room':
-				return __( 'Where every fish is, from landing to shipping: tanks with QR labels, the phone screen, the day\'s to-do list, supplier orders, check-in and stats. Starts nothing by itself: it sends no e-mail and calls nothing outside the site.', 'fishotel-misc-plugin' );
+				return __( 'Where every fish is, from landing to shipping: tanks with QR labels, the phone screen, the day\'s to-do list, fish orders from suppliers, check-in and stats. Starts nothing by itself: it sends no e-mail and calls nothing outside the site.', 'fishotel-misc-plugin' );
 			case 'invoices':
 				return __( 'Build a customer\'s invoice by picking fish and publish it as the hidden product they pay; it is marked paid when its order is paid. Starts nothing by itself and sends no e-mail.', 'fishotel-misc-plugin' );
 			case 'requests':
@@ -164,7 +164,7 @@ class Layout {
 			case 'shop-app':
 				return __( 'Lets a phone or tablet you set up open the fish-room screens with a PIN, without a WordPress login (needs HTTPS). Starts nothing by itself and sends no e-mail.', 'fishotel-misc-plugin' );
 			case 'sticker-giveaway':
-				return __( 'A free FisHotel sticker picked at checkout on fish orders, with optional add-on stickers. Switching it on adds the sticker choice to checkout and starts nothing on a timer; it e-mails you once when a design\'s stock drops to the "Reorder at" number you gave it (the Sticker Giveaway page turns that off).', 'fishotel-misc-plugin' );
+				return __( 'A free FisHotel sticker picked at checkout on customers\' orders that have fish in them, with optional add-on stickers. Switching it on adds the sticker choice to checkout and starts nothing on a timer; it e-mails you once when a design\'s stock drops to the "Reorder at" number you gave it (the Sticker Giveaway page turns that off).', 'fishotel-misc-plugin' );
 			case 'announcer':
 				return __( 'Notice bars and banners across the site. Starts nothing by itself.', 'fishotel-misc-plugin' );
 			case 'coming-soon':

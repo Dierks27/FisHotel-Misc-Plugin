@@ -356,7 +356,7 @@ class Admin_Sizes_Tidy {
 				return sprintf( _n( '%d stay', '%d stays', $count, 'fishotel-misc-plugin' ), $count );
 			case 'order_lines':
 				/* translators: %d: count */
-				return sprintf( _n( '%d supplier order line', '%d supplier order lines', $count, 'fishotel-misc-plugin' ), $count );
+				return sprintf( _n( '%d line on fish orders', '%d lines on fish orders', $count, 'fishotel-misc-plugin' ), $count );
 			case 'requests':
 				/* translators: %d: count */
 				return sprintf( _n( '%d fish request', '%d fish requests', $count, 'fishotel-misc-plugin' ), $count );
