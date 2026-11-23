@@ -218,7 +218,7 @@ const I18N = {
 const URLS = {
 	app: SITE + '/?fh_shop_app=1', state: SITE + '/?fh_shop_app=state', unlock: SITE + '/?fh_shop_app=unlock', lock: SITE + '/?fh_shop_app=lock',
 	sw: SITE + '/?fh_shop_app=sw', swScope: SITE + '/?fh_shop_app=', label: SITE + '/?fh_front_desk=1', ajax: AJAX, admin: SITE + '/wp-admin/',
-	qrLib: SITE + '/wp-content/plugins/fishotel-misc-plugin/includes/sections/shop-app/js/vendor/jsQR.js?ver=0.46.13'
+	qrLib: SITE + '/wp-content/plugins/fishotel-misc-plugin/includes/sections/shop-app/js/vendor/jsQR.js?ver=0.46.16'
 };
 
 /* Load js/app.js into a stand-in page. */
