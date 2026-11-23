@@ -2097,7 +2097,9 @@ order (a line).
   is written: a species row linked to a product already folds its name
   into that product's names in every search. When the species list or
   the shop already has a product under the fish's name (a group typed as
-  unlisted never got the link), the row offers it: *Link to it*.
+  unlisted never got the link), the row offers that product alone —
+  *Link to it* —: another pick would move every fish order line of the
+  fish as well, so it is refused and left to the Species list.
 - **Start a draft product** — makes a WooCommerce product as a
   **draft**, never published here, shaped as this shop's fish products
   are: a product with variations, the `quarantined-fish` category on the

@@ -167,8 +167,9 @@ $fh_keep         = array_filter(
 									<?php echo esc_html( sprintf( /* translators: %s: product title */ __( 'The shop has "%s" under this name.', 'fishotel-misc-plugin' ), '' !== $fh_title ? $fh_title : '#' . $fh_candidate ) ); ?>
 								</span>
 								<button type="button" class="button button-primary fh-cr-np-candidate" data-product="<?php echo esc_attr( $fh_candidate ); ?>"><?php esc_html_e( 'Link to it', 'fishotel-misc-plugin' ); ?></button>
+							<?php else : ?>
+								<button type="button" class="button button-primary fh-cr-np-link-open"><?php esc_html_e( 'Link to a product…', 'fishotel-misc-plugin' ); ?></button>
 							<?php endif; ?>
-							<button type="button" class="button<?php echo $fh_candidate > 0 ? '' : ' button-primary'; ?> fh-cr-np-link-open"><?php esc_html_e( 'Link to a product…', 'fishotel-misc-plugin' ); ?></button>
 							<?php if ( $can_draft && 0 === $fh_candidate ) : ?>
 								<button type="button" class="button fh-cr-np-draft" title="<?php esc_attr_e( 'Makes a product for this fish as a DRAFT — customers cannot see it — with its name, scientific name, the fish category and its sizes, and links the fish to it. You finish it in the shop: photo, description, price, Publish.', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'Start a draft product', 'fishotel-misc-plugin' ); ?></button>
 							<?php endif; ?>

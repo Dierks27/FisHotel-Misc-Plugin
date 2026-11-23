@@ -524,6 +524,13 @@ class Admin_No_Product {
 			return $refuse( null !== $hand['linked'] ? __( 'That fish has a product already — reload the list.', 'fishotel-misc-plugin' ) : __( 'That fish is no longer on the list — reload it.', 'fishotel-misc-plugin' ), 409 );
 		}
 
+		// The species list (or the shop, by the fish's name) ties this fish to another product already — only a
+		// group in a tank lacks the link. Linking it elsewhere would move every fish order line of the fish too.
+		if ( null !== $hand['linked'] && (int) $hand['linked'] !== $product_id ) {
+			/* translators: 1: fish, 2: product title */
+			return $refuse( sprintf( __( '%1$s already has the product "%2$s". Use "Link to it" — or change the fish\'s product on the Species list first.', 'fishotel-misc-plugin' ), (string) $hand['fish']['name'], (string) $store->product_title( (int) $hand['linked'] ) ), 409 );
+		}
+
 		$result = No_Product::link( $store, $hand['fish'], $hand['lines'], $hand['stays'], $product_id, self::write_ctx( $today, $settings ) );
 		if ( empty( $result['ok'] ) ) {
 			return $refuse( (string) $result['error'], 500 );

@@ -525,9 +525,9 @@ class No_Product {
 			if ( '' === $row['name'] ) {
 				$row['name'] = (string) ( $stay['species'] ?? '' );
 			}
-			if ( null === $row['cost'] && isset( $stay['landed_cost'] ) && is_numeric( $stay['landed_cost'] ) && (float) $stay['landed_cost'] > 0 && (int) ( $stay['qty_arrived'] ?? 0 ) > 0 ) {
-				// No order line at hand: what the stay itself was checked in with, per fish.
-				$row['cost']     = (float) $stay['landed_cost'] / (int) $stay['qty_arrived'];
+			if ( null === $row['cost'] && isset( $stay['landed_cost'] ) && is_numeric( $stay['landed_cost'] ) && (float) $stay['landed_cost'] > 0 ) {
+				// No order line at hand (its order is closed): what the stay was checked in with — a stay's landed cost is per fish.
+				$row['cost']     = (float) $stay['landed_cost'];
 				$row['cost_ref'] = (string) ( $stay['batch_order_ref'] ?? ( $stay['order_ref'] ?? '' ) );
 			}
 			unset( $row );
