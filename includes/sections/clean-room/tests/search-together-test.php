@@ -428,6 +428,8 @@ class Fh_Together_Spy extends Fake_Store {
 }
 
 $sea = new Fh_Together_Spy( array( 21 => 'Lined Test Wrasse' ) );
+$sea->size_attributes = array( array( 'taxonomy' => 'pa_size', 'name' => 'size', 'label' => 'Size', 'orderby' => 'menu_order' ) );
+$sea->size_terms      = array( 'pa_size' => array( array( 'term_id' => 30, 'name' => '1-2"', 'slug' => '1-2', 'menu_order' => 0 ) ) );
 $ten = fh_tg_save(
 	$sea,
 	array(
@@ -439,7 +441,7 @@ $ten = fh_tg_save(
 $eleven = fh_tg_save(
 	$sea,
 	array(
-		fh_tg_row( 'Filimented Test Goby', array( 'sci_name' => 'Testus filum', 'qty_received' => '4' ) ),
+		fh_tg_row( 'Filimented Test Goby', array( 'sci_name' => 'Testus filum', 'qty_received' => '4', 'size_slug' => '1-2' ) ),
 		fh_tg_row( 'Other Test Blenny', array( 'qty_received' => '6' ) ),
 	),
 	array( 'order_date' => '2026-11-12', 'received_date' => '2026-11-15', 'status' => 'received', 'ref' => '2026-11' )
@@ -496,7 +498,8 @@ $after      = $page( array() )['n:filimented test goby'] ?? array();
 $read       = array_values( array_filter( $sea->asked, static function ( $filters ) { return isset( $filters['refs'] ); } ) );
 check( 'while its fish order is open the goby\'s row has the order, its landed cost per fish and its scientific name', $before && array( '2026-11' ) === array_column( $before['orders'], 'ref' ) && null !== $before['cost'] && $before['cost'] > 0 && '2026-11' === $before['cost_ref'] && 'Testus filum' === $before['sci_name'] );
 check( 'the fish order CLOSED, the group still alive: the row still names fish order 2026-11 — it showed none, while the Stays tab said 2026-11', $after && array( array( (int) $eleven['order_id'], '2026-11', 'closed' ) ) === array_map( 'array_values', $after['orders'] ) && array( 522 ) === $after['tanks'] && 2 === $after['alive'] );
-check_same( '… with the landed cost and the target price that order\'s line of the fish has, and its scientific name — not "landed cost not known yet"', array( $before['cost'], $before['target'], '2026-11', 'Testus filum' ), array( $after['cost'], $after['target'], $after['cost_ref'], $after['sci_name'] ) );
+check_same( '… with the landed cost and the target price that order\'s line of the fish has, its scientific name and its size — not "landed cost not known yet", not "no size noted"', array( $before['cost'], $before['target'], '2026-11', 'Testus filum', array( '1-2' ) ), array( $after['cost'], $after['target'], $after['cost_ref'], $after['sci_name'], array_column( $after['sizes'], 'slug' ) ) );
+check( '… the row read the same sizes while the order was open', array( '1-2' ) === array_column( $before['sizes'], 'slug' ) );
 check( '… the closed order\'s lines make no row of their own: the blenny that only that order names is not on the list', ! isset( $page( array() )['n:other test blenny'] ) && array() === $after['line_ids'] );
 check_same( '… read in ONE more read of orders, by the refs the groups name and no open order has', array( array( 'refs' => array( '2026-11' ) ) ), $read );
 

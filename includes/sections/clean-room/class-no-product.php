@@ -461,8 +461,8 @@ class No_Product {
 	 * A group put in a tank by hand — the phone's Arrival of a fish picked
 	 * as "on fish order …" — stands for no order line: it carries its fish
 	 * order as a ref only (order_ref). It is that order's all the same: its
-	 * row names the order, and takes the scientific name and the landed
-	 * cost of the order's line of the same fish. With order_id it joins
+	 * row names the order, and takes the scientific name, the sizes and
+	 * the landed cost of the order's line of the same fish. With order_id it joins
 	 * the fish that order's lines put on the list (its tank, its fish
 	 * alive) and adds no row of its own: the count counted the lines.
 	 *
@@ -688,6 +688,9 @@ class No_Product {
 			if ( $facts && '' === $row['sci_name'] ) {
 				$row['sci_name'] = $facts['sci_name'];
 			}
+			foreach ( $facts ? $facts['sizes'] : array() as $size ) {
+				self::add_size( $row, $size ); // The sizes the order named it in: the row reads the same once the order is closed.
+			}
 			if ( $facts && null === $row['cost'] && null !== $facts['cost'] ) {
 				$row['cost']     = $facts['cost'];
 				$row['target']   = $facts['target'];
@@ -811,11 +814,14 @@ class No_Product {
 	/**
 	 * What an order's line knows of its fish besides the name (pure).
 	 *
-	 * @param array $line sci_name, landed_per_fish, suggested_price (a resolved line; without, the two are null).
-	 * @return array{sci_name: string, cost: float|null, target: float|null}
+	 * @param array $line sci_name, size_slug, size_label, landed_per_fish, suggested_price (a resolved
+	 *                    line; without, the last two are null).
+	 * @return array{sci_name: string, cost: float|null, target: float|null, sizes: array[]}
 	 */
 	private static function line_facts( array $line ) {
+		$slug = isset( $line['size_slug'] ) && null !== $line['size_slug'] ? trim( (string) $line['size_slug'] ) : '';
 		return array(
+			'sizes'    => '' !== $slug ? array( $slug => array( 'size_slug' => $slug, 'size_label' => (string) ( $line['size_label'] ?? '' ) ) ) : array(),
 			'sci_name' => trim( (string) ( $line['sci_name'] ?? '' ) ),
 			'cost'     => isset( $line['landed_per_fish'] ) && is_numeric( $line['landed_per_fish'] ) && (float) $line['landed_per_fish'] > 0 ? (float) $line['landed_per_fish'] : null,
 			'target'   => isset( $line['suggested_price'] ) && is_numeric( $line['suggested_price'] ) && (float) $line['suggested_price'] > 0 ? (float) $line['suggested_price'] : null,
@@ -837,7 +843,8 @@ class No_Product {
 			$of_order[ $order_id ][ $key ] = $facts;
 			return;
 		}
-		$have = &$of_order[ $order_id ][ $key ];
+		$have           = &$of_order[ $order_id ][ $key ];
+		$have['sizes'] += $facts['sizes'];
 		if ( '' === $have['sci_name'] ) {
 			$have['sci_name'] = $facts['sci_name'];
 		}

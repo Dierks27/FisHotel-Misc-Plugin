@@ -720,7 +720,7 @@ system temp directory (`FH_TEST_TMP` overrides).
   ONE row with its fish order and its tank — on the list narrowed to
   that order too, which still has exactly the fish the order's count
   counted — and still names the order, with its line's landed cost,
-  target price and scientific name, once the order is closed (one more
+  target price, scientific name and size, once the order is closed (one more
   read of orders, by ref; none when no group needs it); a group that
   carries a product in the trash and moves says its new tank; a product
   deleted for good drops both kept lists (`Clean_Room::product_deleted()`),

@@ -2147,8 +2147,8 @@ Arrival of a fish picked as "on fish order 2026-9" writes that ref on
 the group (`order_ref`), and the Stays tab's Edit lets one be typed. It
 is that order's all the same (`No_Product::named_order()`, the ref's
 case and the spaces around it aside): its row names the order, and takes
-the scientific name, the landed cost and the target price of the order's
-line of the same fish. On the list narrowed to one order it joins the
+the scientific name, the sizes, the landed cost and the target price of
+the order's line of the same fish. On the list narrowed to one order it joins the
 fish that order's lines put there — its tank, its fish alive — and adds
 no row: the count beside the order counted the lines. An order that is
 not among the ones the list read — a closed one, by default — is read
