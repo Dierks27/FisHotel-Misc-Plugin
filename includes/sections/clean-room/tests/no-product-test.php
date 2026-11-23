@@ -490,7 +490,7 @@ check( 'a user who may not make products is offered the link only, and told why'
 $GLOBALS['fh_current_user'] = 7;
 check( '… the page\'s script gets the draft\'s own nonce only for a user who may', wp_create_nonce( Admin_No_Product::NONCE_DRAFT ) === Admin_No_Product::js_config()['draftNonce'] && Admin_No_Product::NONCE_DRAFT !== Admin::NONCE_AJAX );
 $css = (string) file_get_contents( Clean_Room::path() . 'css/clean-room-admin.css' );
-check( 'on a narrow window the list is cards — the table\'s cells stack, nothing scrolls sideways', 1 === preg_match( '/@media \(max-width: 782px\) \{\s*\.fh-cr-np-table,\s*\.fh-cr-np-table tbody,\s*\.fh-cr-np-table tr,\s*\.fh-cr-np-table td \{\s*display: block;/', $css ) && false !== strpos( $css, '.fh-cr-np-table thead {' ) );
+check( 'on a narrow window the list is cards — the table\'s cells stack, its tab strip wraps, nothing scrolls sideways', 1 === preg_match( '/@media \(max-width: 782px\) \{\s*\.fh-cr-np \.fh-cr-tabs \{\s*flex-wrap: wrap;\s*\}\s*\.fh-cr-np-table,\s*\.fh-cr-np-table tbody,\s*\.fh-cr-np-table tr,\s*\.fh-cr-np-table td \{\s*display: block;/', $css ) && false !== strpos( $css, '.fh-cr-np-table thead {' ) );
 
 /* ------------------------------------------------------------------ */
 echo "7. Link to a product\n";
