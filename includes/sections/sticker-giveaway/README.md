@@ -270,6 +270,8 @@ sticker lines from every package that still contains a non-sticker line and
 recomputes `contents_cost`, so the theme's table-rate result (keyed on
 shipping class) is identical with or without stickers. A package made only of
 stickers (add-ons bought on their own) is left alone and ships normally.
+When the only other lines are medications the supplier drop-ships, there is
+no FisHotel box to ride in: see *EA-only orders: mailed by letter* below.
 
 **Leave each sticker product's shipping class blank** (or use a ground class).
 The picker keeps its own sticker lines out of the shipping calculation
@@ -305,6 +307,90 @@ following needs anything from the owner on the live theme (1.26.0):
   left off sticker lines; the short-description warning on the settings
   page is likewise only shown for a theme that does not skip yet.
 
+## EA-only orders: mailed by letter
+
+Medications are drop-shipped by the supplier, Everything Aquatic (EA).
+When a cart holds **only EA lines plus stickers**, nothing ships from
+FisHotel, so the sticker goes out as a plain stamped First-Class letter
+(`class-letter.php`).
+
+**Which lines are EA** is the theme's own answer and nothing else:
+`fishotel_is_ea_fulfilled_product( product id, variation id )`
+(theme `inc/medication-store/helpers.php`) — the product's
+`_fishotel_fulfillment` is `ea` (read on the parent product, as the
+theme's *FisHotel Medication* tab saves it) and an EA SKU is set on the
+product or on the variation. A variation is asked as the theme asks it:
+the parent's id and the variation's. Without the theme's function
+nothing counts as EA, so nothing below happens.
+
+**EA-only** = every line that is not a picker sticker is EA, and there is
+at least one (`Rules::is_ea_only()`). Anything FisHotel ships (a fish, a
+"self" medication, dry goods, a sticker bought the normal way from the
+shop) makes the cart mixed, and a mixed cart, a fish cart and a cart of
+stickers only are left exactly as before: no fee, no message, no flag.
+
+What an EA-only cart with a sticker gets (`Rules::mail_letter()`):
+
+- **One fee of $1.00**, "Sticker mailing (sent separately by letter)",
+  once per order, when it holds at least one **paid** sticker. The
+  add-on lines keep their own price ($0.99 each), so the first paid
+  sticker costs $1.99 in all and each more $0.99. The free sticker alone
+  pays no fee (the shop pays that stamp); free + paid still pays one fee.
+  The fee is taxed as the sticker product is (its tax status and tax
+  class). It is worked out again on every totals pass
+  (`woocommerce_cart_calculate_fees`): remove the last fish and the fee
+  appears, add a fish and it goes; a paid sticker stepping back for the
+  stock (`make_room()`, `guard_lines()`) takes the fee with it when no
+  paid sticker is left.
+- **A message**, word for word: "Heads up: your meds ship straight from
+  our supplier, so your sticker gets mailed to you separately as a letter.
+  You'll get an email with tracking once it's on its way. If you haven't
+  gotten it in 2 weeks, just let us know and we'll send another one." —
+  on the cart page under the item lines (`woocommerce_after_cart_contents`,
+  inside the cart form, so WooCommerce's cart refresh redraws it) and on
+  checkout as a row of the statement under the items
+  (`woocommerce_review_order_after_cart_contents`, redrawn by every
+  checkout refresh). Free or paid sticker alike. Plain small text with a
+  thin gold rule, in the theme's colours (`css/sticker-front.css`).
+
+When such an order is placed (`woocommerce_checkout_order_processed`;
+the block checkout's `woocommerce_store_api_checkout_order_processed`
+too), worked out from the order's own lines:
+
+- order meta **`_fishotel_sticker_mail_letter`** = the number of stickers
+  to mail (free + paid). Letter tracking in ShipTracker keys off it. A
+  checkout tried again on the same order works it out again (a fish added
+  meanwhile takes the meta away);
+- a **private note**: "MAIL STICKER BY LETTER: 2 sticker(s) — EA-only
+  order, nothing ships from FisHotel.";
+- the message in the customer's **processing** and **on-hold** emails, and
+  the note's line in the admin **new-order** email
+  (`woocommerce_email_before_order_table`), for that order only;
+- a **Sticker letter** column in the admin orders list, legacy and HPOS
+  screens: "Mail sticker (2)" in WooCommerce's own yellow pill while the
+  order is open, a quiet "By letter (2)" once it is completed (or
+  cancelled, refunded, failed);
+- on the **Today page and its widget**: "Stickers to mail by letter:
+  #1234 (2), #1240 (1)" through Today's `fishotel_today_lines` filter,
+  under Customers, until the order is completed (open = every status but
+  completed, cancelled, refunded, failed, pending payment). One order
+  links to that order, more to the orders list. At most 50 orders are
+  looked at, oldest first; the line names as many as fit and says
+  "and N more".
+
+The order's fee line carries hidden meta `_fh_sticker_mail_fee`. On the
+pay page of a failed order (`guard_order()`), when its sticker lines are
+cut or taken off, the fee goes once no paid sticker is left and the
+number to mail follows what is left (the meta goes with the last
+sticker), before the order is totalled again.
+
+Not done here, on purpose: the free-sticker rules are only read, EA
+routing and fulfilment are the theme's, ShipTracker is not touched. The
+picker itself is a classic-checkout card (as before); the theme uses the
+classic cart and checkout. On a block cart or checkout the fee, the flag,
+the emails, the list column and the Today line still work (the fee is a
+normal cart fee the Store API shows); the message is not drawn there.
+
 ## Eligibility
 
 `Rules::is_eligible()` — pure, unit-tested:
@@ -325,6 +411,7 @@ following needs anything from the owner on the live theme (1.26.0):
 | `class-rules.php` | Eligibility, selection clamping, pricing; what a design is, how it is named, which variations are ticked after a save, when a design can be handed out, what fits in a count, the status and the email's when. Pure — no WordPress calls. |
 | `class-designs.php` | A design id → product, name, count, stock; gathers the facts `Rules::blockers()` decides on. |
 | `class-cart.php` | Sync the cart with the picker (diff-based, on `woocommerce_checkout_update_order_review` and `woocommerce_checkout_process`), pricing + quantity clamping on every totals pass, sticker lines giving way to the stock (in the cart, when a normal purchase is added, on the pay page of a failed order), row class, labels, thumbnail, order line meta, shipping package stripping. |
+| `class-letter.php` | EA-only orders: the mailing fee, the customer's message, the order flag (meta, note), the email lines, the orders-list column, "Stickers to mail by letter" on the Today page. |
 | `class-reorder.php` | The stock table's rows; the look at a stock change; the reorder email. |
 | `class-today-line.php` | "Stickers to reorder" on the Today page. |
 | `class-frontend.php` | Renders the picker on `woocommerce_checkout_after_customer_details` (inside `<form name="checkout">`), enqueues assets, optional cart-page AJAX sync. |
@@ -379,6 +466,7 @@ php includes/sections/sticker-giveaway/tests/stock-test.php
 php includes/sections/sticker-giveaway/tests/cart-stock-test.php
 php includes/sections/sticker-giveaway/tests/reorder-test.php
 php includes/sections/sticker-giveaway/tests/category-warning-test.php
+php includes/sections/sticker-giveaway/tests/letter-test.php
 ```
 
 - `rules-test` — category eligibility (including descendant slugs and the
@@ -407,6 +495,16 @@ php includes/sections/sticker-giveaway/tests/category-warning-test.php
   `wp_mail`: one email at the end of the request with the final number,
   one when two requests look at the same moment, none for a product that
   is not a design.
+- `letter-test` — EA-only orders: the decisions (EA-only, mixed, sticker
+  counts, the fee), which lines are EA (the theme's function as the theme
+  has it, a variation by its parent), the cart's $0.99 lines and one
+  $1.00 fee taxed as the sticker, the message, a fish removed and added
+  again, the placed order's meta and note, the email lines, the orders-list
+  column and the Today line. `cart-stock-test` section 7: the fee and the
+  flag when a sticker steps back (`make_room()`, `guard_lines()`,
+  `guard_order()`).
+
+By-hand steps on a real site: `tests/README.md`.
 
 None of these runs WordPress. The cases above were also played, with
 invented products, on a throwaway WordPress with WooCommerce 11.2 and the

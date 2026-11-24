@@ -296,6 +296,31 @@
 	display: none;
 }
 
+/* ------------------------------------------------------------------ */
+/*  EA-only orders: "your sticker gets mailed to you separately"       */
+/*  Plain small text under the item lines (cart) or the statement's     */
+/*  item rows (checkout), a thin gold rule on the left as the theme's   */
+/*  quiet notes have.                                                  */
+/* ------------------------------------------------------------------ */
+.fh-sticker-letter {
+	margin: 14px 0 0;
+}
+
+tr.fh-sticker-letter td {
+	padding: 10px 0 4px;
+	border: 0;
+}
+
+.fh-sticker-letter-note {
+	margin: 0;
+	padding: 8px 12px;
+	border-left: 2px solid var(--fh-gold, #c9963a);
+	font-size: 13px;
+	line-height: 1.6;
+	color: var(--fh-text-2, #a09890);
+	font-family: var(--fh-font, 'Montserrat', sans-serif);
+}
+
 @media (max-width: 600px) {
 	.fh-sticker {
 		padding: 20px;

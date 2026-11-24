@@ -36,3 +36,4 @@ require_once FISHOTEL_MISC_PATH . 'includes/sections/sticker-giveaway/class-stic
 require_once FISHOTEL_MISC_PATH . 'includes/sections/sticker-giveaway/class-settings.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/sticker-giveaway/class-rules.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/sticker-giveaway/class-designs.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/sticker-giveaway/class-letter.php';

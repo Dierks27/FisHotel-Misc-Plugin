@@ -818,6 +818,8 @@ class Cart {
 		}
 
 		if ( $names ) {
+			// An EA-only order: no paid sticker left, no mailing fee; the number to mail follows what is left.
+			Letter::settle_order( $order );
 			$order->calculate_totals();
 			/* translators: %s: sticker names */
 			$order->add_order_note( sprintf( __( 'Sticker Giveaway: %s ran short before this order was paid, so its sticker line was cut down or taken off. Nothing else on the order was changed.', 'fishotel-misc-plugin' ), implode( ', ', array_unique( $names ) ) ) );
