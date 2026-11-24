@@ -877,6 +877,7 @@
 						$form.find('[name="copper_target"]').val(s.copper_target);
 						$form.find('[name="auto_confirm_seconds"]').val(s.auto_confirm_seconds);
 						$form.find('[name="voice_enabled"]').prop('checked', !!s.voice_enabled);
+						$form.find('[name="no_feed_on_ship_day"]').prop('checked', !!s.no_feed_on_ship_day);
 					}
 				})
 				.fail(fail)

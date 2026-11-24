@@ -89,7 +89,9 @@ when they are not.
   template named in its layout row, a building without one runs the
   default. The seeds are the workbook's five schedules, counted from the
   check-in day as day 1 (the sheet counts the arrival day as day 0, so
-  site day = sheet day + 1), every one starting with the daily feeding:
+  site day = sheet day + 1), every one starting with the daily feeding
+  (left off a Clean Room system on the day its fish ship — see *No
+  feeding on a ship day*):
   **14 Day CM** (the default): Copper Power to 2.0 on day 1 and to 2.4 on
   day 2, then held at 2.25 or higher (2.5 the target) with a daily copper
   test to day 15; Metronidazole every other day from day 2 to day 12 (six
@@ -916,6 +918,153 @@ phone (*Today* on the tank picker).
   two days old or there never was one. Only a block with a copper test
   on its list today can be flagged: a hospital tank on antibiotics is
   not "low" for having no copper.
+- **A Clean Room system is not fed on the day its fish ship** — see
+  the next part.
+
+### No feeding on a ship day
+
+"I (personally) only feed on days that we do not ship as we do not feed
+fish during the day if they are going in the bag, to pre-empty their
+stomachs as much as we can." And which tanks: "Only the Clean room — and
+really just the system that the fish is in. The whole system is tied
+together so I can't just skip a tank."
+
+So on a day a customer's fish go out the door, **Feed is left off the
+to-do of the Clean Room building those fish are in**, and the reason
+stands where Feed would be:
+
+> Clean Room 2 — no feeding today. 3 fish ship from this system: 2 ×
+> Yellow Tang (tank 121, #1234), 1 × Flame Angel (tank 118, #1240).
+
+- **Which orders go out today.** The order's delivery date (the
+  `_fishotel_shipping_date` the Batch Manager's checkout stores) is
+  **tomorrow** in the site's day — a box ships the day before it arrives,
+  the Batch Manager's own rule — and the order is *processing*, *on
+  hold*, a combined box (*fulfillment*) or already *shipped*. Shipped is
+  there on purpose: ShipTracker turns an order to it the moment tracking
+  is saved, and the fast lasts **the whole site day** — Feed does not
+  come back in the evening once the boxes have left. A combined box is
+  read through the orders in it (not by its own copied lines — those
+  only when none of its orders can be read; a cancelled, refunded or
+  failed one in it ships nothing), and an order folded into a box
+  follows the box's date.
+- **Which lines are fish.** A product in a fish category (the list the
+  Ship Day page and the Today page use: `quarantined-fish`, `inverts`,
+  filter `fishotel_ship_day_fish_categories`) or a fish line out of an
+  invoice, in any of its shapes; refunds are taken off; a line the theme
+  marks "not available" and an invoice's "Adjustment" are no fish.
+- **Inverts need not be found.** A product that is in no fish category
+  but `inverts` (`Feeding::LOOSE_CATEGORIES`, filter
+  `fishotel_cleanroom_loose_categories`) makes the system it is logged
+  in go without, like a fish; one that is in no clean tank on the site
+  changes nothing — snails and shrimp are often in no tank on the site
+  at all, and a ship day with a snail in the box would otherwise stop
+  the feeding of every clean system, for ever. A fish is never loose.
+- **Which water a fish is in** — the ladder `Sold_Line::stays()`,
+  strongest first: the tank group the Invoices section tied the line to;
+  else the open groups of the same shop product and the same size (when
+  none has that size, the ones whose size nobody wrote down); else the
+  groups whose species is, word for word, the line's name, and the size.
+  Every group that fits counts: the same fish in two clean systems makes
+  **both** fast. Neither counts that fish as surely its own: each says
+  "1 fish ships from this system **and 2 more may**" (or "2 fish **may**
+  ship from this system") and the fish names the other one — "2 × Yellow
+  Tang (tank 121, **also in Clean Room 3**, #1234)". The day's total
+  counts each fish once.
+- **A clean tank answers before a quarantine one.** By product or by
+  name the site only guesses, and a fish for sale is in a clean tank:
+  the ladder is asked over the groups in clean water first, so a Spa
+  group that fits better (the arrival, logged with its product and
+  size) does not hide the group in the clean tank (logged by name).
+- **The Spa is fed as always** — it never goes without. A fish the
+  Invoices section tied to a quarantine group is found there and
+  changes nothing.
+- **A shipping fish in no CLEAN tank the site knows → no Clean Room
+  system is fed today**, and the To do tab and the Board say which fish:
+
+  > No feeding in the Clean Room systems today — 4 fish ship and the
+  > site doesn't know their tank: 2 × Blue Tang (#1250), 2 × Royal
+  > Gramma (#1251).
+
+  That is a fish in no tank at all, and also one the site only guesses
+  into a quarantine tank: fish that ship come out of clean tanks, so
+  its clean tank is simply not logged yet (the group was moved by hand
+  and not on the site). The sentence then names where the site has it:
+  "1 × Firefish (#1280, on the site only in quarantine tank 512)".
+  Not feeding a fish that is about to be bagged matters more than a
+  missed feed, and it is what is done by hand today. The rule narrows by
+  itself, and the line under the sentence says how — in this order, so
+  that no fish is counted twice: a fish that is already on the site
+  under another name (the supplier's spelling) or still in a quarantine
+  tank is corrected or moved (*Identify…*, *Correct the fish…*, *Move*);
+  only a fish that is nowhere is added to the tank it is in (*Add fish
+  already here*). Then only that system goes without. A long list is
+  cut after four fish, and says how many FISH it left out ("and 12 more
+  fish"), so the sentence adds up to the number it opened with. It says
+  "systems", not "tanks": a clean temporary tank is still fed (below).
+- **Bagging a fish does not lose it.** A group whose last fish is
+  logged as shipped (or lost) today is closed, and would no longer be
+  found; the groups closed today are therefore asked too — the system
+  goes on fasting and the fish is not suddenly one "the site doesn't
+  know".
+- **Temporary tanks.** A *clean* temporary tank goes without only when
+  a shipping fish was found in it — it is its own water. Otherwise the
+  temporary tanks are left as they are, also on a day a fish cannot be
+  found.
+- **The reason is never a thing to do.** It cannot be ticked and is in
+  neither count ("2 things left to do of 2"). A fasting system with
+  nothing else due still has its block, for the reason.
+- **Fed before the order came in.** A feed that was already ticked
+  stays as it is and reads "Fed at 7:40, before order #1251 came in."
+  (the first order placed after the feed; "Fed at 7:40." when none was).
+- **Everywhere the same**: the To do tab and the Board card of the
+  system; the phone — the day's list, and on a tank of that system the
+  Today strip ("Today · no feeding", opened: "No feeding today — fish
+  ship from here."); the Today page and the dashboard widget ("Tanks: 2
+  things to do · no feeding in Clean Room 2 (ship day)" — said also on a
+  day nothing else is due).
+- **One tick**, Settings → Numbers: *Don't feed a clean system on a day
+  its fish ship*, on by default. Off: every tank has its Feed and the
+  shop is not asked. Without the Batch Manager no order has a ship day:
+  the rule is simply off and the tick says why.
+- **Cost.** What the shop said is kept for five minutes (the transient
+  `fishotel_cleanroom_ship_lines`) and dropped whenever an order changes
+  — the three order hooks the Today section listens to
+  (`woocommerce_order_status_changed`, `woocommerce_update_order`,
+  `woocommerce_order_note_added`), `woocommerce_new_order`, an order
+  trashed, restored or deleted (`trashed_post`, `untrashed_post`,
+  `deleted_post`, and the orders tables' `woocommerce_trash_order`,
+  `woocommerce_untrash_order`, `woocommerce_delete_order`) and a line's
+  status written straight onto the order item (`_fishotel_line_status`
+  — no other item meta) — so a new order takes Feed off on the next page
+  load and a cancelled or trashed one brings it back. A miss is one order query for tomorrow's delivery date plus
+  the lines of that day's orders; nothing per tank; on a day fish ship,
+  one more read of the stays closed lately. Nothing on the storefront,
+  no cron, no table, no column.
+
+How it is built: `class-feeding.php` is the rule, pure (the orders going
+out, their fish, the waters, the words); `class-sold-line.php` is the
+ladder, pure — **the one place that answers "which tank group does this
+order line come out of"**, meant to be asked again when a sold fish is
+reserved in its tank, listed to pull, or taken out of its tank once
+shipped (none of which is done yet). It answers over the groups it is
+given: `Feeding::plan()` gives it the groups in clean water first and
+all of them only for the Invoices section's own link; `class-ship-lines.php` reads the
+shop, and asks the readers the plugin already has rather than being a
+third one: the Weather section's order query
+(`Checker::open_orders()`, what the Today page runs), the Lost Fish
+section's `Orders::lines()` (refunds netted, the "Adjustment" dropped,
+an invoice kept as one line split into its fish, the Invoices link
+added) and the Today section's `Collector::fish_categories()`. Those
+three sections may be switched off: their six class files are then
+loaded here, on a cache miss only — files that hook nothing and run
+nothing at load. `Store::room()` works the fasting set out once and
+hands it to `assemble_room()`, so the Board, the To do tab, the phone
+and the count other sections read cannot disagree.
+
+Not read: an invoice bought before theme 1.25 and kept as one line with
+no snapshot of its fish (its fish are only in the product's description)
+— unless the Invoices section, switched on, lists them.
 
 ### What other sections read
 
@@ -931,19 +1080,23 @@ Both answer `null` while the Clean Room section is switched off — the
 function is defined whenever the Misc plugin is active, but answers
 nothing and runs no query then; the filter has no callback — or its
 tables do not exist; otherwise
-`{ left, total, all_done, flags, text, url }` — the lines still open and
-in all, whether something was due and nothing is left, the number of
-copper flags, one sentence ("Tanks: 3 things to do" / "Tanks: all done"
-/ "Tanks: nothing due today") and the To do tab's URL. Asking reads the
-room (the queries the Board runs), so ask where the answer is shown; the
-two hooks themselves cost nothing on a request that never asks.
+`{ left, total, all_done, flags, text, url, fast }` — the lines still
+open and in all, whether something was due and nothing is left, the
+number of copper flags, one sentence ("Tanks: 3 things to do" / "Tanks:
+all done" / "Tanks: nothing due today"), the To do tab's URL and, on a
+day a clean system is not fed because its fish ship, a few words saying
+so ("no feeding in Clean Room 2 (ship day)", else '' — those feeds are
+in neither number). Asking reads the room (the queries the Board runs),
+so ask where the answer is shown; the two hooks themselves cost nothing
+on a request that never asks.
 
 The **Today** section shows it: the Clean Room hooks that section's
 `fishotel_today_lines` filter and adds one line — `{ key:
-'clean-room-todo', text, detail ("2 copper flags"), url, count, tone
-('todo' / 'done' / 'bad') }` — for a user with `manage_woocommerce`, on
-a day with something due. With the Today section off nobody asks; with
-the Clean Room off there is no line.
+'clean-room-todo', text, detail ("2 copper flags", "no feeding in Clean
+Room 2 (ship day)", or both), url, count, tone ('todo' / 'done' /
+'bad') }` — for a user with `manage_woocommerce`, on a day with
+something due, or on which a clean system goes without food. With the
+Today section off nobody asks; with the Clean Room off there is no line.
 
 ## Fish orders (the tab once called Supplier orders, and Arrivals before that)
 
@@ -2820,7 +2973,7 @@ the owner saves one, at most 40, not autoloaded),
 `fishotel_cleanroom_sales_statuses` (the order statuses that
 count as a sale on *Stats → Real sales*, slugs without "wc-"; absent —
 and then the suggested list applies — until Settings → Sales statuses is
-saved; not autoloaded), `fishotel_cleanroom_settings` (with `size_attribute` and `size_list`, the source of the standard sizes, and `medications`, the medication list — absent until it is first edited, which means the seed; no table and no schema change), `fishotel_cleanroom_protocol`
+saved; not autoloaded), `fishotel_cleanroom_settings` (with `size_attribute` and `size_list`, the source of the standard sizes, `medications`, the medication list — absent until it is first edited, which means the seed; no table and no schema change —, and `no_feed_on_ship_day`, the tick of *No feeding on a ship day*: absent means on), `fishotel_cleanroom_protocol`
 (`{ default: name, templates: { name: steps[] } }` — an older bare steps
 array is read as the "14 Day CM" template next to the other four seeds),
 `fishotel_cleanroom_box_rates` (rows of supplier, origin, per box,
@@ -2830,7 +2983,9 @@ words; absent until a word is first saved — until then only Trifecta
 has one, from the code — and not autoloaded). Two per-user transients carry the
 import's pending preview (with the file's path, ten minutes) and its last
 result; one more, `fishotel_cleanroom_sales`, keeps what *Real sales*
-read from WooCommerce (see *Stats*). One user meta,
+read from WooCommerce (see *Stats*), and `fishotel_cleanroom_ship_lines`
+keeps today's shipping fish for five minutes (see *No feeding on a ship
+day*). One user meta,
 `fishotel_cleanroom_order_view`, remembers which view of the order page
 each person left it in. Real sales, Prices to raise and the order page's
 shop price add no table and no column: they only read — WooCommerce's
@@ -2879,7 +3034,18 @@ clean-room/
 ├── class-todo.php          PURE: everything due today as one list by water system — a block per
 │                           building and per temporary tank, each step once per system, the feeding
 │                           as one line, the copper flags, the overlay onto every tank's own to-do,
-│                           a tick, the count other screens read
+│                           a tick, the count other screens read; a fasting system's reason line
+├── class-feeding.php       PURE: a clean system is not fed on the day its fish ship — the orders
+│                           going out today, which lines are fish, the water each fish is in
+│                           (the fasting set), the to-do without the Feed, a feed ticked before
+│                           the order came in, and every sentence the screens show
+├── class-sold-line.php     PURE: which tank group a line of a customer's order comes out of — the
+│                           Invoices link, the product and size, the exact name and size
+│                           (Sold_Line::stays(): the one ladder, to be asked again by later work)
+├── class-ship-lines.php    that rule's edge: today's shipping fish read from the shop through the
+│                           Weather section's order query, the Lost Fish section's lines and the
+│                           Today section's fish categories (loaded here when those sections are
+│                           off), kept five minutes, dropped when an order changes
 ├── class-replay.php        PURE: events → state, day math, the chosen sale date (own > batch > none,
 │                           the suggestion, ready, "still in the Spa"), splits, compensating events
 ├── class-protocol.php      PURE: the named treatment templates (the five seeds, the option's

@@ -61,6 +61,13 @@ $fh_total = (int) $list['total'];
 	</div>
 	<p class="fh-cr-status fh-cr-todo-status" aria-live="polite"></p>
 
+	<?php if ( ! empty( $list['fast']['text'] ) ) : // A fish ships today and no tank group answers for it: no clean system is fed. ?>
+		<p class="fh-cr-fast fh-cr-fast--all">
+			<strong><?php echo esc_html( $list['fast']['text'] ); ?></strong>
+			<?php echo esc_html( $list['fast']['hint'] ); ?>
+		</p>
+	<?php endif; ?>
+
 	<?php if ( ! $list['blocks'] ) : ?>
 		<p class="fh-cr-muted"><?php esc_html_e( 'No quarantine system and no temporary tank is in use.', 'fishotel-misc-plugin' ); ?></p>
 	<?php endif; ?>
@@ -91,7 +98,7 @@ $fh_total = (int) $list['total'];
 		}
 		$fh_cu = Admin_Temp::copper_text( (array) $fh_block['copper'] );
 		?>
-		<section class="fh-cr-todo-block fh-cr-todo-block--<?php echo esc_attr( $fh_block['type'] ); ?><?php echo ( $fh_block['items'] && 0 === (int) $fh_block['left'] ) ? ' is-done' : ''; ?><?php echo ! $fh_block['items'] ? ' is-idle' : ''; ?>">
+		<section class="fh-cr-todo-block fh-cr-todo-block--<?php echo esc_attr( $fh_block['type'] ); ?><?php echo ( $fh_block['items'] && 0 === (int) $fh_block['left'] ) ? ' is-done' : ''; ?><?php echo ( ! $fh_block['items'] && empty( $fh_block['fast'] ) ) ? ' is-idle' : ''; ?>">
 			<header class="fh-cr-todo-block__head">
 				<h2>
 					<?php if ( $fh_temp ) : ?>
@@ -108,7 +115,11 @@ $fh_total = (int) $list['total'];
 				<?php endif; ?>
 			</header>
 
-			<?php if ( ! $fh_block['items'] ) : ?>
+			<?php if ( ! empty( $fh_block['fast'] ) ) : // Its fish ship today: the reason it has no Feed. Not a line to tick, not counted. ?>
+				<p class="fh-cr-fast"><?php echo esc_html( $fh_block['fast']['text'] ); ?></p>
+			<?php endif; ?>
+
+			<?php if ( ! $fh_block['items'] && empty( $fh_block['fast'] ) ) : ?>
 				<p class="fh-cr-building__empty">
 					<?php
 					if ( $fh_temp ) {
@@ -118,7 +129,7 @@ $fh_total = (int) $list['total'];
 					}
 					?>
 				</p>
-			<?php else : ?>
+			<?php elseif ( $fh_block['items'] ) : ?>
 				<ul class="fh-cr-todo-lines">
 					<?php foreach ( $fh_block['items'] as $fh_item ) : ?>
 						<?php
@@ -166,5 +177,6 @@ $fh_total = (int) $list['total'];
 
 	<p class="fh-cr-footnote">
 		<?php esc_html_e( 'A building is one water: a dose, a test or a water change is listed once for the whole system and ticked once — here, on any of its tanks\' own screens, by a dose logged on the Front Desk or by a copper reading taken on any tank of that building; every tank then shows it done. The feeding is per tank: one line per building that opens to the tanks. A temporary tank is its own water, runs its own schedule and counts its days from its own treatment start.', 'fishotel-misc-plugin' ); ?>
+		<?php esc_html_e( 'A Clean Room system is not fed on the day its fish ship: Feed is left off and the reason stands in its place (Settings → Numbers switches this off).', 'fishotel-misc-plugin' ); ?>
 	</p>
 </div>

@@ -59,7 +59,7 @@
  * englishValue, fmt, escapeHtml, saleSummary, sizeText, unknownName,
  * doseStart, rateChoices, pickChoice, doseFields, and the temporary tanks'
  * and the list's: tankHeading, offerTemplates, previewLines, lineDetail,
- * feedText, flagText, todoHeadline, moveClears, gridTanks) are exported
+ * feedText, flagText, todoHeadline, stripLine, moveClears, gridTanks) are exported
  * for tests/front-desk.test.js, tests/front-desk-dose.test.js and
  * tests/temp-tanks.test.js, and the file skips the DOM wiring when there
  * is no document / config.
@@ -770,6 +770,32 @@
 	}
 
 	/**
+	 * The one line of a tank's "Today" strip: "Today · 2 to do", "Today ·
+	 * all done", and — on a day the tank goes without food because fish
+	 * ship from its water — "· no feeding" ("Today · no feeding" when
+	 * nothing else is due), then "· Cu low".
+	 *
+	 * @param {Object} tk      The tank (todo, occupants, fast, copper).
+	 * @param {Object} strings todayToDo, todayNone, today, noFeeding, cuLow.
+	 * @return {string}
+	 */
+	function stripLine(tk, strings) {
+		var s = strings || {};
+		var todo = (tk && tk.todo) || [];
+		var open = todo.filter(function (i) { return !i.done; }).length;
+		var hasFish = !!(tk && tk.occupants && tk.occupants.length);
+		var fast = !!(tk && tk.fast);
+		var line = open > 0 ? fmt(s.todayToDo || 'Today · %d to do', open) : (hasFish && !(fast && !todo.length) ? (s.todayNone || 'Today · all done') : (s.today || 'Today'));
+		if (fast) {
+			line += ' · ' + (s.noFeeding || 'no feeding');
+		}
+		if (tk && tk.copper && tk.copper.state === 'low') {
+			line += ' · ' + (s.cuLow || 'Cu low');
+		}
+		return line;
+	}
+
+	/**
 	 * Whether moving these groups into a destination clears any of them:
 	 * the destination is a clean tank and a group is still in quarantine.
 	 *
@@ -923,6 +949,7 @@
 	api.feedText = feedText;
 	api.flagText = flagText;
 	api.todoHeadline = todoHeadline;
+	api.stripLine = stripLine;
 	api.moveClears = moveClears;
 	api.gridTanks = gridTanks;
 	api.tileText = tileText;
@@ -1812,11 +1839,7 @@
 		var open = todo.filter(function (i) { return !i.done; }).length;
 		var isOpen = todayOpen();
 		var wrap = el('div', { class: 'fh-fd-today' + (isOpen ? ' is-open' : '') });
-		var hasFish = !!(tk.occupants && tk.occupants.length);
-		var line = open > 0 ? fmt(t('todayToDo', 'Today · %d to do'), open) : (hasFish ? t('todayNone', 'Today · all done') : t('today', 'Today'));
-		if (tk.copper && tk.copper.state === 'low') {
-			line += ' · ' + t('cuLow', 'Cu low');
-		}
+		var line = stripLine(tk, i18n);
 		wrap.appendChild(el('button', {
 			type: 'button',
 			class: 'fh-fd-today__toggle',
@@ -1837,8 +1860,12 @@
 			])
 		]);
 		wrap.appendChild(head);
+		if (tk.fast) {
+			// Fish ship from this water today: no Feed, and why (a feed ticked before the order came in says when).
+			wrap.appendChild(el('p', { class: 'fh-fd-fast', text: [tk.fast.strip, tk.fast.fed].filter(Boolean).join(' ') }));
+		}
 		if (!todo.length) {
-			if (tk.occupants && tk.occupants.length) {
+			if (tk.occupants && tk.occupants.length && !tk.fast) {
 				wrap.appendChild(el('p', { class: 'fh-fd-muted', text: t('todayDone', 'Nothing due today') }));
 			}
 			return wrap;
@@ -3978,6 +4005,10 @@
 					return el('span', { class: 'fh-fd-flag' + (flag.low || flag.overdue ? ' is-bad' : ''), text: flagText(flag, i18n) });
 				})));
 			}
+			if (list.fast && list.fast.text) {
+				// A fish ships today and the site does not know its tank: no clean system is fed.
+				app.appendChild(el('p', { class: 'fh-fd-fast fh-fd-fast--all', text: [list.fast.text, list.fast.hint].filter(Boolean).join(' ') }));
+			}
 			(list.blocks || []).forEach(function (block) {
 				app.appendChild(todoBlock(block, tick));
 			});
@@ -4031,7 +4062,8 @@
 			cu = 'Cu ' + plainNumber(copper.value) + (copper.tank ? ' · ' + fmt(t('tankN', 'tank %d'), copper.tank) : '') + (copper.ago ? ' · ' + fmt(t('ago', '%s ago'), copper.ago) : '') + (copper.state === 'dosed' ? ' → ' + t('copperDosedShort', 'dosed since, test again tomorrow') : '');
 		}
 		var items = block.items || [];
-		var node = el('div', { class: 'fh-fd-todo-block' + (temp ? ' is-temp' : '') + (items.length && !block.left ? ' is-done' : '') + (!items.length ? ' is-idle' : '') }, [
+		var fast = block.fast && block.fast.text ? block.fast.text : '';
+		var node = el('div', { class: 'fh-fd-todo-block' + (temp ? ' is-temp' : '') + (items.length && !block.left ? ' is-done' : '') + (!items.length && !fast ? ' is-idle' : '') }, [
 			el('div', { class: 'fh-fd-todo-block__head' }, [
 				temp ? el('span', { class: 'fh-fd-badge fh-fd-badge--temp', text: t('temporary', 'Temporary') }) : null,
 				temp && block.url ? el('a', { class: 'fh-fd-todo-block__title', href: block.url, text: block.title }) : el('span', { class: 'fh-fd-todo-block__title', text: block.title }),
@@ -4039,8 +4071,14 @@
 				cu ? el('span', { class: 'fh-fd-copper' + (copper.state ? ' is-' + copper.state : ''), text: cu }) : null
 			])
 		]);
+		if (fast) {
+			// Its fish ship today: the reason it has no Feed — nothing to tick, nothing counted.
+			node.appendChild(el('p', { class: 'fh-fd-fast', text: fast }));
+		}
 		if (!items.length) {
-			node.appendChild(el('p', { class: 'fh-fd-muted', text: temp ? t('nothingDueHere', 'Nothing is due on this tank today.') : t('noFishSystem', 'No fish in this system — nothing is due.') }));
+			if (!fast) {
+				node.appendChild(el('p', { class: 'fh-fd-muted', text: temp ? t('nothingDueHere', 'Nothing is due on this tank today.') : t('noFishSystem', 'No fish in this system — nothing is due.') }));
+			}
 			return node;
 		}
 		items.forEach(function (item) {

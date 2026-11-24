@@ -289,6 +289,31 @@ a.fh-cr-chip--todo {
 	opacity: 0.6;
 }
 
+/* A Clean Room system that is not fed today because its fish ship: the
+   reason, where Feed would be — on the To do tab and on the Board. */
+.fh-cr-fast {
+	margin: 6px 0 10px;
+	padding: 8px 12px;
+	font-size: 13px;
+	line-height: 1.5;
+	color: var(--fh-text-primary, #e0e0e0);
+	background: rgba(0, 160, 210, 0.1);
+	border-left: 4px solid var(--fh-accent, #00a0d2);
+	border-radius: 4px;
+}
+
+.fh-cr-fast--all {
+	margin: 0 0 12px;
+	background: rgba(255, 185, 0, 0.1);
+	border-left-color: var(--fh-warning, #ffb900);
+}
+
+.fh-cr-fast--tank {
+	display: block;
+	margin: 6px 0 0;
+	font-size: 12px;
+}
+
 .fh-cr-todo-block__head {
 	display: flex;
 	flex-wrap: wrap;

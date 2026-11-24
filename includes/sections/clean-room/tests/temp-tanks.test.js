@@ -44,7 +44,7 @@ function same( a, b ) {
 }
 
 console.log( '1. Exports' );
-check( 'the phone exports the temporary tanks\' and the list\'s helpers', [ 'tankHeading', 'offerTemplates', 'previewLines', 'lineDetail', 'feedText', 'flagText', 'todoHeadline', 'moveClears', 'gridTanks' ].every( function ( name ) { return typeof phone[ name ] === 'function'; } ) );
+check( 'the phone exports the temporary tanks\' and the list\'s helpers', [ 'tankHeading', 'offerTemplates', 'previewLines', 'lineDetail', 'feedText', 'flagText', 'todoHeadline', 'stripLine', 'moveClears', 'gridTanks' ].every( function ( name ) { return typeof phone[ name ] === 'function'; } ) );
 check( 'the Board\'s script exports its helpers and hangs them on the global', typeof board.offer === 'function' && typeof board.previewLines === 'function' && typeof board.stepsFromRows === 'function' && globalThis.fhCleanRoomTempHelpers === board );
 check( 'the helpers the phone already had are still there', typeof phone.previewSentence === 'function' && typeof phone.saleSummary === 'function' && globalThis.fhFrontDeskHelpers === phone );
 
@@ -97,6 +97,17 @@ check( 'things left', '7 things left to do' === phone.todoHeadline( { left: 7, t
 check( '"All done" when it is', 'All done' === phone.todoHeadline( { left: 0, total: 11 } ) );
 check( 'nothing due is not "all done"', 'Nothing is due today' === phone.todoHeadline( { left: 0, total: 0 } ) && 'Nothing is due today' === phone.todoHeadline( null ) );
 check( 'the page\'s strings are used when given', '3 OPEN' === phone.todoHeadline( { left: 3, total: 4 }, { todoLeft: '%d OPEN' } ) && 'FERTIG' === phone.todoHeadline( { left: 0, total: 4 }, { todoAllDone: 'FERTIG' } ) );
+
+console.log( 'A tank\'s Today strip, in one line' );
+var fedTank = { occupants: [ { stayId: 1 } ], todo: [ { key: 'feed', kind: 'feed', done: false }, { key: 'copper test #1', kind: 'test', done: true } ] };
+check( 'things to do, all done, an empty tank — as it always read', 'Today · 1 to do' === phone.stripLine( fedTank ) && 'Today · all done' === phone.stripLine( { occupants: [ {} ], todo: [ { done: true } ] } ) && 'Today · all done' === phone.stripLine( { occupants: [ {} ], todo: [] } ) && 'Today' === phone.stripLine( { occupants: [], todo: [] } ) && 'Today' === phone.stripLine( null ) );
+check( '… with a low copper reading', 'Today · 1 to do · Cu low' === phone.stripLine( { occupants: [ {} ], todo: [ { done: false } ], copper: { state: 'low' } } ) );
+var fast = { strip: 'No feeding today — fish ship from here.', fed: '' };
+check( 'fish ship from this water and nothing else is due: "no feeding", never "all done"', 'Today · no feeding' === phone.stripLine( { occupants: [ {} ], todo: [], fast: fast } ) );
+check( '… with something else still to do', 'Today · 1 to do · no feeding' === phone.stripLine( { occupants: [ {} ], todo: [ { kind: 'test', done: false } ], fast: fast } ) );
+check( '… fed before the order came in: the tick stands, and the strip still says no feeding', 'Today · all done · no feeding' === phone.stripLine( { occupants: [ {} ], todo: [ { kind: 'feed', done: true } ], fast: fast } ) );
+check( '… and a low copper reading after it', 'Today · no feeding · Cu low' === phone.stripLine( { occupants: [ {} ], todo: [], fast: fast, copper: { state: 'low' } } ) );
+check( '… in the page\'s own words', 'HEUTE · KEIN FUTTER' === phone.stripLine( { occupants: [ {} ], todo: [], fast: fast }, { today: 'HEUTE', noFeeding: 'KEIN FUTTER' } ) );
 
 console.log( '7. A move that clears' );
 var inQt    = { stayId: 1, status: 'in_qt' };

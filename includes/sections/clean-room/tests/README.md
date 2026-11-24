@@ -63,6 +63,9 @@ php  includes/sections/clean-room/tests/dose-phrases-test.php
 php  includes/sections/clean-room/tests/medications-admin-test.php
 php  includes/sections/clean-room/tests/temp-tanks-test.php
 php  includes/sections/clean-room/tests/todo-test.php
+php  includes/sections/clean-room/tests/sold-line-test.php
+php  includes/sections/clean-room/tests/feeding-test.php
+php  includes/sections/clean-room/tests/ship-lines-test.php
 php  includes/sections/clean-room/tests/temp-board-test.php
 php  includes/sections/clean-room/tests/temp-guards-test.php
 php  includes/sections/clean-room/tests/dose-temp-test.php
@@ -87,6 +90,7 @@ node includes/sections/clean-room/tests/medications-admin.test.js
 node includes/sections/clean-room/tests/order-import.test.js
 node includes/sections/clean-room/tests/order-entry.test.js
 node includes/sections/clean-room/tests/temp-tanks.test.js
+node includes/sections/clean-room/tests/front-desk-feeding.test.js
 ```
 
 Every species, price, supplier and figure in these tests is invented
@@ -951,8 +955,94 @@ system temp directory (`FH_TEST_TMP` overrides).
   `lineDetail()`, `feedText()`, `flagText()` against
   `fixtures/todo-lines.json` (the file the server's temp-board-test.php
   reads), `previewLines()` on the phone and on the Board,
-  `todoHeadline()`, `moveClears()`, `gridTanks()` (a free slot is no
-  tank to pick), `stepsFromRows()` (the Board's schedule editor).
+  `todoHeadline()`, `stripLine()` (a tank's Today strip in one line —
+  "Today · no feeding" on a day fish ship from its water),
+  `moveClears()`, `gridTanks()` (a free slot is no tank to pick),
+  `stepsFromRows()` (the Board's schedule editor).
+- **sold-line-test.php** — which tank group a line of a customer's order
+  comes out of (`Sold_Line::stays()`): the Invoices section's link
+  first, also over what the line itself names, and not when the group is
+  closed or empty; the same product (the line's product, its variation,
+  the one the Invoices section names) and the same size — the size as a
+  slug, a group without a size when none has the line's, every group of
+  the product for a line without a size, never the product in another
+  size; the exact name (case and spacing aside, the product's own
+  title, the invoice's name, a name ending in the size) and the size;
+  nearly the name is no match; every group that fits, in the order
+  given; a group whose last fish left today still answers when marked
+  so; nothing fits → an empty answer, for junk too.
+- **feeding-test.php** — a clean system is not fed on the day its fish
+  ship, the rule itself (`Feeding`): the delivery date of a ship day
+  (month end, year end, leap day) and **the site's day around midnight**
+  (23:59 and 00:01 in America/Chicago on both sides of the ship day, and
+  an evening that is already tomorrow in UTC); each status that goes out
+  (processing, on hold, shipped, with or without "wc-") and each that
+  does not; a combined box read through the orders in it — a cancelled,
+  refunded, failed or trashed one left out, one that is not loaded
+  skipped, a box inside a box never read as an order, a folded order
+  following the box's date, a cancelled box; which lines are fish (a
+  product by category, each shape of an invoice's fish, refunds netted,
+  "not available" and fully refunded left out, **an invert marked as
+  one**); the fasting set — one system, two for the same fish in two
+  (each saying "may" and "also in" the other one, neither counting the
+  fish as surely its own), the Spa and a
+  clean system (the clean one — **also when the Spa group fits better**:
+  product and size there, only the name or no size in the clean tank),
+  **all clean systems for a fish in no tank, and for one the site only
+  guesses into a quarantine tank** (that tank named), the Invoices link
+  to a Spa group (nothing changes), none, the Invoices link naming one
+  group among two; **inverts** (found in a clean tank: that system;
+  found nowhere: nothing changes; with no loose category: like fish);
+  a fish logged as shipped still found through the day's closed groups;
+  temporary tanks (a clean one with a shipping fish alone; a quarantine
+  one and the others left as they are, also when a fish cannot be
+  found or is only guessed into a quarantine one — the words then say
+  "systems", not "tanks"); the tick (on by default, off when unticked) and the days the
+  rule cannot run (the tick off, no Batch Manager, no WooCommerce) with
+  the words under the tick; the to-do — no Feed on every tank of the
+  fasting system, the reason on its block, **not a line and in neither
+  count**, the other systems and the Spa fed, "all done" once they are,
+  the phone's tank screen and day list; the notice at the top and how
+  the rule narrows once the fish are logged; **a feed ticked before the
+  order came in** (kept, "Fed at 7:40, before order #1251 came in.", the
+  first order placed after the feed, none, no time known, a whole system
+  ticked at once); every sentence (singular, two tanks, a long list that
+  **adds up** — "and 12 more fish" counts the fish left out, not the
+  lines —, and the line that says how to end it: correct or move a fish
+  that is already on the site BEFORE adding one);
+  the summary and the Today line (beside a copper flag, on a day nothing
+  else is due, never on an ordinary day); and **the To do tab and the
+  Board rendered**: the reason once, no button in the fasting block, the
+  count at the top, the notice, and not a word on an ordinary day.
+- **ship-lines-test.php** — the shop's side (`Ship_Lines`) on a stand-in
+  shop (`fake-shop-orders.php`, invented orders): without the Batch
+  Manager, and with the tick off, **no order is asked for and no other
+  section's class is loaded**; the six classes it asks load on demand,
+  hook nothing and store nothing, and switch no section on; what one
+  read gives — a sized fish with its product, variation, size as bought
+  and title, dry goods and a "not available" fish left out, refunds
+  netted, an invoice's fish as lines and as one line with its snapshot
+  (no credit, no "Adjustment", none of it when the invoice is marked not
+  available), an invert on an order already shipped, other dates and
+  statuses left out, a combined box through its live order, the Invoices
+  link to a tank group — in **one query** for the date; the cache (kept
+  five minutes, no query on a later ask, read again past midnight) and
+  **each order hook dropping it** — a status change, a save, a note, a
+  new order, an order trashed, restored or deleted, and a line status
+  written straight onto an item (any other item meta does not); and the whole way through the room:
+  an order comes in → no Feed and the reason on the next page load,
+  "shipped" keeps it off, a moved delivery date and a cancelled order
+  bring Feed back, a new order for a fish in no tank, an order of
+  inverts that are in no tank (nothing changes), the tick switched off
+  at once; the day's closed groups asked for only on a day fish
+  ship.
+- **front-desk-feeding.test.js** — the same on the phone, the script run
+  against a small stand-in DOM: the Today strip's one line and, opened,
+  the reason where the Feed chip would be with no chip to tap; a feed
+  ticked before the order came in keeping its tick and saying when; the
+  day's list — the fasting block with the reason and nothing to tick,
+  not greyed out as an empty system is; the notice at the top; an
+  ordinary day showing none of it.
 
 - **medications-test.php** — the editable medication list: the seed IS
   the old fixed list (the same keys in the same order, names, chips, the
@@ -1704,3 +1794,58 @@ line's `split` field holds anything (`fields_before`) — and one press on
     once: "in tank <the new number>". Delete that product for good
     (empty the trash) and search: the fish is still found, as the
     unlisted fish in its tank.
+38. No feeding on a ship day (needs the Batch Manager, so that orders
+    carry a delivery date). Settings → Numbers: the tick *Don't feed a
+    clean system on a day its fish ship* is there and on, with two
+    sentences under it (with the Batch Manager switched off it says
+    that it does nothing right now, and why). Pick a customer order
+    that is *processing* with a fish in it, and set its delivery date
+    to **tomorrow**. Make sure that fish is in a Clean Room tank on the
+    site (same product and size, or the same name) — say tank 121 —
+    and that another clean building and a Spa building hold fish too.
+    Open the To do tab: building 100 has no Feed and reads "… — no
+    feeding today. 1 fish ships from this system: 1 × … (tank 121,
+    #…)", with no button on that line; the count at the top does not
+    include it; the other clean building and the Spa still have their
+    Feed. The Board shows the same sentence under building 100's
+    heading, and the cards of its tanks list no Feed. On the phone:
+    tank 121 — and any other tank of building 100 with fish — says
+    "Today · no feeding" and, opened, "No feeding today — fish ship
+    from here."; the day's list shows the block with the reason and
+    nothing to tap. FisHotel Tools → Today (and the dashboard widget):
+    "Tanks: N things to do · no feeding in Building 100 (ship day)".
+    Then, one at a time, reloading the To do tab after each: add a
+    tracking number so the order turns *shipped* — still no Feed, all
+    day; log the fish as shipped on the phone (the group closes) —
+    still no Feed, and no notice about an unknown tank; move the
+    order's delivery date to next week — Feed is back; move it back and
+    cancel the order — Feed is back; put the order in the trash
+    instead, and take it out again — Feed is back, then gone, each on
+    the next load. Give tomorrow's date to an order
+    with a fish that is in no tank on the site: every clean building
+    loses its Feed, the Spa keeps it, and the top of the To do tab and
+    of the Board reads "No feeding in the Clean Room systems today — 1
+    fish ships and the site doesn't know its tank: 1 × … (#…).", with
+    the line under it that says to correct or move a group that is
+    already there before adding one; add that
+    fish to its tank with *Add fish already here* — only that building
+    goes without now. The same with a fish that is on the site only in
+    a Spa tank (same product and size): every clean building goes
+    without and the sentence ends "(#…, on the site only in quarantine
+    tank 512)"; add the fish to a clean tank by its name only — that
+    building alone goes without, though the Spa group fits better. An
+    order of snails (a product only in Inverts) that are in no tank:
+    nothing changes; put the snails in a clean tank — that building
+    goes without. The same fish in two clean buildings: each says "N fish
+    may ship from this system" (or "… and N more may") and "(tank …, also
+    in <the other building>, #…)", the fish it surely ships named first. More than four fish in one sentence: the "and N more fish" at
+    its end and the fish named add up to the number it opens with. Tick Feed on a clean tank FIRST, then give an
+    order for a fish in that building tomorrow's date: that tank's tick
+    stays and reads "Fed at …, before order #… came in."; the building's
+    other tanks have no Feed. A combined box (two orders folded into
+    one, delivery tomorrow): the fish of both orders count, under their
+    own order numbers. Untick the setting and save: every Feed is back
+    at once; tick it again. Last, with the Query Monitor on a shop page
+    and on an ordinary admin page: the section still runs no query of
+    its own there, and on the To do tab the second load within five
+    minutes runs no order query.

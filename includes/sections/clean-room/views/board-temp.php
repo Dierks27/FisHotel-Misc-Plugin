@@ -212,6 +212,9 @@ foreach ( $temp['slots'] as $fh_slot ) {
 								<span class="fh-cr-todo__due"><?php echo esc_html( implode( ' · ', $fh_labels ) ); ?></span>
 							<?php endif; ?>
 						<?php endif; ?>
+						<?php if ( ! empty( $fh_tank['fast']['text'] ) ) : // A clean temporary tank whose fish ship today: no Feed, and why. ?>
+							<span class="fh-cr-fast fh-cr-fast--tank"><?php echo esc_html( $fh_tank['fast']['text'] ); ?></span>
+						<?php endif; ?>
 						<?php if ( $fh_doses ) : ?>
 							<span class="fh-cr-building__doses">
 								<?php

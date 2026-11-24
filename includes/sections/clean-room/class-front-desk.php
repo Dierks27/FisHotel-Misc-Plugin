@@ -353,6 +353,7 @@ class Front_Desk {
 			'notSpa'      => __( 'Arrivals go into a Spa tank', 'fishotel-misc-plugin' ),
 			'todayToDo'   => __( 'Today · %d to do', 'fishotel-misc-plugin' ),
 			'todayNone'   => __( 'Today · all done', 'fishotel-misc-plugin' ),
+			'noFeeding'   => __( 'no feeding', 'fishotel-misc-plugin' ),
 			'cuLow'       => __( 'Cu low', 'fishotel-misc-plugin' ),
 			'copperDosed' => __( 'dosed since — test again tomorrow', 'fishotel-misc-plugin' ),
 			'whyMove'     => __( 'Why? (optional)', 'fishotel-misc-plugin' ),
@@ -672,6 +673,8 @@ class Front_Desk {
 			'dose'        => Dose::sheet_data( Medications::active( $medications ), Dose::waters( $store, $current, $today, $settings, $protocols ), $settings, $medications ),
 			'occupants'   => $occupants,
 			'todo'        => array_values( (array) $current['todo'] ),
+			// No Feed today because fish ship from this water: what the Today strip says (strip, fed), or null.
+			'fast'        => isset( $current['fast'] ) && is_array( $current['fast'] ) ? $current['fast'] : null,
 			'copper'      => $copper,
 			'url'         => Clean_Room::front_desk_url( (int) $current['number'] ),
 			'temp'        => $slot ? self::slot_screen( $current, $today ) : null,
