@@ -43,7 +43,7 @@ class Admin {
 
 		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
 		$id     = $screen && isset( $screen->id ) ? (string) $screen->id : '';
-		if ( false !== strpos( $id, Packing::MENU_SLUG ) || ( 'product' === $id && current_user_can( Packing::CAPABILITY ) ) ) {
+		if ( false !== strpos( $id, Packing::MENU_SLUG ) || ( in_array( $id, array( 'product', 'edit-product' ), true ) && current_user_can( Packing::CAPABILITY ) ) ) {
 			self::enqueue_assets();
 		}
 	}
@@ -137,9 +137,11 @@ class Admin {
 		$current  = array();
 		$boxes    = array();
 		$model    = Boxes::model( $settings );
+		$third    = array();
 
 		if ( 'bags' === $tab ) {
 			$usage = $store->bag_usage();
+			$third = $woocommerce ? ( new Third_Bag( $store ) )->review_list() : array();
 		} elseif ( 'sizes' === $tab ) {
 			$standard = Size_List::standard();
 			$counts   = $store->variation_counts();

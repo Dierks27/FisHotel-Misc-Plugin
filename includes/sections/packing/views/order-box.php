@@ -21,6 +21,7 @@ defined( 'ABSPATH' ) || exit;
 use FisHotel\Misc\Sections\Packing\Bags;
 use FisHotel\Misc\Sections\Packing\Boxes;
 use FisHotel\Misc\Sections\Packing\Layers;
+use FisHotel\Misc\Sections\Packing\Settings;
 use FisHotel\Misc\Sections\Packing\Livestock;
 use FisHotel\Misc\Sections\Packing\Order_Packing;
 use FisHotel\Misc\Sections\Packing\Plan;
@@ -211,7 +212,7 @@ if ( $fh_confirmed && $fh_can_use ) {
 			<?php /* translators: %d: number of single bags */ ?>
 			<strong><?php echo esc_html( sprintf( _n( '%d bag to pull', '%d bags to pull', (int) $result['pull_total'], 'fishotel-misc-plugin' ), (int) $result['pull_total'] ) ); ?></strong>
 			<?php echo esc_html( implode( ' · ', $fh_pull ) ); ?>
-			<span class="fh-pack-box__sub"><?php esc_html_e( 'every fish is double-bagged, triple-bagged for spines', 'fishotel-misc-plugin' ); ?></span>
+			<span class="fh-pack-box__sub"><?php echo esc_html( Layers::SCOPE_ALL === Settings::get()['triple_scope'] ? __( 'every fish is double-bagged, triple-bagged for spines', 'fishotel-misc-plugin' ) : __( 'every fish is double-bagged; 3 bags when its product says so', 'fishotel-misc-plugin' ) ); ?></span>
 		</p>
 	<?php endif; ?>
 

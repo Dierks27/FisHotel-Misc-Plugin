@@ -153,6 +153,10 @@ class Layout {
 				return __( 'When a fish a customer already paid for is lost: a case with every choice and an e-mail that waits for your click. Switching it on starts an hourly check that sends one reminder to a customer who has not answered after 2 days (Settings; 0 = none) — the first e-mail always waits for you.', 'fishotel-misc-plugin' );
 			case 'packing':
 				return __( 'Which bag every fish goes in and which box an order fits in, with a Packing box on every order for you to confirm. Starts nothing by itself.', 'fishotel-misc-plugin' );
+			case 'edit-screens':
+				return __( 'The product and order edit screens tidied: what to fill first at the top, the rarely used closed at the bottom, fish boxes hidden on dry goods. Starts nothing by itself: each person\'s screen is tidied once, when they open it, with "Put my old layout back".', 'fishotel-misc-plugin' );
+			case 'product-checks':
+				return __( 'What each product still needs, counted on the products list: photos, table facts, old-style descriptions, bag sizes, prices. Switching it on starts a check of every product within minutes, then one each night (WP-cron); it sends no e-mail.', 'fishotel-misc-plugin' );
 			case 'foam-cuts':
 				return __( 'Plans the foam cuts for the day\'s boxes, prints the cut sheet and keeps the stock of whole sheets and leftovers. Starts nothing by itself.', 'fishotel-misc-plugin' );
 			case 'weather':

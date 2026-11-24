@@ -45,7 +45,9 @@ words — ten kinds of fish with spines, the owner's to change.
   given to another, and a page that was drawn before the bag was removed
   cannot bring it back under a new `#` (that save is refused: reload).
   Under the bags, **Triple-bag these**: the words that mean a fish is
-  bagged three times instead of twice (*Bag layers*).
+  bagged three times instead of twice, and **The word list applies to**
+  (*Bag layers*); then the one-time helper **Tick every product the old
+  list matches** (*The 3rd-bag tick*).
 - **Sizes → bags** — one row per fish size with a bag dropdown (the map),
   and the *Fill empty ones from the map* tool.
 - **Boxes** — where the boxes come from (with the room each leaves inside
@@ -59,15 +61,22 @@ words — ten kinds of fish with spines, the owner's to change.
 A save that draws the page again (bags, the map, boxes) keeps its button
 disabled until the page is back, so the same rows are never posted twice.
 
-**The product editor** (the classic one) — under *Shipping*, on simple and
-variable products, the checkbox **Livestock — packed in a bag**; and, while
-it is ticked, **Bagging** (Auto / Double / Triple — *Bag layers*) and a
-**Bag size** dropdown on every variation and on a simple product under
-*Shipping*. The dropdown's first option is "Not set", and says which bag
+**The product editor** (the classic one) — at the top of *Shipping*, on
+simple and variable products, the tick **Needs a 3rd bag (sharp spines or a
+scalpel)** (always shown — *The 3rd-bag tick*); the checkbox **Livestock —
+packed in a bag**; and, while it is ticked, a **Bag size** dropdown on every
+variation and on a simple product under *Shipping*. (With the Edit screens
+section on, the tick and the checkbox sit in its *Fish essentials* box under
+the title instead — the same fields, the same save.) The dropdown's first option is "Not set", and says which bag
 the size map gives that variation right now.
 
 **The order screen** (the legacy one and the High-Performance Order Storage
-one) — a **Packing** box: each fish line with the bag to use (bold) and its
+one) — a **Packing** box, under the order's Items and above the theme's
+Shipments box on both screens (it is added on each order screen's own hook,
+`add_meta_boxes_shop_order` / `add_meta_boxes_woocommerce_page_wc-orders`,
+at priority 20 — after WooCommerce's Order data and Items, before the
+Shipments box at 30; until 0.46.19 it was added on the generic hook and
+landed above Order data on the legacy screen): each fish line with the bag to use (bold) and its
 layers ("Medium ×2", "Large ×3 — spines"), "upsized
 from <smallest> to fill the box" or "chosen by hand", its smallest bag and
 where that came from, "tie off at about N in" when the bag stands taller
@@ -338,18 +347,26 @@ everything." So every bag Packing plans is used in **layers** — bags one
 inside the other: **2** unless something says **3** (`class-layers.php`,
 pure). How a fish is known, in this order:
 
-1. **The product's own choice** — *Bagging: Auto / Double / Triple* in the
-   product editor's Shipping tab, under *Livestock — packed in a bag*. It
-   is stored on the **parent** product as the hidden meta `_fh_bag_layers`
-   (`2` or `3`); **Auto stores nothing**. A variation is read from its
-   parent. Double on a tang is respected: the owner said so. The Auto
-   option says what it comes to for the product as it was last saved —
-   "Auto — double for this fish", or "Auto — triple for this fish (“tang”
-   is on the list)".
+1. **The product's own choice** — the tick **Needs a 3rd bag (sharp
+   spines or a scalpel)**. It is stored on the **parent** product as the
+   hidden meta `_fh_bag_layers` = `3`; **unticked stores nothing**. A
+   variation is read from its parent. A `2` ("Double", chosen with the
+   Auto / Double / Triple dropdown this tick replaced) is kept and still
+   means two bags; it shows unticked.
 2. **A word of the *Triple-bag these* list** (Packing → Bags), found in the
-   order line's **name** or in one of its product's **category names**.
-   Because it reads the line's name, it also reaches a fish with no
-   product and each fish of an opened-up Invoice.
+   order line's **name** or in one of its product's **category names** —
+   on the lines **The word list applies to** lets it reach:
+   - **Every line (the old way)** — what a site has after the update, so
+     nothing changes until the owner has ticked the products: an unticked
+     tang is still triple-bagged by its word;
+   - **Lines with no product page only** — set by the helper's first click
+     (*The 3rd-bag tick*): every line with a product follows its tick
+     alone (an unticked tang is `×2`, "no 3rd bag ticked on the product"),
+     and the words reach only a fish with no product to tick — a fish typed
+     on a batch invoice (`_fh_invoice_fish`), an invoice row whose
+     `product_id` is 0. An invoice row naming a product follows that
+     product's tick;
+   - **Nothing** — only the tick triple-bags.
 3. Otherwise **2**.
 
 **How a word matches.** As a whole word, whatever the capitals — and one
@@ -374,14 +391,17 @@ product says otherwise. The outer and the inner bags are **the same stock
 item**: a count of layers is a count of single bags to pull.
 
 **Where it shows.** On the order's Packing box, after the bag of every fish
-line: `×2`, or `×3 — spines` in red (hover for why: the product, or which
-word). A line whose fish ended in bags of different sizes says `each ×2`.
+line: `×2` in plain text, or `×3 — spines` in red (hover for why: "ticked on
+the product", "no 3rd bag ticked on the product", or which word). The line
+under the bags reads "every fish is double-bagged; 3 bags when its product
+says so" (or, while the words reach every line, "…, triple-bagged for
+spines"). A line whose fish ended in bags of different sizes says `each ×2`.
 Below the lines: **"14 bags to pull"** with the count by bag size — the
 filled bags times their layers; in a split, each box says its own.
 
 **For other code.** Every line of `fishotel_packing_suggest()` gains
-`layers` (2 | 3), `layers_why` (`product`, `word:<word>`, `default`,
-`filter`), `layers_label` ("Medium ×2", "Large ×3 — spines", "2 × Large +
+`layers` (2 | 3), `layers_why` (`product`, `word:<word>`, `no_tick`,
+`default`, `filter`), `layers_label` ("Medium ×2", "Large ×3 — spines", "2 × Large +
 Medium, each ×2") and `in_boxes` (box index → bag id → how many of the
 line's bags are in that box); the answer gains `bags_pull` (by size: `id`,
 `name`, `count`) and `pull_total`. `fishotel_packing_bag_for_item()` gains
@@ -390,6 +410,40 @@ were**, so the Batch plugin's pick list ("Bag: Large") is unchanged. The
 filter `fishotel_packing_bag_layers` ( `$layers`, `$product`, `$name`,
 `$order_item` ) has the last word: an answer of 2 or 3 counts (the line
 then says `filter`), anything else is ignored.
+
+## The 3rd-bag tick
+
+The owner asked for "a plain product checkbox for an extra bag instead of
+depending on a word list". So:
+
+- **On the product** — *Needs a 3rd bag (sharp spines or a scalpel)*, at
+  the top of the Shipping tab, not behind anything (or in the Edit screens
+  section's *Fish essentials* box). Ticked → `_fh_bag_layers` = `3`;
+  unticking a `3` deletes it; a hidden "drawn as" field beside it tells an
+  untick from a save that does not carry the field, so a `2` stays `2`.
+  While the words still reach every line, the help under an unticked fish
+  that a word finds says it is still triple-bagged for now, and why.
+- **Products list** — *Quick edit* has the same tick (its state travels in
+  a hidden mark in the Name cell, which the script reads when the row
+  opens); *Bulk edit* has **3rd bag: — No change — / Yes — needs a 3rd bag /
+  No** ("No" removes a `3`, keeps a `2`). A view **3rd bag ticked (n)**
+  beside WooCommerce's own lists the ticked products, to check them.
+- **The one-time helper** (Packing → Bags, *Tick every product the old list
+  matches*) lists the products packed in a bag (Livestock ticked, or with
+  no stored choice in a fish category; never an invoice) — **archived fish
+  included** (shown "(archived)": the same click narrows the word list, so
+  a tang listed again or on a manual order must be ticked now) — with no choice yet
+  (no `3`, no `2`) that a word finds — the same whole-word match on the
+  name and the category names. Every row starts ticked; untick any you
+  disagree with; **one click** ticks the rest (`fishotel_packing_tick_third`,
+  the ids as one comma-separated field, at most 2,000 a click, each written
+  through the product object). Its first click also sets *The word list
+  applies to* to *Lines with no product page only* — unless the owner chose
+  *Nothing*. A fish left unticked stays on the list as a review ("a word,
+  but no tick"); the list is never a rule.
+
+Nothing on the storefront changes, and nothing new is stored: the same
+meta, the same option.
 
 ## The shipment plan
 
@@ -499,10 +553,10 @@ into a combined box is chosen there.
 
 | Where | Key | What |
 |-------|-----|------|
-| option (not autoloaded) | `fishotel_packing_settings` | `bags` (id, name, width, length, share — '' or a whole percent, sort), `last_bag_id`, `boxes` (the own list: name, length, width, height), `fits` (per box: name, dims, bag id → how many — only what was typed), `size_map` (size slug → bag id), `threshold`, `fill_share` (percent, 70), `foam` (inches, 0.5), `triple_words` (the *Triple-bag these* list, lower-cased; absent = the starting words) |
+| option (not autoloaded) | `fishotel_packing_settings` | `bags` (id, name, width, length, share — '' or a whole percent, sort), `last_bag_id`, `boxes` (the own list: name, length, width, height), `fits` (per box: name, dims, bag id → how many — only what was typed), `size_map` (size slug → bag id), `threshold`, `fill_share` (percent, 70), `foam` (inches, 0.5), `triple_words` (the *Triple-bag these* list, lower-cased; absent = the starting words), `triple_scope` (*The word list applies to*: `all` — absent reads so —, `no_product`, `none`) |
 | product / variation meta | `_fh_bag_size` | the bag's id |
 | product meta (the parent product, never a variation) | `_fh_packs_in_bag` | *Livestock — packed in a bag*: `yes` or `no`; absent = follow the default |
-| product meta (the parent product, never a variation) | `_fh_bag_layers` | *Bagging*: `2` (double) or `3` (triple); absent = Auto |
+| product meta (the parent product, never a variation) | `_fh_bag_layers` | *Needs a 3rd bag*: `3` when ticked; `2` = a "Double" chosen before the tick existed (kept, two bags); absent = unticked |
 | order meta | `_fh_packing_box` | the confirmed box: `v`, `boxes` (name, length, width, height), `fill` (as it stood), `suggested`, `complete`, `by` (user id), `at` (UTC) |
 | order meta | `_fh_packing_box_name` | the same as plain text: `Medium box`, `2 × Large box + Small box` |
 | order meta | `_fh_packing_bags` | the bags chosen by hand: line key (`order id-item id-n`, n counting the fish an Invoice line opened up into) → bag id; absent = every line on Auto |
@@ -529,6 +583,7 @@ fishotel_packing_confirmed_box( int $order_id ): ?array
 fishotel_packing_bag_for_product( int|WC_Product $product ): ?array
 fishotel_packing_bag_for_size( string $size_slug_or_label ): ?array
 fishotel_packing_shipment_plan( int $order_id ): array                 // see The shipment plan
+fishotel_packing_product_fields( ?WC_Product $product ): bool          // draws Livestock + the 3rd-bag tick in another box (Edit screens)
 ```
 
 **`fishotel_packing_suggest()`** always returns the same keys:
@@ -620,17 +675,19 @@ the box the Add Shipment form holds — without reloading the page.
 **REST routes**: none. **Public AJAX**: none. The admin AJAX actions
 (`manage_woocommerce` + a nonce each): `fishotel_packing_bags`,
 `fishotel_packing_boxes`, `fishotel_packing_fits`, `fishotel_packing_map`,
-`fishotel_packing_words` (nonce `fishotel_packing_settings`), `fishotel_packing_fill_preview`,
+`fishotel_packing_words`, `fishotel_packing_tick_third` (nonce `fishotel_packing_settings`), `fishotel_packing_fill_preview`,
 `fishotel_packing_fill_run` (nonce `fishotel_packing_fill`) and
 `fishotel_packing_confirm` (nonce `fishotel_packing_order`; with
 `choice=suggested` the screen posts `shown`, the suggestion it displayed,
 and gets 409 plus the box drawn again when that is not the suggestion any
 more; `op=bag` with `line` and `bag` — a bag id, or empty for Auto —
 chooses a line's bag by hand). The product
-editor's fields — the checkbox, *Bagging* and the dropdown — are saved by
+editor's fields — the checkbox, the 3rd-bag tick and the dropdown — are saved by
 WooCommerce's own product saves, behind this section's nonce
 `fishotel_packing_bag_size` and `manage_woocommerce` as well, through the
-product object.
+product object. The tick on quick edit and bulk edit is saved after
+WooCommerce's own save of those (its nonce `woocommerce_quick_edit_nonce`
+and `edit_post` checked), for `manage_woocommerce` only.
 
 ## What it reads from other code — and what happens without it
 
@@ -661,8 +718,14 @@ Each is reached through `class_exists()` / `method_exists()` /
   `woocommerce_product_options_shipping`,
   `woocommerce_admin_process_product_object`, and
   `postbox_classes_product_woocommerce-product-data` for the class that
-  hides the Bag size fields and *Bagging*), `add_meta_boxes`, `admin_enqueue_scripts`
-  (the Packing page and the product edit screen) and the admin AJAX
+  hides the Bag size fields), the products list's
+  (`manage_product_posts_custom_column` for the tick's state in the Name
+  cell, `woocommerce_product_quick_edit_end` / `_save`,
+  `woocommerce_product_bulk_edit_end` / `_save`, `views_edit-product` and
+  `request` for the "3rd bag ticked" view — on that list only),
+  `add_meta_boxes_shop_order` and `add_meta_boxes_woocommerce_page_wc-orders`
+  (the Packing box), `admin_enqueue_scripts`
+  (the Packing page, the product edit screen and the products list) and the admin AJAX
   actions — none of the hooks
   WooCommerce uses to print variation data, cart / checkout / e-mail /
   invoice / My Account order-item data, or to build a REST or Store API
@@ -714,7 +777,8 @@ packing/
 ├── class-order-packing.php  the suggestion of an order; the bags to use; the confirmed box; the choices by hand
 ├── class-store.php          the only $wpdb file — reads only
 ├── class-fill.php           "Fill empty ones from the map"
-├── class-product.php        the checkbox, Bagging and the Bag size dropdown in the product editor
+├── class-product.php        the checkbox, the 3rd-bag tick and the Bag size dropdown in the product editor; quick / bulk edit
+├── class-third-bag.php      the "3rd bag ticked" view; "Tick every product the old list matches"
 ├── class-order-box.php      the Packing box on the order screen
 ├── class-admin.php          the page; the assets
 ├── views/                   page, tab-bags, tab-sizes, tab-boxes, order-box
@@ -732,10 +796,10 @@ packing/
 - **The fit model is a ballpark**: square cells and rows, not the best
   packing of circles. Where it is off for a box and a bag, type the number:
   "your number" wins.
-- The checkbox, *Bagging* and the Bag size dropdown are in the **classic**
-  product editor (the Shipping tab and the variations); quick edit, bulk
-  edit and the product import set none of them — a product made that way
-  follows the default.
+- The checkbox and the Bag size dropdown are in the **classic** product
+  editor (the Shipping tab and the variations); quick edit, bulk edit and
+  the product import set neither — a product made that way follows the
+  default. The 3rd-bag tick is also on quick edit and bulk edit.
 - **Prefilling the shipment form** is the theme's part: it reads
   `fishotel_packing_shipment_plan()`. This section only answers.
 - **Which lines are still open** is ShipTracker's to know: for "the next

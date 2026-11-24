@@ -33,12 +33,23 @@ class Order_Box {
 	const BOX_ID = 'fishotel-packing';
 
 	/**
+	 * The screen id of WooCommerce's HPOS order editor.
+	 *
+	 * @var string
+	 */
+	const HPOS_SCREEN = 'woocommerce_page_wc-orders';
+
+	/**
 	 * Register hooks.
 	 */
 	public function init() {
-		// The generic hook carries the screen: 'shop_order' on the legacy
-		// screen, WooCommerce's own page id on the HPOS one.
-		add_action( 'add_meta_boxes', array( $this, 'register_meta_box' ), 30, 2 );
+		// On each order screen's own hook, which fires after the generic
+		// add_meta_boxes where WooCommerce adds Order data and Items (legacy
+		// screen: add_meta_boxes, priority 30): so Packing lands under the
+		// Items on both screens, and — at priority 20 — above the theme's
+		// Shipments box, which the same hooks add at 30.
+		add_action( 'add_meta_boxes_shop_order', array( $this, 'register_legacy' ), 20, 1 );
+		add_action( 'add_meta_boxes_' . self::HPOS_SCREEN, array( $this, 'register_hpos' ), 20, 1 );
 		add_action( 'wp_ajax_fishotel_packing_confirm', array( $this, 'ajax_confirm' ) );
 	}
 
@@ -56,6 +67,24 @@ class Order_Box {
 			}
 		}
 		return $screens;
+	}
+
+	/**
+	 * The legacy order screen's own hook (it carries the post).
+	 *
+	 * @param mixed $post WP_Post.
+	 */
+	public function register_legacy( $post = null ) {
+		$this->register_meta_box( 'shop_order', $post );
+	}
+
+	/**
+	 * The HPOS order screen's own hook (it carries the order).
+	 *
+	 * @param mixed $order WC_Order.
+	 */
+	public function register_hpos( $order = null ) {
+		$this->register_meta_box( self::HPOS_SCREEN, $order );
 	}
 
 	/**
@@ -80,7 +109,7 @@ class Order_Box {
 			array( $this, 'render_meta_box' ),
 			$screen_id,
 			'normal',
-			'high' // Under the order's items, above the shipment: fish, bag, box, then the label.
+			'high' // Under the order's items, above the shipment: fish, bag, box, then the label (see init()).
 		);
 
 		Admin::enqueue_assets();
