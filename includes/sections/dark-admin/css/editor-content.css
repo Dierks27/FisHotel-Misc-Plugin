@@ -1,0 +1,90 @@
+/**
+ * FisHotel Misc — Dark admin: the classic editor's writing area (the
+ * TinyMCE iframe on posts, pages and products — the description and the
+ * short description).
+ *
+ * Added after the theme's own editor style and only while the person's
+ * "Dark admin" tick is on; every rule hangs on body.fh-dark-admin, which
+ * the section adds to the editor's <body>. Nothing here is saved with the
+ * text: the guard's two classes (fh-da-ink-light / fh-da-ink-dark, and
+ * fh-da-paper behind a mid grey) are taken off by the editor every time it
+ * hands the content over (js/dark-admin.js).
+ */
+
+body.fh-dark-admin.mce-content-body,
+body.fh-dark-admin {
+	background: #1e1e1e;
+	color: #e0e0e0;
+	color-scheme: dark;
+}
+
+body.fh-dark-admin a {
+	color: #0eb5e8;
+}
+
+body.fh-dark-admin h1,
+body.fh-dark-admin h2,
+body.fh-dark-admin h3,
+body.fh-dark-admin h4,
+body.fh-dark-admin h5,
+body.fh-dark-admin h6,
+body.fh-dark-admin p,
+body.fh-dark-admin li,
+body.fh-dark-admin td,
+body.fh-dark-admin th,
+body.fh-dark-admin dt,
+body.fh-dark-admin dd,
+body.fh-dark-admin blockquote,
+body.fh-dark-admin figcaption,
+body.fh-dark-admin .wp-caption-dd {
+	color: inherit;
+}
+
+body.fh-dark-admin table,
+body.fh-dark-admin td,
+body.fh-dark-admin th,
+body.fh-dark-admin hr {
+	border-color: #5c5c5c;
+}
+
+body.fh-dark-admin code,
+body.fh-dark-admin pre,
+body.fh-dark-admin kbd {
+	background: #2d2d2d;
+	color: #e0e0e0;
+}
+
+body.fh-dark-admin blockquote {
+	border-left-color: #5c5c5c;
+}
+
+body.fh-dark-admin .wp-caption,
+body.fh-dark-admin .mce-item-table,
+body.fh-dark-admin .mce-item-table td,
+body.fh-dark-admin .mce-item-table th {
+	border-color: #5c5c5c;
+}
+
+body.fh-dark-admin .mce-content-body *[data-mce-selected],
+body.fh-dark-admin *[data-mce-selected="inline-boundary"] {
+	background-color: #1f3340;
+}
+
+body.fh-dark-admin .mce-content-body img::selection,
+body.fh-dark-admin ::selection {
+	background: #00789f;
+	color: #ffffff;
+}
+
+/* The guard's classes: text another colour made unreadable. */
+body.fh-dark-admin .fh-da-ink-light {
+	color: #e0e0e0 !important;
+}
+
+body.fh-dark-admin .fh-da-ink-dark {
+	color: #1e1e1e !important;
+}
+
+body.fh-dark-admin .fh-da-paper {
+	background-color: #1a1a1a !important;
+}

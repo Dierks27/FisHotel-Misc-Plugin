@@ -1,0 +1,2855 @@
+/**
+ * FisHotel Misc — Dark admin: the one layer that darkens wp-admin.
+ *
+ * Loaded only on wp-admin screens for a person whose "Dark admin" tick is
+ * on, and every rule hangs on body.fh-dark-admin, which the section adds
+ * to those screens only — never the storefront, the login page or the
+ * Customizer.
+ *
+ * Colours: the variables below and nothing else (palette-test.php checks
+ * them against class-palette.php, and every text colour against every
+ * background it is put on). They are the FisHotel Tools screens' own
+ * (admin/css/admin-style.css). A box kept light on purpose sets the
+ * light values again on itself (".fh-da-light", at the end) and is listed
+ * in the section README.
+ *
+ * Order: page and type, links, buttons, fields, boxes, tables, notices,
+ * tabs and Screen Options, quick / bulk edit, the classic editor, media,
+ * pop-ups (thickbox, jQuery UI, select2, date and colour pickers), the
+ * dashboard and the core screens, WooCommerce, its React pages, Yoast,
+ * the FisHotel plugins' and the theme's own boxes, the guard's classes.
+ */
+
+body.fh-dark-admin {
+	--fh-da-bg: #1a1a1a;
+	--fh-da-surface: #2d2d2d;
+	--fh-da-raised: #363636;
+	--fh-da-sunken: #242424;
+	--fh-da-input: #1e1e1e;
+	--fh-da-text: #e0e0e0;
+	--fh-da-text-quiet: #a0a0a0;
+	--fh-da-link: #0eb5e8;
+	--fh-da-link-hover: #5fcff5;
+	--fh-da-accent: #00a0d2;
+	--fh-da-accent-strong: #00789f;
+	--fh-da-accent-hover: #006a8e;
+	--fh-da-on-accent: #ffffff;
+	--fh-da-border: #444444;
+	--fh-da-border-strong: #5c5c5c;
+	--fh-da-success: #46b450;
+	--fh-da-warning: #ffb900;
+	--fh-da-danger: #dc3232;
+	--fh-da-danger-text: #ff8a8a;
+	--fh-da-success-text: #6fcf7a;
+	--fh-da-danger-tint: #3a2222;
+	--fh-da-success-tint: #223a26;
+	--fh-da-warning-tint: #3a3220;
+	--fh-da-info-tint: #1f3340;
+	--fh-da-note-private: #2f3b45;
+	--fh-da-note-customer: #1f3a44;
+	--fh-da-note-system: #3a2f38;
+	--fh-da-light-paper: #ffffff;
+	--fh-da-light-ink: #1e1e1e;
+
+	/* WordPress's and WooCommerce's own variables, pointed at ours. */
+	--wp-admin-theme-color: var(--fh-da-accent-strong);
+	--wp-components-color-background: var(--fh-da-surface);
+	--wp-components-color-foreground: var(--fh-da-text);
+	--wp-components-color-gray-100: var(--fh-da-raised);
+	--wp-components-color-gray-300: var(--fh-da-border);
+	--wp-components-color-gray-600: var(--fh-da-text-quiet);
+	--wp-components-color-gray-700: var(--fh-da-text-quiet);
+	--wp-components-color-gray-800: var(--fh-da-text);
+
+	color-scheme: dark;
+	background: var(--fh-da-bg);
+	color: var(--fh-da-text);
+}
+
+/* ================================================================== */
+/*  Page and type                                                      */
+/* ================================================================== */
+
+html:has(body.fh-dark-admin),
+body.fh-dark-admin #wpwrap,
+body.fh-dark-admin #wpcontent,
+body.fh-dark-admin #wpbody,
+body.fh-dark-admin #wpbody-content,
+body.fh-dark-admin #wpfooter,
+body.fh-dark-admin.iframe,
+body.fh-dark-admin #poststuff,
+body.fh-dark-admin .wrap {
+	background-color: var(--fh-da-bg);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin h1,
+body.fh-dark-admin h2,
+body.fh-dark-admin h3,
+body.fh-dark-admin h4,
+body.fh-dark-admin h5,
+body.fh-dark-admin h6,
+body.fh-dark-admin .wrap h1,
+body.fh-dark-admin .wrap h2,
+body.fh-dark-admin .wp-heading-inline,
+body.fh-dark-admin .postbox .hndle,
+body.fh-dark-admin .postbox h2,
+body.fh-dark-admin .stuffbox h2,
+body.fh-dark-admin .form-table th,
+body.fh-dark-admin .form-wrap label,
+body.fh-dark-admin label,
+body.fh-dark-admin legend,
+body.fh-dark-admin dt,
+body.fh-dark-admin strong,
+body.fh-dark-admin b,
+body.fh-dark-admin p,
+body.fh-dark-admin li,
+body.fh-dark-admin td,
+body.fh-dark-admin th,
+body.fh-dark-admin dd,
+body.fh-dark-admin caption {
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .description,
+body.fh-dark-admin p.description,
+body.fh-dark-admin .form-table td p.description,
+body.fh-dark-admin .howto,
+body.fh-dark-admin .form-wrap p,
+body.fh-dark-admin .wrap .subtitle,
+body.fh-dark-admin #wpfooter,
+body.fh-dark-admin #wpfooter p,
+body.fh-dark-admin .count,
+body.fh-dark-admin .subsubsub,
+body.fh-dark-admin .displaying-num,
+body.fh-dark-admin .post-state,
+body.fh-dark-admin .post-com-count-no-comments,
+body.fh-dark-admin .wp-ui-text-icon,
+body.fh-dark-admin span.description,
+body.fh-dark-admin .help,
+body.fh-dark-admin .meta,
+body.fh-dark-admin .text-muted,
+body.fh-dark-admin .inactive,
+body.fh-dark-admin .wp-list-table .column-date,
+body.fh-dark-admin .wp-list-table .row-title + .post-state {
+	color: var(--fh-da-text-quiet);
+}
+
+body.fh-dark-admin hr {
+	border-color: var(--fh-da-border);
+	background: var(--fh-da-border);
+}
+
+body.fh-dark-admin code,
+body.fh-dark-admin kbd,
+body.fh-dark-admin pre {
+	background: var(--fh-da-sunken);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin mark:not([class*="status"]):not(.yes):not(.no):not(.error) {
+	background: var(--fh-da-warning-tint);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .dashicons,
+body.fh-dark-admin .dashicons-before::before {
+	color: inherit;
+}
+
+/* ================================================================== */
+/*  Links                                                              */
+/* ================================================================== */
+
+body.fh-dark-admin a,
+body.fh-dark-admin .row-title,
+body.fh-dark-admin .button-link,
+body.fh-dark-admin .wp-core-ui .button-link,
+body.fh-dark-admin a.row-title {
+	color: var(--fh-da-link);
+}
+
+body.fh-dark-admin a:hover,
+body.fh-dark-admin a:focus,
+body.fh-dark-admin a:active,
+body.fh-dark-admin .button-link:hover,
+body.fh-dark-admin .button-link:focus {
+	color: var(--fh-da-link-hover);
+}
+
+body.fh-dark-admin .row-actions .trash a,
+body.fh-dark-admin .row-actions .delete a,
+body.fh-dark-admin .row-actions .spam a,
+body.fh-dark-admin a.submitdelete,
+body.fh-dark-admin .submitbox .submitdelete,
+body.fh-dark-admin a.delete,
+body.fh-dark-admin .delete-theme,
+body.fh-dark-admin .button-link-delete,
+body.fh-dark-admin .wp-core-ui .button-link-delete,
+body.fh-dark-admin .plugins a.delete,
+body.fh-dark-admin .file-error,
+body.fh-dark-admin .form-invalid .form-required,
+body.fh-dark-admin .required,
+body.fh-dark-admin .error-message,
+body.fh-dark-admin span.error,
+body.fh-dark-admin .wc-order-totals .refunded-total,
+body.fh-dark-admin .order_notes .delete_note {
+	color: var(--fh-da-danger-text);
+}
+
+/* ================================================================== */
+/*  Buttons                                                            */
+/* ================================================================== */
+
+body.fh-dark-admin .button,
+body.fh-dark-admin .button-secondary,
+body.fh-dark-admin .wp-core-ui .button,
+body.fh-dark-admin .wp-core-ui .button-secondary,
+body.fh-dark-admin .page-title-action,
+body.fh-dark-admin .wrap .page-title-action,
+body.fh-dark-admin .wrap .add-new-h2,
+body.fh-dark-admin input[type="button"]:not(.button-primary):not(.button-link),
+body.fh-dark-admin input[type="submit"]:not(.button-primary):not(.button-link):not(.button) {
+	background: var(--fh-da-surface);
+	border-color: var(--fh-da-link);
+	color: var(--fh-da-link);
+}
+
+body.fh-dark-admin .button:hover,
+body.fh-dark-admin .button:focus,
+body.fh-dark-admin .button-secondary:hover,
+body.fh-dark-admin .button-secondary:focus,
+body.fh-dark-admin .wp-core-ui .button:hover,
+body.fh-dark-admin .wp-core-ui .button:focus,
+body.fh-dark-admin .wp-core-ui .button-secondary:hover,
+body.fh-dark-admin .wp-core-ui .button-secondary:focus,
+body.fh-dark-admin .page-title-action:hover,
+body.fh-dark-admin .page-title-action:focus,
+body.fh-dark-admin .wrap .page-title-action:hover {
+	background: var(--fh-da-raised);
+	border-color: var(--fh-da-link-hover);
+	color: var(--fh-da-link-hover);
+}
+
+body.fh-dark-admin .button.active,
+body.fh-dark-admin .button:active,
+body.fh-dark-admin .wp-core-ui .button.active,
+body.fh-dark-admin .wp-core-ui .button:active {
+	background: var(--fh-da-sunken);
+	border-color: var(--fh-da-link);
+	color: var(--fh-da-link-hover);
+}
+
+body.fh-dark-admin .button-primary,
+body.fh-dark-admin .wp-core-ui .button-primary,
+body.fh-dark-admin .wp-core-ui .button-primary.focus,
+body.fh-dark-admin .wp-core-ui .button-primary:focus,
+body.fh-dark-admin input[type="submit"].button-primary {
+	background: var(--fh-da-accent-strong);
+	border-color: var(--fh-da-accent-strong);
+	color: var(--fh-da-on-accent);
+	text-shadow: none;
+	box-shadow: none;
+}
+
+body.fh-dark-admin .button-primary:hover,
+body.fh-dark-admin .wp-core-ui .button-primary:hover,
+body.fh-dark-admin .wp-core-ui .button-primary.hover,
+body.fh-dark-admin .wp-core-ui .button-primary:active {
+	background: var(--fh-da-accent-hover);
+	border-color: var(--fh-da-accent);
+	color: var(--fh-da-on-accent);
+}
+
+body.fh-dark-admin .button:disabled,
+body.fh-dark-admin .button.disabled,
+body.fh-dark-admin .button[disabled],
+body.fh-dark-admin .wp-core-ui .button:disabled,
+body.fh-dark-admin .wp-core-ui .button.disabled,
+body.fh-dark-admin .wp-core-ui .button-secondary:disabled,
+body.fh-dark-admin .wp-core-ui .button-primary:disabled,
+body.fh-dark-admin .wp-core-ui .button-primary.disabled,
+body.fh-dark-admin .wp-core-ui .button-primary[disabled] {
+	background: var(--fh-da-sunken) !important;
+	border-color: var(--fh-da-border) !important;
+	color: var(--fh-da-text-quiet) !important;
+}
+
+body.fh-dark-admin .button-link,
+body.fh-dark-admin .wp-core-ui .button-link,
+body.fh-dark-admin .wp-core-ui .button.button-link {
+	background: none;
+	border-color: transparent;
+}
+
+body.fh-dark-admin .wp-core-ui .button-group .button.active,
+body.fh-dark-admin .wp-core-ui .button-group .button[aria-pressed="true"] {
+	background: var(--fh-da-accent-strong);
+	border-color: var(--fh-da-accent-strong);
+	color: var(--fh-da-on-accent);
+}
+
+body.fh-dark-admin .spinner {
+	filter: invert(1);
+}
+
+/* ================================================================== */
+/*  Fields                                                             */
+/* ================================================================== */
+
+body.fh-dark-admin input[type="text"],
+body.fh-dark-admin input[type="search"],
+body.fh-dark-admin input[type="email"],
+body.fh-dark-admin input[type="url"],
+body.fh-dark-admin input[type="tel"],
+body.fh-dark-admin input[type="number"],
+body.fh-dark-admin input[type="password"],
+body.fh-dark-admin input[type="date"],
+body.fh-dark-admin input[type="datetime-local"],
+body.fh-dark-admin input[type="datetime"],
+body.fh-dark-admin input[type="month"],
+body.fh-dark-admin input[type="week"],
+body.fh-dark-admin input[type="time"],
+body.fh-dark-admin input[type="color"],
+body.fh-dark-admin input:not([type]),
+body.fh-dark-admin textarea,
+body.fh-dark-admin select,
+body.fh-dark-admin .wp-core-ui select {
+	background-color: var(--fh-da-input);
+	border-color: var(--fh-da-border-strong);
+	color: var(--fh-da-text);
+	box-shadow: none;
+}
+
+body.fh-dark-admin input:focus,
+body.fh-dark-admin textarea:focus,
+body.fh-dark-admin select:focus,
+body.fh-dark-admin .wp-core-ui select:focus {
+	border-color: var(--fh-da-accent);
+	box-shadow: 0 0 0 1px var(--fh-da-accent);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin input[readonly],
+body.fh-dark-admin textarea[readonly],
+body.fh-dark-admin input:disabled,
+body.fh-dark-admin textarea:disabled,
+body.fh-dark-admin select:disabled,
+body.fh-dark-admin .wp-core-ui select:disabled {
+	background-color: var(--fh-da-sunken);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text-quiet);
+}
+
+body.fh-dark-admin ::placeholder {
+	color: var(--fh-da-text-quiet);
+	opacity: 1;
+}
+
+/* The select arrow WordPress draws in #555 — lighter on the dark field. */
+body.fh-dark-admin select:not([multiple]):not([size]),
+body.fh-dark-admin .wp-core-ui select:not([multiple]):not([size]) {
+	background-image: url("data:image/svg+xml;charset=US-ASCII,%3Csvg%20width%3D%2220%22%20height%3D%2220%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%3Cpath%20d%3D%22M5%206l5%205%205-5%202%201-7%207-7-7%202-1z%22%20fill%3D%22%23a0a0a0%22%2F%3E%3C%2Fsvg%3E");
+	background-repeat: no-repeat;
+	background-position: right 5px top 55%;
+	background-size: 16px 16px;
+}
+
+body.fh-dark-admin select option,
+body.fh-dark-admin select optgroup {
+	background-color: var(--fh-da-surface);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin input[type="checkbox"],
+body.fh-dark-admin input[type="radio"] {
+	background-color: var(--fh-da-input);
+	border-color: var(--fh-da-border-strong);
+}
+
+body.fh-dark-admin input[type="checkbox"]:checked,
+body.fh-dark-admin input[type="radio"]:checked {
+	background-color: var(--fh-da-accent-strong);
+	border-color: var(--fh-da-accent);
+}
+
+body.fh-dark-admin input[type="checkbox"]:checked::before {
+	/* WordPress's tick, drawn white on the blue box. */
+	content: url("data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2020%2020%27%3E%3Cpath%20d%3D%27M14.83%204.89l1.34.94-5.81%208.38H9.02L5.78%209.67l1.34-1.25%202.57%202.4z%27%20fill%3D%27%23ffffff%27%2F%3E%3C%2Fsvg%3E");
+}
+
+body.fh-dark-admin input[type="radio"]:checked::before {
+	background-color: var(--fh-da-on-accent);
+}
+
+body.fh-dark-admin fieldset,
+body.fh-dark-admin .form-table,
+body.fh-dark-admin .form-table td,
+body.fh-dark-admin .form-table th {
+	border-color: var(--fh-da-border);
+}
+
+body.fh-dark-admin #pass-strength-result {
+	background: var(--fh-da-sunken);
+	border-color: var(--fh-da-border-strong);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin #pass-strength-result.short,
+body.fh-dark-admin #pass-strength-result.bad {
+	background: var(--fh-da-danger-tint);
+	border-color: var(--fh-da-danger);
+}
+
+body.fh-dark-admin #pass-strength-result.good {
+	background: var(--fh-da-warning-tint);
+	border-color: var(--fh-da-warning);
+}
+
+body.fh-dark-admin #pass-strength-result.strong {
+	background: var(--fh-da-success-tint);
+	border-color: var(--fh-da-success);
+}
+
+/* ================================================================== */
+/*  Boxes                                                              */
+/* ================================================================== */
+
+body.fh-dark-admin .postbox,
+body.fh-dark-admin .stuffbox,
+body.fh-dark-admin .card,
+body.fh-dark-admin .welcome-panel,
+body.fh-dark-admin .postbox .inside,
+body.fh-dark-admin .stuffbox .inside,
+body.fh-dark-admin .metabox-holder .postbox-container .empty-container,
+body.fh-dark-admin #dashboard-widgets .postbox,
+body.fh-dark-admin .widefat,
+body.fh-dark-admin .tool-box,
+body.fh-dark-admin .importers,
+body.fh-dark-admin .wp-filter,
+body.fh-dark-admin .health-check-body .health-check-accordion,
+body.fh-dark-admin .privacy-settings-accordion,
+body.fh-dark-admin .accordion-section-content,
+body.fh-dark-admin .wp-tab-panel,
+body.fh-dark-admin .tabs-panel,
+body.fh-dark-admin .categorydiv div.tabs-panel,
+body.fh-dark-admin .customlinkdiv div.tabs-panel,
+body.fh-dark-admin .posttypediv div.tabs-panel,
+body.fh-dark-admin .taxonomydiv div.tabs-panel {
+	background: var(--fh-da-surface);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .postbox-header,
+body.fh-dark-admin .postbox .hndle,
+body.fh-dark-admin .stuffbox .hndle,
+body.fh-dark-admin .postbox > h2,
+body.fh-dark-admin .accordion-section-title,
+body.fh-dark-admin .accordion-section .accordion-section-title,
+body.fh-dark-admin .nav-menus-php .metabox-holder .accordion-section-title {
+	background: var(--fh-da-surface);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .postbox .handlediv,
+body.fh-dark-admin .postbox .handle-order-higher,
+body.fh-dark-admin .postbox .handle-order-lower,
+body.fh-dark-admin .postbox .handlediv .toggle-indicator,
+body.fh-dark-admin .postbox .toggle-indicator::before,
+body.fh-dark-admin .postbox .order-higher-indicator::before,
+body.fh-dark-admin .postbox .order-lower-indicator::before,
+body.fh-dark-admin .accordion-section-title::after {
+	color: var(--fh-da-text-quiet);
+}
+
+body.fh-dark-admin .postbox .handlediv:hover .toggle-indicator::before,
+body.fh-dark-admin .postbox .handle-order-higher:hover .order-higher-indicator::before,
+body.fh-dark-admin .postbox .handle-order-lower:hover .order-lower-indicator::before {
+	color: var(--fh-da-link-hover);
+}
+
+body.fh-dark-admin .sortable-placeholder,
+body.fh-dark-admin .metabox-holder .postbox-container .empty-container,
+body.fh-dark-admin.is-dragging-metaboxes .metabox-holder .postbox-container .meta-box-sortables {
+	background: transparent;
+	border-color: var(--fh-da-border-strong);
+	outline-color: var(--fh-da-border-strong);
+}
+
+body.fh-dark-admin .metabox-holder .postbox-container .empty-container::after {
+	color: var(--fh-da-text-quiet);
+}
+
+/* ================================================================== */
+/*  Tables and lists                                                   */
+/* ================================================================== */
+
+body.fh-dark-admin .widefat thead td,
+body.fh-dark-admin .widefat thead th,
+body.fh-dark-admin .widefat tfoot td,
+body.fh-dark-admin .widefat tfoot th,
+body.fh-dark-admin .widefat th,
+body.fh-dark-admin .widefat td,
+body.fh-dark-admin .widefat td p,
+body.fh-dark-admin .widefat td ol,
+body.fh-dark-admin .widefat td ul,
+body.fh-dark-admin .widefat ol,
+body.fh-dark-admin .widefat p,
+body.fh-dark-admin .widefat ul {
+	color: var(--fh-da-text);
+	border-color: var(--fh-da-border);
+}
+
+body.fh-dark-admin .widefat thead,
+body.fh-dark-admin .widefat tfoot,
+body.fh-dark-admin .widefat thead th,
+body.fh-dark-admin .widefat thead td,
+body.fh-dark-admin .widefat tfoot th,
+body.fh-dark-admin .widefat tfoot td {
+	background: var(--fh-da-raised);
+}
+
+body.fh-dark-admin .widefat tbody tr,
+body.fh-dark-admin .widefat tbody td,
+body.fh-dark-admin .widefat tbody th,
+body.fh-dark-admin .wp-list-table tbody tr {
+	background-color: var(--fh-da-surface);
+}
+
+body.fh-dark-admin .striped > tbody > :nth-child(odd),
+body.fh-dark-admin .striped > tbody > :nth-child(odd) td,
+body.fh-dark-admin .striped > tbody > :nth-child(odd) th,
+body.fh-dark-admin ul.striped > :nth-child(odd),
+body.fh-dark-admin .alternate,
+body.fh-dark-admin .alternate td,
+body.fh-dark-admin .alternate th {
+	background-color: var(--fh-da-sunken);
+}
+
+body.fh-dark-admin .wp-list-table tbody tr:hover,
+body.fh-dark-admin .wp-list-table tbody tr:hover > td,
+body.fh-dark-admin .wp-list-table tbody tr:hover > th {
+	background-color: var(--fh-da-raised);
+}
+
+body.fh-dark-admin .widefat .check-column,
+body.fh-dark-admin .widefat thead td.check-column {
+	background: transparent;
+}
+
+body.fh-dark-admin .wp-list-table th.sorted a span,
+body.fh-dark-admin .wp-list-table th.sortable a span,
+body.fh-dark-admin th .sorting-indicator::before,
+body.fh-dark-admin .sorting-indicators .sorting-indicator::before {
+	color: var(--fh-da-text-quiet);
+}
+
+body.fh-dark-admin .wp-list-table .is-expanded td,
+body.fh-dark-admin .wp-list-table .toggle-row::before {
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .tablenav,
+body.fh-dark-admin .tablenav .tablenav-pages,
+body.fh-dark-admin .tablenav .displaying-num {
+	color: var(--fh-da-text-quiet);
+}
+
+body.fh-dark-admin .tablenav .tablenav-pages a,
+body.fh-dark-admin .tablenav-pages-navspan {
+	background: var(--fh-da-surface);
+	border-color: var(--fh-da-link);
+	color: var(--fh-da-link);
+}
+
+body.fh-dark-admin .tablenav-pages-navspan.disabled,
+body.fh-dark-admin .tablenav .tablenav-pages span.disabled {
+	background: var(--fh-da-sunken);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text-quiet);
+}
+
+body.fh-dark-admin .subsubsub a .count,
+body.fh-dark-admin .subsubsub a.current .count {
+	color: var(--fh-da-text-quiet);
+}
+
+body.fh-dark-admin .subsubsub a.current {
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .wp-list-table .no-items td,
+body.fh-dark-admin .no-items {
+	color: var(--fh-da-text-quiet);
+}
+
+/* Plugins screen: active rows were pale blue, updates pale yellow. */
+body.fh-dark-admin .plugins tr.active td,
+body.fh-dark-admin .plugins tr.active th,
+body.fh-dark-admin .plugins .active td,
+body.fh-dark-admin .plugins .active th,
+body.fh-dark-admin .plugins .active.update th,
+body.fh-dark-admin .plugins .active.update td,
+body.fh-dark-admin .plugins .active + .plugin-update-tr td {
+	background-color: var(--fh-da-info-tint);
+}
+
+body.fh-dark-admin .plugins .inactive td,
+body.fh-dark-admin .plugins .inactive th {
+	background-color: var(--fh-da-surface);
+}
+
+body.fh-dark-admin .plugins .active th.check-column,
+body.fh-dark-admin .plugin-update-tr.active td {
+	border-left-color: var(--fh-da-accent);
+}
+
+body.fh-dark-admin .plugins .plugin-title strong,
+body.fh-dark-admin .plugins .plugin-description p,
+body.fh-dark-admin .plugins .plugin-version-author-uri {
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .plugin-update-tr .update-message,
+body.fh-dark-admin .update-message.notice-warning,
+body.fh-dark-admin .notice-warning.notice-alt,
+body.fh-dark-admin .update-message.notice-error,
+body.fh-dark-admin .notice-error.notice-alt,
+body.fh-dark-admin .update-message.notice-success,
+body.fh-dark-admin .notice-success.notice-alt {
+	background-color: var(--fh-da-warning-tint);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .notice-error.notice-alt,
+body.fh-dark-admin .update-message.notice-error {
+	background-color: var(--fh-da-danger-tint);
+}
+
+body.fh-dark-admin .notice-success.notice-alt,
+body.fh-dark-admin .update-message.notice-success {
+	background-color: var(--fh-da-success-tint);
+}
+
+body.fh-dark-admin .update-message p,
+body.fh-dark-admin .plugin-update-tr p {
+	color: var(--fh-da-text);
+}
+
+/* Comments awaiting approval were pale yellow. */
+body.fh-dark-admin .unapproved,
+body.fh-dark-admin tr.unapproved td,
+body.fh-dark-admin tr.unapproved th {
+	background-color: var(--fh-da-warning-tint);
+}
+
+body.fh-dark-admin .post-com-count .comment-count-approved,
+body.fh-dark-admin .post-com-count .comment-count-no-comments {
+	background: var(--fh-da-accent-strong);
+	color: var(--fh-da-on-accent);
+}
+
+/* ================================================================== */
+/*  Notices                                                            */
+/* ================================================================== */
+
+body.fh-dark-admin .notice,
+body.fh-dark-admin div.error,
+body.fh-dark-admin div.updated,
+body.fh-dark-admin .update-nag,
+body.fh-dark-admin #message,
+body.fh-dark-admin .woocommerce-message,
+body.fh-dark-admin .wc-connect-notice {
+	background: var(--fh-da-surface);
+	border-color: var(--fh-da-border);
+	border-left-color: var(--fh-da-accent);
+	color: var(--fh-da-text);
+	box-shadow: none;
+}
+
+body.fh-dark-admin .notice p,
+body.fh-dark-admin div.error p,
+body.fh-dark-admin div.updated p,
+body.fh-dark-admin .notice li,
+body.fh-dark-admin .woocommerce-message p {
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .notice-success,
+body.fh-dark-admin div.updated {
+	border-left-color: var(--fh-da-success);
+}
+
+body.fh-dark-admin .notice-warning,
+body.fh-dark-admin .update-nag {
+	border-left-color: var(--fh-da-warning);
+}
+
+body.fh-dark-admin .notice-error,
+body.fh-dark-admin div.error {
+	border-left-color: var(--fh-da-danger);
+}
+
+body.fh-dark-admin .notice-info {
+	border-left-color: var(--fh-da-accent);
+}
+
+body.fh-dark-admin .notice-dismiss::before {
+	color: var(--fh-da-text-quiet);
+}
+
+body.fh-dark-admin .notice-dismiss:hover::before,
+body.fh-dark-admin .notice-dismiss:focus::before {
+	color: var(--fh-da-danger-text);
+}
+
+/* ================================================================== */
+/*  Tabs, Screen Options, Help                                         */
+/* ================================================================== */
+
+body.fh-dark-admin .nav-tab-wrapper,
+body.fh-dark-admin .wrap h2.nav-tab-wrapper,
+body.fh-dark-admin h1.nav-tab-wrapper,
+body.fh-dark-admin .woo-nav-tab-wrapper {
+	border-bottom-color: var(--fh-da-border-strong);
+}
+
+body.fh-dark-admin .nav-tab {
+	background: var(--fh-da-sunken);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text-quiet);
+}
+
+body.fh-dark-admin .nav-tab:hover,
+body.fh-dark-admin .nav-tab:focus {
+	background: var(--fh-da-raised);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .nav-tab-active,
+body.fh-dark-admin .nav-tab-active:hover,
+body.fh-dark-admin .nav-tab-active:focus,
+body.fh-dark-admin .nav-tab-active:focus:active {
+	background: var(--fh-da-bg);
+	border-color: var(--fh-da-border-strong);
+	border-bottom-color: var(--fh-da-bg);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .wp-tab-bar li,
+body.fh-dark-admin .category-tabs li,
+body.fh-dark-admin ul.add-menu-item-tabs li {
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .wp-tab-active,
+body.fh-dark-admin .category-tabs .tabs,
+body.fh-dark-admin ul.add-menu-item-tabs li.tabs,
+body.fh-dark-admin ul.category-tabs li.tabs {
+	background: var(--fh-da-surface);
+	border-color: var(--fh-da-border);
+}
+
+body.fh-dark-admin .wp-tab-active a,
+body.fh-dark-admin .category-tabs .tabs a,
+body.fh-dark-admin ul.category-tabs li.tabs a {
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin #screen-meta,
+body.fh-dark-admin #contextual-help-wrap,
+body.fh-dark-admin #contextual-help-back,
+body.fh-dark-admin #screen-options-wrap {
+	background: var(--fh-da-surface);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin #contextual-help-back {
+	background: var(--fh-da-sunken);
+}
+
+body.fh-dark-admin #contextual-help-columns .contextual-help-tabs .active {
+	background: var(--fh-da-surface);
+	border-color: var(--fh-da-accent);
+}
+
+body.fh-dark-admin #contextual-help-columns .contextual-help-tabs .active a {
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin #screen-meta-links .show-settings,
+body.fh-dark-admin #screen-meta-links .screen-meta-toggle {
+	background: var(--fh-da-surface);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text-quiet);
+}
+
+body.fh-dark-admin #screen-meta-links .show-settings:hover,
+body.fh-dark-admin #screen-meta-links .show-settings:focus,
+body.fh-dark-admin #screen-meta-links .show-settings::after {
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .metabox-prefs label,
+body.fh-dark-admin .screen-options legend,
+body.fh-dark-admin #screen-options-wrap h5,
+body.fh-dark-admin #screen-options-wrap legend {
+	color: var(--fh-da-text);
+}
+
+/* ================================================================== */
+/*  Quick edit and bulk edit                                           */
+/* ================================================================== */
+
+body.fh-dark-admin .inline-edit-row,
+body.fh-dark-admin .inline-edit-row td,
+body.fh-dark-admin .inline-edit-wrapper,
+body.fh-dark-admin tr.inline-edit-row td,
+body.fh-dark-admin .inline-edit-row fieldset,
+body.fh-dark-admin #bulk-edit,
+body.fh-dark-admin .quick-edit-row,
+body.fh-dark-admin .bulk-edit-row {
+	background: var(--fh-da-surface) !important;
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .inline-edit-row fieldset span.title,
+body.fh-dark-admin .inline-edit-row fieldset label span.title,
+body.fh-dark-admin .inline-edit-row .inline-edit-legend,
+body.fh-dark-admin .inline-edit-row fieldset .inline-edit-group label,
+body.fh-dark-admin .inline-edit-row .inline-edit-col label span,
+body.fh-dark-admin .inline-edit-row .inline-edit-col em.alignleft,
+body.fh-dark-admin .inline-edit-row .inline-edit-col span.title {
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin ul.cat-checklist,
+body.fh-dark-admin #bulk-titles,
+body.fh-dark-admin #bulk-titles-list,
+body.fh-dark-admin .inline-edit-row fieldset ul.cat-checklist {
+	background: var(--fh-da-input);
+	border-color: var(--fh-da-border-strong);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin #bulk-titles .ntdelbutton::before,
+body.fh-dark-admin #bulk-titles-list .ntdelbutton::before,
+body.fh-dark-admin .tagchecklist .ntdelbutton .remove-tag-icon::before {
+	color: var(--fh-da-text-quiet);
+}
+
+/* ================================================================== */
+/*  The classic editor (posts, pages, products)                        */
+/* ================================================================== */
+
+body.fh-dark-admin #titlediv #title,
+body.fh-dark-admin #titlewrap input {
+	background: var(--fh-da-input);
+	border-color: var(--fh-da-border-strong);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin #titlediv #title-prompt-text,
+body.fh-dark-admin #edit-slug-box,
+body.fh-dark-admin #edit-slug-box strong,
+body.fh-dark-admin #post-status-info,
+body.fh-dark-admin #post-status-info td,
+body.fh-dark-admin #wp-word-count,
+body.fh-dark-admin .autosave-info,
+body.fh-dark-admin #timestampdiv legend,
+body.fh-dark-admin .misc-pub-section,
+body.fh-dark-admin .misc-pub-section label,
+body.fh-dark-admin .misc-pub-section::before,
+body.fh-dark-admin #post-body .misc-pub-section::before {
+	color: var(--fh-da-text-quiet);
+}
+
+body.fh-dark-admin .misc-pub-section b,
+body.fh-dark-admin .misc-pub-section strong,
+body.fh-dark-admin #post-status-display,
+body.fh-dark-admin #post-visibility-display,
+body.fh-dark-admin #timestamp b {
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin #post-status-info,
+body.fh-dark-admin .wp-editor-container,
+body.fh-dark-admin .wp-editor-wrap .wp-editor-container,
+body.fh-dark-admin #major-publishing-actions,
+body.fh-dark-admin #minor-publishing,
+body.fh-dark-admin #misc-publishing-actions,
+body.fh-dark-admin #submitpost,
+body.fh-dark-admin .submitbox {
+	background: var(--fh-da-surface);
+	border-color: var(--fh-da-border);
+}
+
+body.fh-dark-admin #major-publishing-actions {
+	background: var(--fh-da-sunken);
+}
+
+body.fh-dark-admin .wp-switch-editor,
+body.fh-dark-admin .wp-editor-tabs .wp-switch-editor {
+	background: var(--fh-da-sunken);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text-quiet);
+}
+
+body.fh-dark-admin .html-active .switch-html,
+body.fh-dark-admin .tmce-active .switch-tmce {
+	background: var(--fh-da-raised);
+	border-bottom-color: var(--fh-da-raised);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .quicktags-toolbar,
+body.fh-dark-admin .wp-editor-container .quicktags-toolbar {
+	background: var(--fh-da-raised);
+	border-color: var(--fh-da-border);
+}
+
+body.fh-dark-admin .quicktags-toolbar input.button,
+body.fh-dark-admin .quicktags-toolbar input.ed_button {
+	background: var(--fh-da-surface);
+	border-color: var(--fh-da-border-strong);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .quicktags-toolbar input.button:hover {
+	background: var(--fh-da-sunken);
+	color: var(--fh-da-link-hover);
+}
+
+/* The Text tab: the HTML itself, light on dark. */
+body.fh-dark-admin textarea.wp-editor-area,
+body.fh-dark-admin .wp-editor-area,
+body.fh-dark-admin #content.wp-editor-area,
+body.fh-dark-admin .wp-editor-container textarea.wp-editor-area {
+	background: var(--fh-da-input);
+	color: var(--fh-da-text);
+	caret-color: var(--fh-da-text);
+}
+
+/* TinyMCE's own frame (the writing area itself is editor-content.css). */
+body.fh-dark-admin div.mce-panel,
+body.fh-dark-admin .mce-panel,
+body.fh-dark-admin div.mce-toolbar-grp,
+body.fh-dark-admin .mce-toolbar-grp,
+body.fh-dark-admin .mce-menubar,
+body.fh-dark-admin .mce-statusbar,
+body.fh-dark-admin .wp-editor-container .mce-statusbar,
+body.fh-dark-admin div.mce-statusbar,
+body.fh-dark-admin .mce-edit-area,
+body.fh-dark-admin div.mce-edit-area {
+	background: var(--fh-da-raised) !important;
+	border-color: var(--fh-da-border) !important;
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .mce-toolbar .mce-btn-group .mce-btn,
+body.fh-dark-admin .qt-dfw,
+body.fh-dark-admin .mce-btn {
+	background: transparent;
+	border-color: transparent;
+}
+
+body.fh-dark-admin .mce-ico,
+body.fh-dark-admin .mce-toolbar .mce-ico,
+body.fh-dark-admin .mce-btn .mce-txt,
+body.fh-dark-admin .mce-btn button,
+body.fh-dark-admin .mce-path,
+body.fh-dark-admin .mce-path-item,
+body.fh-dark-admin .mce-path .mce-divider,
+body.fh-dark-admin .mce-toolbar .mce-listbox .mce-txt,
+body.fh-dark-admin .mce-toolbar .mce-btn-group .mce-btn.mce-listbox,
+body.fh-dark-admin .mce-caret {
+	color: var(--fh-da-text) !important;
+}
+
+body.fh-dark-admin .mce-caret {
+	border-top-color: var(--fh-da-text) !important;
+}
+
+body.fh-dark-admin .mce-toolbar .mce-btn-group .mce-btn:hover,
+body.fh-dark-admin .mce-toolbar .mce-btn-group .mce-btn:focus,
+body.fh-dark-admin .mce-toolbar .mce-btn-group .mce-btn.mce-active,
+body.fh-dark-admin .qt-dfw:hover,
+body.fh-dark-admin .qt-dfw.active {
+	background: var(--fh-da-sunken);
+	border-color: var(--fh-da-border-strong);
+	box-shadow: none;
+}
+
+body.fh-dark-admin .mce-toolbar .mce-btn-group .mce-btn.mce-listbox {
+	background: var(--fh-da-input);
+	border-color: var(--fh-da-border-strong);
+}
+
+/* TinyMCE's menus and windows are added straight to <body>. */
+body.fh-dark-admin .mce-menu,
+body.fh-dark-admin div.mce-menu .mce-menu-item-sep,
+body.fh-dark-admin .mce-window,
+body.fh-dark-admin .mce-window .mce-container-body,
+body.fh-dark-admin .mce-window-head,
+body.fh-dark-admin .mce-foot,
+body.fh-dark-admin .mce-window .mce-foot,
+body.fh-dark-admin .mce-floatpanel,
+body.fh-dark-admin .mce-inline-toolbar-grp,
+body.fh-dark-admin div.wp-link-preview,
+body.fh-dark-admin .mce-tooltip-inner {
+	background: var(--fh-da-surface) !important;
+	border-color: var(--fh-da-border) !important;
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .mce-menu-item .mce-text,
+body.fh-dark-admin .mce-menu-item .mce-ico,
+body.fh-dark-admin .mce-window-head .mce-title,
+body.fh-dark-admin .mce-window .mce-label,
+body.fh-dark-admin .mce-window .mce-close,
+body.fh-dark-admin .mce-menu-shortcut,
+body.fh-dark-admin .mce-menu-item-normal.mce-active .mce-text {
+	color: var(--fh-da-text) !important;
+}
+
+body.fh-dark-admin .mce-menu-item:hover,
+body.fh-dark-admin .mce-menu-item.mce-selected,
+body.fh-dark-admin .mce-menu-item:focus,
+body.fh-dark-admin .mce-menu-item-normal.mce-active {
+	background: var(--fh-da-accent-strong) !important;
+}
+
+body.fh-dark-admin .mce-textbox,
+body.fh-dark-admin .mce-window .mce-textbox {
+	background: var(--fh-da-input) !important;
+	border-color: var(--fh-da-border-strong) !important;
+	color: var(--fh-da-text) !important;
+}
+
+body.fh-dark-admin .mce-btn-primary,
+body.fh-dark-admin .mce-window .mce-btn.mce-primary {
+	background: var(--fh-da-accent-strong) !important;
+	border-color: var(--fh-da-accent-strong) !important;
+}
+
+body.fh-dark-admin .mce-btn-primary .mce-txt,
+body.fh-dark-admin .mce-btn-primary button {
+	color: var(--fh-da-on-accent) !important;
+}
+
+/* The link dialog (Insert/edit link). */
+body.fh-dark-admin #wp-link-wrap,
+body.fh-dark-admin #wp-link-wrap .wp-link-text-field,
+body.fh-dark-admin #wp-link .query-results,
+body.fh-dark-admin #wp-link-wrap .submitbox,
+body.fh-dark-admin #link-modal-title,
+body.fh-dark-admin #wp-link .link-search-wrapper {
+	background: var(--fh-da-surface);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin #wp-link li,
+body.fh-dark-admin #wp-link .item-title,
+body.fh-dark-admin #wp-link label span {
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin #wp-link li.alternate {
+	background: var(--fh-da-sunken);
+}
+
+body.fh-dark-admin #wp-link li.selected,
+body.fh-dark-admin #wp-link li:hover {
+	background: var(--fh-da-raised);
+}
+
+body.fh-dark-admin #wp-link .item-info,
+body.fh-dark-admin #wp-link .query-notice .query-notice-default,
+body.fh-dark-admin #wp-link .query-notice .query-notice-hint {
+	color: var(--fh-da-text-quiet);
+	background: transparent;
+}
+
+/* Tags and categories boxes. */
+body.fh-dark-admin .tagchecklist li,
+body.fh-dark-admin .tagsdiv .the-tags,
+body.fh-dark-admin .the-tagcloud,
+body.fh-dark-admin #tagcloud-post_tag {
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .categorychecklist li,
+body.fh-dark-admin .categorychecklist label,
+body.fh-dark-admin .selectit {
+	color: var(--fh-da-text);
+}
+
+/* Featured image / product image boxes. */
+body.fh-dark-admin #postimagediv .inside img,
+body.fh-dark-admin #product_images_container ul li.image,
+body.fh-dark-admin #product_images_container ul li.wc-metabox-sortable-placeholder {
+	background: var(--fh-da-sunken);
+	border-color: var(--fh-da-border);
+}
+
+/* ================================================================== */
+/*  Media: library, the upload screen, the pop-up                      */
+/* ================================================================== */
+
+body.fh-dark-admin .media-modal-content,
+body.fh-dark-admin .media-frame,
+body.fh-dark-admin .media-frame-content,
+body.fh-dark-admin .media-frame-title,
+body.fh-dark-admin .media-frame-router,
+body.fh-dark-admin .media-frame-toolbar .media-toolbar,
+body.fh-dark-admin .media-frame-menu,
+body.fh-dark-admin .media-menu,
+body.fh-dark-admin .media-toolbar,
+body.fh-dark-admin .media-frame.mode-grid .media-toolbar,
+body.fh-dark-admin .attachments-browser .media-toolbar,
+body.fh-dark-admin .media-sidebar,
+body.fh-dark-admin .attachment-details,
+body.fh-dark-admin .attachment-info,
+body.fh-dark-admin .edit-attachment-frame .attachment-media-view,
+body.fh-dark-admin .edit-attachment-frame .attachment-info,
+body.fh-dark-admin .edit-attachment-frame .edit-media-header,
+body.fh-dark-admin .edit-attachment-frame .edit-media-header .left,
+body.fh-dark-admin .edit-attachment-frame .edit-media-header .right,
+body.fh-dark-admin .uploader-inline,
+body.fh-dark-admin .media-frame .uploader-inline,
+body.fh-dark-admin .upload-php .media-frame-content,
+body.fh-dark-admin .media-embed,
+body.fh-dark-admin .embed-link-settings,
+body.fh-dark-admin .embed-media-settings,
+body.fh-dark-admin .image-details .column-settings,
+body.fh-dark-admin .image-details .column-image,
+body.fh-dark-admin .wp-core-ui .media-search-input-label {
+	background: var(--fh-da-surface);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .media-frame-title h1,
+body.fh-dark-admin .media-modal h1,
+body.fh-dark-admin .media-modal h2,
+body.fh-dark-admin .media-modal h3,
+body.fh-dark-admin .media-sidebar h2,
+body.fh-dark-admin .attachment-details h2,
+body.fh-dark-admin .media-sidebar .setting span,
+body.fh-dark-admin .attachment-details .setting span,
+body.fh-dark-admin .media-sidebar .setting .name,
+body.fh-dark-admin .attachment-details .setting .name,
+body.fh-dark-admin .media-sidebar label,
+body.fh-dark-admin .attachment-details label,
+body.fh-dark-admin .attachment-info .filename,
+body.fh-dark-admin .uploader-inline h2,
+body.fh-dark-admin .uploader-inline .upload-instructions,
+body.fh-dark-admin .media-modal .upload-ui,
+body.fh-dark-admin .media-modal .post-upload-ui {
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .attachment-info .details,
+body.fh-dark-admin .attachment-details .details,
+body.fh-dark-admin .media-sidebar .description,
+body.fh-dark-admin .media-types-required-info,
+body.fh-dark-admin .max-upload-size,
+body.fh-dark-admin .uploader-inline .post-upload-ui p,
+body.fh-dark-admin .media-modal .compat-item .description,
+body.fh-dark-admin .attachment-details .copy-to-clipboard-container .success {
+	color: var(--fh-da-text-quiet);
+}
+
+body.fh-dark-admin .media-router .media-menu-item,
+body.fh-dark-admin .media-menu .media-menu-item {
+	background: transparent;
+	color: var(--fh-da-text-quiet);
+}
+
+body.fh-dark-admin .media-router .active,
+body.fh-dark-admin .media-router .media-menu-item.active,
+body.fh-dark-admin .media-router .media-menu-item:hover,
+body.fh-dark-admin .media-menu .media-menu-item:hover,
+body.fh-dark-admin .media-menu .active,
+body.fh-dark-admin .media-menu .media-menu-item.active {
+	background: var(--fh-da-raised);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .media-router .active::after,
+body.fh-dark-admin .media-router .media-menu-item.active::after {
+	background: var(--fh-da-accent);
+}
+
+body.fh-dark-admin .media-modal-close,
+body.fh-dark-admin .media-modal-close .media-modal-icon::before,
+body.fh-dark-admin .edit-media-header .left::before,
+body.fh-dark-admin .edit-media-header .right::before {
+	color: var(--fh-da-text-quiet);
+}
+
+body.fh-dark-admin .media-modal-close:hover .media-modal-icon::before,
+body.fh-dark-admin .media-modal-close:focus .media-modal-icon::before {
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .attachment .thumbnail,
+body.fh-dark-admin .attachment-preview,
+body.fh-dark-admin .wp-core-ui .attachment-preview,
+body.fh-dark-admin .wp-core-ui .attachment .thumbnail,
+body.fh-dark-admin .media-frame .attachment .thumbnail .centered {
+	background: var(--fh-da-sunken);
+}
+
+body.fh-dark-admin .wp-core-ui .attachment-preview .thumbnail .filename div,
+body.fh-dark-admin .attachment .filename div {
+	background: var(--fh-da-raised);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .wp-core-ui .attachment.details,
+body.fh-dark-admin .wp-core-ui .attachment.selected {
+	box-shadow: inset 0 0 0 3px var(--fh-da-surface), inset 0 0 0 7px var(--fh-da-accent);
+}
+
+body.fh-dark-admin .wp-core-ui .attachment .check,
+body.fh-dark-admin .wp-core-ui .attachment.details .check {
+	background-color: var(--fh-da-accent-strong);
+	box-shadow: 0 0 0 1px var(--fh-da-surface), 0 0 0 2px var(--fh-da-accent-strong);
+}
+
+body.fh-dark-admin .media-progress-bar,
+body.fh-dark-admin .wp-core-ui .attachment .media-progress-bar {
+	background: var(--fh-da-raised);
+}
+
+body.fh-dark-admin .media-modal-backdrop {
+	background: #000;
+	opacity: 0.75;
+}
+
+body.fh-dark-admin #plupload-upload-ui,
+body.fh-dark-admin .drag-drop #drag-drop-area,
+body.fh-dark-admin .uploader-inline .drop-instructions,
+body.fh-dark-admin .media-frame.mode-grid .uploader-inline {
+	background: var(--fh-da-surface);
+	border-color: var(--fh-da-border-strong);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .drag-drop .drag-drop-inside p,
+body.fh-dark-admin .drag-drop-inside p.drag-drop-info {
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .media-item,
+body.fh-dark-admin #media-items .media-item,
+body.fh-dark-admin .media-item .progress,
+body.fh-dark-admin .imgedit-wrap,
+body.fh-dark-admin .imgedit-group,
+body.fh-dark-admin .imgedit-menu .button,
+body.fh-dark-admin .imgedit-settings,
+body.fh-dark-admin .image-editor {
+	background: var(--fh-da-surface);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .wp-list-table.media .column-title .media-icon img {
+	background: var(--fh-da-sunken);
+	border-color: var(--fh-da-border);
+}
+
+/* ================================================================== */
+/*  Pop-ups: thickbox, jQuery UI, select2 / selectWoo, pickers          */
+/* ================================================================== */
+
+body.fh-dark-admin #TB_window,
+body.fh-dark-admin #TB_ajaxContent,
+body.fh-dark-admin #TB_title,
+body.fh-dark-admin #TB_ajaxWindowTitle {
+	background: var(--fh-da-surface);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin #TB_title {
+	background: var(--fh-da-raised);
+}
+
+body.fh-dark-admin #TB_closeWindowButton .tb-close-icon,
+body.fh-dark-admin #TB_closeWindowButton .tb-close-icon::before {
+	color: var(--fh-da-text-quiet);
+}
+
+body.fh-dark-admin #TB_overlay.TB_overlayBG {
+	background: #000;
+	opacity: 0.75;
+}
+
+body.fh-dark-admin .ui-widget-content,
+body.fh-dark-admin .ui-dialog,
+body.fh-dark-admin .ui-dialog .ui-dialog-content,
+body.fh-dark-admin .ui-dialog .ui-dialog-buttonpane,
+body.fh-dark-admin .ui-menu,
+body.fh-dark-admin .ui-autocomplete,
+body.fh-dark-admin .wp-dialog,
+body.fh-dark-admin .wp-dialog .ui-dialog-content {
+	background: var(--fh-da-surface);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .ui-widget-header,
+body.fh-dark-admin .ui-dialog .ui-dialog-titlebar,
+body.fh-dark-admin .ui-dialog-title {
+	background: var(--fh-da-raised);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .ui-dialog .ui-dialog-titlebar-close,
+body.fh-dark-admin .ui-dialog .ui-dialog-titlebar-close::before {
+	color: var(--fh-da-text-quiet);
+}
+
+body.fh-dark-admin .ui-widget-overlay {
+	background: #000;
+	opacity: 0.75;
+}
+
+body.fh-dark-admin .ui-menu .ui-menu-item,
+body.fh-dark-admin .ui-menu .ui-menu-item-wrapper,
+body.fh-dark-admin .ui-autocomplete li {
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .ui-menu .ui-state-active,
+body.fh-dark-admin .ui-menu .ui-state-focus,
+body.fh-dark-admin .ui-autocomplete .ui-state-focus,
+body.fh-dark-admin .wp-tags-autocomplete .ui-state-focus,
+body.fh-dark-admin .wp-tags-autocomplete [aria-selected="true"] {
+	background: var(--fh-da-accent-strong);
+	border-color: var(--fh-da-accent-strong);
+	color: var(--fh-da-on-accent);
+}
+
+/* Date pickers (WordPress's and WooCommerce's jQuery UI theme). */
+body.fh-dark-admin .ui-datepicker,
+body.fh-dark-admin #ui-datepicker-div,
+body.fh-dark-admin .ui-datepicker .ui-datepicker-header,
+body.fh-dark-admin .ui-datepicker .ui-datepicker-buttonpane,
+body.fh-dark-admin .ui-datepicker table,
+body.fh-dark-admin .ui-datepicker th,
+body.fh-dark-admin .ui-datepicker thead {
+	background: var(--fh-da-surface);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .ui-datepicker .ui-datepicker-header,
+body.fh-dark-admin .ui-datepicker thead {
+	background: var(--fh-da-raised);
+}
+
+body.fh-dark-admin .ui-datepicker .ui-datepicker-title,
+body.fh-dark-admin .ui-datepicker .ui-datepicker-title select,
+body.fh-dark-admin .ui-datepicker th,
+body.fh-dark-admin .ui-datepicker .ui-datepicker-prev,
+body.fh-dark-admin .ui-datepicker .ui-datepicker-next,
+body.fh-dark-admin .ui-datepicker .ui-datepicker-prev span,
+body.fh-dark-admin .ui-datepicker .ui-datepicker-next span,
+body.fh-dark-admin .ui-datepicker .ui-datepicker-prev::before,
+body.fh-dark-admin .ui-datepicker .ui-datepicker-next::before {
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .ui-datepicker td,
+body.fh-dark-admin .ui-datepicker td .ui-state-default,
+body.fh-dark-admin .ui-datepicker td a,
+body.fh-dark-admin .ui-datepicker td span,
+body.fh-dark-admin .ui-state-default,
+body.fh-dark-admin .ui-widget-content .ui-state-default,
+body.fh-dark-admin .ui-widget-header .ui-state-default {
+	background: var(--fh-da-surface);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .ui-datepicker td .ui-state-hover,
+body.fh-dark-admin .ui-datepicker td a:hover,
+body.fh-dark-admin .ui-state-hover,
+body.fh-dark-admin .ui-widget-content .ui-state-hover,
+body.fh-dark-admin .ui-state-focus,
+body.fh-dark-admin .ui-widget-content .ui-state-focus {
+	background: var(--fh-da-raised);
+	border-color: var(--fh-da-border-strong);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .ui-datepicker td .ui-state-highlight,
+body.fh-dark-admin .ui-state-highlight,
+body.fh-dark-admin .ui-widget-content .ui-state-highlight {
+	background: var(--fh-da-info-tint);
+	border-color: var(--fh-da-accent);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .ui-datepicker td .ui-state-active,
+body.fh-dark-admin .ui-state-active,
+body.fh-dark-admin .ui-widget-content .ui-state-active,
+body.fh-dark-admin .ui-datepicker .ui-datepicker-current-day a {
+	background: var(--fh-da-accent-strong);
+	border-color: var(--fh-da-accent-strong);
+	color: var(--fh-da-on-accent);
+}
+
+body.fh-dark-admin .ui-datepicker .ui-datepicker-unselectable span,
+body.fh-dark-admin .ui-datepicker .ui-state-disabled span,
+body.fh-dark-admin .ui-datepicker td.ui-datepicker-unselectable {
+	background: var(--fh-da-sunken);
+	color: var(--fh-da-text-quiet);
+}
+
+body.fh-dark-admin .ui-datepicker .ui-icon {
+	filter: invert(1);
+}
+
+/* select2 / selectWoo (WooCommerce's searchable dropdowns). */
+body.fh-dark-admin .select2-container--default .select2-selection--single,
+body.fh-dark-admin .select2-container--default .select2-selection--multiple,
+body.fh-dark-admin .select2-container .select2-selection--single,
+body.fh-dark-admin .select2-container .select2-selection--multiple,
+body.fh-dark-admin .select2-container--default.select2-container--focus .select2-selection--multiple,
+body.fh-dark-admin .select2-container--default .select2-search--inline .select2-search__field {
+	background-color: var(--fh-da-input);
+	border-color: var(--fh-da-border-strong);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .select2-container--default .select2-selection--single .select2-selection__rendered,
+body.fh-dark-admin .select2-container .select2-selection--single .select2-selection__rendered,
+body.fh-dark-admin .select2-container--default .select2-selection--multiple .select2-selection__rendered {
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .select2-container--default .select2-selection--single .select2-selection__placeholder,
+body.fh-dark-admin .select2-container--default .select2-selection__placeholder {
+	color: var(--fh-da-text-quiet);
+}
+
+body.fh-dark-admin .select2-container--default .select2-selection--single .select2-selection__arrow b {
+	border-top-color: var(--fh-da-text-quiet);
+}
+
+body.fh-dark-admin .select2-container--default.select2-container--open .select2-selection--single .select2-selection__arrow b {
+	border-bottom-color: var(--fh-da-text-quiet);
+}
+
+body.fh-dark-admin .select2-container--default .select2-selection--multiple .select2-selection__choice {
+	background: var(--fh-da-raised);
+	border-color: var(--fh-da-border-strong);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .select2-container--default .select2-selection--multiple .select2-selection__choice__remove {
+	color: var(--fh-da-danger-text);
+}
+
+body.fh-dark-admin .select2-dropdown,
+body.fh-dark-admin .select2-container--default .select2-results > .select2-results__options,
+body.fh-dark-admin .select2-results__option,
+body.fh-dark-admin .select2-container--default .select2-results__group {
+	background: var(--fh-da-surface);
+	border-color: var(--fh-da-border-strong);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .select2-container--default .select2-search--dropdown .select2-search__field,
+body.fh-dark-admin .select2-search--dropdown .select2-search__field {
+	background: var(--fh-da-input);
+	border-color: var(--fh-da-border-strong);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .select2-container--default .select2-results__option[aria-selected="true"],
+body.fh-dark-admin .select2-container--default .select2-results__option--selected,
+body.fh-dark-admin .select2-container--default .select2-results__option[data-selected="true"] {
+	background: var(--fh-da-raised);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .select2-container--default .select2-results__option--highlighted[aria-selected],
+body.fh-dark-admin .select2-container--default .select2-results__option--highlighted[data-selected],
+body.fh-dark-admin .select2-container--default .select2-results__option--highlighted,
+body.fh-dark-admin .select2-results__option--highlighted {
+	background: var(--fh-da-accent-strong);
+	color: var(--fh-da-on-accent);
+}
+
+body.fh-dark-admin .select2-results__message,
+body.fh-dark-admin .select2-container--default .select2-results__option[aria-disabled="true"] {
+	color: var(--fh-da-text-quiet);
+}
+
+/* Colour pickers: the frame goes dark, the colour field stays as it is. */
+body.fh-dark-admin .wp-picker-container .wp-color-result.button {
+	background-color: var(--fh-da-surface);
+	border-color: var(--fh-da-border-strong);
+}
+
+body.fh-dark-admin .wp-color-result-text {
+	background: var(--fh-da-raised);
+	border-left-color: var(--fh-da-border-strong);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .wp-picker-holder .iris-picker,
+body.fh-dark-admin .iris-picker {
+	background: var(--fh-da-surface);
+	border-color: var(--fh-da-border-strong);
+}
+
+body.fh-dark-admin .iris-picker .iris-square-handle {
+	border-color: var(--fh-da-light-paper);
+}
+
+/* WooCommerce's tooltips are dark already; the help icon is lighter. */
+body.fh-dark-admin .woocommerce-help-tip,
+body.fh-dark-admin .woocommerce-help-tip::after,
+body.fh-dark-admin span.woocommerce-help-tip {
+	color: var(--fh-da-text-quiet);
+}
+
+/* ================================================================== */
+/*  Dashboard and the other core screens                               */
+/* ================================================================== */
+
+body.fh-dark-admin #dashboard-widgets h3,
+body.fh-dark-admin #dashboard-widgets h4,
+body.fh-dark-admin #dashboard_quick_press .drafts h2,
+body.fh-dark-admin #dashboard_right_now li,
+body.fh-dark-admin #dashboard_right_now li a,
+body.fh-dark-admin #dashboard_activity .subsubsub,
+body.fh-dark-admin .community-events,
+body.fh-dark-admin .community-events-footer,
+body.fh-dark-admin .activity-block,
+body.fh-dark-admin #activity-widget #the-comment-list .comment-item,
+body.fh-dark-admin #dashboard-widgets .postbox form .submit,
+body.fh-dark-admin #future-posts li,
+body.fh-dark-admin #published-posts li {
+	background: transparent;
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin #dashboard_activity .comment-meta,
+body.fh-dark-admin #dashboard_activity span,
+body.fh-dark-admin .activity-block span,
+body.fh-dark-admin #dashboard_quick_press .draft-title time,
+body.fh-dark-admin .rss-widget span.rss-date,
+body.fh-dark-admin .community-events .event-date,
+body.fh-dark-admin .community-events .event-time {
+	color: var(--fh-da-text-quiet);
+}
+
+body.fh-dark-admin #dashboard_right_now .main p,
+body.fh-dark-admin #dashboard_right_now .sub,
+body.fh-dark-admin #dashboard_right_now #wp-version-message,
+body.fh-dark-admin .community-events-footer,
+body.fh-dark-admin #dashboard_right_now .sub p {
+	background: var(--fh-da-sunken);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .welcome-panel {
+	background: var(--fh-da-surface);
+}
+
+body.fh-dark-admin .welcome-panel h2,
+body.fh-dark-admin .welcome-panel h3,
+body.fh-dark-admin .welcome-panel p,
+body.fh-dark-admin .welcome-panel-content {
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .welcome-panel-header,
+body.fh-dark-admin .welcome-panel-column-container {
+	background: var(--fh-da-surface);
+	color: var(--fh-da-text);
+}
+
+/* Site Health, Privacy, Export personal data. */
+body.fh-dark-admin .health-check-header,
+body.fh-dark-admin .privacy-settings-header,
+body.fh-dark-admin .health-check-tabs-wrapper,
+body.fh-dark-admin .privacy-settings-tabs-wrapper,
+body.fh-dark-admin .health-check-body .health-check-accordion-trigger,
+body.fh-dark-admin .privacy-settings-accordion-trigger,
+body.fh-dark-admin .health-check-accordion-panel,
+body.fh-dark-admin .privacy-settings-accordion-panel,
+body.fh-dark-admin .site-health-issues-wrapper .issues,
+body.fh-dark-admin .site-health-view-passed,
+body.fh-dark-admin .health-check-widget,
+body.fh-dark-admin .privacy-text-box,
+body.fh-dark-admin .privacy-settings-body .notice,
+body.fh-dark-admin .site-status-has-issues,
+body.fh-dark-admin .site-status-all-clear {
+	background: var(--fh-da-surface);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .health-check-header h1,
+body.fh-dark-admin .health-check-tab,
+body.fh-dark-admin .privacy-settings-tab,
+body.fh-dark-admin .health-check-accordion-trigger .title,
+body.fh-dark-admin .privacy-settings-accordion-trigger .title,
+body.fh-dark-admin .site-health-progress-label,
+body.fh-dark-admin .health-check-accordion-trigger .badge {
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .health-check-tab.active,
+body.fh-dark-admin .privacy-settings-tab.active {
+	box-shadow: inset 0 -3px var(--fh-da-accent);
+}
+
+body.fh-dark-admin .health-check-accordion-trigger .icon,
+body.fh-dark-admin .privacy-settings-accordion-trigger .icon {
+	border-color: var(--fh-da-text-quiet);
+}
+
+body.fh-dark-admin .site-health-progress svg circle {
+	stroke: var(--fh-da-raised);
+}
+
+body.fh-dark-admin .site-health-progress svg #bar {
+	stroke: var(--fh-da-accent);
+}
+
+body.fh-dark-admin .health-check-accordion-trigger .badge.blue,
+body.fh-dark-admin .health-check-accordion-trigger .badge.gray,
+body.fh-dark-admin .health-check-accordion-trigger .badge.orange,
+body.fh-dark-admin .health-check-accordion-trigger .badge.red,
+body.fh-dark-admin .health-check-accordion-trigger .badge.green,
+body.fh-dark-admin .health-check-accordion-trigger .badge.purple,
+body.fh-dark-admin .health-check-accordion-trigger .badge.pink {
+	background: var(--fh-da-raised);
+	color: var(--fh-da-text);
+}
+
+/* Plugins / themes to add. */
+body.fh-dark-admin .plugin-card,
+body.fh-dark-admin .plugin-card-top,
+body.fh-dark-admin .plugin-card-bottom,
+body.fh-dark-admin .upload-plugin .wp-upload-form,
+body.fh-dark-admin .upload-theme .wp-upload-form,
+body.fh-dark-admin .theme-browser .theme .theme-name,
+body.fh-dark-admin .theme-browser .theme,
+body.fh-dark-admin .theme-overlay .theme-wrap,
+body.fh-dark-admin .theme-overlay .theme-header,
+body.fh-dark-admin .theme-overlay .theme-actions,
+body.fh-dark-admin .theme-install-overlay .wp-full-overlay-sidebar,
+body.fh-dark-admin .wp-full-overlay-sidebar .wp-full-overlay-header,
+body.fh-dark-admin .wp-full-overlay-sidebar .wp-full-overlay-footer,
+body.fh-dark-admin .theme-browser .theme.add-new-theme a,
+body.fh-dark-admin .filter-drawer,
+body.fh-dark-admin .wp-filter .search-form input[type="search"],
+body.fh-dark-admin .plugin-install-php .wp-filter {
+	background: var(--fh-da-surface);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .plugin-card-bottom {
+	background: var(--fh-da-sunken);
+}
+
+body.fh-dark-admin .theme-browser .theme.active .theme-name {
+	background: var(--fh-da-accent-strong);
+	color: var(--fh-da-on-accent);
+}
+
+body.fh-dark-admin .theme-browser .theme .theme-actions,
+body.fh-dark-admin .theme-browser .theme.active .theme-actions {
+	background: var(--fh-da-raised);
+	border-color: var(--fh-da-border);
+}
+
+body.fh-dark-admin .theme-overlay .theme-version,
+body.fh-dark-admin .theme-overlay .theme-description,
+body.fh-dark-admin .theme-overlay .theme-tags,
+body.fh-dark-admin .theme-overlay .theme-author,
+body.fh-dark-admin .theme-overlay .theme-name,
+body.fh-dark-admin .theme-overlay .theme-header .close::before,
+body.fh-dark-admin .theme-overlay .theme-header .left::before,
+body.fh-dark-admin .theme-overlay .theme-header .right::before {
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .wp-filter .filter-links li > a,
+body.fh-dark-admin .wp-filter .filter-links .current {
+	color: var(--fh-da-text-quiet);
+}
+
+body.fh-dark-admin .wp-filter .filter-links .current,
+body.fh-dark-admin .wp-filter .filter-links li > a:hover {
+	color: var(--fh-da-text);
+	border-bottom-color: var(--fh-da-accent);
+}
+
+/* Menus screen. */
+body.fh-dark-admin #menu-management .menu-edit,
+body.fh-dark-admin #menu-settings-column .accordion-container,
+body.fh-dark-admin #nav-menu-header,
+body.fh-dark-admin #nav-menu-footer,
+body.fh-dark-admin .menu-item-handle,
+body.fh-dark-admin .menu-item-settings,
+body.fh-dark-admin .manage-menus,
+body.fh-dark-admin .nav-menus-php .menu-item-edit-active .menu-item-handle,
+body.fh-dark-admin .menu-item-bar .menu-item-handle,
+body.fh-dark-admin .nav-menus-php #post-body {
+	background: var(--fh-da-surface);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .menu-item-handle .item-title,
+body.fh-dark-admin .menu-item-handle .item-type,
+body.fh-dark-admin .menu-item-settings .description-wide {
+	color: var(--fh-da-text);
+}
+
+/* Comment reply row and the comment form. */
+body.fh-dark-admin #replyrow,
+body.fh-dark-admin #replyrow td,
+body.fh-dark-admin #replyhead,
+body.fh-dark-admin #edithead,
+body.fh-dark-admin #replysubmit,
+body.fh-dark-admin #replycontainer,
+body.fh-dark-admin .comment-ays,
+body.fh-dark-admin .comment-ays th,
+body.fh-dark-admin .comment-ays td,
+body.fh-dark-admin #namediv,
+body.fh-dark-admin #namediv .inside {
+	background: var(--fh-da-surface);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text);
+}
+
+/* Updates screen, About, Freedoms. */
+body.fh-dark-admin .about__container,
+body.fh-dark-admin .about__section,
+body.fh-dark-admin .about__header,
+body.fh-dark-admin .about-wrap {
+	--background: var(--fh-da-surface);
+	--subtle-background: var(--fh-da-sunken);
+	--text: var(--fh-da-text);
+	--text-light: var(--fh-da-text);
+	--accent-1: var(--fh-da-link);
+	--accent-2: var(--fh-da-link-hover);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .about__section.is-feature,
+body.fh-dark-admin .about__section.has-subtle-background-color {
+	background: var(--fh-da-surface);
+	color: var(--fh-da-text);
+}
+
+/* ================================================================== */
+/*  WooCommerce: classic screens                                       */
+/* ================================================================== */
+
+/* The bar WooCommerce puts above its classic screens. */
+body.fh-dark-admin #woocommerce-embedded-root,
+body.fh-dark-admin .woocommerce-layout__header,
+body.fh-dark-admin .woocommerce-layout__header-wrapper,
+body.fh-dark-admin .woocommerce-layout__header .woocommerce-layout__header-heading,
+body.fh-dark-admin .woocommerce-layout__activity-panel-tabs,
+body.fh-dark-admin .woocommerce-layout__activity-panel-tab,
+body.fh-dark-admin .woocommerce-layout__activity-panel-wrapper,
+body.fh-dark-admin .woocommerce-layout__header-tasks-reminder-bar,
+body.fh-dark-admin .woocommerce-layout__header-breadcrumbs,
+body.fh-dark-admin .woocommerce-layout__header-breadcrumbs span,
+body.fh-dark-admin .woocommerce-layout__header-breadcrumbs a {
+	background: var(--fh-da-surface);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .woocommerce-layout__activity-panel-tab svg,
+body.fh-dark-admin .woocommerce-layout__header svg {
+	fill: var(--fh-da-text-quiet);
+}
+
+/* Product data box: the type picker, the tab strip, the panels. */
+body.fh-dark-admin #woocommerce-product-data .hndle,
+body.fh-dark-admin #woocommerce-product-data .postbox-header,
+body.fh-dark-admin #woocommerce-product-data .hndle label,
+body.fh-dark-admin #woocommerce-product-data .type_box label {
+	background: var(--fh-da-surface);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin #woocommerce-product-data .panel-wrap,
+body.fh-dark-admin #woocommerce-coupon-data .panel-wrap,
+body.fh-dark-admin .woocommerce_options_panel,
+body.fh-dark-admin #woocommerce-product-data .woocommerce_options_panel,
+body.fh-dark-admin .panel-wrap .panel,
+body.fh-dark-admin #woocommerce-product-data .inside,
+body.fh-dark-admin #woocommerce-coupon-data .inside {
+	background: var(--fh-da-surface);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin ul.wc-tabs,
+body.fh-dark-admin #woocommerce-product-data ul.wc-tabs,
+body.fh-dark-admin #woocommerce-coupon-data ul.wc-tabs,
+body.fh-dark-admin .woocommerce ul.wc-tabs,
+body.fh-dark-admin ul.wc-tabs::after,
+body.fh-dark-admin #woocommerce-product-data ul.wc-tabs::after {
+	background: var(--fh-da-sunken);
+	border-color: var(--fh-da-border);
+}
+
+body.fh-dark-admin ul.wc-tabs li,
+body.fh-dark-admin #woocommerce-product-data ul.wc-tabs li,
+body.fh-dark-admin #woocommerce-coupon-data ul.wc-tabs li {
+	background: transparent;
+	border-color: var(--fh-da-border);
+}
+
+body.fh-dark-admin ul.wc-tabs li a,
+body.fh-dark-admin #woocommerce-product-data ul.wc-tabs li a,
+body.fh-dark-admin #woocommerce-coupon-data ul.wc-tabs li a {
+	background: transparent;
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-link);
+}
+
+body.fh-dark-admin ul.wc-tabs li a:hover,
+body.fh-dark-admin #woocommerce-product-data ul.wc-tabs li a:hover {
+	background: var(--fh-da-raised);
+	color: var(--fh-da-link-hover);
+}
+
+body.fh-dark-admin ul.wc-tabs li.active a,
+body.fh-dark-admin #woocommerce-product-data ul.wc-tabs li.active a,
+body.fh-dark-admin #woocommerce-coupon-data ul.wc-tabs li.active a {
+	background: var(--fh-da-raised);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .woocommerce_options_panel .options_group,
+body.fh-dark-admin #woocommerce-product-data .options_group,
+body.fh-dark-admin .woocommerce_options_panel fieldset.form-field,
+body.fh-dark-admin .woocommerce_options_panel p.form-field {
+	border-color: var(--fh-da-border);
+}
+
+body.fh-dark-admin .woocommerce_options_panel label,
+body.fh-dark-admin .woocommerce_options_panel legend,
+body.fh-dark-admin .woocommerce_options_panel .description,
+body.fh-dark-admin #woocommerce-product-data .description {
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .woocommerce_options_panel .description,
+body.fh-dark-admin #woocommerce-product-data span.description {
+	color: var(--fh-da-text-quiet);
+}
+
+/* Attributes and variations. */
+body.fh-dark-admin .wc-metaboxes-wrapper,
+body.fh-dark-admin .wc-metaboxes-wrapper .toolbar,
+body.fh-dark-admin .wc-metaboxes-wrapper .wc-metabox,
+body.fh-dark-admin .wc-metaboxes-wrapper .wc-metabox h3,
+body.fh-dark-admin .wc-metaboxes-wrapper .wc-metabox table,
+body.fh-dark-admin .wc-metaboxes-wrapper .wc-metabox table td,
+body.fh-dark-admin .wc-metaboxes-wrapper .wc-metabox-content,
+body.fh-dark-admin #variable_product_options .toolbar,
+body.fh-dark-admin #variable_product_options .woocommerce_variation,
+body.fh-dark-admin #variable_product_options .woocommerce_variation h3,
+body.fh-dark-admin .woocommerce_variation .woocommerce_variable_attributes,
+body.fh-dark-admin .woocommerce_variable_attributes,
+body.fh-dark-admin .woocommerce_variable_attributes .data,
+body.fh-dark-admin .product_attributes .woocommerce_attribute,
+body.fh-dark-admin .product_attributes .woocommerce_attribute_data,
+body.fh-dark-admin .variations-defaults,
+body.fh-dark-admin .variations-pagenav,
+body.fh-dark-admin .add-attribute-container,
+body.fh-dark-admin .woocommerce-variation-attributes,
+body.fh-dark-admin #product_attributes .toolbar-top,
+body.fh-dark-admin #variable_product_options .toolbar-top,
+body.fh-dark-admin #variable_product_options .toolbar-variations-defaults {
+	background: var(--fh-da-surface);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .wc-metaboxes-wrapper .wc-metabox h3,
+body.fh-dark-admin #variable_product_options .woocommerce_variation h3 {
+	background: var(--fh-da-raised);
+}
+
+body.fh-dark-admin .wc-metaboxes-wrapper .wc-metabox h3 strong,
+body.fh-dark-admin .wc-metaboxes-wrapper .wc-metabox h3 .attribute_name,
+body.fh-dark-admin .wc-metaboxes-wrapper .wc-metabox h3 a.delete,
+body.fh-dark-admin .wc-metaboxes-wrapper .wc-metabox h3 .handlediv,
+body.fh-dark-admin .wc-metaboxes-wrapper .wc-metabox h3 .sort,
+body.fh-dark-admin .wc-metaboxes-wrapper .expand-close,
+body.fh-dark-admin .woocommerce_variation h3 .variation_id,
+body.fh-dark-admin .wc-metaboxes-wrapper .wc-metabox h3 select {
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .wc-metaboxes-wrapper .wc-metabox h3 a.delete,
+body.fh-dark-admin .woocommerce_variation h3 a.remove_variation {
+	color: var(--fh-da-danger-text);
+}
+
+body.fh-dark-admin .woocommerce_variable_attributes .upload_image_button,
+body.fh-dark-admin .woocommerce_variable_attributes .upload_image img,
+body.fh-dark-admin .woocommerce_variation .upload_image .upload_image_button {
+	background-color: var(--fh-da-sunken);
+	border-color: var(--fh-da-border-strong);
+}
+
+body.fh-dark-admin .woocommerce-notice-invalid-variation,
+body.fh-dark-admin #variable_product_options .woocommerce-notice-invalid-variation {
+	background: var(--fh-da-warning-tint);
+	border-color: var(--fh-da-warning);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .wc-metaboxes-wrapper .wc-metabox-sortable-placeholder,
+body.fh-dark-admin .woocommerce_variation.wc-metabox-sortable-placeholder {
+	background: transparent;
+	border-color: var(--fh-da-border-strong);
+}
+
+/* Order screen: the order data box. */
+body.fh-dark-admin #order_data,
+body.fh-dark-admin #order_data .order_data_column,
+body.fh-dark-admin #woocommerce-order-data .inside,
+body.fh-dark-admin #woocommerce-order-data .postbox-header,
+body.fh-dark-admin .order_data_column_container {
+	background: var(--fh-da-surface);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin #order_data h2,
+body.fh-dark-admin #order_data h3,
+body.fh-dark-admin #order_data h4,
+body.fh-dark-admin #order_data .order_data_column h3,
+body.fh-dark-admin #order_data .order_data_column label,
+body.fh-dark-admin #order_data .order_data_column .address strong {
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin #order_data p,
+body.fh-dark-admin #order_data p.woocommerce-order-data__meta,
+body.fh-dark-admin #order_data .order_data_column p,
+body.fh-dark-admin #order_data .order_data_column .address p,
+body.fh-dark-admin #order_data .order_data_column .address,
+body.fh-dark-admin #order_data .order_data_column .wc-customer-user label,
+body.fh-dark-admin #order_data .order_data_column .wc-order-status label,
+body.fh-dark-admin #order_data .order_data_column .form-field label {
+	color: var(--fh-da-text-quiet);
+}
+
+body.fh-dark-admin #order_data .order_data_column a.edit_address::after,
+body.fh-dark-admin #order_data .order_data_column a.load_customer_billing,
+body.fh-dark-admin #order_data .order_data_column a.load_customer_shipping,
+body.fh-dark-admin #order_data .order_data_column a.billing-same-as-shipping {
+	color: var(--fh-da-link);
+}
+
+/* Order screen: the items box. */
+body.fh-dark-admin #woocommerce-order-items .inside,
+body.fh-dark-admin #woocommerce-order-items .woocommerce_order_items_wrapper,
+body.fh-dark-admin #woocommerce-order-items .woocommerce_order_items_wrapper table.woocommerce_order_items,
+body.fh-dark-admin #woocommerce-order-items .woocommerce_order_items_wrapper table.woocommerce_order_items td,
+body.fh-dark-admin #woocommerce-order-items .woocommerce_order_items_wrapper table.woocommerce_order_items tbody tr td,
+body.fh-dark-admin #woocommerce-order-items .wc-order-data-row,
+body.fh-dark-admin #woocommerce-order-items .wc-order-totals-items,
+body.fh-dark-admin #woocommerce-order-items .wc-used-coupons,
+body.fh-dark-admin #woocommerce-order-items .wc-order-add-item,
+body.fh-dark-admin #woocommerce-order-items .wc-order-refund-items,
+body.fh-dark-admin #woocommerce-order-items .wc-order-bulk-actions,
+body.fh-dark-admin #woocommerce-order-items .refund-actions,
+body.fh-dark-admin #woocommerce-order-items .wc-order-edit-line-item-actions {
+	background: var(--fh-da-surface);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin #woocommerce-order-items .wc-order-data-row,
+body.fh-dark-admin #woocommerce-order-items .wc-order-totals-items,
+body.fh-dark-admin #woocommerce-order-items .woocommerce_order_items_wrapper table.woocommerce_order_items thead th,
+body.fh-dark-admin #woocommerce-order-items .woocommerce_order_items_wrapper table.woocommerce_order_items tbody#order_refunds tr td,
+body.fh-dark-admin #woocommerce-order-items .woocommerce_order_items_wrapper table.woocommerce_order_items tbody tr.refund td {
+	background: var(--fh-da-sunken);
+}
+
+body.fh-dark-admin #woocommerce-order-items .woocommerce_order_items_wrapper table.woocommerce_order_items thead th,
+body.fh-dark-admin #woocommerce-order-items .woocommerce_order_items_wrapper table.woocommerce_order_items thead th.sortable,
+body.fh-dark-admin #woocommerce-order-items .woocommerce_order_items_wrapper table.woocommerce_order_items td.quantity,
+body.fh-dark-admin #woocommerce-order-items .woocommerce_order_items_wrapper table.woocommerce_order_items td.item_cost,
+body.fh-dark-admin #woocommerce-order-items .woocommerce_order_items_wrapper table.woocommerce_order_items td.line_cost,
+body.fh-dark-admin #woocommerce-order-items .woocommerce_order_items_wrapper table.woocommerce_order_items td.line_tax,
+body.fh-dark-admin #woocommerce-order-items .woocommerce_order_items_wrapper table.woocommerce_order_items .wc-order-item-sku,
+body.fh-dark-admin #woocommerce-order-items .woocommerce_order_items_wrapper table.woocommerce_order_items .wc-order-item-variation,
+body.fh-dark-admin #woocommerce-order-items .woocommerce_order_items_wrapper table.woocommerce_order_items table.display_meta,
+body.fh-dark-admin #woocommerce-order-items .woocommerce_order_items_wrapper table.woocommerce_order_items table.display_meta th,
+body.fh-dark-admin #woocommerce-order-items .woocommerce_order_items_wrapper table.woocommerce_order_items table.display_meta td,
+body.fh-dark-admin #woocommerce-order-items .woocommerce_order_items_wrapper table.woocommerce_order_items table.display_meta p,
+body.fh-dark-admin #woocommerce-order-items .woocommerce_order_items_wrapper table.woocommerce_order_items small.times,
+body.fh-dark-admin #woocommerce-order-items .woocommerce_order_items_wrapper table.woocommerce_order_items .refunded,
+body.fh-dark-admin #woocommerce-order-items .wc-order-totals .label,
+body.fh-dark-admin #woocommerce-order-items .wc-order-totals td,
+body.fh-dark-admin #woocommerce-order-items .wc-order-data-row p,
+body.fh-dark-admin #woocommerce-order-items .wc-used-coupons .wc_coupon_list li.code {
+	color: var(--fh-da-text);
+	background-color: transparent;
+}
+
+body.fh-dark-admin #woocommerce-order-items .woocommerce_order_items_wrapper table.woocommerce_order_items thead th {
+	color: var(--fh-da-text-quiet);
+	background: var(--fh-da-sunken);
+}
+
+body.fh-dark-admin #woocommerce-order-items .woocommerce_order_items_wrapper table.woocommerce_order_items .refunded,
+body.fh-dark-admin #woocommerce-order-items .wc-order-totals .refunded-total {
+	color: var(--fh-da-danger-text);
+}
+
+body.fh-dark-admin #woocommerce-order-items .woocommerce_order_items_wrapper table.woocommerce_order_items tr.selected td,
+body.fh-dark-admin #woocommerce-order-items .woocommerce_order_items_wrapper table.woocommerce_order_items tbody tr:hover td {
+	background: var(--fh-da-raised);
+}
+
+body.fh-dark-admin #woocommerce-order-items .woocommerce_order_items_wrapper table.woocommerce_order_items .thumb .wc-order-item-thumbnail,
+body.fh-dark-admin #woocommerce-order-items .wc-order-item-thumbnail {
+	background: var(--fh-da-sunken);
+	border-color: var(--fh-da-border);
+}
+
+body.fh-dark-admin #woocommerce-order-items .wc-used-coupons .wc_coupon_list li.code a,
+body.fh-dark-admin #woocommerce-order-items .wc-used-coupons .wc_coupon_list li.code .tips {
+	background: var(--fh-da-raised);
+	border-color: var(--fh-da-border-strong);
+	color: var(--fh-da-text);
+}
+
+/* Order notes: private, to the customer, written by WooCommerce. */
+body.fh-dark-admin ul.order_notes li .note_content,
+body.fh-dark-admin #woocommerce-order-notes ul.order_notes li .note_content {
+	background: var(--fh-da-note-private);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin ul.order_notes li .note_content::after {
+	border-color: var(--fh-da-note-private) transparent;
+}
+
+body.fh-dark-admin ul.order_notes li.customer-note .note_content {
+	background: var(--fh-da-note-customer);
+}
+
+body.fh-dark-admin ul.order_notes li.customer-note .note_content::after {
+	border-color: var(--fh-da-note-customer) transparent;
+}
+
+body.fh-dark-admin ul.order_notes li.system-note .note_content {
+	background: var(--fh-da-note-system);
+}
+
+body.fh-dark-admin ul.order_notes li.system-note .note_content::after {
+	border-color: var(--fh-da-note-system) transparent;
+}
+
+body.fh-dark-admin ul.order_notes li .note_content p,
+body.fh-dark-admin ul.order_notes li .note_content a {
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin ul.order_notes li .note_content a {
+	color: var(--fh-da-link);
+}
+
+body.fh-dark-admin ul.order_notes li p.meta,
+body.fh-dark-admin ul.order_notes li .meta .exact-date {
+	color: var(--fh-da-text-quiet);
+}
+
+body.fh-dark-admin .add_note,
+body.fh-dark-admin #woocommerce-order-notes .add_note {
+	border-color: var(--fh-da-border);
+}
+
+/* Orders list: the order preview pop-up. */
+body.fh-dark-admin .wc-backbone-modal .wc-backbone-modal-content,
+body.fh-dark-admin .wc-backbone-modal-main article,
+body.fh-dark-admin .wc-backbone-modal-main .wc-backbone-modal-header,
+body.fh-dark-admin .wc-backbone-modal-main footer,
+body.fh-dark-admin .wc-backbone-modal-main footer .inner,
+body.fh-dark-admin .wc-order-preview .wc-order-preview-table,
+body.fh-dark-admin .wc-order-preview .wc-order-preview-table td,
+body.fh-dark-admin .wc-order-preview .wc-order-preview-table th,
+body.fh-dark-admin .wc-order-preview .wc-order-preview-addresses,
+body.fh-dark-admin .wc-order-preview-addresses .wc-order-preview-address,
+body.fh-dark-admin .wc-order-preview-addresses .wc-order-preview-note {
+	background: var(--fh-da-surface);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .wc-backbone-modal-main .wc-backbone-modal-header,
+body.fh-dark-admin .wc-backbone-modal-main footer,
+body.fh-dark-admin .wc-order-preview .wc-order-preview-table thead th {
+	background: var(--fh-da-raised);
+}
+
+body.fh-dark-admin .wc-backbone-modal-main .wc-backbone-modal-header h1,
+body.fh-dark-admin .wc-order-preview-addresses h2,
+body.fh-dark-admin .wc-order-preview-addresses strong,
+body.fh-dark-admin .wc-backbone-modal-main .modal-close-link,
+body.fh-dark-admin .wc-backbone-modal .modal-close-link::before {
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .wc-backbone-modal-backdrop {
+	background: #000;
+	opacity: 0.75;
+}
+
+body.fh-dark-admin .wc-order-preview .wc-order-preview-table .wc-order-item-sku,
+body.fh-dark-admin .wc-order-preview .wc-order-preview-table .wc-order-item-meta {
+	color: var(--fh-da-text-quiet);
+}
+
+body.fh-dark-admin .order-preview,
+body.fh-dark-admin a.order-preview {
+	background-color: var(--fh-da-raised);
+	border-color: var(--fh-da-border-strong);
+	color: var(--fh-da-text);
+}
+
+/* WooCommerce's settings, status and old reports. */
+body.fh-dark-admin .woocommerce table.form-table,
+body.fh-dark-admin .woocommerce table.form-table th,
+body.fh-dark-admin .woocommerce table.form-table td,
+body.fh-dark-admin .woocommerce table.form-table .select2-container,
+body.fh-dark-admin .wc-settings-sub-title,
+body.fh-dark-admin .woocommerce h2 {
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin table.wc_status_table,
+body.fh-dark-admin table.wc_status_table td,
+body.fh-dark-admin table.wc_status_table th,
+body.fh-dark-admin table.wc_status_table h2,
+body.fh-dark-admin table.wc_status_table thead th,
+body.fh-dark-admin .wc_status_table--tools td,
+body.fh-dark-admin table.wc_gateways,
+body.fh-dark-admin table.wc_gateways td,
+body.fh-dark-admin table.wc_emails,
+body.fh-dark-admin table.wc_emails td,
+body.fh-dark-admin table.wc_shipping,
+body.fh-dark-admin table.wc_shipping td,
+body.fh-dark-admin table.wc-shipping-zones,
+body.fh-dark-admin table.wc-shipping-zones td,
+body.fh-dark-admin table.wc-shipping-classes,
+body.fh-dark-admin table.wc-shipping-classes td,
+body.fh-dark-admin table.wc-shipping-zone-methods,
+body.fh-dark-admin table.wc-shipping-zone-methods td,
+body.fh-dark-admin table.wc_input_table,
+body.fh-dark-admin table.wc_input_table td,
+body.fh-dark-admin table.wc_tax_rates td,
+body.fh-dark-admin .woocommerce-BlankState,
+body.fh-dark-admin .wc-shipping-zone-settings,
+body.fh-dark-admin .woocommerce-reports-wrap .postbox,
+body.fh-dark-admin .woocommerce-reports-wide .postbox,
+body.fh-dark-admin .woocommerce-reports-wrap .postbox .stats_range,
+body.fh-dark-admin .woocommerce-reports-wide .postbox .stats_range,
+body.fh-dark-admin .woocommerce-reports-wrap .postbox .chart-legend,
+body.fh-dark-admin .woocommerce-reports-wrap .postbox .chart-legend li,
+body.fh-dark-admin .woocommerce-reports-wide .postbox .chart-widgets li.chart-widget,
+body.fh-dark-admin .woocommerce-reports-wrap .postbox .chart-widgets li.chart-widget,
+body.fh-dark-admin .woocommerce-reports-wrap .postbox .chart-sidebar,
+body.fh-dark-admin .woocommerce-reports-wrap .postbox .main,
+body.fh-dark-admin .woocommerce-reports-wide .postbox .main {
+	background-color: var(--fh-da-surface);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin table.wc_status_table td.help,
+body.fh-dark-admin table.wc_status_table .help,
+body.fh-dark-admin .woocommerce-reports-wrap .postbox .chart-legend li small,
+body.fh-dark-admin .woocommerce-BlankState .woocommerce-BlankState-message {
+	color: var(--fh-da-text-quiet);
+}
+
+body.fh-dark-admin table.wc_status_table tbody tr:nth-child(odd) td,
+body.fh-dark-admin table.wc_status_table tbody tr:nth-child(odd) th,
+body.fh-dark-admin table.wc-shipping-zones tbody tr:nth-child(odd) td,
+body.fh-dark-admin table.wc_gateways tbody tr:nth-child(odd) td {
+	background-color: var(--fh-da-sunken);
+}
+
+body.fh-dark-admin table.wc_status_table mark.yes,
+body.fh-dark-admin table.wc_status_table .yes,
+body.fh-dark-admin .wc_status_table mark.yes {
+	background: transparent;
+	color: var(--fh-da-success-text);
+}
+
+body.fh-dark-admin table.wc_status_table mark.no,
+body.fh-dark-admin .wc_status_table mark.no {
+	background: transparent;
+	color: var(--fh-da-text-quiet);
+}
+
+body.fh-dark-admin table.wc_status_table mark.error,
+body.fh-dark-admin table.wc_status_table .red,
+body.fh-dark-admin .wc_status_table mark.error {
+	background: transparent;
+	color: var(--fh-da-danger-text);
+}
+
+body.fh-dark-admin #debug-report,
+body.fh-dark-admin #debug-report textarea,
+body.fh-dark-admin .wc_status_table--tools .button {
+	background: var(--fh-da-input);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .wc-shipping-zone-method-enabled .woocommerce-input-toggle--disabled,
+body.fh-dark-admin .woocommerce-input-toggle--disabled {
+	background-color: var(--fh-da-raised);
+	border-color: var(--fh-da-border-strong);
+}
+
+body.fh-dark-admin .woocommerce-input-toggle--disabled::after {
+	background-color: var(--fh-da-text-quiet);
+}
+
+/* Order status pills keep their own pale colours and dark words (readable as they are). */
+
+/* ================================================================== */
+/*  WooCommerce's React pages (Home, Analytics) — as far as reasonable  */
+/* ================================================================== */
+
+body.fh-dark-admin .woocommerce-layout,
+body.fh-dark-admin .woocommerce-layout__main,
+body.fh-dark-admin .woocommerce-admin-page #wpbody-content,
+body.fh-dark-admin .woocommerce-admin-page #wpcontent,
+body.fh-dark-admin .woocommerce-admin-page #wpbody {
+	background: var(--fh-da-bg);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .woocommerce-card,
+body.fh-dark-admin .components-card,
+body.fh-dark-admin .components-card__header,
+body.fh-dark-admin .components-card__body,
+body.fh-dark-admin .components-card__footer,
+body.fh-dark-admin .components-panel,
+body.fh-dark-admin .components-panel__body,
+body.fh-dark-admin .components-popover__content,
+body.fh-dark-admin .components-dropdown-menu__menu,
+body.fh-dark-admin .components-modal__frame,
+body.fh-dark-admin .components-modal__header,
+body.fh-dark-admin .woocommerce-summary,
+body.fh-dark-admin .woocommerce-summary__item,
+body.fh-dark-admin .woocommerce-summary__item-container,
+body.fh-dark-admin .woocommerce-table,
+body.fh-dark-admin .woocommerce-table__table,
+body.fh-dark-admin .woocommerce-table__table tr,
+body.fh-dark-admin .woocommerce-table__header,
+body.fh-dark-admin .woocommerce-table__item,
+body.fh-dark-admin .woocommerce-table__summary,
+body.fh-dark-admin .woocommerce-chart,
+body.fh-dark-admin .woocommerce-chart__header,
+body.fh-dark-admin .woocommerce-chart__body,
+body.fh-dark-admin .woocommerce-chart__footer,
+body.fh-dark-admin .woocommerce-legend,
+body.fh-dark-admin .woocommerce-legend__list,
+body.fh-dark-admin .woocommerce-legend__item,
+body.fh-dark-admin .woocommerce-legend__item button,
+body.fh-dark-admin .woocommerce-legend__item-container,
+body.fh-dark-admin .woocommerce-filters,
+body.fh-dark-admin .woocommerce-filters-filter,
+body.fh-dark-admin .woocommerce-filters-date__content,
+body.fh-dark-admin .woocommerce-dropdown-button,
+body.fh-dark-admin .woocommerce-segmented-selection__container,
+body.fh-dark-admin .woocommerce-segmented-selection__item,
+body.fh-dark-admin .woocommerce-segmented-selection__label,
+body.fh-dark-admin .woocommerce-task-card,
+body.fh-dark-admin .woocommerce-task-list__item,
+body.fh-dark-admin .woocommerce-inbox-message,
+body.fh-dark-admin .woocommerce-inbox-message__wrapper,
+body.fh-dark-admin .woocommerce-store-alerts,
+body.fh-dark-admin .woocommerce-list__item,
+body.fh-dark-admin .woocommerce-leaderboard,
+body.fh-dark-admin .woocommerce-dashboard__columns > div,
+body.fh-dark-admin .woocommerce-stats-overview,
+body.fh-dark-admin .woocommerce-homescreen-card,
+body.fh-dark-admin .woocommerce-ellipsis-menu__content,
+body.fh-dark-admin .woocommerce-search,
+body.fh-dark-admin .woocommerce-select-control__control,
+body.fh-dark-admin .woocommerce-select-control__listbox,
+body.fh-dark-admin .woocommerce-select-control__option,
+body.fh-dark-admin .woocommerce-calendar,
+body.fh-dark-admin .woocommerce-calendar__inputs,
+body.fh-dark-admin .woocommerce-pagination,
+body.fh-dark-admin .woocommerce-tour-kit-step,
+body.fh-dark-admin .woocommerce-layout__activity-panel-content {
+	background-color: var(--fh-da-surface);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text);
+	box-shadow: none;
+}
+
+body.fh-dark-admin .woocommerce-table__table tr:nth-child(2n) th,
+body.fh-dark-admin .woocommerce-table__table tr:nth-child(2n) td,
+body.fh-dark-admin .woocommerce-table__header,
+body.fh-dark-admin .woocommerce-table__summary,
+body.fh-dark-admin .woocommerce-summary__item.is-selected,
+body.fh-dark-admin .woocommerce-summary__item:hover,
+body.fh-dark-admin .woocommerce-segmented-selection__item input:checked + label {
+	background-color: var(--fh-da-raised);
+}
+
+body.fh-dark-admin .woocommerce-layout *:not(svg):not(path):not(rect):not(g):not(line):not(circle):not(text),
+body.fh-dark-admin .components-popover__content *,
+body.fh-dark-admin .components-modal__frame * {
+	border-color: var(--fh-da-border);
+}
+
+body.fh-dark-admin .woocommerce-layout h1,
+body.fh-dark-admin .woocommerce-layout h2,
+body.fh-dark-admin .woocommerce-layout h3,
+body.fh-dark-admin .woocommerce-layout h4,
+body.fh-dark-admin .woocommerce-layout p,
+body.fh-dark-admin .woocommerce-layout span,
+body.fh-dark-admin .woocommerce-layout label,
+body.fh-dark-admin .woocommerce-layout li,
+body.fh-dark-admin .woocommerce-layout td,
+body.fh-dark-admin .woocommerce-layout th,
+body.fh-dark-admin .woocommerce-layout div,
+body.fh-dark-admin .woocommerce-layout button,
+body.fh-dark-admin .components-popover__content,
+body.fh-dark-admin .components-popover__content span,
+body.fh-dark-admin .components-popover__content button,
+body.fh-dark-admin .components-modal__frame,
+body.fh-dark-admin .components-modal__frame span,
+body.fh-dark-admin .components-button:not(.is-primary):not(.is-link) {
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .woocommerce-layout a,
+body.fh-dark-admin .woocommerce-layout .components-button.is-link,
+body.fh-dark-admin .woocommerce-layout .components-button.is-tertiary,
+body.fh-dark-admin .woocommerce-layout .components-button.is-secondary {
+	color: var(--fh-da-link);
+}
+
+body.fh-dark-admin .components-button.is-primary,
+body.fh-dark-admin .woocommerce-layout .components-button.is-primary {
+	background: var(--fh-da-accent-strong);
+	color: var(--fh-da-on-accent);
+}
+
+body.fh-dark-admin .woocommerce-summary__item-label,
+body.fh-dark-admin .woocommerce-summary__item-prev-label,
+body.fh-dark-admin .woocommerce-summary__item-prev-value,
+body.fh-dark-admin .woocommerce-chart__interval-select,
+body.fh-dark-admin .woocommerce-table__empty-item,
+body.fh-dark-admin .woocommerce-layout .woocommerce-filters-label,
+body.fh-dark-admin .woocommerce-layout .components-base-control__help {
+	color: var(--fh-da-text-quiet);
+}
+
+body.fh-dark-admin .woocommerce-summary__item-delta {
+	background: var(--fh-da-raised);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .woocommerce-chart text,
+body.fh-dark-admin .d3-chart__container text,
+body.fh-dark-admin .woocommerce-chart .axis text {
+	fill: var(--fh-da-text-quiet);
+}
+
+body.fh-dark-admin .d3-chart__container .grid line,
+body.fh-dark-admin .d3-chart__container .axis path,
+body.fh-dark-admin .d3-chart__container .axis line {
+	stroke: var(--fh-da-border);
+}
+
+body.fh-dark-admin .d3-chart__tooltip,
+body.fh-dark-admin .d3-chart__tooltip .d3-chart__tooltip-title {
+	background: var(--fh-da-raised);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .components-text-control__input,
+body.fh-dark-admin .components-select-control__input,
+body.fh-dark-admin .components-input-control__input,
+body.fh-dark-admin .components-input-control__backdrop,
+body.fh-dark-admin .components-form-token-field__input-container,
+body.fh-dark-admin .woocommerce-select-control__control-input {
+	background-color: var(--fh-da-input) !important;
+	border-color: var(--fh-da-border-strong) !important;
+	color: var(--fh-da-text) !important;
+}
+
+/* The Help / Display / Inbox panel and the quick-start list. */
+body.fh-dark-admin .woocommerce-layout__activity-panel-tab.is-active,
+body.fh-dark-admin .woocommerce-layout__activity-panel-tab:hover {
+	background: var(--fh-da-raised);
+	box-shadow: inset 0 -3px var(--fh-da-accent);
+}
+
+/* ================================================================== */
+/*  Yoast SEO's box (from the outside: Yoast itself is never changed)  */
+/* ================================================================== */
+
+body.fh-dark-admin #wpseo_meta,
+body.fh-dark-admin #wpseo_meta .inside,
+body.fh-dark-admin #wpseo_meta .postbox-header,
+body.fh-dark-admin .wpseo-metabox-content,
+body.fh-dark-admin .wpseo-metabox-menu,
+body.fh-dark-admin .wpseo-metabox-menu ul,
+body.fh-dark-admin .wpseo-metabox-menu ul li a,
+body.fh-dark-admin .wpseo-meta-section,
+body.fh-dark-admin .yoast-meta-section,
+body.fh-dark-admin #wpseo-metabox-root,
+body.fh-dark-admin .yoast.wpseo-metabox,
+body.fh-dark-admin .yoast-seo-sidebar-panel,
+body.fh-dark-admin #yoast-seo-analysis-collapsible-metabox,
+body.fh-dark-admin #yoast-readability-analysis-collapsible-metabox {
+	background-color: var(--fh-da-surface);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin #wpseo_meta h2,
+body.fh-dark-admin #wpseo_meta h3,
+body.fh-dark-admin #wpseo_meta label,
+body.fh-dark-admin #wpseo_meta legend,
+body.fh-dark-admin #wpseo_meta p,
+body.fh-dark-admin #wpseo_meta li,
+body.fh-dark-admin #wpseo_meta span,
+body.fh-dark-admin #wpseo_meta button:not(.yoast-button--primary),
+body.fh-dark-admin #wpseo_meta div {
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin #wpseo_meta a {
+	color: var(--fh-da-link);
+}
+
+body.fh-dark-admin #wpseo_meta button,
+body.fh-dark-admin #wpseo_meta .yoast-button {
+	background-color: var(--fh-da-raised);
+	border-color: var(--fh-da-border-strong);
+}
+
+body.fh-dark-admin #wpseo_meta .wpseo-metabox-menu ul li.active a,
+body.fh-dark-admin #wpseo_meta .wpseo-metabox-menu ul li a:hover {
+	background: var(--fh-da-raised);
+}
+
+/* Yoast's snippet preview imitates Google's white results page. */
+body.fh-dark-admin #wpseo_meta [class*="SnippetPreview"],
+body.fh-dark-admin #wpseo_meta .yoast-snippet-preview,
+body.fh-dark-admin #wpseo_meta [class*="snippet-preview"] {
+	--fh-da-text: var(--fh-da-light-ink);
+	background-color: var(--fh-da-light-paper);
+	color: var(--fh-da-light-ink);
+}
+
+/* ================================================================== */
+/*  The FisHotel plugins and the theme on WordPress's screens           */
+/* ================================================================== */
+
+/* ShipTracker (styled from the outside; ShipTracker is never edited):
+ * its pages, its order box, its dashboard widget. */
+body.fh-dark-admin .fst-settings-wrap,
+body.fh-dark-admin .fst-shipment-item,
+body.fh-dark-admin .fst-status-card,
+body.fh-dark-admin .fst-shipments-table,
+body.fh-dark-admin .fst-shipments-table tbody tr,
+body.fh-dark-admin .fst-analytics-card,
+body.fh-dark-admin .fst-tabs .nav-tab-active,
+body.fh-dark-admin .fst-pagination a,
+body.fh-dark-admin .fst-pagination span {
+	background-color: var(--fh-da-surface);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .fst-tabs,
+body.fh-dark-admin .fst-filter-bar,
+body.fh-dark-admin .fst-pagination,
+body.fh-dark-admin .fst-tracking-number,
+body.fh-dark-admin .fst-shipments-table thead,
+body.fh-dark-admin .fst-shipments-table tbody tr:hover,
+body.fh-dark-admin .fst-tabs .nav-tab:hover {
+	background-color: var(--fh-da-sunken);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .fst-shipment-item.fst-late,
+body.fh-dark-admin .fst-shipments-table tbody tr.fst-late {
+	background-color: var(--fh-da-danger-tint);
+}
+
+body.fh-dark-admin .fst-status-card h3,
+body.fh-dark-admin .fst-filter-bar label,
+body.fh-dark-admin .fst-analytics-card h3,
+body.fh-dark-admin .fst-shipments-table th {
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .fst-status-card .count,
+body.fh-dark-admin .fst-shipments-table a,
+body.fh-dark-admin .fst-tabs .nav-tab,
+body.fh-dark-admin .fst-tabs .nav-tab-active,
+body.fh-dark-admin .fst-pagination a,
+body.fh-dark-admin .fst-shipment-actions a {
+	color: var(--fh-da-link);
+	border-color: var(--fh-da-link);
+}
+
+body.fh-dark-admin .fst-tabs .nav-tab {
+	background: transparent;
+	border-color: transparent;
+}
+
+body.fh-dark-admin .fst-tabs .nav-tab-active {
+	border-bottom-color: var(--fh-da-accent);
+}
+
+body.fh-dark-admin .fst-pagination .current,
+body.fh-dark-admin .fst-pagination a:hover,
+body.fh-dark-admin .fst-shipment-actions a:hover {
+	background-color: var(--fh-da-accent-strong);
+	border-color: var(--fh-da-accent-strong);
+	color: var(--fh-da-on-accent);
+}
+
+body.fh-dark-admin .fst-shipment-actions a.delete {
+	border-color: var(--fh-da-danger);
+	color: var(--fh-da-danger-text);
+}
+
+body.fh-dark-admin .fst-settings-wrap h1,
+body.fh-dark-admin .fst-analytics-card h3,
+body.fh-dark-admin .fst-shipments-table thead {
+	border-color: var(--fh-da-border);
+}
+
+/* ShipTracker's dashboard widget writes its boxes inline. */
+body.fh-dark-admin #fst_shipment_overview [style*="background"] {
+	background-color: var(--fh-da-surface) !important;
+	border-color: var(--fh-da-border) !important;
+}
+
+body.fh-dark-admin #fst_shipment_overview [style*="#fff8f8"],
+body.fh-dark-admin #fst_shipment_overview [style*="#fef2f2"] {
+	background-color: var(--fh-da-danger-tint) !important;
+}
+
+/* The theme's Shipments box on an order. */
+body.fh-dark-admin .fishotel-shipments-metabox h3,
+body.fh-dark-admin .fishotel-shipments-metabox h4.fhsm-source-heading,
+body.fh-dark-admin .fhsm-carrier,
+body.fh-dark-admin .fhsm-cost-label,
+body.fh-dark-admin .fhsm-cost-detail,
+body.fh-dark-admin .fhsm-packing-cost,
+body.fh-dark-admin .fhsm-materials-line,
+body.fh-dark-admin .fhsm-riders,
+body.fh-dark-admin .fhsm-ship-with-result {
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .fhsm-ea-ts,
+body.fh-dark-admin .fhsm-source-tag,
+body.fh-dark-admin .fhsm-covers-all,
+body.fh-dark-admin .fhsm-legacy-note,
+body.fh-dark-admin .fhsm-line-item-covered .fhsm-line-item-label,
+body.fh-dark-admin .fhsm-line-item-refunded .fhsm-line-item-label,
+body.fh-dark-admin .fhsm-covered-note,
+body.fh-dark-admin .fhsm-empty,
+body.fh-dark-admin .fhsm-cost-shared,
+body.fh-dark-admin .fhsm-cost-same-box,
+body.fh-dark-admin .fhsm-source-hint,
+body.fh-dark-admin .fhsm-box-packing,
+body.fh-dark-admin .fhsm-packing-closed,
+body.fh-dark-admin .fhsm-packing-lines th,
+body.fh-dark-admin .fhsm-packing-stock,
+body.fh-dark-admin .fhsm-packing-bag-note,
+body.fh-dark-admin .fhsm-packing-unit,
+body.fh-dark-admin .fhsm-materials-none,
+body.fh-dark-admin .fhsm-ship-mode-when {
+	color: var(--fh-da-text-quiet);
+}
+
+body.fh-dark-admin .fhsm-shipment,
+body.fh-dark-admin .fhsm-shipment-legacy,
+body.fh-dark-admin .fhsm-cost,
+body.fh-dark-admin .fhsm-item-checkboxes,
+body.fh-dark-admin .fhsm-cost-form,
+body.fh-dark-admin .fhsm-packing,
+body.fh-dark-admin .fhsm-add-shipment {
+	background: var(--fh-da-surface);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .fhsm-shipment,
+body.fh-dark-admin .fhsm-new-cost,
+body.fh-dark-admin .fhsm-cost-form .fhsm-packing,
+body.fh-dark-admin .fhsm-ship-mode .fhsm-packing {
+	background: var(--fh-da-sunken);
+	border-color: var(--fh-da-border);
+}
+
+body.fh-dark-admin .fhsm-all-covered,
+body.fh-dark-admin .fhsm-cost-totals {
+	background: var(--fh-da-info-tint);
+	border-left-color: var(--fh-da-accent);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .fhsm-cost-totals-loss,
+body.fh-dark-admin .fhsm-shipment-error {
+	background: var(--fh-da-danger-tint);
+	border-color: var(--fh-da-danger);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .fhsm-ea-panel,
+body.fh-dark-admin .fhsm-packing-notes {
+	background: var(--fh-da-warning-tint);
+	border-color: var(--fh-da-warning);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .fhsm-cost-diff-loss,
+body.fh-dark-admin .fhsm-cost-diff-loss strong,
+body.fh-dark-admin .fhsm-field-error,
+body.fh-dark-admin .fhsm-ship-with-problem,
+body.fh-dark-admin .fhsm-message-error {
+	color: var(--fh-da-danger-text);
+}
+
+body.fh-dark-admin .fhsm-cost-none,
+body.fh-dark-admin .fhsm-cost-missing,
+body.fh-dark-admin .fhsm-packing-stock-low,
+body.fh-dark-admin .fhsm-line-item-partial-refund .fhsm-line-item-label {
+	color: var(--fh-da-warning);
+}
+
+body.fh-dark-admin .fhsm-message-success {
+	color: var(--fh-da-success-text);
+}
+
+/* The theme's medication boxes (product tab, order terms, EA packing slip). */
+body.fh-dark-admin .fishotel-med-secret__mask,
+body.fh-dark-admin .fishotel-med-terms-box__state,
+body.fh-dark-admin .fishotel-med-terms-box__state--legacy {
+	background: var(--fh-da-warning-tint);
+	border-color: var(--fh-da-border);
+	border-left-color: var(--fh-da-warning);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .fishotel-med-terms-box__state--ok {
+	background: var(--fh-da-success-tint);
+	border-left-color: var(--fh-da-success);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .fishotel-med-terms-box__state--missing {
+	background: var(--fh-da-danger-tint);
+	border-left-color: var(--fh-da-danger);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .fishotel-med-var-row,
+body.fh-dark-admin .fishotel-med-slip-actions {
+	background: var(--fh-da-sunken);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .fishotel-med-slip-actions {
+	border-left-color: var(--fh-da-warning);
+}
+
+body.fh-dark-admin .fishotel-med-terms-box__table th,
+body.fh-dark-admin .fishotel-med-terms-box__label,
+body.fh-dark-admin .fishotel-med-slip-actions h3 {
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .fishotel-med-terms-box__ua,
+body.fh-dark-admin .fishotel-med-sync-status,
+body.fh-dark-admin .fishotel-med-sync-status[data-state="busy"] {
+	color: var(--fh-da-text-quiet);
+}
+
+body.fh-dark-admin .fishotel-med-sync-status[data-state="ok"] {
+	color: var(--fh-da-success-text);
+}
+
+body.fh-dark-admin .fishotel-med-sync-status[data-state="error"] {
+	color: var(--fh-da-danger-text);
+}
+
+body.fh-dark-admin .fishotel-med-fields-ea,
+body.fh-dark-admin .fishotel-med-fields-amazon {
+	border-color: var(--fh-da-border);
+}
+
+/* Misc's own boxes on WordPress's screens (Packing, Weather on an order). */
+body.fh-dark-admin .fh-pack-box__lines tr.is-missing td,
+body.fh-dark-admin .fh-pack-box__flash.is-error {
+	background: var(--fh-da-danger-tint);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .fh-pack-box__note,
+body.fh-dark-admin .fh-pack-box__warn,
+body.fh-dark-admin .fh-weather-box__warn {
+	background: var(--fh-da-warning-tint);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .fh-pack-box__flash,
+body.fh-dark-admin .fh-pack-box__confirmed {
+	background: var(--fh-da-success-tint);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .fh-pack-box__suggest,
+body.fh-dark-admin .fh-pack-box__packed,
+body.fh-dark-admin .fh-pack-box__tag,
+body.fh-dark-admin .fh-weather-box__note {
+	background: var(--fh-da-sunken);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .fh-pack-meter {
+	background: var(--fh-da-raised);
+}
+
+body.fh-dark-admin .fh-pack-box__lines th,
+body.fh-dark-admin .fh-pack-box__lines td {
+	border-color: var(--fh-da-border);
+}
+
+/* Inline styles other plugins write for a light page: the common pale
+ * backgrounds become the dark card, the common greys become quiet text.
+ * (Anything else is rescued by the readability guard.) */
+body.fh-dark-admin #wpbody-content [style*="background:#fff;"],
+body.fh-dark-admin #wpbody-content [style*="background: #fff;"],
+body.fh-dark-admin #wpbody-content [style*="background-color:#fff;"],
+body.fh-dark-admin #wpbody-content [style*="background-color: #fff;"],
+body.fh-dark-admin #wpbody-content [style*="background:#ffffff"],
+body.fh-dark-admin #wpbody-content [style*="background: #ffffff"],
+body.fh-dark-admin #wpbody-content [style*="background-color:#ffffff"],
+body.fh-dark-admin #wpbody-content [style*="background-color: #ffffff"],
+body.fh-dark-admin #wpbody-content [style*="background:white"],
+body.fh-dark-admin #wpbody-content [style*="background: white"],
+body.fh-dark-admin #wpbody-content [style*="background:#f9f9f9"],
+body.fh-dark-admin #wpbody-content [style*="background: #f9f9f9"],
+body.fh-dark-admin #wpbody-content [style*="background:#fafafa"],
+body.fh-dark-admin #wpbody-content [style*="background: #fafafa"],
+body.fh-dark-admin #wpbody-content [style*="background:#f5f5f5"],
+body.fh-dark-admin #wpbody-content [style*="background: #f5f5f5"],
+body.fh-dark-admin #wpbody-content [style*="background:#f0f0f0"],
+body.fh-dark-admin #wpbody-content [style*="background: #f0f0f0"],
+body.fh-dark-admin #wpbody-content [style*="background:#f0f0f1"],
+body.fh-dark-admin #wpbody-content [style*="background: #f0f0f1"],
+body.fh-dark-admin #wpbody-content [style*="background:#f6f7f7"],
+body.fh-dark-admin #wpbody-content [style*="background: #f6f7f7"],
+body.fh-dark-admin #wpbody-content [style*="background:#f8f9fa"],
+body.fh-dark-admin #wpbody-content [style*="background: #f8f9fa"] {
+	background: var(--fh-da-surface) !important;
+	border-color: var(--fh-da-border) !important;
+}
+
+body.fh-dark-admin #wpbody-content [style*="color:#333"],
+body.fh-dark-admin #wpbody-content [style*="color: #333"],
+body.fh-dark-admin #wpbody-content [style*="color:#000"],
+body.fh-dark-admin #wpbody-content [style*="color: #000"],
+body.fh-dark-admin #wpbody-content [style*="color:#1d2327"],
+body.fh-dark-admin #wpbody-content [style*="color: #1d2327"],
+body.fh-dark-admin #wpbody-content [style*="color:#23282d"],
+body.fh-dark-admin #wpbody-content [style*="color: #23282d"] {
+	color: var(--fh-da-text) !important;
+}
+
+body.fh-dark-admin #wpbody-content [style*="color:#666"],
+body.fh-dark-admin #wpbody-content [style*="color: #666"],
+body.fh-dark-admin #wpbody-content [style*="color:#777"],
+body.fh-dark-admin #wpbody-content [style*="color: #777"],
+body.fh-dark-admin #wpbody-content [style*="color:#888"],
+body.fh-dark-admin #wpbody-content [style*="color: #888"],
+body.fh-dark-admin #wpbody-content [style*="color:#646970"],
+body.fh-dark-admin #wpbody-content [style*="color: #646970"],
+body.fh-dark-admin #wpbody-content [style*="color:#50575e"],
+body.fh-dark-admin #wpbody-content [style*="color: #50575e"],
+body.fh-dark-admin #wpbody-content [style*="color:#555"],
+body.fh-dark-admin #wpbody-content [style*="color: #555"] {
+	color: var(--fh-da-text-quiet) !important;
+}
+
+/* ================================================================== */
+/*  The readability guard's classes (js/dark-admin.js)                  */
+/* ================================================================== */
+
+body.fh-dark-admin .fh-da-fix {
+	color: var(--fh-da-fix-fg) !important;
+}
+
+/* ================================================================== */
+/*  Kept light on purpose (listed in the README)                        */
+/* ================================================================== */
+
+body.fh-dark-admin .fh-da-light,
+body.fh-dark-admin .fh-fc-paper,
+body.fh-dark-admin .fh-inv-preview__box,
+body.fh-dark-admin .fh-lf-preview__frame,
+body.fh-dark-admin .fh-sa-link__qr {
+	--fh-da-bg: #ffffff;
+	--fh-da-surface: #ffffff;
+	--fh-da-raised: #f0f0f1;
+	--fh-da-sunken: #f6f7f7;
+	--fh-da-input: #ffffff;
+	--fh-da-text: #1e1e1e;
+	--fh-da-text-quiet: #50575e;
+	--fh-da-link: #2271b1;
+	--fh-da-link-hover: #135e96;
+	--fh-da-border: #c3c4c7;
+	--fh-da-border-strong: #8c8f94;
+	color-scheme: light;
+	background-color: #ffffff;
+	color: #1e1e1e;
+}
