@@ -1,0 +1,80 @@
+/**
+ * Product checks — the products list's "To fix" row and column, and the
+ * section's page. Plain WordPress admin colours on the list (the Dark
+ * admin section restyles these classes through its own variables).
+ */
+
+/* The "To fix" row: its own line under WooCommerce's links. */
+.subsubsub li.fh_todo {
+	display: block;
+	margin-top: 4px;
+}
+
+.fh-pc-views .count {
+	color: #50575e;
+}
+
+.fh-pc-recount {
+	margin-left: 8px;
+}
+
+/* The column. */
+.wp-list-table .column-fh_todo {
+	width: 14%;
+}
+
+.fh-pc-chip {
+	display: inline-block;
+	margin: 0 3px 3px 0;
+	padding: 0 7px;
+	border: 1px solid #e6b4b4;
+	border-radius: 9px;
+	background: #fcf0f1;
+	color: #8a2424;
+	font-size: 11px;
+	line-height: 18px;
+	white-space: nowrap;
+}
+
+.fh-pc-chip--gallery,
+.fh-pc-chip--sci,
+.fh-pc-chip--subcat {
+	border-color: #e3cf9a;
+	background: #fcf9e8;
+	color: #6b4e00;
+}
+
+.fh-pc-ok {
+	color: #00733a;
+	font-weight: 600;
+}
+
+.fh-pc-third {
+	display: inline-block;
+	padding: 0 6px;
+	border-radius: 9px;
+	background: #f0f0f1;
+	color: #1d2327;
+	font-size: 11px;
+	line-height: 18px;
+}
+
+/* The section's page (inside the FisHotel Tools dark page). */
+.fh-pc-counts,
+.fh-pc-cats {
+	margin: 0 0 12px;
+	columns: 2 260px;
+}
+
+.fh-pc-counts li,
+.fh-pc-cats li {
+	break-inside: avoid;
+	margin: 0 0 6px;
+}
+
+.fh-pc-n {
+	display: inline-block;
+	min-width: 24px;
+	margin-left: 6px;
+	font-weight: 600;
+}
