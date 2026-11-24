@@ -456,6 +456,20 @@ check_same( 'switched off: no sweep is armed, no order hook added', array( false
 Reserve_Shop::register( $settings );
 check( 'on: the hourly sweep is armed and the order hooks are there', false !== wp_next_scheduled( Reserve_Shop::CRON_HOOK ) && isset( $GLOBALS['fh_actions']['woocommerce_order_status_changed'], $GLOBALS['fh_actions']['woocommerce_order_note_added'], $GLOBALS['fh_actions']['woocommerce_order_refunded'] ) );
 
+// Armed before `init` (the section boots earlier): wp_schedule_event() would read WooCommerce's
+// translated cron schedules too early (a notice) — it waits for `init`.
+// (did_action() is declared when the file is compiled: until here every hook counts as done.)
+$GLOBALS['fh_did'] = array( 'init' => 0 );
+function did_action( $hook ) {
+	return $GLOBALS['fh_did'][ $hook ] ?? 1;
+}
+Reserve_Shop::unschedule();
+Reserve_Shop::schedule();
+$armed_early = wp_next_scheduled( Reserve_Shop::CRON_HOOK );
+$GLOBALS['fh_did']['init'] = 1;
+do_action( 'init' );
+check_same( 'before init the sweep is not armed yet (no translations read too early); at init it is', array( false, true ), array( $armed_early, false !== wp_next_scheduled( Reserve_Shop::CRON_HOOK ) ) );
+
 $o1900 = fh_shop_order( new WC_Order( 1900, 'processing', array(), time() - 20 ) );
 $i1900 = $o1900->add_item( 'Test Tang - Medium', 1, $tang_m, $medium );
 fresh();

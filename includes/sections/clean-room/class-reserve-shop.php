@@ -291,9 +291,17 @@ class Reserve_Shop {
 	 * reads the autoloaded cron option: no query).
 	 */
 	public static function schedule() {
-		if ( function_exists( 'wp_next_scheduled' ) && ! wp_next_scheduled( self::CRON_HOOK ) && function_exists( 'wp_schedule_event' ) ) {
-			wp_schedule_event( time() + 300, 'hourly', self::CRON_HOOK );
+		if ( ! function_exists( 'wp_next_scheduled' ) || wp_next_scheduled( self::CRON_HOOK ) || ! function_exists( 'wp_schedule_event' ) ) {
+			return;
 		}
+		// wp_schedule_event() reads the cron schedules, which WooCommerce names in its own language: asked
+		// before `init` (the section boots earlier) that loads its translations too early — a notice in
+		// debug.log the first time it is switched on. So it is armed at `init`.
+		if ( function_exists( 'did_action' ) && ! did_action( 'init' ) ) {
+			add_action( 'init', array( self::class, 'schedule' ), 20, 0 );
+			return;
+		}
+		wp_schedule_event( time() + 300, 'hourly', self::CRON_HOOK );
 	}
 
 	/**
