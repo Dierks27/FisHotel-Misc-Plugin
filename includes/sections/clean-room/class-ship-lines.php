@@ -81,8 +81,8 @@ class Ship_Lines {
 
 	/**
 	 * A line's own change that drops it: its line status written straight
-	 * onto the order item ("not available": that fish is not coming),
-	 * which saves no order.
+	 * onto the order item ("not available": that fish is not coming), or
+	 * its reservation (Reserve) — neither saves the order.
 	 *
 	 * @var string[]
 	 */
@@ -136,7 +136,7 @@ class Ship_Lines {
 	 * @param mixed $meta_key The key written.
 	 */
 	public static function flush_for_item_meta( $meta_id = 0, $item_id = 0, $meta_key = '' ) {
-		if ( self::META_LINE_STATUS === $meta_key ) {
+		if ( self::META_LINE_STATUS === $meta_key || Reserve::is_meta_key( $meta_key ) ) {
 			self::flush();
 		}
 	}
@@ -285,8 +285,18 @@ class Ship_Lines {
 		}
 
 		$going = Feeding::going_out( $orders, $today );
-		foreach ( $going as $id => $head ) {
-			$going[ $id ]['rows'] = self::rows( $objects[ $id ] );
+		// Their shipments in one query (the Lost Fish reader asks ShipTracker per order otherwise).
+		$reader = '\\FisHotel\\Misc\\Sections\\Lost_Fish\\Orders';
+		$rows   = $going && method_exists( $reader, 'prime_shipments' ) ? Store::shipment_rows( array_keys( $going ) ) : null;
+		$primed = null !== $rows ? (array) $reader::prime_shipments( $rows ) : array();
+		try {
+			foreach ( $going as $id => $head ) {
+				$going[ $id ]['rows'] = self::rows( $objects[ $id ] );
+			}
+		} finally {
+			if ( $primed && method_exists( $reader, 'unprime' ) ) {
+				$reader::unprime( $primed );
+			}
 		}
 
 		return Feeding::shipping( $going, $today, \FisHotel\Misc\Sections\Today\Collector::fish_categories(), self::loose_categories() );
@@ -409,10 +419,41 @@ class Ship_Lines {
 				$mine['size_slug']  = '';
 				$mine['size_label'] = '';
 			}
-			$rows[ $index ] = array_merge( $row, $mine );
+			$rows[ $index ] = array_merge( $row, $mine, self::reservation( $items[ $item_id ] ?? null, (string) ( $row['ref'] ?? '' ) ) );
 		}
 
 		return $rows;
+	}
+
+	/**
+	 * What the order item keeps of a line's reservation (Reserve): the
+	 * groups it is held in, when it was first seen open, the groups it was
+	 * held in before a correction, and whether the not-found list was told
+	 * to ignore it.
+	 *
+	 * @param object|null $item The order item.
+	 * @param string      $ref  The line's ref.
+	 * @return array{held: array<int, int>, seen: int, was: int[], ignored: bool}
+	 */
+	public static function reservation( $item, $ref ) {
+		$out = array(
+			'held'    => array(),
+			'seen'    => 0,
+			'was'     => array(),
+			'ignored' => false,
+		);
+		if ( ! is_object( $item ) || ! method_exists( $item, 'get_meta' ) || null === Reserve::key( Reserve::META, $ref ) ) {
+			return $out;
+		}
+		try {
+			$out['held']    = Reserve::held( $item->get_meta( Reserve::key( Reserve::META, $ref ) ) );
+			$out['seen']    = max( 0, (int) $item->get_meta( Reserve::key( Reserve::META_SEEN, $ref ) ) );
+			$out['was']     = array_keys( Reserve::held( $item->get_meta( Reserve::key( Reserve::META_WAS, $ref ) ) ) );
+			$out['ignored'] = '' !== (string) $item->get_meta( Reserve::key( Reserve::META_IGNORE, $ref ) );
+		} catch ( \Throwable $e ) {
+			unset( $e );
+		}
+		return $out;
 	}
 
 	/**
@@ -463,7 +504,7 @@ class Ship_Lines {
 				$key = 0 === strpos( $key, 'attribute_' ) ? substr( $key, 10 ) : $key;
 				if ( '_' !== substr( $key, 0, 1 ) && Sizes::matches( $key ) && '' !== trim( $value ) ) {
 					$out['size_slug']  = Sizes::slug( $value );
-					$out['size_label'] = trim( $value );
+					$out['size_label'] = self::size_name( $key, $value );
 					break;
 				}
 			}
@@ -472,6 +513,30 @@ class Ship_Lines {
 		}
 
 		return $out;
+	}
+
+	/**
+	 * A size as the shop names it: a size attribute of the shop's own
+	 * (pa_…) keeps its slug on the line ("2-3-5") — its term's name is the
+	 * size ("2-3.5\""); a size typed on the product is its own name.
+	 *
+	 * @param string $key   The attribute (without "attribute_").
+	 * @param string $value What the line or the variation keeps.
+	 * @return string
+	 */
+	public static function size_name( $key, $value ) {
+		$value = trim( (string) $value );
+		if ( 0 === strpos( (string) $key, 'pa_' ) && function_exists( 'get_term_by' ) ) {
+			try {
+				$term = get_term_by( 'slug', $value, (string) $key );
+				if ( is_object( $term ) && isset( $term->name ) && '' !== trim( (string) $term->name ) ) {
+					return Sizes::plain( (string) $term->name );
+				}
+			} catch ( \Throwable $e ) {
+				return $value;
+			}
+		}
+		return $value;
 	}
 
 	/**

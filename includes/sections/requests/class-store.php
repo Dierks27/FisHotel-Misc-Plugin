@@ -589,6 +589,46 @@ class Store {
 	}
 
 	/**
+	 * The requests that offered (or filled) any of some tank groups — what
+	 * the Clean Room reads ONCE per pass over the open orders to know which
+	 * group each customer was offered (rather than one search per order).
+	 *
+	 * @param int[] $stay_ids Tank group ids.
+	 * @return array[]|null product_id, stay_id, user_id, email — null when it could not be read whole.
+	 */
+	public function offered_to_stays( array $stay_ids ) {
+		$stay_ids = array_values( array_unique( array_filter( array_map( 'intval', $stay_ids ) ) ) );
+		if ( ! $stay_ids || ! self::ready() ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		$sql = 'SELECT product_id, stay_id, user_id, email FROM ' . self::table( 'requests' ) . " WHERE state IN ('offered','filled') AND stay_id IN (" . implode( ',', $stay_ids ) . ') LIMIT ' . (int) self::FIND_LIMIT;
+		try {
+			$rows = $wpdb->get_results( $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery -- integers only.
+		} catch ( \Throwable $e ) {
+			return null;
+		}
+		// A failed query answers an empty list in WordPress; a full page may have left some out: either way
+		// the caller asks each customer on their own instead (null), never reads "nobody was offered".
+		if ( ! is_array( $rows ) || ( isset( $wpdb->last_error ) && '' !== (string) $wpdb->last_error ) || count( $rows ) >= (int) self::FIND_LIMIT ) {
+			return null;
+		}
+
+		$out = array();
+		foreach ( $rows as $row ) {
+			$out[] = array(
+				'product_id' => (int) ( $row['product_id'] ?? 0 ),
+				'stay_id'    => (int) ( $row['stay_id'] ?? 0 ),
+				'user_id'    => (int) ( $row['user_id'] ?? 0 ),
+				'email'      => strtolower( trim( (string) ( $row['email'] ?? '' ) ) ),
+			);
+		}
+		return $out;
+	}
+
+	/**
 	 * How many requests match some filters.
 	 *
 	 * @param array $filters As find().

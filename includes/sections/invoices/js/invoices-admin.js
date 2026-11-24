@@ -917,6 +917,9 @@
 			}
 			if (line.source === 'tank' && line.alive !== null && line.alive !== undefined && Number(line.alive) < qty) {
 				out.push(sprintf(t('aliveLow'), line.alive, qty));
+			} else if (line.source === 'tank' && line.free !== null && line.free !== undefined && Number(line.free) < qty) {
+				// Alive, but some are reserved for customers' orders already.
+				out.push(sprintf(t('freeLow'), line.free, qty));
 			}
 			return out;
 		}
@@ -1172,6 +1175,7 @@
 				managed: !!item.managed,
 				stock: item.stock,
 				alive: item.alive === null || item.alive === undefined ? null : item.alive,
+				free: item.free === null || item.free === undefined ? null : item.free,
 				detail: item.detail || ''
 			}, price === '' && (item.kind || 'fish') !== 'note' ? '.fh-inv-line-price' : '.fh-inv-line-qty');
 			$('#fh-inv-search').val('');

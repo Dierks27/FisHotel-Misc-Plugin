@@ -411,3 +411,65 @@ a.fh-cr-chip--todo {
 span.fh-cr-todo-tank.is-done {
 	color: var(--fh-success, #46b450);
 }
+
+/* Pull today (Reserved → Pull today → Shipped): which tank each fish of
+   today's boxes comes out of. A list to work from — nothing to tick. */
+.fh-cr-pull {
+	border-left: 4px solid var(--fh-accent, #00a0d2);
+}
+
+.fh-cr-pull__building {
+	margin: 10px 0 4px;
+	font-size: 13px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-pull__tank {
+	margin: 0 0 8px;
+}
+
+.fh-cr-pull__rows {
+	margin: 4px 0 0 12px;
+	padding: 0;
+	list-style: none;
+}
+
+.fh-cr-pull__row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 4px 12px;
+	margin: 0 0 4px;
+	color: var(--fh-text-primary, #e0e0e0);
+}
+
+.fh-cr-pull__row.is-done {
+	opacity: 0.55;
+}
+
+.fh-cr-pull__row a {
+	color: var(--fh-accent, #00a0d2);
+}
+
+.fh-cr-pull__other summary,
+.fh-cr-lost summary {
+	cursor: pointer;
+	font-size: 12px;
+	color: var(--fh-text-secondary, #a0a0a0);
+}
+
+.fh-cr-lost summary {
+	font-size: 13px;
+	margin: 8px 0 4px;
+}
+
+.fh-cr-pull__form {
+	display: inline-flex;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin: 4px 0;
+}
+
+.fh-cr-pull__form select {
+	max-width: 100%;
+}

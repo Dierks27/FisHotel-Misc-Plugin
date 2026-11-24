@@ -138,6 +138,18 @@ function delete_option( $key ) {
 }
 
 /**
+ * Adds only when the option is not there yet (WordPress's own rule: what
+ * makes it a lock).
+ */
+function add_option( $key, $value = '', $deprecated = '', $autoload = 'yes' ) {
+	if ( array_key_exists( $key, $GLOBALS['fh_options'] ) ) {
+		return false;
+	}
+	$GLOBALS['fh_options'][ $key ] = $value;
+	return true;
+}
+
+/**
  * Transients.
  */
 $GLOBALS['fh_transients'] = array();
@@ -313,8 +325,11 @@ require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-protocol.p
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-temp-tanks.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-todo.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-sold-line.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-reserve.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-holds.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-feeding.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-ship-lines.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-reserve-shop.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-parser.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-qr.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-costing.php';
@@ -347,6 +362,7 @@ require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-admin-impo
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-admin-order-import.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-admin-temp.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-admin-no-product.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-admin-reserve.php';
 require_once __DIR__ . '/fake-store.php';
 
 /**

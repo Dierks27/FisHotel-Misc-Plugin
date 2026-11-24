@@ -1666,6 +1666,7 @@
 			case 'existing': renderExisting(); break;
 			case 'pick': renderPick(); break;
 			case 'occupant': renderOccupant(); break;
+			case 'hold': renderHold(); break;
 			case 'identify': renderIdentify(); break;
 			case 'qty': renderQty(); break;
 			case 'move': renderMove(); break;
@@ -1722,7 +1723,7 @@
 		var sale = saleSummary(o, i18n);
 		var dates = datesText(o, i18n);
 		var meta = [
-			el('span', { class: 'fh-fd-badge fh-fd-badge--' + (o.saleReady ? 'ready' : o.status), text: o.stateLabel }),
+			el('span', { class: 'fh-fd-badge fh-fd-badge--' + (o.badge || (o.saleReady ? 'ready' : o.status)), text: o.stateLabel }),
 			sale.warning ? el('span', { class: 'fh-fd-warn', text: sale.warning }) : null,
 			o.needsId ? el('span', { class: 'fh-fd-warn', text: t('needsId', 'needs identifying') }) : null,
 			dates.treatment ? el('span', { class: 'fh-fd-warn', text: dates.treatment }) : null,
@@ -1730,7 +1731,9 @@
 			(o.status === 'in_qt' || o.checkinUnknown) && dates.arrived ? el('span', { text: dates.arrived }) : null,
 			o.status === 'cleared' && o.clearedUnknown ? el('span', { text: dates.cleared }) : null,
 			!o.saleReady ? el('span', { text: sale.short }) : null,
-			o.qtyArrived !== o.qtyLive ? el('span', { text: o.qtyLive + '/' + o.qtyArrived }) : null
+			o.qtyArrived !== o.qtyLive ? el('span', { text: o.qtyLive + '/' + o.qtyArrived }) : null,
+			// Ready → Reserved → Shipped: "5 ready · 2 reserved (#1234)" — reserved fish stay in the tank until they ship.
+			o.reservedText ? el('span', { class: 'fh-fd-reserved', text: o.reservedText }) : null
 		];
 		var node = el(tag, attrs, [
 			el('span', { class: 'fh-fd-occ__qty' }, [String(o.qtyLive), el('small', { text: t('live', 'live') })]),
@@ -2336,15 +2339,26 @@
 		var sale = saleSummary(o, i18n);
 		var dates = datesText(o, i18n);
 		screen.appendChild(el('div', { class: 'fh-fd-facts' }, [
-			el('span', { class: 'fh-fd-badge fh-fd-badge--' + (o.saleReady ? 'ready' : o.status), text: o.stateLabel }),
+			el('span', { class: 'fh-fd-badge fh-fd-badge--' + (o.badge || (o.saleReady ? 'ready' : o.status)), text: o.stateLabel }),
 			sale.warning ? el('span', { class: 'fh-fd-warn', text: sale.warning }) : null,
 			dates.treatment ? el('span', { class: 'fh-fd-warn', text: dates.treatment }) : null,
 			dates.day ? el('span', { text: dates.day }) : null,
 			dates.arrived ? el('span', { text: dates.arrived }) : null,
 			dates.cleared ? el('span', { text: dates.cleared }) : null,
 			o.existing ? el('span', { text: t('alreadyHere', 'added as already here') }) : null,
-			el('span', { text: sale.text })
+			el('span', { text: sale.text }),
+			o.reservedText ? el('span', { class: 'fh-fd-reserved', text: o.reservedText }) : null
 		]));
+		if (settings().reserveOn && (o.holds || []).length) {
+			// Held by hand: who for, how long (an old one stands out), the note — each with Release.
+			screen.appendChild(el('h3', { text: t('heldByHand', 'Held by hand') }));
+			o.holds.forEach(function (h) {
+				screen.appendChild(el('div', { class: 'fh-fd-hold' + (h.old ? ' is-old' : '') }, [
+					el('span', { text: h.text + (h.note ? ' · ' + h.note : '') }),
+					button(t('release', 'Release'), 'fh-fd-btn--quiet', function () { act({ act: 'release', tank: tk.number, hold_id: h.id, via: 'qr' }); })
+				]));
+			});
+		}
 		screen.appendChild(el('div', { class: 'fh-fd-grid2' }, [
 			button(t('lostOne', '−1 lost'), 'fh-fd-btn--danger fh-fd-btn--big', function () { act({ act: 'loss', tank: tk.number, stay_id: o.stayId, qty: 1, via: 'qr' }); }, o.qtyLive < 1),
 			button(t('lost', 'Lost') + ' …', 'fh-fd-btn--danger', function () { go('qty', { act: 'loss', stay: o }); }, o.qtyLive < 1),
@@ -2353,10 +2367,87 @@
 			button(t('headCount', 'Full recount'), '', function () { go('qty', { act: 'count', stay: o }); }),
 			button(t('note', 'Note'), '', function () { go('note', { stay: o }); }),
 			button(t('dates', 'Dates'), '', function () { go('dates', { stay: o }); }),
-			button(o.needsId ? t('identify', 'Identify') : t('correctFish', 'Correct the fish'), o.needsId ? 'fh-fd-btn--primary' : '', function () { go('identify', { stay: o }); })
+			button(o.needsId ? t('identify', 'Identify') : t('correctFish', 'Correct the fish'), o.needsId ? 'fh-fd-btn--primary' : '', function () { go('identify', { stay: o }); }),
+			settings().reserveOn ? button(t('reserveDots', 'Reserve…'), '', function () { go('hold', { stay: o }); }, !(o.ready > 0)) : null
 		]));
 		app.appendChild(screen);
 		bar([button(t('back', 'Back'), 'fh-fd-btn--quiet', function () { go('tank'); })]);
+	}
+
+	/*
+	 * Reserve by hand: how many (never more than are ready), for whom — a
+	 * customer of the shop found by name or e-mail, or any name typed (a
+	 * forum member, a phone call) — and a short note. The fish stay in the
+	 * tank; they are not ready for anybody else until released, and the
+	 * customer's own order takes them by itself.
+	 */
+	var holdTimer = null;
+	function renderHold() {
+		var tk = tank();
+		var o = occupantById((state.pending || {}).stay ? state.pending.stay.stayId : 0) || (state.pending || {}).stay;
+		var f = state.form;
+		if (!o) {
+			go('tank');
+			return;
+		}
+		if (typeof f.qty === 'undefined') {
+			f.qty = 1;
+			f.who = '';
+			f.userId = 0;
+			f.note = '';
+		}
+		app.appendChild(header(t('reserveTitle', 'Reserve by hand'), [o.species + (sizeText(o, i18n) ? ' · ' + sizeText(o, i18n) : '') + ' · Tank ' + tk.number]));
+		var screen = el('div', { class: 'fh-fd-screen' });
+		screen.appendChild(stepperField(fmt(t('holdHowMany', 'How many (%d ready)'), o.ready), f, 'qty', 1, Math.max(1, o.ready)));
+		var found = el('div', { class: 'fh-fd-chips' });
+		var who = el('input', { id: 'fh-fd-hold-who', class: 'fh-fd-input', type: 'text', autocomplete: 'off', maxlength: '60', value: f.who || '' });
+		// Said under the name, always: tied to a customer's account (their order takes the fish) or a name only.
+		var tie = el('p', { class: 'fh-fd-muted fh-fd-hold-tie' });
+		function showTie() {
+			tie.textContent = f.userId ? fmt(t('holdAccount', 'Tied to the customer account of %s — their own paid order takes these fish.'), f.who) : (String(f.who || '').trim() ? t('holdTyped', 'A name typed, no account: no order takes these by itself — you will be asked when one comes in.') : '');
+		}
+		showTie();
+		who.addEventListener('input', function () {
+			f.who = who.value;
+			f.userId = 0; // Typed: a name only, until a customer is picked (said under the field).
+			showTie();
+			root.clearTimeout(holdTimer);
+			var term = String(who.value || '').trim();
+			if (term.length < 2) {
+				while (found.firstChild) { found.removeChild(found.firstChild); }
+				return;
+			}
+			holdTimer = root.setTimeout(function () {
+				post('fishotel_cleanroom_suggest', { term: term, kind: 'customers' }).then(function (data) {
+					while (found.firstChild) { found.removeChild(found.firstChild); }
+					(data && data.items ? data.items : []).forEach(function (item) {
+						found.appendChild(el('button', { type: 'button', class: 'fh-fd-chip', text: item.label || item.who, on: { click: function () {
+							f.who = item.who;
+							f.userId = item.user_id || 0;
+							who.value = item.who;
+							showTie();
+							while (found.firstChild) { found.removeChild(found.firstChild); }
+						} } }));
+					});
+				}).catch(function () { /* No search: a name typed still works. */ });
+			}, 250);
+		});
+		screen.appendChild(el('div', { class: 'fh-fd-field' }, [el('label', { class: 'fh-fd-label', for: 'fh-fd-hold-who', text: t('reserveWho', 'For whom? A customer of the shop (name or e-mail) — or type any name') }), who, found, tie]));
+		var note = el('input', { id: 'fh-fd-hold-note', class: 'fh-fd-input', type: 'text', maxlength: '120', value: f.note || '' });
+		note.addEventListener('input', function () { f.note = note.value; });
+		screen.appendChild(el('div', { class: 'fh-fd-field' }, [el('label', { class: 'fh-fd-label', for: 'fh-fd-hold-note', text: t('reserveNote', 'Note (optional), e.g. paying Friday') }), note]));
+		screen.appendChild(el('p', { class: 'fh-fd-muted', text: t('reserveHint', 'Held fish stay in the tank and are not ready for anybody else until you release them. A customer\'s own order takes them by itself.') }));
+		app.appendChild(screen);
+		bar([
+			button(t('cancel', 'Cancel'), 'fh-fd-btn--quiet', function () { go('occupant', { stay: o }); }),
+			button(t('reserveDots', 'Reserve…').replace('…', ''), 'fh-fd-btn--primary', function () {
+				if (!String(f.who || '').trim()) {
+					say(t('reserveWho', 'For whom?'), null, true);
+					return;
+				}
+				act({ act: 'hold', tank: tk.number, stay_id: o.stayId, qty: f.qty, who: f.who, user_id: f.userId || 0, note: f.note || '', via: 'qr' });
+			})
+		]);
 	}
 
 	/*
@@ -2424,6 +2515,23 @@
 			});
 			screen.appendChild(el('div', { class: 'fh-fd-field' }, [el('label', { class: 'fh-fd-label', text: t('reason', 'Reason (optional)') }), chips]));
 		}
+		if (p.act === 'sold' && o && o.soldNote) {
+			// Some of these are reserved for an order: they come off by themselves when it ships (no double count).
+			screen.appendChild(el('p', { class: 'fh-fd-note fh-fd-reserved', text: o.soldNote }));
+		}
+		if (p.act === 'sold' && o && settings().reserveOn && (o.holds || []).length) {
+			// Held by hand: tick the hold these fish were for, and it goes down by them in the same step.
+			f.holdIds = f.holdIds || [];
+			o.holds.forEach(function (h) {
+				var box = el('input', { type: 'checkbox', id: 'fh-fd-sold-hold-' + h.id });
+				box.checked = f.holdIds.indexOf(h.id) !== -1;
+				box.addEventListener('change', function () {
+					f.holdIds = f.holdIds.filter(function (x) { return x !== h.id; });
+					if (box.checked) { f.holdIds.push(h.id); }
+				});
+				screen.appendChild(el('label', { class: 'fh-fd-check fh-fd-sold-hold', for: 'fh-fd-sold-hold-' + h.id }, [box, ' ' + fmt(t('holdShipped', 'These were held for %s (the hold goes down by them)'), h.who) + ' · ' + h.text]));
+			});
+		}
 		app.appendChild(screen);
 		var cls = p.act === 'loss' ? 'fh-fd-btn--danger' : (p.act === 'sold' ? 'fh-fd-btn--ok' : 'fh-fd-btn--primary');
 		bar([
@@ -2432,7 +2540,7 @@
 				if (isCount) {
 					act({ act: 'count', tank: tk.number, stay_id: o.stayId, count: f.qty, via: 'qr' });
 				} else {
-					act({ act: p.act, tank: tk.number, stay_id: o.stayId, qty: f.qty, reason: f.reason || '', via: 'qr' });
+					act({ act: p.act, tank: tk.number, stay_id: o.stayId, qty: f.qty, reason: f.reason || '', hold_ids: p.act === 'sold' ? (f.holdIds || []) : [], via: 'qr' });
 				}
 			})
 		]);
@@ -2470,6 +2578,12 @@
 		if (moveClears({ clean: true }, moving)) {
 			screen.appendChild(el('p', { class: 'fh-fd-muted fh-fd-move-hint', text: t('moveClearsHint', 'Still in quarantine: a move into the Clean Room — or into a clean temporary tank — clears the group today.') }));
 		}
+		// Fish reserved for an order: the whole group takes them along; a part moved off leaves them here.
+		moving.forEach(function (m) {
+			if (m && m.reserved > 0) {
+				screen.appendChild(el('p', { class: 'fh-fd-muted fh-fd-reserved', text: m.species + ': ' + m.reservedText + ' — ' + fmt(t('moveReserved', '%d not reserved: they move without touching an order or a hold; the reserved fish stay with this group if only part of it moves.'), Math.max(0, m.qtyLive - m.reserved)) }));
+			}
+		});
 		app.appendChild(screen);
 		renderGrid(app, function (dest) {
 			var fields = { act: 'move', tank: tk.number, to_tank: dest.number, reason: f.reason || '', via: 'qr' };
@@ -4009,6 +4123,9 @@
 				// A fish ships today and the site does not know its tank: no clean system is fed.
 				app.appendChild(el('p', { class: 'fh-fd-fast fh-fd-fast--all', text: [list.fast.text, list.fast.hint].filter(Boolean).join(' ') }));
 			}
+			if (list.pull) {
+				app.appendChild(pullBlock(list.pull, list.lost_text || ''));
+			}
 			(list.blocks || []).forEach(function (block) {
 				app.appendChild(todoBlock(block, tick));
 			});
@@ -4031,6 +4148,60 @@
 				}).catch(sayFailed).then(function () { busy(false); });
 			} } })
 		]));
+	}
+
+	/*
+	 * Pull today: which tank each fish of today's boxes comes out of —
+	 * building, tank, fish, order. A list to work from: nothing to tick
+	 * here (a fish comes off its tank by itself once its order ships,
+	 * and then reads Shipped).
+	 */
+	function pullBlock(pull, lostText) {
+		var node = el('div', { class: 'fh-fd-todo-block fh-fd-pull' }, [
+			el('div', { class: 'fh-fd-todo-block__head' }, [
+				el('span', { class: 'fh-fd-todo-block__title', text: t('pullToday', 'Pull today') }),
+				el('small', { text: pull.count_text || '' })
+			])
+		]);
+		(pull.buildings || []).forEach(function (building) {
+			if (building.label) {
+				node.appendChild(el('p', { class: 'fh-fd-pull__building', text: building.label }));
+			}
+			(building.tanks || []).forEach(function (tk) {
+				node.appendChild(el('div', { class: 'fh-fd-pull__tank' }, [
+					el('strong', { text: fmt(t('tankCap', 'Tank %d'), tk.number) }),
+					el('div', {}, (tk.rows || []).map(function (row) {
+						return el('div', { class: 'fh-fd-pull__row' + (row.shipped ? ' is-done' : '') }, [
+							el('span', { text: (row.shipped ? '✓ ' : '') + row.text }),
+							row.shipped ? el('small', { text: t('shippedWord', 'Shipped') }) : null
+						]);
+					}))
+				]));
+			});
+		});
+		if ((pull.unknown || []).length) {
+			// One row per fish (a wet phone reads a list, not a paragraph); a fish already gone is ticked.
+			node.appendChild(el('div', { class: 'fh-fd-pull__tank' }, [
+				el('strong', { text: pull.unknown_head || t('tankNotKnown', 'Tank not known') }),
+				pull.hint ? el('p', { class: 'fh-fd-muted', text: pull.hint }) : null,
+				el('div', {}, pull.unknown.map(function (row) {
+					return el('div', { class: 'fh-fd-pull__row' + (row.shipped ? ' is-done' : ' fh-fd-warn') }, [
+						el('span', { text: (row.shipped ? '✓ ' : '') + (row.text || '') }),
+						row.shipped ? el('small', { text: t('shippedWord', 'Shipped') }) : null
+					]);
+				}))
+			]));
+		}
+		if (pull.loose_text) {
+			node.appendChild(el('p', { class: 'fh-fd-muted', text: pull.loose_text }));
+		}
+		if (!(pull.buildings || []).length && !(pull.unknown || []).length && !pull.loose_text) {
+			node.appendChild(el('p', { class: 'fh-fd-muted', text: t('pullNothing', 'No fish ship today.') }));
+		}
+		if (lostText) {
+			node.appendChild(el('p', { class: 'fh-fd-warn' }, [lostText + ' — ', el('a', { href: cfg.boardUrl ? cfg.boardUrl + (cfg.boardUrl.indexOf('?') >= 0 ? '&' : '?') + 'tab=todo' : '#', text: t('fixOnTodo', 'on the To do tab') })]));
+		}
+		return node;
 	}
 
 	function todoBlock(block, tick) {

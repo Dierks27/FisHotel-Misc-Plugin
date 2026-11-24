@@ -14,8 +14,10 @@
 defined( 'ABSPATH' ) || exit;
 
 use FisHotel\Misc\Sections\Clean_Room\Admin;
+use FisHotel\Misc\Sections\Clean_Room\Admin_Reserve;
 use FisHotel\Misc\Sections\Clean_Room\Clean_Room;
 use FisHotel\Misc\Sections\Clean_Room\Replay;
+use FisHotel\Misc\Sections\Clean_Room\Reserve;
 
 $tab = 'events';
 ?>
@@ -56,7 +58,7 @@ $tab = 'events';
 							<tr data-stay="<?php echo esc_attr( $fh_event['stay_id'] ); ?>" data-event="<?php echo esc_attr( $fh_event['id'] ); ?>">
 								<td class="fh-cr-when"><?php echo esc_html( Admin::site_time( $fh_event['event_at'] ) ); ?></td>
 								<td><?php echo esc_html( $fh_event['species'] ); ?> <span class="fh-cr-sub">#<?php echo esc_html( $fh_event['stay_id'] ); ?></span></td>
-								<td><span class="fh-cr-type fh-cr-type--<?php echo esc_attr( $fh_event['type'] ); ?>"><?php echo esc_html( $fh_event['type'] ); ?></span> <?php echo esc_html( Admin::event_text( $fh_event ) ); ?></td>
+								<td><?php $fh_chip = Reserve::type_label( $fh_event ); // "Shipped" / "Back in the tank" for a fish its order took out. ?><span class="fh-cr-type fh-cr-type--<?php echo esc_attr( $fh_event['type'] ); ?>"><?php echo esc_html( '' !== $fh_chip ? $fh_chip : $fh_event['type'] ); ?></span> <?php echo esc_html( '' !== $fh_chip ? Reserve::event_detail( $fh_event ) : Admin::event_text( $fh_event ) ); ?><?php $fh_shipped = Reserve::parse_note( $fh_event['note'] ); ?><?php if ( 'sold' === $fh_event['type'] && $fh_shipped && class_exists( Admin_Reserve::class ) ) : ?> <a href="<?php echo esc_url( Admin_Reserve::order_url( $fh_shipped['order_id'] ) ); ?>"><?php esc_html_e( 'order', 'fishotel-misc-plugin' ); ?> &rarr;</a><?php endif; ?></td>
 								<td><?php echo esc_html( '' !== $fh_event['actor_name'] ? $fh_event['actor_name'] : '—' ); ?> <span class="fh-cr-sub"><?php echo esc_html( $fh_event['source'] ); ?></span></td>
 								<td class="fh-cr-row__actions">
 									<?php if ( $fh_can_undo ) : ?>
