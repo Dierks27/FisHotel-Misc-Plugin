@@ -28,6 +28,9 @@
  *                         data `fh_sticker` = free|extra), zeroes the free
  *                         line's price, keeps stickers out of the shipping
  *                         package so table rates never change.
+ *   - class-letter.php    EA-only orders: the sticker is mailed by letter
+ *                         (the $1.00 fee, the customer's message, the
+ *                         order flag, badge, emails and Today line).
  *   - class-reorder.php   the stock table's rows and the reorder email.
  *   - class-today-line.php  "Stickers to reorder" on the Today page.
  *   - class-frontend.php  renders the picker card and the tiny JS bridge.
@@ -148,6 +151,9 @@ class Sticker_Giveaway {
 		$cart = new Cart();
 		$cart->init();
 
+		// EA-only orders: the sticker is mailed by letter (fee, message, flag).
+		Letter::register();
+
 		// The reorder look, wherever WooCommerce changes a product's stock.
 		Reorder::register();
 
@@ -178,6 +184,7 @@ class Sticker_Giveaway {
 		require_once self::path() . 'class-designs.php';
 		require_once self::path() . 'class-reorder.php';
 		require_once self::path() . 'class-cart.php';
+		require_once self::path() . 'class-letter.php';
 	}
 
 	/**
