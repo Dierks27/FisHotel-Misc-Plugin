@@ -42,8 +42,8 @@ Three bands. Bands 1 and 2 open; band 3 closed.
      when that section is on; the Shipping tab then leaves them out. (If a
      person dragged the product data box above Fish essentials, the Shipping
      tab draws them and Fish essentials does not — never twice on the form.)
-   - **Still missing** — read-only chips ("Photo", "Price: Large", "Table 5
-     of 8"), each a link to the spot, from the Product checks section when it
+   - **Still missing** — read-only chips ("Photo", "Price: Large", "Table: 3
+     of 8 empty"), each a link to the spot, from the Product checks section when it
      is on (filter `fishotel_edit_screens_missing`, `( array $chips, int
      $product_id )`, each chip `label` and optional `href`). Absent when
      nothing is missing.

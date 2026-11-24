@@ -19,7 +19,8 @@
  * the rule version changes, when a placeholder library, WooCommerce's
  * placeholder image or Packing's settings change, when the live
  * categories are saved, and on "Recount now". Its cursor is one option
- * (`fishotel_product_checks_sweep`).
+ * (`fishotel_product_checks_sweep`), with `ever` once any sweep has
+ * finished (until then the products list says it is still counting).
  *
  * @package FisHotel\Misc\Sections\Product_Checks
  */
@@ -223,6 +224,7 @@ class Checker {
 	 * Start a sweep from the first product (the next run in a minute).
 	 */
 	public function start() {
+		$before = self::state();
 		update_option(
 			self::SWEEP,
 			array(
@@ -230,6 +232,8 @@ class Checker {
 				'started' => time(),
 				'done'    => 0,
 				'checked' => 0,
+				// Whether a sweep ever finished: until one has, the list says it is still counting.
+				'ever'    => ! empty( $before['done'] ) || ! empty( $before['ever'] ) ? 1 : 0,
 			),
 			false
 		);

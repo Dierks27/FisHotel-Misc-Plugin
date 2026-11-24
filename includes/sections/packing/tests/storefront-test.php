@@ -211,7 +211,7 @@ $forbidden = array(
 	'registered meta (which could reach REST)'  => '/register_meta\s*\(|register_post_meta\s*\(|show_in_rest/',
 	'a shortcode or a block'                    => '/add_shortcode\s*\(|register_block_type/',
 	'order-item meta written by this section'   => '/wc_add_order_item_meta|wc_update_order_item_meta|woocommerce_add_order_item_meta|->add_meta_data\s*\(/',
-	'post meta functions (orders and products go through their objects)' => '/\b(get|update|add|delete)_post_meta\s*\(/',
+	'post meta written, or read for an order (orders and products go through their objects)' => '/\b(update|add|delete)_post_meta\s*\(/',
 	'an e-mail'                                 => '/wp_mail\s*\(|WC\(\)->mailer|->send\s*\(/',
 	'a stock change'                            => '/wc_update_product_stock|set_stock_quantity|wc_reduce_stock|wc_increase_stock|set_stock_status/',
 	'an order status change or an order note'   => '/->update_status\s*\(|->set_status\s*\(|add_order_note|wc_create_order_note/',
@@ -225,6 +225,16 @@ foreach ( $forbidden as $label => $pattern ) {
 	$hits = fh_grep( $code, $pattern );
 	check( 'no ' . $label, array() === $hits, implode( ', ', $hits ) );
 }
+// One read only: the products list's Name cell reads the 3rd-bag tick from the meta cache the list
+// primed (a product object per row was one extra query per row) — a product, never an order.
+$reads = array();
+foreach ( $code as $name => $text ) {
+	$n = preg_match_all( '/\bget_post_meta\s*\(/', $text );
+	if ( $n ) {
+		$reads[ $name ] = $n;
+	}
+}
+check( 'get_post_meta only once: the products list\'s Name cell (a product row, from the cache the list primed)', array( 'class-product.php' => 1 ) === $reads && 1 === preg_match( '/function list_column_data\(.*?get_post_meta\( \(int\) \$post_id, Packing::META_LAYERS, true \)/s', $code['class-product.php'] ), var_export( $reads, true ) );
 
 check( '$wpdb is touched by the Store and by no other file', array( 'class-store.php' ) === fh_grep( $code, '/\$wpdb/' ), implode( ', ', fh_grep( $code, '/\$wpdb/' ) ) );
 check( 'and the Store only reads: no INSERT, UPDATE, DELETE or REPLACE, no ->query(), ->insert(), ->update(), ->delete(), ->replace()', 0 === preg_match( '/\b(INSERT|UPDATE|DELETE|REPLACE|TRUNCATE)\b|->(query|insert|update|delete|replace)\s*\(/', $code['class-store.php'] ) && 1 === preg_match( '/\bSELECT\b/', $code['class-store.php'] ) );

@@ -10,6 +10,10 @@
  *     are ticked: the boxes not for that kind are not shown (still posted).
  *   - The scientific name: "Use this one", and the theme's own field of
  *     the facts box kept equal and out of sight (the save writes both).
+ *     The theme's "Copy them into these fields" hands the name on (the
+ *     event `fishotel-copy-facts`): it fills the field when it is empty;
+ *     when the field holds another name, that name is kept and the copied
+ *     one is offered with "Use this one" — nothing typed is replaced.
  *   - The Shipping class first in its tab.
  *
  * The pure helpers are exported for node (tests/edit-screens.test.js).
@@ -99,7 +103,29 @@
 		});
 	}
 
-	var api = { kindFrom: kindFrom, withKind: withKind, topBoxes: topBoxes, ids: ids };
+	/**
+	 * What to do with a scientific name the theme's copy hands on.
+	 *
+	 * @param {*} current The field's value now.
+	 * @param {*} copied  The name read from the description.
+	 * @return {string} fill (the field is empty) | same (it already says so) | offer (it holds another name) | none (nothing handed on).
+	 */
+	function copiedName(current, copied) {
+		var norm = function (v) {
+			return String(v === null || typeof v === 'undefined' ? '' : v).replace(/\s+/g, ' ').trim();
+		};
+		var now = norm(current);
+		var add = norm(copied);
+		if (add === '') {
+			return 'none';
+		}
+		if (now === '') {
+			return 'fill';
+		}
+		return now.toLowerCase() === add.toLowerCase() ? 'same' : 'offer';
+	}
+
+	var api = { kindFrom: kindFrom, withKind: withKind, topBoxes: topBoxes, ids: ids, copiedName: copiedName };
 	root.fhEditScreensHelpers = api;
 	if (typeof module !== 'undefined' && module.exports) {
 		module.exports = api;
@@ -154,6 +180,33 @@
 		$(root.document).on('click', '.fh-es-use', function (e) {
 			e.preventDefault();
 			$sci.val($(this).attr('data-value')).trigger('change').trigger('focus');
+		});
+		// The theme's "Copy them into these fields": the name it hands on.
+		$(root.document).on('fishotel-copy-facts', function (e, values) {
+			if (!$sci.length || !values || typeof values !== 'object' || !Object.prototype.hasOwnProperty.call(values, 'scientific_name')) {
+				return;
+			}
+			var copied = String(values.scientific_name);
+			var what = copiedName($sci.val(), copied);
+			if (what === 'none') {
+				return;
+			}
+			if (what === 'fill') {
+				$sci.val(copied.trim()).trigger('change');
+			} else if (what === 'offer') {
+				var $box = $sci.closest('.fh-es-sci');
+				$box.find('.fh-es-copied').remove();
+				var $line = $('<p class="fh-es-copied"></p>');
+				$line.append($('<span></span>').text('The description says: '));
+				$line.append($('<em></em>').text(copied.trim()));
+				$line.append(' ');
+				$line.append($('<button type="button" class="button-link fh-es-use"></button>').attr('data-value', copied.trim()).text('Use this one'));
+				$box.append($line);
+			}
+			// Tell the theme's box this field took the name (filled, already there, or offered).
+			if (e.taken && typeof e.taken === 'object') {
+				e.taken.scientific_name = true;
+			}
 		});
 
 		/* ---- The Shipping class first in its tab --------------------- */

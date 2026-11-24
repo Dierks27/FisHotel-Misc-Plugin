@@ -229,7 +229,7 @@ $fh_next  = count( $fh_bags ) + $fh_spare;
 							<td>
 								<a href="<?php echo esc_url( admin_url( 'post.php?post=' . (int) $fh_row['id'] . '&action=edit' ) ); ?>"><?php echo esc_html( (string) $fh_row['name'] ); ?></a>
 								<?php if ( 'publish' !== $fh_row['status'] ) : ?>
-									<span class="fh-pack-muted">(<?php echo esc_html( (string) $fh_row['status'] ); ?>)</span>
+									<span class="fh-pack-muted">(<?php echo esc_html( 'fishotel_archived' === $fh_row['status'] ? __( 'archived', 'fishotel-misc-plugin' ) : (string) $fh_row['status'] ); ?>)</span>
 								<?php endif; ?>
 							</td>
 							<td><?php echo esc_html( (string) $fh_row['word'] ); ?></td>

@@ -18,7 +18,7 @@ splitting apart the info so it looks nice in a table".
   *Live fish with no gallery photo*, *Scientific name missing or different*,
   *Filed only under a sub-category* and *3rd bag ticked*.
 - A **To fix** column after Name: small chips — "Photo", "Stand-in photo",
-  "Table 5/8", "Old style", "Bag: Small", "Price: Large", "Scientific
+  "Table: 3 of 8 empty", "Old style", "Bag: Small", "Price: Large", "Scientific
   name", "Gallery", "Sub-category only" —, a ✓ when there is nothing to
   fix, "×3" when the 3rd bag is ticked. Click its heading to sort by how
   many problems.

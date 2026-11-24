@@ -28,7 +28,7 @@ class Settings {
 	 *
 	 * @var string
 	 */
-	const OPTION = 'fishotel_product_checks';
+	const OPTION = \FisHotel\Misc\Live_Categories::OPTION;
 
 	/**
 	 * The most categories kept.
@@ -38,22 +38,13 @@ class Settings {
 	const MAX = 100;
 
 	/**
-	 * The default: the Batch plugin's fish categories.
+	 * The default: the Batch plugin's fish categories (the shared answer,
+	 * \FisHotel\Misc\Live_Categories — Edit screens reads the same).
 	 *
 	 * @return string[]
 	 */
 	public static function default_cats() {
-		$cats = array( 'quarantined-fish', 'inverts' );
-		if ( class_exists( 'FisHotel_Ship_Day' ) && is_callable( array( 'FisHotel_Ship_Day', 'fish_categories' ) ) ) {
-			try {
-				$cats = (array) \FisHotel_Ship_Day::fish_categories();
-			} catch ( \Throwable $e ) {
-				$cats = array( 'quarantined-fish', 'inverts' );
-			}
-		} elseif ( function_exists( 'apply_filters' ) ) {
-			$cats = (array) apply_filters( 'fishotel_ship_day_fish_categories', $cats );
-		}
-		return self::slugs_in( $cats );
+		return \FisHotel\Misc\Live_Categories::fish();
 	}
 
 	/**
@@ -64,17 +55,7 @@ class Settings {
 	 * @return string[]
 	 */
 	public static function slugs_in( $raw ) {
-		$out = array();
-		foreach ( is_array( $raw ) ? $raw : array() as $slug ) {
-			$slug = is_scalar( $slug ) && ! is_bool( $slug ) ? strtolower( trim( (string) $slug ) ) : '';
-			if ( '' !== $slug && 1 === preg_match( '/^[a-z0-9_%\-]{1,200}$/', $slug ) && ! in_array( $slug, $out, true ) ) {
-				$out[] = $slug;
-			}
-			if ( count( $out ) >= self::MAX ) {
-				break;
-			}
-		}
-		return $out;
+		return \FisHotel\Misc\Live_Categories::slugs( $raw );
 	}
 
 	/**
@@ -83,8 +64,7 @@ class Settings {
 	 * @return bool
 	 */
 	public static function saved() {
-		$stored = get_option( self::OPTION, null );
-		return is_array( $stored ) && isset( $stored['live_cats'] ) && is_array( $stored['live_cats'] );
+		return null !== \FisHotel\Misc\Live_Categories::saved();
 	}
 
 	/**
@@ -93,11 +73,7 @@ class Settings {
 	 * @return string[]
 	 */
 	public static function live_cats() {
-		$stored = get_option( self::OPTION, null );
-		if ( is_array( $stored ) && isset( $stored['live_cats'] ) && is_array( $stored['live_cats'] ) ) {
-			return self::slugs_in( $stored['live_cats'] );
-		}
-		return self::default_cats();
+		return \FisHotel\Misc\Live_Categories::live();
 	}
 
 	/**

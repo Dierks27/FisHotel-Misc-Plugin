@@ -67,9 +67,11 @@ check_same(
 		'screen_settings',
 		'woocommerce_process_product_meta',
 		'woocommerce_product_data_tabs',
+		'wp_insert_post_data',
 	),
 	$hooks
 );
+check( 'the short description is written with the post itself (wp_insert_post_data), so save_post — the Batch plugin\'s Master Fish sync — reads the new name', array( Essentials::class, 'insert_data' ) === $GLOBALS['fh_hooks']['wp_insert_post_data'][0]['callback'] && 2 === $GLOBALS['fh_hooks']['wp_insert_post_data'][0]['args'] );
 check( 'the switch runs at 50 on add_meta_boxes: after WooCommerce writes its own product layout (40), before a box is drawn', 50 === $GLOBALS['fh_hooks']['add_meta_boxes'][0]['priority'] );
 check( 'the name is saved after WooCommerce and the theme saved theirs (50)', 50 === $GLOBALS['fh_hooks']['woocommerce_process_product_meta'][0]['priority'] && 99 === $GLOBALS['fh_hooks']['woocommerce_product_data_tabs'][0]['priority'] && 99 === $GLOBALS['fh_hooks']['add_meta_boxes_product'][0]['priority'] );
 fh_reset_hooks();
@@ -103,7 +105,15 @@ check( 'a screen not switched yet: no notice', '' === (string) ob_get_clean() );
 $GLOBALS['fh_screen'] = (object) array( 'id' => 'woocommerce_page_wc-orders' );
 ob_start();
 $tidy->notice();
-check( 'the order screen\'s notice speaks of an order\'s life', false !== strpos( (string) ob_get_clean(), 'follow an order&#039;s life' ) );
+check( 'HPOS: the orders LIST shares the order screen\'s id — no notice there', '' === (string) ob_get_clean() );
+check( '— nor the FisHotel layout links in its Screen Options', 'x' === $tidy->screen_settings( 'x', (object) array( 'id' => 'woocommerce_page_wc-orders' ) ) );
+$_GET = array( 'page' => 'wc-orders', 'action' => 'edit', 'id' => '12' );
+ob_start();
+$tidy->notice();
+check( 'the order screen\'s notice (HPOS: action=edit) speaks of an order\'s life', false !== strpos( (string) ob_get_clean(), 'follow an order&#039;s life' ) );
+check( '— and its Screen Options has the links', false !== strpos( $tidy->screen_settings( '', (object) array( 'id' => 'woocommerce_page_wc-orders' ) ), 'Reset to the FisHotel layout' ) );
+$_GET = array();
+check( 'the edit view: the legacy screens always; HPOS only on edit and new', Tidy::is_edit_view( 'product', array() ) && Tidy::is_edit_view( 'shop_order', array() ) && Tidy::is_edit_view( 'woocommerce_page_wc-orders', array( 'action' => 'new' ) ) && ! Tidy::is_edit_view( 'woocommerce_page_wc-orders', array( 'status' => 'wc-processing' ) ) && ! Tidy::is_edit_view( 'woocommerce_page_wc-orders', array( 'action' => array( 'edit' ) ) ) && ! Tidy::is_edit_view( '', array() ) );
 
 $options = $tidy->screen_settings( '<p>theirs</p>', (object) array( 'id' => 'product' ) );
 check( 'Screen Options keeps its own and adds the two links', 0 === strpos( $options, '<p>theirs</p>' ) && false !== strpos( $options, '>Reset to the FisHotel layout</a>' ) && false !== strpos( $options, '>Put my old layout back</a>' ) && false !== strpos( $options, '<legend>FisHotel layout</legend>' ) );
@@ -175,9 +185,17 @@ check( '— not on another screen', 'wp-admin' === $screen->body_class( 'wp-admi
 $screen->assets();
 check( 'no assets on another screen', array() === $GLOBALS['fh_enqueued'] );
 $GLOBALS['fh_screen'] = (object) array( 'id' => 'product' );
+$GLOBALS['fh_term_reads'] = 0;
 $screen->assets();
+check( 'the categories of each kind: ONE read for every slug (not one per category)', 1 === $GLOBALS['fh_term_reads'] );
 $screen->assets();
 check( 'on the product screen: the stylesheet, the script, once — and the categories of each kind for it', array( 'style:fishotel-edit-screens', 'script:fishotel-edit-screens', 'data:fhEditScreens', 'data:fhEditScreens' ) === $GLOBALS['fh_enqueued'] && array( 'fish' => array( 15, 16 ), 'med' => array( 30 ), 'invoice' => array( 40 ) ) === $GLOBALS['fh_localized']['fhEditScreens']['kindTerms'] );
+$GLOBALS['fh_term_ids']['corals']   = 17;
+$GLOBALS['fh_terms'][10]            = array( 'corals' );
+$GLOBALS['fh_options']['fishotel_product_checks'] = array( 'live_cats' => array( 'corals' ) );
+check( 'a category ticked as live in Product checks (Corals, one day) is a live fish here too — and a fish category left unticked still is', 'fish' === Product_Screen::kind_of( 10 ) && 'fish' === Product_Screen::kind_of( 5 ) && array( 15, 16, 17 ) === Product_Screen::kind_terms()['fish'] );
+$GLOBALS['fh_options'] = array();
+check( '— nothing ticked there: corals is a dry good', 'dry' === Product_Screen::kind_of( 10 ) );
 
 echo "4. Fish essentials\n";
 $GLOBALS['fh_post_meta'][5]['_fh_scientific_name'] = 'Fishus inventus';
@@ -222,25 +240,74 @@ check( 'with Packing on, its two fields come through its contract, for this prod
 check( 'the same name in both places: no choice to make; nothing missing: no chips', false === strpos( $html, 'fh-es-use' ) && false === strpos( $html, 'Still missing' ) );
 
 $nonce = wp_create_nonce( 'fishotel_edit_screens_essentials' );
-$save  = static function ( array $post ) {
-	$_POST = $post;
+/*
+ * One Update of the edit form, as WordPress runs it: wp_insert_post_data
+ * (the post row, the short description in it), then save_post (where the
+ * Batch plugin's Master Fish sync reads the short description), then
+ * WooCommerce's process_product_meta (the facts table's meta).
+ */
+$update = static function ( array $post, $excerpt_posted = null ) {
+	$p     = $GLOBALS['fh_products'][5];
+	$_POST = $post + array( 'post_ID' => '5' );
+	$data  = Essentials::insert_data(
+		array(
+			'post_type'    => 'product',
+			'post_excerpt' => wp_slash( null === $excerpt_posted ? $p->short : $excerpt_posted ),
+		),
+		array( 'ID' => 5 )
+	);
+	$p->short                  = stripslashes( $data['post_excerpt'] );
+	$GLOBALS['fh_master_seen'] = $p->short; // save_post_product: what the Master Fish sync reads.
 	Essentials::save( 5 );
 	$_POST = array();
+	return $p;
 };
 fh_login( 7, array( 'edit_post' ) );
-$p = $GLOBALS['fh_products'][5];
-$save( array( 'fh_es_nonce' => $nonce, 'fh_es_sci' => 'Fishus inventus', 'fh_es_sci_shown' => 'Fishus inventus' ) );
+$p = $update( array( 'fh_es_nonce' => $nonce, 'fh_es_sci' => 'Fishus inventus', 'fh_es_sci_shown' => 'Fishus inventus' ) );
 check( 'saved as it was drawn: nothing is written', 0 === $p->saves && 'Fishus other' === $p->short );
-$save( array( 'fh_es_nonce' => $nonce, 'fh_es_sci' => 'Fishus novus', 'fh_es_sci_shown' => 'Fishus inventus' ) );
-check( 'a changed name: the short description AND the facts table, through the product', 1 === $p->saves && 'Fishus novus' === $p->short && 'Fishus novus' === $p->meta['_fh_scientific_name'] );
-$save( array( 'fh_es_nonce' => $nonce, 'fh_es_sci' => '', 'fh_es_sci_shown' => 'Fishus novus' ) );
+$p = $update( array( 'fh_es_nonce' => $nonce, 'fh_es_sci' => 'Fishus novus', 'fh_es_sci_shown' => 'Fishus inventus' ) );
+check( 'a changed name: the short description (with the post) AND the facts table', 1 === $p->saves && 'Fishus novus' === $p->short && 'Fishus novus' === $p->meta['_fh_scientific_name'] );
+check( '— the short description is already the new name when save_post runs: the Master Fish gets the new name in the same Update, not one save later', 'Fishus novus' === $GLOBALS['fh_master_seen'] );
+$p = $update( array( 'fh_es_nonce' => $nonce, 'fh_es_sci' => '', 'fh_es_sci_shown' => 'Fishus novus' ) );
 check( 'emptied: both cleared', 2 === $p->saves && '' === $p->short && ! isset( $p->meta['_fh_scientific_name'] ) );
-$save( array( 'fh_es_nonce' => 'nope', 'fh_es_sci' => 'X', 'fh_es_sci_shown' => '' ) );
-$save( array( 'fh_es_sci' => 'X', 'fh_es_sci_shown' => '' ) );
+$p = $update( array( 'fh_es_nonce' => $nonce, 'fh_es_sci' => "Fishus o'brieni", 'fh_es_sci_shown' => '' ) );
+check( 'a name with a quote is saved as typed (slashed for WordPress, unslashed in the row)', "Fishus o'brieni" === $p->short );
+$p->short = '';
+$update( array( 'fh_es_nonce' => 'nope', 'fh_es_sci' => 'X', 'fh_es_sci_shown' => '' ) );
+$update( array( 'fh_es_sci' => 'X', 'fh_es_sci_shown' => '' ) );
 fh_login( 8 );
-$save( array( 'fh_es_nonce' => wp_create_nonce( 'fishotel_edit_screens_essentials' ), 'fh_es_sci' => 'X', 'fh_es_sci_shown' => '' ) );
-check( 'another nonce, none, or a person who may not edit the product: nothing', 2 === $p->saves && '' === $p->short );
+$update( array( 'fh_es_nonce' => wp_create_nonce( 'fishotel_edit_screens_essentials' ), 'fh_es_sci' => 'X', 'fh_es_sci_shown' => '' ) );
+check( 'another nonce, none, or a person who may not edit the product: nothing', 3 === $p->saves && '' === $p->short );
 fh_login( 7, array( 'edit_post' ) );
+$_POST = array( 'fh_es_nonce' => $nonce, 'fh_es_sci' => 'X', 'fh_es_sci_shown' => '', 'post_ID' => '6' );
+check( 'another post saved in the same request: its short description is not touched', 'keep' === Essentials::insert_data( array( 'post_type' => 'product', 'post_excerpt' => 'keep' ), array( 'ID' => 5 ) )['post_excerpt'] );
+$_POST = array( 'fh_es_nonce' => $nonce, 'fh_es_sci' => 'X', 'fh_es_sci_shown' => '', 'post_ID' => '5' );
+check( '— nor a post that is not a product', 'keep' === Essentials::insert_data( array( 'post_type' => 'post', 'post_excerpt' => 'keep' ), array( 'ID' => 5 ) )['post_excerpt'] );
+$_POST = array();
+
+echo "4b. A short description that holds more than the name\n";
+$extra = "<p><em>Fishus inventus</em></p>\n<p>Reef safe: with caution</p>";
+check( 'more than the name: a second line, a colon, a link, a list, very long', Essentials::excerpt_extra( $extra ) && Essentials::excerpt_extra( 'Fishus inventus<br>Grows to 6"' ) && Essentials::excerpt_extra( 'Reef safe: yes' ) && Essentials::excerpt_extra( '<a href="/care">Fishus inventus</a>' ) && Essentials::excerpt_extra( '<ul><li>Fishus</li></ul>' ) && Essentials::excerpt_extra( str_repeat( 'a', 201 ) ) );
+check( 'just the name — plain, in italics, in a paragraph, or empty', ! Essentials::excerpt_extra( 'Fishus inventus' ) && ! Essentials::excerpt_extra( '<p><em>Fishus inventus</em></p>' ) && ! Essentials::excerpt_extra( "<strong>Fishus  cf. inventus</strong>\n" ) && ! Essentials::excerpt_extra( '' ) && ! Essentials::excerpt_extra( null ) );
+check( 'the field offers the first line of such a text, not all of it', 'Fishus inventus' === Essentials::sci_view( $extra, '' )['value'] && 'Fishus inventus' === Essentials::first_line( $extra ) );
+$p        = $GLOBALS['fh_products'][5];
+$p->short = $extra;
+$p->meta  = array( '_fh_scientific_name' => 'Fishus inventus' );
+$p        = $update( array( 'fh_es_nonce' => $nonce, 'fh_es_sci' => 'Fishus novus', 'fh_es_sci_shown' => 'Fishus inventus' ) );
+check( 'a changed name: the facts table only — the short description and its extra lines are kept, never overwritten', $extra === $p->short && 'Fishus novus' === $p->meta['_fh_scientific_name'] );
+$p = $update( array( 'fh_es_nonce' => $nonce, 'fh_es_sci' => 'Fishus novus', 'fh_es_sci_shown' => 'Fishus novus' ), 'Fishus novus<br>Edited in its own box' );
+check( 'what the owner types in the short description box is saved as typed', 'Fishus novus<br>Edited in its own box' === $p->short );
+ob_start();
+Essentials::render( (object) array( 'ID' => 5, 'post_excerpt' => $extra ) );
+$html = (string) ob_get_clean();
+check( 'the box says the short description stays in its own box and is not changed from here', false !== strpos( $html, 'class="fh-es-extra"' ) && false !== strpos( $html, 'never changed from here' ) );
+$GLOBALS['post'] = (object) array( 'ID' => 5, 'post_excerpt' => $extra );
+check( '— and that box stays on the screen of a live fish (it is not given the class that hides it)', array( 'x' ) === $screen->classes_not_live( array( 'x' ) ) );
+$GLOBALS['post'] = (object) array( 'ID' => 5, 'post_excerpt' => '<em>Fishus inventus</em>' );
+check( '— a short description that is just the name: hidden for a live fish, as before', array( 'x', 'fh-es-not-live' ) === $screen->classes_not_live( array( 'x' ) ) );
+ob_start();
+Essentials::render( (object) array( 'ID' => 5, 'post_excerpt' => 'Fishus inventus' ) );
+check( '— and no such line', false === strpos( (string) ob_get_clean(), 'fh-es-extra' ) );
 
 echo "5. An order folded into a combined box\n";
 $GLOBALS['fh_orders'][300] = new Fh_Test_Product( 300, '', array( '_fishotel_fulfilled_by_order' => '301' ) );

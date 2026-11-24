@@ -122,3 +122,16 @@ a.fh-es-chip:focus {
 		grid-template-columns: minmax(0, 1fr);
 	}
 }
+
+/* The short description holds more than the name; a name the theme's
+   "Copy" read that differs from the one typed. No colours of their own:
+   they read in the light and the dark admin alike. */
+.fh-es-extra,
+.fh-es-copied {
+	margin: 6px 0 0;
+	max-width: 520px;
+}
+
+.fh-es-extra {
+	font-style: italic;
+}

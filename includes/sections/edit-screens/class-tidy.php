@@ -89,6 +89,35 @@ class Tidy {
 	}
 
 	/**
+	 * Whether a screen is the edit view itself (pure): WooCommerce's own
+	 * order screen (HPOS) shares one screen id between its orders list and
+	 * an order's edit view — only `action=edit` / `action=new` is the
+	 * order.
+	 *
+	 * @param string $screen A screen id of Layouts::screens().
+	 * @param mixed  $get    The query arguments.
+	 * @return bool
+	 */
+	public static function is_edit_view( $screen, $get ) {
+		if ( Layouts::ORDER_HPOS !== $screen ) {
+			return '' !== (string) $screen;
+		}
+		$action = is_array( $get ) && isset( $get['action'] ) && is_scalar( $get['action'] ) ? (string) $get['action'] : '';
+		return in_array( $action, array( 'edit', 'new' ), true );
+	}
+
+	/**
+	 * The screen being drawn when it is an edit view ('' otherwise).
+	 *
+	 * @param mixed $screen A WP_Screen.
+	 * @return string
+	 */
+	private static function edit_view( $screen ) {
+		$id = self::screen_id( $screen );
+		return self::is_edit_view( $id, $_GET ) ? $id : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- which view, nothing is written.
+	}
+
+	/**
 	 * add_meta_boxes: the switch, when due.
 	 *
 	 * @param mixed $screen Post type (legacy) or screen id (HPOS).
@@ -123,7 +152,7 @@ class Tidy {
 	 * The notice on a tidied screen, and the line after an undo or a reset.
 	 */
 	public function notice() {
-		$screen = self::screen_id( function_exists( 'get_current_screen' ) ? get_current_screen() : null );
+		$screen = self::edit_view( function_exists( 'get_current_screen' ) ? get_current_screen() : null );
 		if ( '' === $screen ) {
 			return;
 		}
@@ -155,7 +184,7 @@ class Tidy {
 	 */
 	public function screen_settings( $settings, $screen = null ) {
 		$settings = is_string( $settings ) ? $settings : '';
-		$id       = self::screen_id( $screen );
+		$id       = self::edit_view( $screen );
 		if ( '' === $id ) {
 			return $settings;
 		}

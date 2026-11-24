@@ -18,6 +18,16 @@
 	margin-left: 8px;
 }
 
+/* "(drafts and sold-out fish: the dropdown)"; "…" not checked yet. No
+   colours of their own: they read in the light and the dark admin. */
+.fh-pc-more {
+	font-style: italic;
+}
+
+.fh-pc-wait {
+	font-weight: 600;
+}
+
 /* The column. */
 .wp-list-table .column-fh_todo {
 	width: 14%;

@@ -54,6 +54,16 @@ class Store {
 	 */
 	const PRODUCT_STATUSES = array( 'publish', 'private', 'draft', 'pending', 'future' );
 
+	/**
+	 * The statuses the 3rd-bag helper lists: those, and an archived fish
+	 * (the Product archive section's `fishotel_archived`) — the same click
+	 * narrows the word list to lines with no product page, so an archived
+	 * tang listed again, or on a manual order, must be ticked too.
+	 *
+	 * @var string[]
+	 */
+	const HELPER_STATUSES = array( 'publish', 'private', 'draft', 'pending', 'future', 'fishotel_archived' );
+
 	const SIZES_LIMIT = 200;
 
 	/**
@@ -288,7 +298,7 @@ class Store {
 
 	/**
 	 * Every product (simple, variable — never a variation) in one of
-	 * PRODUCT_STATUSES, with what the 3rd-bag helper needs: id, name,
+	 * HELPER_STATUSES (archived fish too), with what the 3rd-bag helper needs: id, name,
 	 * status, packs ('yes' | 'no' | ''), layers (the raw `_fh_bag_layers`),
 	 * categories (name → slug). Three reads in all, whatever the number of
 	 * products.
@@ -301,7 +311,7 @@ class Store {
 		if ( ! is_object( $wpdb ) ) {
 			return array();
 		}
-		$statuses = "'" . implode( "','", array_map( 'esc_sql', self::PRODUCT_STATUSES ) ) . "'";
+		$statuses = "'" . implode( "','", array_map( 'esc_sql', self::HELPER_STATUSES ) ) . "'";
 
 		try {
 			$posts = $wpdb->get_results( 'SELECT ID, post_title, post_status FROM ' . $wpdb->posts . " WHERE post_type = 'product' AND post_status IN ({$statuses}) ORDER BY post_title ASC, ID ASC LIMIT " . (int) self::SCAN_LIMIT, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery

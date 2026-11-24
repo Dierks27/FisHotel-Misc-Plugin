@@ -165,6 +165,9 @@ check( 'at most ' . Third_Bag::MAX_TICK . ' in one click', Third_Bag::MAX_TICK =
 $store                   = new Fh_Fake_Store();
 $store->third_candidates = $rows;
 check_same( 'the review list reads the store and the fish categories', array( 1, 2, 7 ), array_column( ( new Third_Bag( $store ) )->review_list(), 'id' ) );
+$archived = array( 'id' => 12, 'name' => 'Invented Achilles Tang', 'status' => 'fishotel_archived', 'packs' => '', 'layers' => '', 'categories' => array( 'Quarantined Fish' => 'quarantined-fish' ) );
+check( 'an ARCHIVED tang is listed too: the same click narrows the word list to lines with no product page, so a tang listed again or on a manual order must be ticked now', in_array( 12, array_column( Third_Bag::matches( array_merge( $rows, array( $archived ) ), $words, array( 'quarantined-fish' ) ), 'id' ), true ) );
+check( '— and the store reads archived products for the helper (its statuses), while its other reads keep their own', in_array( 'fishotel_archived', \FisHotel\Misc\Sections\Packing\Store::HELPER_STATUSES, true ) && ! in_array( 'fishotel_archived', \FisHotel\Misc\Sections\Packing\Store::PRODUCT_STATUSES, true ) && false !== strpos( (string) file_get_contents( dirname( __DIR__ ) . '/class-store.php' ), "array_map( 'esc_sql', self::HELPER_STATUSES )" ) );
 
 fh_reset_shop();
 $one   = fh_product( new Fh_Fake_Product( 1, 'variable' ) );
@@ -223,11 +226,13 @@ $ui = new Product( new Fh_Fake_Store() );
 fh_reset_shop();
 $ticked   = fh_product( new Fh_Fake_Product( 50, 'simple', array(), array( '_fh_bag_layers' => '3' ) ) );
 $unticked = fh_product( new Fh_Fake_Product( 51, 'variable' ) );
+$GLOBALS['fh_wc_get_product_calls'] = 0;
 ob_start();
 $ui->list_column_data( 'name', 50 );
 $ui->list_column_data( 'name', 51 );
 $ui->list_column_data( 'price', 50 );
 $cells = (string) ob_get_clean();
+check( 'the Name cell reads the meta the list already loaded — no product object, no query of its own per row', 0 === $GLOBALS['fh_wc_get_product_calls'] );
 check( 'the Name cell carries the tick\'s state for quick edit — and no other cell', '<span class="hidden fh-third-bag-data" data-third="1"></span><span class="hidden fh-third-bag-data" data-third="0"></span>' === $cells, $cells );
 ob_start();
 $ui->render_quick_edit();

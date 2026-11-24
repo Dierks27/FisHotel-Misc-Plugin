@@ -385,9 +385,19 @@ function fh_reset_shop() {
 	$GLOBALS['fh_terms']    = array();
 }
 
+$GLOBALS['fh_wc_get_product_calls'] = 0;
 function wc_get_product( $id ) {
+	$GLOBALS['fh_wc_get_product_calls']++;
 	$id = is_object( $id ) && method_exists( $id, 'get_id' ) ? $id->get_id() : (int) $id;
 	return isset( $GLOBALS['fh_products'][ $id ] ) ? $GLOBALS['fh_products'][ $id ] : false;
+}
+
+/* Post meta as WordPress's cache answers it (the list table primed it): the fake product's own meta. */
+if ( ! function_exists( 'get_post_meta' ) ) {
+	function get_post_meta( $id, $key = '', $single = false ) {
+		$product = $GLOBALS['fh_products'][ (int) $id ] ?? null;
+		return is_object( $product ) && isset( $product->meta[ $key ] ) ? $product->meta[ $key ] : '';
+	}
 }
 
 function wc_get_order( $id ) {

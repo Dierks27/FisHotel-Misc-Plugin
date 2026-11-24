@@ -88,7 +88,7 @@ check_same( '— the sizes of a variable one', array( 'price' => 'Large, Small' 
 check( '— published or private only; any product (a dry good too)', array() === Rules::flags( fh_fish( array( 'status' => 'draft', 'price_missing' => array( '' ) ) ), $live ) && array( 'price' => '1' ) === Rules::flags( fh_fish( array( 'cats' => array( 'salt' ), 'price_missing' => array( '' ) ) ), $live ) );
 check_same( 'no bag size for an in-stock size', array( 'bag' => 'Small' ), Rules::flags( fh_fish( array( 'bag_missing' => array( 'Small' ) ) ), $live ) );
 check( '— not when Livestock is unticked, nor while the Packing section is off (nothing to ask)', array() === Rules::flags( fh_fish( array( 'packs' => 'no', 'bag_missing' => array( 'Small' ) ) ), $live ) && array() === Rules::flags( fh_fish( array( 'bag_missing' => null ) ), $live ) );
-check_same( 'filed only under a sub-category of Quarantined Fish', array( 'photo' => 'none', 'gallery' => '1', 'subcat' => '1' ), Rules::flags( fh_fish( array( 'cats' => array( 'tangs' ), 'under_table_cat' => true, 'thumb' => 0, 'gallery' => '', 'packs' => 'yes' ) ), $live ) );
+check_same( 'filed only under a sub-category of Quarantined Fish (live, but no table yet: photo and the category)', array( 'photo' => 'none', 'subcat' => '1' ), Rules::flags( fh_fish( array( 'cats' => array( 'tangs' ), 'under_table_cat' => true, 'thumb' => 0, 'gallery' => '', 'packs' => 'yes' ) ), $live ) );
 check( '— in both: not flagged', ! isset( Rules::flags( fh_fish( array( 'cats' => array( 'quarantined-fish', 'tangs' ), 'under_table_cat' => true ) ), $live )['subcat'] ) );
 $all = Rules::flags( fh_fish( array( 'thumb' => 0, 'gallery' => '', 'excerpt' => '', 'price_missing' => array( '' ), 'bag_missing' => array( '' ), 'old_style' => true, 'facts' => array() ) ), $live );
 check_same( 'the flags come in the order they are shown', array( 'photo', 'table', 'oldstyle', 'bag', 'price', 'sci', 'gallery' ), array_keys( $all ) );
@@ -113,10 +113,15 @@ $f                   = fh_fish()['facts'];
 $f['foods_feeding']  = '';
 check_same( 'worked out here when there is no answer: the description and the short description read together', array( 'table' => '1', 'oldstyle' => '1' ), Rules::flags( fh_fish( array( 'text' => "Foods and Feeding: algae\nTemperament: calm", 'facts' => $f ) ), $live ) );
 
+$invert_old = fh_fish( array( 'cats' => array( 'inverts' ), 'facts' => array(), 'excerpt' => '', 'gallery' => '', 'thumb' => 0, 'text' => "Scientific Name: Invertus\nReef Safe: Yes", 'price_missing' => array( '' ), 'bag_missing' => array( 'Small' ) ) );
+check_same( 'an invert: photo, price and bag size only — never old style or gallery, even with typed facts and no gallery (the owner\'s answer)', array( 'photo' => 'none', 'bag' => 'Small', 'price' => '1' ), Rules::flags( $invert_old, $live ) );
+check_same( '— the theme\'s own old-style answer does not flag an invert either', array( 'photo' => 'none', 'bag' => 'Small', 'price' => '1' ), Rules::flags( array_merge( $invert_old, array( 'old_style' => true ) ), $live ) );
+check( 'the table count reads as what is EMPTY', array( 'Table: 1 of 8 empty', 'Table: 8 of 8 empty' ) === array_column( array_merge( Rules::chips( array( 'table' => '1' ) ), Rules::chips( array( 'table' => '8' ) ) ), 'label' ) );
+
 echo "4. The chips\n";
 check_same(
 	'each flag in words, pointing at its box',
-	array( 'Stand-in photo', 'Table 5/8', 'Old style', 'Bag: Small', 'Price', 'Scientific name', 'Gallery', 'Sub-category only' ),
+	array( 'Stand-in photo', 'Table: 3 of 8 empty', 'Old style', 'Bag: Small', 'Price', 'Scientific name', 'Gallery', 'Sub-category only' ),
 	array_column( Rules::chips( array( 'photo' => 'standin', 'table' => '3', 'oldstyle' => '1', 'bag' => 'Small', 'price' => '1', 'sci' => '1', 'gallery' => '1', 'subcat' => '1' ) ), 'label' )
 );
 check_same( 'the boxes', array( 'postimagediv', 'fishotel_hotel_data', 'woocommerce-product-data', 'fishotel-essentials' ), array_column( Rules::chips( array( 'photo' => 'none', 'table' => '8', 'price' => 'Large', 'sci' => '1' ) ), 'anchor' ) );
@@ -125,7 +130,22 @@ check( 'an empty or unknown value is no chip', array() === Rules::chips( array( 
 
 echo "5. A stand-in photo\n";
 check( 'one of the placeholder libraries\' images, or WooCommerce\'s', true === Rules::standin( 5, array( 5, 6 ), array(), 'fish.jpg' ) );
-check( 'the same image featured on 3 or more products', true === Rules::standin( 9, array(), array( 9 ), 'fish.jpg' ) );
+check( 'the same image featured on 3 or more products of different fish', true === Rules::standin( 9, array(), array( 9 ), 'fish.jpg' ) );
+$rows = array(
+	array( 'thumb' => 9, 'id' => 1, 'name' => 'Fishus inventus' ),
+	array( 'thumb' => 9, 'id' => 2, 'name' => 'Fishus novus' ),
+	array( 'thumb' => 9, 'id' => 3, 'name' => '<em>Fishus inventus</em>' ),
+	array( 'thumb' => 4, 'id' => 4, 'name' => 'Fishus inventus' ),
+	array( 'thumb' => 4, 'id' => 5, 'name' => '<em>fishus  inventus</em>' ),
+	array( 'thumb' => 4, 'id' => 6, 'name' => 'Fishus inventus ' ),
+	array( 'thumb' => 6, 'id' => 7, 'name' => '' ),
+	array( 'thumb' => 6, 'id' => 8, 'name' => '' ),
+	array( 'thumb' => 6, 'id' => 9, 'name' => '' ),
+	array( 'thumb' => 2, 'id' => 10, 'name' => 'A' ),
+	array( 'thumb' => 2, 'id' => 11, 'name' => 'B' ),
+	'nonsense',
+);
+check_same( 'shared: 3+ products and not all the same fish — one real photo reused for every batch of the same fish is NOT a stand-in; a picture on nameless products is; two products are not enough', array( 6, 9 ), Rules::shared_images( $rows ) );
 check( 'a file named so', true === Rules::standin( 7, array(), array(), '/up/2026/placeholder-blue.png' ) && true === Rules::standin( 7, array(), array(), 'Coming_Soon.jpg' ) && true === Rules::standin( 7, array(), array(), 'no-image.png' ) );
 check( 'a real photo is not', false === Rules::standin( 7, array( 5 ), array( 9 ), '/up/2026/yellow-tang.jpg' ) && false === Rules::standin( 0, array( 0 ), array(), 'placeholder.png' ) );
 

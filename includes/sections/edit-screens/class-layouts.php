@@ -167,7 +167,10 @@ class Layouts {
 	 *
 	 * Main: the warnings (only when there is one), Order data, Items,
 	 * Packing, Shipments, then Custom Fields (closed) and WooCommerce's
-	 * downloads (hidden by WooCommerce itself on these orders). Side: Order
+	 * downloads — hidden, as WooCommerce hides it for a person with no
+	 * layout of their own (a stored list, even an empty one, would
+	 * otherwise show it open on every order; Screen Options brings it
+	 * back). Side: Order
 	 * actions; ShipTracker's Pickup (pickup orders) and the combined box's
 	 * Fulfillment; Weather; the EA slip and the medication terms; order
 	 * notes; Combine Orders; then — closed — Date Change Override, Order
@@ -213,7 +216,7 @@ class Layouts {
 				'advanced' => '',
 			),
 			'closed' => array( 'postcustom', 'order_custom', 'fishotel-date-change-unlock', 'woocommerce-order-source-data', 'woocommerce-customer-history' ),
-			'hidden' => array(),
+			'hidden' => array( 'woocommerce-order-downloads' ),
 		);
 	}
 

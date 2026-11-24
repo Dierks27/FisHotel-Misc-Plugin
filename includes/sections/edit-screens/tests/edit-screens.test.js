@@ -27,7 +27,7 @@ function check( label, condition, detail ) {
 var terms = { fish: [ 15, 16 ], med: [ 30, 31 ], invoice: [ 40 ] };
 
 console.log( '1. The kind follows what is ticked' );
-check( 'the helpers are exported', [ 'kindFrom', 'withKind', 'topBoxes', 'ids' ].every( function ( n ) {
+check( 'the helpers are exported', [ 'kindFrom', 'withKind', 'topBoxes', 'ids', 'copiedName' ].every( function ( n ) {
 	return typeof h[ n ] === 'function';
 } ) );
 check( 'a fish category: a live fish', h.kindFrom( [ '15' ], terms, null, '' ) === 'fish' );
@@ -45,6 +45,12 @@ check( 'a kind that is not one: the old one removed, none added', h.withKind( 'a
 console.log( '3. The boxes under the title' );
 check( 'the two boxes, in order', JSON.stringify( h.topBoxes( 'fishotel-essentials, woocommerce-product-data' ) ) === JSON.stringify( [ 'fishotel-essentials', 'woocommerce-product-data' ] ) );
 check( 'nothing that is not an id', JSON.stringify( h.topBoxes( 'a b,<x>,,ok_1' ) ) === JSON.stringify( [ 'ok_1' ] ) && h.topBoxes( null ).length === 0 );
+
+console.log( '4. The scientific name the theme\'s "Copy" hands on' );
+check( 'an empty field is filled', h.copiedName( '', 'Fishus inventus' ) === 'fill' && h.copiedName( '   ', 'Fishus inventus' ) === 'fill' && h.copiedName( null, 'Fishus inventus' ) === 'fill' );
+check( 'the same name (case, spaces aside): already there', h.copiedName( 'fishus  Inventus', ' Fishus inventus ' ) === 'same' );
+check( 'another name typed: kept, the copied one only offered', h.copiedName( 'Fishus novus', 'Fishus inventus' ) === 'offer' );
+check( 'nothing handed on: nothing done', h.copiedName( 'Fishus novus', '' ) === 'none' && h.copiedName( '', undefined ) === 'none' );
 
 console.log( '\n' + ( failures ? failures + ' of ' + checks + ' checks FAILED' : 'All ' + checks + ' checks passed' ) );
 process.exit( failures ? 1 : 0 );

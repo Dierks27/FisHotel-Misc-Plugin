@@ -17,22 +17,26 @@
  *       default the Batch plugin's fish categories, `quarantined-fish` and
  *       `inverts`) or "Livestock — packed in a bag" ticked;
  *   T — gets the facts table: its own category is `quarantined-fish` (the
- *       theme prints the table for that category only). Inverts are live
- *       but get no table checks for now (the owner's answer).
+ *       theme prints the table for that category only). Inverts (and any
+ *       other live category, corals one day) are checked for photo, price
+ *       and bag size only, for now (the owner's answer): no table, old
+ *       style, gallery or scientific-name checks.
  *
  * The flags (`_fh_todo_<key>`):
  *   photo     L, and no real photo: 'none' (no featured image, or one that
  *             is gone) or 'standin' (a placeholder of the theme's libraries
  *             or WooCommerce's, the same image featured on 3 or more
- *             products, or a file named placeholder / coming soon /
+ *             products of DIFFERENT fish — by scientific name, so one real
+ *             photo reused for every batch of the same fish is not
+ *             flagged —, or a file named placeholder / coming soon /
  *             no image);
- *   gallery   L, and no gallery photo;
+ *   gallery   L and T, and no gallery photo;
  *   table     T, and how many of the 8 table facts are missing (scientific
  *             name, common names, max length, min tank size, temperament,
  *             reef safe — yes, no or caution —, foods & feeding and habitat
  *             & behaviour — these two not counting when they are the site's
  *             default text); region is not required;
- *   oldstyle  L, and the facts are still typed in the description: two or
+ *   oldstyle  T, and the facts are still typed in the description: two or
  *             more different labels at the start of a line, and at least
  *             one of them with its field empty;
  *   sci       T, and the scientific name is missing in one of its two
@@ -299,7 +303,13 @@ class Rules {
 			} elseif ( ! empty( $p['thumb_standin'] ) ) {
 				$out['photo'] = 'standin';
 			}
-			if ( ! self::filled( $p['gallery'] ?? '' ) ) {
+			if ( 'no' !== ( $p['packs'] ?? '' ) && isset( $p['bag_missing'] ) && is_array( $p['bag_missing'] ) && $p['bag_missing'] ) {
+				$out['bag'] = self::sizes( $p['bag_missing'] );
+			}
+		}
+
+		if ( $table ) {
+			if ( $live && ! self::filled( $p['gallery'] ?? '' ) ) {
 				$out['gallery'] = '1';
 			}
 			$old = $p['old_style'] ?? null;
@@ -309,12 +319,6 @@ class Rules {
 			if ( $old ) {
 				$out['oldstyle'] = '1';
 			}
-			if ( 'no' !== ( $p['packs'] ?? '' ) && isset( $p['bag_missing'] ) && is_array( $p['bag_missing'] ) && $p['bag_missing'] ) {
-				$out['bag'] = self::sizes( $p['bag_missing'] );
-			}
-		}
-
-		if ( $table ) {
 			$missing = 0;
 			foreach ( self::TABLE_FIELDS as $field ) {
 				if ( ! self::fact_filled( $field, $facts[ $field ] ?? '', $def ) ) {
@@ -404,8 +408,8 @@ class Rules {
 					$anchor = 'postimagediv';
 					break;
 				case 'table':
-					/* translators: %d: how many of the 8 table facts are filled */
-					$label  = sprintf( __( 'Table %d/8', 'fishotel-misc-plugin' ), max( 0, 8 - (int) $value ) );
+					/* translators: %d: how many of the 8 table facts are empty */
+					$label  = sprintf( __( 'Table: %d of 8 empty', 'fishotel-misc-plugin' ), min( 8, max( 1, (int) $value ) ) );
 					$anchor = 'fishotel_hotel_data';
 					break;
 				case 'oldstyle':
@@ -444,11 +448,45 @@ class Rules {
 	}
 
 	/**
+	 * The images that stand in for many different products (pure): each
+	 * featured on 3 or more products whose scientific names are not all
+	 * the same. A product with no name counts as a name of its own, so a
+	 * placeholder on nameless products is still caught; one real photo of
+	 * a fish used for each of its batches (the same name) is not.
+	 *
+	 * @param array[] $rows Each: thumb (image id), id (product id), name (its scientific name, '' = none).
+	 * @return int[]
+	 */
+	public static function shared_images( array $rows ) {
+		$by = array();
+		foreach ( $rows as $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+			$thumb = (int) ( $row['thumb'] ?? 0 );
+			$id    = (int) ( $row['id'] ?? 0 );
+			if ( $thumb < 1 || $id < 1 ) {
+				continue;
+			}
+			$name                        = self::norm( $row['name'] ?? '' );
+			$by[ $thumb ][ $id ]         = '' === $name ? '#' . $id : $name;
+		}
+		$out = array();
+		foreach ( $by as $thumb => $names ) {
+			if ( count( $names ) >= 3 && count( array_unique( $names ) ) >= 2 ) {
+				$out[] = (int) $thumb;
+			}
+		}
+		sort( $out );
+		return $out;
+	}
+
+	/**
 	 * Whether an image is a stand-in (pure).
 	 *
 	 * @param int      $thumb        The featured image id.
 	 * @param int[]    $placeholders The placeholder libraries' and WooCommerce's placeholder ids.
-	 * @param int[]    $shared       Images featured on 3 or more products.
+	 * @param int[]    $shared       Images standing in for many different products (shared_images()).
 	 * @param string   $file         The image's file name.
 	 * @return bool
 	 */

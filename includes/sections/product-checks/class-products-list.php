@@ -3,8 +3,15 @@
  * Product checks — the products list (wp-admin → Products).
  *
  *   - Under WooCommerce's own links (All | Published | …), a row
- *     "To fix:" with a count per problem; a link with 0 is not shown —
- *     and "Recount now".
+ *     "To fix (for sale now):" with a count per problem among the products
+ *     a customer can buy today — published and in stock — each a link to
+ *     exactly those (the filter, Published, WooCommerce's own "In stock");
+ *     Clean Room drafts on their own; a link with 0 is not shown — and
+ *     "Recount now". Drafts and sold-out fish are left out of the row (so
+ *     a Clean Room draft is never counted twice) but found by the
+ *     dropdown, which shows every product checked. While the very first
+ *     check of every product is still running, the row and the column say
+ *     so instead of showing too few.
  *   - A "To fix" dropdown beside WooCommerce's filters: the same, plus no
  *     gallery photo, scientific name missing or different, filed only
  *     under a sub-category, 3rd bag ticked.
@@ -12,7 +19,8 @@
  *     the 3rd bag is ticked; sortable by how many problems.
  *   - Row and bulk actions: "Copy facts from the description" (the theme's
  *     own copy, never overwriting a filled field — only when the theme
- *     has it) and "Recount".
+ *     has it, and only on a product flagged "Old style": the bulk action
+ *     skips every other product ticked) and "Recount".
  * A filter is a plain `EXISTS` on one meta key; the column reads meta
  * WordPress already loaded for the page.
  *
@@ -55,6 +63,13 @@ class Products_List {
 	 * @var Checker
 	 */
 	private $checker;
+
+	/**
+	 * The sweep's state, read once per list.
+	 *
+	 * @var array|null
+	 */
+	private $sweep = null;
 
 	/**
 	 * @param Store|null   $store   The store.
@@ -197,6 +212,39 @@ class Products_List {
 	}
 
 	/**
+	 * The URL of a link of the "To fix" row (pure but for admin_url): the
+	 * filter among the products for sale now — Published and WooCommerce's
+	 * own "In stock" filter, the same products its count counts. Clean Room
+	 * drafts: the drafts filter as it is.
+	 *
+	 * @param string $key A key of views().
+	 * @return string
+	 */
+	public static function view_url( $key ) {
+		if ( 'cleanroom' === $key ) {
+			return self::url( $key );
+		}
+		return add_query_arg(
+			array(
+				'post_status'  => 'publish',
+				'stock_status' => 'instock',
+			),
+			self::url( $key )
+		);
+	}
+
+	/**
+	 * Whether the very first check of every product is still running
+	 * (pure): a sweep under way, and none ever finished.
+	 *
+	 * @param mixed $state Checker::state().
+	 * @return bool
+	 */
+	public static function first_count_running( $state ) {
+		return is_array( $state ) && isset( $state['cursor'] ) && empty( $state['done'] ) && empty( $state['ever'] );
+	}
+
+	/**
 	 * The link of an op ("recount" of the whole list, or of one product;
 	 * "copy" for one product).
 	 *
@@ -238,17 +286,25 @@ class Products_List {
 			return $views;
 		}
 		$counts = $this->store->counts();
+		$sale   = isset( $counts['sale'] ) && is_array( $counts['sale'] ) ? $counts['sale'] : array();
 		$now    = self::current();
 		$links  = array();
 		foreach ( self::views() as $key => $label ) {
-			$n = (int) ( $counts[ $key ] ?? 0 );
+			$n = (int) ( 'cleanroom' === $key ? ( $counts[ $key ] ?? 0 ) : ( $sale[ $key ] ?? 0 ) );
 			if ( $n < 1 ) {
 				continue;
 			}
-			$links[] = '<a href="' . esc_url( self::url( $key ) ) . '"' . ( $now === $key ? ' class="current" aria-current="page"' : '' ) . '>' . esc_html( $label ) . ' <span class="count">(' . $n . ')</span></a>';
+			$links[] = '<a href="' . esc_url( self::view_url( $key ) ) . '"' . ( $now === $key ? ' class="current" aria-current="page"' : '' ) . '>' . esc_html( $label ) . ' <span class="count">(' . $n . ')</span></a>';
 		}
-		$row  = '<span class="fh-pc-views"><strong>' . esc_html__( 'To fix:', 'fishotel-misc-plugin' ) . '</strong> ';
-		$row .= $links ? implode( ' | ', $links ) : esc_html__( 'nothing — every product checked is complete', 'fishotel-misc-plugin' );
+		$row = '<span class="fh-pc-views"><strong>' . esc_html__( 'To fix (for sale now):', 'fishotel-misc-plugin' ) . '</strong> ';
+		if ( self::first_count_running( Checker::state() ) ) {
+			$state = Checker::state();
+			/* translators: %d: number of products checked so far */
+			$row .= esc_html( sprintf( __( 'still counting — every product is being checked for the first time (%d so far). Reload in a minute or two.', 'fishotel-misc-plugin' ), (int) ( $state['checked'] ?? 0 ) ) );
+		} else {
+			$row .= $links ? implode( ' | ', $links ) : esc_html__( 'nothing — every product for sale is complete', 'fishotel-misc-plugin' );
+			$row .= ' <span class="fh-pc-more">' . esc_html__( '(drafts and sold-out fish: the "To fix" dropdown)', 'fishotel-misc-plugin' ) . '</span>';
+		}
 		if ( current_user_can( 'manage_woocommerce' ) ) {
 			$row .= ' <a class="fh-pc-recount" href="' . esc_url( self::link( 'recount' ) ) . '">' . esc_html__( 'Recount now', 'fishotel-misc-plugin' ) . '</a>';
 		}
@@ -336,6 +392,18 @@ class Products_List {
 	}
 
 	/**
+	 * The sweep's state (read once per request).
+	 *
+	 * @return array
+	 */
+	private function sweep_state() {
+		if ( null === $this->sweep ) {
+			$this->sweep = Checker::state();
+		}
+		return $this->sweep;
+	}
+
+	/**
 	 * The flags stored on a product.
 	 *
 	 * @param int $id Product ID.
@@ -368,7 +436,10 @@ class Products_List {
 			$html .= '<span class="fh-pc-chip fh-pc-chip--' . esc_attr( $chip['flag'] ) . '">' . esc_html( $chip['label'] ) . '</span> ';
 		}
 		if ( '' === $html ) {
-			$html = '<span class="fh-pc-ok" title="' . esc_attr__( 'Nothing to fix', 'fishotel-misc-plugin' ) . '">✓</span> ';
+			$state = $this->sweep_state();
+			$html  = self::first_count_running( $state ) && (int) $post_id > (int) ( $state['cursor'] ?? 0 )
+				? '<span class="fh-pc-wait" title="' . esc_attr__( 'Not checked yet — every product is being checked for the first time', 'fishotel-misc-plugin' ) . '">…</span> '
+				: '<span class="fh-pc-ok" title="' . esc_attr__( 'Nothing to fix', 'fishotel-misc-plugin' ) . '">✓</span> ';
 		}
 		if ( '3' === (string) get_post_meta( (int) $post_id, '_fh_bag_layers', true ) ) {
 			$html .= '<span class="fh-pc-third" title="' . esc_attr__( 'Needs a 3rd bag', 'fishotel-misc-plugin' ) . '">×3</span>';
@@ -413,13 +484,19 @@ class Products_List {
 
 	/**
 	 * Copy the facts of one product (the theme's own copy: empty fields
-	 * only), then check it again.
+	 * only), then check it again — an "Old style" fish only: a product
+	 * without that flag (a medication, a dry good, an invert, a fish whose
+	 * facts are already in their fields) is never copied, whatever was
+	 * ticked for the bulk action, so no fish fact is ever written onto it.
 	 *
 	 * @param int $id Product ID.
 	 * @return int How many fields were filled.
 	 */
 	public function copy( $id ) {
 		if ( ! self::can_copy() || ! current_user_can( 'edit_post', (int) $id ) ) {
+			return 0;
+		}
+		if ( ! Rules::filled( get_post_meta( (int) $id, Rules::PREFIX . 'oldstyle', true ) ) ) {
 			return 0;
 		}
 		try {

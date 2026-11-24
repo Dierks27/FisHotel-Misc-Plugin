@@ -762,9 +762,9 @@ class Product {
 		if ( 'name' !== $column || ! current_user_can( Packing::CAPABILITY ) ) {
 			return;
 		}
-		// The list table loaded this product for its row already: no query of its own.
-		$product = function_exists( 'wc_get_product' ) ? wc_get_product( (int) $post_id ) : null;
-		$stored  = is_object( $product ) ? Layers::stored( $product ) : '';
+		// A row of the list is a product (never a variation), and the list primed its meta: read from
+		// that cache — no product object and no query of its own.
+		$stored = get_post_meta( (int) $post_id, Packing::META_LAYERS, true );
 		echo '<span class="hidden fh-third-bag-data" data-third="' . ( Layers::ticked( $stored ) ? '1' : '0' ) . '"></span>';
 	}
 

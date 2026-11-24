@@ -93,7 +93,7 @@ check( 'fixed: those flags removed, the count down', ! isset( $GLOBALS['fh_post_
 check( 'a dry good with a price: nothing stored at all', array() === $checker->check( 130 ) && ! isset( $GLOBALS['fh_post_meta'][130]['_fh_todo'] ) );
 check_same( 'salt in stock with no price is flagged too (any product)', array( 'price' => '1' ), $checker->check( 120 ) );
 $GLOBALS['fh_options'][ Settings::OPTION ] = array( 'live_cats' => array() );
-check( 'no live category in the setting: a Quarantined Fish is checked for its table only (no photo, gallery, old-style or bag check)', array( 'table' => '6' ) === $checker->check( 100 ) );
+check_same( 'no live category in the setting: a Quarantined Fish is checked for its table only — the facts and the old style (no photo, gallery or bag check)', array( 'table' => '6', 'oldstyle' => '1' ), $checker->check( 100 ) );
 check( '— one filed under a sub-category only: flagged for that', array( 'subcat' => '1' ) === $checker->check( 110 ) );
 unset( $GLOBALS['fh_options'][ Settings::OPTION ] );
 $checker->check( 100 );
@@ -177,14 +177,36 @@ check( '"Use the fish categories again"', true === $out['ok'] && ! Settings::sav
 echo "6. The products list\n";
 fh_login( 3, array( 'manage_woocommerce', 'edit_products', 'edit_post' ) );
 $list                 = new Products_List( $store, $checker );
-$store->counts_answer = array( 'photo' => 23, 'table' => 41, 'oldstyle' => 0, 'bag' => 6, 'price' => 2, 'cleanroom' => 9, 'gallery' => 3, 'sci' => 1, 'subcat' => 0, 'third' => 4 );
+$store->counts_answer = array( 'photo' => 30, 'table' => 50, 'oldstyle' => 7, 'bag' => 6, 'price' => 2, 'cleanroom' => 9, 'gallery' => 3, 'sci' => 1, 'subcat' => 0, 'third' => 4, 'sale' => array( 'photo' => 23, 'table' => 41, 'oldstyle' => 0, 'bag' => 6, 'price' => 2 ) );
 $views                = $list->add_views( array( 'all' => '<a>All</a>' ) );
 $row                  = $views['fh_todo'];
-check( 'a "To fix" row after WooCommerce\'s own links', array( 'all', 'fh_todo' ) === array_keys( $views ) && 0 === strpos( $row, '<span class="fh-pc-views"><strong>To fix:</strong>' ) );
-check( 'each count a link to its filter, in order; a 0 is not shown', 1 === preg_match( '/without a real photo <span class="count">\(23\)<\/span>.*missing table info <span class="count">\(41\)<\/span>.*without a bag size <span class="count">\(6\)<\/span>.*no price <span class="count">\(2\)<\/span>.*Clean Room drafts <span class="count">\(9\)<\/span>/', $row ) && false === strpos( $row, 'Old-style' ) && false !== strpos( $row, 'post_type=product&amp;fh_todo=photo' ) );
+check( 'a "To fix (for sale now)" row after WooCommerce\'s own links', array( 'all', 'fh_todo' ) === array_keys( $views ) && 0 === strpos( $row, '<span class="fh-pc-views"><strong>To fix (for sale now):</strong>' ), $row );
+check( 'each count — of the products for sale now — a link to its filter, in order; a 0 is not shown', 1 === preg_match( '/without a real photo <span class="count">\(23\)<\/span>.*missing table info <span class="count">\(41\)<\/span>.*without a bag size <span class="count">\(6\)<\/span>.*no price <span class="count">\(2\)<\/span>.*Clean Room drafts <span class="count">\(9\)<\/span>/', $row ) && false === strpos( $row, 'Old-style' ) && false !== strpos( $row, 'post_type=product&amp;fh_todo=photo&amp;post_status=publish&amp;stock_status=instock' ), $row );
+check( '— a link lists exactly what its count counts: Published and WooCommerce\'s own "In stock"; the Clean Room drafts as drafts', 'https://example.test/wp-admin/edit.php?post_type=product&fh_todo=table&post_status=publish&stock_status=instock' === Products_List::view_url( 'table' ) && false === strpos( Products_List::view_url( 'cleanroom' ), 'post_status' ) );
+check( '— and it says where drafts and sold-out fish are (the dropdown: every product checked)', false !== strpos( $row, 'drafts and sold-out fish: the &quot;To fix&quot; dropdown' ) );
 check( '"Recount now" for who may manage the shop', false !== strpos( $row, '>Recount now</a>' ) );
 $store->counts_answer = array();
-check( 'nothing to fix: it says so', false !== strpos( $list->add_views( array() )['fh_todo'], 'nothing — every product checked is complete' ) );
+check( 'nothing to fix: it says so', false !== strpos( $list->add_views( array() )['fh_todo'], 'nothing — every product for sale is complete' ) );
+$GLOBALS['fh_options'][ Checker::SWEEP ] = array( 'cursor' => 110, 'started' => 1, 'done' => 0, 'checked' => 2, 'ever' => 0 );
+$row = $list->add_views( array() )['fh_todo'];
+check( 'the very first check still running: the row says it is still counting (not "nothing")', false !== strpos( $row, 'still counting' ) && false !== strpos( $row, '(2 so far)' ) && false === strpos( $row, 'nothing —' ) );
+$cells_list = new Products_List( $store, $checker );
+ob_start();
+$cells_list->render_column( 'fh_todo', 130 );
+$cells_list->render_column( 'fh_todo', 100 );
+$cells = (string) ob_get_clean();
+check( '— a product it has not reached yet shows "…", not ✓; one it has checked shows its answer', false !== strpos( $cells, 'fh-pc-wait' ) && false === strpos( $cells, 'fh-pc-ok' ) );
+$GLOBALS['fh_options'][ Checker::SWEEP ] = array( 'cursor' => 110, 'started' => 1, 'done' => 0, 'checked' => 2, 'ever' => 1 );
+check( '— a later sweep (one has finished before): the counts as they are', false === strpos( $list->add_views( array() )['fh_todo'], 'still counting' ) && ! Products_List::first_count_running( Checker::state() ) );
+$checker->start();
+check( '— a sweep started after one finished remembers it', 1 === Checker::state()['ever'] );
+unset( $GLOBALS['fh_options'][ Checker::SWEEP ] );
+check( 'the first sweep starts with nothing finished before', ( function () use ( $checker ) {
+	$checker->start();
+	$ever = Checker::state()['ever'];
+	unset( $GLOBALS['fh_options'][ Checker::SWEEP ] );
+	return 0 === $ever;
+} )() );
 fh_login( 4 );
 check( 'not for a user who may not edit products', array( 'all' => 'x' ) === $list->add_views( array( 'all' => 'x' ) ) );
 fh_login( 3, array( 'manage_woocommerce', 'edit_products', 'edit_post' ) );
@@ -212,7 +234,7 @@ $list->render_column( 'fh_todo', 100 );
 $list->render_column( 'fh_todo', 130 );
 $list->render_column( 'sku', 100 );
 $cells = (string) ob_get_clean();
-check( 'chips for the tang, "×3" for its tick; a ✓ for a clean product; nothing in another column', false !== strpos( $cells, '<span class="fh-pc-chip fh-pc-chip--table">Table 2/8</span>' ) && false !== strpos( $cells, '<span class="fh-pc-third" title="Needs a 3rd bag">×3</span>' ) && 1 === substr_count( $cells, 'fh-pc-ok' ), $cells );
+check( 'chips for the tang, "×3" for its tick; a ✓ for a clean product; nothing in another column', false !== strpos( $cells, '<span class="fh-pc-chip fh-pc-chip--table">Table: 6 of 8 empty</span>' ) && false !== strpos( $cells, '<span class="fh-pc-third" title="Needs a 3rd bag">×3</span>' ) && 1 === substr_count( $cells, 'fh-pc-ok' ), $cells );
 
 $actions = $list->row_actions( array( 'edit' => 'x' ), (object) array( 'ID' => 100, 'post_type' => 'product' ) );
 check( 'row actions: Recount; no "Copy facts" while the theme has none', array( 'edit', 'fh_recount' ) === array_keys( $actions ) );
@@ -224,6 +246,10 @@ $actions                = $list->row_actions( array(), (object) array( 'ID' => 1
 check( 'with the theme\'s copy: "Copy facts from the description" on an old-style fish only', isset( $actions['fh_copy_facts'] ) && ! isset( $list->row_actions( array(), (object) array( 'ID' => 130, 'post_type' => 'product' ) )['fh_copy_facts'] ) && isset( $list->bulk_actions( array() )['fh_copy_facts'] ) );
 $out = $list->run( array( 'op' => 'copy', 'id' => 100, '_wpnonce' => wp_create_nonce( 'fishotel_product_checks|copy|100' ) ) );
 check( 'the link copies (the theme\'s copy) and checks the product again: one more fact filled, the table count down', array( 'op' => 'copy', 'n' => 1 ) === $out && 'Invented Tang' === $GLOBALS['fh_post_meta'][100]['_fh_common_names'] && '5' === $GLOBALS['fh_post_meta'][100]['_fh_todo_table'], var_export( $GLOBALS['fh_post_meta'][100], true ) );
+$GLOBALS['fh_post_meta'][130]['_fh_common_names'] = '';
+$url = $list->handle_bulk( 'https://example.test/wp-admin/edit.php?post_type=product', 'fh_copy_facts', array( 130, 120 ) );
+check( 'bulk "Copy facts" with a dry good and salt ticked ("Select all"): neither is "Old style", nothing is written onto them', '' === $GLOBALS['fh_post_meta'][130]['_fh_common_names'] && ! isset( $GLOBALS['fh_post_meta'][120]['_fh_common_names'] ) && false !== strpos( $url, 'fh_pc_done=copy&fh_pc_n=0' ) );
+check( '— nor through a link for one of them', array( 'op' => 'copy', 'n' => 0 ) === $list->run( array( 'op' => 'copy', 'id' => 130, '_wpnonce' => wp_create_nonce( 'fishotel_product_checks|copy|130' ) ) ) && '' === $GLOBALS['fh_post_meta'][130]['_fh_common_names'] );
 check( 'a link with another product\'s nonce, another op\'s, or none: refused', null === $list->run( array( 'op' => 'copy', 'id' => 110, '_wpnonce' => wp_create_nonce( 'fishotel_product_checks|copy|100' ) ) ) && null === $list->run( array( 'op' => 'recount', 'id' => 100, '_wpnonce' => wp_create_nonce( 'fishotel_product_checks|copy|100' ) ) ) && null === $list->run( array( 'op' => 'copy', 'id' => 100 ) ) && null === $list->run( array( 'op' => 'delete', 'id' => 100, '_wpnonce' => wp_create_nonce( 'fishotel_product_checks|delete|100' ) ) ) );
 check( 'recount one product', array( 'op' => 'recount', 'n' => 1 ) === $list->run( array( 'op' => 'recount', 'id' => 110, '_wpnonce' => wp_create_nonce( 'fishotel_product_checks|recount|110' ) ) ) );
 $store->batches = array( 100, 110, 120 );
@@ -243,7 +269,7 @@ $_GET = array();
 
 echo "7. The Fish essentials chips\n";
 $chips = Admin::missing_chips( array(), 100 );
-check( 'the product\'s flags as chips, each a link to its box', array() !== $chips && '#fishotel_hotel_data' === $chips[0]['href'] && 0 === strpos( $chips[0]['label'], 'Table ' ) );
+check( 'the product\'s flags as chips, each a link to its box', array() !== $chips && '#fishotel_hotel_data' === $chips[0]['href'] && 0 === strpos( $chips[0]['label'], 'Table: ' ) );
 check( 'a clean product: none; chips from someone else kept', array( array( 'label' => 'x' ) ) === Admin::missing_chips( array( array( 'label' => 'x' ) ), 130 ) );
 
 echo "8. The section's hooks\n";

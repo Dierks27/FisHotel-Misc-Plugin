@@ -12,8 +12,9 @@
  *            fish (the Batch plugin's checkout counts it apart);
  *   fish     a live fish: "Livestock — packed in a bag" ticked, or with no
  *            stored choice one of the fish categories (the Batch plugin's
- *            list: `quarantined-fish`, `inverts` unless it says other) —
- *            the same rule as the Packing section;
+ *            list: `quarantined-fish`, `inverts` unless it says other —
+ *            the same rule as the Packing section — plus any category
+ *            ticked as live in Product checks, e.g. Corals one day);
  *   med      medication or food: the theme's categories for them, or a
  *            "Who ships it" (EA / Amazon / us) set;
  *   none     no category yet: nothing is hidden;
@@ -63,23 +64,15 @@ class Kinds {
 	const NOT_LIVE = array( 'postexcerpt' );
 
 	/**
-	 * The fish categories: the Batch plugin's list when it is there, else
-	 * the same default and filter it uses.
+	 * The fish categories: the Batch plugin's list (or the same default
+	 * and filter it uses), plus any category ticked as live in Product
+	 * checks — one shared answer (\FisHotel\Misc\Live_Categories), so a
+	 * product the checks count as live is a live fish here too.
 	 *
 	 * @return string[]
 	 */
 	public static function fish_categories() {
-		$cats = array( 'quarantined-fish', 'inverts' );
-		if ( class_exists( 'FisHotel_Ship_Day' ) && is_callable( array( 'FisHotel_Ship_Day', 'fish_categories' ) ) ) {
-			try {
-				$cats = (array) \FisHotel_Ship_Day::fish_categories();
-			} catch ( \Throwable $e ) {
-				$cats = array( 'quarantined-fish', 'inverts' );
-			}
-		} elseif ( function_exists( 'apply_filters' ) ) {
-			$cats = (array) apply_filters( 'fishotel_ship_day_fish_categories', $cats );
-		}
-		return self::slugs( $cats );
+		return self::slugs( \FisHotel\Misc\Live_Categories::fish_and_live() );
 	}
 
 	/**

@@ -80,6 +80,7 @@ class Edit_Screens {
 	 * Load the classes (no side effects).
 	 */
 	public static function load() {
+		require_once dirname( __DIR__, 2 ) . '/class-live-categories.php';
 		require_once __DIR__ . '/class-layouts.php';
 		require_once __DIR__ . '/class-switcher.php';
 		require_once __DIR__ . '/class-user-store.php';

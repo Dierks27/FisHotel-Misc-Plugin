@@ -110,6 +110,7 @@ class Product_Screen {
 		add_filter( 'woocommerce_product_data_tabs', array( self::class, 'tabs' ), 99 );
 		// Theme 1.28+: Fish essentials draws the scientific name, so the facts box leaves it out.
 		add_filter( 'fishotel_fish_facts_box_fields', array( self::class, 'facts_fields' ) );
+		add_filter( 'wp_insert_post_data', array( Essentials::class, 'insert_data' ), 10, 2 );
 		add_action( 'woocommerce_process_product_meta', array( Essentials::class, 'save' ), 50 );
 		add_filter( 'admin_body_class', array( $this, 'body_class' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'assets' ) );
@@ -131,12 +132,19 @@ class Product_Screen {
 	}
 
 	/**
-	 * The classes of a box not shown for a live fish.
+	 * The classes of a box not shown for a live fish — the short
+	 * description, unless it holds more than the name (then it stays on
+	 * the screen: Fish essentials never overwrites it).
 	 *
 	 * @param mixed $classes Its classes.
 	 * @return array
 	 */
 	public function classes_not_live( $classes ) {
+		global $post;
+		$excerpt = is_object( $post ) && isset( $post->post_excerpt ) ? (string) $post->post_excerpt : '';
+		if ( Essentials::excerpt_extra( $excerpt ) ) {
+			return is_array( $classes ) ? $classes : array();
+		}
 		return self::box_classes( Kinds::NOT_LIVE[0], $classes );
 	}
 
@@ -227,25 +235,50 @@ class Product_Screen {
 	 * @return array<string, int[]>
 	 */
 	public static function kind_terms() {
-		$out = array(
+		$out   = array(
 			'fish'    => array(),
 			'med'     => array(),
 			'invoice' => array(),
 		);
-		if ( ! function_exists( 'get_term_by' ) ) {
-			return $out;
-		}
 		$lists = array(
 			'fish'    => Kinds::fish_categories(),
 			'med'     => Kinds::MED_SLUGS,
 			'invoice' => array( 'invoices' ),
 		);
+		$ids   = self::term_ids( array_merge( $lists['fish'], $lists['med'], $lists['invoice'] ) );
 		foreach ( $lists as $kind => $slugs ) {
 			foreach ( $slugs as $slug ) {
-				$term = get_term_by( 'slug', $slug, 'product_cat' );
-				if ( is_object( $term ) && isset( $term->term_id ) ) {
-					$out[ $kind ][] = (int) $term->term_id;
+				if ( isset( $ids[ $slug ] ) ) {
+					$out[ $kind ][] = $ids[ $slug ];
 				}
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * The term ids of product categories by slug — one read for them all.
+	 *
+	 * @param string[] $slugs Slugs.
+	 * @return array<string, int> slug → term id (the slugs found).
+	 */
+	private static function term_ids( array $slugs ) {
+		$slugs = Kinds::slugs( $slugs );
+		if ( ! $slugs || ! function_exists( 'get_terms' ) ) {
+			return array();
+		}
+		$terms = get_terms(
+			array(
+				'taxonomy'               => 'product_cat',
+				'slug'                   => $slugs,
+				'hide_empty'             => false,
+				'update_term_meta_cache' => false,
+			)
+		);
+		$out = array();
+		foreach ( is_array( $terms ) ? $terms : array() as $term ) {
+			if ( is_object( $term ) && isset( $term->slug, $term->term_id ) ) {
+				$out[ strtolower( (string) $term->slug ) ] = (int) $term->term_id;
 			}
 		}
 		return $out;

@@ -50,6 +50,9 @@ function sanitize_key( $key ) {
 	return preg_replace( '/[^a-z0-9_\-]/', '', strtolower( (string) $key ) );
 }
 function wp_unslash( $value ) {
+	if ( is_string( $value ) ) {
+		return stripslashes( $value ); // As WordPress: a string loses its slashes (arrays here are posted unslashed).
+	}
 	return $value;
 }
 function admin_url( $path = '' ) {
@@ -143,6 +146,27 @@ function get_the_terms( $id, $tax ) {
 	}
 	return $out ? $out : false;
 }
+$GLOBALS['fh_term_reads'] = 0;
+function get_terms( $args = array() ) {
+	$GLOBALS['fh_term_reads']++;
+	$out = array();
+	foreach ( (array) ( $args['slug'] ?? array() ) as $slug ) {
+		if ( isset( $GLOBALS['fh_term_ids'][ $slug ] ) ) {
+			$out[] = (object) array(
+				'slug'    => $slug,
+				'term_id' => $GLOBALS['fh_term_ids'][ $slug ],
+			);
+		}
+	}
+	return $out;
+}
+$GLOBALS['fh_options'] = array();
+function get_option( $key, $default = false ) {
+	return array_key_exists( $key, $GLOBALS['fh_options'] ) ? $GLOBALS['fh_options'][ $key ] : $default;
+}
+function wp_slash( $value ) {
+	return is_string( $value ) ? addslashes( $value ) : $value;
+}
 function get_term_by( $field, $value, $tax = '' ) {
 	return isset( $GLOBALS['fh_term_ids'][ $value ] ) ? (object) array(
 		'slug'    => $value,
@@ -156,6 +180,7 @@ function add_action( $hook, $callback, $priority = 10, $args = 1 ) {
 	$GLOBALS['fh_hooks'][ $hook ][] = array(
 		'callback' => $callback,
 		'priority' => (int) $priority,
+		'args'     => (int) $args,
 	);
 	return true;
 }
