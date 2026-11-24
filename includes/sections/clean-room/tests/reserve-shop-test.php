@@ -129,6 +129,8 @@ work( $store, 1101 );
 Reserve_Shop::sweep( $store, $settings );
 check_same( '… nor taken out of a tank, by their hooks or by the sweep', array( 3, 2, array(), array() ), array( alive( $store, $s121 ), alive( $store, $s122 ), sold( $store, $s121 ), sold( $store, $s122 ) ) );
 check_same( '… nor put on the not-found list', array(), Reserve_Shop::lost() );
+check_contains( '… and "It was tank…" refuses it too', 'had already left before reserving was switched on', Reserve_Shop::act( $store, $settings, array( 'op' => 'pick', 'order_id' => 1101, 'ref' => 'i:' . $shipped_it->get_id(), 'stay_id' => $s122 ) ) );
+check_same( '… nothing written', array( 2, array() ), array( alive( $store, $s122 ), held( $shipped_it ) ) );
 
 /* ------------------------------------------------------------------ */
 echo "2. Reserved when the order comes in\n";

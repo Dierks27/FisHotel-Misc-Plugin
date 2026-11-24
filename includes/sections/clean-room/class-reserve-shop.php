@@ -1058,6 +1058,13 @@ class Reserve_Shop {
 			);
 		}
 		list( $facts, $line ) = $found;
+		if ( ! Reserve::gated( $line ) && Reserve::left( $facts['signals'], (int) $line['item_id'] ) ) {
+			// Install safety: an order that had left before this was switched on is never taken out of a tank.
+			return array(
+				'ok'      => false,
+				'message' => __( 'That order had already left before reserving was switched on — nothing is taken out of a tank for it.', 'fishotel-misc-plugin' ),
+			);
+		}
 		$stay = $store->stay( (int) $stay_id, Clean_Room::today(), $settings );
 		if ( ! is_array( $stay ) ) {
 			return array(

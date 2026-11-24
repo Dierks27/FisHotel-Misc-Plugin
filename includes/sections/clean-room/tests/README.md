@@ -66,6 +66,8 @@ php  includes/sections/clean-room/tests/todo-test.php
 php  includes/sections/clean-room/tests/sold-line-test.php
 php  includes/sections/clean-room/tests/feeding-test.php
 php  includes/sections/clean-room/tests/ship-lines-test.php
+php  includes/sections/clean-room/tests/reserve-test.php
+php  includes/sections/clean-room/tests/reserve-shop-test.php
 php  includes/sections/clean-room/tests/temp-board-test.php
 php  includes/sections/clean-room/tests/temp-guards-test.php
 php  includes/sections/clean-room/tests/dose-temp-test.php
@@ -1036,6 +1038,66 @@ system temp directory (`FH_TEST_TMP` overrides).
   inverts that are in no tank (nothing changes), the tick switched off
   at once; the day's closed groups asked for only on a day fish
   ship.
+- **reserve-test.php** — Reserved → Pull today → Shipped, the pure rules
+  (`Reserve`): the item meta keys and the shipped note ("order:N
+  item:M", read back), the stored reservation (JSON or array, its order
+  kept, cut from the end by a refund); which group — the Invoices link
+  (even to a quarantine group), a group the same customer was offered by
+  a request, the same product AND size, the same name AND size (or the
+  name ending in the size), **never a guess** (a product or a name with
+  a size one side leaves open: "coarse", no group), nothing for a fish
+  in no tank or only in quarantine; how many — the group that ships
+  first first (`Store::ships_first()`, the product page's own order),
+  free fish only, a line of 5 over two tanks; every open order at once —
+  **a held line never moves**, the oldest order first, asked again →
+  nothing added, a line refunded down holds only what it asks; whether a
+  line left (shipped / completed, a shipment naming its item or naming
+  none, a local pickup, in another order's box, the box it is in); the
+  **difference** — all of it once, **nothing the second time**, put back
+  when not left any more, nothing for a refund after it left (nor the
+  order turning "refunded"), nothing for a cancelled order, the old group
+  back and the new one out when the owner picks another tank after it
+  shipped, **short when fewer are alive** (not written), an undo by hand
+  counted and respected; the gate (seen open, or reserved); the pull
+  list (by building and tank, a line over two tanks, Shipped, Tank not
+  known, inverts apart, the counts) and its words; the stock warning
+  (only where the shop and the tanks' free fish differ, never for an
+  untracked product); the alternatives; every sentence.
+- **reserve-shop-test.php** — the same the whole way through a stand-in
+  shop and the in-memory store (`Reserve_Shop`; ShipTracker's shipments
+  as a stand-in table): **switched on with an order already completed
+  and one already shipped — neither is reserved, written or listed, by
+  its hooks, by the sweep, nor by "It was tank…"**; an order comes in →
+  held in the group that sells first, marked seen, "2 reserved · #1234"
+  on the tank card and the phone, still 3 alive, nothing written; a
+  second order takes what is free; read again → nothing moves; the
+  quarantine group never reserved; a fish in no tank and a fish known
+  only by its product (no size) → tank not known, then reserved once the
+  fish is logged; Pull today (by building and tank, Tank not known, the
+  same fish as the pick list, the other clean groups offered); shipped →
+  **exactly one event per group, noted with the order and item**, saved
+  twice and swept → no change, History "Shipped · order #1234", the row
+  ticked Shipped, no longer reserved; a partial shipment naming the line
+  → out of both tanks, the shipment removed → back in both; cancelled
+  before it left → released, no event, the reservation kept as history;
+  a line over two tanks and a line refunded to nothing before it left;
+  a refund after it left (and the order turning "refunded") → nothing;
+  **fewer alive than reserved → nothing written, on the not-found list**,
+  "It was tank 221" → written there, kept as the reservation, off the
+  list; Ignore → gone for good; Pulled from a different tank **before**
+  (only the reservation moves) **and after** it shipped (the old group
+  back, the new one out, asked again → nothing); **a combined box** read
+  through the orders in it (the box's own copies never reserved) and its
+  fish out when the box ships; switched off → nothing shown or written,
+  on again → the first switch-on time; the feeding rule reads the
+  reservation first; the To do tab and the Board rendered (Pull today,
+  Shipped, the corrections' forms, the not-found line, "N reserved ·
+  #…") and the phone's hand Shipped saying so and still writing; the
+  hooks (the storefront only drops the cache; an order leaving before
+  anyone looked is reserved and written at the end of that request; an
+  order never open after the switch-on: nothing) and the hourly sweep
+  armed, dropped when switched off and when the section is off.
+
 - **front-desk-feeding.test.js** — the same on the phone, the script run
   against a small stand-in DOM: the Today strip's one line and, opened,
   the reason where the Feed chip would be with no chip to tap; a feed
@@ -1849,3 +1911,39 @@ line's `split` field holds anything (`fields_before`) — and one press on
     and on an ordinary admin page: the section still runs no query of
     its own there, and on the To do tab the second load within five
     minutes runs no order query.
+39. Reserved, Pull today, Shipped (needs WooCommerce, the Batch Manager
+    and ShipTracker; Settings → Numbers: the tick *Reserve sold fish in
+    their tank…* is on). Before switching it on, note an order that is
+    already *shipped* or *completed* with fish in a clean tank. Open the
+    Board once: that order's fish are not reserved, and its tanks keep
+    their counts — also an hour later (the sweep). Place an order for a
+    fish that is in a clean tank with its product and size (a variation):
+    on the next Board load the tank card says "1 reserved · #…" and the
+    count alive is unchanged; the phone's tank screen says the same, and
+    its Shipped sheet for that group says the fish "will come off by
+    itself when it ships". In the Invoices section's tank picker the
+    group says "1 reserved for orders (#…)". Order a fish known only by
+    its product without a size, or not in any tank: no reservation.
+    Give the order tomorrow's delivery date: the To do tab (and the
+    phone's Today list) has *Pull today* — "Tank 121 — 1 × … (#…)", the
+    unknown fish under "Tank not known" with the hint; the Batch
+    Manager's printed pick list for tomorrow lists the same orders and
+    fish. Open *Pulled from a different tank* on the row and pick another
+    clean tank of that fish: the row moves there. Add tracking in
+    ShipTracker: at once the row reads ✓ Shipped, the tank's count drops
+    by exactly that fish, and the Events tab reads "Shipped · order #…
+    (1 fish)" with a link to the order; Update the order again — nothing
+    more. Remove the tracking in ShipTracker: within the hour (or on the
+    next change to the order) the fish is back in its tank, the Events
+    tab showing the put-back. Add it again; then refund the fish: the
+    tank does not change. Cancel another reserved order before it ships:
+    its fish are free again, no event. Mark an order whose fish is not
+    in any tank as a local pickup: the To do tab says "Could not find a
+    tank for 1 fish that shipped"; open it, *It was tank…* → pick its
+    group: the event is written there and the line is gone; Ignore
+    another one: it never comes back. Untick the setting and save: no
+    reservations, no Pull today, nothing written; tick it again — the
+    switch-on time is the first one (`fishotel_cleanroom_reserve_since`
+    unchanged). Last, with the Query Monitor on a shop page: no query of
+    this feature there; on the Board, the second load within ten minutes
+    runs no order query.
