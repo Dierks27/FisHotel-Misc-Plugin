@@ -145,6 +145,7 @@ class Letter {
 			add_action( 'manage_shop_order_posts_custom_column', array( self::class, 'render_column' ), 10, 2 );
 			add_filter( 'manage_woocommerce_page_wc-orders_columns', array( self::class, 'add_column' ), 30 );
 			add_action( 'woocommerce_shop_order_list_table_custom_column', array( self::class, 'render_column' ), 10, 2 );
+			add_action( 'admin_head', array( self::class, 'column_css' ) );
 
 			add_filter( self::TODAY_FILTER, array( self::class, 'today_filter' ), 21, 1 );
 		}
@@ -774,6 +775,21 @@ class Letter {
 		}
 
 		return $out;
+	}
+
+	/**
+	 * `admin_head` on the orders screens (legacy and HPOS): the list table
+	 * shares its width out evenly, and WooCommerce's pill cuts what does
+	 * not fit to "Mail sticker…", hiding the number. A width that holds
+	 * "Mail sticker (12)".
+	 */
+	public static function column_css() {
+		$screen = function_exists( 'get_current_screen' ) ? get_current_screen() : null;
+		if ( ! is_object( $screen ) || ! in_array( (string) ( $screen->id ?? '' ), array( 'edit-shop_order', 'woocommerce_page_wc-orders' ), true ) ) {
+			return;
+		}
+
+		echo '<style>table.wp-list-table .column-fh_sticker_letter{width:12em !important}</style>'; // WooCommerce's own list rules set every column's width.
 	}
 
 	/**

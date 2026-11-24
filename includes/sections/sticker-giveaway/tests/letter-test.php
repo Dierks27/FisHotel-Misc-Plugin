@@ -93,6 +93,9 @@ function wc_get_orders( $args ) {
 function admin_url( $path = '' ) {
 	return 'https://example.test/wp-admin/' . $path;
 }
+function get_current_screen() {
+	return isset( $GLOBALS['fh_screen'] ) ? (object) array( 'id' => $GLOBALS['fh_screen'] ) : null;
+}
 function current_user_can( $cap ) {
 	return ! empty( $GLOBALS['fh_can'] );
 }
@@ -647,6 +650,12 @@ check( 'the legacy table hands the post id: the same badge', $cell( $flagged ) =
 $GLOBALS['fh_orders'][1240]->status = 'completed';
 check( 'a completed flagged order: a quiet "By letter (1)"', false !== strpos( $cell( 1240 ), 'By letter (1)' ) && false === strpos( $cell( 1240 ), '<mark' ) );
 check( 'an order without a letter, and another column: nothing', '' === $cell( 1250 ) . $cell( 1234, 'order_total' ) );
+$GLOBALS['fh_screen'] = 'edit-shop_order';
+check( 'the legacy orders screen: the column is wide enough for "Mail sticker (2)" (the pill is not cut to "Mail sticker…")', false !== strpos( shown( array( Letter::class, 'column_css' ) ), '.column-fh_sticker_letter{width:' ) );
+$GLOBALS['fh_screen'] = 'woocommerce_page_wc-orders';
+check( '... the HPOS orders screen too', '' !== shown( array( Letter::class, 'column_css' ) ) );
+$GLOBALS['fh_screen'] = 'dashboard';
+check( '... any other screen: nothing', '' === shown( array( Letter::class, 'column_css' ) ) );
 
 echo "6. The Today page\n";
 check( 'one order: "Stickers to mail by letter: #1234 (2)"', 'Stickers to mail by letter: #1234 (2)' === Letter::today_line( array( array( 'number' => '1234', 'count' => 2 ) ), 'u' )['text'] );

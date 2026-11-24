@@ -376,7 +376,9 @@ too), worked out from the order's own lines:
 - a **Sticker letter** column in the admin orders list, legacy and HPOS
   screens: "Mail sticker (2)" in WooCommerce's own yellow pill while the
   order is open, a quiet "By letter (2)" once it is completed (or
-  cancelled, refunded, failed);
+  cancelled, refunded, failed). The column is given a width of its own
+  (`Letter::column_css()`), or WooCommerce's pill cuts the badge to
+  "Mail sticker…" and the number is lost;
 - on the **Today page and its widget**: "Stickers to mail by letter:
   #1234 (2), #1240 (1)" through Today's `fishotel_today_lines` filter,
   under Customers, until the order is completed (open = every status but
