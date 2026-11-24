@@ -171,12 +171,17 @@ class Search {
 			$detail     = array();
 			/* translators: %d: fish alive in the group */
 			$detail[] = sprintf( __( '%d alive', 'fishotel-misc-plugin' ), $group['alive'] );
-			if ( ! empty( $group['for_sale'] ) ) {
+			$all_held = ! empty( $group['for_sale'] ) && $for_orders > 0 && 0 === $on_other && $group['alive'] - $for_orders <= 0;
+			if ( $all_held ) {
+				// Nothing ready: "all 4 reserved (Mike S. — by hand, 3 days ago)", never "0 ready".
+				/* translators: 1: fish, 2: who they are held for */
+				$detail[] = sprintf( __( 'all %1$d reserved (%2$s)', 'fishotel-misc-plugin' ), $for_orders, Tanks::reserved_for( $ordered[ $group['stay_id'] ] ) );
+			} elseif ( ! empty( $group['for_sale'] ) ) {
 				// Ready → Reserved → Shipped: the fish for sale that nothing holds (an order, a hold by hand, another invoice).
 				/* translators: %d: fish ready */
 				$detail[] = sprintf( __( '%d ready', 'fishotel-misc-plugin' ), max( 0, $group['alive'] - $on_other - $for_orders ) );
 			}
-			if ( $for_orders > 0 ) {
+			if ( $for_orders > 0 && ! $all_held ) {
 				/* translators: 1: fish, 2: who they are held for ("#1234, #1240" or "Mike S. — by hand, 3 days ago") */
 				$detail[] = sprintf( __( '%1$d reserved (%2$s)', 'fishotel-misc-plugin' ), $for_orders, Tanks::reserved_for( $ordered[ $group['stay_id'] ] ) );
 			}

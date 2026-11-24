@@ -57,7 +57,8 @@ if ( ! isset( $fh_hold_on ) ) {
 			<span class="fh-cr-cardline__size"><?php if ( $fh_line['size'] ) : ?><span class="fh-cr-size"><?php echo esc_html( $fh_line['size']['label'] ); ?></span><?php endif; ?></span>
 			<span class="fh-cr-cardline__qty">&times;&nbsp;<?php echo esc_html( $fh_line['qty'] ); ?></span>
 			<span class="fh-cr-cardline__day"><?php echo esc_html( $fh_day ); ?></span>
-			<span class="fh-cr-cardline__state"><?php echo Admin::badge_html( $fh_first, false ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by badge_html(). ?></span>
+			<?php $fh_sum = Reserve::stage_sum( $fh_line['stays'] ); // Every fish for sale of the line reserved: RESERVED, not READY. ?>
+			<span class="fh-cr-cardline__state"><?php echo Admin::badge_html( array_merge( $fh_first, array( 'qty_live' => $fh_sum['qty_live'], 'reserved' => $fh_sum['reserved'] ) ), false ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by badge_html(). ?></span>
 			<?php if ( $fh_notes ) : ?>
 				<span class="fh-cr-cardline__notes">
 					<?php if ( $fh_groups > 1 ) : ?>
@@ -115,7 +116,7 @@ if ( ! isset( $fh_hold_on ) ) {
 								<?php if ( Reserve::ready( $fh_stay ) > 0 ) : ?>
 									<details class="fh-cr-hold">
 										<summary><?php esc_html_e( 'Reserve…', 'fishotel-misc-plugin' ); ?></summary>
-										<form class="fh-cr-hold__form" method="post" action="<?php echo esc_url( Admin_Reserve::form_url() ); ?>" data-ajax="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>" data-nonce="<?php echo esc_attr( wp_create_nonce( Front_Desk::NONCE ) ); ?>">
+										<form class="fh-cr-hold__form" method="post" action="<?php echo esc_url( Admin_Reserve::form_url() ); ?>"<?php if ( Reserve_Shop::can_pick_customers() ) : // The customer search only for those who may see the shop's customers. ?> data-ajax="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>" data-nonce="<?php echo esc_attr( wp_create_nonce( Front_Desk::NONCE ) ); ?>"<?php endif; ?>>
 											<?php wp_nonce_field( Reserve_Shop::ACTION ); ?>
 											<input type="hidden" name="action" value="<?php echo esc_attr( Reserve_Shop::ACTION ); ?>">
 											<input type="hidden" name="op" value="hold">
@@ -130,6 +131,7 @@ if ( ! isset( $fh_hold_on ) ) {
 												<input type="text" name="who" class="fh-cr-hold__who" maxlength="<?php echo esc_attr( Holds::WHO_MAX ); ?>" autocomplete="off" required placeholder="<?php esc_attr_e( 'a customer (name or e-mail) or any name', 'fishotel-misc-plugin' ); ?>">
 											</label>
 											<ul class="fh-cr-hold__found" hidden></ul>
+											<p class="fh-cr-hold__tie fh-cr-muted" aria-live="polite"></p>
 											<label><?php esc_html_e( 'Note', 'fishotel-misc-plugin' ); ?>
 												<input type="text" name="note" maxlength="<?php echo esc_attr( Holds::NOTE_MAX ); ?>" placeholder="<?php esc_attr_e( 'optional, e.g. paying Friday', 'fishotel-misc-plugin' ); ?>">
 											</label>

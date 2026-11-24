@@ -45,10 +45,6 @@ $fh_temp_done = false;
 
 	<?php include Clean_Room::path() . 'views/tabs.php'; ?>
 
-	<?php if ( ! empty( $flash ) ) : // What "Reserve…" or "Release" on a tank card just did. ?>
-		<div class="fishotel-misc-notice fishotel-misc-notice--success"><?php echo esc_html( $flash ); ?></div>
-	<?php endif; ?>
-
 	<?php if ( ! $tables_ok ) : ?>
 		<div class="fishotel-misc-notice fishotel-misc-notice--error">
 			<?php esc_html_e( 'The Clean Room tables do not exist. Deactivate and reactivate the plugin to create them.', 'fishotel-misc-plugin' ); ?>

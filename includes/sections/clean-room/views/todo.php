@@ -71,10 +71,6 @@ $fh_total = (int) $list['total'];
 		</p>
 	<?php endif; ?>
 
-	<?php if ( ! empty( $flash ) ) : ?>
-		<div class="fishotel-misc-notice fishotel-misc-notice--success"><?php echo esc_html( $flash ); ?></div>
-	<?php endif; ?>
-
 	<?php include Clean_Room::path() . 'views/pull-today.php'; // Reserved → Pull today → Shipped: which tank each fish of today's boxes comes out of. ?>
 
 	<?php include Clean_Room::path() . 'views/holds.php'; // Held by hand: every hold with Release, and the orders that may be one a hold was made for. ?>

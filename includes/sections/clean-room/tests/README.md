@@ -2064,3 +2064,26 @@ line's `split` field holds anything (`fields_before`) — and one press on
     hand*: its fish are ready again. A hold older than 14 days stands out
     in orange. Untick the setting: no hold shown anywhere, *Reserve…* gone;
     tick it again — every hold is back as it was.
+
+41. Reserve by hand — what the reviews found (same set-up). (a) Reserve
+    every ready fish of a group: its badge says RESERVED and the line
+    "all N reserved (…)" on the Board, the phone and the Stays tab; the
+    Invoices picker says "all N reserved (…)", never "0 ready". (b) The
+    Board's notice after Reserve… or Release shows once, green (a refusal
+    yellow); the confirmation ends with one full stop after "Maria T.".
+    (c) Ann's paid order takes her hold: on that same load it leaves
+    *Held by hand*, appears under *Ended lately* "taken by order #…", and
+    the order has a private note "Clean Room: 2 × … held by hand for Ann
+    B. since … — taken by this order". (d) Ann with an older order on
+    hold and a newer paid one of the same fish: the paid one takes her
+    held fish. (e) On the phone, with 3 of 5 held for Mike S., Move 4 to
+    another tank: refused ("move at most 2…"); move 2: fine; move the
+    rest (the whole group): the hold goes along. (f) Phone *Shipped* on a
+    group with a hold: tick "These were held for Mike S." — the hold goes
+    down by them (closes "shipped by hand" at 0); unticked, it stays.
+    (g) Pick a customer under *For whom*, then edit the name: the line
+    under it changes from "Tied to the customer account of…" to "A name
+    typed, no account…". (h) Logged in as Clean Room staff without the
+    shop's order screens: no customer is offered, a typed name works.
+    (i) An invoice of 2 fish of a group of 5 left open: *Reserve…* of 4
+    is refused ("Only 3 are ready").

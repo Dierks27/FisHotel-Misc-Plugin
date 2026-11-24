@@ -205,6 +205,14 @@ class WC_Order {
 		return (string) $this->get_meta( '_billing_email' );
 	}
 
+	/**
+	 * A note on the order (kept in $GLOBALS['fh_order_notes'][ order id ]).
+	 */
+	public function add_order_note( $note, $is_customer_note = 0, $added_by_user = false ) {
+		$GLOBALS['fh_order_notes'][ $this->id ][] = (string) $note;
+		return count( $GLOBALS['fh_order_notes'][ $this->id ] );
+	}
+
 	public function get_date_created() {
 		return $this->created > 0 ? new DateTimeImmutable( '@' . $this->created ) : null;
 	}
@@ -262,6 +270,11 @@ class WC_Order {
 function wc_update_order_item_meta( $item_id, $key, $value ) {
 	if ( ! isset( $GLOBALS['fh_shop_items'][ (int) $item_id ] ) ) {
 		return false;
+	}
+	if ( ! empty( $GLOBALS['fh_item_meta_fail'] ) ) {
+		// A test makes the request die here (a crash between two writes).
+		$GLOBALS['fh_item_meta_fail']--;
+		throw new RuntimeException( 'the request died' );
 	}
 	$GLOBALS['fh_shop_items'][ (int) $item_id ]->set_meta( $key, $value );
 	$GLOBALS['fh_item_meta_writes'] = ( $GLOBALS['fh_item_meta_writes'] ?? 0 ) + 1;

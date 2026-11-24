@@ -594,7 +594,7 @@ class Store {
 	 * group each customer was offered (rather than one search per order).
 	 *
 	 * @param int[] $stay_ids Tank group ids.
-	 * @return array[] product_id, stay_id, user_id, email.
+	 * @return array[]|null product_id, stay_id, user_id, email — null when it could not be read whole.
 	 */
 	public function offered_to_stays( array $stay_ids ) {
 		$stay_ids = array_values( array_unique( array_filter( array_map( 'intval', $stay_ids ) ) ) );
@@ -608,11 +608,16 @@ class Store {
 		try {
 			$rows = $wpdb->get_results( $sql, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery -- integers only.
 		} catch ( \Throwable $e ) {
-			return array();
+			return null;
+		}
+		// A failed query answers an empty list in WordPress; a full page may have left some out: either way
+		// the caller asks each customer on their own instead (null), never reads "nobody was offered".
+		if ( ! is_array( $rows ) || ( isset( $wpdb->last_error ) && '' !== (string) $wpdb->last_error ) || count( $rows ) >= (int) self::FIND_LIMIT ) {
+			return null;
 		}
 
 		$out = array();
-		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
+		foreach ( $rows as $row ) {
 			$out[] = array(
 				'product_id' => (int) ( $row['product_id'] ?? 0 ),
 				'stay_id'    => (int) ( $row['stay_id'] ?? 0 ),

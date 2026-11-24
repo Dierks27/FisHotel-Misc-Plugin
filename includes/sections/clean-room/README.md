@@ -1346,33 +1346,58 @@ Friday.
 - **Reserve…** — on a group of a tank card on the Board (open its line)
   and on a group on the phone: **how many** (never more than are
   **ready**: a group not for sale, or with every fish already held, offers
-  none), **for whom** — the shop's customers found by name or e-mail as
-  you type (their name and e-mail are then read from their account, "Mike
-  S."), or any name typed — and a short **note** ("paying Friday").
+  none — and the fish on the Invoices section's open invoices are not
+  ready either), **for whom** — the shop's customers found by name or
+  e-mail as you type (their name and e-mail are then read from their
+  account, "Mike S."), or any name typed — and a short **note** ("paying
+  Friday"). Under the name it always says which it is: "Tied to the
+  customer account of Ann B. — their own paid order takes these fish", or
+  "A name typed, no account…" (a customer picked and then the name edited
+  becomes a typed name, and it says so). Only somebody WooCommerce lets
+  see its customers (`edit_shop_orders`) gets the customer search and may
+  tie a hold to an account; anybody else with the Clean Room types a
+  name.
 - **Shown wherever reserved counts show**: "5 ready · 2 reserved (Mike S.
-  — by hand, 3 days ago)". The held fish are **not ready**: no order, no
+  — by hand, 3 days ago)"; with nothing ready, "all 4 reserved (…)" and
+  the group's badge says **RESERVED**, never READY (Board, phone, Stays,
+  the Invoices picker). The held fish are **not ready**: no order, no
   invoice of the Invoices picker, no request of the Requests job and no
-  "not reserved" count of the Move sheet counts them.
+  "not reserved" count of the Move sheet counts them. A **move of part
+  of a group** never takes held fish along: at most the fish nothing
+  holds may move off ("3 of these are held by hand for Mike S.: move at
+  most 2, move the whole group (the hold goes with it), or release the
+  hold first").
 - **Not an event**: the fish alive are unchanged; nothing is written in
   the tank's history. **Not on Pull today** — no order is behind a hold.
 - **It never runs out by itself.** Its age is shown ("3 days ago"); a
   hold of 14 days or more stands out. **Release** — on the group (Board,
   phone) and on the To do tab's **Held by hand** list of every hold (tank,
   fish, who, how many, how long, the note) — ends it: its fish are ready
-  again.
+  again. A hold never just vanishes: **Ended lately** under that list
+  says for a week who it was for and why it ended ("taken by order
+  #1240", "released", "shipped by hand"). Fish of a hold shipped by hand
+  on the phone ("Shipped"): tick "These were held for Mike S." and the
+  hold goes down by them in the same step.
 - **Orders first, never more than alive.** Holds count with the orders'
   reservations; when fish die, a hold shrinks (the older hold keeps its
-  fish first) — never an order. The list says "only 1 still in the tank
-  for it"; a hold whose group closed holds nothing and says "its tank
-  group is gone".
+  fish first) — never an order, and at once (a loss, a recount or a hand
+  "Shipped" in a group with a hold drops the cached counts). The list
+  says "only 1 still in the tank for it" ("none of its fish is left in the
+  tank — release it"); a hold whose group closed holds nothing and says
+  "its tank group is gone".
 - **When that person orders.** A hold for a **customer's account** is
   taken by **that customer's own paid order** (same account, or the same
   e-mail on a guest checkout) for **the same fish in the same size**: the
   order's line is reserved in the hold's group, the hold keeps what is
-  left over and closes when nothing is ("taken by order #1240"). An order
-  of theirs **not paid yet** waits for the held fish (it is given no
-  others for them, and they stay held). **Never another customer's
-  order.** It is the reservation's **top rung, before the Invoices
+  left over and closes when nothing is ("taken by order #1240" — said on
+  the order too, in a private note: whose held fish, which tank, since
+  when). **Every paid order takes its customer's held fish first**; only
+  then does an order of theirs **not paid yet** wait for what is still
+  held (it is given no others for them, and they stay held) — so an older
+  unpaid order never leaves a newer paid one without them. The hold is
+  closed before the order's line is written: a request that dies between
+  the two leaves the line short, reserved anew on the next read — never
+  the same fish counted for both. **Never another customer's order.** It is the reservation's **top rung, before the Invoices
   link**: the hold is the owner's promise to that person, and the
   Invoices picker never offers held fish, so an invoice for them names
   the same group (same answer) or another one picked only because the
@@ -1383,11 +1408,14 @@ Friday.
   the To do tab asks "Is #1240 the order for the fish held for Mike S.?"
   — **Give them the held fish** (one tap: the line is reserved in the
   hold's group first, its other fish stay where they were, the hold closes
-  "taken by order #1240") or **Not this order** (not asked again for that
-  hold).
+  "taken by order #1240", and the order gets a note) or **Not this order**
+  (not asked again for that hold). The button is checked again when it
+  is pressed: only a line of **the held fish in the held size**, and a
+  hold for an account only to **that customer's own order** — a stale or
+  hand-made request is refused, never a wrong fish on a line.
 - **It follows its group**: a hold names the group (stay id), so a whole
-  group moved to another tank takes its holds along; a part moved off
-  leaves them in the group — as an order's reservation.
+  group moved to another tank takes its holds along; a part may move off
+  only with fish nothing holds (above).
 - **Storage**: one option, `fishotel_cleanroom_holds` (not autoloaded):
   `{ next, holds: { id => { stay_id, qty, who, user_id, email, note, at,
   by, closed, why, taken, not } } }` — no table, no column, no event

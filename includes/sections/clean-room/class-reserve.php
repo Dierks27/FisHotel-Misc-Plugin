@@ -413,10 +413,13 @@ class Reserve {
 	 *
 	 * The top rung (before the Invoices link): fish held BY HAND for this
 	 * order's own customer (their account), of the line's fish in its size
-	 * (Holds::for_line()). A paid order takes them — the hold gives them to
-	 * the order (takes) — and an order not paid yet waits for them: it is
-	 * given no other fish for them and they stay held. Never another
-	 * customer's: a hold with a typed name is never taken here.
+	 * (Holds::for_line()). Every PAID order takes them first — the hold
+	 * gives them to the order (takes), and a hold taken whole leaves the
+	 * holds returned (it closes) — and only then does an order not paid yet
+	 * wait for what is still held: it is given no other fish for them and
+	 * they stay held (so an older unpaid order never keeps a newer paid one
+	 * of the same customer from its fish). Never another customer's: a hold
+	 * with a typed name is never taken here.
 	 *
 	 * @param array[] $orders Open orders, oldest first: id, number, paid, customer (user_id, email), lines
 	 *                        (Feeding::fish_lines() rows with item_id, ref, held, offered; a line already gone
@@ -446,6 +449,51 @@ class Reserve {
 		$adds    = array();
 		$unknown = array();
 		$takes   = array();
+		$early   = array(); // Order id => ref => the fish of a hold its paid order took (rung 0, first pass).
+
+		// 0. Held by hand for this very customer (their account), of this fish in this size. FIRST every PAID
+		// order takes its customer's held fish (the oldest order first) — so a paid order is never left without
+		// them while an older unpaid order of the same customer waits — THEN an order not paid yet waits for
+		// what is still held (it is given no other fish for them, and they stay held).
+		if ( $holds ) {
+			foreach ( $orders as $order ) {
+				if ( empty( $order['paid'] ) || empty( $order['customer'] ) || ! is_array( $order['customer'] ) ) {
+					continue;
+				}
+				$id     = (int) ( $order['id'] ?? 0 );
+				$number = (string) ( $order['number'] ?? '' );
+				foreach ( (array) ( $order['lines'] ?? array() ) as $line ) {
+					$ref     = (string) ( $line['ref'] ?? '' );
+					$missing = (int) ( $line['qty'] ?? 0 ) - self::total( self::trim( (array) ( $line['held'] ?? array() ), (int) ( $line['qty'] ?? 0 ) ) );
+					if ( $missing <= 0 || null === self::key( self::META, $ref ) ) {
+						continue;
+					}
+					foreach ( Holds::for_line( $line, $order['customer'], $holds, $by_id ) as $hold ) {
+						$hid = (int) $hold['id'];
+						$n   = min( $missing, max( 0, (int) $holds[ $hid ]['qty'] ) );
+						if ( $n <= 0 ) {
+							continue;
+						}
+						$missing                  -= $n;
+						$stay                      = (int) $hold['stay_id'];
+						$early[ $id ][ $ref ][ $stay ] = ( $early[ $id ][ $ref ][ $stay ] ?? 0 ) + $n;
+						$holds[ $hid ]['qty']     -= $n;
+						$holds[ $hid ]['asked']    = max( 0, (int) ( $holds[ $hid ]['asked'] ?? $holds[ $hid ]['qty'] + $n ) - $n ); // What is still set aside.
+						$takes[ $hid ][]           = array(
+							'order_id' => $id,
+							'number'   => $number,
+							'ref'      => $ref,
+							'qty'      => $n,
+						);
+						$counts = Holds::move_in_counts( $counts, $stay, $hid, $n, $number );
+						if ( (int) $holds[ $hid ]['qty'] <= 0 ) {
+							unset( $holds[ $hid ] ); // Taken whole: it is closed ("taken by order #1240"), no longer held.
+						}
+					}
+				}
+			}
+		}
+
 		foreach ( $orders as $order ) {
 			$id     = (int) ( $order['id'] ?? 0 );
 			$number = (string) ( $order['number'] ?? '' );
@@ -456,32 +504,18 @@ class Reserve {
 					continue;
 				}
 
-				// 0. Held by hand for this very customer (their account), of this fish in this size: their own
-				// paid order takes those fish first; an order not paid yet waits for them (it takes no others).
-				$add = array();
-				if ( $holds && ! empty( $order['customer'] ) && is_array( $order['customer'] ) ) {
+				$add      = (array) ( $early[ $id ][ $ref ] ?? array() );
+				$missing -= self::total( $add );
+				if ( $missing > 0 && empty( $order['paid'] ) && $holds && ! empty( $order['customer'] ) && is_array( $order['customer'] ) ) {
+					// Not paid yet: it waits for what is still held for its customer (no other fish for them).
 					foreach ( Holds::for_line( $line, $order['customer'], $holds, $by_id ) as $hold ) {
 						$hid  = (int) $hold['id'];
 						$left = (int) $holds[ $hid ]['qty'] - (int) ( $waiting[ $hid ] ?? 0 );
 						$n    = min( $missing, max( 0, $left ) );
-						if ( $n <= 0 ) {
-							continue;
-						}
-						$missing -= $n;
-						if ( empty( $order['paid'] ) ) {
+						if ( $n > 0 ) {
+							$missing        -= $n;
 							$waiting[ $hid ] = (int) ( $waiting[ $hid ] ?? 0 ) + $n;
-							continue;
 						}
-						$stay                  = (int) $hold['stay_id'];
-						$add[ $stay ]          = ( $add[ $stay ] ?? 0 ) + $n;
-						$holds[ $hid ]['qty'] -= $n;
-						$takes[ $hid ][]       = array(
-							'order_id' => $id,
-							'number'   => $number,
-							'ref'      => $ref,
-							'qty'      => $n,
-						);
-						$counts = Holds::move_in_counts( $counts, $stay, $hid, $n, $number );
 					}
 				}
 
@@ -1182,8 +1216,27 @@ class Reserve {
 		if ( '' === $text || empty( $stay['sale_ready'] ) ) {
 			return $text;
 		}
+		if ( self::all_reserved( $stay ) ) {
+			// Nothing ready: never "0 ready · 4 reserved" beside a READY badge — "all 4 reserved (…)".
+			$who = self::reserved_who( (array) ( $stay['reserved_orders'] ?? array() ), (array) ( $stay['reserved_holds'] ?? array() ), $now );
+			/* translators: %d: fish reserved */
+			$all = sprintf( __( 'all %d reserved', 'fishotel-misc-plugin' ), (int) $stay['reserved'] );
+			return '' !== $who ? $all . ' (' . $who . ')' : $all;
+		}
 		/* translators: %d: fish ready (for sale, not reserved) */
 		return sprintf( __( '%d ready', 'fishotel-misc-plugin' ), self::ready( $stay ) ) . ' · ' . $text;
+	}
+
+	/**
+	 * Whether every fish alive of a group for sale is reserved (for orders
+	 * or by hand): nothing of it is ready — its badge says RESERVED, not
+	 * READY.
+	 *
+	 * @param array $stay qty_live, sale_ready, reserved.
+	 * @return bool
+	 */
+	public static function all_reserved( array $stay ) {
+		return ! empty( $stay['sale_ready'] ) && (int) ( $stay['qty_live'] ?? 0 ) > 0 && (int) ( $stay['reserved'] ?? 0 ) > 0 && 0 === self::ready( $stay );
 	}
 
 	/**
@@ -1266,7 +1319,8 @@ class Reserve {
 	/**
 	 * What the phone's hand "Shipped" says when fish of the group are held
 	 * by hand — they never come off by themselves: "2 of these are held by
-	 * hand for Mike S. — release the hold once they go." ('' for none).
+	 * hand for Mike S. — tick below if these are theirs, and the hold goes
+	 * down by them." ('' for none; the tick is the same step).
 	 *
 	 * @param array[] $holds Holds (who, qty).
 	 * @return string
@@ -1278,7 +1332,7 @@ class Reserve {
 		}
 		$who = Feeding::sentence_list( array_values( array_unique( array_filter( array_map( static function ( $h ) { return is_array( $h ) ? trim( (string) ( $h['who'] ?? '' ) ) : ''; }, $holds ), 'strlen' ) ) ) );
 		/* translators: 1: fish held, 2: who for */
-		return sprintf( _n( '%1$d of these is held by hand for %2$s — release the hold once it goes.', '%1$d of these are held by hand for %2$s — release the hold once they go.', $qty, 'fishotel-misc-plugin' ), $qty, $who );
+		return Holds::sentence( sprintf( _n( '%1$d of these is held by hand for %2$s — tick below if it is theirs, and the hold goes down by it', '%1$d of these are held by hand for %2$s — tick below if these are theirs, and the hold goes down by them', $qty, 'fishotel-misc-plugin' ), $qty, $who ) );
 	}
 
 	/**

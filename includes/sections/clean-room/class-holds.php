@@ -311,6 +311,171 @@ class Holds {
 	}
 
 	/**
+	 * Some of a hold's fish shipped BY HAND (the phone's "Shipped" with
+	 * "these were theirs" ticked): the hold goes down by them, and closes
+	 * when none are left ("shipped by hand").
+	 *
+	 * @param array $book book().
+	 * @param int   $id   Hold id.
+	 * @param int   $n    Fish shipped.
+	 * @param int   $now  UNIX time.
+	 * @return array book().
+	 */
+	public static function ship( array $book, $id, $n, $now ) {
+		$book = self::book( $book );
+		$id   = (int) $id;
+		if ( ! isset( $book['holds'][ $id ] ) || ! empty( $book['holds'][ $id ]['closed'] ) || (int) $n <= 0 ) {
+			return $book;
+		}
+		$n                               = min( (int) $n, (int) $book['holds'][ $id ]['qty'] );
+		$book['holds'][ $id ]['qty']    -= $n;
+		$book['holds'][ $id ]['taken'][] = array(
+			'order' => '',
+			'qty'   => $n,
+			'at'    => (int) $now,
+		);
+		if ( (int) $book['holds'][ $id ]['qty'] <= 0 ) {
+			$book['holds'][ $id ]['closed'] = (int) $now;
+			$book['holds'][ $id ]['why']    = __( 'shipped by hand', 'fishotel-misc-plugin' );
+		}
+		return self::trim_closed( $book );
+	}
+
+	/**
+	 * The holds that closed lately (taken by an order, given, released,
+	 * shipped by hand) — the newest first, so a hold never just vanishes
+	 * from the list: "Mike S. · taken by order #1240".
+	 *
+	 * @param array $book book().
+	 * @param int   $now  UNIX time.
+	 * @param int   $days How far back.
+	 * @return array[]
+	 */
+	public static function closed_lately( array $book, $now, $days = 7 ) {
+		$out = array();
+		foreach ( (array) ( $book['holds'] ?? array() ) as $hold ) {
+			if ( ! empty( $hold['closed'] ) && (int) $hold['closed'] >= (int) $now - (int) $days * DAY_IN_SECONDS ) {
+				$out[] = $hold;
+			}
+		}
+		usort(
+			$out,
+			static function ( $a, $b ) {
+				return ( (int) $b['closed'] <=> (int) $a['closed'] ) ?: ( (int) $b['id'] <=> (int) $a['id'] );
+			}
+		);
+		return $out;
+	}
+
+	/**
+	 * Why a closed hold ended, in words: "taken by order #1240",
+	 * "released", "shipped by hand".
+	 *
+	 * @param array $hold A closed hold.
+	 * @return string
+	 */
+	public static function why_text( array $hold ) {
+		$why = trim( (string) ( $hold['why'] ?? '' ) );
+		if ( 'released' === $why ) {
+			return __( 'released', 'fishotel-misc-plugin' );
+		}
+		return '' !== $why ? $why : __( 'ended', 'fishotel-misc-plugin' );
+	}
+
+	/**
+	 * Why "Give them the held fish" may not give a hold to an order line
+	 * ('' = it may): only a hold of the line's OWN fish in its size
+	 * (Sold_Line::exact() against the hold's group) — never a goby line
+	 * given a tang — and a hold tied to a customer's ACCOUNT only to that
+	 * customer's own order (Holds::owned_by()).
+	 *
+	 * @param array      $hold     The hold (user_id, email, who).
+	 * @param array      $line     The order line (a fish line).
+	 * @param array|null $stay     The hold's group (hydrated; null = gone).
+	 * @param array      $customer The order's user_id, email.
+	 * @return string
+	 */
+	public static function give_refuse( array $hold, array $line, $stay, array $customer ) {
+		if ( ! is_array( $stay ) ) {
+			return __( 'That hold\'s tank group is gone — nothing is given.', 'fishotel-misc-plugin' );
+		}
+		if ( ! Sold_Line::exact( array_merge( $line, array( 'held' => array(), 'link' => array() ) ), $stay ) ) {
+			return __( 'That order line is not the held fish in the held size — nothing is given.', 'fishotel-misc-plugin' );
+		}
+		if ( self::is_account( $hold ) && ! self::owned_by( $hold, $customer ) ) {
+			/* translators: %s: who the fish are held for */
+			return sprintf( __( 'Those fish are held for %s\'s account — only their own order takes them.', 'fishotel-misc-plugin' ), (string) $hold['who'] );
+		}
+		return '';
+	}
+
+	/**
+	 * Why a move of PART of a group is refused ('' = it may move): it would
+	 * take fish held by hand along — the hold stays with the group, so it
+	 * would quietly shrink and its fish be ready for anybody in the other
+	 * tank. At most the fish nothing holds may move off; the whole group
+	 * (its hold goes with it) always may.
+	 *
+	 * @param int     $alive    Fish alive in the group.
+	 * @param int     $reserved Fish reserved in it (orders and by hand).
+	 * @param array[] $holds    Its holds by hand (who, qty).
+	 * @param int     $qty      Fish to move (0 or all = the whole group).
+	 * @return string
+	 */
+	public static function move_refuse( $alive, $reserved, array $holds, $qty ) {
+		$alive = (int) $alive;
+		$qty   = (int) $qty;
+		$hand  = 0;
+		$who   = array();
+		foreach ( $holds as $hold ) {
+			if ( is_array( $hold ) && (int) ( $hold['qty'] ?? 0 ) > 0 ) {
+				$hand += (int) $hold['qty'];
+				$who[] = trim( (string) ( $hold['who'] ?? '' ) );
+			}
+		}
+		if ( $hand <= 0 || $qty <= 0 || $qty >= $alive ) {
+			return '';
+		}
+		$free = max( 0, $alive - max( 0, (int) $reserved ) );
+		if ( $qty <= $free ) {
+			return '';
+		}
+		$who = Feeding::sentence_list( array_values( array_unique( array_filter( $who, 'strlen' ) ) ) );
+		if ( $free > 0 ) {
+			/* translators: 1: fish held by hand, 2: who for, 3: fish that may move */
+			return sprintf( _n( '%1$d of these is held by hand for %2$s: move at most %3$d, move the whole group (the hold goes with it), or release the hold first.', '%1$d of these are held by hand for %2$s: move at most %3$d, move the whole group (the hold goes with it), or release the hold first.', $hand, 'fishotel-misc-plugin' ), $hand, $who, $free );
+		}
+		/* translators: 1: fish held by hand, 2: who for */
+		return sprintf( _n( '%1$d of these is held by hand for %2$s and none is free to move: move the whole group (the hold goes with it), or release the hold first.', '%1$d of these are held by hand for %2$s and none is free to move: move the whole group (the hold goes with it), or release the hold first.', $hand, 'fishotel-misc-plugin' ), $hand, $who );
+	}
+
+	/**
+	 * What a hold still holds when fish died: "only 1 still in the tank for
+	 * it" / "none of its fish is left in the tank — release it".
+	 *
+	 * @param int $qty What it holds now.
+	 * @return string
+	 */
+	public static function short_text( $qty ) {
+		if ( (int) $qty <= 0 ) {
+			return __( 'none of its fish is left in the tank — release it', 'fishotel-misc-plugin' );
+		}
+		/* translators: %d: fish */
+		return sprintf( __( 'only %d still in the tank for it', 'fishotel-misc-plugin' ), (int) $qty );
+	}
+
+	/**
+	 * A sentence ended once: "…for Maria T." never "…for Maria T..".
+	 *
+	 * @param string $text Text.
+	 * @return string
+	 */
+	public static function sentence( $text ) {
+		$text = rtrim( (string) $text );
+		return '' === $text || '.' === substr( $text, -1 ) ? $text : $text . '.';
+	}
+
+	/**
 	 * "Not this order": a suggestion that is not asked again.
 	 *
 	 * @param array  $book book().

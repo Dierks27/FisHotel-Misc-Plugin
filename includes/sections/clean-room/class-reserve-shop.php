@@ -359,7 +359,15 @@ class Reserve_Shop {
 		$type = is_array( $data ) ? (string) ( $data['type'] ?? '' ) : '';
 		if ( in_array( $type, array( 'arrival', 'move', 'clear' ), true ) ) {
 			self::flush();
-		} elseif ( 'sold' === $type ) {
+			return;
+		}
+		if ( in_array( $type, array( 'loss', 'count', 'sold' ), true ) && self::holds_stay( (int) $stay_id ) ) {
+			// Fewer fish alive in a group with a hold by hand: the hold shrinks now (orders first), never an hour
+			// later — until then another order could be given its fish.
+			self::flush();
+			return;
+		}
+		if ( 'sold' === $type ) {
 			self::flush_pull();
 		}
 	}
@@ -836,7 +844,7 @@ class Reserve_Shop {
 		} catch ( \Throwable $e ) {
 			return null;
 		}
-		self::$memo['offered'] = is_array( $rows ) ? $rows : array();
+		self::$memo['offered'] = is_array( $rows ) ? $rows : null; // Not read whole: each order is asked on its own.
 		return self::$memo['offered'];
 	}
 
@@ -1067,8 +1075,10 @@ class Reserve_Shop {
 		$holds = Holds::effective( Holds::open( self::book() ), self::alive( $stays['all'] ), Reserve::counted( $list, $base ) );
 		$plan  = Reserve::plan( $list, $stays['clean'], $stays['all'], Holds::add_to( $base, $holds ), $holds );
 		if ( $write ) {
-			self::write_plan( $list, $plan['adds'] );
+			// The holds first: a request that dies between the two leaves a hold closed and its order's line
+			// short — reserved anew on the next read — never the same fish counted for the hold and the order.
 			self::apply_takes( $plan['takes'] );
+			self::write_plan( $list, $plan['adds'] );
 		}
 
 		return array(
@@ -1409,8 +1419,8 @@ class Reserve_Shop {
 		);
 		$stays = self::stays( $store, $settings );
 		$plan  = Reserve::plan( array( $order ), $stays['clean'], $stays['all'], $counts, (array) ( self::ensure( $store, $settings )['holds'] ?? array() ) );
+		self::apply_takes( $plan['takes'] ); // The holds first (as in pass()).
 		self::write_plan( array( $order ), $plan['adds'] );
-		self::apply_takes( $plan['takes'] );
 		if ( isset( self::$memo['ensure'] ) && $open ) {
 			self::$memo['ensure']['counts'] = $plan['counts'];
 			self::$memo['ensure']['holds']  = $plan['holds'];
@@ -1806,19 +1816,36 @@ class Reserve_Shop {
 	 * @return string What to tell the owner.
 	 */
 	public static function act( $store, array $settings, array $raw ) {
+		return self::act_result( $store, $settings, $raw )['message'];
+	}
+
+	/**
+	 * act(), with whether it was done (the notice is green, else yellow).
+	 *
+	 * @param object $store    Store or stand-in.
+	 * @param array  $settings Settings.
+	 * @param array  $raw      The posted form.
+	 * @return array{ok: bool, message: string}
+	 */
+	public static function act_result( $store, array $settings, array $raw ) {
 		$op    = isset( $raw['op'] ) ? sanitize_key( (string) $raw['op'] ) : '';
 		$order = isset( $raw['order_id'] ) ? absint( $raw['order_id'] ) : 0;
 		$ref   = isset( $raw['ref'] ) && is_scalar( $raw['ref'] ) ? preg_replace( '/[^a-z0-9:]/', '', strtolower( (string) $raw['ref'] ) ) : '';
+		$ok = static function ( $done, $message ) {
+			return array(
+				'ok'      => (bool) $done,
+				'message' => (string) $message,
+			);
+		};
 		switch ( $op ) {
 			case 'pick':
-				$result = self::pick( $store, $settings, $order, $ref, isset( $raw['stay_id'] ) ? absint( $raw['stay_id'] ) : 0, isset( $raw['from'] ) ? absint( $raw['from'] ) : 0, isset( $raw['qty'] ) ? absint( $raw['qty'] ) : 0 );
-				return $result['message'];
+				return self::pick( $store, $settings, $order, $ref, isset( $raw['stay_id'] ) ? absint( $raw['stay_id'] ) : 0, isset( $raw['from'] ) ? absint( $raw['from'] ) : 0, isset( $raw['qty'] ) ? absint( $raw['qty'] ) : 0 );
 			case 'ignore':
-				return self::ignore( $order, $ref ) ? __( 'Ignored: that line is no longer listed.', 'fishotel-misc-plugin' ) : __( 'That order line could not be found.', 'fishotel-misc-plugin' );
+				return self::ignore( $order, $ref ) ? $ok( true, __( 'Ignored: that line is no longer listed.', 'fishotel-misc-plugin' ) ) : $ok( false, __( 'That order line could not be found.', 'fishotel-misc-plugin' ) );
 			case 'ignore_all':
 				$n = self::ignore_all();
 				/* translators: %d: lines */
-				return sprintf( _n( 'Ignored %d line.', 'Ignored %d lines.', $n, 'fishotel-misc-plugin' ), $n );
+				return $ok( true, sprintf( _n( 'Ignored %d line.', 'Ignored %d lines.', $n, 'fishotel-misc-plugin' ), $n ) );
 			case 'hold':
 				return self::hold_create(
 					$store,
@@ -1831,15 +1858,15 @@ class Reserve_Shop {
 						'note'    => isset( $raw['note'] ) && is_scalar( $raw['note'] ) ? sanitize_text_field( (string) $raw['note'] ) : '',
 						'by'      => function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0,
 					)
-				)['message'];
+				);
 			case 'release':
-				return self::hold_release( isset( $raw['hold_id'] ) ? absint( $raw['hold_id'] ) : 0 )['message'];
+				return self::hold_release( isset( $raw['hold_id'] ) ? absint( $raw['hold_id'] ) : 0 );
 			case 'give':
-				return self::hold_give( $store, $settings, isset( $raw['hold_id'] ) ? absint( $raw['hold_id'] ) : 0, $order, $ref )['message'];
+				return self::hold_give( $store, $settings, isset( $raw['hold_id'] ) ? absint( $raw['hold_id'] ) : 0, $order, $ref );
 			case 'not':
-				return self::hold_dismiss( isset( $raw['hold_id'] ) ? absint( $raw['hold_id'] ) : 0, $order, $ref ) ? __( 'That order will not be asked about again for this hold.', 'fishotel-misc-plugin' ) : __( 'That hold is no longer there.', 'fishotel-misc-plugin' );
+				return self::hold_dismiss( isset( $raw['hold_id'] ) ? absint( $raw['hold_id'] ) : 0, $order, $ref ) ? $ok( true, __( 'That order will not be asked about again for this hold.', 'fishotel-misc-plugin' ) ) : $ok( false, __( 'That hold is no longer there.', 'fishotel-misc-plugin' ) );
 			default:
-				return __( 'Unknown action.', 'fishotel-misc-plugin' );
+				return $ok( false, __( 'Unknown action.', 'fishotel-misc-plugin' ) );
 		}
 	}
 
@@ -1857,6 +1884,25 @@ class Reserve_Shop {
 			self::$memo['book'] = Holds::book( function_exists( 'get_option' ) ? get_option( Holds::OPTION, array() ) : array() );
 		}
 		return self::$memo['book'];
+	}
+
+	/**
+	 * Whether a group has an open hold by hand (one read of the holds per
+	 * request).
+	 *
+	 * @param int $stay_id Stay id.
+	 * @return bool
+	 */
+	public static function holds_stay( $stay_id ) {
+		if ( (int) $stay_id <= 0 ) {
+			return false;
+		}
+		foreach ( Holds::open( self::book() ) as $hold ) {
+			if ( (int) $hold['stay_id'] === (int) $stay_id ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -1884,13 +1930,60 @@ class Reserve_Shop {
 		if ( ! $takes ) {
 			return;
 		}
-		$book = self::book();
+		$book  = self::book();
+		$notes = array();
 		foreach ( $takes as $id => $rows ) {
+			$hold = $book['holds'][ (int) $id ] ?? null;
 			foreach ( (array) $rows as $row ) {
 				$book = Holds::take( $book, (int) $id, (int) $row['qty'], (string) $row['number'], time() );
+				if ( is_array( $hold ) && (int) ( $row['order_id'] ?? 0 ) > 0 ) {
+					$notes[] = array( (int) $row['order_id'], $hold, (int) $row['qty'] );
+				}
 			}
 		}
+		$by = self::by_id( (array) ( self::$memo['stays']['all'] ?? array() ) ); // Read before save_book() forgets them.
 		self::save_book( $book );
+		foreach ( $notes as $note ) {
+			// Said on the order too: whose held fish it took, from which tank.
+			$stay = $by[ (int) $note[1]['stay_id'] ] ?? null;
+			self::order_note( $note[0], self::hold_note( $note[1], $stay, $note[2], __( 'taken by this order (the customer\'s own paid order)', 'fishotel-misc-plugin' ) ) );
+		}
+	}
+
+	/**
+	 * The order note of a hold given to an order: "Clean Room: 2 × Test
+	 * Tang Medium in tank 121, held by hand for Ann B. since 2026-11-20 —
+	 * taken by this order (…)".
+	 *
+	 * @param array      $hold The hold.
+	 * @param array|null $stay Its group.
+	 * @param int        $n    Fish given.
+	 * @param string     $how  How.
+	 * @return string
+	 */
+	public static function hold_note( array $hold, $stay, $n, $how ) {
+		$fish = is_array( $stay ) ? trim( (string) ( $stay['species'] ?? '' ) . ' ' . (string) ( $stay['size_label'] ?? '' ) ) : '';
+		$tank = is_array( $stay ) ? (int) ( $stay['tank_number'] ?? 0 ) : 0;
+		$when = (int) ( $hold['at'] ?? 0 ) > 0 ? ( function_exists( 'wp_date' ) ? wp_date( 'Y-m-d', (int) $hold['at'] ) : gmdate( 'Y-m-d', (int) $hold['at'] ) ) : '';
+		/* translators: 1: fish, 2: the fish, 3: tank, 4: who they were held for, 5: since when, 6: how */
+		return sprintf( __( 'Clean Room: %1$d × %2$s in tank %3$d, held by hand for %4$s since %5$s — %6$s.', 'fishotel-misc-plugin' ), (int) $n, '' !== $fish ? $fish : __( 'fish', 'fishotel-misc-plugin' ), $tank, (string) ( $hold['who'] ?? '' ), '' !== $when ? $when : '?', $how );
+	}
+
+	/**
+	 * A private note on an order (never one the customer is e-mailed).
+	 *
+	 * @param int    $order_id Order id.
+	 * @param string $text     Note.
+	 */
+	private static function order_note( $order_id, $text ) {
+		try {
+			$order = function_exists( 'wc_get_order' ) ? wc_get_order( (int) $order_id ) : null;
+			if ( is_object( $order ) && method_exists( $order, 'add_order_note' ) ) {
+				$order->add_order_note( (string) $text, 0, false );
+			}
+		} catch ( \Throwable $e ) {
+			unset( $e );
+		}
 	}
 
 	/**
@@ -1921,6 +2014,38 @@ class Reserve_Shop {
 	}
 
 	/**
+	 * Whether the person asking may search the shop's customers and tie a
+	 * hold to an account — what WooCommerce's own customer search asks
+	 * (edit_shop_orders); everybody else types a name.
+	 *
+	 * @return bool
+	 */
+	public static function can_pick_customers() {
+		return function_exists( 'current_user_can' ) && ( current_user_can( 'edit_shop_orders' ) || current_user_can( 'manage_woocommerce' ) );
+	}
+
+	/**
+	 * The fish of some groups on the Invoices section's open invoices
+	 * (drafts and published, not paid): stay id => fish — empty when that
+	 * section is not there.
+	 *
+	 * @param int[] $stay_ids Stay ids.
+	 * @return array<int, int>
+	 */
+	public static function invoiced( array $stay_ids ) {
+		$class = '\\FisHotel\\Misc\\Sections\\Invoices\\Store';
+		if ( ! class_exists( $class, false ) || ! method_exists( $class, 'stay_reservations' ) || ( method_exists( $class, 'ready' ) && ! $class::ready() ) ) {
+			return array();
+		}
+		try {
+			$out = ( new $class() )->stay_reservations( array_map( 'intval', $stay_ids ), 0 );
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+		return is_array( $out ) ? array_map( 'intval', $out ) : array();
+	}
+
+	/**
 	 * The shop's customers whose name or e-mail holds a search text (at
 	 * most 10) — what "Reserve…" offers under "For whom?".
 	 *
@@ -1929,8 +2054,8 @@ class Reserve_Shop {
 	 */
 	public static function customers( $term ) {
 		$term = trim( (string) $term );
-		if ( strlen( $term ) < 2 ) {
-			return array();
+		if ( strlen( $term ) < 2 || ! self::can_pick_customers() ) {
+			return array(); // Names and e-mails only for those who may see the shop's customers.
 		}
 		$ids = array();
 		try {
@@ -1986,6 +2111,12 @@ class Reserve_Shop {
 			$today   = Clean_Room::today();
 			$stay    = $store->stay( (int) ( $raw['stay_id'] ?? 0 ), $today, $settings );
 			$user    = (int) ( $raw['user_id'] ?? 0 );
+			if ( $user > 0 && ! self::can_pick_customers() ) {
+				return array(
+					'ok'      => false,
+					'message' => __( 'Only somebody who can see the shop\'s customers can pick an account — type a name instead.', 'fishotel-misc-plugin' ),
+				);
+			}
 			$account = $user > 0 ? self::customer_of( $user ) : null;
 			if ( $user > 0 && ! $account ) {
 				return array(
@@ -1997,8 +2128,10 @@ class Reserve_Shop {
 			if ( is_array( $stay ) ) {
 				// Everything held there now: the orders and the other holds.
 				self::$memo = array( 'book' => self::$memo['book'] ?? self::book() );
-				$counts          = self::ensure( $store, $settings, true )['counts'];
-				$stay['reserved'] = (int) ( $counts[ (int) $stay['id'] ]['qty'] ?? 0 );
+				$counts = self::ensure( $store, $settings, true )['counts'];
+				$count  = (array) ( $counts[ (int) $stay['id'] ] ?? array() );
+				// …and the fish on the Invoices section's open invoices (an unpaid invoice's order is counted once).
+				$stay['reserved'] = (int) ( $count['qty'] ?? 0 ) - (int) ( $count['invoice'] ?? 0 ) + (int) ( self::invoiced( array( (int) $stay['id'] ) )[ (int) $stay['id'] ] ?? 0 );
 			}
 			$book   = self::book();
 			$qty    = (int) ( $raw['qty'] ?? 0 );
@@ -2027,7 +2160,7 @@ class Reserve_Shop {
 				'ok'      => true,
 				'id'      => $made['id'],
 				/* translators: 1: fish, 2: the fish's name, 3: tank number, 4: who for */
-				'message' => sprintf( __( '%1$d × %2$s in tank %3$d reserved for %4$s.', 'fishotel-misc-plugin' ), $qty, (string) $stay['species'], (int) ( $stay['tank_number'] ?? 0 ), $made['book']['holds'][ $made['id'] ]['who'] ),
+				'message' => Holds::sentence( sprintf( __( '%1$d × %2$s in tank %3$d reserved for %4$s', 'fishotel-misc-plugin' ), $qty, (string) $stay['species'], (int) ( $stay['tank_number'] ?? 0 ), $made['book']['holds'][ $made['id'] ]['who'] ) ), // Never "Maria T.." (two full stops).
 			);
 		} finally {
 			self::unlock();
@@ -2096,8 +2229,8 @@ class Reserve_Shop {
 		}
 		try {
 			self::$memo = array();
-			$book       = self::book();
 			$holds      = self::ensure( $store, $settings, true )['holds'];
+			$book       = self::book(); // Read after the pass: what it took is in it (never written back stale).
 			$hold       = $holds[ (int) $id ] ?? null;
 			$found      = self::line_of( $order_id, $ref );
 			$key        = Reserve::key( Reserve::META, $ref );
@@ -2120,18 +2253,31 @@ class Reserve_Shop {
 					'message' => __( 'That order is no longer open — nothing is given to it.', 'fishotel-misc-plugin' ),
 				);
 			}
+			// Never a wrong fish: only the held fish in the held size, and an account's hold only to its own order.
+			$stay   = self::by_id( self::stays( $store, $settings )['all'] )[ (int) $hold['stay_id'] ] ?? null;
+			$refuse = Holds::give_refuse( $hold, $line, $stay, (array) ( $facts['customer'] ?? array() ) );
+			if ( '' !== $refuse ) {
+				return array(
+					'ok'      => false,
+					'message' => $refuse,
+				);
+			}
 			$n    = min( (int) $hold['qty'], (int) $line['qty'] );
 			$held = Holds::give_to_line( Reserve::held( $line['held'] ), (int) $line['qty'], (int) $hold['stay_id'], $n );
+			// The hold first: a request that dies between the two leaves the hold closed and the line short —
+			// read again, it is reserved anew — never the same fish counted for both.
+			self::save_book( Holds::take( $book, (int) $id, $n, (string) $facts['number'], time() ) );
 			self::write_meta( (int) $line['item_id'], $key, Reserve::encode( $held ) );
 			if ( (int) $line['seen'] <= 0 ) {
 				self::write_meta( (int) $line['item_id'], Reserve::key( Reserve::META_SEEN, $ref ), (string) time() );
 			}
 			Ship_Lines::flush();
-			self::save_book( Holds::take( $book, (int) $id, $n, (string) $facts['number'], time() ) );
+			self::flush();
+			self::order_note( (int) $facts['id'], self::hold_note( $hold, $stay, $n, __( 'given to this order by hand (To do → "Give them the held fish")', 'fishotel-misc-plugin' ) ) );
 			return array(
 				'ok'      => true,
 				/* translators: 1: fish, 2: who they were held for, 3: order number */
-				'message' => sprintf( __( 'The %1$d fish held for %2$s now go to order #%3$s.', 'fishotel-misc-plugin' ), $n, (string) $hold['who'], (string) $facts['number'] ),
+				'message' => sprintf( _n( 'The fish held for %2$s now goes to order #%3$s.', 'The %1$d fish held for %2$s now go to order #%3$s.', $n, 'fishotel-misc-plugin' ), $n, (string) $hold['who'], (string) $facts['number'] ),
 			);
 		} finally {
 			self::unlock();
@@ -2161,6 +2307,97 @@ class Reserve_Shop {
 		} finally {
 			self::unlock();
 		}
+	}
+
+	/**
+	 * Why a move of part of a group is refused (Holds::move_refuse()): it
+	 * would take fish held by hand along — '' when it may move (or when
+	 * reserving is off: holds are hidden then).
+	 *
+	 * @param object $store    Store or stand-in.
+	 * @param array  $settings Settings.
+	 * @param array  $stay     The group (id, qty_live).
+	 * @param int    $qty      Fish to move.
+	 * @return string
+	 */
+	public static function move_refuse( $store, array $settings, array $stay, $qty ) {
+		if ( ! self::enabled( $settings ) || (int) $qty <= 0 || (int) $qty >= (int) ( $stay['qty_live'] ?? 0 ) || ! self::holds_stay( (int) ( $stay['id'] ?? 0 ) ) ) {
+			return '';
+		}
+		try {
+			self::$memo = array( 'book' => self::book() );
+			$count      = (array) ( self::ensure( $store, $settings, true )['counts'][ (int) $stay['id'] ] ?? array() );
+		} catch ( \Throwable $e ) {
+			return '';
+		}
+		return Holds::move_refuse( (int) $stay['qty_live'], (int) ( $count['qty'] ?? 0 ), (array) ( $count['holds'] ?? array() ), (int) $qty );
+	}
+
+	/**
+	 * Fish shipped BY HAND that were someone's held fish (the phone's
+	 * "Shipped" with the hold ticked): each ticked hold of that group goes
+	 * down by them, the oldest first, and closes when none are left.
+	 *
+	 * @param int   $stay_id  The group.
+	 * @param int[] $hold_ids The holds ticked.
+	 * @param int   $qty      Fish shipped.
+	 * @return int How many held fish were taken off holds.
+	 */
+	public static function hold_shipped( $stay_id, array $hold_ids, $qty ) {
+		$hold_ids = array_values( array_filter( array_map( 'intval', $hold_ids ) ) );
+		if ( ! $hold_ids || (int) $qty <= 0 || ! self::lock() ) {
+			return 0;
+		}
+		try {
+			self::$memo = array();
+			$book       = self::book();
+			$left       = (int) $qty;
+			$done       = 0;
+			foreach ( Holds::open( $book ) as $hold ) {
+				if ( $left <= 0 || (int) $hold['stay_id'] !== (int) $stay_id || ! in_array( (int) $hold['id'], $hold_ids, true ) ) {
+					continue;
+				}
+				$n     = min( $left, (int) $hold['qty'] );
+				$book  = Holds::ship( $book, (int) $hold['id'], $n, time() );
+				$left -= $n;
+				$done += $n;
+			}
+			if ( $done > 0 ) {
+				self::save_book( $book );
+			}
+			return $done;
+		} finally {
+			self::unlock();
+		}
+	}
+
+	/**
+	 * The holds that closed lately, as the list shows them: who, how many
+	 * they asked, the fish and tank (when the group is still open), why it
+	 * ended ("taken by order #1240") and when.
+	 *
+	 * @param object $store    Store or stand-in.
+	 * @param array  $settings Settings.
+	 * @return array[]
+	 */
+	public static function closed_rows( $store, array $settings ) {
+		$open = self::by_id( self::stays( $store, $settings )['all'] );
+		$now  = time();
+		$out  = array();
+		foreach ( array_slice( Holds::closed_lately( self::book(), $now ), 0, 20 ) as $hold ) {
+			$stay  = $open[ (int) $hold['stay_id'] ] ?? null;
+			$asked = (int) $hold['qty'] + (int) array_sum( array_map( 'intval', array_column( (array) $hold['taken'], 'qty' ) ) );
+			$out[] = array(
+				'id'   => (int) $hold['id'],
+				'who'  => (string) $hold['who'],
+				'qty'  => max( 1, $asked ),
+				'tank' => is_array( $stay ) ? (int) ( $stay['tank_number'] ?? 0 ) : 0,
+				'fish' => is_array( $stay ) ? trim( (string) $stay['species'] . ' ' . (string) ( $stay['size_label'] ?? '' ) ) : '',
+				'why'  => Holds::why_text( $hold ),
+				'when' => Reserve::age_text( (int) $hold['closed'], $now ),
+			);
+		}
+		return $out;
 	}
 
 	/**
@@ -2235,6 +2472,7 @@ class Reserve_Shop {
 				$out['lost']    = array_values( self::lost() );
 				$out['holds']   = self::hold_rows( $store, $settings, (array) ( $ensure['holds'] ?? array() ) ); // Every hold by hand, with Release.
 				$out['suggest'] = (array) ( $ensure['suggest'] ?? array() ); // "Is #1240 the order for the fish held for Mike S.?"
+				$out['closed']  = self::closed_rows( $store, $settings ); // Ended lately: "taken by order #1240", "released".
 			}
 			return $out;
 		} catch ( \Throwable $e ) {

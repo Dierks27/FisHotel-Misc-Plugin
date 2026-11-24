@@ -1353,6 +1353,7 @@ class Store {
 			$list['lost'] = isset( $reserve['lost'] ) ? $reserve['lost'] : array(); // The fish that shipped and whose tank was not found.
 			$list['holds']   = isset( $reserve['holds'] ) ? $reserve['holds'] : array(); // Every hold by hand (Release), oldest first.
 			$list['suggest'] = isset( $reserve['suggest'] ) ? $reserve['suggest'] : array(); // "Is #1240 the order for the fish held for Mike S.?"
+			$list['closed']  = isset( $reserve['closed'] ) ? $reserve['closed'] : array(); // Holds ended lately ("taken by order #1240").
 		}
 
 		return array(
@@ -1862,8 +1863,9 @@ class Store {
 	 * ShipTracker's shipments of many orders in ONE query on its own table
 	 * (what FST_Shipment::get_by_order() reads one order at a time): order
 	 * id => its rows (order_id, line_item_ids; an order with none gets an
-	 * empty list) — null when the table cannot be named or read (each order
-	 * is then read on its own, as before). Up to 500 orders a query.
+	 * empty list) — null when the table cannot be named or read, or the
+	 * query reports any error (each order is then read on its own, as
+	 * before). Up to 500 orders a query.
 	 *
 	 * @param int[] $order_ids Order ids.
 	 * @return array<int, object[]>|null
@@ -1881,7 +1883,9 @@ class Store {
 			} catch ( \Throwable $e ) {
 				return null;
 			}
-			if ( ! is_array( $rows ) ) {
+			// A failed query answers an EMPTY list in WordPress (not null): a table missing, or a ShipTracker
+			// before 1.9 with no line_item_ids column, would read as "nothing shipped". Any error: not primed.
+			if ( ! is_array( $rows ) || ( isset( $wpdb->last_error ) && '' !== (string) $wpdb->last_error ) ) {
 				return null;
 			}
 			foreach ( $chunk as $id ) {

@@ -62,8 +62,8 @@ class Admin_Reserve {
 		}
 		check_admin_referer( Reserve_Shop::ACTION );
 		$raw     = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- checked above.
-		$message = Reserve_Shop::act( new Store(), Settings::get(), is_array( $raw ) ? $raw : array() );
-		Admin_Workbook::flash( $message );
+		$result = Reserve_Shop::act_result( new Store(), Settings::get(), is_array( $raw ) ? $raw : array() );
+		Admin_Workbook::flash( $result['message'], ! empty( $result['ok'] ) ); // Green when done, yellow when refused.
 		// Back where the button was: the Board (Reserve… / Release on a tank card) or the To do tab.
 		$back = is_array( $raw ) && isset( $raw['back'] ) && 'board' === $raw['back'] ? Admin::page_url( 'board' ) : Admin::page_url( Admin_Temp::TAB );
 		wp_safe_redirect( $back );

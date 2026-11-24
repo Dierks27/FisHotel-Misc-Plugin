@@ -1968,11 +1968,18 @@
 		 * their name and e-mail from the account); anything typed after that is a name only.
 		 */
 		var holdTimer = null;
+		// Said under the name, always: tied to a customer's account (their own paid order takes the fish) or a name only.
+		function holdTie($form) {
+			var who = String($form.find('.fh-cr-hold__who').val() || '').trim();
+			var user = parseInt($form.find('.fh-cr-hold__user').val(), 10) || 0;
+			$form.find('.fh-cr-hold__tie').text(user ? String(i18n.holdAccount || 'Tied to the customer account of %s — their own paid order takes these fish.').replace('%s', who) : (who ? (i18n.holdTyped || 'A name typed, no account: no order takes these by itself — you will be asked when one comes in.') : ''));
+		}
 		$(document).on('input', '.fh-cr-hold__who', function () {
 			var $input = $(this);
 			var $form = $input.closest('.fh-cr-hold__form');
 			var $list = $form.find('.fh-cr-hold__found');
 			$form.find('.fh-cr-hold__user').val('0');
+			holdTie($form);
 			root.clearTimeout(holdTimer);
 			var term = String($input.val() || '').trim();
 			if (term.length < 2 || !$form.data('ajax')) {
@@ -1988,6 +1995,7 @@
 						$b.on('click', function () {
 							$input.val(item.who);
 							$form.find('.fh-cr-hold__user').val(String(item.user_id || 0));
+							holdTie($form);
 							$list.prop('hidden', true).empty();
 						});
 						$list.append($('<li></li>').append($b));

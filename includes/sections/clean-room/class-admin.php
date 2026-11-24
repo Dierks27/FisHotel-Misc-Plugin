@@ -765,6 +765,8 @@ class Admin {
 				'boxRates'      => $on_page ? Settings::box_rates() : array(),
 				'noProduct'     => $on_page ? Admin_No_Product::js_config() : array(),
 				'i18n'          => array(
+					'holdAccount'   => __( 'Tied to the customer account of %s — their own paid order takes these fish.', 'fishotel-misc-plugin' ),
+					'holdTyped'     => __( 'A name typed, no account: no order takes these by itself — you will be asked when one comes in.', 'fishotel-misc-plugin' ),
 					'saved'          => __( 'Saved.', 'fishotel-misc-plugin' ),
 					'error'          => __( 'Something went wrong. Please try again.', 'fishotel-misc-plugin' ),
 					'confirmAlias'   => __( 'Forget this alias?', 'fishotel-misc-plugin' ),
@@ -1649,8 +1651,14 @@ class Admin {
 		$key    = ! empty( $stay['sale_ready'] ) ? 'ready' : $status;
 		$key    = in_array( $key, array( 'in_qt', 'cleared', 'ready', 'closed' ), true ) ? $key : 'in_qt';
 		$words  = self::sale_words( $stay );
+		$label  = (string) ( $stay['state_label'] ?? $status );
+		if ( Reserve::all_reserved( $stay ) ) {
+			// Ready → Reserved → Shipped: every fish for sale is reserved — RESERVED, never READY beside "all 4 reserved".
+			$key   = 'reserved';
+			$label = __( 'reserved', 'fishotel-misc-plugin' );
+		}
 
-		$html = '<span class="fh-cr-badge fh-cr-badge--' . esc_attr( $key ) . '">' . esc_html( (string) ( $stay['state_label'] ?? $status ) ) . '</span>';
+		$html = '<span class="fh-cr-badge fh-cr-badge--' . esc_attr( $key ) . '">' . esc_html( $label ) . '</span>';
 		if ( $warning && '' !== $words['warning'] ) {
 			$html .= ' <span class="fh-cr-warn" title="' . esc_attr__( 'Its sale date has come but it has not moved to the Clean Room yet.', 'fishotel-misc-plugin' ) . '">' . esc_html( $words['warning'] ) . '</span>';
 		}

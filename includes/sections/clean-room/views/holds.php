@@ -20,7 +20,8 @@ use FisHotel\Misc\Sections\Clean_Room\Reserve_Shop;
 
 $fh_holds   = isset( $list['holds'] ) && is_array( $list['holds'] ) ? $list['holds'] : array();
 $fh_suggest = isset( $list['suggest'] ) && is_array( $list['suggest'] ) ? $list['suggest'] : array();
-if ( ! $fh_holds && ! $fh_suggest ) {
+$fh_closed  = isset( $list['closed'] ) && is_array( $list['closed'] ) ? $list['closed'] : array(); // Ended in the last 7 days.
+if ( ! $fh_holds && ! $fh_suggest && ! $fh_closed ) {
 	return;
 }
 
@@ -77,8 +78,8 @@ $fh_hold_button = static function ( $op, array $fields, $label, $class = '' ) {
 					<span class="fh-cr-muted"><?php esc_html_e( '(customer — their own order takes them)', 'fishotel-misc-plugin' ); ?></span>
 				<?php endif; ?>
 				· <span class="<?php echo ! empty( $fh_h['old'] ) ? 'fh-cr-warn' : 'fh-cr-muted'; ?>"><?php echo esc_html( sprintf( /* translators: %s: "3 days ago" */ __( 'held %s', 'fishotel-misc-plugin' ), (string) $fh_h['age'] ) ); ?></span>
-				<?php if ( (int) $fh_h['qty'] < (int) $fh_h['asked'] ) : ?>
-					<span class="fh-cr-warn"><?php echo esc_html( sprintf( /* translators: %d: fish */ __( 'only %d still in the tank for it', 'fishotel-misc-plugin' ), (int) $fh_h['qty'] ) ); ?></span>
+				<?php if ( (int) $fh_h['qty'] < (int) $fh_h['asked'] ) : // Fish died: the orders keep theirs, the hold shrinks. ?>
+					· <span class="fh-cr-warn"><?php echo esc_html( Holds::short_text( (int) $fh_h['qty'] ) ); ?></span>
 				<?php endif; ?>
 				<?php if ( '' !== (string) $fh_h['note'] ) : ?>
 					· <em><?php echo esc_html( (string) $fh_h['note'] ); ?></em>
@@ -87,4 +88,20 @@ $fh_hold_button = static function ( $op, array $fields, $label, $class = '' ) {
 			<?php $fh_hold_button( 'release', array( 'hold_id' => (int) $fh_h['id'] ), __( 'Release', 'fishotel-misc-plugin' ) ); ?>
 		</div>
 	<?php endforeach; ?>
+
+	<?php if ( $fh_closed ) : // A hold never just vanishes: what ended it, for a week. ?>
+		<h3 class="fh-cr-holds__closed-head"><?php esc_html_e( 'Ended lately', 'fishotel-misc-plugin' ); ?></h3>
+		<?php foreach ( $fh_closed as $fh_c ) : ?>
+			<div class="fh-cr-pull__row fh-cr-holds__closed">
+				<span>
+					<?php if ( (int) $fh_c['tank'] > 0 ) : ?>
+						<?php echo esc_html( sprintf( /* translators: 1: tank, 2: fish */ __( 'Tank %1$d — %2$s', 'fishotel-misc-plugin' ), (int) $fh_c['tank'], (string) $fh_c['fish'] ) ); ?> ·
+					<?php endif; ?>
+					<?php echo esc_html( (int) $fh_c['qty'] . ' × ' . (string) $fh_c['who'] ); ?>
+					· <strong><?php echo esc_html( (string) $fh_c['why'] ); ?></strong>
+					· <span class="fh-cr-muted"><?php echo esc_html( (string) $fh_c['when'] ); ?></span>
+				</span>
+			</div>
+		<?php endforeach; ?>
+	<?php endif; ?>
 </section>

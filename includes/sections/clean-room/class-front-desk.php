@@ -271,10 +271,15 @@ class Front_Desk {
 			'reserveNote'  => __( 'Note (optional), e.g. paying Friday', 'fishotel-misc-plugin' ),
 			'reserveHint'  => __( 'Held fish stay in the tank and are not ready for anybody else until you release them. A customer\'s own order takes them by itself.', 'fishotel-misc-plugin' ),
 			'readyOf'      => __( 'of %d ready', 'fishotel-misc-plugin' ),
+			'holdHowMany'  => __( 'How many (%d ready)', 'fishotel-misc-plugin' ),
+			'holdAccount'  => __( 'Tied to the customer account of %s — their own paid order takes these fish.', 'fishotel-misc-plugin' ),
+			'holdTyped'    => __( 'A name typed, no account: no order takes these by itself — you will be asked when one comes in.', 'fishotel-misc-plugin' ),
+			'holdShipped'  => __( 'These were held for %s (the hold goes down by them)', 'fishotel-misc-plugin' ),
+			'reservedBadge' => __( 'reserved', 'fishotel-misc-plugin' ),
 			'heldByHand'   => __( 'Held by hand', 'fishotel-misc-plugin' ),
 			'release'      => __( 'Release', 'fishotel-misc-plugin' ),
 			'customerAcct' => __( 'customer', 'fishotel-misc-plugin' ),
-			'moveReserved' => __( '%d not reserved: they move without touching an order or a hold; the reserved fish stay with this group if only part of it moves.', 'fishotel-misc-plugin' ),
+			'moveReserved' => __( '%d not reserved: they move without touching an order or a hold; the reserved fish stay with this group if only part of it moves (fish held by hand cannot be moved off in part — move the whole group, its hold goes along).', 'fishotel-misc-plugin' ),
 			'cleared'     => __( 'Cleared', 'fishotel-misc-plugin' ),
 			'note'        => __( 'Note', 'fishotel-misc-plugin' ),
 			'mic'         => __( 'Mic', 'fishotel-misc-plugin' ),
@@ -917,7 +922,8 @@ class Front_Desk {
 			'qtyArrived'      => (int) $stay['qty_arrived'],
 			'day'             => $stay['day'],
 			'status'          => (string) $stay['status'],
-			'stateLabel'      => (string) $stay['state_label'],
+			'stateLabel'      => Reserve::all_reserved( $stay ) ? __( 'reserved', 'fishotel-misc-plugin' ) : (string) $stay['state_label'],
+			'badge'           => Reserve::all_reserved( $stay ) ? 'reserved' : ( ! empty( $stay['sale_ready'] ) ? 'ready' : (string) $stay['status'] ), // Every fish for sale reserved: RESERVED, never READY.
 			'checkinDate'     => (string) $stay['checkin_date'],
 			'checkinUnknown'  => ! empty( $stay['checkin_unknown'] ),
 			'clearedDate'     => $stay['cleared_date'],
@@ -947,7 +953,7 @@ class Front_Desk {
 	 * by hand, 3 days ago", the note, whether it is old.
 	 *
 	 * @param array[] $holds Holds::shown() rows.
-	 * @return array[] id, text, note, old.
+	 * @return array[] id, who, qty, text, note, old.
 	 */
 	public static function holds_shown( array $holds ) {
 		$now = time();
@@ -958,6 +964,8 @@ class Front_Desk {
 			}
 			$out[] = array(
 				'id'   => (int) ( $hold['id'] ?? 0 ),
+				'who'  => (string) ( $hold['who'] ?? '' ),
+				'qty'  => (int) ( $hold['qty'] ?? 0 ),
 				'text' => (int) ( $hold['qty'] ?? 0 ) . ' × ' . Reserve::hold_label( $hold, $now ),
 				'note' => (string) ( $hold['note'] ?? '' ),
 				'old'  => Holds::is_old( $hold, $now ),
@@ -1740,6 +1748,8 @@ class Front_Desk {
 		if ( ! $written ) {
 			return array( 'error' => __( 'That could not be recorded.', 'fishotel-misc-plugin' ) );
 		}
+		// Shipped by hand, and they were somebody's held fish (ticked): that hold goes down by them — one step.
+		$off = 'sold' === $type && isset( $raw['hold_ids'] ) ? Reserve_Shop::hold_shipped( (int) $stay['id'], array_map( 'intval', (array) $raw['hold_ids'] ), $qty ) : 0;
 
 		if ( 'loss' === $type ) {
 			/* translators: 1: quantity, 2: species */
@@ -1747,6 +1757,10 @@ class Front_Desk {
 		} else {
 			/* translators: 1: quantity, 2: species */
 			$message = sprintf( __( '%1$d × %2$s shipped', 'fishotel-misc-plugin' ), $qty, $stay['species'] );
+		}
+		if ( $off > 0 ) {
+			/* translators: %d: fish taken off a hold by hand */
+			$message .= ' · ' . sprintf( _n( 'the hold by hand went down by %d', 'the hold by hand went down by %d', $off, 'fishotel-misc-plugin' ), $off );
 		}
 		if ( (int) $written['state']['qty_live'] <= 0 ) {
 			$message .= ' · ' . __( 'group closed', 'fishotel-misc-plugin' );
@@ -1834,6 +1848,12 @@ class Front_Desk {
 		$ids    = array();
 
 		if ( 1 === count( $stays ) && $qty > 0 && $qty < (int) $stays[0]['qty_live'] ) {
+			// Part of a group: never the fish held by hand (the hold stays with the group — it would shrink, and
+			// its fish be ready for anybody in the other tank).
+			$refused = Reserve_Shop::move_refuse( $store, $ctx['settings'], $stays[0], $qty );
+			if ( '' !== $refused ) {
+				return array( 'error' => $refused );
+			}
 			$split = $store->split_stay( $stays[0], $qty, $to, $ctx['base'], $ctx['today'], $ctx['settings'], $reason );
 			if ( ! $split ) {
 				return array( 'error' => __( 'The split could not be recorded.', 'fishotel-misc-plugin' ) );

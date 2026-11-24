@@ -107,6 +107,10 @@ $medium = array( 'pa_size' => 'medium' );
 $store = new Fake_Store();
 $s121  = place( $store, 121, 'Test Tang', 5, array( 'product_id' => 501, 'size_slug' => 'medium', 'size_label' => 'Medium' ) );
 
+// The person working: may see the shop's customers (WooCommerce's edit_shop_orders), so an account can be picked.
+$GLOBALS['fh_current_user']                    = 7;
+$GLOBALS['fh_user_caps']['edit_shop_orders'][] = 7;
+
 /* ------------------------------------------------------------------ */
 echo "1. Reserve… on the phone: create, and shown\n";
 
@@ -289,7 +293,8 @@ $can_settings = false;
 ob_start();
 include FISHOTEL_MISC_PATH . 'includes/sections/clean-room/views/board.php';
 $board = (string) ob_get_clean();
-check_contains( 'the Board\'s tank card: what is ready and what is reserved, for an order and by hand', '0 ready · 3 reserved (#1500; 2 for Forum fan — by hand, today)', $board );
+check_contains( 'the Board\'s tank card: what is ready and what is reserved, for an order and by hand', 'all 3 reserved (#1500; 2 for Forum fan — by hand, today)', $board );
+check_contains( '… with nothing ready its badge says RESERVED, not READY', 'fh-cr-badge--reserved', $board );
 check_contains( '… the hold with its Release', 'name="op" value="release"', $board );
 check_contains( '… and "Reserve…" on a group with fish ready (the gobies), never more than are ready', 'name="stay_id" value="' . $s222 . '">', $board );
 check_contains( '… never more than are ready', 'name="qty" min="1" max="2"', $board );

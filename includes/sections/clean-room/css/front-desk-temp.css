@@ -418,3 +418,16 @@ a.fh-fd-todo-block__title {
 	color: var(--fh-fd-warn, #b45309);
 	font-weight: 600;
 }
+
+/* The hand "Shipped": tick the hold these fish were for (it goes down by them). */
+.fh-fd-sold-hold {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	margin: 10px 0;
+	font-size: 15px;
+	line-height: 1.4;
+}
+.fh-fd-hold-tie {
+	margin: 6px 0 0;
+}
