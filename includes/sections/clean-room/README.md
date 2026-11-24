@@ -966,9 +966,11 @@ stands where Feed would be:
   none has that size, the ones whose size nobody wrote down); else the
   groups whose species is, word for word, the line's name, and the size.
   Every group that fits counts: the same fish in two clean systems makes
-  **both** fast — and since both count it, each then says "**Up to** 3
-  fish ship from this system" and the fish reads "(tank 121, also in
-  another system, #1234)".
+  **both** fast. Neither counts that fish as surely its own: each says
+  "1 fish ships from this system **and 2 more may**" (or "2 fish **may**
+  ship from this system") and the fish names the other one — "2 × Yellow
+  Tang (tank 121, **also in Clean Room 3**, #1234)". The day's total
+  counts each fish once.
 - **A clean tank answers before a quarantine one.** By product or by
   name the site only guesses, and a fish for sale is in a clean tank:
   the ladder is asked over the groups in clean water first, so a Spa

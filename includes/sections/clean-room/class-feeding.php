@@ -351,10 +351,12 @@ class Feeding {
 	 *                       their fish (left_today()) — bagging a fish and logging it does not lose it.
 	 * @return array{state: string, date: string, orders: int, fish: int, buildings: array<int, array>,
 	 *               tanks: array<int, array>, unlocated: array{fish: int, lines: array[]}, all: bool}
-	 *         buildings: Clean Room building id => { fish, lines[] }; tanks: clean temporary tank id => the
-	 *         same; a line: qty, name, number, created, tanks (the tank numbers it may come out of) and,
-	 *         only when it is so, elsewhere (true: the same fish is in another clean water too — each of
-	 *         them goes without, and each counts it); unlocated: the fish no clean tank group answers for
+	 *         buildings: Clean Room building id => { fish, maybe, lines[] }; tanks: clean temporary tank id
+	 *         => the same; fish: the fish that can only come out of this water, maybe: the fish that may
+	 *         come out of it or out of another clean water (each of them goes without, and none counts
+	 *         such a fish as surely its own); a line: qty, name, number, created, tanks (the tank numbers
+	 *         it may come out of) and, only when it is so, also (the names of the other clean waters the
+	 *         same fish is in, "another system" where a name is not known); unlocated: the fish no clean tank group answers for
 	 *         — a line of it may carry quarantine (the quarantine tank numbers the site guesses it in);
 	 *         all: every Clean Room building fasts.
 	 */
@@ -369,6 +371,19 @@ class Feeding {
 		foreach ( $tanks as $tank ) {
 			if ( is_array( $tank ) && Layout::is_slot( $tank ) ) {
 				$slots[ (int) $tank['id'] ] = Temp_Tanks::effective_area( $tank );
+			}
+		}
+		// The names of the clean waters, for "also in Clean Room 3".
+		$names = array();
+		foreach ( $tanks as $tank ) {
+			if ( ! is_array( $tank ) ) {
+				continue;
+			}
+			if ( Layout::is_slot( $tank ) ) {
+				$name                                   = trim( (string) ( $tank['setup']['name'] ?? '' ) );
+				$names[ 'tanks:' . (int) $tank['id'] ] = Layout::tank_label( $tank ) . ( '' !== $name ? ' · ' . $name : '' );
+			} elseif ( isset( $tank['building'] ) && is_array( $tank['building'] ) && (int) ( $tank['building_id'] ?? 0 ) > 0 ) {
+				$names[ 'buildings:' . (int) $tank['building_id'] ] = Layout::building_label( $tank['building'] );
 			}
 		}
 		// The groups in a clean water: a Clean Room building, or a clean temporary tank.
@@ -425,9 +440,9 @@ class Feeding {
 				}
 				// In quarantine by the Invoices section's own link: located, and nothing changes.
 			}
-			if ( count( $waters ) > 1 ) {
-				$entry['elsewhere'] = true; // The same fish in two clean waters: both go without, both count it.
-			}
+			// The same fish in two clean waters: both go without, and each names the other — neither
+			// counts the fish as surely its own.
+			$shared = count( $waters ) > 1;
 			foreach ( $waters as $key => $numbers ) {
 				list( $kind, $id ) = explode( ':', $key );
 				$numbers           = array_values( array_unique( array_filter( array_map( 'intval', $numbers ) ) ) );
@@ -435,11 +450,24 @@ class Feeding {
 				if ( ! isset( $out[ $kind ][ (int) $id ] ) ) {
 					$out[ $kind ][ (int) $id ] = array(
 						'fish'  => 0,
+						'maybe' => 0,
 						'lines' => array(),
 					);
 				}
-				$out[ $kind ][ (int) $id ]['fish']   += $qty;
-				$out[ $kind ][ (int) $id ]['lines'][] = array_merge( $entry, array( 'tanks' => $numbers ) );
+				$here = array_merge( $entry, array( 'tanks' => $numbers ) );
+				if ( $shared ) {
+					$also = array();
+					foreach ( array_keys( $waters ) as $other ) {
+						if ( $other !== $key ) {
+							$also[] = isset( $names[ $other ] ) && '' !== $names[ $other ] ? $names[ $other ] : __( 'another system', 'fishotel-misc-plugin' );
+						}
+					}
+					$here['also']                       = array_values( array_unique( $also ) );
+					$out[ $kind ][ (int) $id ]['maybe'] += $qty;
+				} else {
+					$out[ $kind ][ (int) $id ]['fish'] += $qty;
+				}
+				$out[ $kind ][ (int) $id ]['lines'][] = $here;
 			}
 		}
 
@@ -519,6 +547,7 @@ class Feeding {
 		}
 		return array(
 			'fish'  => $mine ? (int) $mine['fish'] : 0,
+			'maybe' => $mine ? (int) ( $mine['maybe'] ?? 0 ) : 0,
 			'lines' => $mine ? (array) $mine['lines'] : array(),
 			'all'   => ! empty( $fast['all'] ),
 		);
@@ -545,6 +574,7 @@ class Feeding {
 			}
 			return array(
 				'fish'  => (int) $mine['fish'],
+				'maybe' => (int) ( $mine['maybe'] ?? 0 ),
 				'lines' => (array) $mine['lines'],
 				'all'   => false,
 			);
@@ -735,7 +765,7 @@ class Feeding {
 	 * clean system too says so; one the site only guesses in quarantine
 	 * names that tank.
 	 *
-	 * @param array[] $lines Lines (qty, name, number, tanks, elsewhere, quarantine).
+	 * @param array[] $lines Lines (qty, name, number, tanks, also, quarantine).
 	 * @return string
 	 */
 	public static function lines_text( array $lines ) {
@@ -750,8 +780,10 @@ class Feeding {
 				/* translators: %s: tank numbers, e.g. "121 and 122" */
 				$where[] = sprintf( __( 'tanks %s', 'fishotel-misc-plugin' ), self::sentence_list( array_map( 'strval', $tanks ) ) );
 			}
-			if ( $tanks && ! empty( $line['elsewhere'] ) ) {
-				$where[] = __( 'also in another system', 'fishotel-misc-plugin' );
+			$also = array_values( array_filter( array_map( 'strval', (array) ( $line['also'] ?? array() ) ), 'strlen' ) );
+			if ( $tanks && $also ) {
+				/* translators: %s: one or more system names, e.g. "Clean Room 3" */
+				$where[] = sprintf( __( 'also in %s', 'fishotel-misc-plugin' ), self::sentence_list( $also ) );
 			}
 			if ( '' !== (string) ( $line['number'] ?? '' ) ) {
 				$where[] = '#' . (string) $line['number'];
@@ -780,40 +812,55 @@ class Feeding {
 	 * What a fasting system's block says, and the same on its Board card:
 	 * "Clean Room 2 — no feeding today. 3 fish ship from this system:
 	 * 2 × Yellow Tang (tank 121, #1234), 1 × Flame Angel (tank 118,
-	 * #1240)." When one of those fish is in another clean system too, both
-	 * go without and both count it, so each says "Up to 3 fish ship from
-	 * this system" and the fish reads "(tank 121, also in another system,
-	 * #1234)". A system that fasts only because a shipping fish is in no
-	 * tank the site knows says that instead.
+	 * #1240)." A fish whose group is in another clean system too may come
+	 * out of either: both go without, neither counts it as surely its own,
+	 * and the fish names the other one — "1 fish ships from this system
+	 * and 2 more may: 1 × Flame Angel (tank 118, #1240), 2 × Yellow Tang
+	 * (tank 121, also in Clean Room 3, #1234)." A system that fasts only
+	 * because a shipping fish is in no tank the site knows says that
+	 * instead.
 	 *
 	 * @param string $label The system's (or the temporary tank's) name.
 	 * @param array  $why   for_building() / for_tank().
 	 * @param bool   $tank  Whether it is one temporary tank ("from this tank").
 	 * @return array{text: string, strip: string, fish: int, all: bool}
-	 *         text: the reason line; strip: the phone's tank strip.
+	 *         text: the reason line; strip: the phone's tank strip; fish: the fish that surely ship from here.
 	 */
 	public static function block( $label, array $why, $tank = false ) {
 		$fish  = (int) ( $why['fish'] ?? 0 );
+		$maybe = (int) ( $why['maybe'] ?? 0 );
 		$lines = (array) ( $why['lines'] ?? array() );
 
-		$shared = false;
-		foreach ( $lines as $line ) {
-			$shared = $shared || ! empty( $line['elsewhere'] );
-		}
-
-		if ( $fish > 0 && $lines ) {
-			if ( $shared && $tank ) {
-				/* translators: 1: tank name, 2: number of fish, 3: the fish, e.g. "2 × Yellow Tang (tank 901, also in another system, #1234)" */
-				$text = sprintf( _n( '%1$s — no feeding today. Up to %2$d fish ships from this tank: %3$s.', '%1$s — no feeding today. Up to %2$d fish ship from this tank: %3$s.', $fish, 'fishotel-misc-plugin' ), (string) $label, $fish, self::lines_text( $lines ) );
-			} elseif ( $shared ) {
-				/* translators: 1: building name, 2: number of fish, 3: the fish, e.g. "2 × Yellow Tang (tank 121, also in another system, #1234)" */
-				$text = sprintf( _n( '%1$s — no feeding today. Up to %2$d fish ships from this system: %3$s.', '%1$s — no feeding today. Up to %2$d fish ship from this system: %3$s.', $fish, 'fishotel-misc-plugin' ), (string) $label, $fish, self::lines_text( $lines ) );
+		if ( ( $fish + $maybe ) > 0 && $lines ) {
+			// The fish that surely ship from here first, then the ones that may.
+			$sure = array();
+			$may  = array();
+			foreach ( $lines as $line ) {
+				if ( empty( $line['also'] ) ) {
+					$sure[] = $line;
+				} else {
+					$may[] = $line;
+				}
+			}
+			$list = self::lines_text( array_merge( $sure, $may ) );
+			if ( $maybe > 0 && $fish > 0 && $tank ) {
+				/* translators: 1: tank name, 2: fish that surely ship from it, 3: fish that may, 4: the fish */
+				$text = sprintf( _n( '%1$s — no feeding today. %2$d fish ships from this tank and %3$d more may: %4$s.', '%1$s — no feeding today. %2$d fish ship from this tank and %3$d more may: %4$s.', $fish, 'fishotel-misc-plugin' ), (string) $label, $fish, $maybe, $list );
+			} elseif ( $maybe > 0 && $fish > 0 ) {
+				/* translators: 1: building name, 2: fish that surely ship from it, 3: fish that may, 4: the fish, e.g. "2 × Yellow Tang (tank 121, also in Clean Room 3, #1234)" */
+				$text = sprintf( _n( '%1$s — no feeding today. %2$d fish ships from this system and %3$d more may: %4$s.', '%1$s — no feeding today. %2$d fish ship from this system and %3$d more may: %4$s.', $fish, 'fishotel-misc-plugin' ), (string) $label, $fish, $maybe, $list );
+			} elseif ( $maybe > 0 && $tank ) {
+				/* translators: 1: tank name, 2: number of fish, 3: the fish, e.g. "2 × Yellow Tang (tank 901, also in Clean Room 3, #1234)" */
+				$text = sprintf( _n( '%1$s — no feeding today. %2$d fish may ship from this tank: %3$s.', '%1$s — no feeding today. %2$d fish may ship from this tank: %3$s.', $maybe, 'fishotel-misc-plugin' ), (string) $label, $maybe, $list );
+			} elseif ( $maybe > 0 ) {
+				/* translators: 1: building name, 2: number of fish, 3: the fish, e.g. "2 × Yellow Tang (tank 121, also in Clean Room 3, #1234)" */
+				$text = sprintf( _n( '%1$s — no feeding today. %2$d fish may ship from this system: %3$s.', '%1$s — no feeding today. %2$d fish may ship from this system: %3$s.', $maybe, 'fishotel-misc-plugin' ), (string) $label, $maybe, $list );
 			} elseif ( $tank ) {
 				/* translators: 1: tank name, 2: number of fish, 3: the fish, e.g. "2 × Yellow Tang (tank 901, #1234)" */
-				$text = sprintf( _n( '%1$s — no feeding today. %2$d fish ships from this tank: %3$s.', '%1$s — no feeding today. %2$d fish ship from this tank: %3$s.', $fish, 'fishotel-misc-plugin' ), (string) $label, $fish, self::lines_text( $lines ) );
+				$text = sprintf( _n( '%1$s — no feeding today. %2$d fish ships from this tank: %3$s.', '%1$s — no feeding today. %2$d fish ship from this tank: %3$s.', $fish, 'fishotel-misc-plugin' ), (string) $label, $fish, $list );
 			} else {
 				/* translators: 1: building name, 2: number of fish, 3: the fish, e.g. "2 × Yellow Tang (tank 121, #1234)" */
-				$text = sprintf( _n( '%1$s — no feeding today. %2$d fish ships from this system: %3$s.', '%1$s — no feeding today. %2$d fish ship from this system: %3$s.', $fish, 'fishotel-misc-plugin' ), (string) $label, $fish, self::lines_text( $lines ) );
+				$text = sprintf( _n( '%1$s — no feeding today. %2$d fish ships from this system: %3$s.', '%1$s — no feeding today. %2$d fish ship from this system: %3$s.', $fish, 'fishotel-misc-plugin' ), (string) $label, $fish, $list );
 			}
 			$strip = __( 'No feeding today — fish ship from here.', 'fishotel-misc-plugin' );
 		} else {

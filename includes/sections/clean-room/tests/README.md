@@ -984,7 +984,8 @@ system temp directory (`FH_TEST_TMP` overrides).
   product by category, each shape of an invoice's fish, refunds netted,
   "not available" and fully refunded left out, **an invert marked as
   one**); the fasting set — one system, two for the same fish in two
-  (each saying "up to" and "also in another system"), the Spa and a
+  (each saying "may" and "also in" the other one, neither counting the
+  fish as surely its own), the Spa and a
   clean system (the clean one — **also when the Spa group fits better**:
   product and size there, only the name or no size in the clean tank),
   **all clean systems for a fish in no tank, and for one the site only
@@ -1835,9 +1836,9 @@ line's `split` field holds anything (`fields_before`) — and one press on
     building alone goes without, though the Spa group fits better. An
     order of snails (a product only in Inverts) that are in no tank:
     nothing changes; put the snails in a clean tank — that building
-    goes without. The same fish in two clean buildings: both say "Up to
-    N fish ship from this system" and "(tank …, also in another system,
-    #…)". More than four fish in one sentence: the "and N more fish" at
+    goes without. The same fish in two clean buildings: each says "N fish
+    may ship from this system" (or "… and N more may") and "(tank …, also
+    in <the other building>, #…)", the fish it surely ships named first. More than four fish in one sentence: the "and N more fish" at
     its end and the fish named add up to the number it opens with. Tick Feed on a clean tank FIRST, then give an
     order for a fish in that building tomorrow's date: that tank's tick
     stays and reads "Fed at …, before order #… came in."; the building's
