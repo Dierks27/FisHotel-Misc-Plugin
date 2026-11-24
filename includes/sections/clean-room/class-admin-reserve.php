@@ -2,8 +2,10 @@
 /**
  * Clean Room reserved fish — the To do tab's corrections (wp-admin):
  * "It was tank…" and "Ignore" / "Ignore all" on the not-found list,
- * "Pulled from a different tank" on a pull row. Each is one admin-post
- * form; the work is Reserve_Shop::act().
+ * "Pulled from a different tank" on a pull row — and the holds by hand:
+ * "Reserve…" and "Release" on a Board tank card, "Release", "Give them
+ * the held fish" and "Not this order" on the To do tab. Each is one
+ * admin-post form; the work is Reserve_Shop::act().
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  */
@@ -62,7 +64,9 @@ class Admin_Reserve {
 		$raw     = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- checked above.
 		$message = Reserve_Shop::act( new Store(), Settings::get(), is_array( $raw ) ? $raw : array() );
 		Admin_Workbook::flash( $message );
-		wp_safe_redirect( Admin::page_url( Admin_Temp::TAB ) );
+		// Back where the button was: the Board (Reserve… / Release on a tank card) or the To do tab.
+		$back = is_array( $raw ) && isset( $raw['back'] ) && 'board' === $raw['back'] ? Admin::page_url( 'board' ) : Admin::page_url( Admin_Temp::TAB );
+		wp_safe_redirect( $back );
 		exit;
 	}
 }

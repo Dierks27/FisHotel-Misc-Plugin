@@ -248,4 +248,65 @@ check_same( 'off: nothing counted, nothing on the phone, the list empty, Reserve
 check_same( '… the hold is kept, untouched', 1, count( Holds::open( book() ) ) );
 check_same( 'on again: shown again', array( 2, 'Forum fan' ), array( (int) counts( $store )[ $s221 ]['hand'], counts( $store )[ $s221 ]['holds'][0]['who'] ) );
 
+/* ------------------------------------------------------------------ */
+echo "10. The screens: Board card, To do, phone\n";
+
+foreach ( array( 'esc_html_e', 'esc_attr_e' ) as $fh_fn ) {
+	if ( ! function_exists( $fh_fn ) ) {
+		eval( 'function ' . $fh_fn . '( $t, $d = null ) { echo htmlspecialchars( (string) $t, ENT_QUOTES ); }' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- template stubs.
+	}
+}
+if ( ! function_exists( 'wp_nonce_field' ) ) {
+	function wp_nonce_field( $action = -1, $name = '_wpnonce' ) {
+		echo '<input type="hidden" name="' . esc_attr( $name ) . '" value="' . esc_attr( wp_create_nonce( $action ) ) . '">';
+	}
+}
+foreach ( array( 'selected', 'checked', 'disabled' ) as $fh_word ) {
+	if ( ! function_exists( $fh_word ) ) {
+		eval( 'function ' . $fh_word . '( $a, $b = true, $echo = true ) { if ( (string) $a === (string) $b ) { echo " ' . $fh_word . '=\"' . $fh_word . '\""; } }' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- template stubs.
+	}
+}
+$GLOBALS['fh_options']['fishotel_cleanroom_settings'] = $settings;
+$o1700 = fh_shop_order( new WC_Order( 1700, 'processing', array( '_fishotel_shipping_date' => $tomorrow, '_customer_user' => 43, '_paid_date' => (string) time() ), time() + 900 ) );
+$i1700 = $o1700->add_item( 'Test Tang - Medium', 1, $tang_m, $medium );
+$s222  = place( $store, 222, 'Mock Goby', 2, array( 'size_slug' => 'small', 'size_label' => 'Small' ) );
+fresh();
+$labels_url = 'https://example.test/labels';
+$filters    = \FisHotel\Misc\Sections\Clean_Room\Admin::filters_from_request( array() );
+$room       = $store->room( $today, $settings, $protocols );
+$tanks      = $room['tanks'];
+$todo       = $room['todo'];
+$groups     = \FisHotel\Misc\Sections\Clean_Room\Layout::group( $store->buildings(), $tanks );
+$totals     = \FisHotel\Misc\Sections\Clean_Room\Admin::totals( $tanks );
+$doses      = \FisHotel\Misc\Sections\Clean_Room\Dose::board_doses( $store->latest_doses() );
+$sizes      = \FisHotel\Misc\Sections\Clean_Room\Sizes::standard( $store, $settings )['sizes'];
+$temp       = \FisHotel\Misc\Sections\Clean_Room\Admin_Temp::board( $store, $tanks, $protocols, $today );
+$origins    = \FisHotel\Misc\Sections\Clean_Room\Admin::origins( $store, $tanks );
+$tab        = 'board';
+$flash      = '';
+$tables_ok  = true;
+$can_settings = false;
+ob_start();
+include FISHOTEL_MISC_PATH . 'includes/sections/clean-room/views/board.php';
+$board = (string) ob_get_clean();
+check_contains( 'the Board\'s tank card: what is ready and what is reserved, for an order and by hand', '0 ready · 3 reserved (#1500; 2 for Forum fan — by hand, today)', $board );
+check_contains( '… the hold with its Release', 'name="op" value="release"', $board );
+check_contains( '… and "Reserve…" on a group with fish ready (the gobies), never more than are ready', 'name="stay_id" value="' . $s222 . '">', $board );
+check_contains( '… never more than are ready', 'name="qty" min="1" max="2"', $board );
+check( '… none on a group with nothing ready (221)', false === strpos( $board, 'name="stay_id" value="' . $s221 . '">' ) );
+check_contains( '… which searches the shop\'s customers through the phone\'s own read', 'data-nonce=', $board );
+$list = Front_Desk::todo_screen( $store->room( $today, $settings, $protocols )['todo'] );
+ob_start();
+include FISHOTEL_MISC_PATH . 'includes/sections/clean-room/views/todo.php';
+$html = (string) ob_get_clean();
+check_contains( 'the To do tab: Held by hand', '<h2>Held by hand</h2>', $html );
+check_contains( '… a hold for a typed name asks about the order that came in after it', 'Is #1700 the order for the fish held for Forum fan?', $html );
+check_contains( '… with one tap to give the held fish', 'Give them the held fish', $html );
+check_contains( '… and Release on every hold', '2 × Forum fan', $html );
+$o = occupant( $store, 221, $s221 );
+check_same( 'the phone offers "Reserve…" while reserving is on, with how many are ready', array( true, 0 ), array( Front_Desk::screen_from( $store, 221, $settings, $today )['settings']['reserveOn'], $o['ready'] ) );
+check_same( '… and not while it is off', false, Front_Desk::screen_from( $store, 221, $off, $today )['settings']['reserveOn'] );
+$r = Front_Desk::perform( 'hold', ctx( $store, 221 ), array( 'stay_id' => $s221, 'qty' => 1, 'who' => 'Z' ) );
+check_contains( 'nothing ready left on 221: refused', 'every fish is reserved already', (string) ( $r['error'] ?? '' ) );
+
 fh_finish();

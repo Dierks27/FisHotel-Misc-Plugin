@@ -602,6 +602,7 @@ class Front_Desk {
 				'voiceEnabled'       => ! empty( $settings['voice_enabled'] ),
 				'undoSeconds'        => Settings::UNDO_SECONDS,
 				'undoWindow'         => self::UNDO_WINDOW, // The status line's Undo leaves before this ends.
+				'reserveOn'          => Reserve_Shop::enabled( $settings ), // "Reserve…" by hand is offered (holds are hidden while it is off).
 				'saleReadyDays'      => (int) $settings['sale_ready_days'], // The suggestion only (occupants carry saleSuggested).
 				'copperFloor'        => (float) $settings['copper_floor'],
 				'copperTarget'       => (float) $settings['copper_target'],

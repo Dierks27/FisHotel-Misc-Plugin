@@ -22,10 +22,19 @@
 defined( 'ABSPATH' ) || exit;
 
 use FisHotel\Misc\Sections\Clean_Room\Admin;
+use FisHotel\Misc\Sections\Clean_Room\Admin_Reserve;
 use FisHotel\Misc\Sections\Clean_Room\Board_Lines;
+use FisHotel\Misc\Sections\Clean_Room\Front_Desk;
+use FisHotel\Misc\Sections\Clean_Room\Holds;
 use FisHotel\Misc\Sections\Clean_Room\Reserve;
+use FisHotel\Misc\Sections\Clean_Room\Reserve_Shop;
+use FisHotel\Misc\Sections\Clean_Room\Settings;
 
 $fh_origins = isset( $origins ) && is_array( $origins ) ? $origins : array();
+// "Reserve…" by hand: only while reserving is on (the holds are hidden while it is off, never dropped).
+if ( ! isset( $fh_hold_on ) ) {
+	$fh_hold_on = class_exists( Admin_Reserve::class, false ) && Reserve_Shop::enabled( Settings::get() );
+}
 ?>
 <ul class="fh-cr-tank__list fh-cr-cardlines">
 	<?php foreach ( $fh_card['lines'] as $fh_at => $fh_line ) : ?>
@@ -91,6 +100,44 @@ $fh_origins = isset( $origins ) && is_array( $origins ) ? $origins : array();
 						<li>
 							<?php echo esc_html( implode( ' · ', $fh_parts ) ); ?>
 							<a href="<?php echo esc_url( Admin::tank_stays_url( (int) $fh_tank['number'], false, (int) $fh_stay['id'] ) ); ?>"><?php esc_html_e( 'Stays', 'fishotel-misc-plugin' ); ?> &rarr;</a>
+							<?php if ( $fh_hold_on ) : ?>
+								<?php foreach ( (array) ( $fh_stay['reserved_holds'] ?? array() ) as $fh_hold ) : // Held by hand: who, how long (an old one stands out), the note, Release. ?>
+									<form class="fh-cr-hold__row<?php echo Holds::is_old( $fh_hold, time() ) ? ' is-old' : ''; ?>" method="post" action="<?php echo esc_url( Admin_Reserve::form_url() ); ?>">
+										<?php wp_nonce_field( Reserve_Shop::ACTION ); ?>
+										<input type="hidden" name="action" value="<?php echo esc_attr( Reserve_Shop::ACTION ); ?>">
+										<input type="hidden" name="op" value="release">
+										<input type="hidden" name="back" value="board">
+										<input type="hidden" name="hold_id" value="<?php echo esc_attr( (int) $fh_hold['id'] ); ?>">
+										<span><?php echo esc_html( (int) $fh_hold['qty'] . ' × ' . Reserve::hold_label( $fh_hold, time() ) . ( '' !== (string) ( $fh_hold['note'] ?? '' ) ? ' · ' . $fh_hold['note'] : '' ) ); ?></span>
+										<button type="submit" class="button button-small"><?php esc_html_e( 'Release', 'fishotel-misc-plugin' ); ?></button>
+									</form>
+								<?php endforeach; ?>
+								<?php if ( Reserve::ready( $fh_stay ) > 0 ) : ?>
+									<details class="fh-cr-hold">
+										<summary><?php esc_html_e( 'Reserve…', 'fishotel-misc-plugin' ); ?></summary>
+										<form class="fh-cr-hold__form" method="post" action="<?php echo esc_url( Admin_Reserve::form_url() ); ?>" data-ajax="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>" data-nonce="<?php echo esc_attr( wp_create_nonce( Front_Desk::NONCE ) ); ?>">
+											<?php wp_nonce_field( Reserve_Shop::ACTION ); ?>
+											<input type="hidden" name="action" value="<?php echo esc_attr( Reserve_Shop::ACTION ); ?>">
+											<input type="hidden" name="op" value="hold">
+											<input type="hidden" name="back" value="board">
+											<input type="hidden" name="stay_id" value="<?php echo esc_attr( (int) $fh_stay['id'] ); ?>">
+											<input type="hidden" name="user_id" value="0" class="fh-cr-hold__user">
+											<label><?php esc_html_e( 'How many', 'fishotel-misc-plugin' ); ?>
+												<input type="number" name="qty" min="1" max="<?php echo esc_attr( Reserve::ready( $fh_stay ) ); ?>" value="1" required>
+												<span class="fh-cr-muted"><?php echo esc_html( sprintf( /* translators: %d: fish ready */ __( 'of %d ready', 'fishotel-misc-plugin' ), Reserve::ready( $fh_stay ) ) ); ?></span>
+											</label>
+											<label><?php esc_html_e( 'For whom', 'fishotel-misc-plugin' ); ?>
+												<input type="text" name="who" class="fh-cr-hold__who" maxlength="<?php echo esc_attr( Holds::WHO_MAX ); ?>" autocomplete="off" required placeholder="<?php esc_attr_e( 'a customer (name or e-mail) or any name', 'fishotel-misc-plugin' ); ?>">
+											</label>
+											<ul class="fh-cr-hold__found" hidden></ul>
+											<label><?php esc_html_e( 'Note', 'fishotel-misc-plugin' ); ?>
+												<input type="text" name="note" maxlength="<?php echo esc_attr( Holds::NOTE_MAX ); ?>" placeholder="<?php esc_attr_e( 'optional, e.g. paying Friday', 'fishotel-misc-plugin' ); ?>">
+											</label>
+											<button type="submit" class="button button-primary button-small"><?php esc_html_e( 'Reserve', 'fishotel-misc-plugin' ); ?></button>
+										</form>
+									</details>
+								<?php endif; ?>
+							<?php endif; ?>
 						</li>
 					<?php endforeach; ?>
 				</ul>

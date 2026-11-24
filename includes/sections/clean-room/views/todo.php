@@ -77,6 +77,8 @@ $fh_total = (int) $list['total'];
 
 	<?php include Clean_Room::path() . 'views/pull-today.php'; // Reserved → Pull today → Shipped: which tank each fish of today's boxes comes out of. ?>
 
+	<?php include Clean_Room::path() . 'views/holds.php'; // Held by hand: every hold with Release, and the orders that may be one a hold was made for. ?>
+
 	<?php if ( ! $list['blocks'] ) : ?>
 		<p class="fh-cr-muted"><?php esc_html_e( 'No quarantine system and no temporary tank is in use.', 'fishotel-misc-plugin' ); ?></p>
 	<?php endif; ?>

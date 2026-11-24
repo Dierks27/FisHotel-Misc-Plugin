@@ -1666,6 +1666,7 @@
 			case 'existing': renderExisting(); break;
 			case 'pick': renderPick(); break;
 			case 'occupant': renderOccupant(); break;
+			case 'hold': renderHold(); break;
 			case 'identify': renderIdentify(); break;
 			case 'qty': renderQty(); break;
 			case 'move': renderMove(); break;
@@ -2345,8 +2346,19 @@
 			dates.arrived ? el('span', { text: dates.arrived }) : null,
 			dates.cleared ? el('span', { text: dates.cleared }) : null,
 			o.existing ? el('span', { text: t('alreadyHere', 'added as already here') }) : null,
-			el('span', { text: sale.text })
+			el('span', { text: sale.text }),
+			o.reservedText ? el('span', { class: 'fh-fd-reserved', text: o.reservedText }) : null
 		]));
+		if (settings().reserveOn && (o.holds || []).length) {
+			// Held by hand: who for, how long (an old one stands out), the note — each with Release.
+			screen.appendChild(el('h3', { text: t('heldByHand', 'Held by hand') }));
+			o.holds.forEach(function (h) {
+				screen.appendChild(el('div', { class: 'fh-fd-hold' + (h.old ? ' is-old' : '') }, [
+					el('span', { text: h.text + (h.note ? ' · ' + h.note : '') }),
+					button(t('release', 'Release'), 'fh-fd-btn--quiet', function () { act({ act: 'release', tank: tk.number, hold_id: h.id, via: 'qr' }); })
+				]));
+			});
+		}
 		screen.appendChild(el('div', { class: 'fh-fd-grid2' }, [
 			button(t('lostOne', '−1 lost'), 'fh-fd-btn--danger fh-fd-btn--big', function () { act({ act: 'loss', tank: tk.number, stay_id: o.stayId, qty: 1, via: 'qr' }); }, o.qtyLive < 1),
 			button(t('lost', 'Lost') + ' …', 'fh-fd-btn--danger', function () { go('qty', { act: 'loss', stay: o }); }, o.qtyLive < 1),
@@ -2355,10 +2367,79 @@
 			button(t('headCount', 'Full recount'), '', function () { go('qty', { act: 'count', stay: o }); }),
 			button(t('note', 'Note'), '', function () { go('note', { stay: o }); }),
 			button(t('dates', 'Dates'), '', function () { go('dates', { stay: o }); }),
-			button(o.needsId ? t('identify', 'Identify') : t('correctFish', 'Correct the fish'), o.needsId ? 'fh-fd-btn--primary' : '', function () { go('identify', { stay: o }); })
+			button(o.needsId ? t('identify', 'Identify') : t('correctFish', 'Correct the fish'), o.needsId ? 'fh-fd-btn--primary' : '', function () { go('identify', { stay: o }); }),
+			settings().reserveOn ? button(t('reserveDots', 'Reserve…'), '', function () { go('hold', { stay: o }); }, !(o.ready > 0)) : null
 		]));
 		app.appendChild(screen);
 		bar([button(t('back', 'Back'), 'fh-fd-btn--quiet', function () { go('tank'); })]);
+	}
+
+	/*
+	 * Reserve by hand: how many (never more than are ready), for whom — a
+	 * customer of the shop found by name or e-mail, or any name typed (a
+	 * forum member, a phone call) — and a short note. The fish stay in the
+	 * tank; they are not ready for anybody else until released, and the
+	 * customer's own order takes them by itself.
+	 */
+	var holdTimer = null;
+	function renderHold() {
+		var tk = tank();
+		var o = occupantById((state.pending || {}).stay ? state.pending.stay.stayId : 0) || (state.pending || {}).stay;
+		var f = state.form;
+		if (!o) {
+			go('tank');
+			return;
+		}
+		if (typeof f.qty === 'undefined') {
+			f.qty = 1;
+			f.who = '';
+			f.userId = 0;
+			f.note = '';
+		}
+		app.appendChild(header(t('reserveTitle', 'Reserve by hand'), [o.species + (sizeText(o, i18n) ? ' · ' + sizeText(o, i18n) : '') + ' · Tank ' + tk.number]));
+		var screen = el('div', { class: 'fh-fd-screen' });
+		screen.appendChild(stepperField(t('howMany', 'How many?') + ' ' + fmt(t('readyOf', 'of %d ready'), o.ready), f, 'qty', 1, Math.max(1, o.ready)));
+		var found = el('div', { class: 'fh-fd-chips' });
+		var who = el('input', { id: 'fh-fd-hold-who', class: 'fh-fd-input', type: 'text', autocomplete: 'off', maxlength: '60', value: f.who || '' });
+		who.addEventListener('input', function () {
+			f.who = who.value;
+			f.userId = 0; // Typed: a name only, until a customer is picked.
+			root.clearTimeout(holdTimer);
+			var term = String(who.value || '').trim();
+			if (term.length < 2) {
+				while (found.firstChild) { found.removeChild(found.firstChild); }
+				return;
+			}
+			holdTimer = root.setTimeout(function () {
+				post('fishotel_cleanroom_suggest', { term: term, kind: 'customers' }).then(function (data) {
+					while (found.firstChild) { found.removeChild(found.firstChild); }
+					(data && data.items ? data.items : []).forEach(function (item) {
+						found.appendChild(el('button', { type: 'button', class: 'fh-fd-chip', text: item.label || item.who, on: { click: function () {
+							f.who = item.who;
+							f.userId = item.user_id || 0;
+							who.value = item.who;
+							while (found.firstChild) { found.removeChild(found.firstChild); }
+						} } }));
+					});
+				}).catch(function () { /* No search: a name typed still works. */ });
+			}, 250);
+		});
+		screen.appendChild(el('div', { class: 'fh-fd-field' }, [el('label', { class: 'fh-fd-label', for: 'fh-fd-hold-who', text: t('reserveWho', 'For whom? A customer of the shop (name or e-mail) — or type any name') }), who, found]));
+		var note = el('input', { id: 'fh-fd-hold-note', class: 'fh-fd-input', type: 'text', maxlength: '120', value: f.note || '' });
+		note.addEventListener('input', function () { f.note = note.value; });
+		screen.appendChild(el('div', { class: 'fh-fd-field' }, [el('label', { class: 'fh-fd-label', for: 'fh-fd-hold-note', text: t('reserveNote', 'Note (optional), e.g. paying Friday') }), note]));
+		screen.appendChild(el('p', { class: 'fh-fd-muted', text: t('reserveHint', 'Held fish stay in the tank and are not ready for anybody else until you release them. A customer\'s own order takes them by itself.') }));
+		app.appendChild(screen);
+		bar([
+			button(t('cancel', 'Cancel'), 'fh-fd-btn--quiet', function () { go('occupant', { stay: o }); }),
+			button(t('reserveDots', 'Reserve…').replace('…', ''), 'fh-fd-btn--primary', function () {
+				if (!String(f.who || '').trim()) {
+					say(t('reserveWho', 'For whom?'), null, true);
+					return;
+				}
+				act({ act: 'hold', tank: tk.number, stay_id: o.stayId, qty: f.qty, who: f.who, user_id: f.userId || 0, note: f.note || '', via: 'qr' });
+			})
+		]);
 	}
 
 	/*

@@ -2261,3 +2261,36 @@ a.fh-cr-unknown {
 	font-size: 12px;
 	color: var(--fh-accent, #00a0d2);
 }
+
+/* Board → a group → held by hand (Release) and "Reserve…". */
+.fh-cr-hold__row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin: 4px 0 0;
+}
+.fh-cr-hold__row.is-old span,
+.fh-cr-holds--old .fh-cr-warn {
+	color: #b45309;
+	font-weight: 600;
+}
+.fh-cr-hold summary {
+	cursor: pointer;
+	margin-top: 4px;
+}
+.fh-cr-hold__form {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-end;
+	gap: 6px 10px;
+	margin: 6px 0;
+}
+.fh-cr-hold__form input[type="number"] {
+	width: 4.5em;
+}
+.fh-cr-hold__found {
+	flex-basis: 100%;
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}

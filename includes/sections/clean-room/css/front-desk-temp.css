@@ -404,3 +404,17 @@ a.fh-fd-todo-block__title {
 	font-size: 16px;
 	line-height: 1.4;
 }
+
+/* Held by hand (Reserve…): one row per hold with its Release; an old one stands out. */
+.fh-fd-hold {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 6px 0;
+	border-bottom: 1px solid var(--fh-fd-line, rgba(0, 0, 0, 0.1));
+}
+.fh-fd-hold.is-old span {
+	color: var(--fh-fd-warn, #b45309);
+	font-weight: 600;
+}

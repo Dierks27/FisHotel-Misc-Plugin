@@ -265,6 +265,7 @@ class Admin {
 		$temp      = Admin_Temp::board( $store, $tanks, $protocols, $today );
 		$origins   = self::origins( $store, $tanks ); // The quarantine tank each cleared group came out of.
 		$no_product = Admin_No_Product::board_count( $store, $tanks ); // Fish with no product yet: the chip.
+		$flash      = class_exists( Admin_Workbook::class, false ) ? Admin_Workbook::take_flash() : ''; // What "Reserve…" / "Release" just did.
 
 		include Clean_Room::path() . 'views/board.php';
 	}
