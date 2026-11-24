@@ -165,6 +165,8 @@ class Layout {
 				return __( 'Lets a phone or tablet you set up open the fish-room screens with a PIN, without a WordPress login (needs HTTPS). Starts nothing by itself and sends no e-mail.', 'fishotel-misc-plugin' );
 			case 'sticker-giveaway':
 				return __( 'A free FisHotel sticker picked at checkout on customers\' orders that have fish in them, with optional add-on stickers. Switching it on adds the sticker choice to checkout and starts nothing on a timer; it e-mails you once when a design\'s stock drops to the "Reorder at" number you gave it (the Sticker Giveaway page turns that off).', 'fishotel-misc-plugin' );
+			case 'med-listings':
+				return __( 'A one-time cleanup that makes every medication and medicated-food listing a plain product listing (no treatment claims, dosing or calculator links), with undo and 301s for changed categories. Starts nothing by itself: nothing changes until you press Apply. Its redirects keep working while it is switched off.', 'fishotel-misc-plugin' );
 			case 'announcer':
 				return __( 'Notice bars and banners across the site. Starts nothing by itself.', 'fishotel-misc-plugin' );
 			case 'coming-soon':
