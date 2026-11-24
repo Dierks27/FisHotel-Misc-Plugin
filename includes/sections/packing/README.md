@@ -430,7 +430,9 @@ depending on a word list". So:
   beside WooCommerce's own lists the ticked products, to check them.
 - **The one-time helper** (Packing → Bags, *Tick every product the old list
   matches*) lists the products packed in a bag (Livestock ticked, or with
-  no stored choice in a fish category; never an invoice) with no choice yet
+  no stored choice in a fish category; never an invoice) — **archived fish
+  included** (shown "(archived)": the same click narrows the word list, so
+  a tang listed again or on a manual order must be ticked now) — with no choice yet
   (no `3`, no `2`) that a word finds — the same whole-word match on the
   name and the category names. Every row starts ticked; untick any you
   disagree with; **one click** ticks the rest (`fishotel_packing_tick_third`,

@@ -167,7 +167,8 @@ helper files exit cleanly when they are run directly (the CI runs every
   variation, cart, checkout, e-mail, invoice or order-item data or build a
   REST / Store API answer; the source (comments stripped) is scanned for
   what the section must never do — a public AJAX action, a REST route,
-  registered meta, order-item meta, post-meta functions, an e-mail, a
+  registered meta, order-item meta, post meta written (read once only: the
+  products list's Name cell, from the cache the list primed), an e-mail, a
   stock or status change, money, an attribute / term / variation, a
   request to another server, a cron event, a table — and for `$wpdb`
   outside the Store (which only reads); the only meta ever written (the
@@ -277,12 +278,14 @@ helper files exit cleanly when they are run directly (the CI runs every
   line under the bags; the shipment plan's `why`); the one-time helper
   (which products it lists — and the ten it leaves out: ticked, Double, a
   food, Livestock unticked, an invoice, no word, a word inside a longer
-  one —, the posted ids, the click: who may, 3 on each product through its
+  one —, an archived tang listed and the store reading archived products
+  for the helper only, the posted ids, the click: who may, 3 on each product through its
   object, never a Double, a variation or a missing product, the list then
   reaching only the fish with no product page, "Nothing" kept, a second
   click ticking nothing, the AJAX handler); the products list (the view
   and its count, only for who may manage the shop, its query, the Name
-  cell's state, quick edit and bulk edit drawn and saved, a quick edit
+  cell's state read from the meta the list primed — no product object per
+  row, quick edit and bulk edit drawn and saved, a quick edit
   whose script did not run changing nothing, a user who may not); the
   Fish essentials seam (the checkbox and the tick drawn by another box with
   the nonce, then not again in the Shipping tab).

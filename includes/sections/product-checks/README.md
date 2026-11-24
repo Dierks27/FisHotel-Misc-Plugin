@@ -10,11 +10,20 @@ splitting apart the info so it looks nice in a table".
 **Products** (wp-admin → Products):
 
 - Under WooCommerce's own links (All | Published | …), a second line
-  **To fix:** — *Live fish without a real photo (n)* · *Live fish missing
-  table info (n)* · *Old-style description (n)* · *Live fish without a bag
-  size (n)* · *In stock with no price (n)* · *Clean Room drafts (n)* — a
-  link with 0 is not shown — and **Recount now**.
-- A **To fix** dropdown beside WooCommerce's filters: the same six, plus
+  **To fix (for sale now):** — *Live fish without a real photo (n)* · *Live
+  fish missing table info (n)* · *Old-style description (n)* · *Live fish
+  without a bag size (n)* · *In stock with no price (n)* — counting only
+  the products a customer can buy today (**published and in stock**), each
+  a link to exactly those (the filter plus *Published* and WooCommerce's
+  own *In stock* filter) — · *Clean Room drafts (n)* on their own — a link
+  with 0 is not shown — and **Recount now**. Drafts and sold-out fish are
+  left out of the line (so a Clean Room draft is never counted twice and
+  years of sold-out fish do not drown it); the dropdown finds them all.
+  Until the very first check of every product has finished (about a minute
+  on the live shop), the line says **still counting** and a product not
+  reached yet shows **…** in the column instead of a ✓.
+- A **To fix** dropdown beside WooCommerce's filters — every product
+  checked, drafts and sold-out included: the same six, plus
   *Live fish with no gallery photo*, *Scientific name missing or different*,
   *Filed only under a sub-category* and *3rd bag ticked*.
 - A **To fix** column after Name: small chips — "Photo", "Stand-in photo",
@@ -25,7 +34,10 @@ splitting apart the info so it looks nice in a table".
 - Row actions **Copy facts from the description** (on an old-style fish,
   when the theme has its copy — FisHotel Theme 1.28+:
   `fishotel_copy_facts_from_description()`, which only fills empty fields)
-  and **Recount**; the same two as bulk actions.
+  and **Recount**; the same two as bulk actions. The copy — row, link or
+  bulk — only ever runs on a product flagged **Old style**: ticking *Select
+  all* with medications or dry goods in the list writes no fish fact onto
+  them.
 
 **The product screen**: with the Edit screens section on, the flags show as
 the *Still missing* chips in its *Fish essentials* box, each a link to the
@@ -48,14 +60,15 @@ categories again*, checks every product again.
 **Gets the facts table (T):** its own category is `quarantined-fish` (the
 theme prints the table for that category only). Inverts are live but get
 no table checks for now — they are checked for photo, price and bag size
-(the owner's answer).
+(the owner's answer) — no table, old-style, gallery or scientific-name
+check. The same for any other live category (corals one day).
 
 | Flag (hidden meta) | When |
 |---|---|
-| `_fh_todo_photo` = `none` / `standin` | L, and no featured image (or one that is gone) / a stand-in: an image of the theme's placeholder libraries (`fh_placeholder_library`, `fh_cs_placeholder_library`) or WooCommerce's placeholder, the same image featured on 3 or more products, or a file named *placeholder*, *coming soon*, *no image*. (The storefront hides a missing photo with a rotating stand-in, so it is easy to miss.) |
-| `_fh_todo_gallery` | L, and no gallery photo |
+| `_fh_todo_photo` = `none` / `standin` | L, and no featured image (or one that is gone) / a stand-in: an image of the theme's placeholder libraries (`fh_placeholder_library`, `fh_cs_placeholder_library`) or WooCommerce's placeholder, the same image featured on 3 or more products **of different fish** (by scientific name — the table's, else the short description; a product with none counts as its own — so one real photo reused for every batch of the same fish is not flagged), or a file named *placeholder*, *coming soon*, *no image*. (The storefront hides a missing photo with a rotating stand-in, so it is easy to miss.) |
+| `_fh_todo_gallery` | L and T, and no gallery photo |
 | `_fh_todo_table` = how many missing | T, and any of the 8: scientific name, common names, max length, min tank size, temperament, reef safe (yes / no / caution), foods & feeding, habitat & behaviour — the last two not counting when they are the site's default text. Region is not required. |
-| `_fh_todo_oldstyle` | L, and the facts are still typed in the description: two or more different labels at the start of a line ("Scientific Name:", "Maximum Length:", "Foods and Feeding:", …, "Fun Facts"), one of them with its field empty. The theme's own answer when it has one (`fishotel_fish_facts_old_style()`, 1.28+), so the list and the facts box's yellow line agree. Labels found with every field filled are harmless and not flagged. |
+| `_fh_todo_oldstyle` | T, and the facts are still typed in the description: two or more different labels at the start of a line ("Scientific Name:", "Maximum Length:", "Foods and Feeding:", …, "Fun Facts"), one of them with its field empty. The theme's own answer when it has one (`fishotel_fish_facts_old_style()`, 1.28+), so the list and the facts box's yellow line agree. Labels found with every field filled are harmless and not flagged. |
 | `_fh_todo_sci` | T, and the scientific name is missing under the name (the short description) or in the table (`_fh_scientific_name`), or they differ (markup, capitals and spaces aside) |
 | `_fh_todo_price` = `1` / the sizes | published or private, any product: a simple product in stock with no regular price, or the enabled in-stock variations without one |
 | `_fh_todo_bag` = `1` / the sizes | L, Livestock not unticked, the Packing section on, and an in-stock size (or the simple product) Packing's own lookup gives no bag (`fishotel_packing_bag_for_product()`: its own Bag size, else the size map) |
@@ -87,9 +100,11 @@ view is the one `_fh_todo_photo` key (both values), not two keys.
   placeholder library, WooCommerce's placeholder image or Packing's
   settings change, when the live categories are saved, and on *Recount now*
   (which checks the first 200 at once). Its cursor is the option
-  `fishotel_product_checks_sweep`; the images featured on 3 or more products
-  are worked out at its start (`fishotel_product_checks_shared`).
-- **The counts**: one grouped read over the `_fh_todo_%` keys, one for the
+  `fishotel_product_checks_sweep` (with `ever` once any sweep has finished);
+  the images featured on 3 or more products of different fish are worked
+  out at its start (`fishotel_product_checks_shared`).
+- **The counts**: one grouped read over the `_fh_todo_%` keys, the same
+  for the products published and in stock (the *To fix* line), one for the
   Clean Room drafts, one for the 3rd-bag tick — kept in the option
   `fishotel_product_checks_counts` (not autoloaded), forgotten when a check
   changes something. A filter is a plain `EXISTS` on one meta key; the
@@ -118,7 +133,7 @@ product-checks/
 ├── class-collector.php       the facts of one product (reads only)
 ├── class-store.php           the only file that queries the database; writes the flags
 ├── class-checker.php         a product checked again when it changes; the sweep
-├── class-settings.php        which categories count as live
+├── class-settings.php        which categories count as live (the shared list: includes/class-live-categories.php — Edit screens reads it too)
 ├── class-products-list.php   the row, the dropdown, the column, row and bulk actions, the links
 ├── class-admin.php           the page; Fish essentials' chips; admin_init
 ├── css/product-checks.css    the row, the chips, the page
@@ -143,7 +158,8 @@ php includes/sections/product-checks/tests/checks-test.php
   with bullets, dashes, entities and no-break spaces, a label inside a
   sentence, Fun Facts, other spellings, text that is not UTF-8, the
   product's own answer winning); the chips and their boxes; a stand-in
-  photo.
+  photo; inverts with typed facts and no gallery (photo, price, bag only);
+  "Table: N of 8 empty"; the shared images by different fish.
 - **checks-test.php** — on a fake shop: the facts read from a product (its
   own categories, the sizes with no price by name, a sub-category, a
   placeholder by name, by library, by being shared, a gone image, a
@@ -157,23 +173,35 @@ php includes/sections/product-checks/tests/checks-test.php
   its counts, a 0 hidden, *Recount now*, nothing to fix, who may see it, the
   dropdown, each filter's query, the sort keeping every product, another
   list, the column after Name and sortable, the chips, ✓ and ×3, row and
-  bulk actions with and without the theme's copy, the links and their
-  nonces, one product, the whole list, who may, the bulk line); the Fish
+  bulk actions with and without the theme's copy, the copy refused on a
+  product that is not "Old style" (bulk and link), the links and their
+  nonces, the line's for-sale counts and links, "still counting" and "…"
+  during the very first check (not in a later one), one product, the whole list, who may, the bulk line); the Fish
   essentials chips; the section's hooks outside and inside wp-admin;
   switched off; the stylesheet; nothing for a visitor; the database read in
   one file.
 
 ### By hand, on a copy of the site
 
-1. Switch the section on; open Products: within a few minutes the *To
-   fix:* line shows (or *Recount now*). Each link lists exactly the
-   products of its count.
+1. Switch the section on; open Products: the *To fix (for sale now):* line
+   says *still counting* and new rows show *…*; within a few minutes the
+   counts show (or *Recount now*). Each link lists exactly the products of
+   its count (Published, In stock); a sold-out fish with no photo is not in
+   the line's count but is in the dropdown's *Live fish without a real
+   photo*.
 2. Remove a fish's photo with *Remove product image* (no Update): reload —
    it is counted. Set it again: gone from the count.
 3. Quick edit a fish's price to empty: *In stock with no price* goes up.
 4. An old-style fish: *Copy facts from the description* (theme 1.28+) fills
    the empty facts; its *Old style* chip goes when every found fact is in
-   its field.
+   its field. Tick *Select all* on a page with medications and run the bulk
+   *Copy facts*: only the old-style fish are copied; a medication gets no
+   `_fh_reef_safe` / `_fh_region` (Custom Fields).
+4a. Give one real photo to three batches of the same fish (same scientific
+   name): no *Stand-in photo*. The same picture on three different fish:
+   *Stand-in photo*.
+4b. An invert with no gallery photo and facts typed in its description: no
+   *Gallery* and no *Old style* chip.
 5. Tick a Corals category under FisHotel Tools → Product checks: a coral
    with no photo is counted.
 6. Switch the section off: no `fishotel_product_checks_*` event left in
@@ -182,6 +210,6 @@ php includes/sections/product-checks/tests/checks-test.php
 ## Not in this version
 
 - "Shared" stand-ins count an image featured on 3 or more products of any
-  kind (not only live fish): one grouped read.
+  kind (not only live fish) whose scientific names differ.
 - The theme's old-style answer is used when the theme has it; with an older
   theme the same rule is worked out here from the same labels.

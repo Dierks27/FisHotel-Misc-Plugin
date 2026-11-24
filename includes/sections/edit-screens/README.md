@@ -28,14 +28,25 @@ Three bands. Bands 1 and 2 open; band 3 closed.
      its page, the Latin line on related-fish cards, the key the Batch
      plugin's Master Fish library reads) and the theme's
      **`_fh_scientific_name`** (the first row of the facts table). A changed
-     name is saved to both, through the product, after WooCommerce and the
+     name is saved to both: the short description **with the post itself**
+     (`wp_insert_post_data`, so the Batch plugin's Master Fish sync on
+     `save_post_product` already reads the new name — no stale extra Master
+     Fish, no "one save late"), the table's meta after WooCommerce and the
      theme saved theirs (`woocommerce_process_product_meta`, priority 50);
-     a name saved as it was drawn writes nothing. When the two differ today,
+     a name saved as it was drawn writes nothing. **A short description that
+     holds more than the name** — a second line, a typed fact with a colon,
+     a link, a list, more than 200 characters — **is never overwritten**: its
+     own box stays on the screen (even for a live fish), Fish essentials says
+     so, and a name typed there goes to the facts table only. When the two differ today,
      both are shown, each with **Use this one** — nothing changes until the
      owner picks one (or types one) and updates. From theme 1.28 the facts
      box leaves the field out (its filter `fishotel_fish_facts_box_fields`);
      with an older theme its own field is kept equal by the script and
-     hidden. Shown for a live fish only.
+     hidden. The facts box's **Copy them into these fields** hands the
+     scientific name on (the jQuery event `fishotel-copy-facts`): the field
+     is filled when it is empty; when it holds another name, that name is
+     kept and the copied one is offered with **Use this one**. Shown for a
+     live fish only.
    - **Livestock — packed in a bag** and **Needs a 3rd bag (sharp spines or
      a scalpel)** — the Packing section's two fields (same meta, same save),
      drawn here through its contract `fishotel_packing_product_fields()`
@@ -63,7 +74,7 @@ They have no up / down arrows there.
 **Band 2 — should fill (open):** the description; **Fish facts — the table
 on the product page** (the theme's *FisHotel — Product Data*, renamed);
 the short description (not shown for a live fish: Fish essentials writes
-it). Side: Publish, **Product categories** (moved above the photo: they
+it — unless it holds more than the name, then it stays). Side: Publish, **Product categories** (moved above the photo: they
 decide the kind), Product image; gallery, tags, **Compatibility guide**
 (renamed), **Coming Soon — release date** (renamed), Clean room.
 
@@ -80,7 +91,7 @@ changes (`class-kinds.php`, `js/edit-screens.js` — the same rule):
 
 | Kind | When | Not shown |
 |---|---|---|
-| live fish | Livestock ticked, or with no stored choice one of the fish categories (the Batch plugin's list — `quarantined-fish`, `inverts` unless its filter says other) | the short description |
+| live fish | Livestock ticked, or with no stored choice one of the fish categories (the Batch plugin's list — `quarantined-fish`, `inverts` unless its filter says other — plus any category ticked as live in Product checks: one shared list, `includes/class-live-categories.php`) | the short description (unless it holds more than the name) |
 | medication / food | the theme's medication and food categories, or "Who ships it" set | fish facts, compatibility guide, Clean room, the scientific name |
 | invoice | category `invoices` (never a fish) | as a dry good |
 | dry good | anything else (gift cards included) | as medication |
@@ -94,7 +105,10 @@ order's life a box is used:
 
 - **Main:** the two warnings (only when there is one), Order data, Items,
   **Packing** (the Packing section now adds it under the Items on both
-  screens), Shipments, Custom Fields (closed).
+  screens), Shipments, Custom Fields (closed); WooCommerce's
+  *Downloadable product permissions* **hidden** — as WooCommerce hides it
+  for a person with no layout of their own (a stored list, even an empty
+  one, would show it open on every order); Screen Options brings it back.
 - **Side:** Order actions; FisHotel Pickup (ShipTracker — placed by its id
   `fst-pickup` only) / Fulfillment (combined box); Weather; EA Packing Slip /
   Medication terms; Order notes; Combine Orders; closed: Date Change
@@ -124,7 +138,9 @@ Instead (`class-switcher.php`, `class-tidy.php`):
    `fh_edit_screens_backup`), and the FisHotel layout is written in its
    place (user meta `fh_edit_screens` remembers the layout version).
 2. A notice on that screen: **"This screen was tidied: … Put my old layout
-   back · Dismiss"**.
+   back · Dismiss"**. (WooCommerce's own order screen, HPOS, shares one
+   screen id between the orders list and an order: the notice and the
+   Screen Options links show on an order only — `action=edit` / `new`.)
 3. **After that their own drags are kept**: nothing is written again — until
    the layout version goes up (`Layouts::VERSION`), which tidies everyone
    once more, with the same notice and undo.
@@ -197,12 +213,19 @@ node includes/sections/edit-screens/tests/edit-screens.test.js
   four titles, the callbacks untouched, the empty area under the title); the
   kind on the page; the assets with each kind's categories; Fish essentials
   drawn (the field, the two places, the chips escaped, Packing's fields
-  through its contract or not at all) and saved (as drawn: nothing; changed:
-  both; emptied; a bad nonce, none, a person who may not edit); a folded
-  order; and in the source: no front-end hook, no REST route, no cron, no
+  through its contract or not at all) and saved as one Update runs —
+  `wp_insert_post_data`, `save_post`, `process_product_meta` — (as drawn:
+  nothing; changed: both, the short description already new when
+  `save_post` runs; emptied; a quote; a bad nonce, none, a person who may
+  not edit; another post or not a product); a short description that holds
+  more than the name (what counts, the first line offered, kept on save,
+  its box left on the screen, the line that says so); one read for the
+  kind categories; a category ticked live in Product checks; the HPOS
+  orders list (no notice, no links) against an order; a folded order; and in the source: no front-end hook, no REST route, no cron, no
   option, user meta written by the user store only, no box removed.
 - **edit-screens.test.js** — the kind from what is ticked (the PHP rule's
-  cases), the class swapped on `<body>`, the boxes the area takes.
+  cases), the class swapped on `<body>`, the boxes the area takes, what the
+  theme's copied scientific name does (fill, same, offer, none).
 
 ### By hand, on a copy of the site
 
@@ -216,13 +239,28 @@ node includes/sections/edit-screens/tests/edit-screens.test.js
    room boxes go, the short description comes. Tick *Quarantined Fish*
    again: back.
 3. Type a new scientific name, update: the italic line under the name and
-   the first row of the facts table both say it. A fish whose two places
-   differ shows both with *Use this one*.
+   the first row of the facts table both say it — and the Batch plugin's
+   Master Fish list shows the new name after this one Update (no second
+   Master Fish under the old name). A fish whose two places differ shows
+   both with *Use this one*.
+3a. A fish whose short description has a second line (e.g. "Reef safe:
+   with caution" under the name): the short description box is on the
+   screen, Fish essentials says it is never changed from there; change the
+   name, update — the short description is as it was, the facts table has
+   the new name.
+3b. A fish with an empty Scientific name whose description has
+   "Scientific Name: …": in the facts box press *Copy them into these
+   fields* — the Fish essentials field fills; type another name first and
+   press it again — your name stays, the copied one is offered with *Use
+   this one*.
 4. Drag a box, reload: it stays where you put it. *Put my old layout back*:
    your old screen. Screen Options → *Reset to the FisHotel layout*: tidied
    again.
 5. Open an order (legacy screen): Packing under Items; Weather, EA slip,
-   Combine Orders closed on an order folded into a combined box.
+   Combine Orders closed on an order folded into a combined box;
+   *Downloadable product permissions* not shown (Screen Options lists it,
+   unticked). With HPOS on: the orders list has no "This screen was tidied"
+   notice; an order has it.
 6. Switch the section off, open a product and an order: your old screens.
    Switch it on: tidied once more.
 7. On the live site, check Screen Options on a product and an order: where
