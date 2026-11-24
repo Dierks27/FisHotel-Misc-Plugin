@@ -581,6 +581,7 @@ fishotel_packing_confirmed_box( int $order_id ): ?array
 fishotel_packing_bag_for_product( int|WC_Product $product ): ?array
 fishotel_packing_bag_for_size( string $size_slug_or_label ): ?array
 fishotel_packing_shipment_plan( int $order_id ): array                 // see The shipment plan
+fishotel_packing_product_fields( ?WC_Product $product ): bool          // draws Livestock + the 3rd-bag tick in another box (Edit screens)
 ```
 
 **`fishotel_packing_suggest()`** always returns the same keys:

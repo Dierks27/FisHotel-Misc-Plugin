@@ -410,6 +410,28 @@ namespace FisHotel\Misc\Sections\Packing {
 		}
 
 		/**
+		 * fishotel_packing_product_fields(): the "Livestock — packed in a
+		 * bag" checkbox and the "Needs a 3rd bag" tick, drawn for another
+		 * box of the product screen (the Edit screens section's Fish
+		 * essentials) — the Shipping tab then leaves them out. Nothing while
+		 * the section is off, outside wp-admin, or for a user who may not
+		 * manage the shop.
+		 *
+		 * @param mixed $product WC_Product (null for a new product).
+		 * @return bool Whether they were drawn.
+		 */
+		public static function product_fields( $product ) {
+			if ( ! self::$booted || ! is_admin() || ! class_exists( Product::class ) ) {
+				return false;
+			}
+			try {
+				return ( new Product() )->render_essentials_fields( is_object( $product ) ? $product : null );
+			} catch ( \Throwable $e ) {
+				return false;
+			}
+		}
+
+		/**
 		 * fishotel_packing_bag_for_item(): the bag of one order line — the
 		 * bag to USE when its order has a plan (chosen by hand, else
 		 * upsized, else the minimum), with the minimum under `min`; the
@@ -686,6 +708,22 @@ namespace {
 		 */
 		function fishotel_packing_bag_for_item( $order_item ): ?array {
 			return \FisHotel\Misc\Sections\Packing\Packing::bag_for_item( $order_item );
+		}
+	}
+
+	if ( ! function_exists( 'fishotel_packing_product_fields' ) ) {
+		/**
+		 * Draw the "Livestock — packed in a bag" checkbox and the "Needs a
+		 * 3rd bag (sharp spines or a scalpel)" tick inside another box of
+		 * the product edit screen — the same fields and the same save as in
+		 * the Shipping tab, which then leaves them out. Prints nothing and
+		 * answers false while the Packing section is off.
+		 *
+		 * @param mixed $product WC_Product, or null for a new product.
+		 * @return bool Whether they were drawn.
+		 */
+		function fishotel_packing_product_fields( $product ): bool {
+			return \FisHotel\Misc\Sections\Packing\Packing::product_fields( $product );
 		}
 	}
 

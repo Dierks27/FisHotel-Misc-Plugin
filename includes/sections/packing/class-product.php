@@ -107,6 +107,15 @@ class Product {
 	private static $drawn_elsewhere = false;
 
 	/**
+	 * Whether the Shipping tab drew them already on this screen (a person
+	 * who dragged the product data box above Fish essentials): the other
+	 * box then leaves them out.
+	 *
+	 * @var bool
+	 */
+	private static $drawn_in_tab = false;
+
+	/**
 	 * The class the product-data box carries while the checkbox is off:
 	 * the stylesheet hides every Bag size dropdown under it.
 	 *
@@ -717,7 +726,7 @@ class Product {
 	 * @return bool Whether they were drawn.
 	 */
 	public function render_essentials_fields( $product ) {
-		if ( ! current_user_can( Packing::CAPABILITY ) || ! function_exists( 'woocommerce_wp_checkbox' ) ) {
+		if ( self::$drawn_in_tab || ! current_user_can( Packing::CAPABILITY ) || ! function_exists( 'woocommerce_wp_checkbox' ) ) {
 			return false;
 		}
 		$product = is_object( $product ) ? $product : null;
@@ -734,6 +743,7 @@ class Product {
 	 */
 	public static function reset_drawn() {
 		self::$drawn_elsewhere = false;
+		self::$drawn_in_tab    = false;
 	}
 
 	/* ============================================================== */
@@ -851,6 +861,7 @@ class Product {
 			$this->render_third_field( $product );
 			echo '</div>';
 			$this->render_packs_field( $product );
+			self::$drawn_in_tab = true;
 		}
 
 		woocommerce_wp_select(

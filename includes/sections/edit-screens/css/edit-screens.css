@@ -1,0 +1,124 @@
+/**
+ * Edit screens — the product edit screen, tidied. Plain WordPress admin
+ * colours (the Dark admin section restyles every class below through its
+ * own variables).
+ */
+
+/* The area under the title: Fish essentials and "Price, stock & sizes". */
+.fh-es-top {
+	margin: 16px 0 0;
+}
+
+.fh-es-top:empty {
+	display: none;
+}
+
+/* They are not in a sortable column there: no up / down arrows. */
+.fh-es-top .postbox .handle-order-higher,
+.fh-es-top .postbox .handle-order-lower {
+	display: none;
+}
+
+/* Boxes not for the kind of product on the page (still posted). */
+body.fh-es-kind-dry .fh-es-live-only,
+body.fh-es-kind-med .fh-es-live-only,
+body.fh-es-kind-invoice .fh-es-live-only,
+body.fh-es-kind-fish .fh-es-not-live {
+	display: none !important;
+}
+
+/* The theme's own scientific-name field: kept equal, out of sight. */
+.fh-es-on #fishotel_hotel_data .fh-es-moved {
+	display: none;
+}
+
+/* Fish essentials. */
+#fishotel-essentials .fh-es-grid {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+	gap: 8px 24px;
+	align-items: start;
+}
+
+#fishotel-essentials .fh-es-field > label {
+	display: block;
+	margin: 0 0 4px;
+}
+
+#fishotel-essentials .fh-es-sci input[type="text"] {
+	max-width: 420px;
+}
+
+#fishotel-essentials .description {
+	display: block;
+	margin: 4px 0 0;
+}
+
+#fishotel-essentials .fh-es-packing .form-field {
+	margin: 0 0 10px;
+	padding: 0;
+}
+
+#fishotel-essentials .fh-es-packing .form-field label {
+	font-weight: 600;
+	margin-right: 6px;
+}
+
+#fishotel-essentials .fh-es-packing .form-field .description {
+	font-size: 12px;
+}
+
+.fh-es-differ {
+	margin: 8px 0 2px;
+	color: #8a6100;
+	font-weight: 600;
+}
+
+.fh-es-choices {
+	margin: 0;
+}
+
+.fh-es-choice-where {
+	color: #50575e;
+}
+
+.fh-es-missing {
+	margin: 12px 0 0;
+	padding-top: 10px;
+	border-top: 1px solid #dcdcde;
+}
+
+.fh-es-missing-title {
+	font-weight: 600;
+	margin-right: 4px;
+}
+
+.fh-es-chip {
+	display: inline-block;
+	margin: 0 4px 4px 0;
+	padding: 1px 9px;
+	border: 1px solid #e6b4b4;
+	border-radius: 10px;
+	background: #fcf0f1;
+	color: #8a2424;
+	font-size: 12px;
+	line-height: 20px;
+	text-decoration: none;
+}
+
+a.fh-es-chip:hover,
+a.fh-es-chip:focus {
+	background: #f7dcdd;
+	color: #6b1a1a;
+}
+
+/* Screen Options: the two links. */
+.fh-es-screen-options {
+	margin-top: 8px;
+}
+
+@media screen and (max-width: 782px) {
+	#fishotel-essentials .fh-es-grid {
+		grid-template-columns: minmax(0, 1fr);
+	}
+}

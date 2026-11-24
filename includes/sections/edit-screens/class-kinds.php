@@ -1,0 +1,144 @@
+<?php
+/**
+ * What kind of product a product is, for the edit screen (pure but for
+ * fish_categories()).
+ *
+ * The kind decides which boxes the screen shows — never what is saved: a
+ * box hidden for the kind is still printed and still posted, so nothing
+ * saves differently. It is worked out from the categories the screen was
+ * drawn with, and again by the script each time a category is ticked.
+ *
+ *   invoice  in the category `invoices` — treated as a dry good, never a
+ *            fish (the Batch plugin's checkout counts it apart);
+ *   fish     a live fish: "Livestock — packed in a bag" ticked, or with no
+ *            stored choice one of the fish categories (the Batch plugin's
+ *            list: `quarantined-fish`, `inverts` unless it says other) —
+ *            the same rule as the Packing section;
+ *   med      medication or food: the theme's categories for them, or a
+ *            "Who ships it" (EA / Amazon / us) set;
+ *   none     no category yet: nothing is hidden;
+ *   dry      anything else (gift cards included).
+ *
+ * @package FisHotel\Misc\Sections\Edit_Screens
+ */
+
+namespace FisHotel\Misc\Sections\Edit_Screens;
+
+defined( 'ABSPATH' ) || exit;
+
+/**
+ * Class Kinds
+ */
+class Kinds {
+
+	const FISH    = 'fish';
+	const MED     = 'med';
+	const DRY     = 'dry';
+	const INVOICE = 'invoice';
+	const NONE    = 'none';
+
+	/**
+	 * The theme's medication and food categories
+	 * (inc/template-functions.php: fishotel_is_medication_product(),
+	 * fishotel_is_food_product()).
+	 *
+	 * @var string[]
+	 */
+	const MED_SLUGS = array( 'medications', 'flakes', 'pellets', 'powders', 'liquid', 'antibacterial', 'antiparasitic', 'dewormer', 'freeze-dried-foods', 'fish-food', 'medicated-food' );
+
+	/**
+	 * The boxes shown for a live fish only (and while no category is
+	 * ticked).
+	 *
+	 * @var string[]
+	 */
+	const LIVE_ONLY = array( 'fishotel_hotel_data', 'fishotel-compat-category', 'fishotel_cleanroom' );
+
+	/**
+	 * The boxes NOT shown for a live fish: Fish essentials writes the short
+	 * description (the scientific name under the product's name).
+	 *
+	 * @var string[]
+	 */
+	const NOT_LIVE = array( 'postexcerpt' );
+
+	/**
+	 * The fish categories: the Batch plugin's list when it is there, else
+	 * the same default and filter it uses.
+	 *
+	 * @return string[]
+	 */
+	public static function fish_categories() {
+		$cats = array( 'quarantined-fish', 'inverts' );
+		if ( class_exists( 'FisHotel_Ship_Day' ) && is_callable( array( 'FisHotel_Ship_Day', 'fish_categories' ) ) ) {
+			try {
+				$cats = (array) \FisHotel_Ship_Day::fish_categories();
+			} catch ( \Throwable $e ) {
+				$cats = array( 'quarantined-fish', 'inverts' );
+			}
+		} elseif ( function_exists( 'apply_filters' ) ) {
+			$cats = (array) apply_filters( 'fishotel_ship_day_fish_categories', $cats );
+		}
+		return self::slugs( $cats );
+	}
+
+	/**
+	 * A list of slugs, cleaned (pure): lower-case, trimmed, each once.
+	 *
+	 * @param mixed $raw A list.
+	 * @return string[]
+	 */
+	public static function slugs( $raw ) {
+		$out = array();
+		foreach ( is_array( $raw ) ? $raw : array() as $slug ) {
+			$slug = is_scalar( $slug ) && ! is_bool( $slug ) ? strtolower( trim( (string) $slug ) ) : '';
+			if ( '' !== $slug && ! in_array( $slug, $out, true ) ) {
+				$out[] = $slug;
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * The kind (pure).
+	 *
+	 * @param string[] $slugs       The product's own category slugs.
+	 * @param mixed    $packs       "Livestock — packed in a bag": 'yes' | 'no' | '' (no stored choice).
+	 * @param mixed    $fulfillment "Who ships it": '' or 'none' = nobody else.
+	 * @param string[] $fish_slugs  The fish categories.
+	 * @return string One of the constants.
+	 */
+	public static function kind( array $slugs, $packs, $fulfillment, array $fish_slugs ) {
+		$slugs = self::slugs( $slugs );
+		$packs = is_scalar( $packs ) ? strtolower( trim( (string) $packs ) ) : '';
+		$ships = is_scalar( $fulfillment ) ? strtolower( trim( (string) $fulfillment ) ) : '';
+
+		if ( in_array( 'invoices', $slugs, true ) ) {
+			return self::INVOICE;
+		}
+		if ( 'yes' === $packs || ( 'no' !== $packs && array_intersect( $slugs, self::slugs( $fish_slugs ) ) ) ) {
+			return self::FISH;
+		}
+		if ( array_intersect( $slugs, self::MED_SLUGS ) || ( '' !== $ships && 'none' !== $ships ) ) {
+			return self::MED;
+		}
+		return $slugs ? self::DRY : self::NONE;
+	}
+
+	/**
+	 * Whether a box is shown for a kind (pure).
+	 *
+	 * @param string $box  Box id.
+	 * @param string $kind A kind.
+	 * @return bool
+	 */
+	public static function shows( $box, $kind ) {
+		if ( in_array( $box, self::LIVE_ONLY, true ) ) {
+			return in_array( $kind, array( self::FISH, self::NONE ), true );
+		}
+		if ( in_array( $box, self::NOT_LIVE, true ) ) {
+			return self::FISH !== $kind;
+		}
+		return true;
+	}
+}
