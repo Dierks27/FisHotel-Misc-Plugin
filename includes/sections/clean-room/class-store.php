@@ -6114,6 +6114,40 @@ class Store {
 	}
 
 	/**
+	 * Which of two groups can ship first (pure, a usort callback): one for
+	 * sale before one that is not, then the earliest sale date (a group
+	 * without one last), then the earliest check-in (an unknown one last).
+	 * The product page's "next" and the reservation of a sold fish (Reserve)
+	 * both order by it.
+	 *
+	 * @param array $a sale_ready, sale_ready_date, checkin_date (a date, or anything else = none).
+	 * @param array $b The same.
+	 * @return int
+	 */
+	public static function ships_first( array $a, array $b ) {
+		$ready_a = ! empty( $a['sale_ready'] );
+		$ready_b = ! empty( $b['sale_ready'] );
+		if ( $ready_a !== $ready_b ) {
+			return $ready_a ? -1 : 1;
+		}
+		$sale_a = Replay::is_date( $a['sale_ready_date'] ?? null ) ? (string) $a['sale_ready_date'] : null;
+		$sale_b = Replay::is_date( $b['sale_ready_date'] ?? null ) ? (string) $b['sale_ready_date'] : null;
+		if ( ( null === $sale_a ) !== ( null === $sale_b ) ) {
+			return null === $sale_a ? 1 : -1;
+		}
+		$d = strcmp( (string) $sale_a, (string) $sale_b );
+		if ( 0 !== $d ) {
+			return $d;
+		}
+		$in_a = Replay::is_date( $a['checkin_date'] ?? null ) ? (string) $a['checkin_date'] : null;
+		$in_b = Replay::is_date( $b['checkin_date'] ?? null ) ? (string) $b['checkin_date'] : null;
+		if ( ( null === $in_a ) !== ( null === $in_b ) ) {
+			return null === $in_a ? 1 : -1; // An unknown check-in sorts after a known one.
+		}
+		return strcmp( (string) $in_a, (string) $in_b );
+	}
+
+	/**
 	 * The facts of a product from its hydrated stays (pure): how many are
 	 * alive here, the stays in QT (with day numbers), the cleared stays,
 	 * every one with its effective sale date (its own, else its batch's,
@@ -6168,25 +6202,7 @@ class Store {
 			$candidates[] = $entry;
 		}
 
-		usort(
-			$candidates,
-			static function ( $a, $b ) {
-				if ( $a['sale_ready'] !== $b['sale_ready'] ) {
-					return $a['sale_ready'] ? -1 : 1;
-				}
-				if ( ( null === $a['sale_ready_date'] ) !== ( null === $b['sale_ready_date'] ) ) {
-					return null === $a['sale_ready_date'] ? 1 : -1;
-				}
-				$d = strcmp( (string) $a['sale_ready_date'], (string) $b['sale_ready_date'] );
-				if ( 0 !== $d ) {
-					return $d;
-				}
-				if ( ( null === $a['checkin_date'] ) !== ( null === $b['checkin_date'] ) ) {
-					return null === $a['checkin_date'] ? 1 : -1; // An unknown check-in sorts after a known one.
-				}
-				return strcmp( (string) $a['checkin_date'], (string) $b['checkin_date'] );
-			}
-		);
+		usort( $candidates, array( self::class, 'ships_first' ) );
 		if ( $candidates ) {
 			$first         = $candidates[0];
 			$facts['next'] = array(
