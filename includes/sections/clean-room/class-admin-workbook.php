@@ -152,9 +152,17 @@ class Admin_Workbook {
 	 *
 	 * @param string $message The notice.
 	 */
-	public static function flash( $message ) {
-		set_transient( self::FLASH_TRANSIENT . (int) get_current_user_id(), (string) $message, 2 * MINUTE_IN_SECONDS );
+	public static function flash( $message, $ok = false ) {
+		// A notice of something done is kept with that word (shown green); any other stays a plain text (yellow).
+		set_transient( self::FLASH_TRANSIENT . (int) get_current_user_id(), $ok ? array( 'message' => (string) $message, 'ok' => true ) : (string) $message, 2 * MINUTE_IN_SECONDS );
 	}
+
+	/**
+	 * Whether the notice last taken (take_flash()) says something was done.
+	 *
+	 * @var bool
+	 */
+	private static $flash_ok = false;
 
 	/**
 	 * The pending notice, once.
@@ -167,7 +175,21 @@ class Admin_Workbook {
 		if ( false !== $message ) {
 			delete_transient( $key );
 		}
+		self::$flash_ok = is_array( $message ) && ! empty( $message['ok'] );
+		if ( is_array( $message ) ) {
+			$message = (string) ( $message['message'] ?? '' );
+		}
 		return is_string( $message ) ? $message : '';
+	}
+
+	/**
+	 * Whether the notice taken says something was done (green) — else it is
+	 * a warning (yellow).
+	 *
+	 * @return bool
+	 */
+	public static function flash_ok() {
+		return self::$flash_ok;
 	}
 
 	/* ============================================================== */

@@ -117,11 +117,21 @@ class Orders {
 	private $invoice_lines = array();
 
 	/**
-	 * The shipped line ids per order, once per request.
+	 * What the shipments of each order say (shipments()), once per request.
 	 *
-	 * @var array<int, array<int, true>>
+	 * @var array<int, array>
 	 */
 	private $shipped = array();
+
+	/**
+	 * The shipments of many orders read in ONE query (prime_shipments()) for
+	 * a reader that is about to look at each of them — order id => the
+	 * rows' line_item_ids. Only while primed: unprime() forgets them (the
+	 * Clean Room primes for one pass over the open orders, then unprimes).
+	 *
+	 * @var array<int, array>
+	 */
+	private static $primed = array();
 
 	/**
 	 * Constructor.
@@ -190,6 +200,43 @@ class Orders {
 	 */
 	public static function shipments_available() {
 		return class_exists( '\\FST_Shipment' ) && method_exists( '\\FST_Shipment', 'get_by_order' );
+	}
+
+	/**
+	 * Shipments of many orders already read in one go (the Clean Room's
+	 * Store::shipment_rows(), ShipTracker's own table as get_by_order()
+	 * reads it one order at a time): order id => its rows (none = an empty
+	 * list). Each order given is then answered from them — until
+	 * unprime(). An order already primed keeps what it had.
+	 *
+	 * @param array<int, array> $rows_by_order Order id => rows (each with line_item_ids).
+	 * @return int[] The orders primed by this call (to unprime() after).
+	 */
+	public static function prime_shipments( array $rows_by_order ) {
+		$out = array();
+		foreach ( $rows_by_order as $id => $rows ) {
+			if ( (int) $id > 0 && ! isset( self::$primed[ (int) $id ] ) && is_array( $rows ) ) {
+				self::$primed[ (int) $id ] = array_values( $rows );
+				$out[]                     = (int) $id;
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Forget primed shipments (the next read asks ShipTracker again): the
+	 * orders given — what one prime_shipments() call primed — or all.
+	 *
+	 * @param int[]|null $order_ids Order ids (null = all).
+	 */
+	public static function unprime( $order_ids = null ) {
+		if ( null === $order_ids ) {
+			self::$primed = array();
+			return;
+		}
+		foreach ( (array) $order_ids as $id ) {
+			unset( self::$primed[ (int) $id ] );
+		}
 	}
 
 	/**
@@ -284,7 +331,24 @@ class Orders {
 	 * @return array<int, true>
 	 */
 	public function shipped_item_ids( $order ) {
-		$out = array();
+		return $this->shipments( $order )['items'];
+	}
+
+	/**
+	 * What ShipTracker's shipments of an order say: the line ids they
+	 * name, and whether one of them names none — a shipment with no item
+	 * list covers the whole order (ShipTracker's own rule). Read once per
+	 * order and request; the Clean Room's reservations ask it too.
+	 *
+	 * @param object $order Order.
+	 * @return array{any: bool, whole: bool, items: array<int, true>}
+	 */
+	public function shipments( $order ) {
+		$out = array(
+			'any'   => false,
+			'whole' => false,
+			'items' => array(),
+		);
 		if ( ! self::shipments_available() ) {
 			return $out;
 		}
@@ -292,18 +356,31 @@ class Orders {
 		if ( isset( $this->shipped[ $order_id ] ) ) {
 			return $this->shipped[ $order_id ];
 		}
-		try {
-			$rows = \FST_Shipment::get_by_order( $order_id );
-		} catch ( \Throwable $e ) {
-			return $out;
+		if ( isset( self::$primed[ $order_id ] ) ) {
+			$rows = self::$primed[ $order_id ]; // Read with the other open orders, in one query.
+		} else {
+			try {
+				$rows = \FST_Shipment::get_by_order( $order_id );
+			} catch ( \Throwable $e ) {
+				return $out;
+			}
 		}
 		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
-			$list = is_object( $row ) && isset( $row->line_item_ids ) ? $row->line_item_ids : ( is_array( $row ) && isset( $row['line_item_ids'] ) ? $row['line_item_ids'] : '' );
-			$ids  = is_string( $list ) && '' !== $list ? json_decode( $list, true ) : ( is_array( $list ) ? $list : null );
+			if ( ! is_object( $row ) && ! is_array( $row ) ) {
+				continue;
+			}
+			$out['any'] = true;
+			$list       = is_object( $row ) && isset( $row->line_item_ids ) ? $row->line_item_ids : ( is_array( $row ) && isset( $row['line_item_ids'] ) ? $row['line_item_ids'] : '' );
+			$ids        = is_string( $list ) && '' !== $list ? json_decode( $list, true ) : ( is_array( $list ) ? $list : null );
+			$named      = 0;
 			foreach ( is_array( $ids ) ? $ids : array() as $id ) {
 				if ( is_scalar( $id ) && (int) $id > 0 ) {
-					$out[ (int) $id ] = true;
+					$out['items'][ (int) $id ] = true;
+					$named++;
 				}
+			}
+			if ( 0 === $named ) {
+				$out['whole'] = true;
 			}
 		}
 		$this->shipped[ $order_id ] = $out;

@@ -250,7 +250,8 @@ class Admin_Temp {
 		$tab          = self::TAB;
 
 		$room = $tables_ok ? $store->room( $today, $settings, Settings::protocols() ) : array( 'todo' => null );
-		$list = Front_Desk::todo_screen( is_array( $room['todo'] ) ? $room['todo'] : Todo::build( array(), array(), array(), array(), $today, $settings ) );
+		$list  = Front_Desk::todo_screen( is_array( $room['todo'] ) ? $room['todo'] : Todo::build( array(), array(), array(), array(), $today, $settings ) );
+		$flash = class_exists( Admin_Workbook::class, false ) ? Admin_Workbook::take_flash() : ''; // What a Pull today correction just did.
 
 		include Clean_Room::path() . 'views/todo.php';
 	}

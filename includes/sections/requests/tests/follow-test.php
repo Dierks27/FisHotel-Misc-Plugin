@@ -486,4 +486,21 @@ check( 'no standard size is set up in this store: the size is free text (null), 
 $sized = new Cleanroom( $room_store, $today, array_merge( $room_settings, array( 'size_list' => array( '1 - 2"', '2 - 3.5"' ) ) ) );
 check_same( 'the standard sizes come as slug and label', array( array( 'slug' => '1-2', 'label' => '1 - 2"' ), array( 'slug' => '2-3-5', 'label' => '2 - 3.5"' ) ), $sized->sizes() );
 
+echo "\nOffering: the fish a customer's open order already holds are not offered again\n";
+if ( ! class_exists( '\\FisHotel\\Misc\\Sections\\Clean_Room\\Reserve_Shop', false ) ) {
+	// The Clean Room's reserved counts (Reserved → Pull today → Shipped), as a stand-in: group 81 holds 2 for an order.
+	eval( 'namespace FisHotel\\Misc\\Sections\\Clean_Room; class Reserve_Shop { public static function counts_for( array $ids = array() ) { return array_intersect_key( array( 81 => array( "qty" => 2, "orders" => array( "1234" ) ) ), array_flip( $ids ) ); } }' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- a one-method stand-in in another namespace.
+}
+$fh_line_store = new class() {
+	public function stays_for_line( $line_id, $today, array $settings ) {
+		return array(
+			array( 'id' => 81, 'qty_live' => 3, 'sale_ready' => true, 'status' => 'cleared', 'product_id' => 501, 'tank_number' => 121 ),
+			array( 'id' => 82, 'qty_live' => 2, 'sale_ready' => true, 'status' => 'cleared', 'product_id' => 501, 'tank_number' => 122 ),
+		);
+	}
+};
+$fh_stays = new ReflectionMethod( Cleanroom::class, 'stays' );
+$fh_stays->setAccessible( true );
+check_same( 'a group of 3 with 2 reserved for #1234 offers 1; the other group all of its 2', array( 1, 2 ), array_column( $fh_stays->invoke( new Cleanroom( $fh_line_store, $today, $room_settings ), 11 ), 'qty_live' ) );
+
 fh_finish();

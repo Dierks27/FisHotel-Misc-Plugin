@@ -48,6 +48,16 @@
  *                           from the shop through the readers the other
  *                           sections already have, cached, dropped when an
  *                           order changes.
+ *   - class-reserve.php     PURE: a sold fish reserved in its tank, the pull
+ *                           list of its ship day, taken out once it shipped
+ *                           (the difference only), the words.
+ *   - class-holds.php       PURE: fish reserved BY HAND for somebody (a
+ *                           customer's account or a typed name), counted
+ *                           with the orders, taken by that customer's own
+ *                           order, suggested to an order for a typed name.
+ *   - class-reserve-shop.php  its edge: the reservation on the order item,
+ *                           the order hooks, the hourly sweep, the events,
+ *                           the not-found list.
  *   - class-parser.php      PURE: a spoken / typed phrase → structured
  *                           preview (verbs incl. loss / shipped / copper,
  *                           number words, tank references, fuzzy species
@@ -217,8 +227,11 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 			require_once self::path() . 'class-temp-tanks.php';
 			require_once self::path() . 'class-todo.php';
 			require_once self::path() . 'class-sold-line.php';
+			require_once self::path() . 'class-reserve.php';
+			require_once self::path() . 'class-holds.php';
 			require_once self::path() . 'class-feeding.php';
 			require_once self::path() . 'class-ship-lines.php';
+			require_once self::path() . 'class-reserve-shop.php';
 			require_once self::path() . 'class-parser.php';
 			require_once self::path() . 'class-qr.php';
 			require_once self::path() . 'class-costing.php';
@@ -307,6 +320,10 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 			// A clean system is not fed on the day its fish ship: what was read of today's orders is dropped
 			// when an order changes. Nothing is read here — only where the day's to-do is shown.
 			Ship_Lines::register();
+			// Reserved → Pull today → Shipped: a sold fish is reserved in its tank and taken out when its order
+			// ships. The order hooks and the hourly sweep — nothing is read here (Settings::get() is one
+			// autoloaded option).
+			Reserve_Shop::register( Settings::get() );
 
 			$front = new Front_Desk();
 			$front->init();
@@ -326,6 +343,10 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 
 				$settings = new Settings();
 				$settings->init();
+
+				// The To do tab's corrections: It was tank… / Pulled from a different tank / Ignore.
+				require_once self::path() . 'class-admin-reserve.php';
+				Admin_Reserve::init();
 
 				$admin = new Admin();
 				$admin->init();
@@ -408,6 +429,18 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 		public static function deactivate() {
 			self::load();
 			Store::clear_species_cache();
+			Reserve_Shop::unschedule();
+		}
+
+		/**
+		 * The section is switched off: no hourly sweep is left behind
+		 * (wp_next_scheduled() reads the autoloaded cron option — no query,
+		 * no class file loaded).
+		 */
+		public static function boot_disabled() {
+			if ( function_exists( 'wp_next_scheduled' ) && function_exists( 'wp_clear_scheduled_hook' ) && wp_next_scheduled( 'fishotel_cleanroom_reserve_sweep' ) ) {
+				wp_clear_scheduled_hook( 'fishotel_cleanroom_reserve_sweep' );
+			}
 		}
 
 		/**

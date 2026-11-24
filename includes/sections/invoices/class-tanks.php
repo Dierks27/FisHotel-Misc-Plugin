@@ -123,6 +123,7 @@ class Tanks {
 			'order_ref'  => $ref,
 			'product_id' => ! empty( $stay['product_id'] ) ? (int) $stay['product_id'] : null,
 			'needs_id'   => ! empty( $stay['needs_id'] ),
+			'for_sale'   => ! empty( $stay['sale_ready'] ), // Its sale date has come: its fish not reserved are "ready".
 			'open'       => 'closed' !== (string) ( isset( $stay['stored_status'] ) ? $stay['stored_status'] : ( isset( $stay['status'] ) ? $stay['status'] : '' ) ),
 		);
 	}
@@ -210,6 +211,62 @@ class Tanks {
 			return null;
 		}
 		return is_array( $stay ) ? self::group( $stay ) : null;
+	}
+
+	/**
+	 * The fish of each tank group already reserved for a customer's open
+	 * order (the Clean Room's Reserved → Pull today → Shipped) — a paid
+	 * invoice is such an order, so it counts here and no longer as an
+	 * open invoice. Empty while that is switched off.
+	 *
+	 * @param int[] $stay_ids Tank group ids.
+	 * @return array<int, array{qty: int, orders: string[]}>
+	 */
+	public function reserved( array $stay_ids ) {
+		$class = self::CLEAN_ROOM . 'Reserve_Shop';
+		if ( ! $stay_ids || ! $this->context() || ! class_exists( $class, false ) || ! method_exists( $class, 'counts_for' ) ) {
+			return array();
+		}
+		try {
+			return (array) $class::counts_for( array_map( 'intval', $stay_ids ) );
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+	}
+
+	/**
+	 * The fish of one reserved count (reserved()) that are not on an open
+	 * invoice already: a customer's order for an invoice that is not paid
+	 * yet (on hold, a cheque) holds its fish in the tank AND the invoice
+	 * still counts as open here — those are counted once, as the invoice.
+	 *
+	 * @param mixed $count A reserved() entry: qty, invoice (fish held for orders of unpaid invoices).
+	 * @return int
+	 */
+	public static function for_orders( $count ) {
+		if ( ! is_array( $count ) ) {
+			return 0;
+		}
+		return max( 0, (int) ( $count['qty'] ?? 0 ) - max( 0, (int) ( $count['invoice'] ?? 0 ) ) );
+	}
+
+	/**
+	 * Who one reserved count (reserved()) holds its fish for, in the Clean
+	 * Room's words: "#1234, #1240" — with the holds made by hand when there
+	 * are some ("#1234; 1 for Mike S. — by hand, 3 days ago").
+	 *
+	 * @param mixed $count A reserved() entry: orders, who (the Clean Room's words, when it gives them).
+	 * @return string
+	 */
+	public static function reserved_for( $count ) {
+		if ( ! is_array( $count ) ) {
+			return '';
+		}
+		if ( ! empty( $count['who'] ) && is_string( $count['who'] ) ) {
+			return $count['who'];
+		}
+		$orders = array_values( array_filter( array_map( 'strval', (array) ( $count['orders'] ?? array() ) ), 'strlen' ) );
+		return $orders ? '#' . implode( ', #', $orders ) : '';
 	}
 
 	/**

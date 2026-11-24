@@ -10,6 +10,9 @@
  *
  * The ladder, strongest first — the first rung with an answer wins:
  *
+ *   held      the line was reserved in its tank group(s) when the order
+ *             came in (the order item's _fh_stay, see Reserve) and one
+ *             of them still has fish — or left today;
  *   invoice   the Invoices section tied the line to a tank group (the
  *             line's link.stay_id) and that group still has fish;
  *   product   open groups of the same shop product (the group's product
@@ -51,6 +54,7 @@ defined( 'ABSPATH' ) || exit;
  */
 class Sold_Line {
 
+	const RUNG_HELD    = 'held';
 	const RUNG_INVOICE = 'invoice';
 	const RUNG_PRODUCT = 'product';
 	const RUNG_NAME    = 'name';
@@ -76,8 +80,9 @@ class Sold_Line {
 	 *
 	 * @param array $raw name, names (other names the line goes by: the product's title, the invoice's
 	 *                   name), product_id, variation_id, size_slug, size_label, link (the Invoices
-	 *                   section's: product_id, variation_id, species, size_slug, stay_id).
-	 * @return array{name: string, names: string[], product_ids: int[], size_slug: string, size_label: string, stay_id: int}
+	 *                   section's: product_id, variation_id, species, size_slug, stay_id), held (the
+	 *                   reservation: stay id => fish, Reserve::held()).
+	 * @return array{name: string, names: string[], product_ids: int[], size_slug: string, size_label: string, stay_id: int, held: int[]}
 	 */
 	public static function line( array $raw ) {
 		$link = isset( $raw['link'] ) && is_array( $raw['link'] ) ? $raw['link'] : array();
@@ -125,7 +130,37 @@ class Sold_Line {
 			'size_slug'   => $size,
 			'size_label'  => $text( $raw['size_label'] ?? '' ),
 			'stay_id'     => $int( $link['stay_id'] ?? 0 ),
+			'held'        => array_keys( Reserve::held( $raw['held'] ?? array() ) ),
 		);
+	}
+
+	/**
+	 * Whether a group is surely the line's fish AND its size: the same
+	 * product or the same name word for word, and a size both name and
+	 * agree on (or the line's name itself ending in the group's size
+	 * label). A fish matched only by product or name, with a size one of
+	 * them leaves open, is a guess — good enough to skip a feed, never to
+	 * take a fish out of a tank by itself.
+	 *
+	 * @param array $line A line (raw, as stays() takes it).
+	 * @param array $stay A stay (product_id, species, size_slug, size_label).
+	 * @return bool
+	 */
+	public static function exact( array $line, array $stay ) {
+		$line    = self::line( $line );
+		$size    = Sizes::slug( (string) ( $stay['size_slug'] ?? '' ) );
+		$species = self::norm( $stay['species'] ?? '' );
+		$label   = self::norm( $stay['size_label'] ?? '' );
+		if ( '' !== $species && '' !== $label && in_array( $species . ' ' . $label, $line['names'], true ) ) {
+			return true; // "Yellow Tang Medium" names the group's size itself.
+		}
+		if ( '' === $line['size_slug'] || $size !== $line['size_slug'] ) {
+			return false;
+		}
+		if ( $line['product_ids'] && in_array( (int) ( $stay['product_id'] ?? 0 ), $line['product_ids'], true ) ) {
+			return true;
+		}
+		return '' !== $species && in_array( $species, $line['names'], true );
 	}
 
 	/**
@@ -163,7 +198,7 @@ class Sold_Line {
 	 * @param array[] $stays Stays (id, product_id, species, size_slug, size_label, qty_live). One without
 	 *                       a live fish is no candidate — unless it carries `left_today`: its last fish
 	 *                       went out (or died) today, so this morning the fish was still in that water.
-	 * @return array{rung: string, stays: array[]} rung: invoice | product | name, '' when no group fits;
+	 * @return array{rung: string, stays: array[]} rung: held | invoice | product | name, '' when no group fits;
 	 *         stays: the groups as they were given, in their order.
 	 */
 	public static function stays( array $line, array $stays ) {
@@ -173,6 +208,19 @@ class Sold_Line {
 			// A group with fish in it — or one whose last fish left today (the caller says so).
 			if ( is_array( $stay ) && ( (int) ( $stay['qty_live'] ?? 0 ) > 0 || ! empty( $stay['left_today'] ) ) ) {
 				$live[] = $stay;
+			}
+		}
+
+		// 0. The line was reserved in its group(s) when the order came in.
+		if ( $line['held'] ) {
+			$mine = array();
+			foreach ( $live as $stay ) {
+				if ( in_array( (int) ( $stay['id'] ?? 0 ), $line['held'], true ) ) {
+					$mine[] = $stay;
+				}
+			}
+			if ( $mine ) {
+				return self::answer( self::RUNG_HELD, $mine );
 			}
 		}
 

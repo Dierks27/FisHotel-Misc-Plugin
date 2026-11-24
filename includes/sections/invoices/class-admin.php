@@ -632,6 +632,7 @@ class Admin {
 			'productGone'    => __( 'this shop product no longer exists', 'fishotel-misc-plugin' ),
 			/* translators: 1: fish alive in the tank group, 2: quantity on the invoice */
 			'aliveLow'       => __( 'only %1$s alive in that tank group, %2$s on this invoice', 'fishotel-misc-plugin' ),
+			'freeLow'        => __( 'only %1$s of that tank group are not reserved (for an order or by hand), %2$s on this invoice', 'fishotel-misc-plugin' ),
 			'fromTank'       => __( 'from the tanks', 'fishotel-misc-plugin' ),
 			'fromProduct'    => __( 'shop product', 'fishotel-misc-plugin' ),
 			'fromSpecies'    => __( 'species list', 'fishotel-misc-plugin' ),

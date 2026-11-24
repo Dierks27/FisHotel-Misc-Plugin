@@ -12,6 +12,7 @@
 defined( 'ABSPATH' ) || exit;
 
 use FisHotel\Misc\Sections\Clean_Room\Admin;
+use FisHotel\Misc\Sections\Clean_Room\Admin_Workbook;
 
 $fh_tabs = array(
 	'board'    => __( 'Board', 'fishotel-misc-plugin' ),
@@ -31,6 +32,6 @@ if ( ! empty( $can_settings ) ) {
 		<a class="fh-cr-tab<?php echo $tab === $fh_key ? ' is-active' : ''; ?>" href="<?php echo esc_url( Admin::page_url( $fh_key ) ); ?>"><?php echo esc_html( $fh_label ); ?></a>
 	<?php endforeach; ?>
 </nav>
-<?php if ( ! empty( $flash ) ) : ?>
-	<div class="fishotel-misc-notice fishotel-misc-notice--warning"><?php echo esc_html( $flash ); ?></div>
+<?php if ( ! empty( $flash ) ) : // Shown once, here only: green for something done, yellow otherwise. ?>
+	<div class="fishotel-misc-notice fishotel-misc-notice--<?php echo esc_attr( Admin_Workbook::flash_ok() ? 'success' : 'warning' ); ?>"><?php echo esc_html( $flash ); ?></div>
 <?php endif; ?>
