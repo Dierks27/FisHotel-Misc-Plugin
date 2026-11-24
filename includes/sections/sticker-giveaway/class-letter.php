@@ -26,6 +26,17 @@
  * is EA, so nothing changes. Mixed carts (anything FisHotel ships), fish
  * carts and sticker-only carts are never touched (Rules::mail_letter()).
  *
+ * An EA-only cart that joins a customer's open order FisHotel ships (the
+ * theme's combined shipping: "We'll ship both together") is not a letter
+ * either: its sticker goes in that box. The theme's own signals decide —
+ * the shipping package tagged `fishotel_reuse` = 'match' and the open
+ * order it names (FisHotel_Reorder_Checkout_Lock::anchor_order()) in the
+ * cart; `_fishotel_piggyback_of` and `_fishotel_fulfilled_by_order` on the
+ * placed order (the second is written when the order is paid, so the
+ * order is looked at again then). Refunds follow too: the number to mail
+ * goes down with the refunded stickers, and a note reminds the owner to
+ * refund the mailing fee once no paid sticker is left.
+ *
  * The decisions are Rules::is_ea_only(), Rules::sticker_counts() and
  * Rules::mail_letter() — pure, tested headless.
  *
@@ -56,6 +67,14 @@ class Letter {
 	 */
 	const FEE_ID        = 'fh-sticker-mailing';
 	const FEE_ITEM_META = '_fh_sticker_mail_fee';
+
+	/**
+	 * Order meta: the owner was already told to refund the mailing fee of
+	 * an order that rides along in a box FisHotel ships.
+	 *
+	 * @var string
+	 */
+	const FEE_NOTED = '_fh_sticker_mail_fee_noted';
 
 	/**
 	 * The orders-list column.
@@ -117,6 +136,10 @@ class Letter {
 		add_action( 'woocommerce_store_api_checkout_order_processed', array( self::class, 'flag_order' ), 20, 1 );
 		add_action( 'woocommerce_email_before_order_table', array( self::class, 'email_line' ), 20, 4 );
 
+		// After the theme folds a paid order into a box (priority 99), and after a refund.
+		add_action( 'woocommerce_payment_complete', array( self::class, 'after_payment' ), 100, 1 );
+		add_action( 'woocommerce_order_refunded', array( self::class, 'on_refund' ), 20, 2 );
+
 		if ( is_admin() ) {
 			add_filter( 'manage_edit-shop_order_columns', array( self::class, 'add_column' ), 30 );
 			add_action( 'manage_shop_order_posts_custom_column', array( self::class, 'render_column' ), 10, 2 );
@@ -160,6 +183,27 @@ class Letter {
 		return sprintf( __( 'MAIL STICKER BY LETTER: %d sticker(s) — EA-only order, nothing ships from FisHotel.', 'fishotel-misc-plugin' ), max( 0, (int) $count ) );
 	}
 
+	/**
+	 * The private note when an order no longer has a sticker to mail.
+	 *
+	 * @return string
+	 */
+	public static function gone_text() {
+		return __( 'Sticker Giveaway: No sticker is left to mail by letter on this order.', 'fishotel-misc-plugin' );
+	}
+
+	/**
+	 * The private note when the mailing fee was paid but nothing paid is
+	 * left to mail: why, then "so refund the … fee to the customer."
+	 *
+	 * @param string $why The reason, without a full stop.
+	 * @return string
+	 */
+	public static function refund_fee_text( $why ) {
+		/* translators: 1: the reason, 2: the fee's name */
+		return sprintf( __( '%1$s, so refund the "%2$s" fee to the customer.', 'fishotel-misc-plugin' ), $why, self::fee_name() );
+	}
+
 	/* ============================================================== */
 	/*  Which lines are EA                                             */
 	/* ============================================================== */
@@ -196,6 +240,7 @@ class Letter {
 				'kind'  => $kind,
 				'qty'   => (int) ( $item['quantity'] ?? 0 ),
 				'is_ea' => '' === $kind && self::is_ea_line( (int) ( $item['product_id'] ?? 0 ), (int) ( $item['variation_id'] ?? 0 ) ),
+				'price' => isset( $item['data'] ) && is_object( $item['data'] ) && method_exists( $item['data'], 'get_price' ) ? (float) $item['data']->get_price() : null,
 			);
 		}
 
@@ -203,28 +248,136 @@ class Letter {
 	}
 
 	/**
-	 * An order's product lines as letter lines.
+	 * An order's product lines as letter lines: the quantity left after
+	 * refunds, and what one sticker cost before any coupon.
 	 *
 	 * @param \WC_Order|object $order Order.
 	 * @return array[]
 	 */
 	public static function order_lines( $order ) {
-		$lines = array();
+		$lines    = array();
+		$refunded = is_object( $order ) && method_exists( $order, 'get_qty_refunded_for_item' );
 
-		foreach ( is_object( $order ) && method_exists( $order, 'get_items' ) ? (array) $order->get_items() : array() as $item ) {
+		foreach ( is_object( $order ) && method_exists( $order, 'get_items' ) ? (array) $order->get_items() : array() as $id => $item ) {
 			if ( ! is_object( $item ) || ! method_exists( $item, 'get_product_id' ) ) {
 				continue;
 			}
 
 			$kind    = Cart::kind( array( Sticker_Giveaway::ITEM_KEY => $item->get_meta( '_fh_sticker' ) ) );
+			$bought  = (int) $item->get_quantity();
 			$lines[] = array(
 				'kind'  => $kind,
-				'qty'   => (int) $item->get_quantity(),
+				'qty'   => max( 0, $bought + ( $refunded ? (int) $order->get_qty_refunded_for_item( $id ) : 0 ) ),
 				'is_ea' => '' === $kind && self::is_ea_line( (int) $item->get_product_id(), (int) $item->get_variation_id() ),
+				'price' => method_exists( $item, 'get_subtotal' ) && $bought > 0 ? (float) $item->get_subtotal() / $bought : null,
 			);
 		}
 
 		return $lines;
+	}
+
+	/* ============================================================== */
+	/*  Joining a box FisHotel ships (the theme's combined shipping)   */
+	/* ============================================================== */
+
+	/**
+	 * The orders that share a fulfillment box with this one (the theme's
+	 * `fishotel_order_get_fulfillment()` / `fishotel_fulfillment_get_sources()`),
+	 * itself included; none when it is in no box or the theme is not there.
+	 *
+	 * @param \WC_Order|int $order_or_id Order or its id.
+	 * @return int[]
+	 */
+	public static function box_of( $order_or_id ) {
+		if ( ! function_exists( 'fishotel_order_get_fulfillment' ) || ! function_exists( 'fishotel_fulfillment_get_sources' ) ) {
+			return array();
+		}
+
+		$box = (int) fishotel_order_get_fulfillment( $order_or_id );
+
+		return $box > 0 ? array_map( 'intval', (array) fishotel_fulfillment_get_sources( $box ) ) : array();
+	}
+
+	/**
+	 * Whether any of these orders (but $self) has something FisHotel ships.
+	 *
+	 * @param int[] $ids  Order ids.
+	 * @param int   $self The order asking, left out.
+	 * @return bool
+	 */
+	public static function any_ships( array $ids, $self = 0 ) {
+		foreach ( array_unique( array_map( 'intval', $ids ) ) as $id ) {
+			if ( $id < 1 || $id === (int) $self ) {
+				continue;
+			}
+			$order = function_exists( 'wc_get_order' ) ? wc_get_order( $id ) : null;
+			if ( $order instanceof \WC_Order && Rules::ships_from_fishotel( self::order_lines( $order ) ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Whether the live cart joins an open order whose box FisHotel ships.
+	 * The theme tags the shipping package `fishotel_reuse` = 'match' when it
+	 * combines the shipping, and names the open order through the re-order
+	 * lock's anchor. Combined but no order named: the customer is told
+	 * both ship together, so it rides along.
+	 *
+	 * @param \WC_Cart|object $cart Cart.
+	 * @return bool
+	 */
+	public static function cart_rides_along( $cart ) {
+		if ( ! is_object( $cart ) || ! method_exists( $cart, 'get_shipping_packages' ) ) {
+			return false;
+		}
+
+		$joined = false;
+		foreach ( (array) $cart->get_shipping_packages() as $package ) {
+			if ( is_array( $package ) && 'match' === (string) ( $package['fishotel_reuse'] ?? '' ) ) {
+				$joined = true;
+				break;
+			}
+		}
+		if ( ! $joined ) {
+			return false;
+		}
+
+		$anchor = class_exists( 'FisHotel_Reorder_Checkout_Lock' ) && is_callable( array( 'FisHotel_Reorder_Checkout_Lock', 'anchor_order' ) )
+			? \FisHotel_Reorder_Checkout_Lock::anchor_order()
+			: null;
+
+		if ( ! $anchor instanceof \WC_Order ) {
+			return true;
+		}
+
+		return self::any_ships( array_merge( array( (int) $anchor->get_id() ), self::box_of( $anchor ) ) );
+	}
+
+	/**
+	 * Whether a placed order rides along in a box FisHotel ships: the order
+	 * it piggybacks on (`_fishotel_piggyback_of`) or the fulfillment it was
+	 * folded into holds something FisHotel ships.
+	 *
+	 * @param \WC_Order|object $order Order.
+	 * @return bool
+	 */
+	public static function order_rides_along( $order ) {
+		if ( ! is_object( $order ) || ! method_exists( $order, 'get_meta' ) ) {
+			return false;
+		}
+
+		$ids    = array();
+		$source = (int) $order->get_meta( '_fishotel_piggyback_of' );
+		if ( $source > 0 ) {
+			$ids   = self::box_of( $source );
+			$ids[] = $source;
+		}
+		$ids = array_merge( $ids, self::box_of( $order ) );
+
+		return $ids ? self::any_ships( $ids, method_exists( $order, 'get_id' ) ? (int) $order->get_id() : 0 ) : false;
 	}
 
 	/* ============================================================== */
@@ -250,27 +403,58 @@ class Letter {
 		}
 
 		$letter = Rules::mail_letter( self::cart_lines( $cart ) );
-		if ( $letter['fee'] <= 0 ) {
+		if ( $letter['fee'] <= 0 || self::cart_rides_along( $cart ) ) {
 			return;
 		}
 
 		$product = null;
 		foreach ( $cart->get_cart() as $item ) {
-			if ( Rules::KIND_EXTRA === Cart::kind( $item ) && isset( $item['data'] ) && $item['data'] instanceof \WC_Product ) {
+			if ( Rules::KIND_EXTRA === Cart::kind( $item ) && isset( $item['data'] ) && $item['data'] instanceof \WC_Product && (float) $item['data']->get_price() > 0 ) {
 				$product = $item['data'];
 				break;
 			}
 		}
 
+		$taxable   = $product && 'taxable' === $product->get_tax_status();
+		$tax_class = $product ? (string) $product->get_tax_class() : '';
+
 		$cart->fees_api()->add_fee(
 			array(
 				'id'        => self::FEE_ID,
 				'name'      => self::fee_name(),
-				'amount'    => $letter['fee'],
-				'taxable'   => $product && 'taxable' === $product->get_tax_status(),
-				'tax_class' => $product ? (string) $product->get_tax_class() : '',
+				'amount'    => self::fee_amount( $letter['fee'], $taxable, $tax_class, $cart ),
+				'taxable'   => $taxable,
+				'tax_class' => $tax_class,
 			)
 		);
+	}
+
+	/**
+	 * The amount handed to WooCommerce. WooCommerce always adds a fee's tax
+	 * on top, while a shop that enters prices with tax has the tax inside
+	 * the $0.99 sticker. So, then, the tax the customer's rates put inside
+	 * $1.00 is taken out first, and the customer pays $1.00 with its tax,
+	 * as they pay $0.99 for a sticker. Prices entered without tax, or a fee
+	 * that is not taxed: the $1.00 as it is.
+	 *
+	 * @param float           $gross     The fee as the customer should see it.
+	 * @param bool            $taxable   Whether the fee is taxed.
+	 * @param string          $tax_class Its tax class.
+	 * @param \WC_Cart|object $cart      Cart (its customer's tax rates).
+	 * @return float
+	 */
+	public static function fee_amount( $gross, $taxable, $tax_class, $cart ) {
+		$gross = (float) $gross;
+
+		if ( ! $taxable || ! function_exists( 'wc_prices_include_tax' ) || ! wc_prices_include_tax()
+			|| ( function_exists( 'wc_tax_enabled' ) && ! wc_tax_enabled() ) || ! class_exists( '\WC_Tax' ) ) {
+			return $gross;
+		}
+
+		$customer = is_object( $cart ) && method_exists( $cart, 'get_customer' ) ? $cart->get_customer() : null;
+		$taxes    = \WC_Tax::calc_tax( $gross, \WC_Tax::get_rates( (string) $tax_class, $customer ), true );
+
+		return max( 0.0, $gross - (float) array_sum( (array) $taxes ) );
 	}
 
 	/**
@@ -281,7 +465,7 @@ class Letter {
 	public static function cart_has_letter() {
 		$cart = Cart::cart();
 
-		return $cart ? Rules::mail_letter( self::cart_lines( $cart ) )['letter'] : false;
+		return $cart && Rules::mail_letter( self::cart_lines( $cart ) )['letter'] && ! self::cart_rides_along( $cart );
 	}
 
 	/**
@@ -355,24 +539,135 @@ class Letter {
 			return;
 		}
 
-		$letter = Rules::mail_letter( self::order_lines( $order ) );
-		$had    = (int) $order->get_meta( self::META );
+		$rides  = self::order_rides_along( $order );
+		$letter = Rules::mail_letter( self::order_lines( $order ), $rides );
+		$saved  = self::recount( $order, $letter['count'] );
 
-		if ( ! $letter['letter'] ) {
-			if ( $had > 0 ) {
-				$order->delete_meta_data( self::META );
-				$order->save();
+		// Joined a box FisHotel ships, yet the cart charged the mailing fee (the theme's two signals disagreed): say to refund it, once.
+		if ( $rides && self::fee_left( $order ) > 0 && '' === (string) $order->get_meta( self::FEE_NOTED ) ) {
+			$order->update_meta_data( self::FEE_NOTED, '1' );
+			$order->add_order_note( self::refund_fee_text( __( 'Sticker Giveaway: this order ships in the same box as an order FisHotel ships, so its sticker goes in that box and nothing is mailed', 'fishotel-misc-plugin' ) ) );
+			$saved = true;
+		}
+
+		if ( $saved ) {
+			$order->save();
+		}
+	}
+
+	/**
+	 * Set the number to mail and say so in a private note, when it changed:
+	 * the "MAIL STICKER BY LETTER" note with the new number, or $gone (by
+	 * default gone_text()) when nothing is left to mail. The caller saves.
+	 *
+	 * @param \WC_Order $order Order.
+	 * @param int       $count Stickers to mail now.
+	 * @param string    $gone  The note when none is left.
+	 * @return bool Whether it changed.
+	 */
+	private static function recount( $order, $count, $gone = '' ) {
+		$count = max( 0, (int) $count );
+		if ( self::flagged( $order ) === $count ) {
+			return false;
+		}
+
+		if ( $count > 0 ) {
+			$order->update_meta_data( self::META, $count );
+			$order->add_order_note( self::note_text( $count ) );
+		} else {
+			$order->delete_meta_data( self::META );
+			$order->add_order_note( '' !== $gone ? $gone : self::gone_text() );
+		}
+
+		return true;
+	}
+
+	/**
+	 * What is left of the mailing fee the customer paid (fee lines less
+	 * what was refunded of them).
+	 *
+	 * @param \WC_Order $order Order.
+	 * @return float
+	 */
+	public static function fee_left( $order ) {
+		$left = 0.0;
+
+		foreach ( (array) $order->get_items( 'fee' ) as $id => $fee ) {
+			if ( ! self::is_fee_item( $fee ) ) {
+				continue;
 			}
+			$left += (float) $fee->get_total() - ( method_exists( $order, 'get_total_refunded_for_item' ) ? (float) $order->get_total_refunded_for_item( $id, 'fee' ) : 0.0 );
+		}
+
+		return $left > 0.005 ? $left : 0.0;
+	}
+
+	/**
+	 * Whether an order fee line is the mailing fee (by its mark, else its name).
+	 *
+	 * @param object $fee Order fee line.
+	 * @return bool
+	 */
+	private static function is_fee_item( $fee ) {
+		return is_object( $fee ) && ( '' !== (string) $fee->get_meta( self::FEE_ITEM_META ) || self::fee_name() === $fee->get_name() );
+	}
+
+	/**
+	 * `woocommerce_payment_complete`, after the theme folded the paid order
+	 * into a fulfillment box (priority 99): a flagged order that now shares
+	 * a box with an order FisHotel ships is no letter after all — its
+	 * sticker goes in that box. The flag goes, and a note says so (and to
+	 * refund the mailing fee, when one was paid).
+	 *
+	 * @param int $order_id Order id.
+	 */
+	public static function after_payment( $order_id ) {
+		$order = function_exists( 'wc_get_order' ) ? wc_get_order( $order_id ) : null;
+
+		if ( ! $order instanceof \WC_Order || self::flagged( $order ) < 1 || ! self::order_rides_along( $order ) ) {
 			return;
 		}
 
-		if ( $had === $letter['count'] ) {
-			return;
+		$box = function_exists( 'fishotel_order_get_fulfillment' ) ? (int) fishotel_order_get_fulfillment( $order ) : 0;
+		$note = $box > 0
+			/* translators: %d: fulfillment id */
+			? sprintf( __( 'Sticker Giveaway: no letter after all — this order was combined into fulfillment #FF-%d with an order FisHotel ships, so its sticker goes in that box.', 'fishotel-misc-plugin' ), $box )
+			: __( 'Sticker Giveaway: no letter after all — this order ships in the same box as an order FisHotel ships, so its sticker goes in that box.', 'fishotel-misc-plugin' );
+		if ( self::fee_left( $order ) > 0 ) {
+			$note .= ' ' . self::refund_fee_text( __( 'Nothing is mailed', 'fishotel-misc-plugin' ) );
 		}
 
-		$order->update_meta_data( self::META, $letter['count'] );
+		self::recount( $order, 0, $note );
 		$order->save();
-		$order->add_order_note( self::note_text( $letter['count'] ) );
+	}
+
+	/**
+	 * `woocommerce_order_refunded` — a flagged order: the number to mail
+	 * follows the stickers left after the refund, with a note; once no paid
+	 * sticker is left while the mailing fee is still paid, a second note
+	 * says to refund the fee too (WooCommerce never refunds a fee by
+	 * itself, and the section never moves money).
+	 *
+	 * @param int $order_id  Order id.
+	 * @param int $refund_id Refund id.
+	 */
+	public static function on_refund( $order_id, $refund_id = 0 ) {
+		unset( $refund_id );
+		$order = function_exists( 'wc_get_order' ) ? wc_get_order( $order_id ) : null;
+
+		if ( ! $order instanceof \WC_Order || self::flagged( $order ) < 1 ) {
+			return;
+		}
+
+		$letter = Rules::mail_letter( self::order_lines( $order ) );
+		if ( ! self::recount( $order, $letter['count'] ) ) {
+			return;
+		}
+
+		if ( $letter['paid'] < 1 && self::fee_left( $order ) > 0 ) {
+			$order->add_order_note( self::refund_fee_text( __( 'Sticker Giveaway: no paid sticker is left to mail', 'fishotel-misc-plugin' ) ) );
+		}
+		$order->save();
 	}
 
 	/**
@@ -388,21 +683,18 @@ class Letter {
 			return;
 		}
 
-		$letter = Rules::mail_letter( self::order_lines( $order ) );
+		$letter = Rules::mail_letter( self::order_lines( $order ), self::order_rides_along( $order ) );
 
 		if ( $letter['fee'] <= 0 ) {
 			foreach ( (array) $order->get_items( 'fee' ) as $id => $fee ) {
-				if ( is_object( $fee ) && ( '' !== (string) $fee->get_meta( self::FEE_ITEM_META ) || self::fee_name() === $fee->get_name() ) ) {
+				if ( self::is_fee_item( $fee ) ) {
 					$order->remove_item( $id );
 				}
 			}
 		}
 
-		if ( $letter['count'] > 0 ) {
-			$order->update_meta_data( self::META, $letter['count'] );
-		} elseif ( '' !== (string) $order->get_meta( self::META ) ) {
-			$order->delete_meta_data( self::META );
-		}
+		// The number to mail follows what is left, with a fresh note when it changed.
+		self::recount( $order, $letter['count'] );
 	}
 
 	/**

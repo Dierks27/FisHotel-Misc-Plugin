@@ -56,7 +56,24 @@ add-ons on at $0.99.
 9. **Today.** FisHotel Tools → Today and the dashboard widget: "Stickers to
    mail by letter: #1234 (2)"; the order leaves the line when it is
    completed.
-10. **Logs.** Nothing from the section in `debug.log`.
+10. **Joining a fish order.** As a customer with an open, unshipped
+    fish order, check out a medication + 1 add-on to the same address:
+    the checkout says "Shipping combined …", shipping $0, and there is
+    **no** mailing fee and **no** "Heads up" message; the placed order
+    has no `_fishotel_sticker_mail_letter` and no "MAIL STICKER BY
+    LETTER" note. With an open EA-only order instead, it stays a letter.
+11. **Refund.** On a flagged EA-only order with 1 paid sticker, refund
+    just the sticker line (*Refund* → quantity 1): the meta goes down by
+    one, a note gives the new number, and a note says to refund the
+    "Sticker mailing (sent separately by letter)" fee too.
+12. **Pay page.** A failed EA-only order with free + paid stickers, the
+    paid design's stock set to 0, opened from *Customer payment page*:
+    the paid line and the fee go, the total drops, and a fresh note
+    gives the new number to mail.
+13. **Prices with tax / add-on at 0.** With *Prices entered with tax* =
+    yes, the fee line plus its tax is $1.00. With the add-on price set to
+    0: no fee, but the message and the flag stay.
+14. **Logs.** Nothing from the section in `debug.log`.
 
 Played on a throwaway copy of the rehearsal site (WordPress 7.1.4,
 WooCommerce 11.2.0, theme 1.27.0), HPOS off and on, with invented

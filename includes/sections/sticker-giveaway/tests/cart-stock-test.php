@@ -643,18 +643,21 @@ $GLOBALS['fh_products'][301]->stock = 0;
 $order = $ea_order( array( 1 => new FH_Item( 600, 1, 20.0 ), 3 => new FH_Item( 301, 3, 2.97, 'extra' ) ) );
 $guard->guard_order();
 check( 'pay page of a failed EA-only order, the paid design ran out (guard_order): the stickers, the fee and the flag go', array( 1 ) === array_keys( $order->items ) && array() === $order->fees && ! isset( $order->meta['_fishotel_sticker_mail_letter'] ) && 1 === $order->totalled );
+check( '... and a note says no sticker is left to mail (the first "MAIL STICKER BY LETTER" note is out of date)', 1 === count( preg_grep( '/^Sticker Giveaway: No sticker is left to mail by letter/', $order->notes ) ) );
 
 ea_shop();
 $GLOBALS['fh_products'][301]->stock = 0;
 $order = $ea_order( array( 1 => new FH_Item( 600, 1, 20.0 ), 2 => new FH_Item( 302, 1, 0.0, 'free' ), 3 => new FH_Item( 301, 2, 1.98, 'extra' ) ) );
 $guard->guard_order();
 check( '... the free sticker is left, no paid one: no fee, 1 sticker still to mail', array( 1, 2 ) === array_keys( $order->items ) && array() === $order->fees && 1 === $order->meta['_fishotel_sticker_mail_letter'] );
+check( '... and a fresh note with the new number', in_array( 'MAIL STICKER BY LETTER: 1 sticker(s) — EA-only order, nothing ships from FisHotel.', $order->notes, true ) );
 
 ea_shop();
 $GLOBALS['fh_products'][301]->stock = 2;
 $order = $ea_order( array( 1 => new FH_Item( 600, 1, 20.0 ), 3 => new FH_Item( 301, 4, 3.96, 'extra' ) ) );
 $guard->guard_order();
 check( '... the paid stickers are cut from 4 to 2: the fee stays (one), 2 to mail', 2 === $order->items[3]->qty && 1 === count( $order->fees ) && 2 === $order->meta['_fishotel_sticker_mail_letter'] );
+check( '... with a fresh note: 2', in_array( 'MAIL STICKER BY LETTER: 2 sticker(s) — EA-only order, nothing ships from FisHotel.', $order->notes, true ) );
 
 shop();
 $GLOBALS['fh_ea']                   = array( 600 );
@@ -662,7 +665,7 @@ $GLOBALS['fh_products'][600]        = new WC_Product( 600, 'simple', null );
 $GLOBALS['fh_products'][301]->stock = 0;
 $order                              = $pay( array( 1 => new FH_Item( 9, 1, 40.0 ), 2 => new FH_Item( 600, 1, 20.0 ), 3 => new FH_Item( 301, 2, 1.98, 'extra' ) ) );
 $guard->guard_order();
-check( 'a mixed order (fish and a medication) loses a sticker: nothing about letters is written', array() === $order->meta && array() === $order->fees );
+check( 'a mixed order (fish and a medication) loses a sticker: nothing about letters is written', array() === $order->meta && array() === $order->fees && array() === preg_grep( '/letter/i', $order->notes ) );
 
 echo "\n" . ( $failures ? "$failures of $checks checks FAILED\n" : "All $checks checks passed\n" );
 exit( $failures ? 1 : 0 );

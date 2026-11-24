@@ -332,12 +332,19 @@ stickers only are left exactly as before: no fee, no message, no flag.
 What an EA-only cart with a sticker gets (`Rules::mail_letter()`):
 
 - **One fee of $1.00**, "Sticker mailing (sent separately by letter)",
-  once per order, when it holds at least one **paid** sticker. The
+  once per order, when it holds at least one **paid** sticker (an add-on
+  that costs something: with the add-on price set to 0 in the settings
+  there is no fee, but the letter, the message and the flag stay). The
   add-on lines keep their own price ($0.99 each), so the first paid
   sticker costs $1.99 in all and each more $0.99. The free sticker alone
   pays no fee (the shop pays that stamp); free + paid still pays one fee.
   The fee is taxed as the sticker product is (its tax status and tax
-  class). It is worked out again on every totals pass
+  class). WooCommerce always adds a fee's tax on top, so when the shop
+  enters prices **with** tax the tax the customer's rates put inside
+  $1.00 is taken out first, and the customer pays $1.00 with its tax, as
+  they pay $0.99 for a sticker (`Letter::fee_amount()`). A coupon never
+  touches a fee: a percentage coupon lowers the paid sticker, the $1.00
+  stays. It is worked out again on every totals pass
   (`woocommerce_cart_calculate_fees`): remove the last fish and the fee
   appears, add a fish and it goes; a paid sticker stepping back for the
   stock (`make_room()`, `guard_lines()`) takes the fee with it when no
@@ -382,7 +389,45 @@ The order's fee line carries hidden meta `_fh_sticker_mail_fee`. On the
 pay page of a failed order (`guard_order()`), when its sticker lines are
 cut or taken off, the fee goes once no paid sticker is left and the
 number to mail follows what is left (the meta goes with the last
-sticker), before the order is totalled again.
+sticker), before the order is totalled again; a fresh private note gives
+the new number ("MAIL STICKER BY LETTER: 1 sticker(s) …", or "No sticker
+is left to mail by letter on this order.").
+
+**Joining a box FisHotel ships.** The theme combines a new order with
+the customer's open, unshipped order to the same address ("📦 Shipping
+combined … We'll ship both together", shipping $0) and folds the two
+into one fulfillment box when the new one is paid. When that open order
+holds something FisHotel ships (a fish, a "self" product, stickers on
+their own), the EA-only cart is **not a letter**: its stickers go in
+that box. So:
+
+- in the cart, when the theme tagged the shipping package
+  `fishotel_reuse` = 'match' and the open order it names
+  (`FisHotel_Reorder_Checkout_Lock::anchor_order()`), or any order in
+  that order's fulfillment box, holds something FisHotel ships: no fee,
+  no message (`Letter::cart_rides_along()`). Combined but no order named:
+  the customer was told both ship together, so no letter either;
+- on the placed order, `_fishotel_piggyback_of` (written by the theme
+  at checkout) pointing at such an order: no flag
+  (`Letter::order_rides_along()`). Had the cart charged the fee all the
+  same, a private note says to refund it;
+- when the order is paid, after the theme folded it into a fulfillment
+  (`woocommerce_payment_complete`, priority 100, after the theme's 99):
+  a flagged order whose box now holds something FisHotel ships loses its
+  flag, with a note "no letter after all … #FF-N …" (and "refund the
+  … fee" when one was paid). A box combined by hand later (the
+  fulfillment scan tool) is not looked at again: take the flag off by
+  hand.
+
+Joining an open EA-only order (nothing ships from FisHotel there either)
+stays a letter.
+
+**Refunds** (`woocommerce_order_refunded`): on a flagged order the number
+to mail follows the stickers left after the refund, with a note giving
+the new number (the meta goes with the last sticker). When no paid
+sticker is left and the mailing fee is still paid, a second note says
+"… so refund the "Sticker mailing (sent separately by letter)" fee to
+the customer." The section never refunds money itself.
 
 Not done here, on purpose: the free-sticker rules are only read, EA
 routing and fulfilment are the theme's, ShipTracker is not touched. The
@@ -500,9 +545,11 @@ php includes/sections/sticker-giveaway/tests/letter-test.php
   has it, a variation by its parent), the cart's $0.99 lines and one
   $1.00 fee taxed as the sticker, the message, a fish removed and added
   again, the placed order's meta and note, the email lines, the orders-list
-  column and the Today line. `cart-stock-test` section 7: the fee and the
-  flag when a sticker steps back (`make_room()`, `guard_lines()`,
-  `guard_order()`).
+  column and the Today line; then the edge cases the reviews found: an
+  add-on priced at 0, prices entered with tax, joining an open fish or
+  EA-only order (in the cart, at checkout, when paid), and refunds.
+  `cart-stock-test` section 7: the fee, the flag and the fresh note when
+  a sticker steps back (`make_room()`, `guard_lines()`, `guard_order()`).
 
 By-hand steps on a real site: `tests/README.md`.
 

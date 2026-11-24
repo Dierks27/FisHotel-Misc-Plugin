@@ -628,7 +628,8 @@ class Rules {
 	 * stickers only is not EA-only (no EA line).
 	 *
 	 * A "letter line" is [ 'kind' => ''|'free'|'extra', 'qty' => int,
-	 * 'is_ea' => bool ]; the caller asks the theme whether a line is EA.
+	 * 'is_ea' => bool, 'price' => float (optional: what one sticker of the
+	 * line costs) ]; the caller asks the theme whether a line is EA.
 	 *
 	 * @param array $lines Letter lines.
 	 * @return bool
@@ -650,7 +651,11 @@ class Rules {
 	}
 
 	/**
-	 * How many stickers the lines hold, free and paid.
+	 * How many stickers the lines hold, free and paid. A paid sticker is an
+	 * add-on line that costs something: an add-on priced at 0 in the
+	 * settings is counted with the free ones (it still goes in the
+	 * envelope, but there is no stamp to pay for). A line without a price
+	 * is an add-on as always (paid).
 	 *
 	 * @param array $lines Letter lines.
 	 * @return array{free: int, paid: int}
@@ -665,7 +670,7 @@ class Rules {
 			$qty  = max( 0, (int) ( $line['qty'] ?? 0 ) );
 			$kind = (string) ( $line['kind'] ?? '' );
 
-			if ( self::KIND_FREE === $kind ) {
+			if ( self::KIND_FREE === $kind || ( self::KIND_EXTRA === $kind && isset( $line['price'] ) && (float) $line['price'] <= 0 ) ) {
 				$out['free'] += $qty;
 			} elseif ( self::KIND_EXTRA === $kind ) {
 				$out['paid'] += $qty;
@@ -686,15 +691,19 @@ class Rules {
 	 *     sticker; 0 for the free sticker alone (the shop pays that stamp).
 	 *
 	 * A mixed cart, a fish-only cart and a sticker-only cart get no letter,
-	 * no fee and a count of 0.
+	 * no fee and a count of 0. So does an EA-only cart or order that rides
+	 * along in a box FisHotel ships anyway ($rides_along): it joins a
+	 * customer's open order (the theme's combined shipping) that holds
+	 * something FisHotel ships, so the sticker goes in that box.
 	 *
-	 * @param array $lines Letter lines.
+	 * @param array $lines       Letter lines.
+	 * @param bool  $rides_along Whether it joins a box FisHotel ships.
 	 * @return array{letter: bool, count: int, paid: int, fee: float}
 	 */
-	public static function mail_letter( array $lines ) {
+	public static function mail_letter( array $lines, $rides_along = false ) {
 		$counts  = self::sticker_counts( $lines );
 		$total   = $counts['free'] + $counts['paid'];
-		$ea_only = $total > 0 && self::is_ea_only( $lines );
+		$ea_only = ! $rides_along && $total > 0 && self::is_ea_only( $lines );
 
 		return array(
 			'letter' => $ea_only,
@@ -702,6 +711,33 @@ class Rules {
 			'paid'   => $ea_only ? $counts['paid'] : 0,
 			'fee'    => $ea_only && $counts['paid'] > 0 ? self::MAIL_FEE : 0.0,
 		);
+	}
+
+	/**
+	 * Whether FisHotel ships a box for these lines (an order the new one
+	 * may join): something that is not a sticker and not EA, or stickers
+	 * with no EA line beside them (a sticker-only order ships by the
+	 * sticker's shipping class). An EA-only order — with or without its
+	 * stickers — ships nothing from FisHotel.
+	 *
+	 * @param array $lines Letter lines.
+	 * @return bool
+	 */
+	public static function ships_from_fishotel( array $lines ) {
+		$has_ea      = false;
+		$has_sticker = false;
+
+		foreach ( $lines as $line ) {
+			if ( '' !== (string) ( $line['kind'] ?? '' ) ) {
+				$has_sticker = true;
+			} elseif ( empty( $line['is_ea'] ) ) {
+				return true;
+			} else {
+				$has_ea = true;
+			}
+		}
+
+		return $has_sticker && ! $has_ea;
 	}
 
 	/**

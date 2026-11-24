@@ -97,6 +97,47 @@ function current_user_can( $cap ) {
 	return ! empty( $GLOBALS['fh_can'] );
 }
 
+function wc_prices_include_tax() {
+	return ! empty( $GLOBALS['fh_incl_tax'] );
+}
+function wc_tax_enabled() {
+	return true;
+}
+
+// The theme's combined shipping (1.27.0): the fulfillment a source order belongs to, and its sources.
+function fishotel_order_get_fulfillment( $order ) {
+	$order = is_object( $order ) ? $order : wc_get_order( $order );
+	$id    = $order ? (int) $order->get_meta( '_fishotel_fulfilled_by_order' ) : 0;
+	return $id > 0 ? $id : null;
+}
+function fishotel_fulfillment_get_sources( $fulfillment ) {
+	return $GLOBALS['fh_ff'][ (int) $fulfillment ] ?? array();
+}
+class FisHotel_Reorder_Checkout_Lock {
+	public static $anchor = null;
+	public static function anchor_order() {
+		return self::$anchor;
+	}
+}
+
+// WooCommerce's tax maths as it does it: one rate per tax class, inclusive or on top.
+class WC_Tax {
+	public static function get_rates( $tax_class = '', $customer = null ) {
+		$rate = array(
+			''             => 10.0,
+			'reduced-rate' => 5.0,
+		)[ $tax_class ] ?? 0.0;
+		return array( 1 => array( 'rate' => $rate ) );
+	}
+	public static function calc_tax( $price, $rates, $price_includes_tax = false ) {
+		$taxes = array();
+		foreach ( $rates as $key => $rate ) {
+			$taxes[ $key ] = $price_includes_tax ? $price - $price / ( 1 + $rate['rate'] / 100 ) : $price * $rate['rate'] / 100;
+		}
+		return $taxes;
+	}
+}
+
 // The theme's answer, as theme 1.27.0 has it (inc/medication-store/helpers.php).
 function fishotel_is_ea_fulfilled_product( $product_id, $variation_id = 0 ) {
 	$product_id = (int) $product_id;
@@ -193,8 +234,15 @@ class WC_Cart {
 	public $cart_contents         = array();
 	public $removed_cart_contents = array();
 	public $fees                  = array();
+	public $packages              = array( array( 'contents' => array() ) );
 	public function get_cart() {
 		return $this->cart_contents;
+	}
+	public function get_shipping_packages() {
+		return $this->packages; // The theme tags each one (fishotel_reuse) through `woocommerce_cart_shipping_packages`.
+	}
+	public function get_customer() {
+		return null;
 	}
 	public function line( $key, $product_id, $variation_id, $qty, $kind = '' ) {
 		$this->cart_contents[ $key ] = array(
@@ -241,11 +289,16 @@ class FH_Item {
 	public $variation;
 	public $qty;
 	public $kind;
-	public function __construct( $product_id, $variation_id, $qty, $kind = '' ) {
+	public $subtotal;
+	public function __construct( $product_id, $variation_id, $qty, $kind = '', $subtotal = null ) {
 		$this->product   = $product_id;
 		$this->variation = $variation_id;
 		$this->qty       = $qty;
 		$this->kind      = $kind;
+		$this->subtotal  = null !== $subtotal ? $subtotal : ( 'extra' === $kind ? 0.99 * $qty : ( 'free' === $kind ? 0.0 : 10.0 * $qty ) );
+	}
+	public function get_subtotal() {
+		return $this->subtotal;
 	}
 	public function get_product_id() {
 		return $this->product;
@@ -262,9 +315,20 @@ class FH_Item {
 }
 
 class FH_Fee_Item {
-	public $meta = array();
+	public $meta  = array();
+	public $name  = 'Sticker mailing (sent separately by letter)';
+	public $total = 1.0;
 	public function add_meta_data( $key, $value, $unique = false ) {
 		$this->meta[ $key ] = $value;
+	}
+	public function get_meta( $key ) {
+		return $this->meta[ $key ] ?? '';
+	}
+	public function get_name() {
+		return $this->name;
+	}
+	public function get_total() {
+		return $this->total;
 	}
 }
 
@@ -288,8 +352,19 @@ class WC_Order {
 	public function get_edit_order_url() {
 		return 'https://example.test/wp-admin/admin.php?page=wc-orders&action=edit&id=' . $this->id;
 	}
+	public $fees     = array();
+	public $refunded = array(); // Item id => [ qty refunded (negative, as WooCommerce has it), amount refunded ].
 	public function get_items( $type = 'line_item' ) {
-		return 'line_item' === $type ? $this->items : array();
+		return 'line_item' === $type ? $this->items : ( 'fee' === $type ? $this->fees : array() );
+	}
+	public function get_qty_refunded_for_item( $item_id, $type = 'line_item' ) {
+		return $this->refunded[ $item_id ][0] ?? 0;
+	}
+	public function get_total_refunded_for_item( $item_id, $type = 'line_item' ) {
+		return $this->refunded[ $item_id ][1] ?? 0;
+	}
+	public function remove_item( $id ) {
+		unset( $this->items[ $id ], $this->fees[ $id ] );
 	}
 	public function has_status( $statuses ) {
 		return in_array( $this->status, (array) $statuses, true );
@@ -596,6 +671,119 @@ check( 'asked twice in one request: worked out once, never doubled', 2 === count
 $GLOBALS['fh_can'] = false;
 Letter::forget_today();
 check( 'a user who may not run the shop: nothing added', array() === Letter::today_filter( array() ) );
+
+echo "7. Edge cases the reviews found\n";
+check( 'pure: an add-on priced at 0 is a sticker to mail but not a paid one', array( 'free' => 2, 'paid' => 1 ) === Rules::sticker_counts( array( array( 'kind' => 'extra', 'qty' => 2, 'price' => 0.0 ), array( 'kind' => 'extra', 'qty' => 1, 'price' => 0.99 ) ) ) );
+check( 'pure: EA-only that rides along in a box FisHotel ships: no letter, no fee, nothing to count', array( 'letter' => false, 'count' => 0, 'paid' => 0, 'fee' => 0.0 ) === Rules::mail_letter( array( $l( '', 1, true ), $l( 'extra', 1 ) ), true ) );
+check( 'pure: FisHotel ships a fish order, a mixed one, a sticker-only one; not an EA-only one, with or without stickers, nor nothing', Rules::ships_from_fishotel( array( $l( '', 1 ) ) ) && Rules::ships_from_fishotel( array( $l( '', 1, true ), $l( '', 1 ) ) ) && Rules::ships_from_fishotel( array( $l( 'extra', 1 ) ) ) && ! Rules::ships_from_fishotel( array( $l( '', 1, true ), $l( 'free', 1 ) ) ) && ! Rules::ships_from_fishotel( array( $l( '', 1, true ) ) ) && ! Rules::ships_from_fishotel( array() ) );
+
+// Add-on price set to 0 in the settings.
+$cart = shop();
+$GLOBALS['fh_options'][ Sticker_Giveaway::OPTION_KEY ]['upsell_price'] = 0;
+$cart->line( 'med', 700, 0, 1 );
+$cart->line( 'add', 300, 301, 2, 'extra' );
+check( 'add-ons priced at 0: no mailing fee (nothing paid for), but the message is shown', array() === $cart->fees && 0.0 === $cart->sticker_total() && '' !== shown( array( Letter::class, 'cart_notice' ) ) );
+$GLOBALS['fh_orders'] = array();
+$order                = $order_of( 1300, array( new FH_Item( 700, 0, 1 ), new FH_Item( 300, 301, 2, 'extra', 0.0 ) ) );
+Letter::flag_order( 1300 );
+check( '... the placed order is flagged 2 all the same (the stickers still go in the envelope)', 2 === $order->meta['_fishotel_sticker_mail_letter'] );
+
+// Prices entered with tax.
+$cart = shop();
+$cart->line( 'med', 700, 0, 1 );
+$cart->line( 'add', 300, 301, 1, 'extra' );
+check( 'prices entered without tax: the fee is 1.00 and WooCommerce adds the tax on top, as on the sticker', 1.0 === fee( $cart )['amount'] );
+$GLOBALS['fh_incl_tax'] = true;
+$cart->calculate_totals();
+$net  = fee( $cart )['amount'];
+$with = $net + array_sum( WC_Tax::calc_tax( $net, WC_Tax::get_rates( 'reduced-rate' ), false ) );
+check( 'prices entered with tax: the fee holds its tax inside, like the 0.99 sticker: 1.00 with the tax WooCommerce adds', abs( $net - 1 / 1.05 ) < 0.000001 && '1.00' === number_format( $with, 2 ) );
+$cart = shop();
+$cart->line( 'med', 700, 0, 1 );
+$cart->line( 'add', 77, 0, 1, 'extra' );
+check( '... a sticker with no tax: the fee is 1.00 as it is', 1.0 === fee( $cart )['amount'] && false === fee( $cart )['taxable'] );
+$GLOBALS['fh_incl_tax'] = false;
+
+// Joining an open order: the theme's combined shipping.
+$GLOBALS['fh_orders'] = array();
+$GLOBALS['fh_ff']     = array();
+$fish_order           = $order_of( 1400, array( new FH_Item( 9, 0, 1 ) ) );
+$ea_order             = $order_of( 1401, array( new FH_Item( 700, 0, 1 ), new FH_Item( 300, 301, 1, 'extra' ) ) );
+$cart                 = shop();
+$cart->packages       = array( array( 'fishotel_reuse' => 'match' ) );
+FisHotel_Reorder_Checkout_Lock::$anchor = $fish_order;
+$cart->line( 'med', 700, 0, 1 );
+$cart->line( 'add', 300, 301, 1, 'extra' );
+check( 'EA-only + 1 paid joins an open fish order (shipping combined): no fee, no message — the sticker goes in that box', array() === $cart->fees && '' === shown( array( Letter::class, 'cart_notice' ) ) . shown( array( Letter::class, 'review_notice' ) ) && 0.99 === $cart->sticker_total() );
+FisHotel_Reorder_Checkout_Lock::$anchor = $ea_order;
+$cart->calculate_totals();
+check( '... joins an open EA-only order instead: still a letter, fee and message', 1 === count( $cart->fees ) && '' !== shown( array( Letter::class, 'cart_notice' ) ) );
+$ea_order->meta['_fishotel_fulfilled_by_order'] = 1499;
+$GLOBALS['fh_ff'][1499]                         = array( 1400, 1401 );
+$cart->calculate_totals();
+check( '... that EA-only order already shares a box with a fish order: no fee, no message', array() === $cart->fees && '' === shown( array( Letter::class, 'cart_notice' ) ) );
+unset( $ea_order->meta['_fishotel_fulfilled_by_order'] );
+$cart->packages = array( array( 'fishotel_reuse' => 'differ' ) );
+FisHotel_Reorder_Checkout_Lock::$anchor = $fish_order;
+$cart->calculate_totals();
+check( 'an open fish order to ANOTHER address (not combined): a letter as before', 1 === count( $cart->fees ) );
+$cart->packages                         = array( array( 'fishotel_reuse' => 'match' ) );
+FisHotel_Reorder_Checkout_Lock::$anchor = null;
+$cart->calculate_totals();
+check( 'combined, but the theme names no order: told "we\'ll ship both together", so no letter and no fee', array() === $cart->fees );
+
+$order                                   = $order_of( 1402, array( new FH_Item( 700, 0, 1 ), new FH_Item( 300, 301, 1, 'extra' ) ) );
+$order->meta['_fishotel_piggyback_of'] = 1400;
+Letter::flag_order( 1402 );
+check( 'the placed order piggybacks on the fish order (_fishotel_piggyback_of): not flagged, no note', ! isset( $order->meta['_fishotel_sticker_mail_letter'] ) && array() === $order->notes );
+$order                                   = $order_of( 1403, array( new FH_Item( 700, 0, 1 ), new FH_Item( 300, 301, 1, 'extra' ) ) );
+$order->meta['_fishotel_piggyback_of'] = 1401;
+Letter::flag_order( 1403 );
+check( '... piggybacks on an EA-only order: flagged 1', 1 === $order->meta['_fishotel_sticker_mail_letter'] );
+
+$order                                   = $order_of( 1405, array( new FH_Item( 700, 0, 1 ), new FH_Item( 300, 301, 1, 'extra' ) ) );
+$order->fees                             = array( 51 => new FH_Fee_Item() );
+$order->meta['_fishotel_piggyback_of'] = 1400;
+Letter::flag_order( 1405 );
+Letter::flag_order( $order );
+check( 'piggybacks on the fish order but the mailing fee was charged all the same: not flagged, ONE note to refund the fee', ! isset( $order->meta['_fishotel_sticker_mail_letter'] ) && 1 === count( $order->notes ) && false !== strpos( $order->notes[0][0], 'refund the "Sticker mailing (sent separately by letter)" fee' ) );
+
+// Folded into a fish box when paid (the theme combines on payment).
+$order       = $order_of( 1404, array( new FH_Item( 700, 0, 1 ), new FH_Item( 300, 302, 1, 'free' ), new FH_Item( 300, 301, 1, 'extra' ) ) );
+$order->fees = array( 50 => new FH_Fee_Item() );
+Letter::flag_order( 1404 );
+Letter::after_payment( 1404 );
+check( 'paid and not combined: the flag stays (2), no extra note', 2 === $order->meta['_fishotel_sticker_mail_letter'] && 1 === count( $order->notes ) );
+$order->meta['_fishotel_fulfilled_by_order'] = 1498;
+$GLOBALS['fh_ff'][1498]                      = array( 1400, 1404 );
+Letter::after_payment( 1404 );
+check( 'combined on payment into a box with a fish order: the flag goes, a note says why and to refund the mailing fee', ! isset( $order->meta['_fishotel_sticker_mail_letter'] ) && 2 === count( $order->notes ) && false !== strpos( $order->notes[1][0], 'no letter' ) && false !== strpos( $order->notes[1][0], 'refund the "Sticker mailing (sent separately by letter)" fee' ) );
+Letter::after_payment( 1404 );
+check( '... asked again: nothing more', 2 === count( $order->notes ) );
+
+// Refunds.
+$order       = $order_of( 1500, array( 11 => new FH_Item( 700, 0, 1 ), 12 => new FH_Item( 300, 302, 1, 'free' ), 13 => new FH_Item( 300, 301, 1, 'extra' ) ) );
+$order->fees = array( 14 => new FH_Fee_Item() );
+Letter::flag_order( 1500 );
+$order->refunded[13] = array( -1, 0.99 );
+Letter::on_refund( 1500 );
+check( 'the paid sticker is refunded: 1 left to mail, a note with the new number, and one to refund the mailing fee', 1 === $order->meta['_fishotel_sticker_mail_letter'] && 3 === count( $order->notes ) && 'MAIL STICKER BY LETTER: 1 sticker(s) — EA-only order, nothing ships from FisHotel.' === $order->notes[1][0] && false !== strpos( $order->notes[2][0], 'refund the "Sticker mailing (sent separately by letter)" fee' ) );
+Letter::on_refund( 1500 );
+check( '... another refund with nothing new: no more notes', 3 === count( $order->notes ) );
+$order->refunded[14] = array( 0, 1.0 );
+$order->refunded[12] = array( -1, 0 );
+Letter::on_refund( 1500 );
+check( '... the fee and the free one refunded too: nothing left to mail, a note, no fee reminder', ! isset( $order->meta['_fishotel_sticker_mail_letter'] ) && 4 === count( $order->notes ) && false !== strpos( $order->notes[3][0], 'No sticker is left to mail' ) );
+$order = $order_of( 1501, array( 21 => new FH_Item( 700, 0, 1 ), 22 => new FH_Item( 300, 301, 3, 'extra' ) ) );
+$order->fees = array( 24 => new FH_Fee_Item() );
+Letter::flag_order( 1501 );
+$order->refunded[22] = array( -1, 0.99 );
+Letter::on_refund( 1501 );
+check( '1 of 3 paid stickers refunded: 2 to mail, paid ones left, so no fee reminder', 2 === $order->meta['_fishotel_sticker_mail_letter'] && 2 === count( $order->notes ) );
+$order = $order_of( 1502, array( 31 => new FH_Item( 9, 0, 1 ), 32 => new FH_Item( 300, 301, 1, 'extra' ) ) );
+$order->refunded[32] = array( -1, 0.99 );
+Letter::on_refund( 1502 );
+check( 'a refund on an order that was never flagged: nothing written', array() === $order->meta && array() === $order->notes );
 
 echo "\n" . ( $failures ? "$failures of $checks checks FAILED\n" : "All $checks checks passed\n" );
 exit( $failures ? 1 : 0 );
