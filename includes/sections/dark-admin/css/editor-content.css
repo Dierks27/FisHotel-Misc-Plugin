@@ -6,9 +6,10 @@
  * Added after the theme's own editor style and only while the person's
  * "Dark admin" tick is on; every rule hangs on body.fh-dark-admin, which
  * the section adds to the editor's <body>. Nothing here is saved with the
- * text: the guard's two classes (fh-da-ink-light / fh-da-ink-dark, and
- * fh-da-paper behind a mid grey) are taken off by the editor every time it
- * hands the content over (js/dark-admin.js).
+ * text: the guard's classes (fh-da-ink-light / fh-da-ink-dark, the
+ * coloured inks fh-da-ink-h0 … h11 / d0 … d11, and fh-da-paper behind a
+ * mid grey) are taken off by the editor every time it hands the content
+ * over, and out of every undo step (js/dark-admin.js).
  */
 
 body.fh-dark-admin.mce-content-body,
@@ -88,3 +89,32 @@ body.fh-dark-admin .fh-da-ink-dark {
 body.fh-dark-admin .fh-da-paper {
 	background-color: #1a1a1a !important;
 }
+
+/* Coloured words keep their colour: the ink of their own hue (a twelfth of
+ * the colour wheel each), lighter on the dark writing area (h) or darker
+ * on a light box someone pasted (d). The same colours as HUE_INKS in
+ * js/dark-admin.js and Palette::EDITOR_INKS. */
+body.fh-dark-admin .fh-da-ink-h0 { color: #ff7373 !important; } /* red */
+body.fh-dark-admin .fh-da-ink-h1 { color: #ff8000 !important; } /* orange */
+body.fh-dark-admin .fh-da-ink-h2 { color: #ffff00 !important; } /* yellow */
+body.fh-dark-admin .fh-da-ink-h3 { color: #80ff00 !important; } /* yellow-green */
+body.fh-dark-admin .fh-da-ink-h4 { color: #00ff00 !important; } /* green */
+body.fh-dark-admin .fh-da-ink-h5 { color: #00ff80 !important; } /* spring green */
+body.fh-dark-admin .fh-da-ink-h6 { color: #00ffff !important; } /* cyan */
+body.fh-dark-admin .fh-da-ink-h7 { color: #4da6ff !important; } /* azure */
+body.fh-dark-admin .fh-da-ink-h8 { color: #9999ff !important; } /* blue */
+body.fh-dark-admin .fh-da-ink-h9 { color: #c68cff !important; } /* violet */
+body.fh-dark-admin .fh-da-ink-h10 { color: #ff59ff !important; } /* magenta */
+body.fh-dark-admin .fh-da-ink-h11 { color: #ff73b9 !important; } /* pink */
+body.fh-dark-admin .fh-da-ink-d0 { color: #e60000 !important; } /* red */
+body.fh-dark-admin .fh-da-ink-d1 { color: #b35900 !important; } /* orange */
+body.fh-dark-admin .fh-da-ink-d2 { color: #737300 !important; } /* yellow */
+body.fh-dark-admin .fh-da-ink-d3 { color: #408000 !important; } /* yellow-green */
+body.fh-dark-admin .fh-da-ink-d4 { color: #008000 !important; } /* green */
+body.fh-dark-admin .fh-da-ink-d5 { color: #008040 !important; } /* spring green */
+body.fh-dark-admin .fh-da-ink-d6 { color: #008080 !important; } /* cyan */
+body.fh-dark-admin .fh-da-ink-d7 { color: #0073e6 !important; } /* azure */
+body.fh-dark-admin .fh-da-ink-d8 { color: #0000ff !important; } /* blue */
+body.fh-dark-admin .fh-da-ink-d9 { color: #8000ff !important; } /* violet */
+body.fh-dark-admin .fh-da-ink-d10 { color: #cc00cc !important; } /* magenta */
+body.fh-dark-admin .fh-da-ink-d11 { color: #e60073 !important; } /* pink */

@@ -74,6 +74,20 @@ class Palette {
 	);
 
 	/**
+	 * The classic editor's coloured inks (editor-content.css, and HUE_INKS in
+	 * js/dark-admin.js): one per twelfth of the colour wheel, 0 red … 11
+	 * pink. 'h' is the pure hue made lighter until it reads on every dark
+	 * background (the lightest, 'raised', included); 'd' made darker until
+	 * it reads on white. A coloured word in a description keeps its colour.
+	 *
+	 * @var array<string, string[]>
+	 */
+	const EDITOR_INKS = array(
+		'h' => array( '#ff7373', '#ff8000', '#ffff00', '#80ff00', '#00ff00', '#00ff80', '#00ffff', '#4da6ff', '#9999ff', '#c68cff', '#ff59ff', '#ff73b9' ),
+		'd' => array( '#e60000', '#b35900', '#737300', '#408000', '#008000', '#008040', '#008080', '#0073e6', '#0000ff', '#8000ff', '#cc00cc', '#e60073' ),
+	);
+
+	/**
 	 * Every text colour → the backgrounds dark-admin.css puts it on.
 	 *
 	 * @var array<string, string[]>

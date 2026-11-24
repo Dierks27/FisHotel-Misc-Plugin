@@ -17,6 +17,16 @@ use FisHotel\Misc\Sections\Dark_Admin\Dark_Admin;
 use FisHotel\Misc\Sections\Dark_Admin\Hooks;
 use FisHotel\Misc\Sections\Dark_Admin\Rules;
 
+/** WordPress's add_query_arg( array, url ) for these addresses: keys given replace the address's own. */
+function fh_add_query_arg( $args, $url ) {
+	$parts = explode( '?', $url, 2 );
+	$qv    = array();
+	if ( isset( $parts[1] ) ) {
+		parse_str( $parts[1], $qv );
+	}
+	return $parts[0] . '?' . http_build_query( array_merge( $qv, $args ) );
+}
+
 function fh_reset( $user = 7, $meta = null, $pagenow = 'post.php', $screen = null ) {
 	$GLOBALS['fh_user']    = $user;
 	$GLOBALS['fh_meta']    = null === $meta ? array() : array( $user => array( Rules::META_KEY => $meta ) );
@@ -46,7 +56,12 @@ check( 'the section card: "Dark admin", a sentence, an icon', 'Dark admin' === $
 echo "\nThe colour scheme\n";
 fh_run( 'admin_init' );
 check( '"FisHotel dark" is registered next to WordPress\'s schemes', isset( $GLOBALS['fh_schemes']['fishotel-dark'] ) && 'FisHotel dark' === $GLOBALS['fh_schemes']['fishotel-dark']['name'] );
-check( 'from the section\'s scheme.css, with the plugin version', 'https://example.test/wp-content/plugins/fishotel-misc-plugin/includes/sections/dark-admin/css/scheme.css?ver=9.9.9' === $GLOBALS['fh_schemes']['fishotel-dark']['url'] );
+check( 'from the section\'s scheme.css, with the plugin version', 'https://example.test/wp-content/plugins/fishotel-misc-plugin/includes/sections/dark-admin/css/scheme.css?fhv=9.9.9' === $GLOBALS['fh_schemes']['fishotel-dark']['url'] );
+// WordPress's wp_style_loader_src() (script-loader.php) does add_query_arg( <the "colors" handle's query>, <scheme url> ):
+// its own ver= wins over a ver= in the scheme's address, so the plugin's version must ride on another key.
+$fh_loaded = fh_add_query_arg( array( 'ver' => '7.1.4' ), $GLOBALS['fh_schemes']['fishotel-dark']['url'] );
+check( 'as WordPress loads it (its own ?ver=7.1.4 added), the plugin version is still in the address, so a new Misc release is fetched anew', false !== strpos( $fh_loaded, 'fhv=9.9.9' ) && false !== strpos( $fh_loaded, 'ver=7.1.4' ) );
+check( 'the old way would have lost it (shows why: ?ver=9.9.9 becomes ?ver=7.1.4)', false === strpos( fh_add_query_arg( array( 'ver' => '7.1.4' ), 'scheme.css?ver=9.9.9' ), '9.9.9' ) );
 check( 'its four swatches are the palette\'s', array( '#1a1a1a', '#2d2d2d', '#00789f', '#0eb5e8' ) === $GLOBALS['fh_schemes']['fishotel-dark']['colors'] );
 
 fh_reset( 7, null );
@@ -72,6 +87,7 @@ echo "\nWho gets the dark files\n";
 fh_reset( 7, null, 'post.php' );
 fh_run( 'admin_enqueue_scripts', 'post.php' );
 check( 'a person nobody asked yet, on a product screen: the sheet', isset( $GLOBALS['fh_styles']['fishotel-dark-admin'] ) && false !== strpos( $GLOBALS['fh_styles']['fishotel-dark-admin'], 'dark-admin/css/dark-admin.css' ) );
+check_same( 'for screens only: printing a wp-admin page gives dark words on white paper, as today', 'screen', $GLOBALS['fh_media']['fishotel-dark-admin'] );
 check( 'and the readability guard, in the footer', isset( $GLOBALS['fh_scripts']['fishotel-dark-admin'] ) && true === $GLOBALS['fh_scripts']['fishotel-dark-admin'][1] );
 check_same( 'and the body class', ' wp-admin fh-dark-admin ', fh_run( 'admin_body_class', ' wp-admin ' ) );
 

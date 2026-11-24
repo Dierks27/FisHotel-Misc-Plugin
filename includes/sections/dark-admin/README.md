@@ -12,7 +12,9 @@ box on them, WooCommerce's product data tabs and variations, its
 settings, status and reports, the classic editor (the Visual writing area
 and the Text tab), the media library and its pop-up, Screen Options and
 Help, quick edit and bulk edit, the calendars, the searchable dropdowns,
-the colour pickers, thickbox and jQuery UI pop-ups, notices, Tools,
+the colour pickers, thickbox and jQuery UI pop-ups, WordPress's own small
+pop-ups ("someone else is editing this", Media's *Attach*, "your session
+has expired"), notices, Tools,
 Settings, Site Health, and the FisHotel plugins' and the theme's own
 screens and boxes (Batch Manager, ShipTracker, the Shipments, medication
 and Packing boxes on an order, Clean Room, Packing, Weather, …).
@@ -20,7 +22,12 @@ WooCommerce's newer pages (Home, Analytics, Customers) are dark as far as
 their own drawing allows (see *Left light on purpose*).
 
 Switch the section off and wp-admin is exactly as it was: nothing of it
-is loaded. The per-person ticks stay saved for the day it is switched on
+is loaded.
+
+**Printing** (Ctrl+P on any wp-admin screen) comes out as it does today,
+dark words on white paper: the dark sheet is for screens only, and the
+few colours the guard wrote onto an element itself are put back while the
+page prints. Batch Manager's Ship Day print area prints as before. The per-person ticks stay saved for the day it is switched on
 again.
 
 ## Each person's own switch
@@ -50,8 +57,9 @@ profile's own hidden marker) never changes it.
   and the **site editor**: they show the shop itself and stay as WordPress
   draws them.
 - **The block editor** (a post or page edited with blocks): its own
-  full-screen editor, left light; the menu beside it is dark. Products
-  and orders use the classic screens and are dark.
+  full-screen editor, left light, and the menu beside it (when it is not
+  full screen) keeps the person's own colour scheme. Products and orders
+  use the classic screens and are dark.
 
 ## How it works
 
@@ -74,7 +82,9 @@ profile's own hidden marker) never changes it.
 - `css/scheme.css` — the colour scheme (menu, top bar, links, buttons,
   focus rings), built from WordPress 7.1's own `wp-admin/css/colors/_admin.scss`
   with Dart Sass the way core builds its schemes; the values are in its
-  header.
+  header. Its address carries the plugin version as `?fhv=` — WordPress
+  puts its own version over a `?ver=` in a colour scheme's address, so a
+  browser would keep an old copy of the menu colours after a Misc update.
 - `css/dark-admin.css` — **one layer of variables**: the palette declared
   once on `body.fh-dark-admin`, and every rule hangs on that class and uses
   only the variables. Its parts, in order: page and type, links, buttons,
@@ -98,11 +108,17 @@ profile's own hidden marker) never changes it.
   The common light inline backgrounds (`#fff`, `#f9f9f9`, `#f0f0f1`, …)
   and greys (`#333`, `#666`, …) are already turned dark by the style sheet;
   the guard is for the rest.
-  In the Visual writing area it uses two plain classes instead
-  (`fh-da-ink-light` / `fh-da-ink-dark`, and `fh-da-paper` behind a grey
-  neither reads on), and the editor takes them off again every time it
-  hands the text over — saving, autosave, the Text tab — so **nothing the
-  guard does is ever saved into a description.**
+  In the Visual writing area it uses plain classes instead: a coloured
+  word gets the ink of its own colour (`fh-da-ink-h0` … `h11` lighter,
+  `fh-da-ink-d0` … `d11` darker — one per twelfth of the colour wheel, so
+  a red "not reef safe" stays red), a grey or black word `fh-da-ink-light`
+  / `fh-da-ink-dark`, and `fh-da-paper` behind a grey neither reads on.
+  It decides afresh each time, so a word recoloured with the toolbar gets
+  its new colour's ink. The editor takes the classes off again every time
+  it hands the text over — saving, autosave, the Text tab — so **nothing
+  the guard does is ever saved into a description**; and they are taken
+  out of every undo step the editor keeps, so a description nobody
+  touched is never marked changed (no "leave site?" prompt, no autosave).
 
 ## Left light on purpose
 
@@ -120,6 +136,7 @@ These stay light, with dark words, inside the dark screens:
 | The colour field of a colour picker | WooCommerce → Settings → Emails, … | It is the colours themselves (its frame is dark) |
 | Pictures, product photos, the media library's thumbnails, the welcome panel's artwork | everywhere | Images are never recoloured |
 | The block editor, the Customizer, the site editor | Posts / pages edited with blocks, Appearance | See *Where it is never loaded* |
+| The login form inside the "Your session has expired" box | any wp-admin screen, after being logged out | It is the login page itself, shown in a frame, and the login page is never dark; the box around it is dark |
 | Pages of other sites shown inside wp-admin (WordPress.org's plugin details pop-up, a payment provider's iframe, Code Snippets' and Yoast's "upgrade" pages that open their own sites) | Plugins → *View details*, WooCommerce → Payments, Snippets → Upgrade | A page from another site cannot be styled from here |
 | WooCommerce's charts' coloured lines and bars | WooCommerce → Analytics | Their own colours; the axes and words around them are dark-themed |
 

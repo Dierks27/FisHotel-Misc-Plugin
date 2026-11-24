@@ -13,9 +13,10 @@
  * (AJAX, variations, order items, React pages) is checked as it appears.
  *
  * In the classic editor's writing area (an iframe) it does the same with
- * two plain classes instead of colours, and takes them off again every
- * time the editor hands its content over, so nothing it does is ever
- * saved into a description.
+ * plain classes instead of colours (a coloured word gets an ink of its own
+ * hue), and takes them off again every time the editor hands its content
+ * over and from every undo step it keeps, so nothing it does is ever saved
+ * into a description or makes the editor think the text changed.
  *
  * The sums (parse, luminance, contrast, compositing, the rescue) are pure
  * and exported for node: tests/guard.test.js.
@@ -41,6 +42,22 @@
 	var SKIP_TAGS = /^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE|SVG|PATH|CANVAS|IFRAME|OBJECT|VIDEO|AUDIO|IMG|BR|HR|META|LINK|OPTION|OPTGROUP)$/;
 	var FIELD_TAGS = /^(INPUT|TEXTAREA|SELECT)$/;
 	var TEXT_INPUTS = /^(text|search|email|url|tel|number|password|date|datetime-local|month|week|time|)$/;
+
+	/*
+	 * The writing area's coloured inks, one per twelfth of the colour wheel
+	 * (0 red, 1 orange, 2 yellow, … 8 blue, … 11 pink): the pure hue moved
+	 * toward white until it reaches 4.5 : 1 on the lightest dark box
+	 * (#363636) — `h` — or toward black until it reaches 4.5 : 1 on white —
+	 * `d`. Coloured words keep their colour (a red "not reef safe" stays
+	 * red) instead of turning the plain grey ink. editor-content.css has the
+	 * same colours under .fh-da-ink-h0 … h11 / .fh-da-ink-d0 … d11
+	 * (guard.test.js and palette-test.php check both files agree).
+	 */
+	var HUE_INKS = {
+		h: [ '#ff7373', '#ff8000', '#ffff00', '#80ff00', '#00ff00', '#00ff80', '#00ffff', '#4da6ff', '#9999ff', '#c68cff', '#ff59ff', '#ff73b9' ],
+		d: [ '#e60000', '#b35900', '#737300', '#408000', '#008000', '#008040', '#008080', '#0073e6', '#0000ff', '#8000ff', '#cc00cc', '#e60073' ]
+	};
+	var MIN_CHROMA = 40; // under this (0 … 255) a colour is a grey and gets the plain ink
 
 	/* ---------------------------------------------------------------- */
 	/*  Pure sums                                                        */
@@ -180,15 +197,48 @@
 	}
 
 	/**
+	 * Which twelfth of the colour wheel a colour is in (0 … 11), or -1 for
+	 * a grey (black, white and the greys in between have no hue to keep).
+	 */
+	function hueBucket( c ) {
+		var max = Math.max( c.r, c.g, c.b ), min = Math.min( c.r, c.g, c.b ), d = max - min;
+		if ( d < MIN_CHROMA ) {
+			return -1;
+		}
+		var h;
+		if ( max === c.r ) {
+			h = ( ( c.g - c.b ) / d ) % 6;
+		} else if ( max === c.g ) {
+			h = ( c.b - c.r ) / d + 2;
+		} else {
+			h = ( c.r - c.g ) / d + 4;
+		}
+		h = h * 60;
+		if ( h < 0 ) {
+			h += 360;
+		}
+		return Math.round( h / 30 ) % 12;
+	}
+
+	/**
 	 * The writing area's choice, in classes (never colours, never saved):
-	 * 'fh-da-ink-light', 'fh-da-ink-dark', or both 'fh-da-ink-light' and
-	 * 'fh-da-paper' (a dark backing) behind a mid grey.
+	 * coloured words get the ink of their own hue ('fh-da-ink-h<n>' light,
+	 * 'fh-da-ink-d<n>' dark) when it reads on what is behind them; other
+	 * words 'fh-da-ink-light', 'fh-da-ink-dark', or both 'fh-da-ink-light'
+	 * and 'fh-da-paper' (a dark backing) behind a mid grey.
 	 */
 	function editorClasses( fg, bg, min ) {
 		min = min || MIN;
 		fg = fg.a < 1 ? over( fg, bg ) : fg;
 		if ( contrast( fg, bg ) >= min ) {
 			return [];
+		}
+		var hue = hueBucket( fg );
+		if ( hue >= 0 ) {
+			var onH = contrast( parse( HUE_INKS.h[ hue ] ), bg ), onD = contrast( parse( HUE_INKS.d[ hue ] ), bg );
+			if ( Math.max( onH, onD ) >= min ) {
+				return [ ( onH >= onD ? 'fh-da-ink-h' : 'fh-da-ink-d' ) + hue ];
+			}
 		}
 		var light = contrast( INK_LIGHT, bg ), dark = contrast( INK_DARK, bg );
 		if ( Math.max( light, dark ) < min ) {
@@ -202,6 +252,41 @@
 		return String( value || '' ).split( /\s+/ ).filter( function ( c ) {
 			return c && ! /^fh-da-/.test( c );
 		} ).join( ' ' );
+	}
+
+	/**
+	 * An HTML string with the guard's classes taken out of every class
+	 * attribute (an attribute left empty is dropped); anything else, and a
+	 * string with no guard class in it, comes back exactly as it was. The
+	 * editor's undo steps are copied straight from the writing area, so
+	 * without this a step taken after the guard ran would differ from the
+	 * one before it, and the editor would think the text had changed.
+	 */
+	function stripHtml( html ) {
+		if ( typeof html !== 'string' || html.indexOf( 'fh-da-' ) === -1 ) {
+			return html;
+		}
+		return html.replace( /\sclass=("|')([^"']*)\1/gi, function ( all, q, value ) {
+			if ( ! /(^|\s)fh-da-/.test( value ) ) {
+				return all;
+			}
+			var kept = stripClasses( value );
+			return kept === '' ? '' : ' class=' + q + kept + q;
+		} );
+	}
+
+	/** An editor undo step without the guard's classes (TinyMCE 4: content, or fragments). */
+	function stripLevel( level ) {
+		if ( ! level ) {
+			return level;
+		}
+		if ( typeof level.content === 'string' ) {
+			level.content = stripHtml( level.content );
+		}
+		if ( Array.isArray( level.fragments ) ) {
+			level.fragments = level.fragments.map( stripHtml );
+		}
+		return level;
 	}
 
 	/* ---------------------------------------------------------------- */
@@ -281,11 +366,45 @@
 		return { el: el, fg: fg, bg: bg, fix: rescue( fg, bg ) };
 	}
 
+	/*
+	 * Colours the guard had to write onto an element itself (where a sheet's
+	 * or the element's own "!important" beat the class). dark-admin.css is
+	 * for screens only, so a printed page is WordPress's light one; these
+	 * few are put back to what they were while printing, so no lightened
+	 * word comes out pale on white paper.
+	 */
+	var inlined = [];
+
+	function setInline( el, value ) {
+		if ( ! el.fhDaInline ) {
+			el.fhDaInline = { was: el.style.getPropertyValue( 'color' ), prio: el.style.getPropertyPriority( 'color' ) };
+			inlined.push( el );
+		}
+		el.fhDaInline.now = value;
+		el.style.setProperty( 'color', value, 'important' );
+	}
+
+	/** Printing starts (true) or ends (false): the guard's own written colours off / on again. */
+	function printing( on ) {
+		inlined.forEach( function ( el ) {
+			var k = el.fhDaInline;
+			if ( on ) {
+				if ( k.was ) {
+					el.style.setProperty( 'color', k.was, k.prio );
+				} else {
+					el.style.removeProperty( 'color' );
+				}
+			} else {
+				el.style.setProperty( 'color', k.now, 'important' );
+			}
+		} );
+	}
+
 	function apply( found ) {
 		var el = found.el, fix = found.fix;
 		var important = /!\s*important/i.test( el.getAttribute( 'style' ) || '' );
 		if ( important ) {
-			el.style.setProperty( 'color', css( fix.color ), 'important' );
+			setInline( el, css( fix.color ) );
 		} else {
 			el.style.setProperty( '--fh-da-fix-fg', css( fix.color ) );
 			el.classList.add( 'fh-da-fix' );
@@ -293,7 +412,7 @@
 			// then the colour goes on the element itself.
 			var now = parse( el.ownerDocument.defaultView.getComputedStyle( el ).color );
 			if ( now && contrast( now, found.bg ) < MIN ) {
-				el.style.setProperty( 'color', css( fix.color ), 'important' );
+				setInline( el, css( fix.color ) );
 			}
 		}
 		stats.fixed++;
@@ -350,11 +469,21 @@
 		}
 		var els = doc.body.querySelectorAll( '*' );
 		var todo = [];
+		// Decided afresh every time: a word recoloured with the toolbar since the last
+		// pass gets the ink of its new colour, not the one it had before.
+		for ( var k = 0; k < els.length; k++ ) {
+			var cls = els[ k ].getAttribute( 'class' );
+			if ( cls && cls.indexOf( 'fh-da-' ) !== -1 ) {
+				var kept = stripClasses( cls );
+				if ( kept === '' ) {
+					els[ k ].removeAttribute( 'class' );
+				} else {
+					els[ k ].setAttribute( 'class', kept );
+				}
+			}
+		}
 		for ( var i = 0; i < els.length; i++ ) {
 			var el = els[ i ];
-			if ( /fh-da-ink-/.test( el.className || '' ) ) {
-				continue; // already decided
-			}
 			var found = check( el, win );
 			if ( found && found.fix ) {
 				todo.push( { el: el, add: editorClasses( found.fg, found.bg ) } );
@@ -390,6 +519,14 @@
 		}, 250 );
 		addFilter();
 		ed.on( 'PreInit', addFilter );
+		// An undo step is the writing area copied as it is, classes and all. Without the
+		// guard's classes it equals the step before, so a description nobody touched is
+		// not marked changed (no "leave site?" prompt, no autosave).
+		ed.on( 'BeforeAddUndo', function ( e ) {
+			if ( e && e.level ) {
+				stripLevel( e.level );
+			}
+		} );
 		ed.on( 'init', run );
 		ed.on( 'SetContent Paste Undo Redo ExecCommand', run );
 		if ( ed.initialized ) {
@@ -449,6 +586,12 @@
 			if ( ! doc.body || ! doc.body.classList.contains( 'fh-dark-admin' ) ) {
 				return;
 			}
+			win.addEventListener( 'beforeprint', function () {
+				printing( true );
+			} );
+			win.addEventListener( 'afterprint', function () {
+				printing( false );
+			} );
 			scan( doc.body, win );
 			hookEditors( win );
 			if ( win.MutationObserver ) {
@@ -488,7 +631,13 @@
 		mix: mix,
 		rescue: rescue,
 		editorClasses: editorClasses,
+		hueBucket: hueBucket,
+		HUE_INKS: HUE_INKS,
 		stripClasses: stripClasses,
+		stripHtml: stripHtml,
+		stripLevel: stripLevel,
+		setInline: setInline,
+		printing: printing,
 		stats: stats,
 		scan: scan,
 		hookEditor: hookEditor,

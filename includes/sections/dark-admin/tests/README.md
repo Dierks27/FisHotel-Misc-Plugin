@@ -35,20 +35,27 @@ node includes/sections/dark-admin/tests/guard.test.js
   (black pop-up backdrops aside), has each part its header names and
   styles the pop-ups, pickers, editor, media, WooCommerce and Yoast parts;
   the light box's text, quiet text and links read on its own backgrounds;
+  WordPress's lock box, Media's *Attach* box and the session-expired box
+  are styled;
   `editor-content.css` hangs on the same class, uses only palette colours
-  and styles the guard's three classes; `scheme.css` gives WordPress's
+  and the coloured inks, styles the guard's three classes, and has each
+  of the 24 coloured inks under its class, each reading (the light ones on
+  every dark background, the dark ones on white); `scheme.css` gives WordPress's
   theme colour the darker FisHotel blue, is built from the palette, styles
   the menu and the admin bar, and white menu text reads on its current
   item.
 - **hooks-test.php** — `Dark_Admin` and `Hooks`: on the storefront and the
   login page nothing at all is hooked; in wp-admin exactly ten hooks, with
   the right priorities and argument counts; "FisHotel dark" is registered
-  from `scheme.css` with the palette's swatches; the menu uses it for a
+  from `scheme.css` with the palette's swatches, its version under
+  `?fhv=` so it survives WordPress adding its own `?ver=` (shown with the
+  same query merge WordPress does); the menu uses it for a
   person nobody asked yet and not for one who switched it off, not in the
   Customizer or the block editor, not while the picker is drawn, and for
   another person's Edit User screen by that person's own switch; the sheet,
   the guard (in the footer) and the body class come only for a person who
-  wants them, on a dark screen, logged in; the writing area gets its sheet
+  wants them, on a dark screen, logged in, the sheet for screens only
+  (printing is as today); the writing area gets its sheet
   and class, or nothing when switched off; the Profile row, ticked or not,
   with its hidden marker and its plain words; saving it on Profile and on
   another person's Edit User screen, leaving it alone for another form,
@@ -63,6 +70,15 @@ node includes/sections/dark-admin/tests/guard.test.js
   red; light text in a white box goes dark; a link stays blue; see-through
   text; on every grey from black to white the rescued text reads); the
   writing area's classes and taking them off again (only the guard's own);
+  coloured words keep their hue (red, dark red, navy, dark green; a pale
+  pink in a white box gets the dark pink), greys keep the plain ink, the
+  colour wheel's twelfths, every coloured ink reads and is its own hue,
+  the style sheet has the same inks, red text on every grey from black to
+  white reads whichever ink it gets; the guard's classes taken out of an
+  HTML string exactly (anything else untouched) and out of the editor's
+  undo steps, whole or in pieces, so a description nobody changed is not
+  marked changed; while printing, the colours the guard wrote onto an
+  element are put back to the element's own and return afterwards;
   and with a stand-in editor, that whatever the editor hands over — a
   save, an autosave, the Text tab — leaves without the guard's classes, an
   element whose only class was the guard's loses the attribute, the
@@ -83,13 +99,19 @@ On a copy of the shop, as an administrator, with the section switched on:
    date's calendar, the customer dropdown on an order, a colour picker
    (WooCommerce → Settings → Emails): dark, readable.
 3. In a product's description, switch between **Visual** and **Text**:
-   both dark. Type a word, make it red with the toolbar, save, open the
-   **Text** tab: the HTML has no `fh-da-` class anywhere.
-4. **Users → Profile**: untick **Dark admin**, Update Profile — every
+   both dark. Type a word, make it red with the toolbar: it shows red.
+   Save, open the **Text** tab: the HTML has no `fh-da-` class anywhere.
+   Open a product with dark coloured text in its description, click in
+   the writing area and out again without typing, and leave the page: no
+   "Leave site? Changes you made may not be saved" prompt.
+4. On the Products list press **Ctrl+P**: the print preview is dark words
+   on white paper. On a product being edited by another person, Media's
+   *Attach* link, and the "session expired" box: dark, readable.
+5. **Users → Profile**: untick **Dark admin**, Update Profile — every
    screen is WordPress's own light again, with the colour scheme picked
    above; tick it again — dark.
-5. Open the shop (the storefront) logged in, and the login page: nothing
+6. Open the shop (the storefront) logged in, and the login page: nothing
    changed; the black admin bar on the storefront is WordPress's own.
-6. **FisHotel Tools → Dashboard**: switch **Dark admin** off — wp-admin is
+7. **FisHotel Tools → Dashboard**: switch **Dark admin** off — wp-admin is
    exactly as before for everybody; on again — dark again for everyone
    who did not untick it.

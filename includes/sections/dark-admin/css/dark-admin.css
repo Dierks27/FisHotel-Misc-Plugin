@@ -1502,6 +1502,51 @@ body.fh-dark-admin .wp-tags-autocomplete [aria-selected="true"] {
 	color: var(--fh-da-on-accent);
 }
 
+/* WordPress's own small pop-ups: "someone else is editing this" (the
+ * post / product / order lock box), Media's "Attach to existing content",
+ * and "Your session has expired" (its login form inside is the login page
+ * itself, kept light — see the README). */
+body.fh-dark-admin #post-lock-dialog .notification-dialog,
+body.fh-dark-admin .notification-dialog,
+body.fh-dark-admin .find-box,
+body.fh-dark-admin .find-box-head,
+body.fh-dark-admin .find-box-inside,
+body.fh-dark-admin .find-box-buttons,
+body.fh-dark-admin #wp-auth-check-wrap #wp-auth-check {
+	background: var(--fh-da-surface);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .find-box-head {
+	background: var(--fh-da-raised);
+}
+
+body.fh-dark-admin #post-lock-dialog .post-locked-message,
+body.fh-dark-admin #post-lock-dialog .post-taken-over,
+body.fh-dark-admin #post-lock-dialog p,
+body.fh-dark-admin #wp-auth-check-wrap .wp-auth-fallback,
+body.fh-dark-admin #wp-auth-check-wrap .wp-auth-fallback-expired {
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin #find-posts-close,
+body.fh-dark-admin #wp-auth-check-wrap .wp-auth-check-close {
+	color: var(--fh-da-text-quiet);
+}
+
+body.fh-dark-admin #find-posts-close:hover,
+body.fh-dark-admin #find-posts-close:focus,
+body.fh-dark-admin #wp-auth-check-wrap .wp-auth-check-close:hover,
+body.fh-dark-admin #wp-auth-check-wrap .wp-auth-check-close:focus {
+	color: var(--fh-da-link);
+}
+
+body.fh-dark-admin #post-lock-dialog a:not(.button),
+body.fh-dark-admin #wp-auth-check-wrap .wp-auth-fallback a {
+	color: var(--fh-da-link);
+}
+
 /* Date pickers (WordPress's and WooCommerce's jQuery UI theme). */
 body.fh-dark-admin .ui-datepicker,
 body.fh-dark-admin #ui-datepicker-div,

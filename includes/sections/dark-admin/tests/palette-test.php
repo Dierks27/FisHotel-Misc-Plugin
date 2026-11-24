@@ -135,7 +135,7 @@ check( 'and its text, quiet text and links read on its own backgrounds', $fh_lig
 foreach ( array( 'Page and type', 'Links', 'Buttons', 'Fields', 'Boxes', 'Tables and lists', 'Notices', 'Tabs, Screen Options, Help', 'Quick edit and bulk edit', 'The classic editor', 'Media', 'Pop-ups', 'Dashboard', 'WooCommerce: classic screens', 'React pages', 'Yoast', 'FisHotel plugins', 'readability guard', 'Kept light on purpose' ) as $fh_part ) {
 	check( "has its part: $fh_part", false !== stripos( $fh_layer, $fh_part ) );
 }
-foreach ( array( '.select2-dropdown', '.ui-datepicker', '#TB_window', '.ui-dialog', '.iris-picker', '.media-modal-content', '#screen-meta', '.inline-edit-row', 'textarea.wp-editor-area', 'ul.wc-tabs', '.woocommerce_variation', '#order_data', 'ul.order_notes li .note_content', '.wc-backbone-modal', '.woocommerce-layout', '#wpseo_meta', '.notice', '--wpds-color-background-surface-neutral', '.fst-shipments-table', '.fhsm-shipment', '.fishotel-med-terms-box__state', '.fh-pack-box__note', '.fh-es-chip', '.fh-pc-chip', 'form#mainform' ) as $fh_sel ) {
+foreach ( array( '.select2-dropdown', '.ui-datepicker', '#TB_window', '.ui-dialog', '.iris-picker', '.media-modal-content', '#screen-meta', '.inline-edit-row', 'textarea.wp-editor-area', 'ul.wc-tabs', '.woocommerce_variation', '#order_data', 'ul.order_notes li .note_content', '.wc-backbone-modal', '.woocommerce-layout', '#wpseo_meta', '.notice', '--wpds-color-background-surface-neutral', '.fst-shipments-table', '.fhsm-shipment', '.fishotel-med-terms-box__state', '.fh-pack-box__note', '.fh-es-chip', '.fh-pc-chip', 'form#mainform', '#post-lock-dialog .notification-dialog', '.find-box-inside', '#wp-auth-check-wrap #wp-auth-check' ) as $fh_sel ) {
 	check( "styles $fh_sel", false !== strpos( $fh_layer, $fh_sel ) );
 }
 
@@ -149,13 +149,31 @@ foreach ( fh_rules( $fh_editor ) as $fh_rule ) {
 		}
 	}
 	foreach ( fh_hexes( $fh_rule[1] ) as $fh_hex ) {
-		if ( ! in_array( $fh_hex, Palette::TOKENS, true ) ) {
+		if ( ! in_array( $fh_hex, Palette::TOKENS, true ) && ! in_array( $fh_hex, Palette::EDITOR_INKS['h'], true ) && ! in_array( $fh_hex, Palette::EDITOR_INKS['d'], true ) ) {
 			$fh_off[] = $fh_hex;
 		}
 	}
 }
 check_same( 'every selector hangs on body.fh-dark-admin', array(), $fh_loose );
-check_same( 'every colour is one of the palette\'s', array(), array_values( array_unique( $fh_off ) ) );
+check_same( 'every colour is one of the palette\'s (or its coloured inks)', array(), array_values( array_unique( $fh_off ) ) );
+$fh_bad_ink = array();
+foreach ( array( 'h', 'd' ) as $fh_way ) {
+	foreach ( Palette::EDITOR_INKS[ $fh_way ] as $fh_n => $fh_ink ) {
+		if ( ! preg_match( '/body\.fh-dark-admin \.fh-da-ink-' . $fh_way . $fh_n . ' \{ color: ' . preg_quote( $fh_ink, '/' ) . ' !important; \}/', $fh_editor ) ) {
+			$fh_bad_ink[] = "fh-da-ink-$fh_way$fh_n not $fh_ink in the sheet";
+		}
+		$fh_bgs = 'h' === $fh_way ? array( 'bg', 'input', 'sunken', 'surface', 'raised' ) : array( 'light-paper' );
+		foreach ( $fh_bgs as $fh_bg ) {
+			$fh_r = Palette::contrast( $fh_ink, Palette::TOKENS[ $fh_bg ] );
+			if ( $fh_r < Palette::MIN_CONTRAST ) {
+				$fh_bad_ink[] = sprintf( 'fh-da-ink-%s%d %s on %s = %.2f', $fh_way, $fh_n, $fh_ink, $fh_bg, $fh_r );
+			}
+		}
+	}
+}
+check( 'twelve coloured inks each way', 12 === count( Palette::EDITOR_INKS['h'] ) && 12 === count( Palette::EDITOR_INKS['d'] ) );
+check_same( 'each coloured ink is in the sheet under its class, and reads: light ones on every dark background, dark ones on white', array(), $fh_bad_ink );
+check( 'red stays red: the light red ink is still red (more red than green or blue)', '#ff7373' === Palette::EDITOR_INKS['h'][0] );
 foreach ( array( 'fh-da-ink-light', 'fh-da-ink-dark', 'fh-da-paper' ) as $fh_class ) {
 	check( "styles the guard's class $fh_class", false !== strpos( $fh_editor, '.' . $fh_class ) );
 }

@@ -145,8 +145,9 @@ function wp_admin_css_color( $key, $name, $url, $colors = array(), $icons = arra
 	$GLOBALS['fh_schemes'][ $key ] = compact( 'name', 'url', 'colors', 'icons' );
 }
 
-function wp_enqueue_style( $handle, $src = '', $deps = array(), $ver = false ) {
+function wp_enqueue_style( $handle, $src = '', $deps = array(), $ver = false, $media = 'all' ) {
 	$GLOBALS['fh_styles'][ $handle ] = $src;
+	$GLOBALS['fh_media'][ $handle ]  = $media;
 }
 
 function wp_enqueue_script( $handle, $src = '', $deps = array(), $ver = false, $footer = false ) {

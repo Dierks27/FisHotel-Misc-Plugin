@@ -80,8 +80,59 @@ check( 'readable: no class', same( G.editorClasses( G.parse( '#e0e0e0' ), G.pars
 check( 'a description\'s black text on the dark writing area: light ink', same( G.editorClasses( G.parse( '#000000' ), G.parse( '#1e1e1e' ) ), [ 'fh-da-ink-light' ] ) );
 check( 'light text in a white table cell someone pasted: dark ink', same( G.editorClasses( G.parse( '#e0e0e0' ), WHITE ), [ 'fh-da-ink-dark' ] ) );
 check( 'behind a mid grey: light ink on a dark backing', same( G.editorClasses( G.parse( '#808080' ), mid ), [ 'fh-da-ink-light', 'fh-da-paper' ] ) );
+var DESK = G.parse( '#1e1e1e' );
+check( 'a red word ("not reef safe") on the dark writing area keeps its red: the red ink, not the grey', same( G.editorClasses( G.parse( '#ff0000' ), DESK ), [ 'fh-da-ink-h0' ] ) );
+check( 'a dark red word: the same red ink', same( G.editorClasses( G.parse( '#8b0000' ), DESK ), [ 'fh-da-ink-h0' ] ) );
+check( 'navy: the blue ink', same( G.editorClasses( G.parse( '#000080' ), DESK ), [ 'fh-da-ink-h8' ] ) );
+check( 'dark green: the green ink', same( G.editorClasses( G.parse( '#006400' ), DESK ), [ 'fh-da-ink-h4' ] ) );
+check( 'greys (#333, #808080) still get the plain light ink', same( G.editorClasses( G.parse( '#333333' ), DESK ), [ 'fh-da-ink-light' ] ) && same( G.editorClasses( G.parse( '#808080' ), DESK ), [ 'fh-da-ink-light' ] ) );
+check( 'a pale pink word in a white box someone pasted: the dark pink ink', same( G.editorClasses( G.parse( '#ffb6c1' ), WHITE ), [ 'fh-da-ink-d0' ] ) );
+check( 'the wheel: red 0, yellow 2, green 4, cyan 6, blue 8, magenta 10; a grey -1', [ '#ff0000', '#ffff00', '#00ff00', '#00ffff', '#0000ff', '#ff00ff', '#777777' ].map( function ( h ) {
+	return G.hueBucket( G.parse( h ) );
+} ).join( ',' ) === '0,2,4,6,8,10,-1' );
+check( 'just under 360 degrees is red again (0), not a thirteenth', G.hueBucket( G.parse( '#ff0010' ) ) === 0 );
+var inkBad = [];
+[ 'h', 'd' ].forEach( function ( way ) {
+	G.HUE_INKS[ way ].forEach( function ( hex, n ) {
+		var ink = G.parse( hex );
+		var bgs = way === 'h' ? [ '#1a1a1a', '#1e1e1e', '#242424', '#2d2d2d', '#363636' ] : [ '#ffffff' ];
+		bgs.forEach( function ( b ) {
+			if ( G.contrast( ink, G.parse( b ) ) < 4.5 ) {
+				inkBad.push( way + n + ' on ' + b );
+			}
+		} );
+		if ( G.hueBucket( ink ) !== n ) {
+			inkBad.push( way + n + ' is not its own hue' );
+		}
+	} );
+} );
+check( 'every coloured ink reads where it is used and is still its own hue', inkBad.length === 0, inkBad.join( '; ' ) );
+var fs = require( 'fs' );
+var sheet = fs.readFileSync( path.join( __dirname, '..', 'css', 'editor-content.css' ), 'utf8' );
+var sheetBad = [];
+[ 'h', 'd' ].forEach( function ( way ) {
+	G.HUE_INKS[ way ].forEach( function ( hex, n ) {
+		if ( sheet.indexOf( '.fh-da-ink-' + way + n + ' { color: ' + hex + ' !important; }' ) === -1 ) {
+			sheetBad.push( way + n );
+		}
+	} );
+} );
+check( 'editor-content.css has the same inks under the same classes', sheetBad.length === 0, sheetBad.join( ', ' ) );
+var coloured = { r: 255, g: 0, b: 0, a: 1 };
+var everyBg = true;
+for ( var gv = 0; gv <= 255; gv += 5 ) {
+	var gbg = { r: gv, g: gv, b: gv, a: 1 };
+	var got = G.editorClasses( coloured, gbg );
+	var ink = got.length === 0 ? coloured : ( /h0$/.test( got[0] ) ? G.parse( G.HUE_INKS.h[0] ) : /d0$/.test( got[0] ) ? G.parse( G.HUE_INKS.d[0] ) : /dark$/.test( got[0] ) ? G.parse( '#1e1e1e' ) : G.parse( '#e0e0e0' ) );
+	var behindInk = got.indexOf( 'fh-da-paper' ) !== -1 ? G.parse( '#1a1a1a' ) : gbg;
+	if ( G.contrast( ink, behindInk ) < 4.5 ) {
+		everyBg = false;
+	}
+}
+check( 'red text on every grey from black to white: whichever ink it gets reads', everyBg );
 check( 'taking the guard\'s classes off leaves the author\'s', G.stripClasses( 'alignleft fh-da-ink-light size-full fh-da-paper' ) === 'alignleft size-full' );
 check( 'only the guard\'s own (fh-da-…), not a look-alike', G.stripClasses( 'fh-dark fh-da-ink-dark' ) === 'fh-dark' );
+check( 'a coloured ink is the guard\'s too', G.stripClasses( 'x fh-da-ink-h0 fh-da-ink-d11' ) === 'x' );
 check( 'nothing left: empty (the attribute is then dropped)', G.stripClasses( 'fh-da-ink-dark' ) === '' && G.stripClasses( null ) === '' );
 
 console.log( '\nNothing the guard does is saved into a description' );
@@ -123,6 +174,60 @@ check( 'other elements untouched', nodes[2].a['class'] === 'wp-caption' );
 check( 'it re-checks after the editor starts, new content, a paste, undo and redo', [ 'init', 'SetContent', 'Paste', 'Undo', 'Redo' ].every( function ( n ) {
 	return typeof events[ n ] === 'function';
 } ) );
+
+console.log( '\nA description nobody changed is not marked changed' );
+var startLevel = '<p>Hardy <span style="color: #333333;">reef</span> fish</p><p class="alignleft">x</p>';
+var afterGuard = '<p>Hardy <span style="color: #333333;" class="fh-da-ink-light">reef</span> fish</p><p class="alignleft fh-da-ink-dark fh-da-paper">x</p>';
+check( 'the guard\'s classes come out of an HTML string exactly: what is left equals the text before the guard ran', G.stripHtml( afterGuard ) === startLevel );
+check( 'single quotes too, and a coloured ink', G.stripHtml( "<b class='fh-da-ink-h0'>red</b><i class='a fh-da-ink-d3'>g</i>" ) === "<b>red</b><i class='a'>g</i>" );
+check( 'HTML with no guard class comes back exactly as it was (spaces and all)', G.stripHtml( '<p class="a  b">x</p>' ) === '<p class="a  b">x</p>' );
+check( 'a class attribute without a guard class next to one with it: left as it was', G.stripHtml( '<p class="a  b">x</p><b class="fh-da-ink-light">y</b>' ) === '<p class="a  b">x</p><b>y</b>' );
+check( 'the words "fh-da-" in the text itself are not touched', G.stripHtml( '<p>class="fh-da-x" is text</p>' ) === '<p>class="fh-da-x" is text</p>' );
+check( 'not a string: given back', G.stripHtml( null ) === null );
+check( 'the editor is asked to hand every undo step to the guard first', typeof events.BeforeAddUndo === 'function' );
+var level = { type: 'complete', content: afterGuard };
+events.BeforeAddUndo( { level: level, lastLevel: { type: 'complete', content: startLevel } } );
+check( 'an undo step taken after the guard ran (TinyMCE takes one on blur): equal to the one before, so the editor is not marked changed (no "leave site?" prompt, no autosave)', level.content === startLevel );
+var frag = { type: 'fragmented', content: '', fragments: [ '<p class="fh-da-ink-light">a</p>', '<p>b</p>' ] };
+events.BeforeAddUndo( { level: frag } );
+check( 'a step kept in pieces (TinyMCE\'s "fragmented" kind): each piece', frag.fragments[0] === '<p>a</p>' && frag.fragments[1] === '<p>b</p>' );
+events.BeforeAddUndo( {} );
+check( 'an event without a step: nothing breaks', true );
+
+console.log( '\nPrinting' );
+function Style( color, prio ) {
+	this.p = {};
+	if ( color ) {
+		this.p.color = [ color, prio || '' ];
+	}
+}
+Style.prototype.setProperty = function ( n, v, pr ) {
+	this.p[ n ] = [ v, pr || '' ];
+};
+Style.prototype.getPropertyValue = function ( n ) {
+	return this.p[ n ] ? this.p[ n ][0] : '';
+};
+Style.prototype.getPropertyPriority = function ( n ) {
+	return this.p[ n ] ? this.p[ n ][1] : '';
+};
+Style.prototype.removeProperty = function ( n ) {
+	delete this.p[ n ];
+};
+var own = { style: new Style( '#333', 'important' ) };
+var bare = { style: new Style() };
+G.setInline( own, 'rgb(200, 200, 200)' );
+G.setInline( bare, 'rgb(210, 210, 210)' );
+check( 'on screen the guard\'s colour is written on the element', own.style.getPropertyValue( 'color' ) === 'rgb(200, 200, 200)' && bare.style.getPropertyPriority( 'color' ) === 'important' );
+G.printing( true );
+check( 'while printing, the element\'s own colour is back (dark words on white paper, not the lightened grey)', own.style.getPropertyValue( 'color' ) === '#333' && own.style.getPropertyPriority( 'color' ) === 'important' );
+check( 'and an element that had none has none', bare.style.getPropertyValue( 'color' ) === '' );
+G.printing( false );
+check( 'after printing, the screen colours again', own.style.getPropertyValue( 'color' ) === 'rgb(200, 200, 200)' && bare.style.getPropertyValue( 'color' ) === 'rgb(210, 210, 210)' );
+G.setInline( own, 'rgb(220, 220, 220)' );
+G.printing( true );
+check( 'decided twice: still the element\'s first own colour that comes back for printing', own.style.getPropertyValue( 'color' ) === '#333' );
+G.printing( false );
+
 var before = Object.keys( filters ).length;
 G.hookEditor( fakeEditor );
 check( 'an editor is hooked once, however often it is met', Object.keys( filters ).length === before && fakeEditor.fhDarkAdmin === true );

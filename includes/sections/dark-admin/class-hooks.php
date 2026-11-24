@@ -100,7 +100,10 @@ class Hooks {
 		wp_admin_css_color(
 			Rules::SCHEME,
 			__( 'FisHotel dark', 'fishotel-misc-plugin' ),
-			Dark_Admin::url() . 'css/scheme.css?ver=' . rawurlencode( FISHOTEL_MISC_VERSION ),
+			// Not "?ver=": WordPress puts its own version over that one (wp_style_loader_src()
+			// adds the "colors" handle's ?ver= to a scheme's address), so a browser would keep
+			// an old copy until WordPress itself updated. "fhv" is left alone.
+			Dark_Admin::url() . 'css/scheme.css?fhv=' . rawurlencode( FISHOTEL_MISC_VERSION ),
 			array( '#1a1a1a', '#2d2d2d', '#00789f', '#0eb5e8' ),
 			array(
 				'base'    => '#a0a0a0',
@@ -156,7 +159,8 @@ class Hooks {
 		if ( ! self::active() ) {
 			return;
 		}
-		wp_enqueue_style( 'fishotel-dark-admin', Dark_Admin::url() . 'css/dark-admin.css', array(), FISHOTEL_MISC_VERSION );
+		// Screens only: a printed wp-admin page comes out as WordPress prints it, dark words on white paper.
+		wp_enqueue_style( 'fishotel-dark-admin', Dark_Admin::url() . 'css/dark-admin.css', array(), FISHOTEL_MISC_VERSION, 'screen' );
 		wp_enqueue_script( 'fishotel-dark-admin', Dark_Admin::url() . 'js/dark-admin.js', array(), FISHOTEL_MISC_VERSION, true );
 	}
 
