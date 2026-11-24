@@ -324,7 +324,9 @@ class Inventory {
 		}
 
 		foreach ( self::variation_ids( $pid ) as $vid ) {
-			$field( $vid, 'meta:_variation_description', __( 'Variation description', 'fishotel-misc-plugin' ), sprintf( /* translators: %s: variation name */ __( 'variation %s', 'fishotel-misc-plugin' ), wp_strip_all_tags( (string) get_the_title( $vid ) ) ) );
+			$var  = function_exists( 'wc_get_product' ) ? wc_get_product( $vid ) : null;
+			$what = $var && function_exists( 'wc_get_formatted_variation' ) ? wc_get_formatted_variation( $var, true, false ) : '#' . $vid;
+			$field( $vid, 'meta:_variation_description', __( 'Variation description', 'fishotel-misc-plugin' ), sprintf( /* translators: %s: the variation's options */ __( 'variation: %s', 'fishotel-misc-plugin' ), wp_strip_all_tags( (string) $what ) ) );
 		}
 		foreach ( self::image_ids( $pid ) as $aid => $where ) {
 			$field( $aid, 'meta:_wp_attachment_image_alt', __( 'Picture alt text', 'fishotel-misc-plugin' ), $where . ' #' . $aid );

@@ -290,7 +290,7 @@ class Fields {
 	 * @return array
 	 */
 	public static function export_attribute( $a ) {
-		return array(
+		$raw = array(
 			'name'      => (string) $a->get_name(),
 			'id'        => (int) $a->get_id(),
 			'options'   => array_values( (array) $a->get_options() ),
@@ -298,6 +298,19 @@ class Fields {
 			'visible'   => (bool) $a->get_visible(),
 			'variation' => (bool) $a->get_variation(),
 		);
+		// A global attribute's values are term ids. The Categories step may
+		// remove those terms, and WordPress gives a re-created term a new id,
+		// so the values are kept by slug and name too (see import_attribute()).
+		if ( $raw['id'] && function_exists( 'get_term' ) ) {
+			$raw['terms'] = array();
+			foreach ( $raw['options'] as $opt ) {
+				$t = get_term( (int) $opt, $raw['name'] );
+				if ( $t && ! is_wp_error( $t ) ) {
+					$raw['terms'][] = array( (string) $t->slug, (string) $t->name );
+				}
+			}
+		}
+		return $raw;
 	}
 
 	/**
@@ -310,7 +323,23 @@ class Fields {
 		$a = new \WC_Product_Attribute();
 		$a->set_id( (int) ( $raw['id'] ?? 0 ) );
 		$a->set_name( (string) ( $raw['name'] ?? '' ) );
-		$a->set_options( (array) ( $raw['options'] ?? array() ) );
+		$options = (array) ( $raw['options'] ?? array() );
+		if ( ! empty( $raw['id'] ) && ! empty( $raw['terms'] ) && function_exists( 'get_term_by' ) ) {
+			// The values by slug: the term as it is now, or made again when it was removed.
+			$options = array();
+			foreach ( (array) $raw['terms'] as $pair ) {
+				$t = get_term_by( 'slug', (string) $pair[0], (string) $raw['name'] );
+				if ( $t && ! is_wp_error( $t ) ) {
+					$options[] = (int) $t->term_id;
+					continue;
+				}
+				$made = wp_insert_term( (string) $pair[1], (string) $raw['name'], array( 'slug' => (string) $pair[0] ) );
+				if ( ! is_wp_error( $made ) ) {
+					$options[] = (int) $made['term_id'];
+				}
+			}
+		}
+		$a->set_options( $options );
 		$a->set_position( (int) ( $raw['position'] ?? 0 ) );
 		$a->set_visible( ! empty( $raw['visible'] ) );
 		$a->set_variation( ! empty( $raw['variation'] ) );

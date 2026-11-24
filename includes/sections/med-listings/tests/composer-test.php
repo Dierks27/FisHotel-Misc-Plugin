@@ -88,6 +88,7 @@ check( 'highlight escapes the text', '&lt;b&gt;<mark class="fhml-hit fhml-hit--d
 check( 'clean: claim sentences out, the rest kept', 'Keep sealed.' === Finder::clean( 'Great for QT. Dose 1 tsp per 10 gallons for 7-10 days. Keep sealed.', $w ) );
 check( 'clean: a title loses its claim part', 'General Trio Flake' === Finder::clean( 'General Trio Flake | Broad-Spectrum Fish Medication', $w ) );
 check( 'clean: nothing clean left → empty', '' === Finder::clean( 'Kills ich.', $w ) );
+check( 'clean: a question left alone goes too', '' === Finder::clean( 'Dose once daily. Questions? Use our Dosing Calculator.', $w ) );
 check( 'clean: no claim → the same text', 'Omnivore flake.' === Finder::clean( 'Omnivore flake.', $w ) );
 
 echo "\n7. The word lists\n";

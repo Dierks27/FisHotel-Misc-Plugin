@@ -174,7 +174,8 @@ check( 'the Ich tag is removed from the product and the shop', $del['ok'] && fal
 $parent = Terms::apply( array_merge( $rows['product_cat:medications'], array( 'action' => 'sort' ) ), $w );
 check( 'Medications itself can never be removed', ! $parent['ok'] && get_term( $ids['cat_meds'] ) );
 
-foreach ( array_reverse( array_keys( Ledger::all()['terms'] ) ) as $change ) {
+// Oldest first: the neutral category made by the first change is still removed at the end.
+foreach ( array_keys( Ledger::all()['terms'] ) as $change ) {
 	$u = Terms::undo( $change );
 	check( "undo $change", $u['ok'], $u['message'] );
 }
@@ -186,5 +187,33 @@ check( 'Powders & Chemicals (made by the step, empty again) is gone', false === 
 check( 'Medicated Food has its old name and slug', 'Medicated Food' === get_term( $ids['cat_food'] )->name && 'medicated-food' === get_term( $ids['cat_food'] )->slug );
 check( 'no redirect left', array() === Redirects::all() );
 check( 'nothing left to undo', array() === Ledger::all()['terms'] );
+
+echo "\n8. A Treats attribute taken off, its values removed in step 5 — Undo in either order\n";
+foreach ( array( 'product first', 'categories first' ) as $order ) {
+	$ids    = fh_seed();
+	$t      = $ids['trio'];
+	$before = fh_state();
+	$read   = Fields::read( $t, 'attr:pa_med_treats' );
+	Ledger::apply( $t, array( array( 'object' => $t, 'field' => 'attr:pa_med_treats', 'value' => '', 'hash' => Fields::hash( $read ) ) ), Inventory::owned_ids( $t ) );
+	foreach ( Terms::proposals( $w ) as $r ) {
+		if ( 'pa_med_treats' === $r['tax'] ) {
+			Terms::apply( $r, $w );
+		}
+	}
+	check( "$order: the values are gone from the shop", array() === get_terms( array( 'taxonomy' => 'pa_med_treats' ) ) );
+	if ( 'product first' === $order ) {
+		Ledger::undo( $t );
+	}
+	foreach ( array_keys( Ledger::all()['terms'] ) as $change ) {
+		Terms::undo( $change );
+	}
+	if ( 'categories first' === $order ) {
+		Ledger::undo( $t );
+	}
+	$slugs = wp_get_object_terms( $t, 'pa_med_treats', array( 'fields' => 'slugs' ) );
+	sort( $slugs );
+	check( "$order: the attribute is back on the product with Ich and Flukes", array( 'flukes', 'ich' ) === $slugs && isset( $GLOBALS['fh']['attrs'][ $t ]['pa_med_treats'] ) );
+	check( "$order: each value exists once", 2 === count( get_terms( array( 'taxonomy' => 'pa_med_treats' ) ) ) );
+}
 
 fh_done();

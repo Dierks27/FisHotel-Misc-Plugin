@@ -1,6 +1,11 @@
 /* Med listings — the cleanup page. Uses the plugin's dark admin colours (admin/css/admin-style.css). */
 
 .fhml-wrap { max-width: 1400px; }
+.fhml-wrap h3, .fhml-wrap h4 { color: var(--fh-text-primary, #e0e0e0); }
+.fhml-wrap .fishotel-misc-card a:not(.button) { color: var(--fh-accent-hover, #0eb5e8); }
+.fhml-wrap .fhml-table a:not(.button) { color: #0a6fa0; }
+.fhml-wrap .button { display: inline-block; width: auto; }
+.fhml-wrap select, .fhml-wrap input[type="text"], .fhml-wrap textarea { max-width: 100%; box-sizing: border-box; }
 .fhml-lead { font-size: 14px; max-width: 900px; color: var(--fh-text-primary, #e0e0e0); }
 .fhml-step { margin: 18px 0; padding: 18px 20px; }
 .fhml-step h2 { display: flex; align-items: center; gap: 10px; }
@@ -12,6 +17,8 @@
 .fhml-muted { color: var(--fh-text-secondary, #a0a0a0); }
 .fhml-small { font-size: 12px; }
 .fhml-note { color: var(--fh-warning, #ffb900); font-size: 12px; }
+.fhml-table .fhml-note { color: #8a5a00; }
+.fhml-table .fhml-muted { color: #646970; }
 .fhml-ok { color: var(--fh-success, #46b450); }
 .fhml-bad { color: var(--fh-danger, #dc3232); }
 .fhml-notice { padding: 8px 12px; border-left: 4px solid var(--fh-success, #46b450); background: var(--fh-bg-secondary, #2d2d2d); margin: 10px 0; }
@@ -58,6 +65,8 @@
 
 @media (max-width: 900px) {
 	.fhml-found { columns: 1; }
+	.fhml-table, .fhml-table tbody { display: block; width: 100%; }
 	.fhml-table thead { display: none; }
 	.fhml-table tr, .fhml-table td { display: block; width: auto !important; }
+	.fhml-table code { word-break: break-all; }
 }

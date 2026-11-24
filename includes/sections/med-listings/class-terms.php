@@ -173,8 +173,15 @@ class Terms {
 				foreach ( self::products_in( (int) $t->term_id, 'product_cat' ) as $pid ) {
 					$types[] = self::type_of_product( $pid, $words );
 				}
-				$count             = array_count_values( $types );
-				arsort( $count );
+				$count = array_count_values( $types );
+				// Most products first; a tie goes to Powders & Chemicals, then Medicated Foods.
+				$order = array( 'powder' => 0, 'food' => 1, 'water' => 2 );
+				uksort(
+					$count,
+					function ( $a, $b ) use ( $count, $order ) {
+						return $count[ $b ] <=> $count[ $a ] ?: $order[ $a ] <=> $order[ $b ];
+					}
+				);
 				$row['redirect_to'] = $count ? (string) key( $count ) : 'parent';
 				$row['merge_to']    = $row['redirect_to'];
 				$row['types']       = $count;
@@ -465,6 +472,11 @@ class Terms {
 			$redirect_id = self::resolve( (string) ( $row['redirect_to'] ?? 'parent' ), $created );
 		}
 		$entry['created'] = $created;
+		if ( $created ) {
+			$l                  = Ledger::all();
+			$l['created_terms'] = array_values( array_unique( array_merge( array_map( 'intval', (array) ( $l['created_terms'] ?? array() ) ), $created ) ) );
+			Ledger::save( $l );
+		}
 
 		$deleted = wp_delete_term( (int) $t->term_id, $tax );
 		if ( is_wp_error( $deleted ) || ! $deleted ) {
@@ -561,12 +573,7 @@ class Terms {
 			foreach ( (array) $e['added'] as $pair ) {
 				wp_remove_object_terms( (int) $pair[0], (int) $pair[1], 'product_cat' );
 			}
-			foreach ( (array) $e['created'] as $cid ) {
-				$c = get_term( (int) $cid, 'product_cat' );
-				if ( $c && ! is_wp_error( $c ) && ! self::products_in( (int) $cid, 'product_cat' ) ) {
-					wp_delete_term( (int) $cid, 'product_cat' );
-				}
-			}
+			self::forget_created( (array) $e['created'] );
 			foreach ( (array) $e['objects'] as $pid ) {
 				if ( function_exists( 'wc_delete_product_transients' ) ) {
 					wc_delete_product_transients( (int) $pid );
@@ -578,7 +585,40 @@ class Terms {
 		$l = Ledger::all();
 		unset( $l['terms'][ $change ] );
 		Ledger::save( $l );
+		self::forget_created( array() );
 		return self::answer( true, __( 'Put back.', 'fishotel-misc-plugin' ), $change );
+	}
+
+	/**
+	 * A neutral category this step made is removed again once it is empty
+	 * and no change still on the record moved anything into it — whatever
+	 * order the changes are undone in.
+	 *
+	 * @param int[] $created Term ids made by the change being undone.
+	 */
+	private static function forget_created( array $created ) {
+		$l    = Ledger::all();
+		$made = array_values( array_unique( array_merge( array_map( 'intval', (array) ( $l['created_terms'] ?? array() ) ), array_map( 'intval', $created ) ) ) );
+		$used = array();
+		foreach ( (array) $l['terms'] as $e ) {
+			foreach ( (array) ( $e['added'] ?? array() ) as $pair ) {
+				$used[ (int) $pair[1] ] = true;
+			}
+		}
+		$keep = array();
+		foreach ( $made as $cid ) {
+			$c = get_term( $cid, 'product_cat' );
+			if ( ! $c || is_wp_error( $c ) ) {
+				continue;
+			}
+			if ( isset( $used[ $cid ] ) || self::products_in( $cid, 'product_cat' ) ) {
+				$keep[] = $cid;
+				continue;
+			}
+			wp_delete_term( $cid, 'product_cat' );
+		}
+		$l['created_terms'] = $keep;
+		Ledger::save( $l );
 	}
 
 	/**

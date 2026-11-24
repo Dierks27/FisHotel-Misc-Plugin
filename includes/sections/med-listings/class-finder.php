@@ -229,6 +229,17 @@ class Finder {
 				$kept[] = array( $piece, $next );
 			}
 		}
+		// A question left on its own once the line it asked about is gone ("Questions?") goes too.
+		if ( count( $kept ) < ( count( $parts ) + 1 ) / 2 ) {
+			$kept = array_values(
+				array_filter(
+					$kept,
+					function ( $pair ) {
+						return '?' !== substr( rtrim( $pair[0] ), -1 );
+					}
+				)
+			);
+		}
 		$out = '';
 		$n   = count( $kept );
 		foreach ( $kept as $i => $pair ) {
