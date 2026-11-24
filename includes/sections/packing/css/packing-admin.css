@@ -166,6 +166,15 @@
 	text-align: right;
 }
 
+/* The "Triple-bag these" words: one per line. */
+.fh-pack-wrap textarea.fh-pack-words {
+	width: 100%;
+	max-width: 340px;
+	min-height: 150px;
+	line-height: 1.5;
+	resize: vertical;
+}
+
 .fh-pack-wrap select.fh-pack-input {
 	max-width: 320px;
 }
@@ -308,6 +317,21 @@
 }
 
 .fh-pack-box__bags {
+	margin: 0 0 8px;
+}
+
+/* In how many layers a bag is used: ×2, or ×3 for a fish with spines. */
+.fh-pack-box__layers {
+	margin-left: 4px;
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.fh-pack-box__layers.is-triple {
+	color: #b32d2e;
+}
+
+.fh-pack-box__pull {
 	margin: 0 0 8px;
 }
 

@@ -42,6 +42,15 @@
  * copied lines are used. An order that went INTO a combined box says so
  * (`packed_with`): its box is the combined one.
  *
+ * Every fish line also says in how many LAYERS its bags are used (Layers):
+ * `layers` (2, or 3 for a fish with spines) and `layers_why`.
+ *
+ * Read WHOLE (for_order() with $whole), a line counts its full quantity
+ * whatever happened to it since — shipped, never shipping, refunded — and
+ * the answer lists every product line that was read (`items`): that is
+ * what one line takes when it is in a box, which is what ShipTracker asks
+ * (Shipment_Plan::fish_count()).
+ *
  * Nothing here writes anything.
  *
  * @package FisHotel\Misc\Sections\Packing
@@ -400,9 +409,12 @@ class Lines {
 	 * @param object $order    WC_Order.
 	 * @param array  $settings Settings.
 	 * @param array  $standard Size_List::standard().
+	 * @param bool   $whole    Count every line at its full quantity — a shipped, never-shipping or refunded
+	 *                         line included — and list every product line read under `items`
+	 *                         (item id → quantity).
 	 * @return array{lines: array[], ignored: array[], skipped: array[], is_fulfillment: bool, sources: int[], packed_with: int, all_sources_dead: bool}
 	 */
-	public static function for_order( $order, array $settings, array $standard ) {
+	public static function for_order( $order, array $settings, array $standard, $whole = false ) {
 		$out = array(
 			'lines'            => array(),
 			'ignored'          => array(),
@@ -412,9 +424,12 @@ class Lines {
 			'packed_with'      => self::packed_with( $order ),
 			'all_sources_dead' => false,
 		);
+		if ( $whole ) {
+			$out['items'] = array();
+		}
 
 		if ( ! $out['is_fulfillment'] ) {
-			return self::read( $order, $settings, $standard, $out );
+			return self::read( $order, $settings, $standard, $out, $whole );
 		}
 
 		// A combined box: its live source orders carry the lines.
@@ -430,12 +445,12 @@ class Lines {
 					continue;
 				}
 				$out['sources'][] = (int) $source_id;
-				$out              = self::read( $source, $settings, $standard, $out );
+				$out              = self::read( $source, $settings, $standard, $out, $whole );
 			}
 		}
 		if ( 0 === $resolved ) {
 			// No source loads: the copies on the combined box are all there is.
-			$out = self::read( $order, $settings, $standard, $out );
+			$out = self::read( $order, $settings, $standard, $out, $whole );
 		} elseif ( ! $out['sources'] ) {
 			// Every source loaded but is cancelled / refunded / failed: nothing ships.
 			$out['all_sources_dead'] = true;
@@ -451,9 +466,10 @@ class Lines {
 	 * @param array  $settings Settings.
 	 * @param array  $standard Size_List::standard().
 	 * @param array  $out      The result so far.
+	 * @param bool   $whole    See for_order().
 	 * @return array
 	 */
-	private static function read( $order, array $settings, array $standard, array $out ) {
+	private static function read( $order, array $settings, array $standard, array $out, $whole = false ) {
 		if ( ! is_object( $order ) || ! method_exists( $order, 'get_items' ) ) {
 			return $out;
 		}
@@ -492,11 +508,14 @@ class Lines {
 			);
 
 			$status = self::scalar( $meta[ self::META_LINE_STATUS ] );
-			if ( 'shipped' === $status || 'na' === $status ) {
+			if ( $whole ) {
+				$out['items'][ $item_id ] = ( $out['items'][ $item_id ] ?? 0 ) + max( 0, $qty );
+			}
+			if ( ! $whole && ( 'shipped' === $status || 'na' === $status ) ) {
 				$out['skipped'][] = $base + array( 'reason' => 'shipped' === $status ? __( 'already shipped', 'fishotel-misc-plugin' ) : __( 'does not ship', 'fishotel-misc-plugin' ) );
 				continue;
 			}
-			if ( method_exists( $order, 'get_qty_refunded_for_item' ) ) {
+			if ( ! $whole && method_exists( $order, 'get_qty_refunded_for_item' ) ) {
 				$qty -= abs( (int) $order->get_qty_refunded_for_item( $item_id ) ); // WooCommerce reports refunds as negatives.
 			}
 			if ( $qty <= 0 ) {
@@ -542,6 +561,7 @@ class Lines {
 			if ( '' === $size ) {
 				$size = Bags::item_size( $item, $standard );
 			}
+			$layers = Layers::for_line( $product, $name, $settings, $item );
 
 			$out['lines'][] = $base + array(
 				'fish_per_bag' => $per_bag,
@@ -551,6 +571,8 @@ class Lines {
 				'size_label'   => '' !== $size ? Size_List::label( $standard['sizes'], $size ) : '',
 				'flag'         => 'backordered' === $status ? 'backordered' : '',
 				'from'         => '',
+				'layers'       => $layers['layers'],
+				'layers_why'   => $layers['why'],
 			);
 		}
 
@@ -577,6 +599,7 @@ class Lines {
 
 		if ( null === $fish || ! $fish ) {
 			// Nothing here can read it: say so rather than pack an order short.
+			$layers         = Layers::for_line( null, $base['name'], $settings );
 			$out['lines'][] = $base + array(
 				'fish_per_bag' => 1,
 				'bags'         => 0,
@@ -585,6 +608,8 @@ class Lines {
 				'size_label'   => '',
 				'flag'         => 'invoice',
 				'from'         => '',
+				'layers'       => $layers['layers'],
+				'layers_why'   => $layers['why'],
 				'reason'       => null === $fish
 					? __( 'an invoice whose fish cannot be read here', 'fishotel-misc-plugin' )
 					: __( 'an invoice with no fish lines', 'fishotel-misc-plugin' ),
@@ -624,6 +649,7 @@ class Lines {
 				$bag  = Bags::for_size( $row['size'], $settings, $standard );
 				$size = $bag ? $bag['size'] : Size_List::match_value( $row['size'], $standard['sizes'] );
 			}
+			$layers = Layers::for_line( $line, $row['name'], $settings );
 
 			$out['lines'][] = array(
 				'item_id'      => $base['item_id'],
@@ -637,6 +663,8 @@ class Lines {
 				'size_label'   => '' !== $size ? Size_List::label( $standard['sizes'], $size ) : '',
 				'flag'         => '',
 				'from'         => $base['name'],
+				'layers'       => $layers['layers'],
+				'layers_why'   => $layers['why'],
 			);
 		}
 

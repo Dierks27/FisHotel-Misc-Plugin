@@ -1,7 +1,7 @@
 <?php
 /**
  * Packing settings — the ONE option of the section, its pure sanitisers,
- * and the four saves of the Packing page.
+ * and the five saves of the Packing page.
  *
  * The option (fishotel_packing_settings, not autoloaded — only this
  * section's admin screens and contract functions ever read it):
@@ -28,9 +28,13 @@
  *   foam        the foam on each side of a box, in inches (default 0.5) —
  *               used while the Foam Cuts section is off (its thickness wins
  *               while it is on).
+ *   triple_words the "Triple-bag these" list: a fish whose name or category
+ *               has one of these words is bagged three times, not twice
+ *               (Layers). Until a list is saved it is Layers::default_words();
+ *               a saved list is kept as saved, an empty one included.
  *
  * Every save — bags_request(), boxes_request(), fits_request(),
- * map_request() — checks the capability (manage_woocommerce) and the
+ * map_request(), words_request() — checks the capability (manage_woocommerce) and the
  * nonce itself, validates everything before it writes anything, and
  * answers with a status: one invalid value and nothing is saved. The AJAX
  * handlers only send that answer, so the saves run headless.
@@ -83,6 +87,7 @@ class Settings {
 		add_action( 'wp_ajax_fishotel_packing_boxes', array( $this, 'ajax_boxes' ) );
 		add_action( 'wp_ajax_fishotel_packing_fits', array( $this, 'ajax_fits' ) );
 		add_action( 'wp_ajax_fishotel_packing_map', array( $this, 'ajax_map' ) );
+		add_action( 'wp_ajax_fishotel_packing_words', array( $this, 'ajax_words' ) );
 	}
 
 	/* ============================================================== */
@@ -101,9 +106,10 @@ class Settings {
 			'boxes'       => array(),
 			'fits'        => array(),
 			'size_map'    => array(),
-			'threshold'   => self::THRESHOLD_DEFAULT,
-			'fill_share'  => Fit::SHARE_DEFAULT,
-			'foam'        => Fit::FOAM_DEFAULT,
+			'threshold'    => self::THRESHOLD_DEFAULT,
+			'fill_share'   => Fit::SHARE_DEFAULT,
+			'foam'         => Fit::FOAM_DEFAULT,
+			'triple_words' => Layers::default_words(),
 		);
 	}
 
@@ -248,15 +254,21 @@ class Settings {
 		$share     = self::share_in( $raw['fill_share'] ?? '' );
 		$foam      = self::foam_in( $raw['foam'] ?? '' );
 
+		// The "Triple-bag these" words: the starting list until one is saved — a saved empty list stays empty.
+		$words = array_key_exists( 'triple_words', $raw ) && ( is_array( $raw['triple_words'] ) || is_string( $raw['triple_words'] ) )
+			? Layers::words_in( $raw['triple_words'] )
+			: Layers::default_words();
+
 		return array(
-			'bags'        => $bags,
-			'last_bag_id' => $last_id,
-			'boxes'       => $boxes,
-			'fits'        => $fits,
-			'size_map'    => $map,
-			'threshold'   => null === $threshold ? self::THRESHOLD_DEFAULT : $threshold,
-			'fill_share'  => null === $share || '' === $share ? Fit::SHARE_DEFAULT : $share,
-			'foam'        => null === $foam || '' === $foam ? Fit::FOAM_DEFAULT : $foam,
+			'bags'         => $bags,
+			'last_bag_id'  => $last_id,
+			'boxes'        => $boxes,
+			'fits'         => $fits,
+			'size_map'     => $map,
+			'threshold'    => null === $threshold ? self::THRESHOLD_DEFAULT : $threshold,
+			'fill_share'   => null === $share || '' === $share ? Fit::SHARE_DEFAULT : $share,
+			'foam'         => null === $foam || '' === $foam ? Fit::FOAM_DEFAULT : $foam,
+			'triple_words' => $words,
 		);
 	}
 
@@ -834,6 +846,50 @@ class Settings {
 	}
 
 	/**
+	 * The "Triple-bag these" list after a posted form (pure): what was typed
+	 * — one word per line, or separated by commas — IS the list. An entry
+	 * that is not a word (no letter in it, a single character, too long) is
+	 * refused, so a slip is seen and not silently dropped; a word typed
+	 * twice is kept once. An empty box is a list too: nothing is triple-
+	 * bagged by its name any more.
+	 *
+	 * @param array $settings Stored settings (normalised).
+	 * @param mixed $raw      The text box as posted, or a list.
+	 * @return array{settings: array, errors: string[], words: string[]}
+	 */
+	public static function apply_words( array $settings, $raw ) {
+		$errors = array();
+		if ( null !== $raw && ! is_array( $raw ) && ( ! is_scalar( $raw ) || is_bool( $raw ) ) ) {
+			$raw      = '';
+			$errors[] = __( 'the list of words could not be read', 'fishotel-misc-plugin' );
+		}
+
+		$entries = Layers::split( $raw );
+		foreach ( $entries as $entry ) {
+			if ( '' === Layers::word_in( $entry ) ) {
+				$shown = function_exists( 'mb_substr' ) ? mb_substr( self::name_in( $entry ), 0, 30 ) : substr( self::name_in( $entry ), 0, 30 );
+				/* translators: 1: what was typed, 2: the most characters a word may have */
+				$errors[] = sprintf( __( '"%1$s" is not a word: use 2 to %2$d characters with a letter in them', 'fishotel-misc-plugin' ), $shown, Layers::MAX_WORD );
+			}
+		}
+		$words = Layers::words_in( $entries );
+		if ( ! $errors && count( array_unique( array_map( array( Layers::class, 'word_in' ), $entries ) ) ) > Layers::MAX_WORDS ) {
+			/* translators: %d: the most words allowed */
+			$errors[] = sprintf( __( 'at most %d words', 'fishotel-misc-plugin' ), Layers::MAX_WORDS );
+		}
+
+		if ( ! $errors ) {
+			$settings['triple_words'] = $words;
+		}
+
+		return array(
+			'settings' => $errors ? $settings : self::normalize( $settings ),
+			'errors'   => array_values( array_unique( $errors ) ),
+			'words'    => $words,
+		);
+	}
+
+	/**
 	 * Whether a posted field is blank.
 	 *
 	 * @param mixed $value Raw value.
@@ -1037,6 +1093,42 @@ class Settings {
 		);
 	}
 
+	/**
+	 * Save the "Triple-bag these" list.
+	 *
+	 * @param array $raw Unslashed POST: _wpnonce, triple_words (the text box).
+	 * @return array{status: int, ok: bool, message: string, settings?: array}
+	 */
+	public static function words_request( array $raw ) {
+		$denied = self::guard( $raw );
+		if ( $denied ) {
+			return $denied;
+		}
+
+		$typed = $raw['triple_words'] ?? '';
+		if ( ! is_string( $typed ) ) {
+			return self::refused( array( __( 'the list of words could not be read', 'fishotel-misc-plugin' ) ) );
+		}
+
+		$result = self::apply_words( self::get(), $typed );
+		if ( $result['errors'] ) {
+			return self::refused( $result['errors'] );
+		}
+
+		$settings = self::store( $result['settings'] );
+		$count    = count( $settings['triple_words'] );
+
+		return array(
+			'status'   => 200,
+			'ok'       => true,
+			'message'  => $count
+				/* translators: %d: number of words */
+				? sprintf( _n( 'Saved: %d word. A fish with it in its name or category is triple-bagged; every other fish is double-bagged.', 'Saved: %d words. A fish with one of them in its name or category is triple-bagged; every other fish is double-bagged.', $count, 'fishotel-misc-plugin' ), $count )
+				: __( 'Saved: no words. Every fish is double-bagged, unless its product says Triple.', 'fishotel-misc-plugin' ),
+			'settings' => $settings,
+		);
+	}
+
 	/* ============================================================== */
 	/*  AJAX                                                           */
 	/* ============================================================== */
@@ -1080,5 +1172,12 @@ class Settings {
 	 */
 	public function ajax_map() {
 		self::reply( self::map_request( wp_unslash( $_POST ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified in guard().
+	}
+
+	/**
+	 * AJAX: save the "Triple-bag these" list (words_request()).
+	 */
+	public function ajax_words() {
+		self::reply( self::words_request( wp_unslash( $_POST ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified in guard().
 	}
 }

@@ -45,7 +45,9 @@ class Plan {
 	 * @param array[]|null $confirmed  The confirmed boxes with their fits (null = none).
 	 * @param bool         $same       Whether the confirmed boxes are the suggestion's.
 	 * @return array{from: string, boxes: array[], lines: array[], moved: int, over: bool, chosen: int, left_out: array} left_out: bag id → fish
-	 *         left out of the confirmed boxes because only another box takes that bag.
+	 *         left out of the confirmed boxes because only another box takes that bag. Each of `lines` (by the
+	 *         line's index): use (bag id → bags), boxes (the boxes holding some of it), in_box (box → bag id →
+	 *         bags of the line in that box), moved, chosen.
 	 */
 	public static function build( array $lines, array $suggestion, array $fitted, array $ladder, array $overrides = array(), $confirmed = null, $same = false ) {
 		$known = array_flip( array_map( 'intval', $ladder ) );
@@ -177,6 +179,7 @@ class Plan {
 			$out['lines'][ $index ] = array(
 				'use'    => array(),
 				'boxes'  => array(),
+				'in_box' => array(),
 				'moved'  => 0,
 				'chosen' => 0,
 			);
@@ -186,6 +189,10 @@ class Plan {
 			$row['use'][ $use[ $id ] ] = ( $row['use'][ $use[ $id ] ] ?? 0 ) + 1;
 			if ( isset( $in_box[ $id ] ) && ! in_array( $in_box[ $id ], $row['boxes'], true ) ) {
 				$row['boxes'][] = $in_box[ $id ];
+			}
+			if ( isset( $in_box[ $id ] ) ) {
+				// Which box holds which of the line's bags: what a shipment of that box is made of.
+				$row['in_box'][ $in_box[ $id ] ][ $use[ $id ] ] = ( $row['in_box'][ $in_box[ $id ] ][ $use[ $id ] ] ?? 0 ) + 1;
 			}
 			if ( $one['fixed'] > 0 ) {
 				$row['chosen'] = $one['fixed'];

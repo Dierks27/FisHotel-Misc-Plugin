@@ -29,6 +29,9 @@ php  includes/sections/packing/tests/page-test.php
 php  includes/sections/packing/tests/storefront-test.php
 php  includes/sections/packing/tests/foam-cuts-seam-test.php
 php  includes/sections/packing/tests/upsize-test.php
+php  includes/sections/packing/tests/today-line-test.php
+php  includes/sections/packing/tests/layers-test.php
+php  includes/sections/packing/tests/shipment-plan-test.php
 node includes/sections/packing/tests/packing-admin.test.js
 ```
 
@@ -154,7 +157,10 @@ helper files exit cleanly when they are run directly (the CI runs every
   the boxes; the assets (the Packing page, and the product edit screen of
   a user who is shown the fields — no other screen).
 - **storefront-test.php** — a front-end request loads nothing but the
-  section's own file, hooks nothing and reads no option; in wp-admin the
+  section's own file, reads no option and hooks one thing only —
+  ShipTracker's own filter for the fish of a box, which hands the number
+  back without loading or reading anything when there is nothing to count;
+  in wp-admin the
   hooks are exactly the product editor's, the order screen's, the page's
   assets and the admin AJAX saves — none of the hooks that print
   variation, cart, checkout, e-mail, invoice or order-item data or build a
@@ -199,6 +205,57 @@ helper files exit cleanly when they are run directly (the CI runs every
   with a plan (upsized, mixed, chosen by hand), without one, and while
   the section is off; nothing written by any of it, and the three new
   classes pure.
+- **layers-test.php** — bag layers: the rule by the numbers (the
+  product's *Bagging* choice first — Triple on a fish no word knows, Double
+  on a tang; else a word of the list as a WHOLE word in the name or a
+  category name — any letter case, its plural, a word typed as a plural
+  finding the one fish ("tangs" → "Yellow Tang"), punctuation around it,
+  never inside a longer word such as Tangerine or Mustang, a phrase, a
+  name that is not UTF-8; else 2); the list of words (what it starts with,
+  what a word is, the most it keeps; who may save it and with which nonce,
+  one entry that is not a word and nothing is saved, an empty list staying
+  empty, settings from before the list reading with the starting words,
+  the AJAX handler); the *Bagging* field (the rule of its save; drawn
+  under the checkbox with Auto / Double / Triple; saved through the
+  product object on the parent only, never a variation; Auto removing the
+  meta; a bad nonce, no nonce, no field, no capability); on an order
+  (every fish line with its layers and why — a word in its name, in its
+  category, a fish with no product, the fish of an opened-up Invoice; the
+  product's choice beating the word; the filter overruling, a nonsense
+  answer ignored); the Packing box in plain words (`×2`, `×3 — spines`
+  with its reason, "14 bags to pull", nothing for an order with no bags);
+  `fishotel_packing_bag_for_item()` gaining `layers` and `layers_label`
+  with `name` and `label` exactly as they were; nothing written.
+- **shipment-plan-test.php** — `fishotel_packing_shipment_plan()` against
+  stand-ins for the two ShipTracker classes it meets (the standard boxes;
+  `fish_count()` copied from ShipTracker 1.9.18 with its filter): the
+  "nothing" answer with every key (section off, no such order, a refund,
+  no fish line, an id that is not one); one box (the exact shape, lines,
+  totals, surviving JSON); a confirmed box, in the same request; which
+  ShipTracker row (by name — its spelling handed on verbatim —, by the
+  same numbers when the box was renamed, the first of two the same size,
+  none, an empty list, ShipTracker failing, the name winning over the
+  size, "12.0" being 12); a split (a line in two boxes, each box's own
+  counts, the boxes adding up to the totals; two of one box chosen by
+  hand); a combined box asked by its own id (the source orders' ids and
+  line ids) and an order folded into one (no box, the owner named, its
+  own lines); what is left to pack and a fish with no bag size; two fish
+  to a bag; the plan worked out once while a page is drawn, dropped by a
+  write, and worked out each time in a request that may write;
+  the contract's filter (nonsense and a throwing filter ignored);
+  ShipTracker's `fst_box_fish_count` answered with the bags to pull —
+  hooked outside wp-admin too, lines given, the whole order, dry goods 0,
+  an unknown line id, a smaller count ("the next box") answered exactly
+  from the lines ShipTracker's shipments list — a stand-in for
+  `FST_Shipment::get_by_order()` — and scaled and rounded to a whole bag
+  when they say nothing, do not add up or fail,
+  a shipped and a refunded line counted whole, an Invoice kept as one
+  line, a credit, an order with no plan left as ShipTracker counted it, a
+  combined box through its sources, an order read once however many lines
+  are asked about (again each time in a request that may write), never an
+  exception (an order that fails, something
+  that is not an order, other code failing underneath), the section off;
+  the pure halves; nothing written.
 - **packing-admin.test.js** — the script's pure helpers: the tiny
   sprintf, a new table row from its template, the fill tool's run loop
   (it must end: a cursor that does not move, an answer that is not a
@@ -209,9 +266,16 @@ helper files exit cleanly when they are run directly (the CI runs every
   redraw the page being stopped while another form holds unsaved changes,
   the product editor's checkbox following the product's categories only
   while no choice is stored and the box was not touched, and a box the
-  owner clicked being marked on the form as a choice.
+  owner clicked being marked on the form as a choice; and, against a
+  stand-in for jQuery, the Packing box telling the document
+  (`fishotel-packing-changed`, with the order) each time an answer draws
+  it again — a refusal that hands the box back included, a failed post
+  not.
 
-735 checks in the twelve PHP files and 49 in the node test. Since 0.46.5
+921 checks in the fourteen PHP files and 58 in the node test. Since 0.46.15
+the storefront test expects one hook outside wp-admin (ShipTracker's own
+filter for the fish of a box, which no storefront page fires) and the
+settings test five saves. Since 0.46.5
 three older checks expect the fit model's answer where a bag with a size
 has no typed number (lines-test: one Large now goes alone in Cube 8;
 order-test: three Cube 8 now report a fill; the "no numbers yet" case
