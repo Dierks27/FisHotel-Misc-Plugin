@@ -37,6 +37,7 @@ use FisHotel\Misc\Sections\Clean_Room\Costing;
 use FisHotel\Misc\Sections\Clean_Room\Feeding;
 use FisHotel\Misc\Sections\Clean_Room\Layout;
 use FisHotel\Misc\Sections\Clean_Room\Protocol;
+use FisHotel\Misc\Sections\Clean_Room\Reserve;
 use FisHotel\Misc\Sections\Clean_Room\Settings;
 use FisHotel\Misc\Sections\Clean_Room\Ship_Lines;
 use FisHotel\Misc\Sections\Clean_Room\Sizes;
@@ -110,6 +111,17 @@ $fh_from_attr = Sizes::SOURCE_ATTRIBUTE === $fh_standard['source'];
 				</div>
 				<label class="fishotel-misc-toggle">
 					<input type="checkbox" name="<?php echo esc_attr( Feeding::SETTING ); ?>" value="1" <?php checked( ! empty( $settings[ Feeding::SETTING ] ) ); ?>>
+					<span class="slider"></span>
+				</label>
+			</div>
+			<?php $fh_reserve = Reserve::setting_text(); // Reserved → Pull today → Shipped. ?>
+			<div class="fh-cr-field fh-cr-field--row">
+				<div>
+					<span class="fh-cr-label"><?php echo esc_html( $fh_reserve['label'] ); ?></span>
+					<p class="fishotel-misc-card-desc"><?php echo esc_html( $fh_reserve['text'] ); ?></p>
+				</div>
+				<label class="fishotel-misc-toggle">
+					<input type="checkbox" name="<?php echo esc_attr( Reserve::SETTING ); ?>" value="1" <?php checked( ! empty( $settings[ Reserve::SETTING ] ) ); ?>>
 					<span class="slider"></span>
 				</label>
 			</div>

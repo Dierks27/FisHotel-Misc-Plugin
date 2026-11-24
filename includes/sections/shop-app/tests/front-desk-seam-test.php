@@ -332,7 +332,11 @@ foreach ( $admin_only as $action => $what ) {
 echo "\n6. Nothing on the act path asks for a capability of its own\n";
 // Where the Clean Room asks for a capability outside its wp-admin screens:
 // the Front Desk's page and its guard (the one the session holds), the
-// remember-me cookie of a WordPress login, and the Today section's line.
+// remember-me cookie of a WordPress login, and the Today section's line —
+// and one that only NARROWS: "Reserve…" searches the shop's customers (names
+// and e-mails) and ties a hold to an account only for somebody WooCommerce
+// lets see its customers (edit_shop_orders); a tablet without it still
+// reserves, for a name typed. No act needs it to go through.
 $asks = array();
 foreach ( glob( $room_dir . 'class-*.php' ) as $file ) {
 	$name = basename( $file );
@@ -353,6 +357,7 @@ check(
 		'class-front-desk.php:Clean_Room::CAPABILITY',
 		'class-front-desk.php:Clean_Room::CAPABILITY',
 		'class-front-desk.php:Clean_Room::CAPABILITY',
+		'class-reserve-shop.php:\'edit_shop_orders\'',
 	) === $asks,
 	implode( ' | ', $asks )
 );

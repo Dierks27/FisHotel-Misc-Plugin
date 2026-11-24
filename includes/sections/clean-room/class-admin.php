@@ -232,6 +232,13 @@ class Admin {
 			$fish_tanks   = $tables_ok ? self::existing_tanks( $store->tanks( false ) ) : array();
 			$picks        = $tables_ok ? Front_Desk::picks( $store ) : array( 'suppliers' => array(), 'origins' => array() );
 			$product_states = Admin_No_Product::stay_states( $store, array_merge( $stays, $closed_stays ) ); // One read: which stays have no product yet.
+			$reserved       = Reserve_Shop::enabled( $settings ) ? Reserve_Shop::ensure( $store, $settings )['counts'] : array(); // Fish held for open orders.
+			foreach ( $stays as $fh_i => $fh_open ) {
+				$stays[ $fh_i ]['reserved']        = (int) ( $reserved[ (int) $fh_open['id'] ]['qty'] ?? 0 );
+				$stays[ $fh_i ]['reserved_orders'] = (array) ( $reserved[ (int) $fh_open['id'] ]['orders'] ?? array() );
+				$stays[ $fh_i ]['reserved_holds']  = (array) ( $reserved[ (int) $fh_open['id'] ]['holds'] ?? array() );
+			}
+			$stock_notes    = Reserve_Shop::stock_warnings( $store, $settings, $stays ); // Where the shop's stock and the tanks differ.
 
 			include Clean_Room::path() . 'views/stays.php';
 			return;
@@ -258,6 +265,7 @@ class Admin {
 		$temp      = Admin_Temp::board( $store, $tanks, $protocols, $today );
 		$origins   = self::origins( $store, $tanks ); // The quarantine tank each cleared group came out of.
 		$no_product = Admin_No_Product::board_count( $store, $tanks ); // Fish with no product yet: the chip.
+		$flash      = class_exists( Admin_Workbook::class, false ) ? Admin_Workbook::take_flash() : ''; // What "Reserve…" / "Release" just did.
 
 		include Clean_Room::path() . 'views/board.php';
 	}
@@ -497,6 +505,7 @@ class Admin {
 		}
 
 		$board_url    = self::page_url( 'stays' );
+		$stock_notes  = Reserve_Shop::stock_warnings( $store, $settings, $stays ); // "Shop says 5 in stock, tanks have 3 ready" — a warning only.
 		$release_ts   = (int) get_post_meta( $product_id, self::RELEASE_META, true );
 		$release_url  = '';
 		$nonce_action = self::NONCE_PRODUCT . $product_id;
@@ -756,6 +765,8 @@ class Admin {
 				'boxRates'      => $on_page ? Settings::box_rates() : array(),
 				'noProduct'     => $on_page ? Admin_No_Product::js_config() : array(),
 				'i18n'          => array(
+					'holdAccount'   => __( 'Tied to the customer account of %s — their own paid order takes these fish.', 'fishotel-misc-plugin' ),
+					'holdTyped'     => __( 'A name typed, no account: no order takes these by itself — you will be asked when one comes in.', 'fishotel-misc-plugin' ),
 					'saved'          => __( 'Saved.', 'fishotel-misc-plugin' ),
 					'error'          => __( 'Something went wrong. Please try again.', 'fishotel-misc-plugin' ),
 					'confirmAlias'   => __( 'Forget this alias?', 'fishotel-misc-plugin' ),
@@ -1640,8 +1651,14 @@ class Admin {
 		$key    = ! empty( $stay['sale_ready'] ) ? 'ready' : $status;
 		$key    = in_array( $key, array( 'in_qt', 'cleared', 'ready', 'closed' ), true ) ? $key : 'in_qt';
 		$words  = self::sale_words( $stay );
+		$label  = (string) ( $stay['state_label'] ?? $status );
+		if ( Reserve::all_reserved( $stay ) ) {
+			// Ready → Reserved → Shipped: every fish for sale is reserved — RESERVED, never READY beside "all 4 reserved".
+			$key   = 'reserved';
+			$label = __( 'reserved', 'fishotel-misc-plugin' );
+		}
 
-		$html = '<span class="fh-cr-badge fh-cr-badge--' . esc_attr( $key ) . '">' . esc_html( (string) ( $stay['state_label'] ?? $status ) ) . '</span>';
+		$html = '<span class="fh-cr-badge fh-cr-badge--' . esc_attr( $key ) . '">' . esc_html( $label ) . '</span>';
 		if ( $warning && '' !== $words['warning'] ) {
 			$html .= ' <span class="fh-cr-warn" title="' . esc_attr__( 'Its sale date has come but it has not moved to the Clean Room yet.', 'fishotel-misc-plugin' ) . '">' . esc_html( $words['warning'] ) . '</span>';
 		}
@@ -1790,6 +1807,9 @@ class Admin {
 				$reason = '' !== $note && 0 !== strpos( $note, 'undo' ) ? ' (' . $note . ')' : '';
 				return sprintf( '%d lost%s%s', abs( null === $qty ? 1 : $qty ), $reason, $undo );
 			case 'sold':
+				if ( '' !== Reserve::event_text( $event ) ) {
+					return Reserve::event_text( $event ); // Taken out by its order: "Shipped · order #1234 (2 fish)".
+				}
 				return sprintf( '%d shipped%s', abs( null === $qty ? 1 : $qty ), $undo );
 			case 'move':
 				$why = self::move_reason( $note );

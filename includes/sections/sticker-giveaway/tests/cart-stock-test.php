@@ -17,7 +17,8 @@
  * and #302 "Coral Pop" on a custom attribute, each with its own stock;
  * "Logo Stickers" (#400) on a global attribute, keeping ONE stock number
  * for #401 and #402; "Round Logo Sticker" (#77), a simple product; a
- * fish (#9).
+ * fish (#9). Section 7 adds a medication the supplier drop-ships
+ * (#600, "EA") for the mailing fee of an EA-only order.
  *
  * Run from the plugin root:
  *   php includes/sections/sticker-giveaway/tests/cart-stock-test.php
@@ -73,6 +74,10 @@ function wc_clean( $text ) {
 function wp_unslash( $text ) {
 	return $text;
 }
+// The theme's answer (inc/medication-store/helpers.php), for the invented ids in $GLOBALS['fh_ea'].
+function fishotel_is_ea_fulfilled_product( $product_id, $variation_id = 0 ) {
+	return in_array( (int) $product_id, $GLOBALS['fh_ea'] ?? array(), true );
+}
 
 class WP_Term {
 	public $slug    = '';
@@ -97,6 +102,7 @@ class WC_Product {
 	public $backorders = false;
 	public $status     = 'publish';
 	public $price      = '4.00';
+	public $tax_status = 'taxable';
 	public function __construct( $id, $type, $stock, $parent = 0, $holder = 0 ) {
 		$this->id     = $id;
 		$this->type   = $type;
@@ -146,6 +152,12 @@ class WC_Product {
 	public function get_attributes() {
 		return array( new FH_Attribute() );
 	}
+	public function get_tax_status() {
+		return $this->tax_status;
+	}
+	public function get_tax_class() {
+		return '';
+	}
 }
 
 class WC_Cart {
@@ -153,6 +165,7 @@ class WC_Cart {
 	public $removed_cart_contents = array();
 	public $added                 = array();
 	public $totalled              = 0;
+	public $fees                  = array();
 	public function get_cart() {
 		return $this->cart_contents;
 	}
@@ -180,6 +193,14 @@ class WC_Cart {
 	public function calculate_totals() {
 		$this->totalled++;
 		( new \FisHotel\Misc\Sections\Sticker_Giveaway\Cart() )->apply_pricing( $this ); // `woocommerce_before_calculate_totals`.
+		$this->fees = array(); // WooCommerce clears the fees, then asks `woocommerce_cart_calculate_fees`.
+		\FisHotel\Misc\Sections\Sticker_Giveaway\Letter::add_fee( $this );
+	}
+	public function fees_api() {
+		return $this;
+	}
+	public function add_fee( $fee ) {
+		$this->fees[ $fee['id'] ] = $fee;
 	}
 	public function get_cart_item_quantities() {
 		$out = array();
@@ -204,6 +225,13 @@ class FH_Item {
 	}
 	public function get_product() {
 		return wc_get_product( $this->product );
+	}
+	public function get_product_id() {
+		$parent = wc_get_product( $this->product )->get_parent_id();
+		return $parent ? $parent : $this->product;
+	}
+	public function get_variation_id() {
+		return wc_get_product( $this->product )->get_parent_id() ? $this->product : 0;
 	}
 	public function get_meta( $key ) {
 		return '_fh_sticker' === $key ? $this->kind : '';
@@ -230,8 +258,25 @@ class FH_Item {
 	}
 }
 
+class FH_Fee {
+	public $name;
+	public $meta;
+	public function __construct( $name, $meta = '' ) {
+		$this->name = $name;
+		$this->meta = $meta;
+	}
+	public function get_meta( $key ) {
+		return '_fh_sticker_mail_fee' === $key ? $this->meta : '';
+	}
+	public function get_name() {
+		return $this->name;
+	}
+}
+
 class WC_Order {
 	public $items;
+	public $fees          = array();
+	public $meta          = array();
 	public $status        = 'failed';
 	public $stock_reduced = false;
 	public $totalled      = 0;
@@ -257,11 +302,20 @@ class WC_Order {
 	public function get_stock_reduced() {
 		return $this->stock_reduced;
 	}
-	public function get_items() {
-		return $this->items;
+	public function get_items( $type = 'line_item' ) {
+		return 'fee' === $type ? $this->fees : $this->items;
 	}
 	public function remove_item( $id ) {
-		unset( $this->items[ $id ] );
+		unset( $this->items[ $id ], $this->fees[ $id ] );
+	}
+	public function get_meta( $key ) {
+		return $this->meta[ $key ] ?? '';
+	}
+	public function update_meta_data( $key, $value ) {
+		$this->meta[ $key ] = $value;
+	}
+	public function delete_meta_data( $key ) {
+		unset( $this->meta[ $key ] );
 	}
 	public function calculate_totals() {
 		$this->totalled++;
@@ -543,6 +597,75 @@ $order                = $pay( $order_items() );
 $order->stock_reduced = true;
 $guard->guard_order();
 check( 'an order whose stock was already taken: not touched', 3 === count( $order->items ) );
+
+echo "7. An EA-only order: the mailing fee follows the sticker lines when they step back\n";
+/**
+ * A cart that holds only a medication the supplier drop-ships (#600).
+ */
+function ea_shop() {
+	$cart                   = shop();
+	$GLOBALS['fh_ea']       = array( 600 );
+	$GLOBALS['fh_products'][600] = new WC_Product( 600, 'simple', null );
+	unset( $cart->cart_contents['fish'] );
+	$cart->line( 'med', 600, 0, 1 );
+	return $cart;
+}
+
+$cart = ea_shop();
+$cart->line( 'add', 300, 301, 2, 'extra' );
+$cart->calculate_totals();
+check( 'an EA medication and 2 add-ons: one mailing fee of 1.00', array( 'fh-sticker-mailing' ) === array_keys( $cart->fees ) && 1.0 === $cart->fees['fh-sticker-mailing']['amount'] );
+$shop_adds( $cart, 300, 3, 301 );
+check( 'the customer adds the last 3 of that design from the shop: the add-ons step back (make_room) and the fee goes with them', 0 === qty( $cart, 'add' ) && array() === $cart->fees );
+
+$cart = ea_shop();
+$cart->line( 'add', 300, 301, 1, 'extra' );
+$cart->line( 'add2', 300, 302, 2, 'extra' );
+$cart->calculate_totals();
+$shop_adds( $cart, 300, 3, 301 );
+check( 'one add-on steps back, another design is still a paid sticker: still ONE fee', 0 === qty( $cart, 'add' ) && 2 === qty( $cart, 'add2' ) && 1 === count( $cart->fees ) );
+
+$cart                                   = ea_shop();
+$cart->line( 'add', 300, 301, 2, 'extra' );
+$GLOBALS['fh_products'][301]->stock = 0;
+$guard->guard_lines();
+check( 'the design ran out before Place Order (guard_lines): the add-on goes, and no fee is left', 0 === qty( $cart, 'add' ) && array() === $cart->fees );
+
+$ea_order = static function ( array $items ) use ( $pay ) {
+	$order                                            = $pay( $items );
+	$order->fees                                      = array( 9 => new FH_Fee( 'Sticker mailing (sent separately by letter)', '1' ) );
+	$order->meta['_fishotel_sticker_mail_letter'] = 3;
+	return $order;
+};
+
+ea_shop();
+$GLOBALS['fh_products'][301]->stock = 0;
+$order = $ea_order( array( 1 => new FH_Item( 600, 1, 20.0 ), 3 => new FH_Item( 301, 3, 2.97, 'extra' ) ) );
+$guard->guard_order();
+check( 'pay page of a failed EA-only order, the paid design ran out (guard_order): the stickers, the fee and the flag go', array( 1 ) === array_keys( $order->items ) && array() === $order->fees && ! isset( $order->meta['_fishotel_sticker_mail_letter'] ) && 1 === $order->totalled );
+check( '... and a note says no sticker is left to mail (the first "MAIL STICKER BY LETTER" note is out of date)', 1 === count( preg_grep( '/^Sticker Giveaway: No sticker is left to mail by letter/', $order->notes ) ) );
+
+ea_shop();
+$GLOBALS['fh_products'][301]->stock = 0;
+$order = $ea_order( array( 1 => new FH_Item( 600, 1, 20.0 ), 2 => new FH_Item( 302, 1, 0.0, 'free' ), 3 => new FH_Item( 301, 2, 1.98, 'extra' ) ) );
+$guard->guard_order();
+check( '... the free sticker is left, no paid one: no fee, 1 sticker still to mail', array( 1, 2 ) === array_keys( $order->items ) && array() === $order->fees && 1 === $order->meta['_fishotel_sticker_mail_letter'] );
+check( '... and a fresh note with the new number', in_array( 'MAIL STICKER BY LETTER: 1 sticker(s) — EA-only order, nothing ships from FisHotel.', $order->notes, true ) );
+
+ea_shop();
+$GLOBALS['fh_products'][301]->stock = 2;
+$order = $ea_order( array( 1 => new FH_Item( 600, 1, 20.0 ), 3 => new FH_Item( 301, 4, 3.96, 'extra' ) ) );
+$guard->guard_order();
+check( '... the paid stickers are cut from 4 to 2: the fee stays (one), 2 to mail', 2 === $order->items[3]->qty && 1 === count( $order->fees ) && 2 === $order->meta['_fishotel_sticker_mail_letter'] );
+check( '... with a fresh note: 2', in_array( 'MAIL STICKER BY LETTER: 2 sticker(s) — EA-only order, nothing ships from FisHotel.', $order->notes, true ) );
+
+shop();
+$GLOBALS['fh_ea']                   = array( 600 );
+$GLOBALS['fh_products'][600]        = new WC_Product( 600, 'simple', null );
+$GLOBALS['fh_products'][301]->stock = 0;
+$order                              = $pay( array( 1 => new FH_Item( 9, 1, 40.0 ), 2 => new FH_Item( 600, 1, 20.0 ), 3 => new FH_Item( 301, 2, 1.98, 'extra' ) ) );
+$guard->guard_order();
+check( 'a mixed order (fish and a medication) loses a sticker: nothing about letters is written', array() === $order->meta && array() === $order->fees && array() === preg_grep( '/letter/i', $order->notes ) );
 
 echo "\n" . ( $failures ? "$failures of $checks checks FAILED\n" : "All $checks checks passed\n" );
 exit( $failures ? 1 : 0 );

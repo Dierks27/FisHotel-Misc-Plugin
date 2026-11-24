@@ -22,6 +22,7 @@ $GLOBALS['fh_shop_orders']   = array();
 $GLOBALS['fh_shop_products'] = array();
 $GLOBALS['fh_shop_queries']  = 0;
 $GLOBALS['fh_shop_loads']    = 0;
+$GLOBALS['fh_shop_items']    = array();
 
 /**
  * A product: its categories live on the parent for a variation, as in
@@ -125,6 +126,14 @@ class Fh_Shop_Item {
 		return array_key_exists( $key, $this->meta ) ? $this->meta[ $key ] : '';
 	}
 
+	public function set_meta( $key, $value ) {
+		$this->meta[ (string) $key ] = $value;
+	}
+
+	public function delete_meta( $key ) {
+		unset( $this->meta[ (string) $key ] );
+	}
+
 	public function get_meta_data() {
 		$out = array();
 		foreach ( $this->meta as $key => $value ) {
@@ -185,8 +194,35 @@ class WC_Order {
 		$this->meta[ $key ] = $value;
 	}
 
+	/**
+	 * The customer's account and billing e-mail: the meta "_customer_user" and "_billing_email", as stored.
+	 */
+	public function get_customer_id() {
+		return (int) $this->get_meta( '_customer_user' );
+	}
+
+	public function get_billing_email() {
+		return (string) $this->get_meta( '_billing_email' );
+	}
+
+	/**
+	 * A note on the order (kept in $GLOBALS['fh_order_notes'][ order id ]).
+	 */
+	public function add_order_note( $note, $is_customer_note = 0, $added_by_user = false ) {
+		$GLOBALS['fh_order_notes'][ $this->id ][] = (string) $note;
+		return count( $GLOBALS['fh_order_notes'][ $this->id ] );
+	}
+
 	public function get_date_created() {
 		return $this->created > 0 ? new DateTimeImmutable( '@' . $this->created ) : null;
+	}
+
+	/**
+	 * Paid when the meta "_paid_date" says when (a stand-in for WooCommerce's own paid date).
+	 */
+	public function get_date_paid() {
+		$paid = $this->get_meta( '_paid_date' );
+		return '' !== (string) $paid ? new DateTimeImmutable( '@' . (int) $paid ) : null;
 	}
 
 	/**
@@ -203,6 +239,7 @@ class WC_Order {
 		$id                 = $this->id * 10 + count( $this->items ) + 1;
 		$item               = new Fh_Shop_Item( $id, $name, $qty, $product, $meta );
 		$this->items[ $id ] = $item;
+		$GLOBALS['fh_shop_items'][ $id ] = $item;
 		if ( $refunded ) {
 			$this->refunded[ $id ] = -abs( (int) $refunded ); // WooCommerce reports refunds as negatives.
 		}
@@ -213,9 +250,49 @@ class WC_Order {
 		return $this->items;
 	}
 
+	/**
+	 * Refund some fish of a line (after the order was placed).
+	 */
+	public function refund_item( $item_id, $qty ) {
+		$this->refunded[ (int) $item_id ] = -abs( (int) $qty );
+	}
+
 	public function get_qty_refunded_for_item( $item_id ) {
 		return isset( $this->refunded[ (int) $item_id ] ) ? $this->refunded[ (int) $item_id ] : 0;
 	}
+}
+
+/**
+ * Item meta written straight onto an order item (the reservation), as
+ * WooCommerce's own functions do — without saving the order. Each write
+ * fires the item-meta action, as WooCommerce's metadata API does.
+ */
+function wc_update_order_item_meta( $item_id, $key, $value ) {
+	if ( ! isset( $GLOBALS['fh_shop_items'][ (int) $item_id ] ) ) {
+		return false;
+	}
+	if ( ! empty( $GLOBALS['fh_item_meta_fail'] ) ) {
+		// A test makes the request die here (a crash between two writes).
+		$GLOBALS['fh_item_meta_fail']--;
+		throw new RuntimeException( 'the request died' );
+	}
+	$GLOBALS['fh_shop_items'][ (int) $item_id ]->set_meta( $key, $value );
+	$GLOBALS['fh_item_meta_writes'] = ( $GLOBALS['fh_item_meta_writes'] ?? 0 ) + 1;
+	if ( function_exists( 'do_action' ) ) {
+		do_action( 'updated_order_item_meta', 0, (int) $item_id, (string) $key, $value );
+	}
+	return true;
+}
+
+function wc_delete_order_item_meta( $item_id, $key ) {
+	if ( ! isset( $GLOBALS['fh_shop_items'][ (int) $item_id ] ) ) {
+		return false;
+	}
+	$GLOBALS['fh_shop_items'][ (int) $item_id ]->delete_meta( $key );
+	if ( function_exists( 'do_action' ) ) {
+		do_action( 'deleted_order_item_meta', array(), (int) $item_id, (string) $key, '' );
+	}
+	return true;
 }
 
 function fh_shop_order( WC_Order $order ) {
@@ -259,6 +336,13 @@ function wc_get_orders( $args ) {
 			return $a->get_id() <=> $b->get_id();
 		}
 	);
+	// The newest first when asked, and a limit when one is given — as the shop does with orderby ID.
+	if ( isset( $args['order'] ) && 'DESC' === strtoupper( (string) $args['order'] ) ) {
+		$out = array_reverse( $out );
+	}
+	if ( isset( $args['limit'] ) && (int) $args['limit'] > 0 ) {
+		$out = array_slice( $out, 0, (int) $args['limit'] );
+	}
 	return $out;
 }
 

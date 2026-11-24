@@ -1236,6 +1236,9 @@ class Store {
 			return $this->closed_stays( $today, $settings, 200 );
 		};
 
+		// The fish reserved for open orders (Reserve) — and, where the day's list is built, the pull list.
+		$reserve = Reserve_Shop::room_data( $this, $today, $settings, $stays, $tanks, isset( $protocol['templates'] ) );
+
 		return self::assemble_room(
 			$tanks,
 			isset( $protocol['templates'] ) ? $this->buildings() : array(),
@@ -1246,7 +1249,8 @@ class Store {
 			$settings,
 			$protocol,
 			// A clean system is not fed on the day its fish ship (Feeding) — asked only where the day's list is built.
-			isset( $protocol['templates'] ) ? Ship_Lines::fast( $today, $settings, $stays, $tanks, $gone ) : array()
+			isset( $protocol['templates'] ) ? Ship_Lines::fast( $today, $settings, $stays, $tanks, $gone ) : array(),
+			$reserve
 		);
 	}
 
@@ -1272,13 +1276,20 @@ class Store {
 	 * @param array   $settings  Settings.
 	 * @param array   $protocol  Settings::protocols(), or one steps list.
 	 * @param array   $fast      Feeding::plan() (empty = every tank is fed).
+	 * @param array   $reserve   Reserve_Shop::room_data(): counts (each group's reserved fish — the occupant
+	 *                           carries reserved and reserved_orders), pull and lost (on the list).
 	 * @return array{tanks: array[], todo: array|null}
 	 */
-	public static function assemble_room( array $tanks, array $buildings, array $stays, array $copper, array $rows, $today, array $settings, array $protocol, array $fast = array() ) {
+	public static function assemble_room( array $tanks, array $buildings, array $stays, array $copper, array $rows, $today, array $settings, array $protocol, array $fast = array(), array $reserve = array() ) {
 		$per_building = isset( $protocol['templates'] );
+		$counts       = isset( $reserve['counts'] ) && is_array( $reserve['counts'] ) ? $reserve['counts'] : array();
 
 		$by_tank = array();
 		foreach ( $stays as $stay ) {
+			// Reserved for open orders: not an event, the count alive is unchanged.
+			$stay['reserved']        = (int) ( $counts[ (int) $stay['id'] ]['qty'] ?? 0 );
+			$stay['reserved_orders'] = (array) ( $counts[ (int) $stay['id'] ]['orders'] ?? array() );
+			$stay['reserved_holds']  = (array) ( $counts[ (int) $stay['id'] ]['holds'] ?? array() ); // Held by hand (who, qty, at).
 			$by_tank[ (int) $stay['tank_id'] ][] = $stay;
 		}
 
@@ -1337,6 +1348,13 @@ class Store {
 		}
 
 		$list = Todo::build( $buildings, $out, $protocol, $rows, $today, $settings, $fast );
+		if ( $reserve ) {
+			$list['pull'] = isset( $reserve['pull'] ) ? $reserve['pull'] : null; // Reserve::pull(): which tank each fish of today's boxes comes out of.
+			$list['lost'] = isset( $reserve['lost'] ) ? $reserve['lost'] : array(); // The fish that shipped and whose tank was not found.
+			$list['holds']   = isset( $reserve['holds'] ) ? $reserve['holds'] : array(); // Every hold by hand (Release), oldest first.
+			$list['suggest'] = isset( $reserve['suggest'] ) ? $reserve['suggest'] : array(); // "Is #1240 the order for the fish held for Mike S.?"
+			$list['closed']  = isset( $reserve['closed'] ) ? $reserve['closed'] : array(); // Holds ended lately ("taken by order #1240").
+		}
 
 		return array(
 			'tanks' => Todo::overlay( $out, $list ),
@@ -1811,6 +1829,108 @@ class Store {
 		}
 
 		return array_map( array( self::class, 'hydrate_event' ), is_array( $rows ) ? $rows : array() );
+	}
+
+	/**
+	 * The `sold` events of a set of stays that an order wrote or that undo
+	 * one — what the reservation reads to write only the difference
+	 * (Reserve::written()). One query on the stay_id key.
+	 *
+	 * @param int[] $stay_ids Stay ids.
+	 * @return array[] Hydrated events, oldest first.
+	 */
+	public function order_events( array $stay_ids ) {
+		$stay_ids = array_values( array_unique( array_filter( array_map( 'intval', $stay_ids ) ) ) );
+		if ( ! self::tables_exist() || ! $stay_ids ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		try {
+			$rows = $wpdb->get_results(
+				self::event_select() . " WHERE e.stay_id IN (" . implode( ',', $stay_ids ) . ") AND e.type = 'sold' AND ( e.note LIKE 'order:%' OR e.note LIKE 'undo of #%' ) ORDER BY e.event_at ASC, e.id ASC LIMIT 20000", // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- integers only.
+				ARRAY_A
+			);
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+
+		return array_map( array( self::class, 'hydrate_event' ), is_array( $rows ) ? $rows : array() );
+	}
+
+	/**
+	 * ShipTracker's shipments of many orders in ONE query on its own table
+	 * (what FST_Shipment::get_by_order() reads one order at a time): order
+	 * id => its rows (order_id, line_item_ids; an order with none gets an
+	 * empty list) — null when the table cannot be named or read, or the
+	 * query reports any error (each order is then read on its own, as
+	 * before). Up to 500 orders a query.
+	 *
+	 * @param int[] $order_ids Order ids.
+	 * @return array<int, object[]>|null
+	 */
+	public static function shipment_rows( array $order_ids ) {
+		global $wpdb;
+		$ids = array_values( array_unique( array_filter( array_map( 'intval', $order_ids ) ) ) );
+		if ( ! $ids || ! class_exists( '\\FST_Shipment' ) || ! method_exists( '\\FST_Shipment', 'table' ) || ! is_object( $wpdb ) || ! method_exists( $wpdb, 'get_results' ) ) {
+			return null;
+		}
+		$out = array();
+		foreach ( array_chunk( $ids, 500 ) as $chunk ) {
+			try {
+				$rows = $wpdb->get_results( 'SELECT order_id, line_item_ids FROM ' . \FST_Shipment::table() . ' WHERE order_id IN (' . implode( ',', $chunk ) . ')' ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery -- integers only.
+			} catch ( \Throwable $e ) {
+				return null;
+			}
+			// A failed query answers an EMPTY list in WordPress (not null): a table missing, or a ShipTracker
+			// before 1.9 with no line_item_ids column, would read as "nothing shipped". Any error: not primed.
+			if ( ! is_array( $rows ) || ( isset( $wpdb->last_error ) && '' !== (string) $wpdb->last_error ) ) {
+				return null;
+			}
+			foreach ( $chunk as $id ) {
+				$out[ $id ] = array();
+			}
+			foreach ( $rows as $row ) {
+				$id = is_object( $row ) ? (int) ( $row->order_id ?? 0 ) : ( is_array( $row ) ? (int) ( $row['order_id'] ?? 0 ) : 0 );
+				if ( isset( $out[ $id ] ) ) {
+					$out[ $id ][] = $row;
+				}
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * The orders whose fish were taken out of a tank by themselves since a
+	 * moment (their events' notes) — what the hourly sweep looks at again.
+	 *
+	 * @param string $since_utc "Y-m-d H:i:s" UTC.
+	 * @return int[] Order ids.
+	 */
+	public function order_ids_shipped_since( $since_utc ) {
+		if ( ! self::tables_exist() ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		try {
+			$notes = $wpdb->get_col(
+				$wpdb->prepare( 'SELECT DISTINCT note FROM ' . self::table( 'stay_events' ) . " WHERE type = 'sold' AND note LIKE %s AND created_at >= %s LIMIT 2000", 'order:%', (string) $since_utc ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			);
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+
+		$out = array();
+		foreach ( is_array( $notes ) ? $notes : array() as $note ) {
+			$order = Reserve::parse_note( $note );
+			if ( $order ) {
+				$out[ $order['order_id'] ] = $order['order_id'];
+			}
+		}
+		return array_values( $out );
 	}
 
 	/**
@@ -6114,6 +6234,40 @@ class Store {
 	}
 
 	/**
+	 * Which of two groups can ship first (pure, a usort callback): one for
+	 * sale before one that is not, then the earliest sale date (a group
+	 * without one last), then the earliest check-in (an unknown one last).
+	 * The product page's "next" and the reservation of a sold fish (Reserve)
+	 * both order by it.
+	 *
+	 * @param array $a sale_ready, sale_ready_date, checkin_date (a date, or anything else = none).
+	 * @param array $b The same.
+	 * @return int
+	 */
+	public static function ships_first( array $a, array $b ) {
+		$ready_a = ! empty( $a['sale_ready'] );
+		$ready_b = ! empty( $b['sale_ready'] );
+		if ( $ready_a !== $ready_b ) {
+			return $ready_a ? -1 : 1;
+		}
+		$sale_a = Replay::is_date( $a['sale_ready_date'] ?? null ) ? (string) $a['sale_ready_date'] : null;
+		$sale_b = Replay::is_date( $b['sale_ready_date'] ?? null ) ? (string) $b['sale_ready_date'] : null;
+		if ( ( null === $sale_a ) !== ( null === $sale_b ) ) {
+			return null === $sale_a ? 1 : -1;
+		}
+		$d = strcmp( (string) $sale_a, (string) $sale_b );
+		if ( 0 !== $d ) {
+			return $d;
+		}
+		$in_a = Replay::is_date( $a['checkin_date'] ?? null ) ? (string) $a['checkin_date'] : null;
+		$in_b = Replay::is_date( $b['checkin_date'] ?? null ) ? (string) $b['checkin_date'] : null;
+		if ( ( null === $in_a ) !== ( null === $in_b ) ) {
+			return null === $in_a ? 1 : -1; // An unknown check-in sorts after a known one.
+		}
+		return strcmp( (string) $in_a, (string) $in_b );
+	}
+
+	/**
 	 * The facts of a product from its hydrated stays (pure): how many are
 	 * alive here, the stays in QT (with day numbers), the cleared stays,
 	 * every one with its effective sale date (its own, else its batch's,
@@ -6168,25 +6322,7 @@ class Store {
 			$candidates[] = $entry;
 		}
 
-		usort(
-			$candidates,
-			static function ( $a, $b ) {
-				if ( $a['sale_ready'] !== $b['sale_ready'] ) {
-					return $a['sale_ready'] ? -1 : 1;
-				}
-				if ( ( null === $a['sale_ready_date'] ) !== ( null === $b['sale_ready_date'] ) ) {
-					return null === $a['sale_ready_date'] ? 1 : -1;
-				}
-				$d = strcmp( (string) $a['sale_ready_date'], (string) $b['sale_ready_date'] );
-				if ( 0 !== $d ) {
-					return $d;
-				}
-				if ( ( null === $a['checkin_date'] ) !== ( null === $b['checkin_date'] ) ) {
-					return null === $a['checkin_date'] ? 1 : -1; // An unknown check-in sorts after a known one.
-				}
-				return strcmp( (string) $a['checkin_date'], (string) $b['checkin_date'] );
-			}
-		);
+		usort( $candidates, array( self::class, 'ships_first' ) );
 		if ( $candidates ) {
 			$first         = $candidates[0];
 			$facts['next'] = array(

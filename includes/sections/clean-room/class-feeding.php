@@ -234,10 +234,12 @@ class Feeding {
 	 * @param string[] $fish_categories The category slugs that are fish.
 	 * @param string[]|null $loose      Of those, the ones whose animals need not be found in a tank (null =
 	 *                                  LOOSE_CATEGORIES).
+	 * @param bool     $keep_empty      Keep a line refunded to nothing (qty 0) — the reservation's own read: such
+	 *                                  a line releases its fish, and one that already left keeps them out.
 	 * @return array[] order_id, number, created, name, qty, product_id, variation_id, size_slug, size_label, names, link,
-	 *                 loose (an invert: when no tank answers for it, nothing changes).
+	 *                 loose (an invert: when no tank answers for it, nothing changes), item_id, ref, held.
 	 */
-	public static function fish_lines( array $order, array $fish_categories, $loose = null ) {
+	public static function fish_lines( array $order, array $fish_categories, $loose = null, $keep_empty = false ) {
 		$out             = array();
 		$fish_categories = array_map( 'strval', $fish_categories );
 		$loose           = array_map( 'strval', is_array( $loose ) ? $loose : self::LOOSE_CATEGORIES );
@@ -246,9 +248,10 @@ class Feeding {
 				continue;
 			}
 			$qty = (int) ( $row['qty'] ?? 0 ) - abs( (int) ( $row['qty_refunded'] ?? 0 ) );
-			if ( $qty <= 0 ) {
+			if ( $qty <= 0 && ! $keep_empty ) {
 				continue;
 			}
+			$qty = max( 0, $qty );
 			$type   = (string) ( $row['type'] ?? 'product' );
 			$invert = false;
 			if ( 'product' === $type ) {
@@ -276,6 +279,11 @@ class Feeding {
 				'names'        => '' !== $title ? array( $title ) : array(),
 				'link'         => isset( $row['link'] ) && is_array( $row['link'] ) ? $row['link'] : array(),
 				'loose'        => $invert,
+				// Which order item it is (its row's ref: "i:<item>" or "i:<item>:<n>" for a fish of an invoice
+				// kept as one line) and the tank group(s) it was reserved in (Reserve): read by the ladder first.
+				'item_id'      => max( 0, (int) ( $row['item_id'] ?? 0 ) ),
+				'ref'          => (string) ( $row['ref'] ?? '' ),
+				'held'         => Reserve::held( $row['held'] ?? array() ),
 			);
 		}
 		return $out;
@@ -387,12 +395,7 @@ class Feeding {
 			}
 		}
 		// The groups in a clean water: a Clean Room building, or a clean temporary tank.
-		$clean = array();
-		foreach ( $stays as $stay ) {
-			if ( is_array( $stay ) && '' !== self::water( $stay, $slots ) ) {
-				$clean[] = $stay;
-			}
-		}
+		$clean = self::clean_stays( $stays, $tanks );
 
 		foreach ( isset( $ship['lines'] ) && is_array( $ship['lines'] ) ? $ship['lines'] : array() as $line ) {
 			$qty = (int) ( $line['qty'] ?? 0 );
@@ -408,7 +411,7 @@ class Feeding {
 			);
 
 			$found = Sold_Line::stays( $line, $stays );
-			if ( Sold_Line::RUNG_INVOICE !== $found['rung'] ) {
+			if ( ! in_array( $found['rung'], array( Sold_Line::RUNG_HELD, Sold_Line::RUNG_INVOICE ), true ) ) {
 				// By product or by name the site only guesses, and a fish for sale is in a clean tank: a
 				// group in a clean water answers before a better-fitting one in quarantine. Guessed into
 				// quarantine only, the fish is in no clean tank the site knows — its clean tank is simply
@@ -473,6 +476,32 @@ class Feeding {
 
 		$out['all'] = $out['unlocated']['fish'] > 0;
 
+		return $out;
+	}
+
+	/**
+	 * The groups in a clean water — a Clean Room building, or a temporary
+	 * tank set up as a clean one —, in their order. The ones a fish for
+	 * sale is in: what the feeding rule asks first and the only ones a
+	 * sold fish is reserved in by itself (Reserve).
+	 *
+	 * @param array[] $stays Hydrated stays (tank_id, building_id, area, own_water).
+	 * @param array[] $tanks Every tank (a slot with its 'setup').
+	 * @return array[]
+	 */
+	public static function clean_stays( array $stays, array $tanks ) {
+		$slots = array();
+		foreach ( $tanks as $tank ) {
+			if ( is_array( $tank ) && Layout::is_slot( $tank ) ) {
+				$slots[ (int) $tank['id'] ] = Temp_Tanks::effective_area( $tank );
+			}
+		}
+		$out = array();
+		foreach ( $stays as $stay ) {
+			if ( is_array( $stay ) && '' !== self::water( $stay, $slots ) ) {
+				$out[] = $stay;
+			}
+		}
 		return $out;
 	}
 

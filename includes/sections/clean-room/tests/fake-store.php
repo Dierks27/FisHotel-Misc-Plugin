@@ -463,7 +463,8 @@ class Fake_Store {
 			};
 			$fast = null !== $this->ship ? Feeding::plan( $this->ship, $stays, $tanks, $gone() ) : Ship_Lines::fast( $today, $settings, $stays, $tanks, $gone );
 		}
-		return Store::assemble_room( $tanks, $this->buildings(), $stays, $this->latest_copper( $tanks ), $this->day_logs( $today ), $today, $settings, $protocol, $fast );
+		$reserve = \FisHotel\Misc\Sections\Clean_Room\Reserve_Shop::room_data( $this, $today, $settings, $stays, $tanks, isset( $protocol['templates'] ) );
+		return Store::assemble_room( $tanks, $this->buildings(), $stays, $this->latest_copper( $tanks ), $this->day_logs( $today ), $today, $settings, $protocol, $fast, $reserve );
 	}
 
 	public function tanks_with_occupants( $today, array $settings, array $protocol = array() ) {
@@ -764,6 +765,28 @@ class Fake_Store {
 			}
 		}
 		return Replay::sort_events( $out );
+	}
+
+	public function order_events( array $stay_ids ) {
+		$out = array();
+		foreach ( $this->events as $row ) {
+			$note = (string) $row['note'];
+			if ( 'sold' === (string) $row['type'] && in_array( (int) $row['stay_id'], array_map( 'intval', $stay_ids ), true ) && ( 0 === strpos( $note, 'order:' ) || 0 === strpos( $note, 'undo of #' ) ) ) {
+				$out[] = $this->event_row( $row );
+			}
+		}
+		return Replay::sort_events( $out );
+	}
+
+	public function order_ids_shipped_since( $since_utc ) {
+		$out = array();
+		foreach ( $this->events as $row ) {
+			$order = \FisHotel\Misc\Sections\Clean_Room\Reserve::parse_note( $row['note'] );
+			if ( 'sold' === (string) $row['type'] && $order && strcmp( (string) $row['created_at'], (string) $since_utc ) >= 0 ) {
+				$out[ $order['order_id'] ] = $order['order_id'];
+			}
+		}
+		return array_values( $out );
 	}
 
 	public function event( $id ) {

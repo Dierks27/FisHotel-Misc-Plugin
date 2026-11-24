@@ -235,6 +235,7 @@ a.fh-cr-chip--muted {
 .fh-cr-badge--in_qt   { background: #b7791f; }
 .fh-cr-badge--cleared { background: #2d5fb8; }
 .fh-cr-badge--ready   { background: #2e9e47; }
+.fh-cr-badge--reserved { background: #8a4fbf; } /* Every fish for sale reserved (orders or by hand). */
 .fh-cr-badge--closed  { background: #555; }
 
 .fh-cr-type--arrival { background: #2d5fb8; }
@@ -2253,4 +2254,74 @@ a.fh-cr-unknown {
 	.fh-cr-wrap .fh-cr-view-tab {
 		min-width: 0;
 	}
+}
+
+/* Reserved for an open order (Reserve): on a tank card's line and in its groups. */
+.fh-cr-reserved {
+	display: inline-block;
+	font-size: 12px;
+	color: var(--fh-accent, #00a0d2);
+}
+
+/* Board → a group → held by hand (Release) and "Reserve…". */
+.fh-cr-hold__row {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin: 4px 0 0;
+}
+.fh-cr-hold__row.is-old span,
+.fh-cr-holds--old .fh-cr-warn {
+	color: #b45309;
+	font-weight: 600;
+}
+.fh-cr-hold summary {
+	cursor: pointer;
+	margin-top: 4px;
+}
+.fh-cr-hold__form {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: flex-end;
+	gap: 6px 10px;
+	margin: 6px 0;
+	max-width: 100%;
+	box-sizing: border-box;
+}
+/* Each field on its own line inside the card: "For whom" never sticks out past the card's edge. */
+.fh-cr-hold__form label {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	max-width: 100%;
+	flex: 1 1 10em;
+}
+.fh-cr-hold__form input[type="text"] {
+	width: 100%;
+	min-width: 0;
+	max-width: 100%;
+	box-sizing: border-box;
+}
+.fh-cr-hold__tie {
+	flex-basis: 100%;
+	margin: 0;
+	font-size: 12px;
+}
+.fh-cr-holds__closed {
+	opacity: 0.8;
+}
+/* "Ended lately" reads on the dark To do card (an h3 is dark by default). */
+.fh-cr-holds__closed-head {
+	margin: 14px 0 4px;
+	font-size: 14px;
+	color: var(--fh-text-secondary, #b0b0b0);
+}
+.fh-cr-hold__form input[type="number"] {
+	width: 4.5em;
+}
+.fh-cr-hold__found {
+	flex-basis: 100%;
+	margin: 0;
+	padding: 0;
+	list-style: none;
 }

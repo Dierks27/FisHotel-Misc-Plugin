@@ -878,6 +878,7 @@
 						$form.find('[name="auto_confirm_seconds"]').val(s.auto_confirm_seconds);
 						$form.find('[name="voice_enabled"]').prop('checked', !!s.voice_enabled);
 						$form.find('[name="no_feed_on_ship_day"]').prop('checked', !!s.no_feed_on_ship_day);
+						$form.find('[name="reserve_sold_fish"]').prop('checked', !!s.reserve_sold_fish);
 					}
 				})
 				.fail(fail)
@@ -1959,6 +1960,48 @@
 					$buttons.prop('disabled', false);
 				})
 				.always(function () { $row.removeClass('is-busy'); });
+		});
+
+		/*
+		 * Board → a group → "Reserve…": For whom? offers the shop's customers whose name or
+		 * e-mail holds what is typed (picking one fills the hidden user_id — the server reads
+		 * their name and e-mail from the account); anything typed after that is a name only.
+		 */
+		var holdTimer = null;
+		// Said under the name, always: tied to a customer's account (their own paid order takes the fish) or a name only.
+		function holdTie($form) {
+			var who = String($form.find('.fh-cr-hold__who').val() || '').trim();
+			var user = parseInt($form.find('.fh-cr-hold__user').val(), 10) || 0;
+			$form.find('.fh-cr-hold__tie').text(user ? String(i18n.holdAccount || 'Tied to the customer account of %s — their own paid order takes these fish.').replace('%s', who) : (who ? (i18n.holdTyped || 'A name typed, no account: no order takes these by itself — you will be asked when one comes in.') : ''));
+		}
+		$(document).on('input', '.fh-cr-hold__who', function () {
+			var $input = $(this);
+			var $form = $input.closest('.fh-cr-hold__form');
+			var $list = $form.find('.fh-cr-hold__found');
+			$form.find('.fh-cr-hold__user').val('0');
+			holdTie($form);
+			root.clearTimeout(holdTimer);
+			var term = String($input.val() || '').trim();
+			if (term.length < 2 || !$form.data('ajax')) {
+				$list.prop('hidden', true).empty();
+				return;
+			}
+			holdTimer = root.setTimeout(function () {
+				$.post($form.data('ajax'), { action: 'fishotel_cleanroom_suggest', kind: 'customers', term: term, nonce: $form.data('nonce') }).done(function (res) {
+					var items = res && res.success && res.data && res.data.items ? res.data.items : [];
+					$list.empty().prop('hidden', !items.length);
+					items.forEach(function (item) {
+						var $b = $('<button type="button" class="button-link"></button>').text(item.label || item.who);
+						$b.on('click', function () {
+							$input.val(item.who);
+							$form.find('.fh-cr-hold__user').val(String(item.user_id || 0));
+							holdTie($form);
+							$list.prop('hidden', true).empty();
+						});
+						$list.append($('<li></li>').append($b));
+					});
+				});
+			}, 250);
 		});
 
 		attachSuggest($(document), '.fh-cr-product-search', 'products', function ($input, item) {

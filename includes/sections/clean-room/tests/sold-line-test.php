@@ -138,7 +138,22 @@ check_same( 'an empty group nobody marked is no candidate', array( 'rung' => '',
 echo "6. The line it reads\n";
 
 $line = Sold_Line::line( array( 'name' => ' Test Tang - Medium ', 'names' => array( 'Test Tang', '' ), 'product_id' => '501', 'variation_id' => 502, 'size_label' => 'Medium', 'link' => array( 'product_id' => 501, 'species' => 'Test Tang', 'size_slug' => 'Medium', 'stay_id' => '3' ) ) );
-check_same( 'one shape whatever the reader had', array( 'name' => 'Test Tang - Medium', 'names' => array( 'test tang medium', 'test tang' ), 'product_ids' => array( 501, 502 ), 'size_slug' => 'medium', 'size_label' => 'Medium', 'stay_id' => 3 ), $line );
+check_same( 'one shape whatever the reader had', array( 'name' => 'Test Tang - Medium', 'names' => array( 'test tang medium', 'test tang' ), 'product_ids' => array( 501, 502 ), 'size_slug' => 'medium', 'size_label' => 'Medium', 'stay_id' => 3, 'held' => array() ), $line );
 check_same( 'a name as it is compared', 'yellow tang 2 3 5', Sold_Line::norm( '  Yellow-Tang (2 - 3.5")' ) );
+
+/* ------------------------------------------------------------------ */
+echo "7. A line reserved in its tank group comes first (Reserve)\n";
+
+$answer = Sold_Line::stays( array( 'name' => 'Test Tang - Medium', 'product_id' => 501, 'size_slug' => 'medium', 'link' => array( 'stay_id' => 1 ), 'held' => array( 3 => 2 ) ), $stays );
+check_same( 'held over the Invoices link and the product: the group it was reserved in', array( 'held', array( 3 ) ), array( $answer['rung'], ids( $answer ) ) );
+$answer = Sold_Line::stays( array( 'name' => 'Test Tang - Medium', 'product_id' => 501, 'size_slug' => 'medium', 'held' => '{"7":1}' ), $stays );
+check_same( 'held in a group with no fish left (nobody marked it): the ladder as before', array( 'product', array( 1, 3 ) ), array( $answer['rung'], ids( $answer ) ) );
+$answer = Sold_Line::stays( array( 'name' => 'x', 'held' => array( 20 => 1 ) ), array( $bagged ) );
+check_same( '… one whose last fish left today still answers', array( 'held', array( 20 ) ), array( $answer['rung'], ids( $answer ) ) );
+
+check( 'exact(): the same product and the same size', Sold_Line::exact( array( 'product_id' => 501, 'size_slug' => 'Medium' ), $stays[0] ) );
+check( '… not without a size on the line, nor on the group', ! Sold_Line::exact( array( 'product_id' => 501 ), $stays[0] ) && ! Sold_Line::exact( array( 'name' => 'Sample Angel', 'size_slug' => 'small' ), $stays[3] ) );
+check( '… the same name and size, or the name ending in the group\'s size', Sold_Line::exact( array( 'name' => 'Mock Blenny', 'size_slug' => 'small' ), $stays[7] ) && Sold_Line::exact( array( 'name' => 'Mock Blenny - Small' ), $stays[7] ) );
+check( '… another fish of that size is not it', ! Sold_Line::exact( array( 'name' => 'Other Blenny', 'size_slug' => 'small' ), $stays[7] ) );
 
 fh_finish();
