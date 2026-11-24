@@ -8,6 +8,7 @@
  * @var array $settings Settings::get().
  * @var array $usage    Bag id → how many products / variations name it.
  * @var array $model    Boxes::model(): the foam and the filled share.
+ * @var array $third    Third_Bag::review_list(): products the words find, with no tick yet.
  */
 
 defined( 'ABSPATH' ) || exit;
@@ -17,6 +18,7 @@ use FisHotel\Misc\Sections\Packing\Boxes;
 use FisHotel\Misc\Sections\Packing\Fit;
 use FisHotel\Misc\Sections\Packing\Layers;
 use FisHotel\Misc\Sections\Packing\Settings;
+use FisHotel\Misc\Sections\Packing\Third_Bag;
 
 $fh_bags  = $settings['bags'];
 $fh_spare = $fh_bags ? 1 : 4;
@@ -145,10 +147,10 @@ $fh_next  = count( $fh_bags ) + $fh_spare;
 		<h2 class="fishotel-misc-card-title"><?php esc_html_e( 'Triple-bag these', 'fishotel-misc-plugin' ); ?></h2>
 	</div>
 	<p class="fishotel-misc-card-desc">
-		<?php esc_html_e( 'Every fish is double-bagged. A fish with sharp spines or a scalpel is triple-bagged: one whose name, or one of whose product categories, has a word of this list. A word counts whole, whatever the capitals, and one or many makes no difference — “tang” (or “tangs”) finds “Yellow Tang” and “Tangs”, never “Tangerine”.', 'fishotel-misc-plugin' ); ?>
+		<?php esc_html_e( 'Every fish is double-bagged. A fish with sharp spines or a scalpel is triple-bagged: tick "Needs a 3rd bag (sharp spines or a scalpel)" on its product (top of the Shipping tab, or quick edit / bulk edit on the products list). This list of words is for the fish that have no product page to tick — a fish typed on a batch invoice. A word counts whole, whatever the capitals, in the fish\'s name or one of its product categories, and one or many makes no difference — “tang” (or “tangs”) finds “Yellow Tang” and “Tangs”, never “Tangerine”.', 'fishotel-misc-plugin' ); ?>
 	</p>
 	<p class="fishotel-misc-card-desc">
-		<?php esc_html_e( 'One word per line, or separated by commas. A name is read as it is written: if your invoices say “Flame Angel”, “Niger Trigger” or “Volitan Lion”, add “angel”, “trigger” and “lion” — “angelfish” alone does not find them. To set one fish by hand, use Bagging (Auto / Double / Triple) in its product\'s Shipping tab: that beats this list. The order\'s Packing box shows the result on every fish line — ×2 or ×3 — and how many bags to pull in all.', 'fishotel-misc-plugin' ); ?>
+		<?php esc_html_e( 'One word per line, or separated by commas. A name is read as it is written: if your invoices say “Flame Angel”, “Niger Trigger” or “Volitan Lion”, add “angel”, “trigger” and “lion” — “angelfish” alone does not find them. The order\'s Packing box shows the result on every fish line — ×2 or ×3 — and how many bags to pull in all.', 'fishotel-misc-plugin' ); ?>
 	</p>
 
 	<form class="fh-pack-form" method="post" action="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>">
@@ -165,10 +167,81 @@ $fh_next  = count( $fh_bags ) + $fh_spare;
 			echo esc_html( sprintf( __( 'The list it started with: %s.', 'fishotel-misc-plugin' ), implode( ', ', Layers::default_words() ) ) );
 			?>
 		</p>
+		<p>
+			<label for="fh-pack-triple-scope"><strong><?php esc_html_e( 'The word list applies to', 'fishotel-misc-plugin' ); ?></strong></label><br>
+			<select id="fh-pack-triple-scope" name="triple_scope">
+				<?php foreach ( Layers::scopes() as $fh_scope => $fh_scope_label ) : ?>
+					<option value="<?php echo esc_attr( $fh_scope ); ?>" <?php selected( $settings['triple_scope'], $fh_scope ); ?>><?php echo esc_html( $fh_scope_label ); ?></option>
+				<?php endforeach; ?>
+			</select>
+		</p>
+		<p class="fishotel-misc-card-desc">
+			<?php esc_html_e( '"Lines with no product page only": every fish with a product is triple-bagged when its tick says so, and only then. "Every line" is the old way: a word also triple-bags a fish with a product whose tick is off. The helper below sets "Lines with no product page only" the first time it ticks products.', 'fishotel-misc-plugin' ); ?>
+		</p>
 
 		<p class="fh-pack-actions">
 			<button type="submit" class="button button-primary"><?php esc_html_e( 'Save the list', 'fishotel-misc-plugin' ); ?></button>
 			<span class="fh-pack-status" role="status" aria-live="polite"></span>
 		</p>
 	</form>
+</div>
+
+<div class="fishotel-misc-card fh-pack-card fh-pack-third">
+	<div class="fishotel-misc-card-header">
+		<div class="fishotel-misc-card-icon"><span class="dashicons dashicons-yes-alt"></span></div>
+		<h2 class="fishotel-misc-card-title"><?php esc_html_e( 'Tick every product the old list matches', 'fishotel-misc-plugin' ); ?></h2>
+	</div>
+	<?php if ( ! $third ) : ?>
+		<p class="fishotel-misc-card-desc">
+			<?php esc_html_e( 'Nothing to tick: no product packed in a bag has a word of the list in its name or categories without its "Needs a 3rd bag" tick.', 'fishotel-misc-plugin' ); ?>
+		</p>
+	<?php else : ?>
+		<p class="fishotel-misc-card-desc">
+			<?php
+			/* translators: %d: number of products */
+			echo esc_html( sprintf( _n( '%d product packed in a bag has a word of the list in its name or categories but no "Needs a 3rd bag" tick. Untick any fish you disagree with, then tick the rest in one click. Nothing is ticked until you click.', '%d products packed in a bag have a word of the list in their name or categories but no "Needs a 3rd bag" tick. Untick any fish you disagree with, then tick the rest in one click. Nothing is ticked until you click.', count( $third ), 'fishotel-misc-plugin' ), count( $third ) ) );
+			?>
+		</p>
+		<p class="fishotel-misc-card-desc">
+			<?php esc_html_e( 'A fish you leave unticked stays on this list, to look at again — it is double-bagged once the list reaches only the fish with no product page.', 'fishotel-misc-plugin' ); ?>
+		</p>
+		<form class="fh-pack-form fh-pack-third-form" method="post" action="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>" data-reload="1">
+			<?php wp_nonce_field( Settings::NONCE_ACTION ); ?>
+			<input type="hidden" name="action" value="fishotel_packing_tick_third">
+			<input type="hidden" name="ids" value="">
+			<p>
+				<a href="#" class="fh-pack-third-all"><?php esc_html_e( 'Tick all', 'fishotel-misc-plugin' ); ?></a> ·
+				<a href="#" class="fh-pack-third-none"><?php esc_html_e( 'Untick all', 'fishotel-misc-plugin' ); ?></a>
+			</p>
+			<table class="widefat striped fh-pack-table fh-pack-third-table">
+				<thead>
+					<tr>
+						<th scope="col" class="check-column"><span class="screen-reader-text"><?php esc_html_e( 'Tick', 'fishotel-misc-plugin' ); ?></span></th>
+						<th scope="col"><?php esc_html_e( 'Product', 'fishotel-misc-plugin' ); ?></th>
+						<th scope="col"><?php esc_html_e( 'Word found', 'fishotel-misc-plugin' ); ?></th>
+						<th scope="col"><?php esc_html_e( 'Categories', 'fishotel-misc-plugin' ); ?></th>
+					</tr>
+				</thead>
+				<tbody>
+					<?php foreach ( $third as $fh_row ) : ?>
+						<tr>
+							<td class="check-column"><input type="checkbox" class="fh-pack-third-pick" value="<?php echo esc_attr( (int) $fh_row['id'] ); ?>" checked aria-label="<?php echo esc_attr( (string) $fh_row['name'] ); ?>"></td>
+							<td>
+								<a href="<?php echo esc_url( admin_url( 'post.php?post=' . (int) $fh_row['id'] . '&action=edit' ) ); ?>"><?php echo esc_html( (string) $fh_row['name'] ); ?></a>
+								<?php if ( 'publish' !== $fh_row['status'] ) : ?>
+									<span class="fh-pack-muted">(<?php echo esc_html( (string) $fh_row['status'] ); ?>)</span>
+								<?php endif; ?>
+							</td>
+							<td><?php echo esc_html( (string) $fh_row['word'] ); ?></td>
+							<td><?php echo esc_html( implode( ', ', array_keys( (array) $fh_row['categories'] ) ) ); ?></td>
+						</tr>
+					<?php endforeach; ?>
+				</tbody>
+			</table>
+			<p class="fh-pack-actions">
+				<button type="submit" class="button button-primary"><?php esc_html_e( 'Tick "Needs a 3rd bag" on the ticked rows', 'fishotel-misc-plugin' ); ?></button>
+				<span class="fh-pack-status" role="status" aria-live="polite"></span>
+			</p>
+		</form>
+	<?php endif; ?>
 </div>

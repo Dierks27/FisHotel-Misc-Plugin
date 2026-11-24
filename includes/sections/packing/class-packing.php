@@ -33,8 +33,9 @@
  *                              value, else the size → bag map.
  *   - class-layers.php         PURE: in how many layers a bag is used — 2,
  *                              or 3 for a fish with spines (the product's
- *                              "Bagging" choice, else the "Triple-bag
- *                              these" words).
+ *                              "Needs a 3rd bag" tick, else the "Triple-bag
+ *                              these" words where the setting lets them
+ *                              reach).
  *   - class-shipment-plan.php  the plan in the words a shipment is recorded
  *                              in — fishotel_packing_shipment_plan() — and
  *                              the bag count ShipTracker asks for.
@@ -51,8 +52,13 @@
  *                              variations without a bag size, bag usage.
  *   - class-fill.php           "Fill empty ones from the map": preview,
  *                              then set only what has no value.
- *   - class-product.php        the "Livestock — packed in a bag" checkbox and
- *                              the Bag size dropdown in the product editor.
+ *   - class-product.php        the "Livestock — packed in a bag" checkbox, the
+ *                              "Needs a 3rd bag" tick and the Bag size
+ *                              dropdown in the product editor; the tick on
+ *                              quick edit and bulk edit.
+ *   - class-third-bag.php      the products list's "3rd bag ticked" view and
+ *                              the one-time "Tick every product the old
+ *                              list matches" helper.
  *   - class-order-box.php      the Packing box on the order screen (legacy
  *                              and HPOS) and its Confirm / change AJAX.
  *   - class-admin.php          the page under FisHotel Tools.
@@ -226,6 +232,7 @@ namespace FisHotel\Misc\Sections\Packing {
 		public static function load_admin() {
 			self::load();
 			require_once __DIR__ . '/class-product.php';
+			require_once __DIR__ . '/class-third-bag.php';
 			require_once __DIR__ . '/class-order-box.php';
 			require_once __DIR__ . '/class-admin.php';
 		}
@@ -262,6 +269,9 @@ namespace FisHotel\Misc\Sections\Packing {
 
 			$product = new Product();
 			$product->init();
+
+			$third = new Third_Bag();
+			$third->init();
 
 			$box = new Order_Box();
 			$box->init();

@@ -16,6 +16,11 @@
  *     list of products, in one go — for the fill tool; variation_bags():
  *     the Bag sizes stored on one product's variations — for the product
  *     editor's checkbox;
+ *   - third_bag_candidates(): every product (not a variation) with its
+ *     name, its "Livestock" and "Needs a 3rd bag" values and its category
+ *     names and slugs — what the one-time "Tick every product the old list
+ *     matches" helper reads; third_bag_count(): how many products have
+ *     the tick — for the products list's view;
  *   - unconfirmed_orders(): the open orders delivering on given dates that
  *     have no confirmed box yet — for the Today page's line (one query,
  *     on the legacy order tables or WooCommerce's own).
@@ -279,6 +284,81 @@ class Store {
 		}
 
 		return $out;
+	}
+
+	/**
+	 * Every product (simple, variable — never a variation) in one of
+	 * PRODUCT_STATUSES, with what the 3rd-bag helper needs: id, name,
+	 * status, packs ('yes' | 'no' | ''), layers (the raw `_fh_bag_layers`),
+	 * categories (name → slug). Three reads in all, whatever the number of
+	 * products.
+	 *
+	 * @return array[]
+	 */
+	public function third_bag_candidates() {
+		global $wpdb;
+
+		if ( ! is_object( $wpdb ) ) {
+			return array();
+		}
+		$statuses = "'" . implode( "','", array_map( 'esc_sql', self::PRODUCT_STATUSES ) ) . "'";
+
+		try {
+			$posts = $wpdb->get_results( 'SELECT ID, post_title, post_status FROM ' . $wpdb->posts . " WHERE post_type = 'product' AND post_status IN ({$statuses}) ORDER BY post_title ASC, ID ASC LIMIT " . (int) self::SCAN_LIMIT, ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery
+			$meta  = $wpdb->get_results( $wpdb->prepare( 'SELECT pm.post_id, pm.meta_key, pm.meta_value FROM ' . $wpdb->postmeta . ' pm JOIN ' . $wpdb->posts . " p ON p.ID = pm.post_id AND p.post_type = 'product' WHERE pm.meta_key IN (%s, %s) ORDER BY pm.meta_id ASC", Packing::META_PACKS, Packing::META_LAYERS ), ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery
+			$terms = $wpdb->get_results( 'SELECT tr.object_id, t.name, t.slug FROM ' . $wpdb->term_relationships . ' tr JOIN ' . $wpdb->term_taxonomy . " tt ON tt.term_taxonomy_id = tr.term_taxonomy_id AND tt.taxonomy = 'product_cat' JOIN " . $wpdb->terms . ' t ON t.term_id = tt.term_id JOIN ' . $wpdb->posts . " p ON p.ID = tr.object_id AND p.post_type = 'product'", ARRAY_A ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+
+		$out = array();
+		foreach ( is_array( $posts ) ? $posts : array() as $row ) {
+			$out[ (int) $row['ID'] ] = array(
+				'id'         => (int) $row['ID'],
+				'name'       => (string) $row['post_title'],
+				'status'     => (string) $row['post_status'],
+				'packs'      => '',
+				'layers'     => '',
+				'categories' => array(),
+			);
+		}
+		foreach ( is_array( $meta ) ? $meta : array() as $row ) {
+			$id = (int) $row['post_id'];
+			if ( ! isset( $out[ $id ] ) ) {
+				continue;
+			}
+			if ( Packing::META_PACKS === $row['meta_key'] ) {
+				$out[ $id ]['packs'] = Livestock::flag( $row['meta_value'] );
+			} else {
+				$out[ $id ]['layers'] = (string) $row['meta_value'];
+			}
+		}
+		foreach ( is_array( $terms ) ? $terms : array() as $row ) {
+			$id = (int) $row['object_id'];
+			if ( isset( $out[ $id ] ) ) {
+				$out[ $id ]['categories'][ (string) $row['name'] ] = (string) $row['slug'];
+			}
+		}
+
+		return array_values( $out );
+	}
+
+	/**
+	 * How many products (not in the trash) have "Needs a 3rd bag" ticked.
+	 *
+	 * @return int
+	 */
+	public function third_bag_count() {
+		global $wpdb;
+
+		if ( ! is_object( $wpdb ) ) {
+			return 0;
+		}
+		try {
+			return (int) $wpdb->get_var( $wpdb->prepare( 'SELECT COUNT(DISTINCT pm.post_id) FROM ' . $wpdb->postmeta . ' pm JOIN ' . $wpdb->posts . " p ON p.ID = pm.post_id AND p.post_type = 'product' AND p.post_status NOT IN ('trash', 'auto-draft') WHERE pm.meta_key = %s AND pm.meta_value = %s", Packing::META_LAYERS, '3' ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery
+		} catch ( \Throwable $e ) {
+			return 0;
+		}
 	}
 
 	/**
