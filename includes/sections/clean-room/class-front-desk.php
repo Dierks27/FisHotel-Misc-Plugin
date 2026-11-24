@@ -263,6 +263,7 @@ class Front_Desk {
 			'tankCap'     => __( 'Tank %d', 'fishotel-misc-plugin' ),
 			'shippedWord' => __( 'Shipped', 'fishotel-misc-plugin' ),
 			'pullNothing' => __( 'No fish ship today.', 'fishotel-misc-plugin' ),
+			'tankNotKnown' => __( 'Tank not known', 'fishotel-misc-plugin' ),
 			'fixOnTodo'   => __( 'on the To do tab', 'fishotel-misc-plugin' ),
 			'moveReserved' => __( '%d free to move without touching an order; the reserved fish stay with this group if only part of it moves.', 'fishotel-misc-plugin' ),
 			'cleared'     => __( 'Cleared', 'fishotel-misc-plugin' ),
@@ -850,7 +851,9 @@ class Front_Desk {
 		}
 		$list['text'] = Todo::headline( $list );
 		if ( ! empty( $list['pull'] ) && is_array( $list['pull'] ) ) {
-			$list['pull'] = Reserve::pull_words( $list['pull'] ); // The phone's words, worked out once here.
+			// The phone's words, worked out once here — no hint of its own when the feeding line above already
+			// says what to do about a fish whose tank is not known.
+			$list['pull'] = Reserve::pull_words( $list['pull'], ! empty( $list['fast']['hint'] ) );
 		}
 		$list['lost_text'] = ! empty( $list['lost'] ) ? Reserve::lost_text( Reserve_Shop::lost_fish( (array) $list['lost'] ) ) : '';
 		return $list;

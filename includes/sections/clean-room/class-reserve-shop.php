@@ -52,11 +52,53 @@ class Reserve_Shop {
 	const TRANSIENT = 'fishotel_cleanroom_reserved';
 
 	/**
-	 * How long it is kept when no order changes (seconds).
+	 * How long it is kept when no order changes (seconds) — every change
+	 * that moves a reservation drops it, and the hourly sweep reads it
+	 * again anyway.
 	 *
 	 * @var int
 	 */
-	const CACHE_SECONDS = 600;
+	const CACHE_SECONDS = 3600;
+
+	/**
+	 * The transient holding today's pull list (dropped with the reserved
+	 * counts, and whenever today's shipping fish are read again).
+	 *
+	 * @var string
+	 */
+	const PULL_TRANSIENT = 'fishotel_cleanroom_pull';
+
+	/**
+	 * The option that keeps two requests from writing at once (an "add
+	 * tracking" alongside the hourly sweep): add_option() is atomic — it
+	 * fails when the row is there. A lock older than LOCK_SECONDS is taken
+	 * over (a request that died holding it).
+	 */
+	const LOCK_OPTION  = 'fishotel_cleanroom_reserve_lock';
+	const LOCK_SECONDS = 120;
+
+	/**
+	 * The order hooks that drop the reserved counts: a status change, a
+	 * note (ShipTracker's tracking), a new order, a refund, items saved in
+	 * wp-admin, and an order trashed, restored or deleted — not every
+	 * order save (woocommerce_update_order fires on any save, ShipTracker's
+	 * own included, and says nothing about a reservation).
+	 *
+	 * @var string[]
+	 */
+	const FLUSH_HOOKS = array(
+		'woocommerce_order_status_changed',
+		'woocommerce_order_note_added',
+		'woocommerce_new_order',
+		'woocommerce_order_refunded',
+		'woocommerce_saved_order_items',
+		'trashed_post',
+		'untrashed_post',
+		'deleted_post',
+		'woocommerce_trash_order',
+		'woocommerce_untrash_order',
+		'woocommerce_delete_order',
+	);
 
 	/**
 	 * The option holding the fish that shipped and whose tank could not be
@@ -122,6 +164,13 @@ class Reserve_Shop {
 	 */
 	private static $memo = array();
 
+	/**
+	 * How deep this request holds the lock (0 = not held).
+	 *
+	 * @var int
+	 */
+	private static $locked = 0;
+
 	/* ============================================================== */
 	/*  On, off, since                                                 */
 	/* ============================================================== */
@@ -156,8 +205,51 @@ class Reserve_Shop {
 	 * Forget what this request worked out (the tests start over with it).
 	 */
 	public static function reset() {
-		self::$memo  = array();
-		self::$queue = array();
+		self::$memo   = array();
+		self::$queue  = array();
+		self::$locked = 0;
+	}
+
+	/**
+	 * Take the write lock (held again by the same request: nested).
+	 *
+	 * @return bool Whether this request holds it now.
+	 */
+	public static function lock() {
+		if ( self::$locked > 0 ) {
+			self::$locked++;
+			return true;
+		}
+		if ( ! function_exists( 'add_option' ) ) {
+			self::$locked = 1;
+			return true;
+		}
+		$now = time();
+		if ( ! add_option( self::LOCK_OPTION, (string) $now, '', 'no' ) ) {
+			$held = (int) get_option( self::LOCK_OPTION, 0 );
+			if ( $held > 0 && $now - $held < self::LOCK_SECONDS ) {
+				return false; // Another request is writing: the hourly sweep catches up.
+			}
+			delete_option( self::LOCK_OPTION );
+			if ( ! add_option( self::LOCK_OPTION, (string) $now, '', 'no' ) ) {
+				return false;
+			}
+		}
+		self::$locked = 1;
+		return true;
+	}
+
+	/**
+	 * Give the write lock back.
+	 */
+	public static function unlock() {
+		if ( self::$locked <= 0 ) {
+			return;
+		}
+		self::$locked--;
+		if ( 0 === self::$locked && function_exists( 'add_option' ) ) {
+			delete_option( self::LOCK_OPTION );
+		}
 	}
 
 	/**
@@ -168,18 +260,25 @@ class Reserve_Shop {
 	 */
 	public static function register( array $settings ) {
 		add_action( self::CRON_HOOK, array( self::class, 'cron' ), 10, 0 );
+		// The tick switched off or on again: what was worked out before is not kept (one hook, nothing read).
+		add_action( 'update_option_' . Clean_Room::OPTION_KEY, array( self::class, 'flush' ), 10, 0 );
 		if ( ! self::enabled( $settings ) ) {
 			self::unschedule();
 			return;
 		}
 		self::since( true );
 
-		foreach ( Ship_Lines::HOOKS as $hook ) {
+		foreach ( self::FLUSH_HOOKS as $hook ) {
 			add_action( $hook, array( self::class, 'flush' ), 10, 0 );
+		}
+		foreach ( Ship_Lines::HOOKS as $hook ) {
+			add_action( $hook, array( self::class, 'flush_pull' ), 10, 0 ); // Today's list is read again with them.
 		}
 		foreach ( Ship_Lines::ITEM_META_HOOKS as $hook ) {
 			add_action( $hook, array( self::class, 'flush_for_item_meta' ), 10, 3 );
 		}
+		// A group logged or moved into clean water: a fish whose tank was not known may be reserved now.
+		add_action( 'fishotel_cleanroom_event_recorded', array( self::class, 'flush_for_event' ), 10, 3 );
 		add_action( 'woocommerce_order_status_changed', array( self::class, 'on_status' ), 20, 3 );
 		add_action( 'woocommerce_new_order', array( self::class, 'on_order' ), 20, 1 );
 		add_action( 'woocommerce_order_note_added', array( self::class, 'on_note' ), 20, 2 );
@@ -214,6 +313,37 @@ class Reserve_Shop {
 		self::$memo = array();
 		if ( function_exists( 'delete_transient' ) ) {
 			delete_transient( self::TRANSIENT );
+			delete_transient( self::PULL_TRANSIENT );
+		}
+	}
+
+	/**
+	 * Forget today's pull list only (an order saved: its delivery date or
+	 * its lines may have changed — the reservations did not).
+	 */
+	public static function flush_pull() {
+		unset( self::$memo['pull'] );
+		if ( function_exists( 'delete_transient' ) ) {
+			delete_transient( self::PULL_TRANSIENT );
+		}
+	}
+
+	/**
+	 * Forget them when a tank group changes in a way that can answer for a
+	 * fish whose tank was not known (an arrival, a move, a clear) — and the
+	 * pull list when a fish is sold or put back by hand. A loss, a count or
+	 * a note changes neither (and the phone logs many of those).
+	 *
+	 * @param mixed $stay_id  Stay id (unused).
+	 * @param mixed $event_id Event id (unused).
+	 * @param mixed $data     The event as written (type).
+	 */
+	public static function flush_for_event( $stay_id = 0, $event_id = 0, $data = array() ) {
+		$type = is_array( $data ) ? (string) ( $data['type'] ?? '' ) : '';
+		if ( in_array( $type, array( 'arrival', 'move', 'clear' ), true ) ) {
+			self::flush();
+		} elseif ( 'sold' === $type ) {
+			self::flush_pull();
 		}
 	}
 
@@ -338,6 +468,19 @@ class Reserve_Shop {
 	}
 
 	/**
+	 * Whether a target is still open (process() and the sweep work the
+	 * ones that left first: their fish come off before anything is given
+	 * to another order).
+	 *
+	 * @param int $order_id Order id.
+	 * @return bool
+	 */
+	private static function is_open( $order_id ) {
+		$order = wc_get_order( (int) $order_id );
+		return is_object( $order ) && in_array( Feeding::status( $order->get_status() ), Reserve::OPEN_STATUSES, true );
+	}
+
+	/**
 	 * The hourly sweep.
 	 */
 	public static function cron() {
@@ -371,9 +514,27 @@ class Reserve_Shop {
 		}
 		$now   = null === $now ? time() : (int) $now;
 		$after = max( self::since( true ), $now - self::SWEEP_DAYS * DAY_IN_SECONDS );
+		if ( ! self::lock() ) {
+			return 0; // Another request is writing: next hour.
+		}
+		try {
+			return self::sweep_locked( $store, $settings, $now, $after );
+		} finally {
+			self::unlock();
+		}
+	}
 
+	/**
+	 * The sweep's body, under the lock.
+	 *
+	 * @param object $store    Store or stand-in.
+	 * @param array  $settings Settings.
+	 * @param int    $now      UNIX time.
+	 * @param int    $after    Orders changed after this (UNIX time).
+	 * @return int
+	 */
+	private static function sweep_locked( $store, array $settings, $now, $after ) {
 		self::flush();
-		self::ensure( $store, $settings );
 
 		$ids = array();
 		foreach ( (array) $store->order_ids_shipped_since( gmdate( 'Y-m-d H:i:s', $now - self::SWEEP_DAYS * DAY_IN_SECONDS ) ) as $id ) {
@@ -400,8 +561,20 @@ class Reserve_Shop {
 				$ids[ $id ] = true;
 			}
 		}
+		// The orders that left first — their fish come off before the open ones are reserved out of
+		// what is free — then every open order is reserved, then the open ones are worked.
+		$open = array();
 		foreach ( array_keys( $ids ) as $id ) {
+			if ( self::is_open( (int) $id ) ) {
+				$open[] = (int) $id;
+				continue;
+			}
 			self::process( $store, $settings, (int) $id, false );
+		}
+		self::flush();
+		self::ensure( $store, $settings );
+		foreach ( $open as $id ) {
+			self::process( $store, $settings, $id, false );
 		}
 		self::flush();
 		return count( $ids );
@@ -452,7 +625,23 @@ class Reserve_Shop {
 		}
 		$head['lines']   = $lines;
 		$head['signals'] = array_merge( self::signals( $order ), array( 'box' => $box ) );
+		$head['paid']    = self::paid( $order );
 		return $head;
+	}
+
+	/**
+	 * Whether an order is paid (WooCommerce's own word, never a status
+	 * name — as the Invoices section reads it).
+	 *
+	 * @param object $order Order.
+	 * @return bool
+	 */
+	private static function paid( $order ) {
+		try {
+			return ( method_exists( $order, 'get_date_paid' ) && (bool) $order->get_date_paid() ) || ( method_exists( $order, 'is_paid' ) && (bool) $order->is_paid() );
+		} catch ( \Throwable $e ) {
+			return false;
+		}
 	}
 
 	/**
@@ -608,7 +797,7 @@ class Reserve_Shop {
 	 * @param object $store    Store or stand-in.
 	 * @param array  $settings Settings.
 	 * @param bool   $force    Work it out even when cached.
-	 * @return array{counts: array<int, array{qty: int, orders: string[]}>}
+	 * @return array{counts: array<int, array{qty: int, orders: string[], invoice: int}>}
 	 */
 	public static function ensure( $store, array $settings, $force = false ) {
 		if ( ! self::enabled( $settings ) ) {
@@ -623,32 +812,61 @@ class Reserve_Shop {
 			return $cached;
 		}
 
-		$out = array( 'counts' => array() );
+		$out   = array( 'counts' => array() );
+		$wrote = true;
 		if ( Ship_Lines::load_readers() ) {
 			self::since( true );
-			$out = self::pass( $store, $settings );
+			$wrote = self::lock();
+			try {
+				$out = self::pass( $store, $settings, $wrote );
+			} finally {
+				if ( $wrote ) {
+					self::unlock();
+				}
+			}
 		}
-		set_transient( self::TRANSIENT, $out, self::CACHE_SECONDS );
+		if ( $wrote ) {
+			set_transient( self::TRANSIENT, $out, self::CACHE_SECONDS ); // Only what was also stored is kept.
+		}
 		self::$memo['ensure'] = $out;
 		return $out;
 	}
 
 	/**
+	 * How many open orders one read looks at (filterable; the newest are
+	 * read first — they ship soonest).
+	 *
+	 * @return int
+	 */
+	public static function open_limit() {
+		$limit = function_exists( 'apply_filters' ) ? apply_filters( 'fishotel_cleanroom_reserve_open_limit', self::OPEN_LIMIT ) : self::OPEN_LIMIT;
+		return max( 1, (int) $limit );
+	}
+
+	/**
 	 * One pass over the open orders (ensure()).
+	 *
+	 * Lines that have already gone (a partial shipment, a box sent while
+	 * the order still reads open) are not reserved again: what they hold
+	 * and was not taken out yet still counts — those fish are spoken for
+	 * until their events are written. An unseen line of an order already
+	 * past its delivery date when this was switched on is left alone
+	 * (Reserve::stale()).
 	 *
 	 * @param object $store    Store or stand-in.
 	 * @param array  $settings Settings.
+	 * @param bool   $write    Store the reservations (false: another request holds the lock — count only).
 	 * @return array{counts: array}
 	 */
-	private static function pass( $store, array $settings ) {
+	private static function pass( $store, array $settings, $write = true ) {
 		try {
 			$found = wc_get_orders(
 				array(
 					'type'    => 'shop_order',
 					'status'  => Reserve::OPEN_STATUSES,
-					'limit'   => self::OPEN_LIMIT,
+					'limit'   => self::open_limit(),
 					'orderby' => 'ID',
-					'order'   => 'ASC',
+					'order'   => 'DESC',
 					'return'  => 'objects',
 				)
 			);
@@ -662,22 +880,34 @@ class Reserve_Shop {
 				continue;
 			}
 			foreach ( self::targets( $order ) as $facts ) {
-				if ( isset( $orders[ $facts['id'] ] ) || in_array( $facts['status'], Feeding::DEAD_STATUSES, true ) || Reserve::left( $facts['signals'], 0 ) ) {
+				if ( isset( $orders[ $facts['id'] ] ) || in_array( $facts['status'], Feeding::DEAD_STATUSES, true ) ) {
 					continue;
 				}
 				$orders[ $facts['id'] ] = $facts;
 			}
 		}
-		ksort( $orders );
+		ksort( $orders ); // The oldest order first: it was bought first.
 
+		$since = self::since();
+		$today = Clean_Room::today();
 		$stays = self::stays( $store, $settings );
 		$list  = array();
+		$gone  = array(); // Lines gone but maybe not taken out yet: [ order, line ].
 		foreach ( $orders as $id => $facts ) {
 			$lines   = array();
 			$offered = null;
 			foreach ( $facts['lines'] as $line ) {
-				if ( Reserve::left( $facts['signals'], (int) $line['item_id'] ) || (int) $line['qty'] <= 0 ) {
-					continue; // Gone already (a partial shipment), or refunded to nothing: it holds no fish.
+				if ( (int) $line['qty'] <= 0 ) {
+					continue; // Refunded to nothing: it holds no fish.
+				}
+				if ( Reserve::left( $facts['signals'], (int) $line['item_id'] ) ) {
+					if ( $line['held'] ) {
+						$gone[] = array( $facts, $line );
+					}
+					continue; // Gone already: it is never given a tank here.
+				}
+				if ( Reserve::stale( $line, $facts, $since, $today ) ) {
+					continue; // Open at the switch-on but past its delivery date: it had left, unmarked.
 				}
 				if ( (int) $line['qty'] > Reserve::total( Reserve::trim( $line['held'], (int) $line['qty'] ) ) ) {
 					if ( null === $offered ) {
@@ -691,14 +921,89 @@ class Reserve_Shop {
 			$list[] = array(
 				'id'     => $id,
 				'number' => $facts['number'],
+				'paid'   => ! empty( $facts['paid'] ),
 				'lines'  => $lines,
 			);
 		}
 
-		$plan = Reserve::plan( $list, $stays['clean'], $stays['all'] );
-		self::write_plan( $list, $plan['adds'] );
+		$plan = Reserve::plan( $list, $stays['clean'], $stays['all'], self::gone_counts( $store, $gone ) );
+		if ( $write ) {
+			self::write_plan( $list, $plan['adds'] );
+		}
 
-		return array( 'counts' => $plan['counts'] );
+		return array( 'counts' => self::with_invoices( $plan['counts'], $list, $plan['adds'] ) );
+	}
+
+	/**
+	 * What lines already gone still hold in their tanks (Reserve::holding()):
+	 * one read of their groups' order events.
+	 *
+	 * @param object  $store Store or stand-in.
+	 * @param array[] $gone  [ facts, line ] pairs.
+	 * @return array Counts: stay id => { qty, orders }.
+	 */
+	private static function gone_counts( $store, array $gone ) {
+		if ( ! $gone ) {
+			return array();
+		}
+		$ids = array();
+		foreach ( $gone as $pair ) {
+			foreach ( array_keys( $pair[1]['held'] ) as $stay ) {
+				$ids[ (int) $stay ] = true;
+			}
+		}
+		$events = (array) $store->order_events( array_keys( $ids ) );
+		$counts = array();
+		foreach ( $gone as $pair ) {
+			list( $facts, $line ) = $pair;
+			$net = Reserve::written( $events, Reserve::note( $facts['id'], $line['ref'] ) )['net'];
+			foreach ( Reserve::holding( $line['held'], (int) $line['qty'], $net ) as $stay => $n ) {
+				if ( ! isset( $counts[ $stay ] ) ) {
+					$counts[ $stay ] = array(
+						'qty'    => 0,
+						'orders' => array(),
+					);
+				}
+				$counts[ $stay ]['qty'] += $n;
+				if ( ! in_array( (string) $facts['number'], $counts[ $stay ]['orders'], true ) ) {
+					$counts[ $stay ]['orders'][] = (string) $facts['number'];
+				}
+			}
+		}
+		return $counts;
+	}
+
+	/**
+	 * Each count with the fish of it held by lines of an Invoices-section
+	 * invoice whose order is not paid yet ("invoice") — the Invoices
+	 * section counts that invoice as open still, so it takes them off the
+	 * reserved count there and never counts them twice.
+	 *
+	 * @param array   $counts Counts.
+	 * @param array[] $list   The orders planned (id, paid, lines).
+	 * @param array   $adds   Reserve::plan()['adds'].
+	 * @return array
+	 */
+	public static function with_invoices( array $counts, array $list, array $adds ) {
+		foreach ( $counts as $stay => $count ) {
+			$counts[ $stay ]['invoice'] = 0;
+		}
+		foreach ( $list as $order ) {
+			if ( ! empty( $order['paid'] ) ) {
+				continue;
+			}
+			foreach ( $order['lines'] as $line ) {
+				$link = isset( $line['link'] ) && is_array( $line['link'] ) ? (int) ( $line['link']['stay_id'] ?? 0 ) : 0;
+				if ( $link <= 0 ) {
+					continue;
+				}
+				$held = Reserve::trim( Reserve::merge( $line['held'], $adds[ (int) $order['id'] ][ $line['ref'] ] ?? array() ), (int) $line['qty'] );
+				if ( isset( $held[ $link ], $counts[ $link ] ) ) {
+					$counts[ $link ]['invoice'] += $held[ $link ];
+				}
+			}
+		}
+		return $counts;
 	}
 
 	/**
@@ -728,6 +1033,7 @@ class Reserve_Shop {
 		}
 		if ( $wrote ) {
 			Ship_Lines::flush(); // What it read of today's lines carried the reservations.
+			self::flush_pull();
 		}
 	}
 
@@ -755,12 +1061,23 @@ class Reserve_Shop {
 	/* ============================================================== */
 
 	/**
-	 * Work one order (and the orders in it, for a combined box).
+	 * Work one order (and the orders in it, for a combined box), under the
+	 * write lock — nothing when another request holds it (the hourly
+	 * sweep catches up).
+	 *
+	 *   open      its lines are reserved, then what already went (a partial
+	 *             shipment) is taken out;
+	 *   gone      what it holds is taken out FIRST — before anything could
+	 *             count its fish as free — then a line that was never looked
+	 *             at may still be given a tank, when it is sure it left
+	 *             after the switch-on (Reserve::late_ok()), and is taken out;
+	 *   dead      (cancelled, refunded, failed) nothing new is ever taken
+	 *             out — what was is kept (a refund after it left).
 	 *
 	 * @param object $store    Store or stand-in.
 	 * @param array  $settings Settings.
 	 * @param int    $order_id Order id.
-	 * @param bool   $was_open It was open until the change that asked: it is reserved now, as it was then.
+	 * @param bool   $was_open It was open until the change that asked.
 	 * @return array[] What was done per order: id => { reserved, written, lost }.
 	 */
 	public static function process( $store, array $settings, $order_id, $was_open = false ) {
@@ -771,54 +1088,132 @@ class Reserve_Shop {
 		if ( ! is_object( $order ) ) {
 			return array();
 		}
-		$out = array();
-		foreach ( self::targets( $order ) as $facts ) {
-			$dead = in_array( $facts['status'], Feeding::DEAD_STATUSES, true );
-			$open = in_array( $facts['status'], Reserve::OPEN_STATUSES, true );
-			$did  = array(
-				'reserved' => 0,
-				'written'  => 0,
-				'lost'     => 0,
-			);
-			if ( ! $dead && ( $open || $was_open ) ) {
-				$facts           = self::reserve_one( $store, $settings, $facts, $open );
+		if ( ! self::lock() ) {
+			return array();
+		}
+		try {
+			$out = array();
+			foreach ( self::targets( $order ) as $facts ) {
+				$out[ $facts['id'] ] = self::process_one( $store, $settings, $facts, (bool) $was_open );
+			}
+			return $out;
+		} finally {
+			self::unlock();
+		}
+	}
+
+	/**
+	 * process() for one order.
+	 *
+	 * @param object $store    Store or stand-in.
+	 * @param array  $settings Settings.
+	 * @param array  $facts    facts().
+	 * @param bool   $was_open It was open until the change that asked.
+	 * @return array{reserved: int, written: int, lost: int}
+	 */
+	private static function process_one( $store, array $settings, array $facts, $was_open ) {
+		$dead = in_array( $facts['status'], Feeding::DEAD_STATUSES, true );
+		$open = in_array( $facts['status'], Reserve::OPEN_STATUSES, true );
+		$did  = array(
+			'reserved' => 0,
+			'written'  => 0,
+			'lost'     => 0,
+		);
+		if ( $open ) {
+			if ( self::needs_plan( $facts, $was_open ) ) {
+				// Only then are the other open orders read (a box of fish all reserved already costs nothing more).
+				$facts           = self::reserve_one( $store, $settings, $facts, true, $was_open );
 				$did['reserved'] = 1;
 			}
-			$done            = self::reconcile( $store, $settings, $facts );
-			$did['written']  = $done['written'];
-			$did['lost']     = $done['lost'];
-			$out[ $facts['id'] ] = $did;
+			return array_merge( $did, self::reconcile( $store, $settings, $facts ) );
 		}
-		return $out;
+		$done = self::reconcile( $store, $settings, $facts );
+		if ( ! $dead && self::has_late( $facts, $was_open ) ) {
+			$facts           = self::reserve_one( $store, $settings, $facts, false, $was_open );
+			$did['reserved'] = 1;
+			$done            = self::reconcile( $store, $settings, $facts );
+		}
+		return array_merge( $did, $done );
+	}
+
+	/**
+	 * Whether an open order has a line to reserve or to mark seen — a line
+	 * not seen yet, or one short of fish that has not gone.
+	 *
+	 * @param array $facts    facts().
+	 * @param bool  $was_open It was open until the change being worked.
+	 * @return bool
+	 */
+	private static function needs_plan( array $facts, $was_open ) {
+		$since = self::since();
+		$today = Clean_Room::today();
+		foreach ( $facts['lines'] as $line ) {
+			if ( (int) $line['qty'] <= 0 || null === Reserve::key( Reserve::META, $line['ref'] ) || Reserve::stale( $line, $facts, $since, $today ) ) {
+				continue;
+			}
+			if ( Reserve::left( $facts['signals'], (int) $line['item_id'] ) ) {
+				if ( Reserve::late_ok( $line, $facts, $since, $was_open ) ) {
+					return true;
+				}
+				continue;
+			}
+			if ( (int) $line['seen'] <= 0 || (int) $line['qty'] > Reserve::total( Reserve::trim( $line['held'], (int) $line['qty'] ) ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Whether a gone order has a line that may still be given a tank.
+	 *
+	 * @param array $facts    facts().
+	 * @param bool  $was_open It was open until the change being worked.
+	 * @return bool
+	 */
+	private static function has_late( array $facts, $was_open ) {
+		$since = self::since();
+		$today = Clean_Room::today();
+		foreach ( $facts['lines'] as $line ) {
+			if ( (int) $line['qty'] > 0 && ! Reserve::stale( $line, $facts, $since, $today ) && Reserve::late_ok( $line, $facts, $since, $was_open ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
 	 * Reserve one order's lines that hold too few fish — out of what the
-	 * other open orders leave free.
+	 * other open orders leave free. A line already gone is given a tank
+	 * only when Reserve::late_ok() says so; a stale one never.
 	 *
 	 * @param object $store    Store or stand-in.
 	 * @param array  $settings Settings.
 	 * @param array  $facts    facts().
 	 * @param bool   $open     Still open (ensure() counted it already).
+	 * @param bool   $was_open It was open until the change being worked.
 	 * @return array facts() with the reservations added.
 	 */
-	private static function reserve_one( $store, array $settings, array $facts, $open ) {
-		$counts = self::ensure( $store, $settings )['counts'];
-		if ( $open ) {
-			// The counts may hold this order already: take its own fish out of them first.
-			foreach ( $facts['lines'] as $line ) {
+	private static function reserve_one( $store, array $settings, array $facts, $open, $was_open = false ) {
+		$counts  = self::ensure( $store, $settings )['counts'];
+		$since   = self::since();
+		$today   = Clean_Room::today();
+		$offered = null;
+		$lines   = array();
+		foreach ( $facts['lines'] as $line ) {
+			if ( (int) $line['qty'] <= 0 || Reserve::stale( $line, $facts, $since, $today ) ) {
+				continue;
+			}
+			if ( Reserve::left( $facts['signals'], (int) $line['item_id'] ) && ! Reserve::late_ok( $line, $facts, $since, $was_open ) ) {
+				continue; // Gone already: what it holds is what it holds.
+			}
+			if ( $open ) {
+				// The counts hold this line already: take its own fish out of them first.
 				foreach ( Reserve::trim( $line['held'], (int) $line['qty'] ) as $stay => $qty ) {
 					if ( isset( $counts[ $stay ] ) ) {
 						$counts[ $stay ]['qty'] = max( 0, $counts[ $stay ]['qty'] - $qty );
 					}
 				}
-			}
-		}
-		$offered = null;
-		$lines   = array();
-		foreach ( $facts['lines'] as $line ) {
-			if ( (int) $line['qty'] <= 0 ) {
-				continue;
 			}
 			if ( (int) $line['qty'] > Reserve::total( Reserve::trim( $line['held'], (int) $line['qty'] ) ) ) {
 				if ( null === $offered ) {
@@ -837,15 +1232,19 @@ class Reserve_Shop {
 		$stays = self::stays( $store, $settings );
 		$plan  = Reserve::plan( array( $order ), $stays['clean'], $stays['all'], $counts );
 		self::write_plan( array( $order ), $plan['adds'] );
-		if ( isset( self::$memo['ensure'] ) ) {
+		if ( isset( self::$memo['ensure'] ) && $open ) {
 			self::$memo['ensure']['counts'] = $plan['counts'];
 		}
+		if ( ! empty( $plan['adds'] ) && function_exists( 'delete_transient' ) ) {
+			delete_transient( self::TRANSIENT );
+		}
 
+		$planned = array_flip( array_column( $lines, 'ref' ) );
 		foreach ( $facts['lines'] as $i => $line ) {
 			if ( ! empty( $plan['adds'][ $facts['id'] ][ $line['ref'] ] ) ) {
 				$facts['lines'][ $i ]['held'] = Reserve::merge( $line['held'], $plan['adds'][ $facts['id'] ][ $line['ref'] ] );
 			}
-			if ( (int) $line['seen'] <= 0 && null !== Reserve::key( Reserve::META, $line['ref'] ) ) {
+			if ( isset( $planned[ $line['ref'] ] ) && (int) $line['seen'] <= 0 && null !== Reserve::key( Reserve::META, $line['ref'] ) ) {
 				$facts['lines'][ $i ]['seen'] = time();
 			}
 		}
@@ -853,8 +1252,29 @@ class Reserve_Shop {
 	}
 
 	/**
+	 * The start of a site date, in UTC.
+	 *
+	 * @param string $ymd Site date.
+	 * @return string "Y-m-d H:i:s" UTC ('' when it cannot be told).
+	 */
+	private static function site_start_utc( $ymd ) {
+		if ( ! Replay::is_date( (string) $ymd ) ) {
+			return '';
+		}
+		try {
+			$dt = new \DateTimeImmutable( $ymd . ' 00:00:01', Clean_Room::timezone() );
+			return $dt->setTimezone( new \DateTimeZone( 'UTC' ) )->format( 'Y-m-d H:i:s' );
+		} catch ( \Exception $e ) {
+			return '';
+		}
+	}
+
+	/**
 	 * Take an order's shipped fish out of their tanks — or put them back
 	 * — writing only the difference, and keep the not-found list.
+	 *
+	 * A dead order (cancelled, refunded, failed) never gets a new fish
+	 * taken out, and never has one put back: what was written is kept.
 	 *
 	 * @param object $store    Store or stand-in.
 	 * @param array  $settings Settings.
@@ -863,6 +1283,7 @@ class Reserve_Shop {
 	 */
 	public static function reconcile( $store, array $settings, array $facts ) {
 		$today = Clean_Room::today();
+		$dead  = in_array( $facts['status'], Feeding::DEAD_STATUSES, true );
 		$lines = array();
 		$ids   = array();
 		foreach ( $facts['lines'] as $line ) {
@@ -876,7 +1297,9 @@ class Reserve_Shop {
 		}
 		$events = $ids ? (array) $store->order_events( array_keys( $ids ) ) : array();
 
-		$alive   = array();
+		$delivery = (string) ( $facts['delivery'] ?? '' );
+		$ship_at  = Replay::is_date( $delivery ) ? self::site_start_utc( Replay::add_days( $delivery, -1 ) ) : '';
+		$rows    = array();
 		$lost    = self::lost();
 		$changed = false;
 		$written = 0;
@@ -884,23 +1307,26 @@ class Reserve_Shop {
 		foreach ( $lines as $line ) {
 			$note = Reserve::note( $facts['id'], $line['ref'] );
 			$done = Reserve::written( $events, $note );
-			$gone = Reserve::left( $facts['signals'], (int) $line['item_id'] );
-			$want = Reserve::wanted( $gone, $facts['status'], $line['held'], (int) $line['qty'], $done['net'] );
+			$gone = ! $dead && Reserve::left( $facts['signals'], (int) $line['item_id'] );
+			$want = Reserve::wanted( $gone, $dead ? 'cancelled' : $facts['status'], $line['held'], (int) $line['qty'], $done['net'] );
+			$alive = array();
 			foreach ( array_keys( $want ) as $stay ) {
-				if ( ! isset( $alive[ $stay ] ) ) {
+				if ( ! isset( $rows[ $stay ] ) ) {
 					$row            = $store->stay( (int) $stay, $today, $settings );
-					$alive[ $stay ] = is_array( $row ) ? (int) $row['qty_live'] : 0;
+					$rows[ $stay ] = is_array( $row ) ? $row : array( 'qty_live' => 0 );
 				}
+				$alive[ $stay ] = (int) ( $rows[ $stay ]['qty_live'] ?? 0 );
 			}
 			$diff = Reserve::diff( $want, $done['net'], $alive, $done['undone'] );
 			foreach ( $diff['writes'] as $stay => $delta ) {
+				$at     = $delta > 0 ? Reserve::shipped_at( $delivery, $today, $ship_at, (string) ( $rows[ $stay ]['checkin_date'] ?? '' ) ) : '';
 				$result = $store->record_event(
 					(int) $stay,
 					array(
 						'type'     => 'sold',
 						'qty'      => (int) $delta,
 						'note'     => $note,
-						'event_at' => gmdate( 'Y-m-d H:i:s' ),
+						'event_at' => '' !== $at ? $at : gmdate( 'Y-m-d H:i:s' ),
 						'actor_id' => 0,
 						'source'   => Reserve::SOURCE,
 					),
@@ -909,7 +1335,7 @@ class Reserve_Shop {
 				);
 				if ( $result ) {
 					$written++;
-					$alive[ $stay ] = (int) ( $result['state']['qty_live'] ?? ( $alive[ $stay ] - $delta ) );
+					$rows[ $stay ]['qty_live'] = (int) ( $result['state']['qty_live'] ?? ( $alive[ $stay ] - $delta ) );
 				}
 			}
 
@@ -927,13 +1353,16 @@ class Reserve_Shop {
 					$changed       = true;
 				}
 				$missing += $short;
-			} elseif ( isset( $lost[ $key ] ) ) {
+			} elseif ( isset( $lost[ $key ] ) && ! ( $dead && Reserve::left( $facts['signals'], (int) $line['item_id'] ) ) ) {
 				unset( $lost[ $key ] );
 				$changed = true;
 			}
 		}
 		if ( $changed ) {
 			self::save_lost( $lost );
+		}
+		if ( $written > 0 ) {
+			self::flush(); // The groups' fish alive changed: what was read of them is not used again.
 		}
 		return array(
 			'written' => $written,
@@ -1042,13 +1471,39 @@ class Reserve_Shop {
 	 * @param int    $from     The group it was held in and did not come out of (0 = the whole line).
 	 * @return array{ok: bool, message: string}
 	 */
-	public static function pick( $store, array $settings, $order_id, $ref, $stay_id, $from = 0 ) {
+	public static function pick( $store, array $settings, $order_id, $ref, $stay_id, $from = 0, $qty = 0 ) {
 		if ( ! self::enabled( $settings ) || ! Ship_Lines::load_readers() ) {
 			return array(
 				'ok'      => false,
 				'message' => __( 'Reserving sold fish is switched off.', 'fishotel-misc-plugin' ),
 			);
 		}
+		if ( ! self::lock() ) {
+			return array(
+				'ok'      => false,
+				'message' => __( 'The site is writing the shipped fish right now — try again in a minute.', 'fishotel-misc-plugin' ),
+			);
+		}
+		try {
+			return self::pick_locked( $store, $settings, $order_id, $ref, $stay_id, $from, $qty );
+		} finally {
+			self::unlock();
+		}
+	}
+
+	/**
+	 * pick() under the lock.
+	 *
+	 * @param object $store    Store or stand-in.
+	 * @param array  $settings Settings.
+	 * @param int    $order_id Order id.
+	 * @param string $ref      The line's ref.
+	 * @param int    $stay_id  The group it came out of.
+	 * @param int    $from     The group it was held in and did not come out of (0 = the whole line).
+	 * @param int    $qty      How many of $from's fish (0 = all; only before the order left).
+	 * @return array{ok: bool, message: string}
+	 */
+	private static function pick_locked( $store, array $settings, $order_id, $ref, $stay_id, $from, $qty ) {
 		$found = self::line_of( $order_id, $ref );
 		$key   = Reserve::key( Reserve::META, $ref );
 		if ( null === $found || null === $key ) {
@@ -1075,7 +1530,12 @@ class Reserve_Shop {
 
 		$held = Reserve::held( $line['held'] );
 		$was  = array_fill_keys( (array) $line['was'], 1 );
-		if ( (int) $from > 0 && isset( $held[ (int) $from ] ) ) {
+		$gone = Reserve::left( $facts['signals'], (int) $line['item_id'] );
+		if ( (int) $from > 0 && isset( $held[ (int) $from ] ) && ! $gone && (int) $qty > 0 && (int) $qty < $held[ (int) $from ] ) {
+			// Some of them only (before it left): the line is split over the two tanks.
+			$n                     = (int) $qty;
+			$held[ (int) $from ] -= $n;
+		} elseif ( (int) $from > 0 && isset( $held[ (int) $from ] ) ) {
 			$n = $held[ (int) $from ];
 			unset( $held[ (int) $from ] );
 			$was[ (int) $from ] = 1;
@@ -1089,7 +1549,6 @@ class Reserve_Shop {
 		$held[ (int) $stay_id ] = ( $held[ (int) $stay_id ] ?? 0 ) + $n;
 		unset( $was[ (int) $stay_id ] );
 
-		$gone = Reserve::left( $facts['signals'], (int) $line['item_id'] );
 		if ( $gone && (int) $stay['qty_live'] < $n ) {
 			/* translators: 1: tank number, 2: fish alive */
 			return array(
@@ -1172,7 +1631,7 @@ class Reserve_Shop {
 		$ref   = isset( $raw['ref'] ) && is_scalar( $raw['ref'] ) ? preg_replace( '/[^a-z0-9:]/', '', strtolower( (string) $raw['ref'] ) ) : '';
 		switch ( $op ) {
 			case 'pick':
-				$result = self::pick( $store, $settings, $order, $ref, isset( $raw['stay_id'] ) ? absint( $raw['stay_id'] ) : 0, isset( $raw['from'] ) ? absint( $raw['from'] ) : 0 );
+				$result = self::pick( $store, $settings, $order, $ref, isset( $raw['stay_id'] ) ? absint( $raw['stay_id'] ) : 0, isset( $raw['from'] ) ? absint( $raw['from'] ) : 0, isset( $raw['qty'] ) ? absint( $raw['qty'] ) : 0 );
 				return $result['message'];
 			case 'ignore':
 				return self::ignore( $order, $ref ) ? __( 'Ignored: that line is no longer listed.', 'fishotel-misc-plugin' ) : __( 'That order line could not be found.', 'fishotel-misc-plugin' );
@@ -1227,7 +1686,9 @@ class Reserve_Shop {
 
 	/**
 	 * Today's pull list (Reserve::pull()), with the other clean groups
-	 * each row's fish may have come out of.
+	 * each row's fish may have come out of — kept in a transient for the
+	 * day (dropped with the reserved counts, and whenever today's shipping
+	 * fish are read again).
 	 *
 	 * @param object  $store    Store or stand-in.
 	 * @param string  $today    Site date.
@@ -1236,9 +1697,27 @@ class Reserve_Shop {
 	 * @return array
 	 */
 	public static function pull( $store, $today, array $settings, array $tanks ) {
+		$cached = self::$memo['pull'] ?? ( function_exists( 'get_transient' ) ? get_transient( self::PULL_TRANSIENT ) : false );
+		if ( is_array( $cached ) && (string) ( $cached['date'] ?? '' ) === (string) $today && isset( $cached['buildings'] ) ) {
+			self::$memo['pull'] = $cached;
+			return $cached;
+		}
+
 		$ship  = Ship_Lines::today( (string) $today );
 		$lines = isset( $ship['lines'] ) && is_array( $ship['lines'] ) ? $ship['lines'] : array();
-		$ids   = array();
+
+		// Whether each order has gone (its status, its shipments, its box): one read per order.
+		$left = array();
+		foreach ( $lines as $i => $line ) {
+			$id = (int) ( $line['order_id'] ?? 0 );
+			if ( ! isset( $left[ $id ] ) ) {
+				$order       = $id > 0 ? wc_get_order( $id ) : null;
+				$left[ $id ] = is_object( $order ) ? self::left_signals( $order ) : array();
+			}
+			$lines[ $i ]['left'] = $left[ $id ] && Reserve::left( $left[ $id ], (int) ( $line['item_id'] ?? 0 ) );
+		}
+
+		$ids = array();
 		foreach ( $lines as $line ) {
 			foreach ( array_keys( Reserve::held( $line['held'] ?? array() ) ) as $stay ) {
 				$ids[ (int) $stay ] = true;
@@ -1250,9 +1729,14 @@ class Reserve_Shop {
 				$labels[ (int) $tank['building_id'] ] = Layout::building_label( $tank['building'] );
 			}
 		}
+		// The groups: the open ones this request already read; only a closed one is read on its own.
+		$open = array();
+		foreach ( self::stays( $store, $settings )['all'] as $stay ) {
+			$open[ (int) $stay['id'] ] = $stay;
+		}
 		$stays = array();
 		foreach ( array_keys( $ids ) as $id ) {
-			$stay = $store->stay( $id, (string) $today, $settings );
+			$stay = $open[ $id ] ?? $store->stay( $id, (string) $today, $settings );
 			if ( is_array( $stay ) ) {
 				$stay['building_label'] = $labels[ (int) $stay['building_id'] ] ?? '';
 				$stays[ $id ]           = $stay;
@@ -1267,7 +1751,8 @@ class Reserve_Shop {
 		$pull         = Reserve::pull( $lines, $stays, $shipped );
 		$pull['date'] = (string) $today;
 
-		// The other clean groups each row's fish may have come out of.
+		// The other clean groups each row's fish may have come out of — not for a fish already gone:
+		// "It was tank…" on the not-found list is for those (and an order gone before the switch-on has none).
 		$clean = self::stays( $store, $settings )['clean'];
 		$by    = array();
 		foreach ( $lines as $line ) {
@@ -1278,13 +1763,35 @@ class Reserve_Shop {
 				foreach ( $tank['rows'] as $r => $row ) {
 					$line = $by[ $row['order_id'] . '|' . $row['ref'] ] ?? array();
 					$pull['buildings'][ $b ]['tanks'][ $t ]['rows'][ $r ]['others'] = self::choices( Reserve::alternatives( $line, $clean, array_keys( Reserve::held( $line['held'] ?? array() ) ) ) );
+					$pull['buildings'][ $b ]['tanks'][ $t ]['rows'][ $r ]['line_qty'] = (int) ( $line['qty'] ?? 0 );
+					$pull['buildings'][ $b ]['tanks'][ $t ]['rows'][ $r ]['left']     = ! empty( $line['left'] );
 				}
 			}
 		}
 		foreach ( $pull['unknown'] as $u => $row ) {
-			$pull['unknown'][ $u ]['others'] = self::choices( Reserve::alternatives( $by[ $row['order_id'] . '|' . $row['ref'] ] ?? array(), $clean ) );
+			$pull['unknown'][ $u ]['others'] = ! empty( $row['shipped'] ) ? array() : self::choices( Reserve::alternatives( $by[ $row['order_id'] . '|' . $row['ref'] ] ?? array(), $clean ) );
+		}
+		self::$memo['pull'] = $pull;
+		if ( function_exists( 'set_transient' ) ) {
+			set_transient( self::PULL_TRANSIENT, $pull, self::CACHE_SECONDS );
 		}
 		return $pull;
+	}
+
+	/**
+	 * left()'s signals of an order: its own, and its combined box's.
+	 *
+	 * @param object $order Order.
+	 * @return array
+	 */
+	private static function left_signals( $order ) {
+		$box  = null;
+		$head = Ship_Lines::head( $order );
+		if ( $head && $head['folded'] ) {
+			$wrapper = wc_get_order( (int) $order->get_meta( Ship_Lines::META_FOLDED ) );
+			$box     = is_object( $wrapper ) ? self::signals( $wrapper ) : null;
+		}
+		return array_merge( self::signals( $order ), array( 'box' => $box ) );
 	}
 
 	/**
@@ -1355,9 +1862,11 @@ class Reserve_Shop {
 						continue; // Counted on the parent (above), or not at all.
 					}
 					$size = '';
-					foreach ( (array) $variation->get_attributes() as $key => $value ) {
-						if ( Sizes::matches( (string) $key ) && is_scalar( $value ) && '' !== (string) $value ) {
+					$key  = '';
+					foreach ( (array) $variation->get_attributes() as $attribute => $value ) {
+						if ( Sizes::matches( (string) $attribute ) && is_scalar( $value ) && '' !== (string) $value ) {
 							$size = (string) $value;
+							$key  = (string) $attribute;
 							break;
 						}
 					}
@@ -1367,7 +1876,7 @@ class Reserve_Shop {
 					$out[] = array(
 						'product_id' => $id,
 						'size_slug'  => Sizes::slug( $size ),
-						'label'      => $name . ' · ' . $size,
+						'label'      => $name . ' · ' . Ship_Lines::size_name( (string) $key, $size ),
 						'stock'      => (int) $variation->get_stock_quantity(),
 					);
 				}

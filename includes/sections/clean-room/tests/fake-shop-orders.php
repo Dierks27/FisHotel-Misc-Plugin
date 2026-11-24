@@ -199,6 +199,14 @@ class WC_Order {
 	}
 
 	/**
+	 * Paid when the meta "_paid_date" says when (a stand-in for WooCommerce's own paid date).
+	 */
+	public function get_date_paid() {
+		$paid = $this->get_meta( '_paid_date' );
+		return '' !== (string) $paid ? new DateTimeImmutable( '@' . (int) $paid ) : null;
+	}
+
+	/**
 	 * Add a line.
 	 *
 	 * @param string               $name     Item name.
@@ -304,6 +312,13 @@ function wc_get_orders( $args ) {
 			return $a->get_id() <=> $b->get_id();
 		}
 	);
+	// The newest first when asked, and a limit when one is given — as the shop does with orderby ID.
+	if ( isset( $args['order'] ) && 'DESC' === strtoupper( (string) $args['order'] ) ) {
+		$out = array_reverse( $out );
+	}
+	if ( isset( $args['limit'] ) && (int) $args['limit'] > 0 ) {
+		$out = array_slice( $out, 0, (int) $args['limit'] );
+	}
 	return $out;
 }
 

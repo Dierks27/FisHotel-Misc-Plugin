@@ -234,6 +234,22 @@ class Tanks {
 	}
 
 	/**
+	 * The fish of one reserved count (reserved()) that are not on an open
+	 * invoice already: a customer's order for an invoice that is not paid
+	 * yet (on hold, a cheque) holds its fish in the tank AND the invoice
+	 * still counts as open here — those are counted once, as the invoice.
+	 *
+	 * @param mixed $count A reserved() entry: qty, invoice (fish held for orders of unpaid invoices).
+	 * @return int
+	 */
+	public static function for_orders( $count ) {
+		if ( ! is_array( $count ) ) {
+			return 0;
+		}
+		return max( 0, (int) ( $count['qty'] ?? 0 ) - max( 0, (int) ( $count['invoice'] ?? 0 ) ) );
+	}
+
+	/**
 	 * Species-list rows whose name (or scientific name) starts a word
 	 * with the search text.
 	 *

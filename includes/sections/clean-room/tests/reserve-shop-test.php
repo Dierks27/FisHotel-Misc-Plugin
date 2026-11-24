@@ -208,7 +208,7 @@ check_same( '121: 3 − 2 = 1 alive; 221 untouched', array( 1, 4 ), array( alive
 work( $store, 1234 );
 Reserve_Shop::sweep( $store, $settings );
 check_same( 'saved twice, swept: no change', array( array( array( 2, 'order:1234 item:' . $i1234->get_id() ) ), 1 ), array( sold( $store, $s121 ), alive( $store, $s121 ) ) );
-check_same( 'History says "Shipped · order #1234"', 'Shipped · order #1234 (2 fish)', Reserve::event_text( $store->events( $s121 )[ count( $store->events( $s121 ) ) - 1 ] ) );
+check_same( 'History says "Shipped · order #1234"', 'Shipped · order #1234 (2 fish)', Reserve::event_text( current( array_filter( $store->events( $s121 ), static function ( $e ) { return 'sold' === $e['type']; } ) ) ) );
 fresh();
 $room = $store->room( $today, $settings, $protocols );
 $rows = $room['todo']['pull']['buildings'][0]['tanks'][1]['rows'];
@@ -284,7 +284,7 @@ work( $store, 1251, true );
 check_same( 'the guessed fish shipped: on the list too; the hippo came out of 112', array( 2, 1, 1 ), array( count( Reserve_Shop::lost() ), alive( $store, $hippo_stay ), (int) Reserve_Shop::lost()[ '1251|i:' . $i1252->get_id() ]['qty'] ) );
 
 $message = Reserve_Shop::act( $store, $settings, array( 'op' => 'pick', 'order_id' => 1251, 'ref' => 'i:' . $i1252->get_id(), 'stay_id' => $s221 ) );
-check_same( '"It was tank 221": written there, and off the list', array( array( 1, 'order:1251 item:' . $i1252->get_id() ) ), array_slice( sold( $store, $s221 ), 2 ) );
+check_same( '"It was tank 221": written there, and off the list', array( array( 1, 'order:1251 item:' . $i1252->get_id() ) ), array_values( array_filter( sold( $store, $s221 ), static function ( $e ) { return 0 === strpos( $e[1], 'order:1251 ' ); } ) ) );
 check( '… stored as its reservation', array( $s221 => 1 ) === held( $i1252 ) && false === isset( Reserve_Shop::lost()[ '1251|i:' . $i1252->get_id() ] ) );
 check_contains( '… and said', 'tank 221', $message );
 check_same( '"Ignore" takes a line off for good', array( 'Ignored: that line is no longer listed.', array() ), array( Reserve_Shop::act( $store, $settings, array( 'op' => 'ignore', 'order_id' => 1400, 'ref' => 'i:' . $i1400->get_id() ) ), Reserve_Shop::lost() ) );

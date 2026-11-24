@@ -231,7 +231,7 @@ echo "8. The words\n";
 
 check_same( 'the tank card', array( '2 reserved · #1234', '3 reserved · #1234, #1240', '' ), array( Reserve::reserved_text( 2, array( '1234' ) ), Reserve::reserved_text( 3, array( '1234', '1240' ) ), Reserve::reserved_text( 0, array() ) ) );
 check_same( 'the hand "Shipped" on a group that holds fish for an order', '2 of these are reserved for #1234 and will come off by themselves when it ships.', Reserve::sold_note( 2, array( '1234' ) ) );
-check_same( 'History says "Shipped" and the order', array( 'Shipped · order #1234 (2 fish)', 'Shipped · order #1234 — 2 fish put back', '' ), array( Reserve::event_text( array( 'type' => 'sold', 'qty' => 2, 'note' => 'order:1234 item:31' ) ), Reserve::event_text( array( 'type' => 'sold', 'qty' => -2, 'note' => 'order:1234 item:31' ) ), Reserve::event_text( array( 'type' => 'sold', 'qty' => 2, 'note' => '' ) ) ) );
+check_same( 'History says "Shipped" and the order', array( 'Shipped · order #1234 (2 fish)', 'Back in the tank · order #1234 (2 fish)', '' ), array( Reserve::event_text( array( 'type' => 'sold', 'qty' => 2, 'note' => 'order:1234 item:31' ) ), Reserve::event_text( array( 'type' => 'sold', 'qty' => -2, 'note' => 'order:1234 item:31' ) ), Reserve::event_text( array( 'type' => 'sold', 'qty' => 2, 'note' => '' ) ) ) );
 check_same( 'the stock warning — only when the shop and the tanks differ', array( 'Shop says 5 in stock, tanks have 3 free', '', '' ), array( Reserve::stock_text( 5, 3 ), Reserve::stock_text( 3, 3 ), Reserve::stock_text( null, 3 ) ) );
 check_same( 'the not-found line', 'Could not find a tank for 4 fish that shipped', Reserve::lost_text( 4 ) );
 check_contains( 'the tick in Settings says what it does', 'reserved in the tank', Reserve::setting_text()['text'] );
@@ -258,8 +258,10 @@ check_same( 'the medium tangs: 5 in the shop, 3 + 2 alive less 2 reserved = 3 fr
 echo "10. The pull list's words\n";
 
 $words = Reserve::pull_words( $pull );
-check_same( 'each row, the count, the unknown line with its hint, the inverts', array( '2 × Test Tang Medium (#1234)', '6 of 7 fish still to pull', 'Tank not known — 1 × Blue Hippo Tang (#1251)', 'Not in a tank on the site: 2 × Test Snail (#1251)' ), array( $words['buildings'][0]['tanks'][0]['rows'][0]['text'], $words['count_text'], $words['unknown_text'], $words['loose_text'] ) );
-check_contains( '… the hint is the feeding rule\'s: correct a group already there before adding one', 'do not add it again', $words['hint'] );
+check_same( 'each row, the count, the unknown line with its hint, the inverts', array( '2 × Test Tang Medium (#1234)', '7 fish today · 1 shipped', 'Tank not known — 1 × Blue Hippo Tang (#1251)', 'Not in a tank on the site: 2 × Test Snail (#1251)' ), array( $words['buildings'][0]['tanks'][0]['rows'][0]['text'], $words['count_text'], $words['unknown_text'], $words['loose_text'] ) );
+check_contains( '… Pull today\'s own short hint: correct a group already there before adding one', 'correct that group first', $words['hint'] );
+check( '… and nothing about feeding in it', false === strpos( $words['hint'], 'fed' ) && false === strpos( $words['hint'], 'goes without' ) );
+check_same( '… none when the feeding line above already gives one', '', Reserve::pull_words( $pull, true )['hint'] );
 check_same( 'alternatives: the other clean groups of the fish, the one that ships first first', array( 2 ), array_column( Reserve::alternatives( $tang_line, $clean, array( 1 ) ), 'id' ) );
 
 fh_finish();

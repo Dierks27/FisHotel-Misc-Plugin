@@ -4077,14 +4077,23 @@
 				]));
 			});
 		});
-		if (pull.unknown_text) {
-			node.appendChild(el('p', { class: 'fh-fd-fast fh-fd-fast--all', text: pull.unknown_text }));
-			node.appendChild(el('p', { class: 'fh-fd-muted', text: pull.hint || '' }));
+		if ((pull.unknown || []).length) {
+			// One row per fish (a wet phone reads a list, not a paragraph); a fish already gone is ticked.
+			node.appendChild(el('div', { class: 'fh-fd-pull__tank' }, [
+				el('strong', { text: pull.unknown_head || t('tankNotKnown', 'Tank not known') }),
+				pull.hint ? el('p', { class: 'fh-fd-muted', text: pull.hint }) : null,
+				el('div', {}, pull.unknown.map(function (row) {
+					return el('div', { class: 'fh-fd-pull__row' + (row.shipped ? ' is-done' : ' fh-fd-warn') }, [
+						el('span', { text: (row.shipped ? '✓ ' : '') + (row.text || '') }),
+						row.shipped ? el('small', { text: t('shippedWord', 'Shipped') }) : null
+					]);
+				}))
+			]));
 		}
 		if (pull.loose_text) {
 			node.appendChild(el('p', { class: 'fh-fd-muted', text: pull.loose_text }));
 		}
-		if (!(pull.buildings || []).length && !pull.unknown_text && !pull.loose_text) {
+		if (!(pull.buildings || []).length && !(pull.unknown || []).length && !pull.loose_text) {
 			node.appendChild(el('p', { class: 'fh-fd-muted', text: t('pullNothing', 'No fish ship today.') }));
 		}
 		if (lostText) {

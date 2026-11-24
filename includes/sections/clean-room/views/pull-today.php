@@ -36,8 +36,9 @@ if ( null === $fh_pull && ! $fh_lost ) {
  * @param int     $from    The group it is held in (0 = the whole line).
  * @param array[] $choices Reserve_Shop::choices().
  * @param string  $label   The button.
+ * @param int     $split   Fish of the row that may be moved on their own (0 = the whole row only).
  */
-$fh_pick_form = static function ( $op, $order, $ref, $from, array $choices, $label ) {
+$fh_pick_form = static function ( $op, $order, $ref, $from, array $choices, $label, $split = 0 ) {
 	if ( ! $choices ) {
 		echo '<span class="fh-cr-muted">' . esc_html__( 'No other clean tank holds this fish on the site.', 'fishotel-misc-plugin' ) . '</span>';
 		return;
@@ -50,6 +51,13 @@ $fh_pick_form = static function ( $op, $order, $ref, $from, array $choices, $lab
 		<input type="hidden" name="order_id" value="<?php echo esc_attr( (int) $order ); ?>">
 		<input type="hidden" name="ref" value="<?php echo esc_attr( $ref ); ?>">
 		<input type="hidden" name="from" value="<?php echo esc_attr( (int) $from ); ?>">
+		<?php if ( (int) $split > 1 ) : // Only some of them came out of another tank: the line is split over the two. ?>
+			<select name="qty" aria-label="<?php esc_attr_e( 'How many', 'fishotel-misc-plugin' ); ?>">
+				<?php for ( $fh_n = (int) $split; $fh_n >= 1; $fh_n-- ) : ?>
+					<option value="<?php echo esc_attr( $fh_n === (int) $split ? 0 : $fh_n ); ?>"><?php echo esc_html( $fh_n === (int) $split ? sprintf( /* translators: %d: fish */ __( 'all %d', 'fishotel-misc-plugin' ), $fh_n ) : (string) $fh_n ); ?></option>
+				<?php endfor; ?>
+			</select>
+		<?php endif; ?>
 		<select name="stay_id">
 			<?php foreach ( $choices as $fh_choice ) : ?>
 				<option value="<?php echo esc_attr( (int) $fh_choice['stay_id'] ); ?>"><?php echo esc_html( $fh_choice['text'] ); ?></option>
@@ -94,7 +102,7 @@ $fh_pick_form = static function ( $op, $order, $ref, $from, array $choices, $lab
 							</span>
 							<details class="fh-cr-pull__other">
 								<summary><?php esc_html_e( 'Pulled from a different tank', 'fishotel-misc-plugin' ); ?></summary>
-								<?php $fh_pick_form( 'pick', (int) $fh_row['order_id'], (string) $fh_row['ref'], (int) $fh_row['stay_id'], (array) ( $fh_row['others'] ?? array() ), __( 'It came out of this one', 'fishotel-misc-plugin' ) ); ?>
+								<?php $fh_pick_form( 'pick', (int) $fh_row['order_id'], (string) $fh_row['ref'], (int) $fh_row['stay_id'], (array) ( $fh_row['others'] ?? array() ), __( 'It came out of this one', 'fishotel-misc-plugin' ), empty( $fh_row['left'] ) ? (int) $fh_row['qty'] : 0 ); ?>
 							</details>
 						</li>
 					<?php endforeach; ?>
@@ -103,18 +111,34 @@ $fh_pick_form = static function ( $op, $order, $ref, $from, array $choices, $lab
 		<?php endforeach; ?>
 	<?php endforeach; ?>
 
-	<?php if ( $fh_pull && '' !== (string) ( $fh_pull['unknown_text'] ?? '' ) ) : ?>
-		<div class="fh-cr-fast fh-cr-fast--all">
-			<strong><?php echo esc_html( $fh_pull['unknown_text'] ); ?></strong>
-			<?php echo esc_html( $fh_pull['hint'] ); ?>
-			<?php foreach ( (array) $fh_pull['unknown'] as $fh_row ) : ?>
-				<?php if ( ! empty( $fh_row['others'] ) ) : ?>
-					<details class="fh-cr-pull__other">
-						<summary><?php echo esc_html( sprintf( /* translators: %s: the fish, e.g. "1 × Blue Hippo Tang (#1251)" */ __( 'It is in a tank already: %s', 'fishotel-misc-plugin' ), Reserve::row_text( $fh_row ) ) ); ?></summary>
-						<?php $fh_pick_form( 'pick', (int) $fh_row['order_id'], (string) $fh_row['ref'], 0, (array) $fh_row['others'], __( 'It was this tank', 'fishotel-misc-plugin' ) ); ?>
-					</details>
-				<?php endif; ?>
-			<?php endforeach; ?>
+	<?php if ( $fh_pull && ! empty( $fh_pull['unknown'] ) ) : // One row per fish: a fish already gone is ticked, the others say what to do. ?>
+		<div class="fh-cr-pull__tank fh-cr-pull__unknown">
+			<strong><?php echo esc_html( (string) ( $fh_pull['unknown_head'] ?? __( 'Tank not known', 'fishotel-misc-plugin' ) ) ); ?></strong>
+			<?php if ( '' !== (string) ( $fh_pull['hint'] ?? '' ) ) : ?>
+				<p class="fh-cr-muted"><?php echo esc_html( $fh_pull['hint'] ); ?></p>
+			<?php endif; ?>
+			<ul class="fh-cr-pull__rows">
+				<?php foreach ( (array) $fh_pull['unknown'] as $fh_row ) : ?>
+					<li class="fh-cr-pull__row<?php echo ! empty( $fh_row['shipped'] ) ? ' is-done' : ' fh-cr-warn'; ?>">
+						<span>
+							<?php if ( ! empty( $fh_row['shipped'] ) ) : ?>
+								<span class="fh-cr-todo-check">&#10003;</span>
+							<?php endif; ?>
+							<?php echo esc_html( Reserve::row_text( $fh_row ) ); ?>
+							<a href="<?php echo esc_url( Admin_Reserve::order_url( (int) $fh_row['order_id'] ) ); ?>"><?php esc_html_e( 'order', 'fishotel-misc-plugin' ); ?></a>
+							<?php if ( ! empty( $fh_row['shipped'] ) ) : ?>
+								<em><?php esc_html_e( 'Shipped', 'fishotel-misc-plugin' ); ?></em>
+							<?php endif; ?>
+						</span>
+						<?php if ( empty( $fh_row['shipped'] ) && ! empty( $fh_row['others'] ) ) : ?>
+							<details class="fh-cr-pull__other">
+								<summary><?php esc_html_e( 'It is in a tank already', 'fishotel-misc-plugin' ); ?></summary>
+								<?php $fh_pick_form( 'pick', (int) $fh_row['order_id'], (string) $fh_row['ref'], 0, (array) $fh_row['others'], __( 'It was this tank', 'fishotel-misc-plugin' ) ); ?>
+							</details>
+						<?php endif; ?>
+					</li>
+				<?php endforeach; ?>
+			</ul>
 		</div>
 	<?php endif; ?>
 

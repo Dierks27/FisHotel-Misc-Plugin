@@ -138,6 +138,18 @@ function delete_option( $key ) {
 }
 
 /**
+ * Adds only when the option is not there yet (WordPress's own rule: what
+ * makes it a lock).
+ */
+function add_option( $key, $value = '', $deprecated = '', $autoload = 'yes' ) {
+	if ( array_key_exists( $key, $GLOBALS['fh_options'] ) ) {
+		return false;
+	}
+	$GLOBALS['fh_options'][ $key ] = $value;
+	return true;
+}
+
+/**
  * Transients.
  */
 $GLOBALS['fh_transients'] = array();

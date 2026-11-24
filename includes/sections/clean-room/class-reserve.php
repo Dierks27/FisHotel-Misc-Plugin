@@ -275,7 +275,8 @@ class Reserve {
 	 *            water (a fish bought on an invoice while in quarantine
 	 *            moves with its group);
 	 *   request  a group the same customer was offered by a request
-	 *            (line.offered: stay ids), in clean water;
+	 *            (line.offered: stay ids), in clean water, of the line's
+	 *            own fish and size (Sold_Line::exact());
 	 *   product  / name — the ladder (Sold_Line::stays()) over the clean
 	 *            groups, kept only where it is sure of the size
 	 *            (Sold_Line::exact()); otherwise 'coarse' with no group:
@@ -315,8 +316,11 @@ class Reserve {
 		$offered = array_map( 'intval', isset( $line['offered'] ) && is_array( $line['offered'] ) ? $line['offered'] : array() );
 		if ( $offered ) {
 			$mine = array();
+			$ask  = array_merge( $line, array( 'held' => array(), 'link' => array() ) );
 			foreach ( $clean as $stay ) {
-				if ( in_array( (int) $stay['id'], $offered, true ) ) {
+				// The group offered, and only when it is that fish in that size: a Medium once offered never
+				// answers for a Large bought now (a request is matched on its product, not its size).
+				if ( in_array( (int) $stay['id'], $offered, true ) && Sold_Line::exact( $ask, $stay ) ) {
 					$mine[] = $stay;
 				}
 			}
@@ -645,6 +649,109 @@ class Reserve {
 		return (int) ( $line['seen'] ?? 0 ) > 0 || ! empty( $line['held'] );
 	}
 
+	/**
+	 * The fish a line that has gone still keeps out of the free count:
+	 * what it holds less what its events already took out of each group
+	 * (until they are written, those fish are spoken for — never given to
+	 * another order).
+	 *
+	 * @param array<int, int> $held Held.
+	 * @param int             $qty  The line's fish now.
+	 * @param array<int, int> $net  written()['net'].
+	 * @return array<int, int>
+	 */
+	public static function holding( array $held, $qty, array $net ) {
+		$out = array();
+		foreach ( self::trim( $held, $qty ) as $stay => $n ) {
+			$left = $n - max( 0, (int) ( $net[ $stay ] ?? 0 ) );
+			if ( $left > 0 ) {
+				$out[ $stay ] = $left;
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * Whether a line that has ALREADY gone may still be given a tank by
+	 * itself (and so be taken out of it) — install safety:
+	 *
+	 *   - a line looked at while its order was open (seen, or held) keeps
+	 *     what it holds: a fish whose tank was not known then is "not
+	 *     found" — never taken out of a group logged after it left;
+	 *   - otherwise only when it is sure the line left AFTER the switch-on:
+	 *     its order came in after it, or the order was open until the very
+	 *     change being worked and nothing but that change says it left (no
+	 *     shipment, no pickup, no box gone before).
+	 *
+	 * A line of an order that had left before the switch-on is so never
+	 * given a tank, whatever hook or sweep looks at it later.
+	 *
+	 * @param array $line     A fish line (seen, held, item_id).
+	 * @param array $order    created (UNIX time), signals.
+	 * @param int   $since    The switch-on time.
+	 * @param bool  $was_open The order was open until the change being worked.
+	 * @return bool
+	 */
+	public static function late_ok( array $line, array $order, $since, $was_open ) {
+		if ( self::gated( $line ) || (int) $since <= 0 ) {
+			return false;
+		}
+		if ( (int) ( $order['created'] ?? 0 ) >= (int) $since ) {
+			return true;
+		}
+		$signals = (array) ( $order['signals'] ?? array() );
+		return $was_open && ! self::left( array_merge( $signals, array( 'status' => 'processing' ) ), (int) ( $line['item_id'] ?? 0 ) );
+	}
+
+	/**
+	 * Whether an open order's line that was never looked at is left alone
+	 * — install safety for the orders open at the switch-on that had in
+	 * fact already gone and were never marked: one that came in before the
+	 * switch-on and was to be delivered today or earlier (it shipped the
+	 * day before its delivery date). It is never reserved, never marked
+	 * seen, and so never taken out.
+	 *
+	 * @param array  $line  seen, held.
+	 * @param array  $order created (UNIX time), delivery (site date).
+	 * @param int    $since The switch-on time.
+	 * @param string $today Site date.
+	 * @return bool
+	 */
+	public static function stale( array $line, array $order, $since, $today ) {
+		if ( self::gated( $line ) || (int) ( $order['created'] ?? 0 ) >= (int) $since ) {
+			return false;
+		}
+		$delivery = (string) ( $order['delivery'] ?? '' );
+		return Replay::is_date( $delivery ) && Replay::is_date( (string) $today ) && strcmp( $delivery, (string) $today ) <= 0;
+	}
+
+	/**
+	 * When a shipped event happened: the start of the line's ship day (the
+	 * day before its delivery date) when that is today or the two days
+	 * before — the fish were pulled that day, so a recount logged after
+	 * the pull already counted them gone and is not taken off twice — else
+	 * now ('').
+	 *
+	 * @param string $delivery    The order's delivery date (site date, '' = none).
+	 * @param string $today       Site date.
+	 * @param string $ship_start  The ship day's start as "Y-m-d H:i:s" UTC (worked out by the caller).
+	 * @param string $checkin     The group's check-in date (site date, '' = not known).
+	 * @return string "Y-m-d H:i:s" UTC, or '' for now.
+	 */
+	public static function shipped_at( $delivery, $today, $ship_start, $checkin = '' ) {
+		if ( ! Replay::is_date( (string) $delivery ) || ! Replay::is_date( (string) $today ) || '' === (string) $ship_start ) {
+			return '';
+		}
+		$ship_day = Replay::add_days( (string) $delivery, -1 );
+		if ( strcmp( $ship_day, (string) $today ) > 0 || strcmp( $ship_day, Replay::add_days( (string) $today, -2 ) ) < 0 ) {
+			return '';
+		}
+		if ( ! Replay::is_date( (string) $checkin ) || strcmp( (string) $checkin, $ship_day ) >= 0 ) {
+			return ''; // A group checked in on the ship day or later (or not known when): the event is now.
+		}
+		return (string) $ship_start;
+	}
+
 	/* ============================================================== */
 	/*  Pull today                                                     */
 	/* ============================================================== */
@@ -652,30 +759,33 @@ class Reserve {
 	/**
 	 * The ship day's pull list: building → tank → fish → order. A line
 	 * spread over two tanks is under each with its own fish; a line
-	 * already taken out of its tank is ticked ("Shipped"); a line no
-	 * group holds is "Tank not known" (an invert in no tank is only
-	 * named, quietly: inverts are often in no tank on the site).
+	 * already gone ticked ("Shipped": its order left, or its fish were
+	 * already taken out of that tank); a line no group holds is "Tank not
+	 * known" (an invert in no tank is only named, quietly: inverts are
+	 * often in no tank on the site) — ticked too once its order left.
 	 *
-	 * @param array[] $lines   Today's fish lines (Ship_Lines::today()['lines']).
+	 * @param array[] $lines   Today's fish lines (Ship_Lines::today()['lines']), each may carry left (its
+	 *                         order or its own shipment has gone out).
 	 * @param array[] $stays   The groups the reservations name, by id (hydrated; a closed one too).
 	 * @param array   $shipped Note => stay id => fish taken out (written()['net'] per line).
-	 * @return array{buildings: array[], unknown: array[], loose: array[], fish: int, left: int}
+	 * @return array{buildings: array[], unknown: array[], loose: array[], fish: int, shipped: int, left: int}
 	 *         buildings: [ { id, label, tanks: [ { number, rows: [ { name, size, qty, number, order_id, ref,
-	 *         stay_id, shipped } ] } ] } ]; unknown / loose: [ { qty, name, number, order_id, ref } ];
-	 *         fish: every fish on the list; left: the fish not taken out yet.
+	 *         stay_id, shipped } ] } ] } ]; unknown / loose: [ { qty, name, number, order_id, ref, shipped } ];
+	 *         fish: every fish on the list; shipped: the ones gone; left: the ones still here.
 	 */
 	public static function pull( array $lines, array $stays, array $shipped ) {
 		$buildings = array();
 		$unknown   = array();
 		$loose     = array();
 		$fish      = 0;
-		$left      = 0;
+		$gone_fish = 0;
 		foreach ( $lines as $line ) {
 			$qty = (int) ( $line['qty'] ?? 0 );
 			if ( $qty <= 0 ) {
 				continue;
 			}
 			$fish += $qty;
+			$gone  = ! empty( $line['left'] );
 			$base  = array(
 				'name'     => (string) ( $line['name'] ?? '' ),
 				'number'   => (string) ( $line['number'] ?? '' ),
@@ -692,7 +802,8 @@ class Reserve {
 				}
 				$rest -= $n;
 				$out   = (int) ( $shipped[ $note ][ $stay_id ] ?? 0 );
-				$left += max( 0, $n - $out );
+				$done  = $gone || $out >= $n;
+				$gone_fish += $done ? $n : max( 0, min( $n, $out ) );
 				$bid   = (int) ( $stay['building_id'] ?? 0 );
 				$tank  = (int) ( $stay['tank_number'] ?? 0 );
 				if ( ! isset( $buildings[ $bid ] ) ) {
@@ -710,16 +821,23 @@ class Reserve {
 						'size'    => (string) ( $stay['size_label'] ?? '' ),
 						'qty'     => (int) $n,
 						'stay_id' => (int) $stay_id,
-						'shipped' => $out >= $n,
+						'shipped' => $done,
 					)
 				);
 			}
 			if ( $rest > 0 ) {
-				$left += $rest;
+				$gone_fish += $gone ? $rest : 0;
+				$row        = array_merge(
+					$base,
+					array(
+						'qty'     => $rest,
+						'shipped' => $gone,
+					)
+				);
 				if ( ! empty( $line['loose'] ) ) {
-					$loose[] = array_merge( $base, array( 'qty' => $rest ) );
+					$loose[] = $row;
 				} else {
-					$unknown[] = array_merge( $base, array( 'qty' => $rest ) );
+					$unknown[] = $row;
 				}
 			}
 		}
@@ -743,7 +861,8 @@ class Reserve {
 			'unknown'   => $unknown,
 			'loose'     => $loose,
 			'fish'      => $fish,
-			'left'      => $left,
+			'shipped'   => $gone_fish,
+			'left'      => max( 0, $fish - $gone_fish ),
 		);
 	}
 
@@ -776,7 +895,8 @@ class Reserve {
 	}
 
 	/**
-	 * "Tank not known — 1 × Blue Hippo Tang (#1251)".
+	 * "Tank not known — 1 × Blue Hippo Tang (#1251)" — the fish still
+	 * here only (one whose order left is ticked on its own row instead).
 	 *
 	 * @param array[] $rows unknown rows.
 	 * @return string
@@ -784,7 +904,9 @@ class Reserve {
 	public static function unknown_text( array $rows ) {
 		$parts = array();
 		foreach ( $rows as $row ) {
-			$parts[] = self::row_text( $row );
+			if ( empty( $row['shipped'] ) ) {
+				$parts[] = self::row_text( $row );
+			}
 		}
 		/* translators: %s: the fish */
 		return $parts ? sprintf( __( 'Tank not known — %s', 'fishotel-misc-plugin' ), implode( ', ', $parts ) ) : '';
@@ -792,13 +914,16 @@ class Reserve {
 
 	/**
 	 * The pull list with its words: each row's ("2 × Yellow Tang M
-	 * (#1234)"), the count ("6 of 8 fish still to pull"), the unknown
-	 * line and its hint, the inverts in no tank.
+	 * (#1234)"), the count ("8 fish today · 2 shipped"), the fish whose
+	 * tank is not known — one row each — and the hint, the inverts in no
+	 * tank.
 	 *
-	 * @param array $pull pull().
+	 * @param array $pull  pull().
+	 * @param bool  $quiet The feeding block right above already says what to do about a fish with no tank:
+	 *                     no hint here.
 	 * @return array
 	 */
-	public static function pull_words( array $pull ) {
+	public static function pull_words( array $pull, $quiet = false ) {
 		foreach ( (array) ( $pull['buildings'] ?? array() ) as $b => $building ) {
 			foreach ( (array) ( $building['tanks'] ?? array() ) as $t => $tank ) {
 				foreach ( (array) ( $tank['rows'] ?? array() ) as $r => $row ) {
@@ -806,11 +931,15 @@ class Reserve {
 				}
 			}
 		}
-		$fish                 = (int) ( $pull['fish'] ?? 0 );
-		$left                 = (int) ( $pull['left'] ?? 0 );
-		$pull['count_text']   = $fish > 0 ? ( $left > 0 ? sprintf( /* translators: 1: fish still in their tanks, 2: every fish */ _n( '%1$d of %2$d fish still to pull', '%1$d of %2$d fish still to pull', $fish, 'fishotel-misc-plugin' ), $left, $fish ) : __( 'All shipped', 'fishotel-misc-plugin' ) ) : '';
+		$pull['count_text'] = self::count_text( (int) ( $pull['fish'] ?? 0 ), (int) ( $pull['shipped'] ?? 0 ) );
+		$waiting            = false;
+		foreach ( (array) ( $pull['unknown'] ?? array() ) as $u => $row ) {
+			$pull['unknown'][ $u ]['text'] = self::row_text( $row );
+			$waiting                       = $waiting || empty( $row['shipped'] );
+		}
 		$pull['unknown_text'] = self::unknown_text( (array) ( $pull['unknown'] ?? array() ) );
-		$pull['hint']         = '' !== $pull['unknown_text'] ? self::unknown_hint() : '';
+		$pull['unknown_head'] = (array) ( $pull['unknown'] ?? array() ) ? __( 'Tank not known', 'fishotel-misc-plugin' ) : '';
+		$pull['hint']         = $waiting && ! $quiet ? self::unknown_hint() : '';
 		$loose                = array();
 		foreach ( (array) ( $pull['loose'] ?? array() ) as $row ) {
 			$loose[] = self::row_text( $row );
@@ -821,14 +950,37 @@ class Reserve {
 	}
 
 	/**
-	 * What to do about a fish whose tank is not known — the feeding
-	 * rule's own hint (correct a group already there under another name
-	 * before adding one).
+	 * "8 fish today · 2 shipped" / "8 fish today · all shipped" — '' on a
+	 * day with none. Counted the same way however long the fish wait in
+	 * their bags for a label.
+	 *
+	 * @param int $fish    Every fish on the list.
+	 * @param int $shipped The ones gone.
+	 * @return string
+	 */
+	public static function count_text( $fish, $shipped ) {
+		$fish    = max( 0, (int) $fish );
+		$shipped = min( $fish, max( 0, (int) $shipped ) );
+		if ( $fish <= 0 ) {
+			return '';
+		}
+		if ( $shipped >= $fish ) {
+			/* translators: %d: fish */
+			return sprintf( _n( '%d fish today · all shipped', '%d fish today · all shipped', $fish, 'fishotel-misc-plugin' ), $fish );
+		}
+		/* translators: 1: fish, 2: fish shipped */
+		return sprintf( _n( '%1$d fish today · %2$d shipped', '%1$d fish today · %2$d shipped', $fish, 'fishotel-misc-plugin' ), $fish, $shipped );
+	}
+
+	/**
+	 * What to do about a fish whose tank is not known — Pull today's own,
+	 * short: log its group, or correct the one already there under
+	 * another name (the feeding rule's advice, without the feeding).
 	 *
 	 * @return string
 	 */
 	public static function unknown_hint() {
-		return Feeding::list_hint();
+		return __( 'Log its group on the Board — or, if it is already there under another name, correct that group first — and it is reserved by itself.', 'fishotel-misc-plugin' );
 	}
 
 	/* ============================================================== */
@@ -879,6 +1031,11 @@ class Reserve {
 			return sprintf( _n( '%d of these is reserved for an order and will come off by itself when it ships.', '%d of these are reserved for an order and will come off by themselves when it ships.', (int) $qty, 'fishotel-misc-plugin' ), (int) $qty );
 		}
 		/* translators: 1: fish reserved, 2: order numbers */
+		if ( count( $numbers ) > 1 ) {
+			/* translators: 1: fish reserved, 2: order numbers */
+			return sprintf( _n( '%1$d of these is reserved for %2$s and will come off by itself when they ship.', '%1$d of these are reserved for %2$s and will come off by themselves when they ship.', (int) $qty, 'fishotel-misc-plugin' ), (int) $qty, $list );
+		}
+		/* translators: 1: fish reserved, 2: order number */
 		return sprintf( _n( '%1$d of these is reserved for %2$s and will come off by itself when it ships.', '%1$d of these are reserved for %2$s and will come off by themselves when it ships.', (int) $qty, 'fishotel-misc-plugin' ), (int) $qty, $list );
 	}
 
@@ -897,10 +1054,42 @@ class Reserve {
 		$qty = (int) ( $event['qty'] ?? 0 );
 		if ( $qty < 0 ) {
 			/* translators: 1: order number, 2: fish */
-			return sprintf( _n( 'Shipped · order #%1$d — %2$d fish put back', 'Shipped · order #%1$d — %2$d fish put back', abs( $qty ), 'fishotel-misc-plugin' ), $order['order_id'], abs( $qty ) );
+			return sprintf( _n( 'Back in the tank · order #%1$d (%2$d fish)', 'Back in the tank · order #%1$d (%2$d fish)', abs( $qty ), 'fishotel-misc-plugin' ), $order['order_id'], abs( $qty ) );
 		}
 		/* translators: 1: order number, 2: fish */
 		return sprintf( _n( 'Shipped · order #%1$d (%2$d fish)', 'Shipped · order #%1$d (%2$d fish)', $qty, 'fishotel-misc-plugin' ), $order['order_id'], $qty );
+	}
+
+	/**
+	 * The rest of a shipped event's line once its chip says "Shipped" /
+	 * "Back in the tank": "order #1234 (2 fish)".
+	 *
+	 * @param array $event type, qty, note.
+	 * @return string
+	 */
+	public static function event_detail( array $event ) {
+		$order = 'sold' === (string) ( $event['type'] ?? '' ) ? self::parse_note( $event['note'] ?? '' ) : null;
+		if ( null === $order ) {
+			return '';
+		}
+		$qty = abs( (int) ( $event['qty'] ?? 0 ) );
+		/* translators: 1: order number, 2: fish */
+		return sprintf( _n( 'order #%1$d (%2$d fish)', 'order #%1$d (%2$d fish)', $qty, 'fishotel-misc-plugin' ), $order['order_id'], $qty );
+	}
+
+	/**
+	 * The word on an event's type chip: "Shipped" for a fish taken out by
+	 * its order, "Back in the tank" for one put back — '' for any other
+	 * event (its own type is shown).
+	 *
+	 * @param array $event type, qty, note.
+	 * @return string
+	 */
+	public static function type_label( array $event ) {
+		if ( 'sold' !== (string) ( $event['type'] ?? '' ) || null === self::parse_note( $event['note'] ?? '' ) ) {
+			return '';
+		}
+		return (int) ( $event['qty'] ?? 0 ) < 0 ? __( 'Back in the tank', 'fishotel-misc-plugin' ) : __( 'Shipped', 'fishotel-misc-plugin' );
 	}
 
 	/**

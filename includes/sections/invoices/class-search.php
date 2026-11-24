@@ -182,7 +182,7 @@ class Search {
 				/* translators: %d: fish */
 				$detail[] = sprintf( __( '%d on other open invoices', 'fishotel-misc-plugin' ), $on_other );
 			}
-			$for_orders = isset( $ordered[ $group['stay_id'] ] ) ? (int) $ordered[ $group['stay_id'] ]['qty'] : 0;
+			$for_orders = isset( $ordered[ $group['stay_id'] ] ) ? Tanks::for_orders( $ordered[ $group['stay_id'] ] ) : 0; // Not the ones on an open invoice already.
 			if ( $for_orders > 0 ) {
 				/* translators: 1: fish, 2: order numbers */
 				$detail[] = sprintf( __( '%1$d reserved for orders (%2$s)', 'fishotel-misc-plugin' ), $for_orders, '#' . implode( ', #', (array) $ordered[ $group['stay_id'] ]['orders'] ) );

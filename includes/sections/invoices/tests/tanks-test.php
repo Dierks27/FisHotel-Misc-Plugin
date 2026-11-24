@@ -209,6 +209,7 @@ namespace {
 	preg_match_all( '/\$context\[0\]->(\w+)\(/', $source, $m );
 	check_same( 'the only methods called on its store are reads', array( 'open_stays', 'species_by_name', 'species_by_product', 'species_list', 'stay' ), array_values( array_unique( ( sort( $m[1] ) ? $m[1] : $m[1] ) ) ) );
 	check_same( 'the fish a group holds for customers\' open orders are read from the Clean Room (only the groups asked for)', array( 21 => array( 'qty' => 2, 'orders' => array( '1234' ) ) ), ( new Tanks() )->reserved( array( 21, 22 ) ) );
+	check_same( 'an unpaid invoice\'s order is counted once — as the open invoice — not again as reserved', array( 1, 3, 0 ), array( Tanks::for_orders( array( 'qty' => 3, 'invoice' => 2 ) ), Tanks::for_orders( array( 'qty' => 3 ) ), Tanks::for_orders( null ) ) );
 	check( 'its classes (the reserved counts too) are looked up without the autoloader, and every method is checked first', 4 === substr_count( $source, 'class_exists( $' ) && substr_count( $source, 'method_exists(' ) >= 7 && false === strpos( $source, 'use FisHotel\\Misc\\Sections\\Clean_Room' ) );
 
 	fh_finish();

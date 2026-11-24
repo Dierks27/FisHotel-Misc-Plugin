@@ -494,7 +494,7 @@ class Ship_Lines {
 				$key = 0 === strpos( $key, 'attribute_' ) ? substr( $key, 10 ) : $key;
 				if ( '_' !== substr( $key, 0, 1 ) && Sizes::matches( $key ) && '' !== trim( $value ) ) {
 					$out['size_slug']  = Sizes::slug( $value );
-					$out['size_label'] = trim( $value );
+					$out['size_label'] = self::size_name( $key, $value );
 					break;
 				}
 			}
@@ -503,6 +503,30 @@ class Ship_Lines {
 		}
 
 		return $out;
+	}
+
+	/**
+	 * A size as the shop names it: a size attribute of the shop's own
+	 * (pa_…) keeps its slug on the line ("2-3-5") — its term's name is the
+	 * size ("2-3.5\""); a size typed on the product is its own name.
+	 *
+	 * @param string $key   The attribute (without "attribute_").
+	 * @param string $value What the line or the variation keeps.
+	 * @return string
+	 */
+	public static function size_name( $key, $value ) {
+		$value = trim( (string) $value );
+		if ( 0 === strpos( (string) $key, 'pa_' ) && function_exists( 'get_term_by' ) ) {
+			try {
+				$term = get_term_by( 'slug', $value, (string) $key );
+				if ( is_object( $term ) && isset( $term->name ) && '' !== trim( (string) $term->name ) ) {
+					return Sizes::plain( (string) $term->name );
+				}
+			} catch ( \Throwable $e ) {
+				return $value;
+			}
+		}
+		return $value;
 	}
 
 	/**
