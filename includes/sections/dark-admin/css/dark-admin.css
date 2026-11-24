@@ -477,6 +477,11 @@ body.fh-dark-admin #pass-strength-result.strong {
 	border-color: var(--fh-da-success);
 }
 
+body.fh-dark-admin .color-option.selected,
+body.fh-dark-admin .color-option:hover {
+	background: var(--fh-da-raised);
+}
+
 /* ================================================================== */
 /*  Boxes                                                              */
 /* ================================================================== */
@@ -2120,6 +2125,7 @@ body.fh-dark-admin #order_data .order_data_column .form-field label {
 	color: var(--fh-da-text-quiet);
 }
 
+body.fh-dark-admin #order_data .order_data_column a.edit_address,
 body.fh-dark-admin #order_data .order_data_column a.edit_address::after,
 body.fh-dark-admin #order_data .order_data_column a.load_customer_billing,
 body.fh-dark-admin #order_data .order_data_column a.load_customer_shipping,
@@ -2483,6 +2489,44 @@ body.fh-dark-admin .woocommerce-badge {
 	color: var(--fh-da-text);
 }
 
+body.fh-dark-admin.woocommerce_page_wc-settings .woo-nav-tab-wrapper .nav-tab,
+body.fh-dark-admin.woocommerce_page_wc-settings .nav-tab-wrapper .nav-tab {
+	color: var(--fh-da-text-quiet);
+}
+
+body.fh-dark-admin.woocommerce_page_wc-settings .woo-nav-tab-wrapper .nav-tab-active,
+body.fh-dark-admin.woocommerce_page_wc-settings .nav-tab-wrapper .nav-tab-active,
+body.fh-dark-admin.woocommerce_page_wc-settings .woo-nav-tab-wrapper .nav-tab:hover {
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin.woocommerce_page_wc-settings .subsubsub li,
+body.fh-dark-admin.woocommerce_page_wc-settings p.wc-settings-marketplace-link {
+	color: var(--fh-da-text-quiet);
+}
+
+body.fh-dark-admin.woocommerce_page_wc-settings .subsubsub li a {
+	color: var(--fh-da-link);
+}
+
+body.fh-dark-admin.woocommerce_page_wc-settings .subsubsub li a.current {
+	color: var(--fh-da-text);
+}
+
+/* WooCommerce's dashboard widget writes its figures near-black. */
+body.fh-dark-admin #woocommerce_dashboard_status .wc_status_list li,
+body.fh-dark-admin #woocommerce_dashboard_status .wc_status_list li a,
+body.fh-dark-admin #woocommerce_dashboard_status .wc_status_list li strong,
+body.fh-dark-admin #woocommerce_dashboard_status .wc_status_list li .amount,
+body.fh-dark-admin #woocommerce_dashboard_status .wc_status_list li bdi {
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin #woocommerce_dashboard_status .wc_status_list li a:hover {
+	background: var(--fh-da-raised);
+}
+
 /* Order status pills keep their own pale colours and dark words (readable as they are). */
 
 /* ================================================================== */
@@ -2678,6 +2722,11 @@ body.fh-dark-admin #wpseo_meta .wpseo-metabox-menu ul li a {
 	background-color: var(--fh-da-surface);
 	border-color: var(--fh-da-border);
 	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .wpseo-make-primary-term,
+body.fh-dark-admin .wpseo-is-primary-term {
+	color: var(--fh-da-link);
 }
 
 body.fh-dark-admin #wpseo_meta .wpseo-metabox-menu ul li.active,
@@ -3098,6 +3147,85 @@ body.fh-dark-admin .tablenav input[type="checkbox"]:not(:checked) {
 	border-color: var(--fh-da-border-strong);
 }
 
+/* Batch Manager's picture library, the theme's testimonials editor. */
+body.fh-dark-admin .fha-card,
+body.fh-dark-admin #fha-upload-panel,
+body.fh-dark-admin .fh-tm-row {
+	background: var(--fh-da-surface);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .fha-pill {
+	background: var(--fh-da-raised);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .fh-tm-handle,
+body.fh-dark-admin .fh-tm-optional {
+	color: var(--fh-da-text-quiet);
+}
+
+/* Small grey or coloured words in the FisHotel boxes and widgets. */
+body.fh-dark-admin .fh-cr-metabox__muted,
+body.fh-dark-admin .fh-cs-mb__hint,
+body.fh-dark-admin .fh-hw-hint,
+body.fh-dark-admin .fh-hw-meta,
+body.fh-dark-admin .fh-tw-note,
+body.fh-dark-admin .fh-tw-open,
+body.fh-dark-admin .fh-stats-widget__label,
+body.fh-dark-admin .fhsmtp-widget-label,
+body.fh-dark-admin .fh-dash-card span {
+	color: var(--fh-da-text-quiet);
+}
+
+body.fh-dark-admin .fh-faq-answer-label,
+body.fh-dark-admin .fh-faq-row label {
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .fh-cs-col--future,
+body.fh-dark-admin #fst_shipment_overview a,
+body.fh-dark-admin #fst_shipment_overview [style*="#0073aa"],
+body.fh-dark-admin #fst_shipment_overview [style*="#17a2b8"] {
+	color: var(--fh-da-link) !important;
+}
+
+body.fh-dark-admin .column-fst_ship_date span {
+	color: var(--fh-da-warning);
+}
+
+/* Code Snippets' editor screen (its code area is left light: see README). */
+body.fh-dark-admin .code-snippets-upsell-banner,
+body.fh-dark-admin .snippet-editor-sidebar .box,
+body.fh-dark-admin .import-snippets-card,
+body.fh-dark-admin .code-snippets-select [class*="-control"],
+body.fh-dark-admin .code-snippets-select [class*="-menu"] {
+	background: var(--fh-da-surface);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .code-snippets-select [class*="-singleValue"],
+body.fh-dark-admin .code-snippets-select [class*="-option"] {
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin #snippet-form .button:not(.button-primary),
+body.fh-dark-admin #snippet-form input[type="submit"]:not(.button-primary) {
+	background: var(--fh-da-surface);
+	border-color: var(--fh-da-link);
+	color: var(--fh-da-link);
+}
+
+/* WordPress 7's new single-page screens (Font Library). */
+body.fh-dark-admin .boot-layout,
+body.fh-dark-admin .boot-layout__surfaces,
+body.fh-dark-admin .boot-layout__stage {
+	background: var(--fh-da-bg);
+	color: var(--fh-da-text);
+}
+
 /* Inline styles other plugins write for a light page: the common pale
  * backgrounds become the dark card, the common greys become quiet text.
  * (Anything else is rescued by the readability guard.) */
@@ -3274,7 +3402,11 @@ body.fh-dark-admin #woo-seo-product-upsell-ad,
 body.fh-dark-admin .yst-root .yst-paper,
 body.fh-dark-admin .yst-root [id^="headlessui-dialog-panel"],
 body.fh-dark-admin #yoast-first-time-configuration-notice,
-body.fh-dark-admin #webinar-promo-notification {
+body.fh-dark-admin #webinar-promo-notification,
+body.fh-dark-admin #wpbody-content .yst-root,
+body.fh-dark-admin #wpbody-content [class*="yoast_premium_upsell"],
+body.fh-dark-admin #wpbody-content .yoast-features-list,
+body.fh-dark-admin .CodeMirror {
 	--fh-da-bg: #ffffff;
 	--fh-da-surface: #ffffff;
 	--fh-da-raised: #f0f0f1;
