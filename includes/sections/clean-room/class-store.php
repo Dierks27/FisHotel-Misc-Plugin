@@ -1236,6 +1236,9 @@ class Store {
 			return $this->closed_stays( $today, $settings, 200 );
 		};
 
+		// The fish reserved for open orders (Reserve) — and, where the day's list is built, the pull list.
+		$reserve = Reserve_Shop::room_data( $this, $today, $settings, $stays, $tanks, isset( $protocol['templates'] ) );
+
 		return self::assemble_room(
 			$tanks,
 			isset( $protocol['templates'] ) ? $this->buildings() : array(),
@@ -1246,7 +1249,8 @@ class Store {
 			$settings,
 			$protocol,
 			// A clean system is not fed on the day its fish ship (Feeding) — asked only where the day's list is built.
-			isset( $protocol['templates'] ) ? Ship_Lines::fast( $today, $settings, $stays, $tanks, $gone ) : array()
+			isset( $protocol['templates'] ) ? Ship_Lines::fast( $today, $settings, $stays, $tanks, $gone ) : array(),
+			$reserve
 		);
 	}
 
@@ -1272,13 +1276,19 @@ class Store {
 	 * @param array   $settings  Settings.
 	 * @param array   $protocol  Settings::protocols(), or one steps list.
 	 * @param array   $fast      Feeding::plan() (empty = every tank is fed).
+	 * @param array   $reserve   Reserve_Shop::room_data(): counts (each group's reserved fish — the occupant
+	 *                           carries reserved and reserved_orders), pull and lost (on the list).
 	 * @return array{tanks: array[], todo: array|null}
 	 */
-	public static function assemble_room( array $tanks, array $buildings, array $stays, array $copper, array $rows, $today, array $settings, array $protocol, array $fast = array() ) {
+	public static function assemble_room( array $tanks, array $buildings, array $stays, array $copper, array $rows, $today, array $settings, array $protocol, array $fast = array(), array $reserve = array() ) {
 		$per_building = isset( $protocol['templates'] );
+		$counts       = isset( $reserve['counts'] ) && is_array( $reserve['counts'] ) ? $reserve['counts'] : array();
 
 		$by_tank = array();
 		foreach ( $stays as $stay ) {
+			// Reserved for open orders: not an event, the count alive is unchanged.
+			$stay['reserved']        = (int) ( $counts[ (int) $stay['id'] ]['qty'] ?? 0 );
+			$stay['reserved_orders'] = (array) ( $counts[ (int) $stay['id'] ]['orders'] ?? array() );
 			$by_tank[ (int) $stay['tank_id'] ][] = $stay;
 		}
 
@@ -1337,6 +1347,10 @@ class Store {
 		}
 
 		$list = Todo::build( $buildings, $out, $protocol, $rows, $today, $settings, $fast );
+		if ( $reserve ) {
+			$list['pull'] = isset( $reserve['pull'] ) ? $reserve['pull'] : null; // Reserve::pull(): which tank each fish of today's boxes comes out of.
+			$list['lost'] = isset( $reserve['lost'] ) ? $reserve['lost'] : array(); // The fish that shipped and whose tank was not found.
+		}
 
 		return array(
 			'tanks' => Todo::overlay( $out, $list ),
@@ -1811,6 +1825,66 @@ class Store {
 		}
 
 		return array_map( array( self::class, 'hydrate_event' ), is_array( $rows ) ? $rows : array() );
+	}
+
+	/**
+	 * The `sold` events of a set of stays that an order wrote or that undo
+	 * one — what the reservation reads to write only the difference
+	 * (Reserve::written()). One query on the stay_id key.
+	 *
+	 * @param int[] $stay_ids Stay ids.
+	 * @return array[] Hydrated events, oldest first.
+	 */
+	public function order_events( array $stay_ids ) {
+		$stay_ids = array_values( array_unique( array_filter( array_map( 'intval', $stay_ids ) ) ) );
+		if ( ! self::tables_exist() || ! $stay_ids ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		try {
+			$rows = $wpdb->get_results(
+				self::event_select() . " WHERE e.stay_id IN (" . implode( ',', $stay_ids ) . ") AND e.type = 'sold' AND ( e.note LIKE 'order:%' OR e.note LIKE 'undo of #%' ) ORDER BY e.event_at ASC, e.id ASC LIMIT 20000", // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- integers only.
+				ARRAY_A
+			);
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+
+		return array_map( array( self::class, 'hydrate_event' ), is_array( $rows ) ? $rows : array() );
+	}
+
+	/**
+	 * The orders whose fish were taken out of a tank by themselves since a
+	 * moment (their events' notes) — what the hourly sweep looks at again.
+	 *
+	 * @param string $since_utc "Y-m-d H:i:s" UTC.
+	 * @return int[] Order ids.
+	 */
+	public function order_ids_shipped_since( $since_utc ) {
+		if ( ! self::tables_exist() ) {
+			return array();
+		}
+
+		global $wpdb;
+
+		try {
+			$notes = $wpdb->get_col(
+				$wpdb->prepare( 'SELECT DISTINCT note FROM ' . self::table( 'stay_events' ) . " WHERE type = 'sold' AND note LIKE %s AND created_at >= %s LIMIT 2000", 'order:%', (string) $since_utc ) // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+			);
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+
+		$out = array();
+		foreach ( is_array( $notes ) ? $notes : array() as $note ) {
+			$order = Reserve::parse_note( $note );
+			if ( $order ) {
+				$out[ $order['order_id'] ] = $order['order_id'];
+			}
+		}
+		return array_values( $out );
 	}
 
 	/**

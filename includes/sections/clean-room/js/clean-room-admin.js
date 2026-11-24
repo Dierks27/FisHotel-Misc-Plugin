@@ -878,6 +878,7 @@
 						$form.find('[name="auto_confirm_seconds"]').val(s.auto_confirm_seconds);
 						$form.find('[name="voice_enabled"]').prop('checked', !!s.voice_enabled);
 						$form.find('[name="no_feed_on_ship_day"]').prop('checked', !!s.no_feed_on_ship_day);
+						$form.find('[name="reserve_sold_fish"]').prop('checked', !!s.reserve_sold_fish);
 					}
 				})
 				.fail(fail)

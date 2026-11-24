@@ -411,12 +411,12 @@ class Reserve {
 	 *                        item_id, ref, held, offered; a line already gone is not passed).
 	 * @param array[] $clean  The open groups in clean water.
 	 * @param array[] $all    Every open group.
+	 * @param array   $counts What other orders (not passed) already hold: stay id => { qty, orders }.
 	 * @return array{counts: array<int, array{qty: int, orders: string[]}>, adds: array<int, array<string, array<int, int>>>,
 	 *               unknown: array<int, array<string, int>>}
 	 *         adds: order id => ref => the groups to add; unknown: order id => ref => fish no group was found for.
 	 */
-	public static function plan( array $orders, array $clean, array $all = array() ) {
-		$counts = array();
+	public static function plan( array $orders, array $clean, array $all = array(), array $counts = array() ) {
 		foreach ( $orders as $order ) {
 			foreach ( (array) ( $order['lines'] ?? array() ) as $line ) {
 				self::count_in( $counts, self::trim( (array) ( $line['held'] ?? array() ), (int) ( $line['qty'] ?? 0 ) ), (string) ( $order['number'] ?? '' ) );
@@ -465,6 +465,30 @@ class Reserve {
 		foreach ( self::held( $add ) as $stay => $qty ) {
 			$out[ $stay ] = ( $out[ $stay ] ?? 0 ) + $qty;
 		}
+		return $out;
+	}
+
+	/**
+	 * The other clean groups a line's fish may have come out of — what
+	 * "Pulled from a different tank" and "It was tank…" offer: every group
+	 * of that fish the ladder knows in clean water (a size nobody wrote
+	 * down too: the owner decides), with fish alive or its last fish gone
+	 * today, minus the ones it is held in now.
+	 *
+	 * @param array   $line    A line (name, names, product_id, variation_id, size_slug, size_label).
+	 * @param array[] $clean   The clean groups (a closed one may carry left_today).
+	 * @param int[]   $exclude Stay ids not to offer.
+	 * @return array[] The groups, the one that ships first first.
+	 */
+	public static function alternatives( array $line, array $clean, array $exclude = array() ) {
+		$ask = array_merge( $line, array( 'held' => array(), 'link' => array() ) );
+		$out = array();
+		foreach ( Sold_Line::stays( $ask, $clean )['stays'] as $stay ) {
+			if ( ! in_array( (int) $stay['id'], array_map( 'intval', $exclude ), true ) ) {
+				$out[] = $stay;
+			}
+		}
+		usort( $out, array( self::class, 'ships_first' ) );
 		return $out;
 	}
 

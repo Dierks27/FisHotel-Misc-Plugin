@@ -117,9 +117,9 @@ class Orders {
 	private $invoice_lines = array();
 
 	/**
-	 * The shipped line ids per order, once per request.
+	 * What the shipments of each order say (shipments()), once per request.
 	 *
-	 * @var array<int, array<int, true>>
+	 * @var array<int, array>
 	 */
 	private $shipped = array();
 
@@ -284,7 +284,24 @@ class Orders {
 	 * @return array<int, true>
 	 */
 	public function shipped_item_ids( $order ) {
-		$out = array();
+		return $this->shipments( $order )['items'];
+	}
+
+	/**
+	 * What ShipTracker's shipments of an order say: the line ids they
+	 * name, and whether one of them names none — a shipment with no item
+	 * list covers the whole order (ShipTracker's own rule). Read once per
+	 * order and request; the Clean Room's reservations ask it too.
+	 *
+	 * @param object $order Order.
+	 * @return array{any: bool, whole: bool, items: array<int, true>}
+	 */
+	public function shipments( $order ) {
+		$out = array(
+			'any'   => false,
+			'whole' => false,
+			'items' => array(),
+		);
 		if ( ! self::shipments_available() ) {
 			return $out;
 		}
@@ -298,12 +315,21 @@ class Orders {
 			return $out;
 		}
 		foreach ( is_array( $rows ) ? $rows : array() as $row ) {
-			$list = is_object( $row ) && isset( $row->line_item_ids ) ? $row->line_item_ids : ( is_array( $row ) && isset( $row['line_item_ids'] ) ? $row['line_item_ids'] : '' );
-			$ids  = is_string( $list ) && '' !== $list ? json_decode( $list, true ) : ( is_array( $list ) ? $list : null );
+			if ( ! is_object( $row ) && ! is_array( $row ) ) {
+				continue;
+			}
+			$out['any'] = true;
+			$list       = is_object( $row ) && isset( $row->line_item_ids ) ? $row->line_item_ids : ( is_array( $row ) && isset( $row['line_item_ids'] ) ? $row['line_item_ids'] : '' );
+			$ids        = is_string( $list ) && '' !== $list ? json_decode( $list, true ) : ( is_array( $list ) ? $list : null );
+			$named      = 0;
 			foreach ( is_array( $ids ) ? $ids : array() as $id ) {
 				if ( is_scalar( $id ) && (int) $id > 0 ) {
-					$out[ (int) $id ] = true;
+					$out['items'][ (int) $id ] = true;
+					$named++;
 				}
+			}
+			if ( 0 === $named ) {
+				$out['whole'] = true;
 			}
 		}
 		$this->shipped[ $order_id ] = $out;

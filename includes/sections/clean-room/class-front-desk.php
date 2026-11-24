@@ -907,6 +907,11 @@ class Front_Desk {
 			'saleReady'       => ! empty( $stay['sale_ready'] ),
 			'readyInSpa'      => ! empty( $stay['ready_in_spa'] ),
 			'needsId'         => ! empty( $stay['needs_id'] ),
+			// Reserved for open orders (Reserve): "2 reserved · #1234", and what the hand "Shipped" says.
+			'reserved'        => (int) ( $stay['reserved'] ?? 0 ),
+			'reservedFor'     => ! empty( $stay['reserved_orders'] ) ? '#' . implode( ', #', array_map( 'strval', (array) $stay['reserved_orders'] ) ) : '',
+			'reservedText'    => Reserve::reserved_text( (int) ( $stay['reserved'] ?? 0 ), (array) ( $stay['reserved_orders'] ?? array() ) ),
+			'soldNote'        => Reserve::sold_note( (int) ( $stay['reserved'] ?? 0 ), (array) ( $stay['reserved_orders'] ?? array() ) ),
 		);
 	}
 

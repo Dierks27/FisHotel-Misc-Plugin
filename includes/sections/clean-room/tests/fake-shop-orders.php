@@ -22,6 +22,7 @@ $GLOBALS['fh_shop_orders']   = array();
 $GLOBALS['fh_shop_products'] = array();
 $GLOBALS['fh_shop_queries']  = 0;
 $GLOBALS['fh_shop_loads']    = 0;
+$GLOBALS['fh_shop_items']    = array();
 
 /**
  * A product: its categories live on the parent for a variation, as in
@@ -125,6 +126,14 @@ class Fh_Shop_Item {
 		return array_key_exists( $key, $this->meta ) ? $this->meta[ $key ] : '';
 	}
 
+	public function set_meta( $key, $value ) {
+		$this->meta[ (string) $key ] = $value;
+	}
+
+	public function delete_meta( $key ) {
+		unset( $this->meta[ (string) $key ] );
+	}
+
 	public function get_meta_data() {
 		$out = array();
 		foreach ( $this->meta as $key => $value ) {
@@ -203,6 +212,7 @@ class WC_Order {
 		$id                 = $this->id * 10 + count( $this->items ) + 1;
 		$item               = new Fh_Shop_Item( $id, $name, $qty, $product, $meta );
 		$this->items[ $id ] = $item;
+		$GLOBALS['fh_shop_items'][ $id ] = $item;
 		if ( $refunded ) {
 			$this->refunded[ $id ] = -abs( (int) $refunded ); // WooCommerce reports refunds as negatives.
 		}
@@ -213,9 +223,44 @@ class WC_Order {
 		return $this->items;
 	}
 
+	/**
+	 * Refund some fish of a line (after the order was placed).
+	 */
+	public function refund_item( $item_id, $qty ) {
+		$this->refunded[ (int) $item_id ] = -abs( (int) $qty );
+	}
+
 	public function get_qty_refunded_for_item( $item_id ) {
 		return isset( $this->refunded[ (int) $item_id ] ) ? $this->refunded[ (int) $item_id ] : 0;
 	}
+}
+
+/**
+ * Item meta written straight onto an order item (the reservation), as
+ * WooCommerce's own functions do — without saving the order. Each write
+ * fires the item-meta action, as WooCommerce's metadata API does.
+ */
+function wc_update_order_item_meta( $item_id, $key, $value ) {
+	if ( ! isset( $GLOBALS['fh_shop_items'][ (int) $item_id ] ) ) {
+		return false;
+	}
+	$GLOBALS['fh_shop_items'][ (int) $item_id ]->set_meta( $key, $value );
+	$GLOBALS['fh_item_meta_writes'] = ( $GLOBALS['fh_item_meta_writes'] ?? 0 ) + 1;
+	if ( function_exists( 'do_action' ) ) {
+		do_action( 'updated_order_item_meta', 0, (int) $item_id, (string) $key, $value );
+	}
+	return true;
+}
+
+function wc_delete_order_item_meta( $item_id, $key ) {
+	if ( ! isset( $GLOBALS['fh_shop_items'][ (int) $item_id ] ) ) {
+		return false;
+	}
+	$GLOBALS['fh_shop_items'][ (int) $item_id ]->delete_meta( $key );
+	if ( function_exists( 'do_action' ) ) {
+		do_action( 'deleted_order_item_meta', array(), (int) $item_id, (string) $key, '' );
+	}
+	return true;
 }
 
 function fh_shop_order( WC_Order $order ) {
