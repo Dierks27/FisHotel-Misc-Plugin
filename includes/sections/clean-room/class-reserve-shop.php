@@ -165,6 +165,14 @@ class Reserve_Shop {
 	private static $memo = array();
 
 	/**
+	 * The orders whose shipments this class primed (Lost Fish's reader),
+	 * forgotten when the read is done.
+	 *
+	 * @var int[]
+	 */
+	private static $primed = array();
+
+	/**
 	 * How deep this request holds the lock (0 = not held).
 	 *
 	 * @var int
@@ -208,6 +216,7 @@ class Reserve_Shop {
 		self::$memo   = array();
 		self::$queue  = array();
 		self::$locked = 0;
+		self::unprime();
 	}
 
 	/**
@@ -768,6 +777,19 @@ class Reserve_Shop {
 		if ( ! class_exists( $class, false ) || ! method_exists( $class, 'ready' ) || ! $class::ready() ) {
 			return array();
 		}
+		$user  = method_exists( $order, 'get_customer_id' ) ? (int) $order->get_customer_id() : 0;
+		$email = method_exists( $order, 'get_billing_email' ) ? strtolower( trim( (string) $order->get_billing_email() ) ) : '';
+		$rows  = self::offered_rows( $class );
+		if ( null !== $rows ) {
+			// Every offer of the open groups was read once for this pass: this customer's are picked out here.
+			$out = array();
+			foreach ( $rows as $row ) {
+				if ( $row['product_id'] > 0 && $row['stay_id'] > 0 && ( ( $user > 0 && $row['user_id'] === $user ) || ( '' !== $email && $row['email'] === $email ) ) ) {
+					$out[ $row['product_id'] ][] = $row['stay_id'];
+				}
+			}
+			return $out;
+		}
 		$out = array();
 		try {
 			$store   = new $class();
@@ -794,6 +816,31 @@ class Reserve_Shop {
 	}
 
 	/**
+	 * Every offer (or fill) of a request naming one of the open groups in
+	 * clean water — read once per request (Requests' offered_to_stays()),
+	 * null when that Requests section is older (each order is then asked on
+	 * its own, as before).
+	 *
+	 * @param string $class The Requests store's class.
+	 * @return array[]|null
+	 */
+	private static function offered_rows( $class ) {
+		if ( array_key_exists( 'offered', self::$memo ) ) {
+			return self::$memo['offered'];
+		}
+		if ( ! method_exists( $class, 'offered_to_stays' ) || ! isset( self::$memo['stays'] ) ) {
+			return null;
+		}
+		try {
+			$rows = ( new $class() )->offered_to_stays( array_column( self::$memo['stays']['clean'], 'id' ) );
+		} catch ( \Throwable $e ) {
+			return null;
+		}
+		self::$memo['offered'] = is_array( $rows ) ? $rows : array();
+		return self::$memo['offered'];
+	}
+
+	/**
 	 * A line's offered groups.
 	 *
 	 * @param array             $line    A fish line.
@@ -813,6 +860,34 @@ class Reserve_Shop {
 	/* ============================================================== */
 	/*  Reserved                                                       */
 	/* ============================================================== */
+
+	/**
+	 * Read the shipments of many orders in one query for the reads that
+	 * follow (the Lost Fish section's reader, when it can).
+	 *
+	 * @param int[] $order_ids Order ids.
+	 */
+	private static function prime( array $order_ids ) {
+		$class = '\\FisHotel\\Misc\\Sections\\Lost_Fish\\Orders';
+		if ( ! class_exists( $class, false ) || ! method_exists( $class, 'prime_shipments' ) ) {
+			return;
+		}
+		$rows = Store::shipment_rows( $order_ids );
+		if ( null !== $rows ) {
+			self::$primed = array_merge( self::$primed, (array) $class::prime_shipments( $rows ) );
+		}
+	}
+
+	/**
+	 * Forget the shipments this class primed.
+	 */
+	private static function unprime() {
+		$class = '\\FisHotel\\Misc\\Sections\\Lost_Fish\\Orders';
+		if ( self::$primed && class_exists( $class, false ) && method_exists( $class, 'unprime' ) ) {
+			$class::unprime( self::$primed );
+		}
+		self::$primed = array();
+	}
 
 	/**
 	 * Every open group, and the ones in clean water — read once per
@@ -875,6 +950,7 @@ class Reserve_Shop {
 			try {
 				$out = self::pass( $store, $settings, $wrote );
 			} finally {
+				self::unprime();
 				if ( $wrote ) {
 					self::unlock();
 				}
@@ -928,6 +1004,9 @@ class Reserve_Shop {
 		} catch ( \Throwable $e ) {
 			$found = array();
 		}
+
+		// Every open order's shipments in one query (ShipTracker's table), not one or two per order.
+		self::prime( array_map( static function ( $o ) { return is_object( $o ) && method_exists( $o, 'get_id' ) ? (int) $o->get_id() : 0; }, (array) $found ) );
 
 		$orders = array();
 		foreach ( (array) $found as $order ) {
@@ -2185,15 +2264,20 @@ class Reserve_Shop {
 		$ship  = Ship_Lines::today( (string) $today );
 		$lines = isset( $ship['lines'] ) && is_array( $ship['lines'] ) ? $ship['lines'] : array();
 
-		// Whether each order has gone (its status, its shipments, its box): one read per order.
+		// Whether each order has gone (its status, its shipments, its box): their shipments in one query.
 		$left = array();
-		foreach ( $lines as $i => $line ) {
-			$id = (int) ( $line['order_id'] ?? 0 );
-			if ( ! isset( $left[ $id ] ) ) {
-				$order       = $id > 0 ? wc_get_order( $id ) : null;
-				$left[ $id ] = is_object( $order ) ? self::left_signals( $order ) : array();
+		self::prime( array_column( $lines, 'order_id' ) );
+		try {
+			foreach ( $lines as $i => $line ) {
+				$id = (int) ( $line['order_id'] ?? 0 );
+				if ( ! isset( $left[ $id ] ) ) {
+					$order       = $id > 0 ? wc_get_order( $id ) : null;
+					$left[ $id ] = is_object( $order ) ? self::left_signals( $order ) : array();
+				}
+				$lines[ $i ]['left'] = $left[ $id ] && Reserve::left( $left[ $id ], (int) ( $line['item_id'] ?? 0 ) );
 			}
-			$lines[ $i ]['left'] = $left[ $id ] && Reserve::left( $left[ $id ], (int) ( $line['item_id'] ?? 0 ) );
+		} finally {
+			self::unprime();
 		}
 
 		$ids = array();

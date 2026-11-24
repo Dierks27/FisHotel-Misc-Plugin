@@ -285,8 +285,18 @@ class Ship_Lines {
 		}
 
 		$going = Feeding::going_out( $orders, $today );
-		foreach ( $going as $id => $head ) {
-			$going[ $id ]['rows'] = self::rows( $objects[ $id ] );
+		// Their shipments in one query (the Lost Fish reader asks ShipTracker per order otherwise).
+		$reader = '\\FisHotel\\Misc\\Sections\\Lost_Fish\\Orders';
+		$rows   = $going && method_exists( $reader, 'prime_shipments' ) ? Store::shipment_rows( array_keys( $going ) ) : null;
+		$primed = null !== $rows ? (array) $reader::prime_shipments( $rows ) : array();
+		try {
+			foreach ( $going as $id => $head ) {
+				$going[ $id ]['rows'] = self::rows( $objects[ $id ] );
+			}
+		} finally {
+			if ( $primed && method_exists( $reader, 'unprime' ) ) {
+				$reader::unprime( $primed );
+			}
 		}
 
 		return Feeding::shipping( $going, $today, \FisHotel\Misc\Sections\Today\Collector::fish_categories(), self::loose_categories() );

@@ -1859,6 +1859,45 @@ class Store {
 	}
 
 	/**
+	 * ShipTracker's shipments of many orders in ONE query on its own table
+	 * (what FST_Shipment::get_by_order() reads one order at a time): order
+	 * id => its rows (order_id, line_item_ids; an order with none gets an
+	 * empty list) — null when the table cannot be named or read (each order
+	 * is then read on its own, as before). Up to 500 orders a query.
+	 *
+	 * @param int[] $order_ids Order ids.
+	 * @return array<int, object[]>|null
+	 */
+	public static function shipment_rows( array $order_ids ) {
+		global $wpdb;
+		$ids = array_values( array_unique( array_filter( array_map( 'intval', $order_ids ) ) ) );
+		if ( ! $ids || ! class_exists( '\\FST_Shipment' ) || ! method_exists( '\\FST_Shipment', 'table' ) || ! is_object( $wpdb ) || ! method_exists( $wpdb, 'get_results' ) ) {
+			return null;
+		}
+		$out = array();
+		foreach ( array_chunk( $ids, 500 ) as $chunk ) {
+			try {
+				$rows = $wpdb->get_results( 'SELECT order_id, line_item_ids FROM ' . \FST_Shipment::table() . ' WHERE order_id IN (' . implode( ',', $chunk ) . ')' ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery -- integers only.
+			} catch ( \Throwable $e ) {
+				return null;
+			}
+			if ( ! is_array( $rows ) ) {
+				return null;
+			}
+			foreach ( $chunk as $id ) {
+				$out[ $id ] = array();
+			}
+			foreach ( $rows as $row ) {
+				$id = is_object( $row ) ? (int) ( $row->order_id ?? 0 ) : ( is_array( $row ) ? (int) ( $row['order_id'] ?? 0 ) : 0 );
+				if ( isset( $out[ $id ] ) ) {
+					$out[ $id ][] = $row;
+				}
+			}
+		}
+		return $out;
+	}
+
+	/**
 	 * The orders whose fish were taken out of a tank by themselves since a
 	 * moment (their events' notes) — what the hourly sweep looks at again.
 	 *
