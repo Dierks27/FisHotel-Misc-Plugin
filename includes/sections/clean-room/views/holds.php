@@ -51,7 +51,7 @@ $fh_hold_button = static function ( $op, array $fields, $label, $class = '' ) {
 <section class="fh-cr-todo-block fh-cr-holds">
 	<header class="fh-cr-todo-block__head">
 		<h2><?php esc_html_e( 'Held by hand', 'fishotel-misc-plugin' ); ?></h2>
-		<span class="fh-cr-building__meta"><?php echo esc_html( sprintf( /* translators: %d: holds */ _n( '%d hold — released by hand only', '%d holds — released by hand only', count( $fh_holds ), 'fishotel-misc-plugin' ), count( $fh_holds ) ) ); ?></span>
+		<span class="fh-cr-building__meta"><?php echo esc_html( $fh_holds ? sprintf( /* translators: %d: holds */ _n( '%d hold — released by hand only', '%d holds — released by hand only', count( $fh_holds ), 'fishotel-misc-plugin' ), count( $fh_holds ) ) : __( 'none held now', 'fishotel-misc-plugin' ) ); ?></span>
 	</header>
 
 	<?php foreach ( $fh_suggest as $fh_s ) : ?>

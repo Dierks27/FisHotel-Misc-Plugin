@@ -351,6 +351,7 @@ namespace {
 	check( 'the phone\'s Reserve… label: "How many (1 ready)" — not "HOW MANY? OF 1 READY"', false !== strpos( $js, "fmt(t('holdHowMany', 'How many (%d ready)'), o.ready)" ) && false === strpos( $js, "t('howMany', 'How many?') + ' ' + fmt(t('readyOf'" ) );
 	check( '… and under the name, always: tied to an account, or a name typed (picking then editing says so)', false !== strpos( $js, 'showTie()' ) && false !== strpos( (string) file_get_contents( FISHOTEL_MISC_PATH . 'includes/sections/clean-room/js/clean-room-admin.js' ), 'holdTie($form)' ) );
 	$css = (string) file_get_contents( FISHOTEL_MISC_PATH . 'includes/sections/clean-room/css/clean-room-admin.css' );
+	check( '"Ended lately" is readable on the dark To do card (its own colour), and no "0 holds" header', (bool) preg_match( '/\.fh-cr-holds__closed-head \{[^}]*color:/', (string) file_get_contents( FISHOTEL_MISC_PATH . 'includes/sections/clean-room/css/clean-room-admin.css' ) ) && false !== strpos( (string) file_get_contents( FISHOTEL_MISC_PATH . 'includes/sections/clean-room/views/holds.php' ), "'none held now'" ) );
 	check( 'the Board\'s "For whom" box keeps inside its card', (bool) preg_match( '/\.fh-cr-hold__form input\[type="text"\] \{[^}]*max-width: 100%;[^}]*box-sizing: border-box;/', $css ) );
 
 	/* ------------------------------------------------------------------ */

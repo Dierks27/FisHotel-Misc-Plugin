@@ -2310,6 +2310,12 @@ a.fh-cr-unknown {
 .fh-cr-holds__closed {
 	opacity: 0.8;
 }
+/* "Ended lately" reads on the dark To do card (an h3 is dark by default). */
+.fh-cr-holds__closed-head {
+	margin: 14px 0 4px;
+	font-size: 14px;
+	color: var(--fh-text-secondary, #b0b0b0);
+}
 .fh-cr-hold__form input[type="number"] {
 	width: 4.5em;
 }
