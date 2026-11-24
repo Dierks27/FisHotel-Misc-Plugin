@@ -32,9 +32,10 @@ Three bands. Bands 1 and 2 open; band 3 closed.
      theme saved theirs (`woocommerce_process_product_meta`, priority 50);
      a name saved as it was drawn writes nothing. When the two differ today,
      both are shown, each with **Use this one** — nothing changes until the
-     owner picks one (or types one) and updates. The theme's own field in
-     the facts box is kept equal by the script and hidden. Shown for a live
-     fish only.
+     owner picks one (or types one) and updates. From theme 1.28 the facts
+     box leaves the field out (its filter `fishotel_fish_facts_box_fields`);
+     with an older theme its own field is kept equal by the script and
+     hidden. Shown for a live fish only.
    - **Livestock — packed in a bag** and **Needs a 3rd bag (sharp spines or
      a scalpel)** — the Packing section's two fields (same meta, same save),
      drawn here through its contract `fishotel_packing_product_fields()`

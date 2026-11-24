@@ -71,6 +71,20 @@ class Product_Screen {
 	}
 
 	/**
+	 * The fields the theme's facts box draws (pure): all but the
+	 * scientific name, which Fish essentials draws.
+	 *
+	 * @param mixed $keys The theme's field keys.
+	 * @return mixed
+	 */
+	public static function facts_fields( $keys ) {
+		if ( ! is_array( $keys ) ) {
+			return $keys;
+		}
+		return array_values( array_diff( $keys, array( 'scientific_name' ) ) );
+	}
+
+	/**
 	 * The kind classes of a box (pure): which kinds it is not shown for.
 	 *
 	 * @param string $box     Box id.
@@ -94,6 +108,8 @@ class Product_Screen {
 		add_action( 'add_meta_boxes_product', array( $this, 'boxes' ), 99 );
 		add_action( 'edit_form_after_title', array( $this, 'top_area' ) );
 		add_filter( 'woocommerce_product_data_tabs', array( self::class, 'tabs' ), 99 );
+		// Theme 1.28+: Fish essentials draws the scientific name, so the facts box leaves it out.
+		add_filter( 'fishotel_fish_facts_box_fields', array( self::class, 'facts_fields' ) );
 		add_action( 'woocommerce_process_product_meta', array( Essentials::class, 'save' ), 50 );
 		add_filter( 'admin_body_class', array( $this, 'body_class' ) );
 		add_action( 'admin_enqueue_scripts', array( $this, 'assets' ) );

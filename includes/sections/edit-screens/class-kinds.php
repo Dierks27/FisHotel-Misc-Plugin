@@ -40,11 +40,11 @@ class Kinds {
 	/**
 	 * The theme's medication and food categories
 	 * (inc/template-functions.php: fishotel_is_medication_product(),
-	 * fishotel_is_food_product()).
+	 * fishotel_is_food_product(); theme 1.28 adds the root `foods`).
 	 *
 	 * @var string[]
 	 */
-	const MED_SLUGS = array( 'medications', 'flakes', 'pellets', 'powders', 'liquid', 'antibacterial', 'antiparasitic', 'dewormer', 'freeze-dried-foods', 'fish-food', 'medicated-food' );
+	const MED_SLUGS = array( 'medications', 'flakes', 'pellets', 'powders', 'liquid', 'antibacterial', 'antiparasitic', 'dewormer', 'foods', 'freeze-dried-foods', 'fish-food', 'medicated-food' );
 
 	/**
 	 * The boxes shown for a live fish only (and while no category is

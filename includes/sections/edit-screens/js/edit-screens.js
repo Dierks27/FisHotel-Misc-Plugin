@@ -131,7 +131,11 @@
 			var $packs = $('#fh_packs_in_bag');
 			var packs = $packs.length ? $packs.prop('checked') : null;
 			var ships = $('[name="_fishotel_fulfillment"]').val();
-			$body.attr('class', withKind($body.attr('class'), kindFrom(checked, cfg.kindTerms, packs, ships)));
+			var kind = kindFrom(checked, cfg.kindTerms, packs, ships);
+			// Only this section's own class changes: other code's classes on <body> are left alone.
+			$body.removeClass(KINDS.map(function (k) {
+				return 'fh-es-kind-' + k;
+			}).join(' ')).addClass('fh-es-kind-' + kind);
 		};
 		$(root.document).on('change', '#product_catchecklist input[type="checkbox"], #fh_packs_in_bag, [name="_fishotel_fulfillment"]', function () {
 			// After the Packing script let the Livestock box follow the categories.

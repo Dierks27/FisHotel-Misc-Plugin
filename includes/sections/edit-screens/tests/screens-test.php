@@ -51,6 +51,7 @@ check_same(
 		'admin_notices',
 		'admin_post_fishotel_edit_screens',
 		'edit_form_after_title',
+		'fishotel_fish_facts_box_fields',
 		'postbox_classes_product_fishotel-compat-category',
 		'postbox_classes_product_fishotel_cleanroom',
 		'postbox_classes_product_fishotel_hotel_data',

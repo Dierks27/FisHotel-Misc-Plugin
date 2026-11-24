@@ -179,6 +179,8 @@ uasort(
 	}
 );
 check_same( 'tabs: General, Attributes, Variations, the medication tab, Inventory, Shipping, Linked, Advanced', array( 'general', 'attribute', 'variations', 'fishotel_med', 'inventory', 'shipping', 'linked', 'advanced' ), array_keys( $tabs ) );
+check_same( 'the theme\'s facts box (1.28) leaves the scientific name to Fish essentials', array( 'common_names', 'max_length' ), Product_Screen::facts_fields( array( 'scientific_name', 'common_names', 'max_length' ) ) );
+check( '— nonsense is handed back', 'x' === Product_Screen::facts_fields( 'x' ) );
 check( 'a tab that is not there is not added; nonsense is handed back', array( 'general' => array( 'priority' => 10 ) ) === Product_Screen::tabs( array( 'general' => array( 'priority' => 10 ) ) ) && 'x' === Product_Screen::tabs( 'x' ) );
 
 fh_finish();
