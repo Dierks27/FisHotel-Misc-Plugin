@@ -334,6 +334,6 @@ $_POST = array();
 
 fh_reset_hooks();
 $handlers->init();
-check( 'the four saves are admin AJAX actions (there is no nopriv twin)', array( 'wp_ajax_fishotel_packing_bags', 'wp_ajax_fishotel_packing_boxes', 'wp_ajax_fishotel_packing_fits', 'wp_ajax_fishotel_packing_map' ) === array_keys( $GLOBALS['fh_hooks'] ) );
+check( 'the five saves are admin AJAX actions (there is no nopriv twin)', array( 'wp_ajax_fishotel_packing_bags', 'wp_ajax_fishotel_packing_boxes', 'wp_ajax_fishotel_packing_fits', 'wp_ajax_fishotel_packing_map', 'wp_ajax_fishotel_packing_words' ) === array_keys( $GLOBALS['fh_hooks'] ) );
 
 fh_finish();

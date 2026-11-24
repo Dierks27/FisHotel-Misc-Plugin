@@ -62,6 +62,10 @@ function esc_attr( $text ) {
 	return htmlspecialchars( (string) $text, ENT_QUOTES, 'UTF-8' );
 }
 
+function esc_textarea( $text ) {
+	return htmlspecialchars( (string) $text, ENT_QUOTES, 'UTF-8' );
+}
+
 function esc_url( $url ) {
 	return (string) $url;
 }
@@ -364,8 +368,10 @@ function get_term_by( $field, $value, $taxonomy = '' ) {
 
 /**
  * Product categories: $GLOBALS['fh_terms'][ product id ] = array( slugs ).
+ * A category has a name when $GLOBALS['fh_term_names'][ slug ] gives one.
  */
-$GLOBALS['fh_terms'] = array();
+$GLOBALS['fh_terms']      = array();
+$GLOBALS['fh_term_names'] = array();
 
 function get_the_terms( $post_id, $taxonomy ) {
 	$slugs = $GLOBALS['fh_terms'][ (int) $post_id ] ?? array();
@@ -374,7 +380,11 @@ function get_the_terms( $post_id, $taxonomy ) {
 	}
 	return array_map(
 		static function ( $slug ) {
-			return (object) array( 'slug' => $slug );
+			$term = array( 'slug' => $slug );
+			if ( isset( $GLOBALS['fh_term_names'][ $slug ] ) ) {
+				$term['name'] = $GLOBALS['fh_term_names'][ $slug ];
+			}
+			return (object) $term;
 		},
 		$slugs
 	);

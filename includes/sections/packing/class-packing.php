@@ -31,6 +31,13 @@
  *                              fill, "on the line".
  *   - class-bags.php           a product's / an order line's bag: its own
  *                              value, else the size → bag map.
+ *   - class-layers.php         PURE: in how many layers a bag is used — 2,
+ *                              or 3 for a fish with spines (the product's
+ *                              "Bagging" choice, else the "Triple-bag
+ *                              these" words).
+ *   - class-shipment-plan.php  the plan in the words a shipment is recorded
+ *                              in — fishotel_packing_shipment_plan() — and
+ *                              the bag count ShipTracker asks for.
  *   - class-livestock.php      "Livestock — packed in a bag": the ONE rule
  *                              that says whether a product is bagged at all
  *                              (the checkbox on the product, else the fish
@@ -54,7 +61,10 @@
  * is not autoloaded and is read only by this section's admin screens and
  * its contract functions. The section registers no hook at all outside
  * wp-admin, so an ordinary front-end request costs no query and no option
- * read here.
+ * read here — with ONE exception: ShipTracker's own filter
+ * `fst_box_fish_count`, which fires only where ShipTracker counts the fish
+ * of a box (the order screen, its staff-only REST routes), never on a page
+ * a customer opens. Its callback loads the classes when it is called.
  *
  * The file uses bracketed namespaces because the contract functions live
  * in the global namespace.
@@ -110,6 +120,15 @@ namespace FisHotel\Misc\Sections\Packing {
 		 * @var string
 		 */
 		const META_PACKS = '_fh_packs_in_bag';
+
+		/**
+		 * Product meta (on the parent product, never on a variation):
+		 * "Bagging" — '2' (double) or '3' (triple); absent = Auto (the
+		 * "Triple-bag these" words decide). Hidden, like the bag size.
+		 *
+		 * @var string
+		 */
+		const META_LAYERS = '_fh_bag_layers';
 
 		/**
 		 * Order meta: the confirmed box (a JSON record) and its name as
@@ -184,6 +203,7 @@ namespace FisHotel\Misc\Sections\Packing {
 		 */
 		public static function load() {
 			require_once __DIR__ . '/class-size-list.php';
+			require_once __DIR__ . '/class-layers.php';
 			require_once __DIR__ . '/class-settings.php';
 			require_once __DIR__ . '/class-fit.php';
 			require_once __DIR__ . '/class-boxes.php';
@@ -194,6 +214,7 @@ namespace FisHotel\Misc\Sections\Packing {
 			require_once __DIR__ . '/class-livestock.php';
 			require_once __DIR__ . '/class-lines.php';
 			require_once __DIR__ . '/class-order-packing.php';
+			require_once __DIR__ . '/class-shipment-plan.php';
 			require_once __DIR__ . '/class-store.php';
 			require_once __DIR__ . '/class-fill.php';
 			require_once __DIR__ . '/class-today-line.php';
@@ -215,9 +236,17 @@ namespace FisHotel\Misc\Sections\Packing {
 		 * storefront, the cart, the checkout, the e-mails and the REST API
 		 * never hear of this section. (admin-ajax.php counts as wp-admin,
 		 * which is where the product editor and the order screen save.)
+		 *
+		 * The one hook of every request is ShipTracker's own filter
+		 * `fst_box_fish_count` — it counts the fish of a box in wp-admin AND
+		 * in its REST routes (staff only), and both must get the same bags.
+		 * No page a customer opens fires it; the callback loads nothing and
+		 * reads nothing until it is called.
 		 */
 		public static function boot() {
 			self::$booted = true;
+
+			add_filter( 'fst_box_fish_count', array( self::class, 'box_fish_count' ), 10, 3 );
 
 			if ( ! is_admin() ) {
 				return;
@@ -319,6 +348,8 @@ namespace FisHotel\Misc\Sections\Packing {
 				'bags'           => array(),
 				'bag_total'      => 0,
 				'bags_used'      => array(),
+				'bags_pull'      => array(),
+				'pull_total'     => 0,
 				'packed'         => array(
 					'from'   => '',
 					'boxes'  => array(),
@@ -372,7 +403,9 @@ namespace FisHotel\Misc\Sections\Packing {
 		 * fishotel_packing_bag_for_item(): the bag of one order line — the
 		 * bag to USE when its order has a plan (chosen by hand, else
 		 * upsized, else the minimum), with the minimum under `min`; the
-		 * minimum alone when it has none.
+		 * minimum alone when it has none. Either way with `layers` (2, or 3
+		 * for a fish with spines) and `layers_label` ("Medium ×2"); `name`
+		 * and `label` are the bag's alone, as they always were.
 		 *
 		 * @param mixed $order_item A WC_Order_Item_Product (anything else gives null).
 		 * @return array|null
@@ -387,6 +420,18 @@ namespace FisHotel\Misc\Sections\Packing {
 					if ( is_array( $bag ) ) {
 						$use = Order_Packing::bag_to_use( $order_item, $bag );
 						$bag = is_array( $use ) ? $use : $bag;
+					}
+					if ( is_array( $bag ) && ! isset( $bag['layers'] ) ) {
+						// No plan for the line: its layers by the rule alone.
+						$layers = Layers::for_line(
+							method_exists( $order_item, 'get_product' ) ? $order_item->get_product() : null,
+							method_exists( $order_item, 'get_name' ) ? (string) $order_item->get_name() : '',
+							Settings::get(),
+							$order_item
+						);
+
+						$bag['layers']       = $layers['layers'];
+						$bag['layers_label'] = Layers::label( $bag['name'], $layers['layers'] );
 					}
 				} catch ( \Throwable $e ) {
 					$bag = null;
@@ -468,6 +513,91 @@ namespace FisHotel\Misc\Sections\Packing {
 			$filtered = apply_filters( 'fishotel_packing_confirmed_box', $box, $order_id );
 
 			return is_array( $filtered ) ? $filtered : null;
+		}
+
+		/**
+		 * The answer of fishotel_packing_shipment_plan() when there is
+		 * nothing to say — written out here, so it is there while the
+		 * section's classes are not loaded.
+		 *
+		 * @param int    $order_id Order ID.
+		 * @param string $reason   disabled|no_woocommerce|order_not_found|no_plan|error.
+		 * @return array
+		 */
+		public static function no_shipment_plan( $order_id, $reason ) {
+			return array(
+				'available'   => false,
+				'reason'      => (string) $reason,
+				'order_id'    => (int) $order_id,
+				'owner_id'    => (int) $order_id,
+				'packed_with' => 0,
+				'from'        => '',
+				'split'       => false,
+				'boxes'       => array(),
+				'lines'       => array(),
+				'totals'      => array(
+					'fish'   => 0,
+					'bags'   => 0,
+					'layers' => 0,
+				),
+			);
+		}
+
+		/**
+		 * fishotel_packing_shipment_plan(): the order's plan in the words a
+		 * shipment is recorded in, or the "nothing" answer — never an
+		 * exception.
+		 *
+		 * @param mixed $order_id Order ID.
+		 * @return array
+		 */
+		public static function shipment_plan( $order_id ) {
+			$order_id = is_scalar( $order_id ) ? (int) $order_id : 0;
+
+			if ( ! self::$booted ) {
+				$plan = self::no_shipment_plan( $order_id, 'disabled' );
+			} else {
+				try {
+					self::load();
+					$plan = Shipment_Plan::for_order_id( $order_id );
+				} catch ( \Throwable $e ) {
+					$plan = self::no_shipment_plan( $order_id, 'error' );
+				}
+			}
+
+			try {
+				$filtered = apply_filters( 'fishotel_packing_shipment_plan', $plan, $order_id );
+			} catch ( \Throwable $e ) {
+				$filtered = $plan;
+			}
+
+			return is_array( $filtered ) ? $filtered : $plan;
+		}
+
+		/**
+		 * The callback of ShipTracker's filter `fst_box_fish_count`
+		 * ( $count, $order, $item_ids ): the single bags to pull for those
+		 * fish — every bag doubled, tripled for spines — in place of the
+		 * fish. ShipTracker uses the number only as the fish-bag quantity
+		 * of a box's usual materials. Unchanged while the section is off,
+		 * for an order Packing has no plan for, and whenever anything
+		 * fails: this never throws into ShipTracker.
+		 *
+		 * @param mixed $count    ShipTracker's count.
+		 * @param mixed $order    WC_Order.
+		 * @param mixed $item_ids The order's items in the box; null = all of them.
+		 * @return mixed
+		 */
+		public static function box_fish_count( $count, $order = null, $item_ids = null ) {
+			if ( ! self::$booted || ! is_object( $order ) ) {
+				return $count; // Nothing to count for: nothing is loaded and nothing is read.
+			}
+			try {
+				self::load();
+				return Shipment_Plan::fish_count( $count, $order, $item_ids );
+			} catch ( \Throwable $e ) {
+				return $count;
+			}
 		}
 	}
 }
@@ -576,6 +706,46 @@ namespace {
 		 */
 		function fishotel_packing_bag_for_size( $size ): ?array {
 			return \FisHotel\Misc\Sections\Packing\Packing::bag_for_size( $size );
+		}
+	}
+
+	if ( ! function_exists( 'fishotel_packing_shipment_plan' ) ) {
+		/**
+		 * What Packing knows about an order, in the words a shipment is
+		 * recorded in — so the box and the bags are not typed twice. Never
+		 * throws; every key is always there. Guard the call with
+		 * function_exists(): the function is declared by the Misc plugin.
+		 *
+		 *   available    bool — false while the section is off, WooCommerce
+		 *                is not loaded, the order does not exist or it has
+		 *                no fish line (`reason`: disabled | no_woocommerce |
+		 *                order_not_found | no_plan | error)
+		 *   order_id     int — the order asked
+		 *   owner_id     int — the order whose Packing box holds the plan:
+		 *                the combined box's for an order folded into one
+		 *   packed_with  int — the combined box this order went into (0 =
+		 *                none); then `boxes` is empty — ask the combined box
+		 *   from         confirmed | suggestion | '' (no box)
+		 *   split        bool — more than one box
+		 *   boxes        each: index (from 0), name, dims ("LxWxH"),
+		 *                standard (ShipTracker's own row for the box — name,
+		 *                dims, its strings verbatim — or null), match (name |
+		 *                dims | none), fish, bags, layers (single bags to
+		 *                pull: Σ bags × layers), by_bag (each: id, name,
+		 *                count, layers — the largest bag first), items
+		 *                ("<order id>-<item id>" → bags of that line in this
+		 *                box)
+		 *   lines        the fish lines still to pack, each: order_id,
+		 *                item_id, name, qty, bags, layers_each (2 | 3), why
+		 *                (product | word:<word> | default | filter), boxes
+		 *                (the index of every box holding some of it)
+		 *   totals       fish, bags, layers
+		 *
+		 * @param int $order_id Order ID.
+		 * @return array
+		 */
+		function fishotel_packing_shipment_plan( $order_id ): array {
+			return \FisHotel\Misc\Sections\Packing\Packing::shipment_plan( $order_id );
 		}
 	}
 

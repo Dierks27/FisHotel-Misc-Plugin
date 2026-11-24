@@ -9,8 +9,14 @@
  * The server draws every piece of HTML and writes every sentence; this
  * file posts forms and swaps the answers in. The pure helpers (fmt,
  * rowFromTemplate, fillStep, nowLine, confirmPayload, bagPayload, afterSave,
- * unsavedElsewhere, livestockFromCategories, drawnAsAfterClick) are exported for
- * tests/packing-admin.test.js.
+ * unsavedElsewhere, livestockFromCategories, drawnAsAfterClick, changedDetail)
+ * are exported for tests/packing-admin.test.js.
+ *
+ * Each time the Packing box of an order is drawn again (a box confirmed,
+ * changed or cleared, a bag changed, a refresh) the document is told:
+ * the event "fishotel-packing-changed" with { orderId }. Whatever shows
+ * Packing's box elsewhere on the order screen — the theme's Shipments box
+ * does — asks for the plan again, so it never keeps the box from before.
  *
  * @package FisHotel\Misc\Sections\Packing
  */
@@ -240,7 +246,24 @@
 		return checked ? 'no' : 'yes';
 	}
 
+	/**
+	 * The event the document hears once an order's Packing box was drawn
+	 * again, and what goes with it.
+	 */
+	var CHANGED_EVENT = 'fishotel-packing-changed';
+
+	/**
+	 * @param {*} orderId The order of the box (its data-order-id).
+	 * @return {Object} { orderId } — 0 when it is not an order id.
+	 */
+	function changedDetail(orderId) {
+		var id = /^\d+$/.test(String(orderId === null || typeof orderId === 'undefined' ? '' : orderId).replace(/\s+/g, '')) ? parseInt(orderId, 10) : 0;
+		return { orderId: id > 0 ? id : 0 };
+	}
+
 	var api = {
+		CHANGED_EVENT: CHANGED_EVENT,
+		changedDetail: changedDetail,
 		fmt: fmt,
 		rowFromTemplate: rowFromTemplate,
 		fillStep: fillStep,
@@ -517,10 +540,17 @@
 		// One post of the Packing box; the reply draws the box again.
 		function send($box, payload) {
 			var $status = $box.find('.fh-pack-status');
+			var orderId = $box.attr('data-order-id');
+
+			// The box was drawn again: tell whoever shows its box elsewhere on the screen.
+			function redraw(html) {
+				$box.replaceWith(html);
+				$(document).trigger(CHANGED_EVENT, [changedDetail(orderId)]);
+			}
 
 			payload.action = 'fishotel_packing_confirm';
 			payload._wpnonce = $box.attr('data-nonce');
-			payload.order_id = $box.attr('data-order-id');
+			payload.order_id = orderId;
 
 			$box.find('button, select').prop('disabled', true);
 			setStatus($status, i18n.saving || 'Saving…', '');
@@ -528,7 +558,7 @@
 			$.post(ajaxUrl, payload)
 				.done(function (reply) {
 					if (reply && reply.success && reply.data && reply.data.html) {
-						$box.replaceWith(reply.data.html);
+						redraw(reply.data.html);
 						return;
 					}
 					$box.find('button, select').prop('disabled', false);
@@ -538,7 +568,7 @@
 					var data = xhr && xhr.responseJSON && xhr.responseJSON.data ? xhr.responseJSON.data : null;
 					if (data && data.html) {
 						// Refused because the box on screen was out of date: here it is as it stands now.
-						$box.replaceWith(data.html);
+						redraw(data.html);
 						return;
 					}
 					$box.find('button, select').prop('disabled', false);
