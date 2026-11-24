@@ -32,6 +32,12 @@
  *               has one of these words is bagged three times, not twice
  *               (Layers). Until a list is saved it is Layers::default_words();
  *               a saved list is kept as saved, an empty one included.
+ *   triple_scope which lines that list reaches (Layers::scopes()): 'all'
+ *               (every line — the old way, and what a site has until the
+ *               owner ticks the products once with the helper on the Bags
+ *               tab, which then sets 'no_product'), 'no_product' (only a
+ *               line with no product page — a fish typed on a batch
+ *               invoice) or 'none'.
  *
  * Every save — bags_request(), boxes_request(), fits_request(),
  * map_request(), words_request() — checks the capability (manage_woocommerce) and the
@@ -110,6 +116,7 @@ class Settings {
 			'fill_share'   => Fit::SHARE_DEFAULT,
 			'foam'         => Fit::FOAM_DEFAULT,
 			'triple_words' => Layers::default_words(),
+			'triple_scope' => Layers::SCOPE_ALL,
 		);
 	}
 
@@ -259,6 +266,8 @@ class Settings {
 			? Layers::words_in( $raw['triple_words'] )
 			: Layers::default_words();
 
+		$scope = Layers::scope_in( $raw['triple_scope'] ?? '' );
+
 		return array(
 			'bags'         => $bags,
 			'last_bag_id'  => $last_id,
@@ -269,6 +278,7 @@ class Settings {
 			'fill_share'   => null === $share || '' === $share ? Fit::SHARE_DEFAULT : $share,
 			'foam'         => null === $foam || '' === $foam ? Fit::FOAM_DEFAULT : $foam,
 			'triple_words' => $words,
+			'triple_scope' => '' === $scope ? Layers::SCOPE_ALL : $scope,
 		);
 	}
 
@@ -1096,7 +1106,8 @@ class Settings {
 	/**
 	 * Save the "Triple-bag these" list.
 	 *
-	 * @param array $raw Unslashed POST: _wpnonce, triple_words (the text box).
+	 * @param array $raw Unslashed POST: _wpnonce, triple_words (the text box), triple_scope (which
+	 *                   lines the list reaches; left as it is when not posted).
 	 * @return array{status: int, ok: bool, message: string, settings?: array}
 	 */
 	public static function words_request( array $raw ) {
@@ -1109,22 +1120,40 @@ class Settings {
 		if ( ! is_string( $typed ) ) {
 			return self::refused( array( __( 'the list of words could not be read', 'fishotel-misc-plugin' ) ) );
 		}
+		$scope = null;
+		if ( array_key_exists( 'triple_scope', $raw ) ) {
+			$scope = Layers::scope_in( $raw['triple_scope'] );
+			if ( '' === $scope ) {
+				return self::refused( array( __( '"The word list applies to" is not one of its choices', 'fishotel-misc-plugin' ) ) );
+			}
+		}
 
 		$result = self::apply_words( self::get(), $typed );
 		if ( $result['errors'] ) {
 			return self::refused( $result['errors'] );
 		}
+		if ( null !== $scope ) {
+			$result['settings']['triple_scope'] = $scope;
+		}
 
 		$settings = self::store( $result['settings'] );
 		$count    = count( $settings['triple_words'] );
+		$reach    = Layers::words_reach( $settings['triple_scope'], true );
+
+		if ( ! $count || Layers::SCOPE_NONE === $settings['triple_scope'] ) {
+			$message = __( 'Saved. No word triple-bags anything: a fish is triple-bagged only when its product has "Needs a 3rd bag" ticked.', 'fishotel-misc-plugin' );
+		} elseif ( $reach ) {
+			/* translators: %d: number of words */
+			$message = sprintf( _n( 'Saved: %d word. A fish with it in its name or category is triple-bagged; every other fish is double-bagged.', 'Saved: %d words. A fish with one of them in its name or category is triple-bagged; every other fish is double-bagged.', $count, 'fishotel-misc-plugin' ), $count );
+		} else {
+			/* translators: %d: number of words */
+			$message = sprintf( _n( 'Saved: %d word. It reaches only the fish with no product page; a fish with a product is triple-bagged when "Needs a 3rd bag" is ticked on it.', 'Saved: %d words. They reach only the fish with no product page; a fish with a product is triple-bagged when "Needs a 3rd bag" is ticked on it.', $count, 'fishotel-misc-plugin' ), $count );
+		}
 
 		return array(
 			'status'   => 200,
 			'ok'       => true,
-			'message'  => $count
-				/* translators: %d: number of words */
-				? sprintf( _n( 'Saved: %d word. A fish with it in its name or category is triple-bagged; every other fish is double-bagged.', 'Saved: %d words. A fish with one of them in its name or category is triple-bagged; every other fish is double-bagged.', $count, 'fishotel-misc-plugin' ), $count )
-				: __( 'Saved: no words. Every fish is double-bagged, unless its product says Triple.', 'fishotel-misc-plugin' ),
+			'message'  => $message,
 			'settings' => $settings,
 		);
 	}

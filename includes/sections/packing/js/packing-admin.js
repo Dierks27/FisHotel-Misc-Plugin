@@ -261,7 +261,44 @@
 		return { orderId: id > 0 ? id : 0 };
 	}
 
+	/**
+	 * Quick edit of the products list: how the "Needs a 3rd bag" tick is
+	 * drawn for a row, from the state the Name cell carries.
+	 *
+	 * @param {*} dataThird The row's data-third ('1' = ticked); anything else
+	 *                      (none printed) leaves the tick out of the save.
+	 * @return {Object} { checked, shown } — shown is what the hidden field
+	 *                  posts ('yes' | 'no' | '' = not on the form).
+	 */
+	function quickEditThird(dataThird) {
+		var raw = String(dataThird === null || typeof dataThird === 'undefined' ? '' : dataThird);
+		if (raw !== '1' && raw !== '0') {
+			return { checked: false, shown: '' };
+		}
+		return { checked: raw === '1', shown: raw === '1' ? 'yes' : 'no' };
+	}
+
+	/**
+	 * Which selected checkboxes of the "Tick every product the old list
+	 * matches" list are posted, as one comma-separated list of ids.
+	 *
+	 * @param {Array} values The values of the ticked boxes.
+	 * @return {string}
+	 */
+	function tickIds(values) {
+		var out = [];
+		(values || []).forEach(function (v) {
+			var id = /^\d+$/.test(String(v)) ? parseInt(v, 10) : 0;
+			if (id > 0 && out.indexOf(id) === -1) {
+				out.push(id);
+			}
+		});
+		return out.join(',');
+	}
+
 	var api = {
+		quickEditThird: quickEditThird,
+		tickIds: tickIds,
 		CHANGED_EVENT: CHANGED_EVENT,
 		changedDetail: changedDetail,
 		fmt: fmt,
@@ -495,6 +532,52 @@
 
 			showBagFields();
 		}
+
+		/* ---- Needs a 3rd bag: top of the Shipping tab, quick edit -- */
+
+		// Drawn with the Shipping tab's own fields: moved to the top of the tab.
+		var $thirdTop = $('#shipping_product_data .fh-third-bag-top');
+		if ($thirdTop.length) {
+			$('#shipping_product_data').prepend($thirdTop.addClass('options_group'));
+		}
+
+		// Quick edit: WordPress copies the row's own data into the form; the
+		// tick's state is read from the Name cell.
+		if (root.inlineEditPost && typeof root.inlineEditPost.edit === 'function' && $('.fh-third-bag-quick').length) {
+			var wpInlineEdit = root.inlineEditPost.edit;
+			root.inlineEditPost.edit = function (id) {
+				wpInlineEdit.apply(this, arguments);
+				var postId = typeof id === 'object' ? parseInt(this.getId(id), 10) : parseInt(id, 10);
+				if (!postId) {
+					return;
+				}
+				var state = quickEditThird($('#post-' + postId).find('.fh-third-bag-data').attr('data-third'));
+				var $edit = $('#edit-' + postId);
+				$edit.find('input[name="fh_third_bag"]').prop('checked', state.checked);
+				$edit.find('input[name="fh_third_bag_shown"]').val(state.shown);
+			};
+		}
+
+		// "Tick every product the old list matches": the ticked rows are posted as
+		// one field (a long list would pass the server's limit on fields), kept
+		// up to date as rows are ticked, so the page's own save posts it.
+		var syncThirdIds = function ($form) {
+			$form.find('input[name="ids"]').val(tickIds($form.find('.fh-pack-third-pick:checked').map(function () {
+				return this.value;
+			}).get()));
+		};
+		$(document).on('change', '.fh-pack-third-pick', function () {
+			syncThirdIds($(this).closest('form'));
+		});
+		$(document).on('click', '.fh-pack-third-all, .fh-pack-third-none', function (e) {
+			e.preventDefault();
+			var $form = $(this).closest('form');
+			$form.find('.fh-pack-third-pick').prop('checked', $(this).hasClass('fh-pack-third-all'));
+			syncThirdIds($form);
+		});
+		$('.fh-pack-third-form').each(function () {
+			syncThirdIds($(this));
+		});
 
 		/* ---- The Packing box on the order screen ------------------- */
 

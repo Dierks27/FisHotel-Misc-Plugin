@@ -8,15 +8,20 @@
  * 3 for a fish with sharp spines or a scalpel. How a fish is known, in this
  * order (decide()):
  *
- *   1. the product's own choice — "Bagging: Auto / Double / Triple" in the
- *      product editor's Shipping tab, stored on the PARENT product as the
- *      hidden meta `_fh_bag_layers` ('2' or '3'; Auto stores nothing);
+ *   1. the product's own choice — the tick "Needs a 3rd bag (sharp spines
+ *      or a scalpel)" in the product editor, stored on the PARENT product
+ *      as the hidden meta `_fh_bag_layers` ('3'; '2' is a "Double" chosen
+ *      before the tick existed and still counts; unticked stores nothing);
  *   2. a word of the "Triple-bag these" list (Packing → Bags), found as a
  *      WHOLE word, whatever the letter case, in the order line's name or in
- *      one of its product's category names — so it also reaches the fish
- *      of an opened-up Invoice and a fish line with no product. One or
- *      many makes no difference: "tang" finds "Tangs" and "tangs" finds
- *      "Tang" — never "Tangerine";
+ *      one of its product's category names. One or many makes no
+ *      difference: "tang" finds "Tangs" and "tangs" finds "Tang" — never
+ *      "Tangerine". WHICH lines the list reaches is a setting ("The word
+ *      list applies to", scopes()): every line (the old way, and the way
+ *      until the owner ticks the products once with the helper on
+ *      Packing → Bags), only the lines with no product page — a fish typed
+ *      on a batch invoice, an invoice row with no product — or none. A
+ *      line with a product page then obeys its tick alone;
  *   3. otherwise 2.
  *
  * The filter fishotel_packing_bag_layers has the last word (for_line()).
@@ -52,10 +57,77 @@ class Layers {
 	const WHY_FILTER  = 'filter';
 
 	/**
+	 * Why a fish WITH a product page has two bags while the word list does
+	 * not reach such lines: nobody ticked "Needs a 3rd bag" on it.
+	 */
+	const WHY_NO_TICK = 'no_tick';
+
+	/**
+	 * Which lines the "Triple-bag these" list reaches: every line (the old
+	 * way), only the lines with no product page, or none.
+	 */
+	const SCOPE_ALL        = 'all';
+	const SCOPE_NO_PRODUCT = 'no_product';
+	const SCOPE_NONE       = 'none';
+
+	/**
 	 * The most words the list keeps, and the longest a word may be.
 	 */
 	const MAX_WORDS = 60;
 	const MAX_WORD  = 40;
+
+	/**
+	 * The choices of "The word list applies to", in the order the setting
+	 * lists them (pure).
+	 *
+	 * @return array<string, string> Scope → its words on the screen.
+	 */
+	public static function scopes() {
+		return array(
+			self::SCOPE_NO_PRODUCT => __( 'Lines with no product page only (a fish typed on a batch invoice)', 'fishotel-misc-plugin' ),
+			self::SCOPE_ALL        => __( 'Every line (the old way)', 'fishotel-misc-plugin' ),
+			self::SCOPE_NONE       => __( 'Nothing', 'fishotel-misc-plugin' ),
+		);
+	}
+
+	/**
+	 * A stored or posted scope as the rule reads it (pure): one of the
+	 * scopes, '' for anything else.
+	 *
+	 * @param mixed $raw Raw value.
+	 * @return string
+	 */
+	public static function scope_in( $raw ) {
+		if ( ! is_scalar( $raw ) || is_bool( $raw ) ) {
+			return '';
+		}
+		$raw = trim( (string) $raw );
+		return isset( self::scopes()[ $raw ] ) ? $raw : '';
+	}
+
+	/**
+	 * Whether the word list reaches a line (pure).
+	 *
+	 * @param string $scope       SCOPE_*.
+	 * @param bool   $has_product Whether the line has a product page.
+	 * @return bool
+	 */
+	public static function words_reach( $scope, $has_product ) {
+		if ( self::SCOPE_NONE === $scope ) {
+			return false;
+		}
+		return self::SCOPE_NO_PRODUCT === $scope ? ! $has_product : true;
+	}
+
+	/**
+	 * Whether a stored choice is the tick "Needs a 3rd bag" (pure).
+	 *
+	 * @param mixed $value The `_fh_bag_layers` meta.
+	 * @return bool
+	 */
+	public static function ticked( $value ) {
+		return self::TRIPLE === self::choice( $value );
+	}
 
 	/**
 	 * The words the list starts with — until the owner saves a list of
@@ -216,13 +288,15 @@ class Layers {
 	/**
 	 * The rule itself (pure).
 	 *
-	 * @param mixed    $stored     The product's `_fh_bag_layers` ('' = Auto, or no product).
-	 * @param string[] $words      The "Triple-bag these" list.
-	 * @param mixed    $name       The order line's name.
-	 * @param string[] $categories Its product's category names.
+	 * @param mixed    $stored      The product's `_fh_bag_layers` ('' = not ticked, or no product).
+	 * @param string[] $words       The "Triple-bag these" list.
+	 * @param mixed    $name        The order line's name.
+	 * @param string[] $categories  Its product's category names.
+	 * @param bool     $has_product Whether the line has a product page.
+	 * @param string   $scope       Which lines the list reaches (SCOPE_*; the old way by default).
 	 * @return array{layers: int, why: string}
 	 */
-	public static function decide( $stored, array $words, $name, array $categories = array() ) {
+	public static function decide( $stored, array $words, $name, array $categories = array(), $has_product = false, $scope = self::SCOPE_ALL ) {
 		$choice = self::choice( $stored );
 		if ( $choice > 0 ) {
 			return array(
@@ -231,17 +305,20 @@ class Layers {
 			);
 		}
 
-		$word = self::find_word( $words, array_merge( array( is_scalar( $name ) ? (string) $name : '' ), $categories ) );
-		if ( '' !== $word ) {
-			return array(
-				'layers' => self::TRIPLE,
-				'why'    => self::WHY_WORD . $word,
-			);
+		$scope = '' === self::scope_in( $scope ) ? self::SCOPE_ALL : (string) $scope;
+		if ( self::words_reach( $scope, (bool) $has_product ) ) {
+			$word = self::find_word( $words, array_merge( array( is_scalar( $name ) ? (string) $name : '' ), $categories ) );
+			if ( '' !== $word ) {
+				return array(
+					'layers' => self::TRIPLE,
+					'why'    => self::WHY_WORD . $word,
+				);
+			}
 		}
 
 		return array(
 			'layers' => self::DOUBLE,
-			'why'    => self::WHY_DEFAULT,
+			'why'    => $has_product && self::SCOPE_ALL !== $scope ? self::WHY_NO_TICK : self::WHY_DEFAULT,
 		);
 	}
 
@@ -301,14 +378,15 @@ class Layers {
 	 *
 	 * @param object|null $product  The line's product (null without one).
 	 * @param mixed       $name     The line's name.
-	 * @param array       $settings Settings (triple_words).
+	 * @param array       $settings Settings (triple_words, triple_scope).
 	 * @param object|null $item     The order line, for the filter (null for a fish of an opened-up Invoice).
 	 * @return array{layers: int, why: string}
 	 */
 	public static function for_line( $product, $name, array $settings, $item = null ) {
 		$product = is_object( $product ) ? $product : null;
 		$words   = isset( $settings['triple_words'] ) && is_array( $settings['triple_words'] ) ? $settings['triple_words'] : self::default_words();
-		$out     = self::decide( self::stored( $product ), $words, $name, self::category_names( $product ) );
+		$scope   = self::scope_in( $settings['triple_scope'] ?? '' );
+		$out     = self::decide( self::stored( $product ), $words, $name, self::category_names( $product ), null !== $product, '' === $scope ? self::SCOPE_ALL : $scope );
 
 		if ( function_exists( 'apply_filters' ) ) {
 			$filtered = self::choice( apply_filters( 'fishotel_packing_bag_layers', $out['layers'], $product, is_scalar( $name ) ? (string) $name : '', $item ) );
@@ -377,8 +455,12 @@ class Layers {
 		$times = (int) $layers >= self::TRIPLE ? __( 'Triple-bagged', 'fishotel-misc-plugin' ) : __( 'Double-bagged', 'fishotel-misc-plugin' );
 
 		if ( self::WHY_PRODUCT === $why ) {
-			/* translators: %s: "Double-bagged" or "Triple-bagged" */
-			return sprintf( __( '%s: set on the product (Bagging)', 'fishotel-misc-plugin' ), $times );
+			return (int) $layers >= self::TRIPLE
+				? __( 'Triple-bagged: ticked on the product (Needs a 3rd bag)', 'fishotel-misc-plugin' )
+				: __( 'Double-bagged: set to Double on the product', 'fishotel-misc-plugin' );
+		}
+		if ( self::WHY_NO_TICK === $why ) {
+			return __( 'Double-bagged: no 3rd bag ticked on the product', 'fishotel-misc-plugin' );
 		}
 		if ( 0 === strpos( $why, self::WHY_WORD ) ) {
 			/* translators: 1: "Triple-bagged", 2: the word that matched */

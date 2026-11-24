@@ -32,6 +32,7 @@ php  includes/sections/packing/tests/upsize-test.php
 php  includes/sections/packing/tests/today-line-test.php
 php  includes/sections/packing/tests/layers-test.php
 php  includes/sections/packing/tests/shipment-plan-test.php
+php  includes/sections/packing/tests/third-bag-test.php
 node includes/sections/packing/tests/packing-admin.test.js
 ```
 
@@ -166,7 +167,8 @@ helper files exit cleanly when they are run directly (the CI runs every
   variation, cart, checkout, e-mail, invoice or order-item data or build a
   REST / Store API answer; the source (comments stripped) is scanned for
   what the section must never do — a public AJAX action, a REST route,
-  registered meta, order-item meta, post-meta functions, an e-mail, a
+  registered meta, order-item meta, post meta written (read once only: the
+  products list's Name cell, from the cache the list primed), an e-mail, a
   stock or status change, money, an attribute / term / variation, a
   request to another server, a cron event, a table — and for `$wpdb`
   outside the Store (which only reads); the only meta ever written (the
@@ -206,8 +208,8 @@ helper files exit cleanly when they are run directly (the CI runs every
   the section is off; nothing written by any of it, and the three new
   classes pure.
 - **layers-test.php** — bag layers: the rule by the numbers (the
-  product's *Bagging* choice first — Triple on a fish no word knows, Double
-  on a tang; else a word of the list as a WHOLE word in the name or a
+  product's choice first — 3 on a fish no word knows, a Double (2) on a
+  tang; else a word of the list as a WHOLE word in the name or a
   category name — any letter case, its plural, a word typed as a plural
   finding the one fish ("tangs" → "Yellow Tang"), punctuation around it,
   never inside a longer word such as Tangerine or Mustang, a phrase, a
@@ -215,10 +217,14 @@ helper files exit cleanly when they are run directly (the CI runs every
   what a word is, the most it keeps; who may save it and with which nonce,
   one entry that is not a word and nothing is saved, an empty list staying
   empty, settings from before the list reading with the starting words,
-  the AJAX handler); the *Bagging* field (the rule of its save; drawn
-  under the checkbox with Auto / Double / Triple; saved through the
-  product object on the parent only, never a variation; Auto removing the
-  meta; a bad nonce, no nonce, no field, no capability); on an order
+  the AJAX handler); the *Needs a 3rd bag* tick (the rule of its save and
+  of bulk edit — a 2 kept; drawn first in the Shipping tab, not hidden with
+  the Bag size fields, the old dropdown gone; an unticked fish a word finds
+  saying it is still triple-bagged while the words reach every line;
+  saved through the product object on the parent only, never a variation;
+  unticking removing the meta; a Double shown unticked and kept; a bad
+  nonce, no nonce, no field, no capability); on an order (with the words
+  reaching every line, as a site has them after the update)
   (every fish line with its layers and why — a word in its name, in its
   category, a fish with no product, the fish of an opened-up Invoice; the
   product's choice beating the word; the filter overruling, a nonsense
@@ -256,6 +262,33 @@ helper files exit cleanly when they are run directly (the CI runs every
   exception (an order that fails, something
   that is not an order, other code failing underneath), the section off;
   the pure halves; nothing written.
+- **third-bag-test.php** — the tick that replaces the word list:
+  *The word list applies to* (its three choices; every line — a tang with
+  a product by its word; no product page only — an unticked tang `×2`
+  "no_tick", a fish with no product page still by its word, the tick
+  winning; nothing; an unknown choice read as every line; decide() without
+  the new arguments as before; the reasons in words); the setting (every
+  line for settings saved before it, a stored choice kept, a bad choice
+  refused, saved with the list, a save of the list alone leaving it, the
+  answers); on an order (the same order under every line and no product
+  page only: a tang with a product, a goby, a batch-invoice fish, an
+  invoice row with no product and one naming a product; the tick reaching
+  the line and the invoice row; the Packing box `×2` plain with "no 3rd
+  bag ticked on the product", `×3 — spines` "ticked on the product", the
+  line under the bags; the shipment plan's `why`); the one-time helper
+  (which products it lists — and the ten it leaves out: ticked, Double, a
+  food, Livestock unticked, an invoice, no word, a word inside a longer
+  one —, an archived tang listed and the store reading archived products
+  for the helper only, the posted ids, the click: who may, 3 on each product through its
+  object, never a Double, a variation or a missing product, the list then
+  reaching only the fish with no product page, "Nothing" kept, a second
+  click ticking nothing, the AJAX handler); the products list (the view
+  and its count, only for who may manage the shop, its query, the Name
+  cell's state read from the meta the list primed — no product object per
+  row, quick edit and bulk edit drawn and saved, a quick edit
+  whose script did not run changing nothing, a user who may not); the
+  Fish essentials seam (the checkbox and the tick drawn by another box with
+  the nonce, then not again in the Shipping tab).
 - **packing-admin.test.js** — the script's pure helpers: the tiny
   sprintf, a new table row from its template, the fill tool's run loop
   (it must end: a cursor that does not move, an answer that is not a
@@ -270,9 +303,14 @@ helper files exit cleanly when they are run directly (the CI runs every
   stand-in for jQuery, the Packing box telling the document
   (`fishotel-packing-changed`, with the order) each time an answer draws
   it again — a refusal that hands the box back included, a failed post
-  not.
+  not; quick edit's 3rd-bag tick from a row's state, and the helper's
+  ticked rows posted as one field.
 
-921 checks in the fourteen PHP files and 58 in the node test. Since 0.46.15
+993 checks in the fifteen PHP files and 62 in the node test. Since 0.46.19
+the storefront test expects the products list's hooks (quick edit, bulk
+edit, the view) and the order screen's own two hooks instead of the generic
+`add_meta_boxes`, and layers-test the tick instead of the *Bagging*
+dropdown. Since 0.46.15
 the storefront test expects one hook outside wp-admin (ShipTracker's own
 filter for the fish of a box, which no storefront page fires) and the
 settings test five saves. Since 0.46.5

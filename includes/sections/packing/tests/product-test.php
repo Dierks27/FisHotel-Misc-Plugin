@@ -350,6 +350,6 @@ $GLOBALS['post'] = null;
 echo "11. The hooks\n";
 fh_reset_hooks();
 $editor->init();
-check( 'the four product-editor hooks, and the classes of the product-data box — all of them fired in wp-admin only', array( 'woocommerce_product_after_variable_attributes', 'woocommerce_save_product_variation', 'woocommerce_product_options_shipping', 'woocommerce_admin_process_product_object', 'postbox_classes_product_woocommerce-product-data' ) === array_keys( $GLOBALS['fh_hooks'] ) );
+check( 'the four product-editor hooks, the classes of the product-data box, and the products list\'s quick edit and bulk edit — all of them fired in wp-admin only', array( 'woocommerce_product_after_variable_attributes', 'woocommerce_save_product_variation', 'woocommerce_product_options_shipping', 'woocommerce_admin_process_product_object', 'postbox_classes_product_woocommerce-product-data', 'manage_product_posts_custom_column', 'woocommerce_product_quick_edit_end', 'woocommerce_product_quick_edit_save', 'woocommerce_product_bulk_edit_end', 'woocommerce_product_bulk_edit_save' ) === array_keys( $GLOBALS['fh_hooks'] ) );
 
 fh_finish();
