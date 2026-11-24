@@ -135,7 +135,7 @@ check( 'and its text, quiet text and links read on its own backgrounds', $fh_lig
 foreach ( array( 'Page and type', 'Links', 'Buttons', 'Fields', 'Boxes', 'Tables and lists', 'Notices', 'Tabs, Screen Options, Help', 'Quick edit and bulk edit', 'The classic editor', 'Media', 'Pop-ups', 'Dashboard', 'WooCommerce: classic screens', 'React pages', 'Yoast', 'FisHotel plugins', 'readability guard', 'Kept light on purpose' ) as $fh_part ) {
 	check( "has its part: $fh_part", false !== stripos( $fh_layer, $fh_part ) );
 }
-foreach ( array( '.select2-dropdown', '.ui-datepicker', '#TB_window', '.ui-dialog', '.iris-picker', '.media-modal-content', '#screen-meta', '.inline-edit-row', 'textarea.wp-editor-area', 'ul.wc-tabs', '.woocommerce_variation', '#order_data', 'ul.order_notes li .note_content', '.wc-backbone-modal', '.woocommerce-layout', '#wpseo_meta', '.notice' ) as $fh_sel ) {
+foreach ( array( '.select2-dropdown', '.ui-datepicker', '#TB_window', '.ui-dialog', '.iris-picker', '.media-modal-content', '#screen-meta', '.inline-edit-row', 'textarea.wp-editor-area', 'ul.wc-tabs', '.woocommerce_variation', '#order_data', 'ul.order_notes li .note_content', '.wc-backbone-modal', '.woocommerce-layout', '#wpseo_meta', '.notice', '--wpds-color-background-surface-neutral', '.fst-shipments-table', '.fhsm-shipment', '.fishotel-med-terms-box__state', '.fh-pack-box__note', '.fh-es-chip', '.fh-pc-chip', 'form#mainform' ) as $fh_sel ) {
 	check( "styles $fh_sel", false !== strpos( $fh_layer, $fh_sel ) );
 }
 

@@ -61,6 +61,72 @@ body.fh-dark-admin {
 	--wp-components-color-gray-700: var(--fh-da-text-quiet);
 	--wp-components-color-gray-800: var(--fh-da-text);
 
+	/* WordPress's design-system colours (WooCommerce 11's settings and
+	 * payments screens, newer components), pointed at ours. */
+	--wpds-color-background-surface-neutral: var(--fh-da-bg);
+	--wpds-color-background-surface-neutral-strong: var(--fh-da-surface);
+	--wpds-color-background-surface-neutral-weak: var(--fh-da-sunken);
+	--wpds-color-background-surface-brand: var(--fh-da-info-tint);
+	--wpds-color-background-surface-info: var(--fh-da-info-tint);
+	--wpds-color-background-surface-info-weak: var(--fh-da-info-tint);
+	--wpds-color-background-surface-success: var(--fh-da-success-tint);
+	--wpds-color-background-surface-success-weak: var(--fh-da-success-tint);
+	--wpds-color-background-surface-warning: var(--fh-da-warning-tint);
+	--wpds-color-background-surface-warning-weak: var(--fh-da-warning-tint);
+	--wpds-color-background-surface-caution: var(--fh-da-warning-tint);
+	--wpds-color-background-surface-caution-weak: var(--fh-da-warning-tint);
+	--wpds-color-background-surface-error: var(--fh-da-danger-tint);
+	--wpds-color-background-surface-error-weak: var(--fh-da-danger-tint);
+	--wpds-color-background-interactive-brand-strong: var(--fh-da-accent-strong);
+	--wpds-color-background-interactive-brand-strong-active: var(--fh-da-accent-hover);
+	--wpds-color-background-interactive-brand-weak-active: var(--fh-da-info-tint);
+	--wpds-color-background-interactive-neutral-weak-active: var(--fh-da-raised);
+	--wpds-color-background-interactive-error-active: var(--fh-da-danger-tint);
+	--wpds-color-background-interactive-error-weak-active: var(--fh-da-danger-tint);
+	--wpds-color-background-interactive-brand-strong-disabled: var(--fh-da-sunken);
+	--wpds-color-background-interactive-neutral-strong-disabled: var(--fh-da-sunken);
+	--wpds-color-background-interactive-error-strong-disabled: var(--fh-da-sunken);
+	--wpds-color-foreground-content-neutral: var(--fh-da-text);
+	--wpds-color-foreground-content-neutral-weak: var(--fh-da-text-quiet);
+	--wpds-color-foreground-interactive-brand: var(--fh-da-link);
+	--wpds-color-foreground-interactive-brand-active: var(--fh-da-link-hover);
+	--wpds-color-foreground-interactive-brand-strong: var(--fh-da-on-accent);
+	--wpds-color-foreground-interactive-brand-strong-active: var(--fh-da-on-accent);
+	--wpds-color-foreground-interactive-neutral: var(--fh-da-text);
+	--wpds-color-foreground-interactive-neutral-active: var(--fh-da-text);
+	--wpds-color-foreground-interactive-neutral-strong: var(--fh-da-text);
+	--wpds-color-foreground-interactive-neutral-weak: var(--fh-da-text-quiet);
+	--wpds-color-foreground-interactive-neutral-weak-active: var(--fh-da-text);
+	--wpds-color-foreground-interactive-neutral-disabled: var(--fh-da-text-quiet);
+	--wpds-color-foreground-content-error: var(--fh-da-danger-text);
+	--wpds-color-foreground-content-error-weak: var(--fh-da-danger-text);
+	--wpds-color-foreground-content-success: var(--fh-da-success-text);
+	--wpds-color-foreground-content-success-weak: var(--fh-da-success-text);
+	--wpds-color-foreground-content-warning: var(--fh-da-warning);
+	--wpds-color-foreground-content-warning-weak: var(--fh-da-warning);
+	--wpds-color-foreground-content-caution: var(--fh-da-warning);
+	--wpds-color-foreground-content-info: var(--fh-da-link);
+	--wpds-color-foreground-content-info-weak: var(--fh-da-link);
+	--wpds-color-stroke-surface-neutral: var(--fh-da-border);
+	--wpds-color-stroke-surface-neutral-weak: var(--fh-da-border);
+	--wpds-color-stroke-surface-neutral-strong: var(--fh-da-border-strong);
+	--wpds-color-stroke-interactive-neutral: var(--fh-da-border-strong);
+	--wpds-color-stroke-interactive-neutral-active: var(--fh-da-text-quiet);
+	--wpds-color-stroke-interactive-neutral-strong: var(--fh-da-text-quiet);
+	--wpds-color-stroke-interactive-neutral-disabled: var(--fh-da-border);
+	--wpds-color-stroke-interactive-brand: var(--fh-da-accent);
+	--wpds-color-stroke-interactive-brand-active: var(--fh-da-link-hover);
+	--wpds-color-stroke-surface-brand: var(--fh-da-accent);
+	--wpds-color-stroke-focus: var(--fh-da-accent);
+	--wpds-color-stroke-surface-info: var(--fh-da-accent);
+	--wpds-color-stroke-surface-info-strong: var(--fh-da-accent);
+	--wpds-color-stroke-surface-success: var(--fh-da-success);
+	--wpds-color-stroke-surface-success-strong: var(--fh-da-success);
+	--wpds-color-stroke-surface-warning: var(--fh-da-warning);
+	--wpds-color-stroke-surface-warning-strong: var(--fh-da-warning);
+	--wpds-color-stroke-surface-error: var(--fh-da-danger);
+	--wpds-color-stroke-surface-error-strong: var(--fh-da-danger);
+
 	color-scheme: dark;
 	background: var(--fh-da-bg);
 	color: var(--fh-da-text);
@@ -447,7 +513,7 @@ body.fh-dark-admin .stuffbox .hndle,
 body.fh-dark-admin .postbox > h2,
 body.fh-dark-admin .accordion-section-title,
 body.fh-dark-admin .accordion-section .accordion-section-title,
-body.fh-dark-admin .nav-menus-php .metabox-holder .accordion-section-title {
+body.fh-dark-admin.nav-menus-php .metabox-holder .accordion-section-title {
 	background: var(--fh-da-surface);
 	border-color: var(--fh-da-border);
 	color: var(--fh-da-text);
@@ -1096,6 +1162,89 @@ body.fh-dark-admin #product_images_container ul li.wc-metabox-sortable-placehold
 	border-color: var(--fh-da-border);
 }
 
+/* WordPress's own greys and near-blacks that a dark page needs lighter. */
+body.fh-dark-admin .row-actions,
+body.fh-dark-admin .row-actions span,
+body.fh-dark-admin .comment-meta,
+body.fh-dark-admin .dashboard-comment-wrap .comment-meta,
+body.fh-dark-admin .subsubsub li,
+body.fh-dark-admin .importer-action,
+body.fh-dark-admin .wc-dashboard-widget-loading__text,
+body.fh-dark-admin .woocommerce-list__item-content {
+	color: var(--fh-da-text-quiet);
+}
+
+body.fh-dark-admin .importer-title,
+body.fh-dark-admin .woocommerce-list__item-title,
+body.fh-dark-admin .accordion-section-title button.accordion-trigger,
+body.fh-dark-admin .accordion-section-title .accordion-title,
+body.fh-dark-admin.nav-menus-php .metabox-holder .accordion-section-title button.accordion-trigger,
+body.fh-dark-admin #side-sortables .category-tabs .tabs a,
+body.fh-dark-admin #side-sortables .add-menu-item-tabs .tabs a,
+body.fh-dark-admin #post-body ul.category-tabs li.tabs a,
+body.fh-dark-admin #post-body ul.add-menu-item-tabs li.tabs a {
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .accordion-section-title button.accordion-trigger,
+body.fh-dark-admin.nav-menus-php .metabox-holder .accordion-section-title button.accordion-trigger,
+body.fh-dark-admin #side-sortables .accordion-section-title {
+	background: var(--fh-da-surface);
+}
+
+body.fh-dark-admin .accordion-section-title button.accordion-trigger:hover,
+body.fh-dark-admin .accordion-section-title button.accordion-trigger:focus,
+body.fh-dark-admin .accordion-section.open .accordion-section-title button.accordion-trigger {
+	background: var(--fh-da-raised);
+}
+
+body.fh-dark-admin #adminmenu .awaiting-mod,
+body.fh-dark-admin #adminmenu .update-plugins,
+body.fh-dark-admin #adminmenu .menu-counter,
+body.fh-dark-admin #adminmenu .awaiting-mod span,
+body.fh-dark-admin #adminmenu .update-plugins span,
+body.fh-dark-admin #adminmenu .menu-counter span {
+	background-color: var(--fh-da-danger);
+	color: var(--fh-da-on-accent);
+}
+
+body.fh-dark-admin #adminmenu .awaiting-mod span,
+body.fh-dark-admin #adminmenu .update-plugins span,
+body.fh-dark-admin #adminmenu .menu-counter span {
+	background: transparent;
+}
+
+/* The editor's own bar above the writing area, the Custom Fields table. */
+body.fh-dark-admin .wp-editor-tools,
+body.fh-dark-admin #wp-content-editor-tools,
+body.fh-dark-admin .wp-editor-wrap .wp-editor-tools,
+body.fh-dark-admin #wp-excerpt-editor-container,
+body.fh-dark-admin .wp-editor-wrap .wp-editor-container {
+	background: var(--fh-da-bg);
+	border-color: var(--fh-da-border);
+}
+
+body.fh-dark-admin #postexcerpt .wp-editor-container,
+body.fh-dark-admin #postexcerpt .wp-editor-tools {
+	background: var(--fh-da-surface);
+}
+
+body.fh-dark-admin #postcustomstuff table,
+body.fh-dark-admin #postcustomstuff table#newmeta,
+body.fh-dark-admin #postcustomstuff table#list-table,
+body.fh-dark-admin #postcustomstuff #newmeta,
+body.fh-dark-admin #postcustomstuff thead th,
+body.fh-dark-admin #postcustomstuff table td,
+body.fh-dark-admin #postcustomstuff .submit {
+	background: var(--fh-da-surface);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin #postcustomstuff thead th {
+	background: var(--fh-da-raised);
+}
+
 /* ================================================================== */
 /*  Media: library, the upload screen, the pop-up                      */
 /* ================================================================== */
@@ -1121,7 +1270,7 @@ body.fh-dark-admin .edit-attachment-frame .edit-media-header .left,
 body.fh-dark-admin .edit-attachment-frame .edit-media-header .right,
 body.fh-dark-admin .uploader-inline,
 body.fh-dark-admin .media-frame .uploader-inline,
-body.fh-dark-admin .upload-php .media-frame-content,
+body.fh-dark-admin.upload-php .media-frame-content,
 body.fh-dark-admin .media-embed,
 body.fh-dark-admin .embed-link-settings,
 body.fh-dark-admin .embed-media-settings,
@@ -1661,7 +1810,7 @@ body.fh-dark-admin .wp-full-overlay-sidebar .wp-full-overlay-footer,
 body.fh-dark-admin .theme-browser .theme.add-new-theme a,
 body.fh-dark-admin .filter-drawer,
 body.fh-dark-admin .wp-filter .search-form input[type="search"],
-body.fh-dark-admin .plugin-install-php .wp-filter {
+body.fh-dark-admin.plugin-install-php .wp-filter {
 	background: var(--fh-da-surface);
 	border-color: var(--fh-da-border);
 	color: var(--fh-da-text);
@@ -1674,6 +1823,12 @@ body.fh-dark-admin .plugin-card-bottom {
 body.fh-dark-admin .theme-browser .theme.active .theme-name {
 	background: var(--fh-da-accent-strong);
 	color: var(--fh-da-on-accent);
+}
+
+body.fh-dark-admin .theme-browser .theme .theme-actions .button:not(.button-primary) {
+	background: var(--fh-da-surface);
+	border-color: var(--fh-da-link);
+	color: var(--fh-da-link);
 }
 
 body.fh-dark-admin .theme-browser .theme .theme-actions,
@@ -1712,9 +1867,9 @@ body.fh-dark-admin #nav-menu-footer,
 body.fh-dark-admin .menu-item-handle,
 body.fh-dark-admin .menu-item-settings,
 body.fh-dark-admin .manage-menus,
-body.fh-dark-admin .nav-menus-php .menu-item-edit-active .menu-item-handle,
+body.fh-dark-admin.nav-menus-php .menu-item-edit-active .menu-item-handle,
 body.fh-dark-admin .menu-item-bar .menu-item-handle,
-body.fh-dark-admin .nav-menus-php #post-body {
+body.fh-dark-admin.nav-menus-php #post-body {
 	background: var(--fh-da-surface);
 	border-color: var(--fh-da-border);
 	color: var(--fh-da-text);
@@ -2243,6 +2398,91 @@ body.fh-dark-admin .woocommerce-input-toggle--disabled::after {
 	background-color: var(--fh-da-text-quiet);
 }
 
+/* WooCommerce 11's settings screens sit on a pale grey form. */
+body.fh-dark-admin form#mainform,
+body.fh-dark-admin .woocommerce form#mainform,
+body.fh-dark-admin .woocommerce-settings-page,
+body.fh-dark-admin .wc-settings-prevent-change-event {
+	background-color: var(--fh-da-bg);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin.woocommerce_page_wc-settings #wpbody,
+body.fh-dark-admin.woocommerce_page_wc-settings #wpbody-content,
+body.fh-dark-admin.woocommerce_page_wc-settings.woocommerce-settings-payments-tab #wpbody,
+body.fh-dark-admin.woocommerce_page_wc-settings.woocommerce-settings-payments-tab .nav-tab-wrapper,
+body.fh-dark-admin.woocommerce_page_wc-settings.woocommerce-settings-ui-page #mainform,
+body.fh-dark-admin.woocommerce_page_wc-settings.woocommerce-settings-ui-page #wpcontent,
+body.fh-dark-admin.woocommerce_page_wc-settings.woocommerce-settings-ui-page #wpbody-content,
+body.fh-dark-admin.woocommerce_page_wc-settings.woocommerce-settings-ui-page .wrap.woocommerce,
+body.fh-dark-admin.woocommerce-settings-payments-section_legacy #wpbody-content {
+	background-color: var(--fh-da-bg);
+}
+
+body.fh-dark-admin form#mainform .subsubsub li a.current,
+body.fh-dark-admin form#mainform .subsubsub a {
+	background: transparent;
+}
+
+body.fh-dark-admin #woocommerce-product-data .notice,
+body.fh-dark-admin #woocommerce-product-data .woocommerce-message,
+body.fh-dark-admin .woocommerce_options_panel .inline.notice {
+	background: var(--fh-da-sunken);
+	border-color: var(--fh-da-border);
+	border-left-color: var(--fh-da-accent);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .woocommerce-reports-wrap .postbox .stats_range ul,
+body.fh-dark-admin .woocommerce-reports-wide .postbox .stats_range ul,
+body.fh-dark-admin .woocommerce-reports-wrap .postbox .stats_range li,
+body.fh-dark-admin .woocommerce-reports-wide .postbox .stats_range li,
+body.fh-dark-admin .woocommerce-reports-wrap .postbox .chart-legend,
+body.fh-dark-admin .woocommerce-reports-wide .postbox .chart-legend,
+body.fh-dark-admin .woocommerce-reports-wrap .postbox .chart-container,
+body.fh-dark-admin .woocommerce-reports-wide .postbox .chart-container,
+body.fh-dark-admin .woocommerce-reports-wrap .postbox .chart-sidebar,
+body.fh-dark-admin .woocommerce-reports-wrap .postbox .chart-legend li {
+	background-color: var(--fh-da-surface);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .woocommerce-reports-wrap .postbox .stats_range li.active,
+body.fh-dark-admin .woocommerce-reports-wide .postbox .stats_range li.active {
+	background-color: var(--fh-da-raised);
+	box-shadow: inset 0 -3px var(--fh-da-accent);
+}
+
+body.fh-dark-admin .woocommerce-reports-wrap .postbox .stats_range li a,
+body.fh-dark-admin .woocommerce-reports-wrap .postbox .chart-legend li,
+body.fh-dark-admin .woocommerce-reports-wide .postbox .stats_range li a {
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .woocommerce-reports-wrap .flot-x-axis .tickLabel,
+body.fh-dark-admin .woocommerce-reports-wrap .flot-y-axis .tickLabel {
+	color: var(--fh-da-text-quiet);
+}
+
+body.fh-dark-admin .wc-shipping-zone-method,
+body.fh-dark-admin .wc-shipping-zones li.wc-shipping-zone-method,
+body.fh-dark-admin table.wc-shipping-zones tfoot td,
+body.fh-dark-admin table.wc-shipping-zones tbody.wc-shipping-zone-rows tr:nth-child(odd) td {
+	background-color: var(--fh-da-raised);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin table.wc-shipping-zones tfoot td {
+	background-color: var(--fh-da-sunken);
+}
+
+body.fh-dark-admin .woocommerce-badge {
+	background: var(--fh-da-raised);
+	color: var(--fh-da-text);
+}
+
 /* Order status pills keep their own pale colours and dark words (readable as they are). */
 
 /* ================================================================== */
@@ -2425,59 +2665,24 @@ body.fh-dark-admin .woocommerce-layout__activity-panel-tab:hover {
 /*  Yoast SEO's box (from the outside: Yoast itself is never changed)  */
 /* ================================================================== */
 
+/* The box's frame and tab strip go dark; what Yoast draws inside with
+ * its own React styles (generated class names that change with every
+ * Yoast release) stays light, with its own dark words — readable, and
+ * not broken by the next Yoast update. Its own pages the same. */
 body.fh-dark-admin #wpseo_meta,
-body.fh-dark-admin #wpseo_meta .inside,
 body.fh-dark-admin #wpseo_meta .postbox-header,
-body.fh-dark-admin .wpseo-metabox-content,
-body.fh-dark-admin .wpseo-metabox-menu,
-body.fh-dark-admin .wpseo-metabox-menu ul,
-body.fh-dark-admin .wpseo-metabox-menu ul li a,
-body.fh-dark-admin .wpseo-meta-section,
-body.fh-dark-admin .yoast-meta-section,
-body.fh-dark-admin #wpseo-metabox-root,
-body.fh-dark-admin .yoast.wpseo-metabox,
-body.fh-dark-admin .yoast-seo-sidebar-panel,
-body.fh-dark-admin #yoast-seo-analysis-collapsible-metabox,
-body.fh-dark-admin #yoast-readability-analysis-collapsible-metabox {
+body.fh-dark-admin #wpseo_meta .wpseo-metabox-menu,
+body.fh-dark-admin #wpseo_meta .wpseo-metabox-menu ul,
+body.fh-dark-admin #wpseo_meta .wpseo-metabox-menu ul li,
+body.fh-dark-admin #wpseo_meta .wpseo-metabox-menu ul li a {
 	background-color: var(--fh-da-surface);
 	border-color: var(--fh-da-border);
 	color: var(--fh-da-text);
 }
 
-body.fh-dark-admin #wpseo_meta h2,
-body.fh-dark-admin #wpseo_meta h3,
-body.fh-dark-admin #wpseo_meta label,
-body.fh-dark-admin #wpseo_meta legend,
-body.fh-dark-admin #wpseo_meta p,
-body.fh-dark-admin #wpseo_meta li,
-body.fh-dark-admin #wpseo_meta span,
-body.fh-dark-admin #wpseo_meta button:not(.yoast-button--primary),
-body.fh-dark-admin #wpseo_meta div {
-	color: var(--fh-da-text);
-}
-
-body.fh-dark-admin #wpseo_meta a {
-	color: var(--fh-da-link);
-}
-
-body.fh-dark-admin #wpseo_meta button,
-body.fh-dark-admin #wpseo_meta .yoast-button {
+body.fh-dark-admin #wpseo_meta .wpseo-metabox-menu ul li.active,
+body.fh-dark-admin #wpseo_meta .wpseo-metabox-menu ul li.active a {
 	background-color: var(--fh-da-raised);
-	border-color: var(--fh-da-border-strong);
-}
-
-body.fh-dark-admin #wpseo_meta .wpseo-metabox-menu ul li.active a,
-body.fh-dark-admin #wpseo_meta .wpseo-metabox-menu ul li a:hover {
-	background: var(--fh-da-raised);
-}
-
-/* Yoast's snippet preview imitates Google's white results page. */
-body.fh-dark-admin #wpseo_meta [class*="SnippetPreview"],
-body.fh-dark-admin #wpseo_meta .yoast-snippet-preview,
-body.fh-dark-admin #wpseo_meta [class*="snippet-preview"] {
-	--fh-da-text: var(--fh-da-light-ink);
-	background-color: var(--fh-da-light-paper);
-	color: var(--fh-da-light-ink);
 }
 
 /* ================================================================== */
@@ -2764,6 +2969,135 @@ body.fh-dark-admin .fh-pack-box__lines td {
 	border-color: var(--fh-da-border);
 }
 
+/* Misc 0.46.18's Edit screens and Product checks (the tidied product
+ * screen's Fish essentials box, its "Still missing" chips, the products
+ * list's "To fix" row, column and chips). */
+body.fh-dark-admin .fh-es-differ {
+	color: var(--fh-da-warning);
+}
+
+body.fh-dark-admin .fh-es-choice-where,
+body.fh-dark-admin .fh-pc-views .count {
+	color: var(--fh-da-text-quiet);
+}
+
+body.fh-dark-admin .fh-es-missing {
+	border-top-color: var(--fh-da-border);
+}
+
+body.fh-dark-admin .fh-es-chip,
+body.fh-dark-admin .fh-pc-chip {
+	background: var(--fh-da-danger-tint);
+	border-color: var(--fh-da-danger);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin a.fh-es-chip:hover,
+body.fh-dark-admin a.fh-es-chip:focus {
+	background: var(--fh-da-raised);
+	color: var(--fh-da-link-hover);
+}
+
+body.fh-dark-admin .fh-pc-chip--gallery,
+body.fh-dark-admin .fh-pc-chip--sci,
+body.fh-dark-admin .fh-pc-chip--subcat {
+	background: var(--fh-da-warning-tint);
+	border-color: var(--fh-da-warning);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .fh-pc-ok {
+	color: var(--fh-da-success-text);
+}
+
+body.fh-dark-admin .fh-pc-third {
+	background: var(--fh-da-raised);
+	color: var(--fh-da-text);
+}
+
+/* The theme's own admin pages (FisHotel Theme dashboard, FAQ editor). */
+body.fh-dark-admin .fh-dash-card,
+body.fh-dark-admin .fh-faq-row,
+body.fh-dark-admin .fh-faq-stage {
+	background: var(--fh-da-surface);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .fh-faq-stage {
+	background: var(--fh-da-sunken);
+}
+
+body.fh-dark-admin .fh-dash-card:hover,
+body.fh-dark-admin .fh-dash-card:focus {
+	background: var(--fh-da-raised);
+	border-color: var(--fh-da-accent);
+}
+
+body.fh-dark-admin .fh-faq-handle {
+	color: var(--fh-da-text-quiet);
+}
+
+/* Batch Manager's own pages are dark already; the few light bits. */
+body.fh-dark-admin .fh-layer-scene-tabs a,
+body.fh-dark-admin .fh-sd-tone-grey td {
+	background: var(--fh-da-raised);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .fh-layer-scene-tabs a.active,
+body.fh-dark-admin .fh-layer-scene-tabs a.is-active,
+body.fh-dark-admin .fh-layer-scene-tabs a[aria-current] {
+	background: var(--fh-da-accent-strong);
+	color: var(--fh-da-on-accent);
+}
+
+/* Code Snippets' screens (its toolbar, type tabs and welcome page). */
+body.fh-dark-admin .code-snippets-toolbar,
+body.fh-dark-admin .snippet-type-nav-wrapper,
+body.fh-dark-admin .code-snippets-hero,
+body.fh-dark-admin .code-snippets-changelog,
+body.fh-dark-admin .code-snippets-welcome .csp-card,
+body.fh-dark-admin .snippet-view-toggle-option,
+body.fh-dark-admin .snippet-type-nav .snippet-type-link.active-type,
+body.fh-dark-admin .code-snippets-toolbar .button-secondary {
+	background: var(--fh-da-surface);
+	border-color: var(--fh-da-border);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .snippet-type-nav .snippet-type-link.active-type,
+body.fh-dark-admin .snippet-view-toggle-option.active,
+body.fh-dark-admin .snippet-view-toggle-option[aria-pressed="true"] {
+	background: var(--fh-da-raised);
+}
+
+body.fh-dark-admin .code-snippets-hero figure {
+	background: var(--fh-da-sunken);
+}
+
+body.fh-dark-admin .code-snippets-toolbar a,
+body.fh-dark-admin .snippet-type-nav a {
+	color: var(--fh-da-link);
+}
+
+body.fh-dark-admin .pro-chip {
+	background: var(--fh-da-info-tint);
+	color: var(--fh-da-text);
+}
+
+body.fh-dark-admin .widefat thead tr,
+body.fh-dark-admin .widefat tfoot tr {
+	background: var(--fh-da-raised);
+}
+
+body.fh-dark-admin .wp-list-table input[type="checkbox"]:not(:checked),
+body.fh-dark-admin .tablenav input[type="checkbox"]:not(:checked) {
+	background-color: var(--fh-da-input);
+	border-color: var(--fh-da-border-strong);
+}
+
 /* Inline styles other plugins write for a light page: the common pale
  * backgrounds become the dark card, the common greys become quiet text.
  * (Anything else is rescued by the readability guard.) */
@@ -2772,27 +3106,121 @@ body.fh-dark-admin #wpbody-content [style*="background: #fff;"],
 body.fh-dark-admin #wpbody-content [style*="background-color:#fff;"],
 body.fh-dark-admin #wpbody-content [style*="background-color: #fff;"],
 body.fh-dark-admin #wpbody-content [style*="background:#ffffff"],
+body.fh-dark-admin #wpbody-content [style*="background-color:#ffffff"],
 body.fh-dark-admin #wpbody-content [style*="background: #ffffff"],
+body.fh-dark-admin #wpbody-content [style*="background-color: #ffffff"],
 body.fh-dark-admin #wpbody-content [style*="background-color:#ffffff"],
 body.fh-dark-admin #wpbody-content [style*="background-color: #ffffff"],
 body.fh-dark-admin #wpbody-content [style*="background:white"],
+body.fh-dark-admin #wpbody-content [style*="background-color:white"],
 body.fh-dark-admin #wpbody-content [style*="background: white"],
+body.fh-dark-admin #wpbody-content [style*="background-color: white"],
 body.fh-dark-admin #wpbody-content [style*="background:#f9f9f9"],
+body.fh-dark-admin #wpbody-content [style*="background-color:#f9f9f9"],
 body.fh-dark-admin #wpbody-content [style*="background: #f9f9f9"],
+body.fh-dark-admin #wpbody-content [style*="background-color: #f9f9f9"],
 body.fh-dark-admin #wpbody-content [style*="background:#fafafa"],
+body.fh-dark-admin #wpbody-content [style*="background-color:#fafafa"],
 body.fh-dark-admin #wpbody-content [style*="background: #fafafa"],
+body.fh-dark-admin #wpbody-content [style*="background-color: #fafafa"],
 body.fh-dark-admin #wpbody-content [style*="background:#f5f5f5"],
+body.fh-dark-admin #wpbody-content [style*="background-color:#f5f5f5"],
 body.fh-dark-admin #wpbody-content [style*="background: #f5f5f5"],
+body.fh-dark-admin #wpbody-content [style*="background-color: #f5f5f5"],
 body.fh-dark-admin #wpbody-content [style*="background:#f0f0f0"],
+body.fh-dark-admin #wpbody-content [style*="background-color:#f0f0f0"],
 body.fh-dark-admin #wpbody-content [style*="background: #f0f0f0"],
+body.fh-dark-admin #wpbody-content [style*="background-color: #f0f0f0"],
 body.fh-dark-admin #wpbody-content [style*="background:#f0f0f1"],
+body.fh-dark-admin #wpbody-content [style*="background-color:#f0f0f1"],
 body.fh-dark-admin #wpbody-content [style*="background: #f0f0f1"],
+body.fh-dark-admin #wpbody-content [style*="background-color: #f0f0f1"],
 body.fh-dark-admin #wpbody-content [style*="background:#f6f7f7"],
+body.fh-dark-admin #wpbody-content [style*="background-color:#f6f7f7"],
 body.fh-dark-admin #wpbody-content [style*="background: #f6f7f7"],
+body.fh-dark-admin #wpbody-content [style*="background-color: #f6f7f7"],
 body.fh-dark-admin #wpbody-content [style*="background:#f8f9fa"],
-body.fh-dark-admin #wpbody-content [style*="background: #f8f9fa"] {
+body.fh-dark-admin #wpbody-content [style*="background-color:#f8f9fa"],
+body.fh-dark-admin #wpbody-content [style*="background: #f8f9fa"],
+body.fh-dark-admin #wpbody-content [style*="background-color: #f8f9fa"] {
 	background: var(--fh-da-surface) !important;
 	border-color: var(--fh-da-border) !important;
+}
+
+body.fh-dark-admin #wpbody-content [style*="background:#fcf3cd"],
+body.fh-dark-admin #wpbody-content [style*="background-color:#fcf3cd"],
+body.fh-dark-admin #wpbody-content [style*="background: #fcf3cd"],
+body.fh-dark-admin #wpbody-content [style*="background-color: #fcf3cd"],
+body.fh-dark-admin #wpbody-content [style*="background:#fff3cd"],
+body.fh-dark-admin #wpbody-content [style*="background-color:#fff3cd"],
+body.fh-dark-admin #wpbody-content [style*="background: #fff3cd"],
+body.fh-dark-admin #wpbody-content [style*="background-color: #fff3cd"],
+body.fh-dark-admin #wpbody-content [style*="background:#fcf9e8"],
+body.fh-dark-admin #wpbody-content [style*="background-color:#fcf9e8"],
+body.fh-dark-admin #wpbody-content [style*="background: #fcf9e8"],
+body.fh-dark-admin #wpbody-content [style*="background-color: #fcf9e8"],
+body.fh-dark-admin #wpbody-content [style*="background:#fff8e1"],
+body.fh-dark-admin #wpbody-content [style*="background-color:#fff8e1"],
+body.fh-dark-admin #wpbody-content [style*="background: #fff8e1"],
+body.fh-dark-admin #wpbody-content [style*="background-color: #fff8e1"],
+body.fh-dark-admin #wpbody-content [style*="background:#fffbf0"],
+body.fh-dark-admin #wpbody-content [style*="background-color:#fffbf0"],
+body.fh-dark-admin #wpbody-content [style*="background: #fffbf0"],
+body.fh-dark-admin #wpbody-content [style*="background-color: #fffbf0"] {
+	background: var(--fh-da-warning-tint) !important;
+}
+
+body.fh-dark-admin #wpbody-content [style*="background:#fcf0f1"],
+body.fh-dark-admin #wpbody-content [style*="background-color:#fcf0f1"],
+body.fh-dark-admin #wpbody-content [style*="background: #fcf0f1"],
+body.fh-dark-admin #wpbody-content [style*="background-color: #fcf0f1"],
+body.fh-dark-admin #wpbody-content [style*="background:#f8d7da"],
+body.fh-dark-admin #wpbody-content [style*="background-color:#f8d7da"],
+body.fh-dark-admin #wpbody-content [style*="background: #f8d7da"],
+body.fh-dark-admin #wpbody-content [style*="background-color: #f8d7da"],
+body.fh-dark-admin #wpbody-content [style*="background:#fbeaea"],
+body.fh-dark-admin #wpbody-content [style*="background-color:#fbeaea"],
+body.fh-dark-admin #wpbody-content [style*="background: #fbeaea"],
+body.fh-dark-admin #wpbody-content [style*="background-color: #fbeaea"],
+body.fh-dark-admin #wpbody-content [style*="background:#fff8f8"],
+body.fh-dark-admin #wpbody-content [style*="background-color:#fff8f8"],
+body.fh-dark-admin #wpbody-content [style*="background: #fff8f8"],
+body.fh-dark-admin #wpbody-content [style*="background-color: #fff8f8"],
+body.fh-dark-admin #wpbody-content [style*="background:#fef2f2"],
+body.fh-dark-admin #wpbody-content [style*="background-color:#fef2f2"],
+body.fh-dark-admin #wpbody-content [style*="background: #fef2f2"],
+body.fh-dark-admin #wpbody-content [style*="background-color: #fef2f2"] {
+	background: var(--fh-da-danger-tint) !important;
+}
+
+body.fh-dark-admin #wpbody-content [style*="background:#edfaef"],
+body.fh-dark-admin #wpbody-content [style*="background-color:#edfaef"],
+body.fh-dark-admin #wpbody-content [style*="background: #edfaef"],
+body.fh-dark-admin #wpbody-content [style*="background-color: #edfaef"],
+body.fh-dark-admin #wpbody-content [style*="background:#d4edda"],
+body.fh-dark-admin #wpbody-content [style*="background-color:#d4edda"],
+body.fh-dark-admin #wpbody-content [style*="background: #d4edda"],
+body.fh-dark-admin #wpbody-content [style*="background-color: #d4edda"],
+body.fh-dark-admin #wpbody-content [style*="background:#f0fdf4"],
+body.fh-dark-admin #wpbody-content [style*="background-color:#f0fdf4"],
+body.fh-dark-admin #wpbody-content [style*="background: #f0fdf4"],
+body.fh-dark-admin #wpbody-content [style*="background-color: #f0fdf4"] {
+	background: var(--fh-da-success-tint) !important;
+}
+
+body.fh-dark-admin #wpbody-content [style*="background:#f0f6fc"],
+body.fh-dark-admin #wpbody-content [style*="background-color:#f0f6fc"],
+body.fh-dark-admin #wpbody-content [style*="background: #f0f6fc"],
+body.fh-dark-admin #wpbody-content [style*="background-color: #f0f6fc"],
+body.fh-dark-admin #wpbody-content [style*="background:#e7f5fe"],
+body.fh-dark-admin #wpbody-content [style*="background-color:#e7f5fe"],
+body.fh-dark-admin #wpbody-content [style*="background: #e7f5fe"],
+body.fh-dark-admin #wpbody-content [style*="background-color: #e7f5fe"],
+body.fh-dark-admin #wpbody-content [style*="background:#f0f5ff"],
+body.fh-dark-admin #wpbody-content [style*="background-color:#f0f5ff"],
+body.fh-dark-admin #wpbody-content [style*="background: #f0f5ff"],
+body.fh-dark-admin #wpbody-content [style*="background-color: #f0f5ff"] {
+	background: var(--fh-da-info-tint) !important;
 }
 
 body.fh-dark-admin #wpbody-content [style*="color:#333"],
@@ -2837,7 +3265,16 @@ body.fh-dark-admin .fh-da-light,
 body.fh-dark-admin .fh-fc-paper,
 body.fh-dark-admin .fh-inv-preview__box,
 body.fh-dark-admin .fh-lf-preview__frame,
-body.fh-dark-admin .fh-sa-link__qr {
+body.fh-dark-admin .fh-sa-link__qr,
+body.fh-dark-admin .fh-sd-print,
+body.fh-dark-admin .wc-settings-email-preview,
+body.fh-dark-admin #wpseo_meta .wpseo-metabox-content .wpseo-meta-section,
+body.fh-dark-admin #wpseo-metabox-root,
+body.fh-dark-admin #woo-seo-product-upsell-ad,
+body.fh-dark-admin .yst-root .yst-paper,
+body.fh-dark-admin .yst-root [id^="headlessui-dialog-panel"],
+body.fh-dark-admin #yoast-first-time-configuration-notice,
+body.fh-dark-admin #webinar-promo-notification {
 	--fh-da-bg: #ffffff;
 	--fh-da-surface: #ffffff;
 	--fh-da-raised: #f0f0f1;
