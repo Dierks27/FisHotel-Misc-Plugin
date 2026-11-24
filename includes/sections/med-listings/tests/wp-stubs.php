@@ -36,6 +36,9 @@ function fh_reset() {
 		'next'     => 1000,
 		'user'     => 1,
 		'redirect' => null,
+		'termmeta' => array(),
+		'wc_attrs' => array( 'med_treats' => array( 'id' => 1, 'name' => 'Treats', 'type' => 'select', 'order_by' => 'menu_order', 'has_archives' => true ), 'med_use_in' => array( 'id' => 2, 'name' => 'Use In', 'type' => 'select', 'order_by' => 'menu_order', 'has_archives' => true ) ),
+		'taxes'    => array( 'product_cat', 'product_tag', 'pa_med_treats', 'pa_med_use_in', 'product_brand' ),
 	);
 }
 fh_reset();
@@ -157,9 +160,21 @@ function wp_update_post( $data, $wp_error = false ) {
 	if ( ! isset( $GLOBALS['fh']['posts'][ $id ] ) ) {
 		return $wp_error ? new WP_Error( 'x', 'no post' ) : 0;
 	}
+	$before = $GLOBALS['fh']['posts'][ $id ]->post_name;
 	foreach ( $data as $k => $v ) {
 		if ( 'ID' !== $k ) {
 			$GLOBALS['fh']['posts'][ $id ]->$k = wp_unslash( $v );
+		}
+	}
+	// As wp_check_for_changed_slugs() does for a published post or a picture.
+	$after = $GLOBALS['fh']['posts'][ $id ]->post_name;
+	if ( $before !== $after && '' !== $before ) {
+		$old = (array) get_post_meta( $id, '_wp_old_slug' );
+		if ( ! in_array( $before, $old, true ) ) {
+			add_post_meta( $id, '_wp_old_slug', $before );
+		}
+		if ( in_array( $after, $old, true ) ) {
+			delete_post_meta( $id, '_wp_old_slug', $after );
 		}
 	}
 	return $id;
@@ -183,6 +198,9 @@ function get_posts( $args ) {
 		if ( 'any' !== $st && ! in_array( $p->post_status, (array) $st, true ) ) {
 			continue;
 		}
+		if ( isset( $args['meta_key'] ) && ( ! metadata_exists( 'post', $p->ID, $args['meta_key'] ) || (string) get_post_meta( $p->ID, $args['meta_key'], true ) !== (string) $args['meta_value'] ) ) {
+			continue;
+		}
 		if ( ! empty( $args['tax_query'] ) ) {
 			$q    = $args['tax_query'][0];
 			$have = $GLOBALS['fh']['rel'][ $q['taxonomy'] ][ $p->ID ] ?? array();
@@ -199,17 +217,116 @@ function get_posts( $args ) {
 function metadata_exists( $type, $id, $key ) {
 	return isset( $GLOBALS['fh']['meta'][ (int) $id ] ) && array_key_exists( $key, $GLOBALS['fh']['meta'][ (int) $id ] );
 }
+/** Several values under one key (add_post_meta). */
+class FH_Multi {
+	public $v = array();
+}
 function get_post_meta( $id, $key = '', $single = false ) {
-	$v = $GLOBALS['fh']['meta'][ (int) $id ][ $key ] ?? '';
+	$v = $GLOBALS['fh']['meta'][ (int) $id ][ $key ] ?? null;
+	if ( $v instanceof FH_Multi ) {
+		return $single ? ( $v->v[0] ?? '' ) : $v->v;
+	}
+	if ( ! $single && '' !== $key ) {
+		return null === $v ? array() : array( is_int( $v ) || is_float( $v ) ? (string) $v : $v );
+	}
+	$v = null === $v ? '' : $v;
 	return is_int( $v ) || is_float( $v ) ? (string) $v : $v;
+}
+function add_post_meta( $id, $key, $value ) {
+	$cur = $GLOBALS['fh']['meta'][ (int) $id ][ $key ] ?? null;
+	if ( null === $cur ) {
+		$m = new FH_Multi();
+	} elseif ( $cur instanceof FH_Multi ) {
+		$m = $cur;
+	} else {
+		$m      = new FH_Multi();
+		$m->v[] = $cur;
+	}
+	$m->v[] = wp_unslash( $value );
+	$GLOBALS['fh']['meta'][ (int) $id ][ $key ] = $m;
+	return true;
+}
+function get_attached_file( $id ) {
+	return (string) get_post_meta( $id, '_wp_attached_file', true );
+}
+function maybe_unserialize( $v ) {
+	return $v;
 }
 function update_post_meta( $id, $key, $value ) {
 	$GLOBALS['fh']['meta'][ (int) $id ][ $key ] = wp_unslash( $value );
 	return true;
 }
-function delete_post_meta( $id, $key ) {
+function delete_post_meta( $id, $key, $value = null ) {
+	$cur = $GLOBALS['fh']['meta'][ (int) $id ][ $key ] ?? null;
+	if ( null !== $value && $cur instanceof FH_Multi ) {
+		$cur->v = array_values( array_diff( $cur->v, array( $value ) ) );
+		if ( ! $cur->v ) {
+			unset( $GLOBALS['fh']['meta'][ (int) $id ][ $key ] );
+		}
+		return true;
+	}
+	if ( null !== $value && null !== $cur && (string) $cur !== (string) $value ) {
+		return false;
+	}
 	unset( $GLOBALS['fh']['meta'][ (int) $id ][ $key ] );
 	return true;
+}
+/* Term meta */
+function get_term_meta( $id, $key = '', $single = false ) {
+	$all = $GLOBALS['fh']['termmeta'][ (int) $id ] ?? array();
+	if ( '' === $key ) {
+		return $all;
+	}
+	return $single ? ( $all[ $key ][0] ?? '' ) : ( $all[ $key ] ?? array() );
+}
+function add_term_meta( $id, $key, $value ) {
+	$GLOBALS['fh']['termmeta'][ (int) $id ][ $key ][] = $value;
+	return true;
+}
+function update_term_meta( $id, $key, $value ) {
+	$GLOBALS['fh']['termmeta'][ (int) $id ][ $key ] = array( $value );
+	return true;
+}
+function delete_term_meta( $id, $key ) {
+	unset( $GLOBALS['fh']['termmeta'][ (int) $id ][ $key ] );
+	if ( empty( $GLOBALS['fh']['termmeta'][ (int) $id ] ) ) {
+		unset( $GLOBALS['fh']['termmeta'][ (int) $id ] );
+	}
+	return true;
+}
+/* WooCommerce attributes */
+function wc_attribute_taxonomy_id_by_name( $name ) {
+	$slug = substr( (string) $name, 3 );
+	return (int) ( $GLOBALS['fh']['wc_attrs'][ $slug ]['id'] ?? 0 );
+}
+function wc_get_attribute( $id ) {
+	foreach ( $GLOBALS['fh']['wc_attrs'] as $slug => $a ) {
+		if ( (int) $a['id'] === (int) $id ) {
+			return (object) array_merge( $a, array( 'slug' => 'pa_' . $slug ) );
+		}
+	}
+	return null;
+}
+function wc_delete_attribute( $id ) {
+	foreach ( $GLOBALS['fh']['wc_attrs'] as $slug => $a ) {
+		if ( (int) $a['id'] === (int) $id ) {
+			foreach ( get_terms( array( 'taxonomy' => 'pa_' . $slug ) ) as $t ) {
+				wp_delete_term( $t->term_id, 'pa_' . $slug );
+			}
+			unset( $GLOBALS['fh']['wc_attrs'][ $slug ] );
+			$GLOBALS['fh']['taxes'] = array_values( array_diff( $GLOBALS['fh']['taxes'], array( 'pa_' . $slug ) ) );
+			return true;
+		}
+	}
+	return false;
+}
+function wc_create_attribute( $args ) {
+	$id = ++$GLOBALS['fh']['next'];
+	$GLOBALS['fh']['wc_attrs'][ $args['slug'] ] = array( 'id' => $id, 'name' => $args['name'], 'type' => $args['type'], 'order_by' => $args['order_by'], 'has_archives' => $args['has_archives'] );
+	return $id;
+}
+function register_taxonomy( $tax, $types, $args = array() ) {
+	$GLOBALS['fh']['taxes'][] = $tax;
 }
 
 /* Terms */
@@ -217,7 +334,7 @@ class WP_Term {
 	public $term_id, $name, $slug, $taxonomy, $description = '', $parent = 0, $count = 0;
 }
 function taxonomy_exists( $t ) {
-	return in_array( $t, array( 'product_cat', 'product_tag', 'pa_med_treats', 'pa_med_use_in' ), true );
+	return in_array( $t, $GLOBALS['fh']['taxes'], true );
 }
 function fh_term( $tax, $name, $slug = '', $parent = 0, $desc = '' ) {
 	$t              = new WP_Term();
@@ -256,7 +373,7 @@ function get_term_by( $field, $value, $tax ) {
 function get_terms( $args ) {
 	$out = array();
 	foreach ( $GLOBALS['fh']['terms'] as $t ) {
-		if ( $t->taxonomy === $args['taxonomy'] ) {
+		if ( $t->taxonomy === $args['taxonomy'] && ( ! isset( $args['parent'] ) || (int) $t->parent === (int) $args['parent'] ) ) {
 			$out[] = fh_count( $t );
 		}
 	}
@@ -286,7 +403,7 @@ function get_term_link( $term, $tax = '' ) {
 	if ( ! $t ) {
 		return new WP_Error( 'x', 'no term' );
 	}
-	$base = array( 'product_cat' => 'product-category', 'product_tag' => 'product-tag', 'pa_med_treats' => 'med_treats', 'pa_med_use_in' => 'med_use_in' );
+	$base = array( 'product_cat' => 'product-category', 'product_tag' => 'product-tag', 'pa_med_treats' => 'med_treats', 'pa_med_use_in' => 'med_use_in', 'product_brand' => 'brand' );
 	$path = array( $t->slug );
 	foreach ( get_ancestors( $t->term_id, $t->taxonomy ) as $a ) {
 		array_unshift( $path, get_term( $a )->slug );
@@ -305,7 +422,7 @@ function wp_update_term( $id, $tax, $args ) {
 	if ( ! $t ) {
 		return new WP_Error( 'x', 'no term' );
 	}
-	foreach ( array( 'name', 'slug', 'description' ) as $k ) {
+	foreach ( array( 'name', 'slug', 'description', 'parent' ) as $k ) {
 		if ( isset( $args[ $k ] ) ) {
 			$t->$k = $args[ $k ];
 		}
@@ -322,7 +439,13 @@ function wp_delete_term( $id, $tax ) {
 			$t->parent = $dead->parent;
 		}
 	}
-	unset( $GLOBALS['fh']['terms'][ (int) $id ] );
+	unset( $GLOBALS['fh']['terms'][ (int) $id ], $GLOBALS['fh']['termmeta'][ (int) $id ] );
+	// As WordPress does: menu items that point at the term go with it.
+	foreach ( $GLOBALS['fh']['posts'] as $pid => $p ) {
+		if ( 'nav_menu_item' === $p->post_type && (string) get_post_meta( $pid, '_menu_item_object_id', true ) === (string) (int) $id && get_post_meta( $pid, '_menu_item_object', true ) === $tax ) {
+			unset( $GLOBALS['fh']['posts'][ $pid ], $GLOBALS['fh']['meta'][ $pid ] );
+		}
+	}
 	foreach ( $GLOBALS['fh']['rel'][ $tax ] ?? array() as $obj => $ids ) {
 		$GLOBALS['fh']['rel'][ $tax ][ $obj ] = array_values( array_diff( $ids, array( (int) $id ) ) );
 	}

@@ -149,7 +149,7 @@ check( 'Medicated Food: renamed "Medicated Foods", slug kept', 'rename' === $row
 check( 'Medications: name and slug kept, description cleaned', 'rename' === $rows['product_cat:medications']['action'] && 'medications' === $rows['product_cat:medications']['new_slug'] && '' === $rows['product_cat:medications']['new_desc'] );
 check( 'the fish category is not in the table', ! isset( $rows['product_cat:quarantined-fish'] ) );
 check( 'disease and medicine-type tags: remove; the ingredient tag is not listed', 'delete' === $rows['product_tag:ich']['action'] && 'delete' === $rows['product_tag:anthelmintic']['action'] && ! isset( $rows['product_tag:metronidazole'] ) );
-check( 'Treats attribute values: remove', 'delete' === $rows['pa_med_treats:ich']['action'] );
+check( 'Treats attribute: one row, left alone while a product still uses it', 'keep' === $rows['attribute:pa_med_treats']['action'] && $rows['attribute:pa_med_treats']['blocked'] && ! isset( $rows['pa_med_treats:ich'] ) );
 
 $sort = Terms::apply( $rows['product_cat:antiparasitic'], $w );
 check( 'sort done', $sort['ok'], $sort['message'] );
@@ -196,11 +196,13 @@ foreach ( array( 'product first', 'categories first' ) as $order ) {
 	$read   = Fields::read( $t, 'attr:pa_med_treats' );
 	Ledger::apply( $t, array( array( 'object' => $t, 'field' => 'attr:pa_med_treats', 'value' => '', 'hash' => Fields::hash( $read ) ) ), Inventory::owned_ids( $t ) );
 	foreach ( Terms::proposals( $w ) as $r ) {
-		if ( 'pa_med_treats' === $r['tax'] ) {
-			Terms::apply( $r, $w );
+		if ( 'attribute' === $r['tax'] && 'pa_med_treats' === $r['slug'] ) {
+			check( "$order: once off the product, the attribute row is ready", 'delete_attribute' === $r['action'] && $r['ticked'] );
+			$done = Terms::apply( $r, $w );
+			check( "$order: attribute removed", $done['ok'], $done['message'] );
 		}
 	}
-	check( "$order: the values are gone from the shop", array() === get_terms( array( 'taxonomy' => 'pa_med_treats' ) ) );
+	check( "$order: the attribute and its values are gone from the shop", ! taxonomy_exists( 'pa_med_treats' ) && array() === get_terms( array( 'taxonomy' => 'pa_med_treats' ) ) && ! wc_attribute_taxonomy_id_by_name( 'pa_med_treats' ) );
 	if ( 'product first' === $order ) {
 		Ledger::undo( $t );
 	}

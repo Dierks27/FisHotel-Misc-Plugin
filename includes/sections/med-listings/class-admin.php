@@ -242,7 +242,7 @@ class Admin {
 		if ( ! is_array( $row ) ) {
 			wp_send_json_error( array( 'message' => __( 'Nothing to change.', 'fishotel-misc-plugin' ) ) );
 		}
-		$row['action'] = in_array( $row['action'] ?? '', array( 'sort', 'merge', 'rename', 'delete', 'keep' ), true ) ? $row['action'] : 'keep';
+		$row['action'] = in_array( $row['action'] ?? '', array( 'sort', 'merge', 'rename', 'delete', 'untag', 'delete_attribute', 'keep' ), true ) ? $row['action'] : 'keep';
 		wp_send_json_success( Terms::apply( $row, Words::get() ) );
 	}
 
@@ -321,40 +321,90 @@ class Admin {
 	}
 
 	/**
-	 * The backup CSV: every field the review proposes to change, with
-	 * its current value; every category row; every product's categories
-	 * and tags.
+	 * The backup CSV: every field the page reads on every product found
+	 * (empty ones too), each with what it says now AND its stored value
+	 * exactly as WordPress holds it (JSON: whether it exists, and the
+	 * value — an attribute with its term ids, position and flags, a
+	 * picture address with its old addresses), and every category, tag and
+	 * attribute the Categories step lists, with its products, its own
+	 * settings, the menu items pointing at it and the categories under it.
+	 *
+	 * The CSV is for reading and for checking by hand. Undo does not need
+	 * it: the exact record of every old value is the option
+	 * fishotel_med_listings_ledger.
 	 */
 	public function download_backup() {
 		if ( ! current_user_can( Med_Listings::CAP ) ) {
 			wp_die( esc_html__( 'You do not have permission to do this.', 'fishotel-misc-plugin' ) );
 		}
 		check_admin_referer( self::NONCE );
-		$words = Words::get();
 		nocache_headers();
 		header( 'Content-Type: text/csv; charset=utf-8' );
 		header( 'Content-Disposition: attachment; filename="med-listings-backup-' . gmdate( 'Y-m-d-His' ) . '.csv"' );
 		$out = fopen( 'php://output', 'w' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- streaming a download.
 		fwrite( $out, "\xEF\xBB\xBF" ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite -- BOM so Excel reads UTF-8.
-		fputcsv( $out, array( 'kind', 'product_id', 'product_name', 'post_id', 'field', 'label', 'where', 'current_value' ) );
+		foreach ( self::backup_rows( Words::get() ) as $r ) {
+			fputcsv( $out, $r );
+		}
+		fclose( $out ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- streaming a download.
+		exit;
+	}
+
+	/**
+	 * The backup's rows, header first.
+	 *
+	 * @param array $words Words::get().
+	 * @return array<int, string[]>
+	 */
+	public static function backup_rows( array $words ) {
+		$rows   = array();
+		$rows[] = array( 'kind', 'product_id', 'product_name', 'post_id', 'field', 'label', 'where', 'current_value', 'stored_value_json' );
 		foreach ( Inventory::find( $words ) as $pid => $reasons ) {
 			$snap = Inventory::snapshot( $pid, $words );
 			if ( ! $snap ) {
 				continue;
 			}
-			fputcsv( $out, array( 'product', $pid, $snap['name'], $pid, 'categories', 'Categories', '', implode( ', ', $snap['cats'] ) ) );
+			$cats = wp_get_object_terms( $pid, 'product_cat', array( 'fields' => 'ids' ) );
+			$rows[] = array( 'product', $pid, $snap['name'], $pid, 'categories', 'Categories', '', self::csv_safe( implode( ', ', $snap['cats'] ) ), wp_json_encode( array( 'exists' => true, 'raw' => is_array( $cats ) ? array_map( 'intval', $cats ) : array() ) ) );
 			foreach ( $snap['fields'] as $f ) {
-				if ( '' === trim( (string) $f['read']['text'] ) ) {
-					continue;
-				}
-				fputcsv( $out, array( 'product', $pid, $snap['name'], $f['object'], $f['field'], $f['label'], $f['where'], self::csv_safe( (string) $f['read']['text'] ) ) );
+				$rows[] = array( 'product', $pid, $snap['name'], $f['object'], $f['field'], $f['label'], $f['where'], self::csv_safe( (string) $f['read']['text'] ), wp_json_encode( array( 'exists' => (bool) $f['read']['exists'], 'raw' => $f['read']['raw'] ) ) );
+			}
+			foreach ( $snap['comments'] as $c ) {
+				$rows[] = array( 'review', $pid, $snap['name'], $c['id'], 'comment_status', 'Review', (string) $c['author'], self::csv_safe( (string) $c['content'] ), wp_json_encode( array( 'exists' => true, 'raw' => $c['status'] ) ) );
 			}
 		}
 		foreach ( Terms::proposals( $words ) as $t ) {
-			fputcsv( $out, array( 'term', '', '', $t['id'], $t['tax'], $t['name'], $t['slug'], self::csv_safe( $t['desc'] ) ) );
+			if ( 'attribute' === $t['tax'] ) {
+				$def    = Terms::attribute_def( (string) $t['slug'] );
+				$values = taxonomy_exists( (string) $t['slug'] ) ? get_terms( array( 'taxonomy' => (string) $t['slug'], 'hide_empty' => false ) ) : array();
+				$vals   = array();
+				foreach ( is_array( $values ) ? $values : array() as $v ) {
+					$vals[] = array(
+						'term_id'     => (int) $v->term_id,
+						'name'        => (string) $v->name,
+						'slug'        => (string) $v->slug,
+						'description' => (string) $v->description,
+						'meta'        => function_exists( 'get_term_meta' ) ? get_term_meta( (int) $v->term_id ) : array(),
+						'products'    => Terms::products_in( (int) $v->term_id, (string) $t['slug'] ),
+					);
+				}
+				$rows[] = array( 'attribute', '', '', $t['id'], $t['slug'], $t['name'], '', self::csv_safe( $t['desc'] ), wp_json_encode( array( 'exists' => true, 'raw' => array( 'attribute' => $def, 'values' => $vals ) ) ) );
+				continue;
+			}
+			$term = get_term( (int) $t['id'], $t['tax'] );
+			$raw  = array(
+				'name'        => $t['name'],
+				'slug'        => $t['slug'],
+				'description' => $t['desc'],
+				'parent'      => $term ? (int) $term->parent : 0,
+				'meta'        => function_exists( 'get_term_meta' ) ? get_term_meta( (int) $t['id'] ) : array(),
+				'products'    => Terms::products_in( (int) $t['id'], $t['tax'] ),
+				'menu_items'  => Terms::menu_items( (int) $t['id'], $t['tax'] ),
+				'children'    => is_array( $kids = get_term_children( (int) $t['id'], $t['tax'] ) ) ? array_map( 'intval', $kids ) : array(), // phpcs:ignore Squiz.PHP.DisallowMultipleAssignments.Found
+			);
+			$rows[] = array( 'term', '', '', $t['id'], $t['tax'], $t['name'], $t['slug'], self::csv_safe( $t['desc'] ), wp_json_encode( array( 'exists' => true, 'raw' => $raw ) ) );
 		}
-		fclose( $out ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fclose -- streaming a download.
-		exit;
+		return $rows;
 	}
 
 	/**

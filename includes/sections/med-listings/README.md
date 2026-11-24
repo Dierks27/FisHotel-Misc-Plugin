@@ -22,10 +22,17 @@ working while the section is switched off.
 ## The six steps (one page)
 
 1. **Backup.** First make a Cloudways backup (the application → Backup and
-   Restore → Take Backup Now). Then press **Download backup (CSV)**. You get
-   every field the page would change on every product, with what it says
-   now, plus the categories and tags. The page keeps its own record of every
-   old value as well, so Undo works without either backup.
+   Restore → Take Backup Now): that is the one to restore the whole site
+   from. Then press **Download backup (CSV)**, to read and keep. It has
+   every field the page reads on every product (empty ones too), each with
+   what it says now and, in the last column, its stored value exactly as
+   WordPress holds it (JSON: an attribute with its term ids, position and
+   flags; a picture address with its old addresses). It also has every
+   category, tag and attribute of step 5 with its products, its own
+   settings, the menu items pointing at it and the categories under it.
+   **The CSV is for reading, not for restoring.** Undo uses the page's own
+   exact record (the option `fishotel_med_listings_ledger`) and works
+   without either backup.
 2. **Find.** The page lists:
    - every product in the Medications category or a category under it (the
      theme's own test for a medication), or in the other slugs the theme
@@ -34,7 +41,8 @@ working while the section is switched off.
      names a drug from the list.
 
    Products in the categories you leave out are skipped (the fish and
-   invoices by default). The **Word lists** box holds every list the page
+   invoices by default), even when one was put in a medication category
+   by mistake. The **Word lists** box holds every list the page
    uses: drug names, diseases, what-it-does words, dosing, medicine-type
    labels, link addresses, Water Chemistry words, the storage line, the
    supplier line, your own brands and the left-out categories. Use one word
@@ -71,6 +79,10 @@ working while the section is switched off.
      medication category page, and the tool pages (Dosing Calculator, QT
      Scheduler, quarantine guides). Each page passes or fails, with the
      offending words and where they were found.
+   - The **Home page** row is for information only: its words come from
+     your fish service and the header and footer, and are not counted
+     against the other pages. Links are what a visitor can follow (`<a>`
+     and forms); stylesheets and files under `/wp-content/` are not links.
    - If the site cannot open its own pages, the page says so. Open the
      listed addresses in a private window yourself.
 
@@ -89,10 +101,15 @@ The description is written from the **product's own facts only**:
 | "Keep sealed, store cool and dry. Not for human consumption. Keep out of reach of children." | the storage line (a setting) |
 | "Ships direct from our supplier." | only when the theme says Everything Aquatic ships it (`fishotel_is_ea_fulfilled_product()`) |
 
-**Ingredients are never guessed.** When the field is empty, the line
-carries `[[fill in the active ingredients — confirm against the EA product]]`.
-That row starts unticked and **cannot be applied while the blank is
-there**. Fill it in from the label and the row ticks itself.
+**Ingredients are never guessed.** When the field is empty, the lines
+carry `[[fill in the active ingredients — confirm against the EA product]]`
+and the product's table starts with one **Active ingredient(s)** box.
+Type the ingredients there once, from the label: every blank of that
+product (description, short description, search descriptions) fills as
+you type and its row ticks itself, and Apply saves what you typed to the
+product's own Active ingredient(s) field. A row with a blank left
+**cannot be applied**. A field that says the product has none ("None
+(test kit)", "n/a") gets no "Contains" line and is flagged instead.
 
 The short description is the "containing" line plus the "Available in"
 line. It also feeds the WooCommerce product data (JSON-LD), the product
@@ -105,12 +122,15 @@ Other fields:
 | Tagline above the title, calculator anchor, "Treats" row, "Use in" row | emptied |
 | "Best for", "Nutrition", "Additives", food source, purchase note (printed in order e-mails), Yoast / Rank Math titles and focus keyphrase | the sentences or title parts with a claim taken out (only when there is one) |
 | Yoast / Rank Math meta, Facebook and X descriptions | the name plus the short description (only when there is a claim) |
+| Yoast / Rank Math titles (also Facebook and X) | the title parts with a claim taken out. When the product name goes with them ("General Cure \| …"), the field is proposed empty: **an empty search field is removed**, so Yoast / Rank Math use their own title (name and site name) instead of printing just "FisHotel" |
 | Extra checkout tick | proposed empty but **left unticked**: you decide |
 | Tags | disease, claim and medicine-type tags come off, ingredient tags stay |
 | An attribute named Treats / Use / Use in / Dosage / Directions …, or with a claim value | taken off the product. If the product's variations are built on it, it is flagged instead. |
 | Variation descriptions (they sit in the page source) | claim sentences out |
-| Picture alt text | the product name |
-| Picture caption | claim sentences out |
+| Picture alt text, picture title | the product name (the title is in the page source and the shop's public product data) |
+| Picture caption, picture description | claim sentences out |
+| Picture address (its slug) | from the product name; WordPress sends the old address on |
+| Description, when the old text gives amounts the new one lacks (net weight, strength, pellet size) | the row says which, so you can add them before applying |
 | Active ingredient | never changed. A claim inside it is flagged. |
 
 A field the tool already changed, and that nobody has touched since, is
@@ -127,12 +147,23 @@ not proposed again.
 - **Reviews and questions** that name a disease or dosing. Each one comes
   with a link and a **Hide** button that only acts when you press it. Hide
   holds the review for moderation. **Show it again** puts back the status
-  it had. Reviews do not show on the product page, but WooCommerce puts
-  their text into the page's product data, which search engines read.
+  it had. Reviews do not show on the product page (and the theme takes
+  their text out of the page's product data since 1.29.0), but an
+  approved review's text is still public in WooCommerce's review list for
+  apps and search engines (`/wp-json/wc/store/v1/products/reviews`):
+  Hide takes it out of there too.
+- **Picture file names** with a claim ("trio-flake-kills-ich.jpg"). The
+  file name is part of the picture's address on every page that shows it.
+  Upload the picture again under a plain name; this page does not rename
+  files.
 - **Other brands.** A brand term that is not one of yours, and products
   sold through Amazon.
 - **Pages and posts that link to the products**, with the tool and QT
-  guide pages marked.
+  guide pages marked. A product is found by its address, by its slug in
+  any address (so a link still found after step 5 changed the address),
+  by an add-to-cart link and by its id in a shortcode (`[product id=…]`,
+  `[products ids="…"]`, `[add_to_cart id=…]`) or a product block; a
+  category by its address and every old address on the redirect list.
 
 ## Apply and Undo
 
@@ -163,33 +194,70 @@ not proposed again.
 
 ## Categories (step 5) in detail
 
+- **Only medication categories.** A category is proposed only when it is
+  inside the Medications tree, or has one of the medicine-type slugs
+  (antiparasitic, antibacterial, dewormer …), and never when its slug is in
+  the left-out list. "Fish Treats" or "Hospital Tank Supplies" elsewhere in
+  the shop are never listed. A medicine-type category outside the tree
+  starts unticked.
+- **Never a fish turned into a medication.** A category that also holds
+  products that are not medications (a fish put there by mistake) cannot
+  be sorted or merged: its row is greyed out, and the server refuses it
+  too. Move those products out by hand first.
 - **The new categories stay under Medications.** The theme decides "this
   is a medication" (the ornamental-use notice, the checkout tick, the terms
-  record) by the Medications parent (`helpers.php`
+  record) by the Medications tree (`helpers.php`
   `fishotel_med_is_med_product()`). Every product the step moves is also
-  put in Medications itself, because the theme's other test
-  (`fishotel_is_medication_product()`) reads the slugs `antibacterial` /
-  `antiparasitic` / `dewormer` by name.
+  put in Medications itself.
 - **"Sort its products by type"** puts each product in:
-  - Medicated Foods when it is a food;
+  - Medicated Foods when it is a food (by its category, its form or its
+    name: flake, pellet, gel, "food");
   - Water Chemistry when its name or ingredient has a Water Chemistry word
     (copper …);
   - Powders & Chemicals otherwise.
 
   The old category is then removed. Its address goes to the category you
   choose, by default the one most of its products went to.
-- **"Merge into"** sends all its products to one category.
+- **Medicated Foods** is made with the slug `medicated-food` (the one the
+  theme reads as a food) when it is not there yet; the theme's own
+  "Medicated Food" is renamed "Medicated Foods" with its slug kept.
+- **Form categories** (Flakes, Pellets, Powders, Liquid) are offered a
+  **Merge into** Medicated Foods / Powders & Chemicals, left unticked: the
+  Medications page's Form filter reads them, so merged, that filter button
+  finds nothing. You decide.
+- **What a removed category takes with it is kept.** Before the button the
+  row says which menu items point at it and which categories are under
+  it. On removal:
+  - its menu items are pointed at the category its address goes to (a
+    menu label that is a claim is emptied, so the new name shows) instead
+    of being deleted by WordPress;
+  - the categories under it move up one level, and their old addresses
+    get a 301;
+  - its own settings (picture, display type, order), the Yoast primary
+    category of its products and its Yoast SEO text are recorded.
+
+  Undo puts all of it back on the category it makes again.
+- **Tags.** A disease or medicine-type tag only on medications is removed
+  (its page goes to Medications). One that is also on other products (a
+  fish) is **only taken off the medications**; the tag and its page stay.
+  A tag on no medication is not listed. A tag that stays (an ingredient)
+  and a brand on a medication get their description cleaned when it makes
+  a claim ("Products that treat …"); brand names are only flagged.
+- **The theme's Treats / Use In attributes** are one row each. Once no
+  product uses them (step 4 takes them off), the whole attribute goes with
+  its values and filter pages — also from WooCommerce's public attribute
+  list. Their addresses go to Medications. Undo makes the attribute again
+  with the same name, slug and values (a new id), and a product's Undo
+  does that by itself when it needs the attribute back.
 - **"Rename"** keeps the same category with a new name, slug or
-  description. The theme's own "Medicated Food" becomes "Medicated Foods"
-  with its slug kept (the theme reads it). The Medications category keeps
-  its name and slug; only its description is cleaned. It can never be
-  removed.
+  description. The Medications category keeps its name and slug; only its
+  description is cleaned. It can never be removed.
 - **The neutral categories.** Ones the step made are removed again by Undo
   once they are empty.
 - **Undo** puts a removed category back with its name, slug, description
-  and parent, and puts its products back in it. WordPress gives it a new id.
-- **Yoast's own category SEO** (option `wpseo_taxonomy_meta`) is not
-  touched. Check it in Yoast.
+  and parent, puts its products back in it, and restores what is listed
+  above. WordPress gives it a new id.
+- **Yoast's own title templates** (`wpseo_titles`) are not touched.
 
 ## Redirects
 
@@ -218,24 +286,17 @@ the section is switched off (`boot_disabled()`).
 
 ## Not done here (the theme release, or you)
 
-**The theme release.** Theme code prints wording that no stored data
-controls:
-- the "From the Pharmacy / Therapeutic-grade" badge;
-- the trust strip "The same meds we use in QT";
-- "Fulfilled by EverythingAquatic, our trusted medication partner";
-- the calculator link (also from the theme's reverse map);
-- the "I Agree — Show Me the Pharmacy" button;
-- the Medications archive "TREATS" filter;
-- the calculator and QT Scheduler product links in their JavaScript;
-- the seeding of the Treats / Use In attributes and the old subcategories.
-
-The page check shows these until the theme release is installed.
+**The theme release (FisHotel Theme 1.29.0).** Theme code prints wording
+that no stored data controls: the Pharmacy badge and trust strip, the
+partner line, the calculator link, the "Show Me the Pharmacy" button, the
+"proper dosing" line of the entry pop-up, the Medications archive TREATS
+filter, the calculator and QT Scheduler product links, and the seeding of
+the Treats / Use In attributes and the old subcategories. Install the
+theme first: the page check shows these until it is.
 
 **For you.**
 - The footer Tools column (Medication Dosing, QT Scheduler) is on every
   page.
-- The ornamental-use notice text mentions "proper dosing" (a theme
-  setting).
 - E-mail templates. ShipTracker's e-mails print no product text.
 - Old orders keep their item names and the checkout ticks that were
   accepted.
@@ -274,5 +335,6 @@ php includes/sections/med-listings/tests/composer-test.php
 php includes/sections/med-listings/tests/proposals-test.php
 php includes/sections/med-listings/tests/apply-undo-test.php
 php includes/sections/med-listings/tests/redirects-verify-test.php
+php includes/sections/med-listings/tests/review-fixes-test.php
 node includes/sections/med-listings/tests/report.test.js
 ```

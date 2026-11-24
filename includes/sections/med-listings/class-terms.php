@@ -52,7 +52,9 @@ class Terms {
 	 * @var array<string, array{0: string, 1: string}>
 	 */
 	const TARGETS = array(
-		'food'   => array( 'Medicated Foods', 'medicated-foods' ),
+		// Slug "medicated-food": the one the theme reads as a food (the theme
+		// also knows "medicated-foods" since 1.29.0).
+		'food'   => array( 'Medicated Foods', 'medicated-food' ),
 		'powder' => array( 'Powders & Chemicals', 'powders-chemicals' ),
 		'water'  => array( 'Water Chemistry', 'water-chemistry' ),
 	);
@@ -103,7 +105,7 @@ class Terms {
 		}
 		$slugs = array( self::TARGETS[ $type ][1] );
 		if ( 'food' === $type ) {
-			$slugs[] = 'medicated-food';
+			$slugs[] = 'medicated-foods';
 		}
 		foreach ( $slugs as $slug ) {
 			$t = get_term_by( 'slug', $slug, 'product_cat' );
@@ -115,16 +117,60 @@ class Terms {
 	}
 
 	/**
+	 * Category slugs that say what a product looks like, not what it does
+	 * (the theme's Form filter on the Medications page reads them):
+	 * slug => the neutral category they could be merged into.
+	 *
+	 * @var array<string, string>
+	 */
+	const FORM_SLUGS = array(
+		'flakes'  => 'food',
+		'pellets' => 'food',
+		'powders' => 'powder',
+		'liquid'  => 'powder',
+		'liquids' => 'powder',
+		'tablets' => 'powder',
+	);
+
+	/**
+	 * Brand taxonomies (kept brands: only a description with a claim is
+	 * cleaned; another brand is flagged on the product).
+	 *
+	 * @var string[]
+	 */
+	const BRAND_TAXONOMIES = array( 'product_brand', 'pwb-brand', 'yith_product_brand' );
+
+	/**
 	 * The proposal table.
+	 *
+	 * Only categories INSIDE the Medications tree, or with one of the
+	 * medicine-type slugs (THERAPEUTIC), are ever proposed — never "Fish
+	 * Treats" or "Hospital Tank" somewhere else in the shop — and never one
+	 * in the left-out list. A row outside the tree, or a category that also
+	 * holds products that are not medications, starts unticked (and the
+	 * second cannot be sorted or merged at all: its other products would
+	 * become medications).
+	 *
+	 * Tags: a disease or medicine-type tag only on medications is removed;
+	 * one that is also on other products (a fish) is only taken off the
+	 * medications; one on no medication is not listed. A kept tag or a
+	 * brand on a medication whose description makes a claim gets a cleaned
+	 * description.
+	 *
+	 * The theme's Treats / Use In attributes are one row each: the whole
+	 * attribute (with its values and its filter pages) is removed once no
+	 * product uses it any more (step 4 takes it off the products).
 	 *
 	 * @param array $words Words::get().
 	 * @return array<int, array>
 	 */
 	public static function proposals( array $words ) {
-		$rows   = array();
-		$parent = Inventory::parent_term();
-		$tree   = Inventory::med_term_ids();
-		$claim  = array( 'diseases', 'claims', 'dosing', 'labels' );
+		$rows    = array();
+		$parent  = Inventory::parent_term();
+		$tree    = Inventory::med_term_ids();
+		$claim   = array( 'diseases', 'claims', 'dosing', 'labels' );
+		$leave   = array_map( 'strtolower', Words::parse_commas( (string) ( $words['leave_out'] ?? '' ) ) );
+		$med_set = array_fill_keys( array_map( 'intval', array_keys( Inventory::find( $words ) ) ), true );
 		$targets_ids = array();
 		foreach ( array_keys( self::TARGETS ) as $type ) {
 			$t = self::target_term( $type );
@@ -140,15 +186,23 @@ class Terms {
 			)
 		);
 		foreach ( is_array( $cats ) ? $cats : array() as $t ) {
-			$in_tree = in_array( (int) $t->term_id, $tree, true );
-			$name_hit = Finder::has( $t->name . ' ' . str_replace( '-', ' ', $t->slug ), $words, $claim );
-			$desc_hit = Finder::has( (string) $t->description, $words, $claim );
-			$is_ther  = in_array( $t->slug, self::THERAPEUTIC, true );
-			if ( ! $is_ther && ! $name_hit && ! ( $in_tree && $desc_hit ) && ! isset( $targets_ids[ (int) $t->term_id ] ) ) {
+			if ( in_array( strtolower( $t->slug ), $leave, true ) ) {
 				continue;
 			}
-			$row = self::row( $t, 'product_cat' );
+			$in_tree  = in_array( (int) $t->term_id, $tree, true );
+			$is_ther  = in_array( $t->slug, self::THERAPEUTIC, true );
+			if ( ! $in_tree && ! $is_ther ) {
+				continue; // Not a medication category: never touched here.
+			}
+			$name_hit = Finder::has( $t->name . ' ' . str_replace( '-', ' ', $t->slug ), $words, $claim );
+			$desc_hit = Finder::has( (string) $t->description, $words, $claim );
+			$is_form  = isset( self::FORM_SLUGS[ $t->slug ] ) && ! isset( $targets_ids[ (int) $t->term_id ] );
+			if ( ! $is_ther && ! $name_hit && ! $desc_hit && ! $is_form && ! isset( $targets_ids[ (int) $t->term_id ] ) ) {
+				continue;
+			}
+			$row         = self::row( $t, 'product_cat' );
 			$row['hits'] = Finder::words( Finder::find( $t->name . ' · ' . $t->description, $words, $claim ) );
+			$others      = self::others_in( (int) $t->term_id, $med_set );
 
 			if ( isset( $targets_ids[ (int) $t->term_id ] ) ) {
 				// A neutral category: its name as it should be, its description cleaned.
@@ -171,7 +225,9 @@ class Terms {
 				$row['action'] = 'sort';
 				$types         = array();
 				foreach ( self::products_in( (int) $t->term_id, 'product_cat' ) as $pid ) {
-					$types[] = self::type_of_product( $pid, $words );
+					if ( isset( $med_set[ $pid ] ) ) {
+						$types[] = self::type_of_product( $pid, $words );
+					}
 				}
 				$count = array_count_values( $types );
 				// Most products first; a tie goes to Powders & Chemicals, then Medicated Foods.
@@ -185,15 +241,35 @@ class Terms {
 				$row['redirect_to'] = $count ? (string) key( $count ) : 'parent';
 				$row['merge_to']    = $row['redirect_to'];
 				$row['types']       = $count;
-				$row['note']        = __( 'Each product goes to Medicated Foods, Water Chemistry or Powders & Chemicals by what it is; this category is then removed and its address sent on.', 'fishotel-misc-plugin' );
+				$row['note']        = __( 'Each product goes to Medicated Foods, Water Chemistry or Powders & Chemicals by what it is (and stays in Medications); this category is then removed and its address sent on.', 'fishotel-misc-plugin' );
+			} elseif ( $is_form ) {
+				$row['action']   = 'merge';
+				$row['merge_to'] = self::FORM_SLUGS[ $t->slug ];
+				$row['ticked']   = false;
+				$row['note']     = __( 'A form category next to the new ones ("Powders" next to "Powders & Chemicals"). Merge it if you want one category per product. The Form filter on the Medications page (Flakes / Pellets / Powders / Liquid) reads this category: merged, that filter button finds nothing. Left unticked: you decide.', 'fishotel-misc-plugin' );
 			} else {
 				$row['action']   = 'rename';
 				$row['new_desc'] = Finder::clean( (string) $t->description, $words, $claim );
 			}
+
+			if ( in_array( $row['action'], array( 'sort', 'merge' ), true ) ) {
+				$row['affects'] = self::delete_preview( $t, 'product_cat' );
+			}
+			if ( $others && in_array( $row['action'], array( 'sort', 'merge' ), true ) ) {
+				$row['action']  = 'keep';
+				$row['ticked']  = false;
+				$row['blocked'] = true;
+				$row['note']    = sprintf( /* translators: %s: product names */ __( 'Also holds products that are not medications (%s). Sorting or merging it would turn them into medications, so this page leaves it alone: move those products out by hand first.', 'fishotel-misc-plugin' ), implode( ', ', array_slice( $others, 0, 5 ) ) . ( count( $others ) > 5 ? ' …' : '' ) );
+			}
+			if ( ! $in_tree ) {
+				$row['ticked'] = false;
+				$row['note']  .= ' ' . __( '(Not under Medications: left unticked.)', 'fishotel-misc-plugin' );
+			}
 			$rows[] = $row;
 		}
 
-		$taxes = array_merge( array( 'product_tag' ), self::CLAIM_ATTRIBUTE_TAXONOMIES );
+		// Tags and brands.
+		$taxes = array_merge( array( 'product_tag' ), self::BRAND_TAXONOMIES );
 		foreach ( $taxes as $tax ) {
 			if ( ! taxonomy_exists( $tax ) ) {
 				continue;
@@ -205,22 +281,184 @@ class Terms {
 				)
 			);
 			foreach ( is_array( $terms ) ? $terms : array() as $t ) {
-				$attr = in_array( $tax, self::CLAIM_ATTRIBUTE_TAXONOMIES, true );
-				if ( ! $attr && ! Finder::has( $t->name, $words, $claim ) ) {
-					continue;
+				$objs   = self::products_in( (int) $t->term_id, $tax );
+				$on_med = array_values( array_filter( $objs, function ( $o ) use ( $med_set ) {
+					return isset( $med_set[ (int) $o ] );
+				} ) );
+				$others = count( $objs ) - count( $on_med );
+				$name_hit = 'product_tag' === $tax && Finder::has( $t->name, $words, $claim );
+				$desc_hit = Finder::has( (string) $t->description, $words, $claim );
+				if ( $name_hit && ( $on_med || ! $objs ) ) {
+					$row           = self::row( $t, $tax );
+					$row['hits']   = Finder::words( Finder::find( $t->name, $words, $claim ) );
+					$row['action'] = $others ? 'untag' : 'delete';
+					$row['note']   = $others
+						? sprintf( /* translators: %d: products */ __( 'A disease or medicine-type tag that is also on %d other products (fish …): it is only taken off the medications. The tag and its page stay for the others.', 'fishotel-misc-plugin' ), $others )
+						: __( 'A disease or medicine-type tag: taken off every product and removed; its page goes to Medications.', 'fishotel-misc-plugin' );
+					$rows[] = $row;
+				} elseif ( $desc_hit && $on_med ) {
+					$row             = self::row( $t, $tax );
+					$row['hits']     = Finder::words( Finder::find( (string) $t->description, $words, $claim ) );
+					$row['action']   = 'rename';
+					$row['new_desc'] = Finder::clean( (string) $t->description, $words, $claim );
+					$row['note']     = 'product_tag' === $tax
+						? __( 'A tag that stays (an ingredient, a form): only its description is cleaned. It is printed on its tag page and in the shop\'s product data.', 'fishotel-misc-plugin' )
+						: __( 'A brand on medications: only its description is cleaned (it is printed on the brand page).', 'fishotel-misc-plugin' );
+					$rows[] = $row;
 				}
-				$row                = self::row( $t, $tax );
-				$row['hits']        = Finder::words( Finder::find( $t->name, $words, $claim ) );
-				$row['action']      = 'delete';
-				$row['redirect_to'] = 'parent';
-				$row['note']        = $attr
-					? __( 'A value of the theme\'s Treats / Use In attribute: removed with its filter page.', 'fishotel-misc-plugin' )
-					: __( 'A disease or medicine-type tag: taken off every product and removed; its page goes to Medications.', 'fishotel-misc-plugin' );
-				$rows[]             = $row;
 			}
 		}
 
+		// The theme's Treats / Use In attributes.
+		foreach ( self::CLAIM_ATTRIBUTE_TAXONOMIES as $tax ) {
+			$attr = self::attribute_def( $tax );
+			if ( ! $attr ) {
+				continue;
+			}
+			$values = taxonomy_exists( $tax ) ? get_terms( array( 'taxonomy' => $tax, 'hide_empty' => false ) ) : array();
+			$values = is_array( $values ) ? $values : array();
+			$used   = array();
+			foreach ( $values as $v ) {
+				$used = array_merge( $used, self::products_in( (int) $v->term_id, $tax ) );
+			}
+			$used  = array_values( array_unique( $used ) );
+			$names = wp_list_pluck( $values, 'name' );
+			$row   = array(
+				'id'          => (int) $attr['id'],
+				'tax'         => 'attribute',
+				'name'        => sprintf( /* translators: %s: attribute */ __( 'Attribute "%s"', 'fishotel-misc-plugin' ), $attr['name'] ),
+				'slug'        => $tax,
+				'desc'        => $names ? sprintf( /* translators: %s: values */ __( 'Values: %s', 'fishotel-misc-plugin' ), implode( ', ', $names ) ) : '',
+				'count'       => count( $used ),
+				'link'        => '',
+				'action'      => $used ? 'keep' : 'delete_attribute',
+				'ticked'      => ! $used,
+				'blocked'     => (bool) $used,
+				'new_name'    => '',
+				'new_slug'    => '',
+				'new_desc'    => '',
+				'merge_to'    => 'parent',
+				'redirect_to' => 'parent',
+				'hits'        => array(),
+				'types'       => array(),
+				'affects'     => array(),
+				'note'        => $used
+					? sprintf( /* translators: %d: products */ __( 'Still on %d products. Apply step 4 first (it takes the attribute off each product); an attribute the variations are built on is flagged there for you to change by hand.', 'fishotel-misc-plugin' ), count( $used ) )
+					: sprintf( /* translators: %d: values */ __( 'The theme\'s "%1$s" attribute and its %2$d values: removed, with their filter pages (also from WooCommerce\'s public attribute list). Its addresses go to Medications.', 'fishotel-misc-plugin' ), $attr['name'], count( $values ) ),
+			);
+			$rows[] = $row;
+		}
+
 		return $rows;
+	}
+
+	/**
+	 * Names of the products in a category that are not medications.
+	 *
+	 * @param int   $term_id Category.
+	 * @param array $med_set Medication product ids => true.
+	 * @return string[]
+	 */
+	private static function others_in( $term_id, array $med_set ) {
+		$out = array();
+		foreach ( self::products_in( (int) $term_id, 'product_cat' ) as $pid ) {
+			if ( ! isset( $med_set[ $pid ] ) && 'product' === get_post_type( $pid ) ) {
+				$out[] = (string) get_the_title( $pid );
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * What removing a category also touches, for the page to say before
+	 * the button: menu items that point at it, categories under it, and
+	 * whether it has its own settings (picture, display type, order).
+	 *
+	 * @param \WP_Term $t   Term.
+	 * @param string   $tax Taxonomy.
+	 * @return array{menus: string[], children: string[], settings: bool}
+	 */
+	public static function delete_preview( $t, $tax ) {
+		$menus = array();
+		foreach ( self::menu_items( (int) $t->term_id, $tax ) as $m ) {
+			$menus[] = '' !== $m['title'] ? $m['title'] : (string) $t->name;
+		}
+		$children = array();
+		$kids     = get_terms(
+			array(
+				'taxonomy'   => $tax,
+				'hide_empty' => false,
+				'parent'     => (int) $t->term_id,
+			)
+		);
+		foreach ( is_array( $kids ) ? $kids : array() as $k ) {
+			$children[] = (string) $k->name;
+		}
+		$meta = function_exists( 'get_term_meta' ) ? get_term_meta( (int) $t->term_id ) : array();
+		return array(
+			'menus'    => $menus,
+			'children' => $children,
+			'settings' => ! empty( $meta ),
+		);
+	}
+
+	/**
+	 * Menu items that point at a term.
+	 *
+	 * @param int    $term_id Term.
+	 * @param string $tax     Taxonomy.
+	 * @return array<int, array{id: int, title: string, object: string, object_id: int}>
+	 */
+	public static function menu_items( $term_id, $tax ) {
+		$out   = array();
+		$items = get_posts(
+			array(
+				'post_type'        => 'nav_menu_item',
+				'post_status'      => 'any',
+				'posts_per_page'   => -1,
+				'meta_key'         => '_menu_item_object_id', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- one-time admin page.
+				'meta_value'       => (string) (int) $term_id, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+				'suppress_filters' => true,
+			)
+		);
+		foreach ( (array) $items as $p ) {
+			if ( 'taxonomy' !== (string) get_post_meta( $p->ID, '_menu_item_type', true ) || $tax !== (string) get_post_meta( $p->ID, '_menu_item_object', true ) ) {
+				continue;
+			}
+			$out[] = array(
+				'id'        => (int) $p->ID,
+				'title'     => (string) $p->post_title,
+				'object'    => $tax,
+				'object_id' => (int) $term_id,
+			);
+		}
+		return $out;
+	}
+
+	/**
+	 * A WooCommerce attribute by its taxonomy name, as a plain array, or
+	 * null.
+	 *
+	 * @param string $tax pa_… name.
+	 * @return array|null
+	 */
+	public static function attribute_def( $tax ) {
+		if ( ! function_exists( 'wc_attribute_taxonomy_id_by_name' ) || ! function_exists( 'wc_get_attribute' ) ) {
+			return null;
+		}
+		$id = (int) wc_attribute_taxonomy_id_by_name( (string) $tax );
+		$a  = $id ? wc_get_attribute( $id ) : null;
+		if ( ! $a ) {
+			return null;
+		}
+		return array(
+			'id'           => (int) $a->id,
+			'name'         => (string) $a->name,
+			'slug'         => (string) $a->slug,
+			'type'         => (string) $a->type,
+			'order_by'     => (string) $a->order_by,
+			'has_archives' => (bool) $a->has_archives,
+		);
 	}
 
 	/**
@@ -241,6 +479,9 @@ class Terms {
 			'count'       => (int) $t->count,
 			'link'        => is_string( $link ) ? $link : '',
 			'action'      => 'keep',
+			'ticked'      => true,
+			'blocked'     => false,
+			'affects'     => array(),
 			'new_name'    => (string) $t->name,
 			'new_slug'    => (string) $t->slug,
 			'new_desc'    => (string) $t->description,
@@ -364,19 +605,46 @@ class Terms {
 	public static function apply( array $row, array $words ) {
 		$tax    = (string) ( $row['tax'] ?? '' );
 		$action = (string) ( $row['action'] ?? 'keep' );
-		if ( ! in_array( $tax, array_merge( array( 'product_cat', 'product_tag' ), self::CLAIM_ATTRIBUTE_TAXONOMIES ), true ) ) {
+		if ( 'keep' === $action ) {
+			return self::answer( true, __( 'Left as it is.', 'fishotel-misc-plugin' ) );
+		}
+		if ( 'attribute' === $tax ) {
+			return 'delete_attribute' === $action ? self::delete_attribute( (int) ( $row['id'] ?? 0 ) ) : self::answer( false, __( 'An attribute can only be removed here.', 'fishotel-misc-plugin' ) );
+		}
+		if ( ! in_array( $tax, array_merge( array( 'product_cat', 'product_tag' ), self::BRAND_TAXONOMIES ), true ) ) {
 			return self::answer( false, __( 'Not a category or tag this step changes.', 'fishotel-misc-plugin' ) );
 		}
 		$t = get_term( (int) ( $row['id'] ?? 0 ), $tax );
 		if ( ! $t || is_wp_error( $t ) ) {
 			return self::answer( false, __( 'That category is not there any more — reload the page.', 'fishotel-misc-plugin' ) );
 		}
-		$parent = Inventory::parent_term();
-		if ( 'keep' === $action ) {
-			return self::answer( true, __( 'Left as it is.', 'fishotel-misc-plugin' ) );
+		$allowed = array(
+			'product_cat' => array( 'sort', 'merge', 'rename' ),
+			'product_tag' => array( 'delete', 'untag', 'rename' ),
+		);
+		if ( ! in_array( $action, $allowed[ $tax ] ?? array( 'rename' ), true ) ) {
+			return self::answer( false, __( 'That cannot be done to this kind of term.', 'fishotel-misc-plugin' ) );
 		}
+		$parent  = Inventory::parent_term();
+		$med_set = array_fill_keys( array_map( 'intval', array_keys( Inventory::find( $words ) ) ), true );
 		if ( in_array( $action, array( 'sort', 'merge', 'delete' ), true ) && $parent && (int) $t->term_id === (int) $parent->term_id ) {
 			return self::answer( false, __( 'The Medications category itself is never removed: the theme finds medications by it.', 'fishotel-misc-plugin' ) );
+		}
+		if ( 'product_cat' === $tax ) {
+			$leave = array_map( 'strtolower', Words::parse_commas( (string) ( $words['leave_out'] ?? '' ) ) );
+			if ( in_array( strtolower( $t->slug ), $leave, true ) || ( ! in_array( (int) $t->term_id, Inventory::med_term_ids(), true ) && ! in_array( $t->slug, self::THERAPEUTIC, true ) ) ) {
+				return self::answer( false, __( 'Not a medication category: this page does not change it.', 'fishotel-misc-plugin' ) );
+			}
+			if ( in_array( $action, array( 'sort', 'merge' ), true ) && self::others_in( (int) $t->term_id, $med_set ) ) {
+				return self::answer( false, __( 'It also holds products that are not medications: move them out by hand first.', 'fishotel-misc-plugin' ) );
+			}
+		}
+		if ( 'delete' === $action ) {
+			foreach ( self::products_in( (int) $t->term_id, $tax ) as $pid ) {
+				if ( ! isset( $med_set[ $pid ] ) ) {
+					return self::answer( false, __( 'This tag is also on products that are not medications: choose "Take off the medications only".', 'fishotel-misc-plugin' ) );
+				}
+			}
 		}
 
 		$change = 'c' . time() . '_' . (int) $t->term_id;
@@ -439,6 +707,20 @@ class Terms {
 			return self::answer( true, __( 'Renamed.', 'fishotel-misc-plugin' ), $change );
 		}
 
+		if ( 'untag' === $action ) {
+			foreach ( self::products_in( (int) $t->term_id, $tax ) as $pid ) {
+				if ( isset( $med_set[ $pid ] ) ) {
+					wp_remove_object_terms( $pid, (int) $t->term_id, $tax );
+					$entry['objects'][] = $pid;
+					if ( function_exists( 'wc_delete_product_transients' ) ) {
+						wc_delete_product_transients( $pid );
+					}
+				}
+			}
+			self::record( $change, $entry );
+			return self::answer( true, __( 'Taken off the medications.', 'fishotel-misc-plugin' ), $change );
+		}
+
 		// sort / merge / delete: move the products, then remove the term.
 		$products         = self::products_in( (int) $t->term_id, $tax );
 		$entry['objects'] = $products;
@@ -469,7 +751,7 @@ class Terms {
 			foreach ( $products as $pid ) {
 				wp_remove_object_terms( $pid, (int) $t->term_id, $tax );
 			}
-			$redirect_id = self::resolve( (string) ( $row['redirect_to'] ?? 'parent' ), $created );
+			$redirect_id = self::resolve( 'parent', $created );
 		}
 		$entry['created'] = $created;
 		if ( $created ) {
@@ -477,6 +759,9 @@ class Terms {
 			$l['created_terms'] = array_values( array_unique( array_merge( array_map( 'intval', (array) ( $l['created_terms'] ?? array() ) ), $created ) ) );
 			Ledger::save( $l );
 		}
+
+		// What WordPress would lose with the term: kept so Undo puts it back.
+		$entry['keep'] = self::keep_before_delete( $t, $tax, $redirect_id, $change );
 
 		$deleted = wp_delete_term( (int) $t->term_id, $tax );
 		if ( is_wp_error( $deleted ) || ! $deleted ) {
@@ -509,6 +794,257 @@ class Terms {
 	}
 
 	/**
+	 * Before a term is removed: what WordPress would lose with it, recorded
+	 * and looked after.
+	 *   - menu items pointing at it are pointed at the category its address
+	 *     goes to (a menu label that is a claim is emptied, so the new
+	 *     category's name shows) instead of being deleted by WordPress;
+	 *   - its own settings (term meta: picture, display type, order …);
+	 *   - the categories under it (WordPress moves them up one level): their
+	 *     old addresses get a 301 to where they are now;
+	 *   - products whose Yoast primary category it was (pointed at the new one);
+	 *   - its Yoast SEO settings (option wpseo_taxonomy_meta).
+	 *
+	 * @param \WP_Term $t           Term.
+	 * @param string   $tax         Taxonomy.
+	 * @param int      $redirect_id Category its address goes to.
+	 * @param string   $change      Change id.
+	 * @return array
+	 */
+	private static function keep_before_delete( $t, $tax, $redirect_id, $change ) {
+		$tid  = (int) $t->term_id;
+		$keep = array(
+			'menus'    => array(),
+			'meta'     => function_exists( 'get_term_meta' ) ? (array) get_term_meta( $tid ) : array(),
+			'children' => array(),
+			'primary'  => array(),
+			'yoast'    => null,
+		);
+		$words = Words::get();
+		foreach ( self::menu_items( $tid, $tax ) as $m ) {
+			$keep['menus'][] = $m;
+			if ( $redirect_id ) {
+				update_post_meta( $m['id'], '_menu_item_object', 'product_cat' );
+				update_post_meta( $m['id'], '_menu_item_object_id', (string) (int) $redirect_id );
+				if ( '' !== $m['title'] && Finder::has( $m['title'], $words, array( 'diseases', 'claims', 'dosing', 'labels' ) ) ) {
+					wp_update_post(
+						array(
+							'ID'         => $m['id'],
+							'post_title' => '',
+						)
+					);
+				}
+			}
+		}
+		$kids = get_terms(
+			array(
+				'taxonomy'   => $tax,
+				'hide_empty' => false,
+				'parent'     => $tid,
+			)
+		);
+		foreach ( is_array( $kids ) ? $kids : array() as $k ) {
+			$paths              = self::old_paths( $k, $tax );
+			$keep['children'][] = array(
+				'term_id' => (int) $k->term_id,
+				'slug'    => (string) $k->slug,
+			);
+			foreach ( $paths['paths'] as $path ) {
+				Redirects::add(
+					array(
+						'from'      => $path,
+						'tax'       => $tax,
+						'slug'      => (string) $k->slug,
+						'segment'   => $paths['segment'],
+						'to_term'   => (int) $k->term_id,
+						'to_tax'    => $tax,
+						'to_url'    => '',
+						'keep_rest' => true,
+						'child'     => true,
+						'change'    => $change,
+					)
+				);
+			}
+		}
+		if ( 'product_cat' === $tax ) {
+			$primary = get_posts(
+				array(
+					'post_type'        => 'product',
+					'post_status'      => 'any',
+					'posts_per_page'   => -1,
+					'fields'           => 'ids',
+					'meta_key'         => '_yoast_wpseo_primary_product_cat', // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_key -- one-time admin page.
+					'meta_value'       => (string) $tid, // phpcs:ignore WordPress.DB.SlowDBQuery.slow_db_query_meta_value
+					'suppress_filters' => true,
+				)
+			);
+			foreach ( (array) $primary as $pid ) {
+				$keep['primary'][] = (int) $pid;
+				if ( $redirect_id ) {
+					update_post_meta( (int) $pid, '_yoast_wpseo_primary_product_cat', (string) (int) $redirect_id );
+				}
+			}
+		}
+		$y = get_option( 'wpseo_taxonomy_meta', array() );
+		if ( is_array( $y ) && isset( $y[ $tax ][ $tid ] ) ) {
+			$keep['yoast'] = $y[ $tax ][ $tid ];
+		}
+		return $keep;
+	}
+
+	/**
+	 * After Undo made a removed term again (new id): put back what
+	 * keep_before_delete() recorded.
+	 *
+	 * @param array  $keep    Record.
+	 * @param int    $old_id  The term's old id.
+	 * @param int    $new_id  Its new id.
+	 * @param string $tax     Taxonomy.
+	 */
+	private static function restore_kept( array $keep, $old_id, $new_id, $tax ) {
+		if ( function_exists( 'get_term_meta' ) ) {
+			foreach ( array_keys( (array) get_term_meta( $new_id ) ) as $k ) {
+				delete_term_meta( $new_id, $k );
+			}
+			foreach ( (array) ( $keep['meta'] ?? array() ) as $k => $vals ) {
+				foreach ( (array) $vals as $v ) {
+					add_term_meta( $new_id, (string) $k, maybe_unserialize( $v ) );
+				}
+			}
+		}
+		foreach ( (array) ( $keep['menus'] ?? array() ) as $m ) {
+			if ( ! get_post( (int) $m['id'] ) ) {
+				continue;
+			}
+			update_post_meta( (int) $m['id'], '_menu_item_object', (string) $m['object'] );
+			update_post_meta( (int) $m['id'], '_menu_item_object_id', (string) (int) $new_id );
+			if ( (string) get_post( (int) $m['id'] )->post_title !== (string) $m['title'] ) {
+				wp_update_post(
+					array(
+						'ID'         => (int) $m['id'],
+						'post_title' => wp_slash( (string) $m['title'] ),
+					)
+				);
+			}
+		}
+		foreach ( (array) ( $keep['children'] ?? array() ) as $c ) {
+			if ( get_term( (int) $c['term_id'], $tax ) ) {
+				wp_update_term( (int) $c['term_id'], $tax, array( 'parent' => (int) $new_id ) );
+			}
+		}
+		foreach ( (array) ( $keep['primary'] ?? array() ) as $pid ) {
+			update_post_meta( (int) $pid, '_yoast_wpseo_primary_product_cat', (string) (int) $new_id );
+		}
+		if ( null !== ( $keep['yoast'] ?? null ) ) {
+			$y = get_option( 'wpseo_taxonomy_meta', array() );
+			$y = is_array( $y ) ? $y : array();
+			unset( $y[ $tax ][ (int) $old_id ] );
+			$y[ $tax ][ (int) $new_id ] = $keep['yoast'];
+			update_option( 'wpseo_taxonomy_meta', $y );
+		}
+	}
+
+	/**
+	 * Remove one of the theme's claim attributes (Treats / Use In) with its
+	 * values, once no product uses it. Its definition and values are
+	 * recorded; Undo makes it again with the same name, slug and values.
+	 *
+	 * @param int $id Attribute id.
+	 * @return array{ok: bool, message: string, change: string}
+	 */
+	public static function delete_attribute( $id ) {
+		$def = null;
+		foreach ( self::CLAIM_ATTRIBUTE_TAXONOMIES as $tax ) {
+			$d = self::attribute_def( $tax );
+			if ( $d && (int) $d['id'] === (int) $id ) {
+				$def = $d;
+				$def['tax'] = $tax;
+			}
+		}
+		if ( ! $def ) {
+			return self::answer( false, __( 'Not one of the theme\'s Treats / Use In attributes.', 'fishotel-misc-plugin' ) );
+		}
+		$tax    = $def['tax'];
+		$values = taxonomy_exists( $tax ) ? get_terms( array( 'taxonomy' => $tax, 'hide_empty' => false ) ) : array();
+		$values = is_array( $values ) ? $values : array();
+		$terms  = array();
+		$change = 'c' . time() . '_a' . (int) $id;
+		foreach ( $values as $v ) {
+			if ( self::products_in( (int) $v->term_id, $tax ) ) {
+				return self::answer( false, __( 'Still on a product: apply step 4 first.', 'fishotel-misc-plugin' ) );
+			}
+			$terms[] = array(
+				'name'        => (string) $v->name,
+				'slug'        => (string) $v->slug,
+				'description' => (string) $v->description,
+				'meta'        => function_exists( 'get_term_meta' ) ? (array) get_term_meta( (int) $v->term_id ) : array(),
+			);
+			$link = get_term_link( $v );
+			if ( $def['has_archives'] && is_string( $link ) ) {
+				$paths = self::old_paths( $v, $tax );
+				$to    = Inventory::parent_term();
+				foreach ( $paths['paths'] as $path ) {
+					Redirects::add(
+						array(
+							'from'    => $path,
+							'tax'     => $tax,
+							'slug'    => (string) $v->slug,
+							'segment' => '',
+							'to_term' => $to ? (int) $to->term_id : 0,
+							'to_tax'  => 'product_cat',
+							'to_url'  => $to ? (string) get_term_link( $to ) : '',
+							'change'  => $change,
+						)
+					);
+				}
+			}
+		}
+		$done = wc_delete_attribute( (int) $id );
+		if ( ! $done ) {
+			Redirects::remove( $change );
+			return self::answer( false, __( 'WooCommerce did not remove it.', 'fishotel-misc-plugin' ) );
+		}
+		self::record(
+			$change,
+			array(
+				'type'      => 'delete_attribute',
+				'tax'       => $tax,
+				'old'       => array(
+					'term_id'     => (int) $id,
+					'name'        => (string) $def['name'],
+					'slug'        => $tax,
+					'description' => '',
+					'parent'      => 0,
+				),
+				'attribute' => $def,
+				'values'    => $terms,
+				'objects'   => array(),
+				'added'     => array(),
+				'created'   => array(),
+				'at'        => time(),
+				'user'      => function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0,
+			)
+		);
+		return self::answer( true, __( 'Attribute removed.', 'fishotel-misc-plugin' ), $change );
+	}
+
+	/**
+	 * Put back a removed claim attribute by its taxonomy name (used when a
+	 * product's Undo needs it before its own category Undo was pressed).
+	 *
+	 * @param string $tax pa_… name.
+	 * @return bool
+	 */
+	public static function restore_attribute( $tax ) {
+		foreach ( (array) Ledger::all()['terms'] as $change => $e ) {
+			if ( 'delete_attribute' === ( $e['type'] ?? '' ) && (string) $e['tax'] === (string) $tax ) {
+				return self::undo( (string) $change )['ok'];
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * Undo one change.
 	 *
 	 * @param string $change Change id.
@@ -523,7 +1059,40 @@ class Terms {
 		$tax = (string) $e['tax'];
 		$old = (array) $e['old'];
 
-		if ( 'rename' === $e['type'] ) {
+		if ( 'delete_attribute' === $e['type'] ) {
+			$def = (array) $e['attribute'];
+			if ( ! wc_attribute_taxonomy_id_by_name( $tax ) ) {
+				$made = wc_create_attribute(
+					array(
+						'name'         => (string) $def['name'],
+						'slug'         => substr( $tax, 3 ),
+						'type'         => (string) $def['type'],
+						'order_by'     => (string) $def['order_by'],
+						'has_archives' => (bool) $def['has_archives'],
+					)
+				);
+				if ( is_wp_error( $made ) ) {
+					return self::answer( false, $made->get_error_message() );
+				}
+			}
+			if ( ! taxonomy_exists( $tax ) ) {
+				// WooCommerce registers attribute taxonomies on "init": do it for this request.
+				register_taxonomy( $tax, array( 'product' ), array( 'hierarchical' => false, 'public' => (bool) $def['has_archives'], 'rewrite' => false ) );
+			}
+			foreach ( (array) $e['values'] as $v ) {
+				$t = get_term_by( 'slug', (string) $v['slug'], $tax );
+				if ( ! $t ) {
+					$m = wp_insert_term( (string) $v['name'], $tax, array( 'slug' => (string) $v['slug'], 'description' => (string) $v['description'] ) );
+					if ( ! is_wp_error( $m ) && function_exists( 'add_term_meta' ) ) {
+						foreach ( (array) $v['meta'] as $k => $vals ) {
+							foreach ( (array) $vals as $one ) {
+								add_term_meta( (int) $m['term_id'], (string) $k, maybe_unserialize( $one ) );
+							}
+						}
+					}
+				}
+			}
+		} elseif ( 'rename' === $e['type'] ) {
 			$now = get_term( (int) $old['term_id'], $tax );
 			if ( ! $now || is_wp_error( $now ) ) {
 				return self::answer( false, __( 'The category is not there any more.', 'fishotel-misc-plugin' ) );
@@ -543,6 +1112,14 @@ class Terms {
 			);
 			if ( is_wp_error( $done ) ) {
 				return self::answer( false, $done->get_error_message() );
+			}
+		} elseif ( 'untag' === $e['type'] ) {
+			$back = get_term( (int) $old['term_id'], $tax );
+			if ( ! $back || is_wp_error( $back ) ) {
+				return self::answer( false, __( 'The tag is not there any more.', 'fishotel-misc-plugin' ) );
+			}
+			foreach ( (array) $e['objects'] as $pid ) {
+				wp_set_object_terms( (int) $pid, array( (int) $old['term_id'] ), $tax, true );
 			}
 		} else {
 			$back = get_term_by( 'slug', $old['slug'], $tax );
@@ -573,12 +1150,21 @@ class Terms {
 			foreach ( (array) $e['added'] as $pair ) {
 				wp_remove_object_terms( (int) $pair[0], (int) $pair[1], 'product_cat' );
 			}
+			self::restore_kept( (array) ( $e['keep'] ?? array() ), (int) $old['term_id'], $tid, $tax );
+			// Redirects (and the record) are cleared below before the empty
+			// neutral categories go, so a menu item pointed back is never
+			// left pointing at a category being removed.
+			Redirects::remove( $change );
+			$l = Ledger::all();
+			unset( $l['terms'][ $change ] );
+			Ledger::save( $l );
 			self::forget_created( (array) $e['created'] );
 			foreach ( (array) $e['objects'] as $pid ) {
 				if ( function_exists( 'wc_delete_product_transients' ) ) {
 					wc_delete_product_transients( (int) $pid );
 				}
 			}
+			return self::answer( true, __( 'Put back.', 'fishotel-misc-plugin' ), $change );
 		}
 
 		Redirects::remove( $change );

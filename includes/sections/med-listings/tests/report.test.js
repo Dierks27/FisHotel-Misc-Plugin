@@ -47,4 +47,11 @@ ok( 'the redirects', md.indexOf( '`/product-category/medications/antiparasitic/`
 ok( 'the page check', md.indexOf( 'https://shop.test/shop/sample-trio-flake/ — clean' ) !== -1 );
 ok( 'nothing yet: says so', lib.buildReport( {} ).indexOf( 'Nothing yet.' ) !== -1 && lib.buildReport( {} ).indexOf( 'nothing left to change' ) !== -1 );
 
+// The ingredient box (one per product) fills every blank the same way the PHP composer writes it.
+ok( 'food: "a, b, and c", ordinary capitals lower case', lib.ingredientPhrase( 'Kanamycin, Metronidazole, Nitrofurazone', true ) === 'kanamycin, metronidazole, and nitrofurazone' );
+ok( 'food, two: "a and b"', lib.ingredientPhrase( 'Praziquantel + Levamisole', true ) === 'praziquantel and levamisole' );
+ok( 'not a food: a comma list, "99%+" and TMP kept', lib.ingredientPhrase( 'Metronidazole 99%+ + TMP/Sulfa', false ) === 'metronidazole 99%+, TMP/sulfa' );
+ok( 'the blank is filled', lib.fillBlank( 'Contains: [[fill in the active ingredients — confirm against the EA product]].', 'praziquantel' ) === 'Contains: praziquantel.' );
+ok( 'nothing typed: the blank stays (the row cannot be applied)', lib.fillBlank( 'Contains: [[fill in]].', '' ) === 'Contains: [[fill in]].' );
+
 console.log( '\nAll ' + checks + ' checks passed' );

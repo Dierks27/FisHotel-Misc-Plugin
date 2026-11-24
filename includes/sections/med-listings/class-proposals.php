@@ -119,9 +119,10 @@ class Proposals {
 				return;
 			}
 			$current = (string) $read['text'];
-			if ( trim( $current ) === trim( (string) $proposed ) ) {
+			if ( empty( $extra['force'] ) && trim( $current ) === trim( (string) $proposed ) ) {
 				return;
 			}
+			unset( $extra['force'] );
 			$hits   = Finder::find( $current, $words );
 			$rows[] = array_merge(
 				array(
@@ -148,7 +149,30 @@ class Proposals {
 			$text  = (string) $read['text'];
 
 			if ( 'post_content' === $field && (int) $f['object'] === $pid ) {
-				$add( $f, $composed['description'] );
+				$lost  = self::facts_left_out( $text, $composed['description'] );
+				$extra = $lost ? array( 'note' => sprintf( /* translators: %s: amounts */ __( 'The old text also gives %s — not in the new text. Add what belongs to the product (net weight, strength, pellet size) to the box before applying.', 'fishotel-misc-plugin' ), '"' . implode( '", "', $lost ) . '"' ) ) : array();
+				if ( $lost && false !== strpos( (string) $composed['description'], '[[' ) ) {
+					$extra['note'] = __( 'Fill in the ingredients from the product\'s own label first (confirm against the EA product).', 'fishotel-misc-plugin' ) . ' ' . $extra['note'];
+				}
+				$add( $f, $composed['description'], $extra );
+				continue;
+			}
+			if ( 'meta:_fishotel_active_ingredient' === $field ) {
+				// Never rewritten. Only when it is empty does the page offer one box
+				// to type it in: it is saved to the field and fills every [[ … ]]
+				// blank of this product's proposals as it is typed.
+				if ( '' === trim( $text ) && $composed['missing_ingredients'] ) {
+					$add(
+						$f,
+						'',
+						array(
+							'ticked' => false,
+							'force'  => true,
+							'kind'   => 'ingredient',
+							'note'   => __( 'Type the active ingredients from the product\'s own label (confirm against the EA product), separated by commas. Saved to the product\'s Active ingredient(s) field, and filled into the blanks below as you type.', 'fishotel-misc-plugin' ),
+						)
+					);
+				}
 				continue;
 			}
 			if ( 'post_excerpt' === $field && (int) $f['object'] === $pid ) {
@@ -189,11 +213,18 @@ class Proposals {
 				);
 				continue;
 			}
-			if ( 'meta:_variation_description' === $field || 'meta:_wp_attachment_image_alt' === $field || ( 'post_excerpt' === $field && (int) $f['object'] !== $pid ) ) {
+			if ( 'post_name' === $field && (int) $f['object'] !== $pid ) {
+				if ( Finder::has( str_replace( array( '-', '_' ), ' ', $text ), $words ) ) {
+					$want = function_exists( 'sanitize_title' ) ? sanitize_title( (string) $snap['name'] ) : strtolower( (string) $snap['name'] );
+					$add( $f, $want, array( 'note' => __( 'The picture\'s own page address. WordPress sends the old address on to the new one.', 'fishotel-misc-plugin' ) ) );
+				}
+				continue;
+			}
+			if ( in_array( $field, array( 'meta:_variation_description', 'meta:_wp_attachment_image_alt', 'post_title', 'post_excerpt', 'post_content' ), true ) && (int) $f['object'] !== $pid ) {
 				if ( ! Finder::has( $text, $words ) ) {
 					continue;
 				}
-				if ( 'meta:_wp_attachment_image_alt' === $field ) {
+				if ( 'meta:_wp_attachment_image_alt' === $field || 'post_title' === $field ) {
 					$add( $f, (string) $snap['name'] );
 				} else {
 					$add( $f, Finder::clean( $text, $words ) );
@@ -206,6 +237,9 @@ class Proposals {
 					continue;
 				}
 				$policy = Fields::META[ $key ][1];
+				if ( 'ingredient' === $policy ) {
+					continue;
+				}
 				if ( 'empty' === $policy ) {
 					$add( $f, '' );
 				} elseif ( 'ack' === $policy ) {
@@ -218,7 +252,13 @@ class Proposals {
 						)
 					);
 				} elseif ( Finder::has( $text, $words ) ) {
-					$add( $f, 'meta' === $policy ? $composed['meta'] : Finder::clean( $text, $words ) );
+					if ( 'meta' === $policy ) {
+						$add( $f, $composed['meta'] );
+					} elseif ( Fields::is_title_key( $key ) ) {
+						$add( $f, self::clean_title( $text, (string) $snap['name'], $words ), array( 'note' => __( 'Empty = the field is removed and Yoast / Rank Math use their own title (the product name and the site name).', 'fishotel-misc-plugin' ) ) );
+					} else {
+						$add( $f, Finder::clean( $text, $words ) );
+					}
 				}
 			}
 		}
@@ -235,7 +275,12 @@ class Proposals {
 		if ( '' === trim( (string) $snap['ingredients'] ) ) {
 			$flags[] = array(
 				'type' => 'ingredients',
-				'text' => __( 'No active ingredient on the product (FisHotel Medication tab → Active ingredient(s)). The proposal leaves a blank: fill it in from the label — confirm against the EA product.', 'fishotel-misc-plugin' ),
+				'text' => __( 'No active ingredient on the product (FisHotel Medication tab → Active ingredient(s)). Type it once in the "Active ingredient(s)" box of its table below, from the label — confirm against the EA product. It fills the blanks and is saved to the product.', 'fishotel-misc-plugin' ),
+			);
+		} elseif ( ! empty( $composed['none_ingredients'] ) ) {
+			$flags[] = array(
+				'type' => 'ingredients',
+				'text' => sprintf( /* translators: %s: field */ __( 'The active-ingredient field says "%s", so no "Contains" line is written. Check that this product really has no active ingredient (a test kit, a net); otherwise type the ingredients into the field.', 'fishotel-misc-plugin' ), trim( (string) $snap['ingredients'] ) ),
 			);
 		} elseif ( Finder::has( (string) $snap['ingredients'], $words ) ) {
 			$flags[] = array(
@@ -262,12 +307,23 @@ class Proposals {
 			}
 			$flags[] = array(
 				'type'       => 'review',
-				'text'       => sprintf( /* translators: 1: author 2: words */ __( 'Review by %1$s mentions: %2$s.', 'fishotel-misc-plugin' ), $c['author'], implode( ', ', Finder::words( $hits ) ) ),
+				'text'       => sprintf( /* translators: 1: author 2: words */ __( 'Review by %1$s mentions: %2$s. Reviews do not show on the product page, but their text is public in WooCommerce\'s review list for apps and search engines (/wp-json/wc/store/v1/products/reviews) — Hide takes it out of there too.', 'fishotel-misc-plugin' ), $c['author'], implode( ', ', Finder::words( $hits ) ) ),
 				'quote'      => Finder::snippet( (string) $c['content'], $hits[0], 60 ),
 				'link'       => (string) ( $c['link'] ?? '' ),
 				'comment_id' => (int) $c['id'],
 				'status'     => (string) ( $c['status'] ?? '' ),
 			);
+		}
+
+		foreach ( (array) ( $snap['pictures'] ?? array() ) as $aid => $pic ) {
+			$file = (string) ( $pic['file'] ?? '' );
+			if ( '' !== $file && Finder::has( str_replace( array( '-', '_', '.' ), ' ', $file ), $words ) ) {
+				$flags[] = array(
+					'type' => 'picture',
+					'text' => sprintf( /* translators: 1: file 2: where */ __( 'The picture file is named "%1$s" (%2$s): the name is part of its address on every page that shows it. Upload the picture again under a plain name and swap it in on the product; this page does not rename files.', 'fishotel-misc-plugin' ), $file, (string) ( $pic['where'] ?? '' ) ),
+					'link' => (string) ( $pic['edit'] ?? '' ),
+				);
+			}
 		}
 
 		return array(
@@ -276,5 +332,52 @@ class Proposals {
 			'facts'    => $facts,
 			'composed' => $composed,
 		);
+	}
+
+	/**
+	 * A search-engine title without its claim. When the name part goes with
+	 * the claim ("General Cure | Broad-Spectrum …" → "FisHotel") the title is
+	 * proposed empty: the field is removed and the SEO plugin's own title
+	 * (the product name and the site name) is used.
+	 *
+	 * @param string $title Title.
+	 * @param string $name  Product name.
+	 * @param array  $words Words::get().
+	 * @return string
+	 */
+	public static function clean_title( $title, $name, array $words ) {
+		$clean = Finder::clean( (string) $title, $words );
+		if ( '' === trim( $name ) || false === stripos( $clean, trim( $name ) ) ) {
+			return '';
+		}
+		return $clean;
+	}
+
+	/**
+	 * Amounts the old description gives that the new one does not: net
+	 * weight, strength, pellet size ("100 g", "99%", "1 mm") — so the owner
+	 * is told before they are dropped (pure).
+	 *
+	 * @param string $old Old description.
+	 * @param string $new Proposed description.
+	 * @return string[]
+	 */
+	public static function facts_left_out( $old, $new ) {
+		$plain = html_entity_decode( preg_replace( '/<[^>]*>/', ' ', (string) $old ), ENT_QUOTES, 'UTF-8' );
+		$norm  = function ( $x ) {
+			return strtolower( preg_replace( '/\s+/u', '', (string) $x ) );
+		};
+		$have = $norm( html_entity_decode( preg_replace( '/<[^>]*>/', ' ', (string) $new ), ENT_QUOTES, 'UTF-8' ) );
+		if ( ! preg_match_all( '/\b\d+(?:[.,]\d+)?\s*(?:%\+?|mm|cm|mg\/g|mg|g|kg|oz|lb|lbs|ml|l|fl\.?\s*oz|ct|count|tabs|tablets|capsules)(?![\p{L}])(?!\s*(?:per\b|\/))/iu', $plain, $m ) ) {
+			return array();
+		}
+		$out = array();
+		foreach ( $m[0] as $amount ) {
+			$amount = trim( preg_replace( '/\s+/u', ' ', $amount ) );
+			if ( false === strpos( $have, $norm( $amount ) ) && ! in_array( $amount, $out, true ) ) {
+				$out[] = $amount;
+			}
+		}
+		return $out;
 	}
 }

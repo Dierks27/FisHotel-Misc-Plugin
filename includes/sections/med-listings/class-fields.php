@@ -5,6 +5,9 @@
  *
  * A field is named by a key:
  *   post_content / post_excerpt   the post's own text (wp_update_post)
+ *   post_title / post_name        a PICTURE's title and address only (the
+ *                                 product's own name is never written:
+ *                                 a name that is a claim is flagged)
  *   meta:<key>                    one post meta value (update_post_meta /
  *                                 delete_post_meta; "not there" is kept
  *                                 apart from "empty" so undo puts back
@@ -40,6 +43,7 @@ class Fields {
 	 * @var array<string, array{0: string, 1: string}>
 	 */
 	const META = array(
+		'_fishotel_active_ingredient'         => array( 'Active ingredient(s)', 'ingredient' ),
 		'_fishotel_med_eyebrow'               => array( 'Tagline above the title', 'empty' ),
 		'_fishotel_dosing_anchor'             => array( 'Calculator link (dosing anchor)', 'empty' ),
 		'_fishotel_treats'                    => array( '"Treats" row', 'empty' ),
@@ -74,6 +78,32 @@ class Fields {
 	const OTHER_META = array( '_variation_description', '_wp_attachment_image_alt' );
 
 	/**
+	 * Search-engine fields that are removed (not left empty) when the new
+	 * text is empty, so Yoast / Rank Math fall back to their own template
+	 * ("Product name | FisHotel") instead of printing nothing.
+	 *
+	 * @var string[]
+	 */
+	const DELETE_WHEN_EMPTY = array(
+		'_yoast_wpseo_title', '_yoast_wpseo_metadesc', '_yoast_wpseo_focuskw',
+		'_yoast_wpseo_opengraph-title', '_yoast_wpseo_opengraph-description',
+		'_yoast_wpseo_twitter-title', '_yoast_wpseo_twitter-description',
+		'rank_math_title', 'rank_math_description', 'rank_math_focus_keyword',
+		'rank_math_facebook_title', 'rank_math_facebook_description',
+		'rank_math_twitter_title', 'rank_math_twitter_description',
+	);
+
+	/**
+	 * Whether a meta field is a title (search engines, social), not a sentence.
+	 *
+	 * @param string $key Meta key.
+	 * @return bool
+	 */
+	public static function is_title_key( $key ) {
+		return (bool) preg_match( '/(?:title)$/', (string) $key );
+	}
+
+	/**
 	 * Whether a field key is one this tool may write.
 	 *
 	 * @param string $field Key.
@@ -81,8 +111,8 @@ class Fields {
 	 */
 	public static function allowed( $field ) {
 		$field = (string) $field;
-		if ( in_array( $field, array( 'post_content', 'post_excerpt', 'tags' ), true ) ) {
-			return true;
+		if ( in_array( $field, array( 'post_content', 'post_excerpt', 'tags', 'post_title', 'post_name' ), true ) ) {
+			return true; // post_title / post_name: write() refuses anything but a picture.
 		}
 		if ( 0 === strpos( $field, 'meta:' ) ) {
 			$key = substr( $field, 5 );
@@ -102,7 +132,23 @@ class Fields {
 		$object_id = (int) $object_id;
 		$field     = (string) $field;
 
-		if ( 'post_content' === $field || 'post_excerpt' === $field ) {
+		if ( 'post_name' === $field ) {
+			// A picture's address, with the old addresses WordPress keeps for
+			// it (_wp_old_slug), so Undo puts back exactly that list too.
+			$post = get_post( $object_id );
+			$slug = $post ? (string) $post->post_name : '';
+			$old  = $post ? array_values( array_map( 'strval', (array) get_post_meta( $object_id, '_wp_old_slug' ) ) ) : array();
+			sort( $old );
+			return array(
+				'exists' => (bool) $post,
+				'raw'    => array(
+					'slug'      => $slug,
+					'old_slugs' => $old,
+				),
+				'text'   => $slug,
+			);
+		}
+		if ( 'post_content' === $field || 'post_excerpt' === $field || 'post_title' === $field ) {
 			$post = get_post( $object_id );
 			$raw  = $post ? (string) $post->$field : '';
 			return array(
@@ -172,7 +218,37 @@ class Fields {
 			return 'This field cannot be changed here.';
 		}
 
-		if ( 'post_content' === $field || 'post_excerpt' === $field ) {
+		if ( ( 'post_title' === $field || 'post_name' === $field ) && 'attachment' !== get_post_type( $object_id ) ) {
+			return 'Only a picture\'s title and address are changed here — a product\'s name is yours to change.';
+		}
+		if ( 'post_name' === $field ) {
+			$raw  = is_array( $raw ) ? $raw : array( 'slug' => (string) $raw, 'old_slugs' => null );
+			$slug = sanitize_title( (string) ( $raw['slug'] ?? '' ) );
+			if ( '' === $slug ) {
+				return 'A picture needs an address.';
+			}
+			$done = wp_update_post(
+				array(
+					'ID'        => $object_id,
+					'post_name' => $slug,
+				),
+				true
+			);
+			if ( is_wp_error( $done ) || ! $done ) {
+				return is_wp_error( $done ) ? $done->get_error_message() : 'WordPress did not save it.';
+			}
+			// Apply leaves WordPress's own old-address list as WordPress made it
+			// (the old address goes on to the new one). Undo writes the list back
+			// exactly as it was.
+			if ( isset( $raw['old_slugs'] ) && is_array( $raw['old_slugs'] ) ) {
+				delete_post_meta( $object_id, '_wp_old_slug' );
+				foreach ( $raw['old_slugs'] as $o ) {
+					add_post_meta( $object_id, '_wp_old_slug', (string) $o );
+				}
+			}
+			return true;
+		}
+		if ( 'post_content' === $field || 'post_excerpt' === $field || 'post_title' === $field ) {
 			$done = wp_update_post(
 				array(
 					'ID'   => $object_id,
@@ -185,7 +261,7 @@ class Fields {
 
 		if ( 0 === strpos( $field, 'meta:' ) ) {
 			$key = substr( $field, 5 );
-			if ( ! $exists ) {
+			if ( ! $exists || ( '' === $raw && in_array( $key, self::DELETE_WHEN_EMPTY, true ) ) ) {
 				delete_post_meta( $object_id, $key );
 				return true;
 			}
@@ -238,6 +314,15 @@ class Fields {
 		}
 		if ( 0 === strpos( $field, 'attr:' ) ) {
 			return null; // An attribute row only ever takes the attribute off.
+		}
+		if ( 'post_name' === $field ) {
+			return array(
+				'slug'      => function_exists( 'sanitize_title' ) ? sanitize_title( $text ) : strtolower( trim( $text ) ),
+				'old_slugs' => null,
+			);
+		}
+		if ( 'post_title' === $field ) {
+			return function_exists( 'sanitize_text_field' ) ? sanitize_text_field( $text ) : trim( $text );
 		}
 		if ( 'post_content' === $field || 'post_excerpt' === $field || 'meta:_purchase_note' === $field || 'meta:_variation_description' === $field ) {
 			return function_exists( 'wp_kses_post' ) ? wp_kses_post( $text ) : $text;
@@ -320,8 +405,20 @@ class Fields {
 	 * @return object
 	 */
 	public static function import_attribute( array $raw ) {
-		$a = new \WC_Product_Attribute();
-		$a->set_id( (int) ( $raw['id'] ?? 0 ) );
+		$a  = new \WC_Product_Attribute();
+		$id = (int) ( $raw['id'] ?? 0 );
+		if ( $id && 0 === strpos( (string) ( $raw['name'] ?? '' ), 'pa_' ) ) {
+			// The attribute itself may have been removed by the Categories step
+			// and made again (with a new id): put it back first, then take its id.
+			if ( ! taxonomy_exists( (string) $raw['name'] ) && class_exists( __NAMESPACE__ . '\\Terms' ) ) {
+				Terms::restore_attribute( (string) $raw['name'] );
+			}
+			if ( function_exists( 'wc_attribute_taxonomy_id_by_name' ) ) {
+				$now = (int) wc_attribute_taxonomy_id_by_name( (string) $raw['name'] );
+				$id  = $now ? $now : $id;
+			}
+		}
+		$a->set_id( $id );
 		$a->set_name( (string) ( $raw['name'] ?? '' ) );
 		$options = (array) ( $raw['options'] ?? array() );
 		if ( ! empty( $raw['id'] ) && ! empty( $raw['terms'] ) && function_exists( 'get_term_by' ) ) {

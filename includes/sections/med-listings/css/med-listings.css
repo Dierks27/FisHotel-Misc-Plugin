@@ -70,3 +70,19 @@
 	.fhml-table tr, .fhml-table td { display: block; width: auto !important; }
 	.fhml-table code { word-break: break-all; }
 }
+
+/* Phone width: nothing wider than the screen (long addresses, selects, code). */
+.fhml-wrap, .fhml-wrap * { min-width: 0; }
+.fhml-wrap { overflow-wrap: anywhere; }
+.fhml-wrap code { white-space: normal; word-break: break-all; }
+.fhml-wrap select { max-width: 100%; }
+.fhml-ingredient { width: 100%; font-size: 13px; padding: 6px; border: 2px solid var(--fh-warning, #ffb900); }
+.fhml-term--blocked { opacity: .7; }
+@media (max-width: 600px) {
+	.fhml-step { padding: 12px 10px; }
+	.fhml-words-grid { grid-template-columns: 1fr; }
+	.fhml-table, .fhml-table tbody, .fhml-table tr, .fhml-table td { max-width: 100%; box-sizing: border-box; }
+	.fhml-wrap .fhml-table th, .fhml-wrap .fhml-table td { padding: 6px 4px; }
+	.fhml-c-tick { text-align: left; }
+	.fhml-product-head { flex-direction: column; }
+}

@@ -104,8 +104,40 @@
 		return out.join( '\n' );
 	}
 
+	/**
+	 * The ingredients as they go into a line (pure; the same as PHP
+	 * Composer::ingredient_phrase()): split on , ; + & "and"; ordinary
+	 * capitalised words lower case, abbreviations kept; a food joins them
+	 * "a, b, and c", anything else "a, b".
+	 *
+	 * @param {string}  field  As typed.
+	 * @param {boolean} isFood A food.
+	 * @return {string}
+	 */
+	function ingredientPhrase( field, isFood ) {
+		var parts = String( field || '' ).trim().split( /\s*(?:,|;|(?<=[\p{L}\s])\+|\s&\s|\band\b)\s*/iu ).map( function ( p ) {
+			return p.trim().replace( /(?<![\p{L}\p{N}])\p{Lu}\p{Ll}+(?![\p{L}\p{N}])/gu, function ( w ) {
+				return w.toLowerCase();
+			} );
+		} ).filter( function ( p ) {
+			return p !== '';
+		} );
+		if ( ! isFood ) {
+			return parts.join( ', ' );
+		}
+		if ( parts.length < 3 ) {
+			return parts.join( ' and ' );
+		}
+		return parts.slice( 0, -1 ).join( ', ' ) + ', and ' + parts[ parts.length - 1 ];
+	}
+
+	/** A proposal with the [[ … ]] blank filled (pure). */
+	function fillBlank( template, phrase ) {
+		return phrase ? String( template ).replace( /\[\[[^\]]*\]\]/g, phrase ) : String( template );
+	}
+
 	if ( typeof module !== 'undefined' && module.exports ) {
-		module.exports = { buildReport: buildReport };
+		module.exports = { buildReport: buildReport, ingredientPhrase: ingredientPhrase, fillBlank: fillBlank };
 	}
 	if ( typeof document === 'undefined' ) {
 		return;
@@ -168,6 +200,30 @@
 				tick.checked = false;
 				say( $( '.fhml-status', row ), t.fillIn, 'bad' );
 			}
+		} );
+	} );
+
+	/* ── One ingredient box per product fills every blank of it ────────── */
+	$$( '.fhml-product' ).forEach( function ( block ) {
+		var box = $( '.fhml-ingredient', block );
+		if ( ! box ) {
+			return;
+		}
+		var isFood = block.getAttribute( 'data-food' ) === '1';
+		var boxRow = box.closest( '.fhml-row' );
+		var filled = $$( 'textarea.fhml-proposed', block ).filter( function ( ta ) {
+			return ta.value.indexOf( '[[' ) !== -1;
+		} );
+		filled.forEach( function ( ta ) {
+			ta.setAttribute( 'data-template', ta.value );
+		} );
+		box.addEventListener( 'input', function () {
+			var phrase = ingredientPhrase( box.value, isFood );
+			$( '.fhml-tick', boxRow ).checked = phrase !== '';
+			filled.forEach( function ( ta ) {
+				ta.value = fillBlank( ta.getAttribute( 'data-template' ), phrase );
+				ta.dispatchEvent( new Event( 'input' ) );
+			} );
 		} );
 	} );
 
@@ -315,7 +371,10 @@
 		showWhen( tr );
 		$( '.fhml-action', tr ).addEventListener( 'change', function () {
 			showWhen( tr );
-			$( '.fhml-tick', tr ).checked = $( '.fhml-action', tr ).value !== 'keep';
+			var tick = $( '.fhml-tick', tr );
+			if ( ! tick.disabled ) {
+				tick.checked = $( '.fhml-action', tr ).value !== 'keep';
+			}
 		} );
 	} );
 
@@ -331,15 +390,19 @@
 			var status = $( '#fhml-terms-status' );
 			say( status, t.working );
 			inTurn( rows, function ( tr ) {
+				var val = function ( sel ) {
+					var el = $( sel, tr );
+					return el ? el.value : '';
+				};
 				var row = {
 					id: parseInt( tr.getAttribute( 'data-id' ), 10 ),
 					tax: tr.getAttribute( 'data-tax' ),
-					action: $( '.fhml-action', tr ).value,
-					merge_to: $( '.fhml-merge-to', tr ).value,
-					redirect_to: $( '.fhml-redirect-to', tr ).value,
-					new_name: $( '.fhml-new-name', tr ).value,
-					new_slug: $( '.fhml-new-slug', tr ).value,
-					new_desc: $( '.fhml-new-desc', tr ).value
+					action: val( '.fhml-action' ),
+					merge_to: val( '.fhml-merge-to' ) || 'parent',
+					redirect_to: val( '.fhml-redirect-to' ) || 'parent',
+					new_name: val( '.fhml-new-name' ),
+					new_slug: val( '.fhml-new-slug' ),
+					new_desc: val( '.fhml-new-desc' )
 				};
 				return post( 'fishotel_med_listings_term', { row: JSON.stringify( row ) } ).then( function ( res ) {
 					var ok = res && res.success && res.data.ok;

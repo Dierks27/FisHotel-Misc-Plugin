@@ -39,6 +39,15 @@ class Composer {
 	const BLANK = '[[fill in the active ingredients — confirm against the EA product]]';
 
 	/**
+	 * An active-ingredient field that says the product has none ("None
+	 * (test kit)", "n/a", "-"): no "Contains" line is written, and the
+	 * product is flagged for the owner instead.
+	 *
+	 * @var string
+	 */
+	const NONE = '/^\s*(?:none|n\/?a|no active ingredients?|not applicable|-+|—)\b/iu';
+
+	/**
 	 * Forms a product can be, read from its food base or its name.
 	 *
 	 * @var array<string, string> pattern => form
@@ -118,11 +127,14 @@ class Composer {
 		$f     = array_merge( self::blank_facts(), $facts );
 		$name  = trim( (string) $f['name'] );
 		$form  = '' !== $f['form'] ? (string) $f['form'] : self::form_of( $f['bases'], $name );
-		$parts = self::split_ingredients( $f['ingredients'] );
+		$none  = self::says_none( $f['ingredients'] );
+		$parts = $none ? array() : self::split_ingredients( $f['ingredients'] );
 		$list  = array_map( array( __CLASS__, 'ingredient_words' ), $parts );
-		$miss  = array() === $list;
+		$miss  = ! $none && array() === $list;
 
-		if ( $f['is_food'] ) {
+		if ( $none ) {
+			$contains = ''; // The field says there is nothing in it: no line, a flag instead.
+		} elseif ( $f['is_food'] ) {
 			$what     = '' !== $form ? ucfirst( $form ) . ' food containing ' : 'Food containing ';
 			$contains = $what . ( $miss ? self::BLANK : self::and_list( $list ) ) . '.';
 		} else {
@@ -144,7 +156,7 @@ class Composer {
 			)
 		);
 
-		$short = trim( $contains . ( '' !== $available ? ' ' . $available : '' ) );
+		$short = trim( $contains . ( '' !== $available && '' !== $contains ? ' ' : '' ) . $available );
 
 		return array(
 			'description'         => implode( "\n", array_map( array( __CLASS__, 'paragraph' ), $lines ) ),
@@ -152,7 +164,33 @@ class Composer {
 			'meta'                => trim( ( '' !== $name ? $name . '. ' : '' ) . $short ),
 			'lines'               => $lines,
 			'missing_ingredients' => $miss,
+			'none_ingredients'    => $none,
 		);
+	}
+
+	/**
+	 * Whether the active-ingredient field says the product has none.
+	 *
+	 * @param string $field As typed.
+	 * @return bool
+	 */
+	public static function says_none( $field ) {
+		return (bool) preg_match( self::NONE, (string) $field );
+	}
+
+	/**
+	 * The ingredient list as it goes into a line: "kanamycin,
+	 * metronidazole, and nitrofurazone" for a food ("… food containing …"),
+	 * "metronidazole 99%+, praziquantel" otherwise ("Contains: …"). The
+	 * page's ingredient box writes the same in JavaScript.
+	 *
+	 * @param string $field   As typed.
+	 * @param bool   $is_food A food.
+	 * @return string '' when the field is empty.
+	 */
+	public static function ingredient_phrase( $field, $is_food ) {
+		$list = array_map( array( __CLASS__, 'ingredient_words' ), self::split_ingredients( $field ) );
+		return $is_food ? self::and_list( $list ) : implode( ', ', $list );
 	}
 
 	/**
@@ -444,10 +482,13 @@ class Composer {
 		}
 
 		$f     = array_merge( self::blank_facts(), $facts );
-		$parts = self::split_ingredients( $f['ingredients'] );
+		$parts = self::says_none( $f['ingredients'] ) ? array() : self::split_ingredients( $f['ingredients'] );
 		$form  = '' !== $f['form'] ? $f['form'] : self::form_of( $f['bases'], $name );
 		$noun  = $f['is_food'] ? trim( ucfirst( $form ) . ' Food' ) : ucfirst( $form );
 		if ( ! $parts ) {
+			if ( ! $useful ) {
+				return '(name to choose)'; // "Anti-Parasite Duo" leaves only "Duo": nothing worth keeping.
+			}
 			if ( '' !== self::form_of( array(), $left ) ) {
 				$noun = ''; // "Tabs" already says what it is.
 			}

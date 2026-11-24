@@ -128,7 +128,19 @@ class Inventory {
 			}
 		}
 
+		// A product in a left-out category (the fish, invoices) is never a
+		// medication here, even when it was put in a medication category by
+		// mistake: the Categories step must never turn a fish into a medication.
 		$leave = array_map( 'strtolower', Words::parse_commas( (string) $words['leave_out'] ) );
+		if ( $leave ) {
+			foreach ( array_keys( $out ) as $pid ) {
+				$slugs = wp_get_post_terms( $pid, 'product_cat', array( 'fields' => 'slugs' ) );
+				if ( is_array( $slugs ) && array_intersect( $leave, array_map( 'strtolower', $slugs ) ) ) {
+					unset( $out[ $pid ] );
+				}
+			}
+		}
+
 		$all   = get_posts(
 			array(
 				'post_type'        => 'product',
@@ -145,7 +157,7 @@ class Inventory {
 			if ( ! $hits ) {
 				continue;
 			}
-			if ( ! isset( $out[ $pid ] ) && $leave ) {
+			if ( $leave ) {
 				$slugs = wp_get_post_terms( $pid, 'product_cat', array( 'fields' => 'slugs' ) );
 				if ( is_array( $slugs ) && array_intersect( $leave, array_map( 'strtolower', $slugs ) ) ) {
 					continue;
@@ -233,7 +245,9 @@ class Inventory {
 	}
 
 	/**
-	 * Whether a product is a food (by category, form or food fields).
+	 * Whether a product is a food — by its category, its form or its name
+	 * only. The food fields (Nutrition, Food source) do not decide: a
+	 * copper liquid or a tablet with Nutrition text is not a food.
 	 *
 	 * @param int    $pid   Product id.
 	 * @param string $name  Name.
@@ -244,15 +258,7 @@ class Inventory {
 		if ( array_intersect( self::FOOD_SLUGS, $slugs ) ) {
 			return true;
 		}
-		if ( in_array( Composer::form_of( array(), $name ), array( 'flake', 'pellet', 'gel', 'granule' ), true ) || preg_match( '/\bfoods?\b/i', $name ) ) {
-			return true;
-		}
-		foreach ( array( '_fishotel_food_source', '_fishotel_nutrition' ) as $key ) {
-			if ( '' !== trim( (string) get_post_meta( (int) $pid, $key, true ) ) ) {
-				return true;
-			}
-		}
-		return false;
+		return in_array( Composer::form_of( array(), $name ), array( 'flake', 'pellet', 'gel', 'granule' ), true ) || (bool) preg_match( '/\bfoods?\b/i', $name );
 	}
 
 	/**
@@ -266,6 +272,48 @@ class Inventory {
 			return (bool) fishotel_is_ea_fulfilled_product( (int) $pid );
 		}
 		return 'ea' === (string) get_post_meta( (int) $pid, '_fishotel_fulfillment', true );
+	}
+
+	/**
+	 * An attribute's values in the product's own order: for an attribute
+	 * the variations are built on, the order of the variations (the order
+	 * the shop's dropdown and the owner's example use — "omnivore or
+	 * herbivore"); otherwise as stored.
+	 *
+	 * @param int   $pid Product id.
+	 * @param array $raw Fields::export_attribute().
+	 * @return string[]
+	 */
+	public static function values_in_product_order( $pid, array $raw ) {
+		$values = Fields::attribute_values( $raw );
+		if ( empty( $raw['variation'] ) || count( $values ) < 2 ) {
+			return $values;
+		}
+		$name  = (string) $raw['name'];
+		$key   = 'attribute_' . ( function_exists( 'sanitize_title' ) ? sanitize_title( $name ) : strtolower( $name ) );
+		$by    = array(); // slug or text (lower case) => name
+		foreach ( (array) ( $raw['terms'] ?? array() ) as $pair ) {
+			$by[ strtolower( (string) $pair[0] ) ] = (string) $pair[1];
+		}
+		foreach ( $values as $v ) {
+			$by[ strtolower( $v ) ] = $v;
+			if ( function_exists( 'sanitize_title' ) ) {
+				$by[ sanitize_title( $v ) ] = $by[ sanitize_title( $v ) ] ?? $v;
+			}
+		}
+		$ordered = array();
+		foreach ( self::variation_ids( (int) $pid ) as $vid ) {
+			$got = strtolower( (string) get_post_meta( $vid, $key, true ) );
+			if ( '' !== $got && isset( $by[ $got ] ) && ! in_array( $by[ $got ], $ordered, true ) ) {
+				$ordered[] = $by[ $got ];
+			}
+		}
+		foreach ( $values as $v ) {
+			if ( ! in_array( $v, $ordered, true ) ) {
+				$ordered[] = $v;
+			}
+		}
+		return $ordered;
 	}
 
 	/**
@@ -302,7 +350,7 @@ class Inventory {
 		$field( $pid, 'post_content', __( 'Description', 'fishotel-misc-plugin' ) );
 		$field( $pid, 'post_excerpt', __( 'Short description', 'fishotel-misc-plugin' ) );
 		foreach ( Fields::META as $key => $def ) {
-			if ( metadata_exists( 'post', $pid, $key ) ) {
+			if ( '_fishotel_active_ingredient' === $key || metadata_exists( 'post', $pid, $key ) ) {
 				$field( $pid, 'meta:' . $key, $def[0] );
 			}
 		}
@@ -316,7 +364,7 @@ class Inventory {
 			$raw                = Fields::export_attribute( $attr );
 			$attributes[ $key ] = array(
 				'label'     => function_exists( 'wc_attribute_label' ) ? wc_attribute_label( $raw['name'], $product ) : $raw['name'],
-				'values'    => Fields::attribute_values( $raw ),
+				'values'    => self::values_in_product_order( $pid, $raw ),
 				'variation' => (bool) $raw['variation'],
 			);
 			$i                      = $field( $pid, 'attr:' . $key, sprintf( /* translators: %s: attribute label */ __( 'Attribute "%s"', 'fishotel-misc-plugin' ), $attributes[ $key ]['label'] ) );
@@ -328,9 +376,19 @@ class Inventory {
 			$what = $var && function_exists( 'wc_get_formatted_variation' ) ? wc_get_formatted_variation( $var, true, false ) : '#' . $vid;
 			$field( $vid, 'meta:_variation_description', __( 'Variation description', 'fishotel-misc-plugin' ), sprintf( /* translators: %s: the variation's options */ __( 'variation: %s', 'fishotel-misc-plugin' ), wp_strip_all_tags( (string) $what ) ) );
 		}
+		$pictures = array();
 		foreach ( self::image_ids( $pid ) as $aid => $where ) {
 			$field( $aid, 'meta:_wp_attachment_image_alt', __( 'Picture alt text', 'fishotel-misc-plugin' ), $where . ' #' . $aid );
+			$field( $aid, 'post_title', __( 'Picture title', 'fishotel-misc-plugin' ), $where . ' #' . $aid );
 			$field( $aid, 'post_excerpt', __( 'Picture caption', 'fishotel-misc-plugin' ), $where . ' #' . $aid );
+			$field( $aid, 'post_content', __( 'Picture description', 'fishotel-misc-plugin' ), $where . ' #' . $aid );
+			$field( $aid, 'post_name', __( 'Picture address', 'fishotel-misc-plugin' ), $where . ' #' . $aid );
+			$file             = function_exists( 'get_attached_file' ) ? (string) get_attached_file( $aid ) : '';
+			$pictures[ $aid ] = array(
+				'where' => $where,
+				'file'  => '' !== $file ? basename( $file ) : '',
+				'edit'  => admin_url( 'post.php?post=' . (int) $aid . '&action=edit' ),
+			);
 		}
 
 		$own    = array_map( 'strtolower', Words::parse_commas( (string) $words['own_brands'] ) );
@@ -381,40 +439,60 @@ class Inventory {
 			'fields'      => $fields,
 			'attributes'  => $attributes,
 			'comments'    => $comments,
+			'pictures'    => $pictures,
+			'slug'        => (string) $post->post_name,
 			'ledger'      => Ledger::written( $pid ),
 		);
 	}
 
 	/**
 	 * Published pages and posts that link to or show one of these
-	 * products or the medication categories (a product address, an
-	 * add-to-cart, a [product] shortcode or a product block naming its
-	 * id), with whether it is one of the tool pages (Dosing Calculator,
-	 * QT Scheduler, a quarantine guide).
+	 * products or the medication categories, with whether it is one of
+	 * the tool pages (Dosing Calculator, QT Scheduler, a quarantine guide).
+	 *
+	 * A product is found by its address as it is now, by its slug in any
+	 * address (so a link still found after step 5 moved it, through the
+	 * 301), by an add-to-cart link, and by its id in a shortcode
+	 * ([product id="12"], [products ids="12,34"], [add_to_cart id=12] …) or
+	 * a product block ({"productId":12}, {"products":[12,34]}). A category
+	 * is found by its address now and by every old address on the redirect
+	 * list.
 	 *
 	 * @param int[] $pids Product ids.
 	 * @return array<int, array{id: int, title: string, url: string, edit: string, tool: bool, found: string[]}>
 	 */
 	public static function linking_pages( array $pids ) {
-		$needles = array();
+		$products = array();
 		foreach ( $pids as $pid ) {
-			$url = (string) get_permalink( (int) $pid );
-			$path = (string) wp_parse_url( $url, PHP_URL_PATH );
-			if ( '' !== $path && '/' !== $path ) {
-				$needles[ $path ] = get_the_title( (int) $pid );
+			$post = get_post( (int) $pid );
+			if ( ! $post ) {
+				continue;
 			}
-			$needles[ 'add-to-cart=' . (int) $pid ] = get_the_title( (int) $pid );
-			$needles[ 'id="' . (int) $pid . '"' ]    = get_the_title( (int) $pid );
-			$needles[ '"productId":' . (int) $pid ]  = get_the_title( (int) $pid );
+			$products[ (int) $pid ] = array(
+				'title' => (string) get_the_title( (int) $pid ),
+				'slug'  => (string) $post->post_name,
+				'path'  => (string) wp_parse_url( (string) get_permalink( (int) $pid ), PHP_URL_PATH ),
+			);
 		}
+		$paths  = array();
 		$parent = self::parent_term();
-		if ( $parent ) {
-			$link = get_term_link( $parent );
-			if ( is_string( $link ) ) {
-				$needles[ rtrim( (string) wp_parse_url( $link, PHP_URL_PATH ), '/' ) ] = $parent->name;
+		foreach ( self::med_term_ids() as $tid ) {
+			$t    = get_term( (int) $tid, 'product_cat' );
+			$link = $t && ! is_wp_error( $t ) ? get_term_link( $t ) : '';
+			if ( is_string( $link ) && '' !== $link ) {
+				$paths[ Redirects::normalise_path( $link ) ] = $t->name;
 			}
 		}
-		$needles['/product-category/medications'] = 'Medications';
+		if ( $parent ) {
+			$paths['/product-category/' . $parent->slug . '/'] = $parent->name;
+		}
+		$paths['/product-category/medications/'] = 'Medications';
+		foreach ( Redirects::all() as $e ) {
+			if ( ! empty( $e['from'] ) ) {
+				/* translators: %s: old address */
+				$paths[ Redirects::normalise_path( (string) $e['from'] ) ] = sprintf( __( 'old address %s', 'fishotel-misc-plugin' ), (string) $e['from'] );
+			}
+		}
 
 		$out   = array();
 		$posts = get_posts(
@@ -426,12 +504,7 @@ class Inventory {
 			)
 		);
 		foreach ( (array) $posts as $p ) {
-			$found = array();
-			foreach ( $needles as $needle => $what ) {
-				if ( false !== stripos( (string) $p->post_content, (string) $needle ) ) {
-					$found[] = (string) $what;
-				}
-			}
+			$found = self::links_in( (string) $p->post_content, $products, $paths );
 			if ( ! $found ) {
 				continue;
 			}
@@ -442,10 +515,103 @@ class Inventory {
 				'url'   => (string) get_permalink( $p ),
 				'edit'  => admin_url( 'post.php?post=' . (int) $p->ID . '&action=edit' ),
 				'tool'  => self::is_tool_page( (string) $p->post_name, (string) $p->post_title, $template ),
-				'found' => array_values( array_unique( $found ) ),
+				'found' => $found,
 			);
 		}
 		return $out;
+	}
+
+	/**
+	 * What one page's content links to or shows (pure).
+	 *
+	 * @param string $content  post_content.
+	 * @param array  $products id => [title, slug, path].
+	 * @param array  $paths    category address => what it is.
+	 * @return string[] what was found, each once.
+	 */
+	public static function links_in( $content, array $products, array $paths ) {
+		$content = (string) $content;
+		$plain   = str_replace( '\\/', '/', html_entity_decode( $content, ENT_QUOTES, 'UTF-8' ) );
+		$found   = array();
+
+		// Ids in shortcodes and product blocks.
+		$ids = array();
+		if ( preg_match_all( '/\[[a-z_]+\b([^\]]*)\]/i', $plain, $sc ) ) {
+			foreach ( $sc[1] as $attrs ) {
+				if ( preg_match_all( '/\b(?:id|ids|product_id|product_ids|product)\s*=\s*["\']?([\d,\s]+)/i', $attrs, $am ) ) {
+					foreach ( $am[1] as $list ) {
+						foreach ( preg_split( '/[\s,]+/', $list ) as $n ) {
+							if ( '' !== $n ) {
+								$ids[ (int) $n ] = true;
+							}
+						}
+					}
+				}
+			}
+		}
+		if ( preg_match_all( '/"(?:productId|product_id|id)"\s*:\s*(\d+)/', $plain, $bm ) ) {
+			foreach ( $bm[1] as $n ) {
+				$ids[ (int) $n ] = true;
+			}
+		}
+		if ( preg_match_all( '/"(?:products|productIds|ids)"\s*:\s*\[([\d,\s]*)\]/', $plain, $bm ) ) {
+			foreach ( $bm[1] as $list ) {
+				foreach ( preg_split( '/[\s,]+/', $list ) as $n ) {
+					if ( '' !== $n ) {
+						$ids[ (int) $n ] = true;
+					}
+				}
+			}
+		}
+		if ( preg_match_all( '/(?:add-to-cart|add_to_cart|[?&]p)=(\d+)/i', $plain, $cm ) ) {
+			foreach ( $cm[1] as $n ) {
+				$ids[ (int) $n ] = true;
+			}
+		}
+
+		// Addresses in links.
+		$hrefs = array();
+		if ( preg_match_all( '/\b(?:href|src|action|url)\s*=\s*(["\'])(.*?)\1/is', $plain, $hm ) ) {
+			$hrefs = $hm[2];
+		}
+		if ( preg_match_all( '#https?://[^\s"\'<>\]]+#i', $plain, $um ) ) {
+			$hrefs = array_merge( $hrefs, $um[0] );
+		}
+		$link_paths = array();
+		foreach ( $hrefs as $h ) {
+			$path = (string) wp_parse_url( (string) $h, PHP_URL_PATH );
+			if ( '' !== $path ) {
+				$link_paths[] = Redirects::normalise_path( $path );
+			}
+		}
+
+		foreach ( $products as $pid => $p ) {
+			$hit = isset( $ids[ (int) $pid ] );
+			$slug = strtolower( (string) $p['slug'] );
+			foreach ( $link_paths as $lp ) {
+				if ( $hit ) {
+					break;
+				}
+				if ( '' !== $p['path'] && '/' !== $p['path'] && Redirects::normalise_path( $p['path'] ) === $lp ) {
+					$hit = true;
+				} elseif ( '' !== $slug && false !== strpos( $lp, '/' . $slug . '/' ) ) {
+					$hit = true; // The product slug in any address: an old address still goes there.
+				}
+			}
+			if ( $hit ) {
+				$found[] = (string) $p['title'];
+			}
+		}
+		foreach ( $paths as $path => $what ) {
+			$path = Redirects::normalise_path( (string) $path );
+			foreach ( $link_paths as $lp ) {
+				if ( $lp === $path || 0 === strpos( $lp, $path ) ) {
+					$found[] = (string) $what;
+					break;
+				}
+			}
+		}
+		return array_values( array_unique( $found ) );
 	}
 
 	/**

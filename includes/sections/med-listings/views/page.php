@@ -25,13 +25,22 @@ $fhml_flag_types = array(
 	'review'      => __( 'Reviews and questions that name diseases or dosing', 'fishotel-misc-plugin' ),
 	'brand'       => __( 'Other brands', 'fishotel-misc-plugin' ),
 	'attribute'   => __( 'Attributes that cannot be taken off here', 'fishotel-misc-plugin' ),
+	'picture'     => __( 'Picture file names', 'fishotel-misc-plugin' ),
 );
 $fhml_action_words = array(
 	'sort'   => __( 'Sort its products by type', 'fishotel-misc-plugin' ),
 	'merge'  => __( 'Merge into', 'fishotel-misc-plugin' ),
 	'rename' => __( 'Rename', 'fishotel-misc-plugin' ),
 	'delete' => __( 'Remove', 'fishotel-misc-plugin' ),
+	'untag'  => __( 'Take off the medications only', 'fishotel-misc-plugin' ),
+	'delete_attribute' => __( 'Remove the attribute', 'fishotel-misc-plugin' ),
 	'keep'   => __( 'Leave as is', 'fishotel-misc-plugin' ),
+);
+// Which actions each kind of row offers.
+$fhml_actions_for = array(
+	'product_cat' => array( 'sort', 'merge', 'rename', 'keep' ),
+	'product_tag' => array( 'delete', 'untag', 'rename', 'keep' ),
+	'attribute'   => array( 'delete_attribute', 'keep' ),
 );
 $fhml_backup = wp_nonce_url( admin_url( 'admin-post.php?action=fishotel_med_listings_backup' ), Admin::NONCE );
 ?>
@@ -56,7 +65,7 @@ $fhml_backup = wp_nonce_url( admin_url( 'admin-post.php?action=fishotel_med_list
 	<section class="fishotel-misc-card fhml-step" id="fhml-backup">
 		<h2 class="fishotel-misc-card-title"><span class="fhml-num">1</span><?php esc_html_e( 'Backup', 'fishotel-misc-plugin' ); ?></h2>
 		<p class="fishotel-misc-card-desc">
-			<?php esc_html_e( 'First make a backup in Cloudways (the application → Backup and Restore → Take Backup Now). Then download this file too: every field this page would change on every product, with what it says now, plus the categories and tags. This page also keeps its own record of every old value, so Undo works without either.', 'fishotel-misc-plugin' ); ?>
+			<?phpesc_html_e( 'First make a backup in Cloudways (the application → Backup and Restore → Take Backup Now) — that is the one to restore the whole site from. Then download this file too, to read and keep: every field this page reads on every product, with what it says now and its stored value exactly as WordPress holds it, plus the categories, tags and attributes of step 5 with their products, settings, menu items and sub-categories. The file is for reading, not for restoring: Undo on this page uses its own exact record of every old value, and works without either backup.', 'fishotel-misc-plugin' ); ?>
 		</p>
 		<a class="button button-primary" href="<?php echo esc_url( $fhml_backup ); ?>"><?php esc_html_e( 'Download backup (CSV)', 'fishotel-misc-plugin' ); ?></a>
 	</section>
@@ -152,6 +161,9 @@ $fhml_backup = wp_nonce_url( admin_url( 'admin-post.php?action=fishotel_med_list
 								<?php if ( ! empty( $fhml_f['quote'] ) ) : ?>
 									<br><q><?php echo esc_html( $fhml_f['quote'] ); ?></q>
 								<?php endif; ?>
+								<?php if ( 'picture' === $fhml_type && ! empty( $fhml_f['link'] ) ) : ?>
+									<br><a href="<?php echo esc_url( $fhml_f['link'] ); ?>" target="_blank" rel="noopener"><?php esc_html_e( 'Open the picture', 'fishotel-misc-plugin' ); ?></a>
+								<?php endif; ?>
 								<?php if ( 'review' === $fhml_type ) : ?>
 									<br><a href="<?php echo esc_url( $fhml_f['link'] ); ?>" target="_blank" rel="noopener"><?php esc_html_e( 'Open the review', 'fishotel-misc-plugin' ); ?></a>
 									<?php $fhml_hidden = isset( $model['reviews'][ (int) $fhml_f['comment_id'] ] ); ?>
@@ -183,7 +195,7 @@ $fhml_backup = wp_nonce_url( admin_url( 'admin-post.php?action=fishotel_med_list
 
 		<?php foreach ( $fhml_products as $fhml_p ) : ?>
 			<?php $fhml_s = $fhml_p['snap']; ?>
-			<div class="fhml-product" id="fhml-p-<?php echo (int) $fhml_s['id']; ?>" data-product="<?php echo (int) $fhml_s['id']; ?>" data-name="<?php echo esc_attr( $fhml_s['name'] ); ?>">
+			<div class="fhml-product" id="fhml-p-<?php echo (int) $fhml_s['id']; ?>" data-product="<?php echo (int) $fhml_s['id']; ?>"data-name="<?php echo esc_attr( $fhml_s['name'] ); ?>" data-food="<?php echo ! empty( $fhml_p['facts']['is_food'] ) ? '1' : '0'; ?>">
 				<div class="fhml-product-head">
 					<h3><?php echo esc_html( $fhml_s['name'] ); ?> <span class="fhml-muted">#<?php echo (int) $fhml_s['id']; ?> · <?php echo esc_html( implode( ', ', $fhml_s['cats'] ) ); ?></span></h3>
 					<span class="fhml-links">
@@ -210,7 +222,9 @@ $fhml_backup = wp_nonce_url( admin_url( 'admin-post.php?action=fishotel_med_list
 								</td>
 								<td class="fhml-c-now"><div class="fhml-now"><?php echo '' === trim( $fhml_r['current'] ) ? '<em class="fhml-muted">' . esc_html__( '(empty)', 'fishotel-misc-plugin' ) . '</em>' : Finder::highlight( $fhml_r['current'], $fhml_r['hits'] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Finder::highlight() escapes. ?></div></td>
 								<td class="fhml-c-new">
-									<?php if ( $fhml_r['editable'] ) : ?>
+									<?php if ( 'ingredient' === ( $fhml_r['kind'] ?? '' ) ) : ?>
+										<input type="text" class="fhml-proposed fhml-ingredient" value="" placeholder="<?php esc_attr_e( 'e.g. Praziquantel, Metronidazole', 'fishotel-misc-plugin' ); ?>" aria-label="<?php esc_attr_e( 'Active ingredient(s)', 'fishotel-misc-plugin' ); ?>">
+									<?php elseif ( $fhml_r['editable'] ) : ?>
 										<textarea class="fhml-proposed" rows="<?php echo (int) min( 10, max( 2, substr_count( $fhml_r['proposed'], "\n" ) + 2 ) ); ?>"><?php echo esc_textarea( $fhml_r['proposed'] ); ?></textarea>
 										<?php if ( '' === $fhml_r['proposed'] ) : ?><span class="fhml-muted"><?php esc_html_e( '(empty = removed)', 'fishotel-misc-plugin' ); ?></span><?php endif; ?>
 									<?php else : ?>
@@ -282,26 +296,35 @@ $fhml_backup = wp_nonce_url( admin_url( 'admin-post.php?action=fishotel_med_list
 				</tr></thead>
 				<tbody>
 				<?php foreach ( $model['terms'] as $fhml_t ) : ?>
-					<tr class="fhml-term" data-id="<?php echo (int) $fhml_t['id']; ?>" data-tax="<?php echo esc_attr( $fhml_t['tax'] ); ?>" data-name="<?php echo esc_attr( $fhml_t['name'] ); ?>">
-						<td class="fhml-c-tick"><input type="checkbox" class="fhml-tick" <?php checked( 'keep' !== $fhml_t['action'] ); ?>></td>
+					<?php $fhml_offer = $fhml_actions_for[ $fhml_t['tax'] ] ?? array( 'rename', 'keep' ); ?>
+					<tr class="fhml-term<?php echo ! empty( $fhml_t['blocked'] ) ? ' fhml-term--blocked' : ''; ?>" data-id="<?php echo (int) $fhml_t['id']; ?>" data-tax="<?php echo esc_attr( $fhml_t['tax'] ); ?>" data-name="<?php echo esc_attr( $fhml_t['name'] ); ?>">
+						<td class="fhml-c-tick"><input type="checkbox" class="fhml-tick" <?php checked( 'keep' !== $fhml_t['action'] && ! empty( $fhml_t['ticked'] ) ); ?> <?php disabled( ! empty( $fhml_t['blocked'] ) ); ?>></td>
 						<td>
 							<strong><?php echo esc_html( $fhml_t['name'] ); ?></strong>
-							<span class="fhml-muted"><?php echo esc_html( 'product_cat' === $fhml_t['tax'] ? __( 'category', 'fishotel-misc-plugin' ) : ( 'product_tag' === $fhml_t['tax'] ? __( 'tag', 'fishotel-misc-plugin' ) : __( 'attribute value', 'fishotel-misc-plugin' ) ) ); ?> · <?php echo esc_html( $fhml_t['slug'] ); ?> · <?php printf( /* translators: %d: products */ esc_html( _n( '%d product', '%d products', $fhml_t['count'], 'fishotel-misc-plugin' ) ), (int) $fhml_t['count'] ); ?></span>
+							<span class="fhml-muted"><?php echo esc_html( 'product_cat' === $fhml_t['tax'] ? __( 'category', 'fishotel-misc-plugin' ) :( 'product_tag' === $fhml_t['tax'] ? __( 'tag', 'fishotel-misc-plugin' ) : ( 'attribute' === $fhml_t['tax'] ? __( 'attribute', 'fishotel-misc-plugin' ) : __( 'brand', 'fishotel-misc-plugin' ) ) ) ); ?> · <?php echo esc_html( $fhml_t['slug'] ); ?> · <?php printf( /* translators: %d: products */ esc_html( _n( '%d product', '%d products', $fhml_t['count'], 'fishotel-misc-plugin' ) ), (int) $fhml_t['count'] ); ?></span>
 							<?php if ( $fhml_t['types'] ) : ?>
 								<br><span class="fhml-muted"><?php echo esc_html( implode( ', ', array_map( function ( $k, $v ) { return $v . ' × ' . Terms::TARGETS[ $k ][0]; }, array_keys( $fhml_t['types'] ), $fhml_t['types'] ) ) ); ?></span>
 							<?php endif; ?>
 							<?php if ( '' !== trim( $fhml_t['desc'] ) ) : ?><div class="fhml-now fhml-small"><?php echo esc_html( wp_strip_all_tags( $fhml_t['desc'] ) ); ?></div><?php endif; ?>
-							<?php if ( $fhml_t['note'] ) : ?><br><span class="fhml-note"><?php echo esc_html( $fhml_t['note'] ); ?></span><?php endif; ?>
-							<span class="fhml-status" aria-live="polite"></span>
+								<?php if ( $fhml_t['note'] ) : ?><br><span class="fhml-note"><?php echo esc_html( $fhml_t['note'] ); ?></span><?php endif; ?>
+								<?php $fhml_aff = (array) ( $fhml_t['affects'] ?? array() ); ?>
+								<?php if ( ! empty( $fhml_aff['menus'] ) || ! empty( $fhml_aff['children'] ) || ! empty( $fhml_aff['settings'] ) ) : ?>
+									<br><span class="fhml-note"><?php esc_html_e( 'Also:', 'fishotel-misc-plugin' ); ?>
+									<?php if ( ! empty( $fhml_aff['menus'] ) ) : ?><?php printf( /* translators: %s: menu labels */ esc_html__( 'menu items %s will point to the category its address goes to;', 'fishotel-misc-plugin' ), '"' . esc_html( implode( '", "', $fhml_aff['menus'] ) ) . '"' ); ?><?php endif; ?>
+									<?php if ( ! empty( $fhml_aff['children'] ) ) : ?><?php printf( /* translators: %s: categories */ esc_html__( 'the categories under it (%s) move up one level, their old addresses sent on;', 'fishotel-misc-plugin' ), esc_html( implode( ', ', $fhml_aff['children'] ) ) ); ?><?php endif; ?>
+									<?php if ( ! empty( $fhml_aff['settings'] ) ) : ?><?php esc_html_e( 'its own settings (picture, display, order) are kept for Undo.', 'fishotel-misc-plugin' ); ?><?php endif; ?>
+									<?php esc_html_e( 'Undo puts all of it back.', 'fishotel-misc-plugin' ); ?></span>
+								<?php endif; ?>
+								<span class="fhml-status" aria-live="polite"></span>
 						</td>
 						<td>
 							<select class="fhml-action">
 								<?php foreach ( $fhml_action_words as $fhml_a => $fhml_w ) : ?>
-									<?php if ( 'product_cat' !== $fhml_t['tax'] && in_array( $fhml_a, array( 'sort', 'merge' ), true ) ) { continue; } ?>
-									<?php if ( 'product_cat' === $fhml_t['tax'] && 'delete' === $fhml_a ) { continue; } ?>
+									<?php if ( ! in_array( $fhml_a, $fhml_offer, true ) ) { continue; } ?>
 									<option value="<?php echo esc_attr( $fhml_a ); ?>" <?php selected( $fhml_t['action'], $fhml_a ); ?>><?php echo esc_html( $fhml_w ); ?></option>
 								<?php endforeach; ?>
 							</select>
+							<?php if ( 'product_cat' === $fhml_t['tax'] ) : ?>
 							<span class="fhml-when fhml-when--merge">
 								<select class="fhml-merge-to">
 									<?php foreach ( $model['targets'] as $fhml_v => $fhml_n ) : ?>
@@ -309,20 +332,27 @@ $fhml_backup = wp_nonce_url( admin_url( 'admin-post.php?action=fishotel_med_list
 									<?php endforeach; ?>
 								</select>
 							</span>
+							<?php endif; ?>
+							<?php if ( 'attribute' !== $fhml_t['tax'] ) : ?>
 							<span class="fhml-when fhml-when--rename">
 								<label><?php esc_html_e( 'Name', 'fishotel-misc-plugin' ); ?> <input type="text" class="fhml-new-name" value="<?php echo esc_attr( $fhml_t['new_name'] ); ?>"></label>
 								<label><?php esc_html_e( 'Slug', 'fishotel-misc-plugin' ); ?> <input type="text" class="fhml-new-slug" value="<?php echo esc_attr( $fhml_t['new_slug'] ); ?>"></label>
-								<label><?php esc_html_e( 'Description', 'fishotel-misc-plugin' ); ?> <textarea class="fhml-new-desc" rows="2"><?php echo esc_textarea( $fhml_t['new_desc'] ); ?></textarea></label>
+								<label><?php esc_html_e( 'Description', 'fishotel-misc-plugin' ); ?><textarea class="fhml-new-desc" rows="2"><?php echo esc_textarea( $fhml_t['new_desc'] ); ?></textarea></label>
 							</span>
+							<?php endif; ?>
 						</td>
 						<td>
-							<span class="fhml-when fhml-when--sort fhml-when--delete">
+							<?php if ( 'product_cat' === $fhml_t['tax'] ) : ?>
+							<span class="fhml-when fhml-when--sort">
 								<select class="fhml-redirect-to">
 									<?php foreach ( $model['targets'] as $fhml_v => $fhml_n ) : ?>
 										<option value="<?php echo esc_attr( $fhml_v ); ?>" <?php selected( $fhml_t['redirect_to'], $fhml_v ); ?>><?php echo esc_html( $fhml_n ); ?></option>
 									<?php endforeach; ?>
 								</select>
 							</span>
+							<?php endif; ?>
+							<span class="fhml-when fhml-when--delete fhml-when--delete_attribute fhml-muted"><?php echo esc_html( $model['targets']['parent'] ); ?></span>
+							<span class="fhml-when fhml-when--untag fhml-muted"><?php esc_html_e( 'nothing changes (the tag page stays)', 'fishotel-misc-plugin' ); ?></span>
 							<span class="fhml-when fhml-when--merge fhml-muted"><?php esc_html_e( 'the category merged into', 'fishotel-misc-plugin' ); ?></span>
 							<span class="fhml-when fhml-when--rename fhml-muted"><?php esc_html_e( 'the new address (when the slug changes)', 'fishotel-misc-plugin' ); ?></span>
 							<?php if ( $fhml_t['link'] ) : ?><br><code class="fhml-small"><?php echo esc_html( (string) wp_parse_url( $fhml_t['link'], PHP_URL_PATH ) ); ?></code><?php endif; ?>

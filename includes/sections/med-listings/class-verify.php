@@ -99,7 +99,7 @@ class Verify {
 		$out[] = array(
 			'url'   => home_url( '/' ),
 			'kind'  => 'home',
-			'label' => __( 'Home page (words found here are in the header or footer of every page)', 'fishotel-misc-plugin' ),
+			'label' => __( 'Home page — for information only: your fish service and the header and footer, not a product listing. Words found here are not counted against the other pages.', 'fishotel-misc-plugin' ),
 		);
 		foreach ( $pids as $pid ) {
 			if ( 'publish' !== get_post_status( (int) $pid ) ) {
@@ -228,19 +228,31 @@ class Verify {
 	}
 
 	/**
-	 * Every link on a page (pure).
+	 * Every link a visitor can follow on a page (pure): the href of each
+	 * <a> and the action of each <form>. Stylesheets, scripts and icons
+	 * (<link href>, anything under /wp-content/ or /wp-includes/) are not
+	 * links to a page.
 	 *
 	 * @param string $html Page.
 	 * @return string[]
 	 */
 	public static function links( $html ) {
 		$out = array();
-		if ( preg_match_all( '#\s(?:href|action|data-href)=(["\'])(.*?)\1#is', (string) $html, $m ) ) {
-			foreach ( $m[2] as $h ) {
-				$out[] = html_entity_decode( $h, ENT_QUOTES, 'UTF-8' );
-			}
+		if ( preg_match_all( '#<(?:a|area)\b[^>]*?\shref=(["\'])(.*?)\1#is', (string) $html, $m ) ) {
+			$out = array_merge( $out, $m[2] );
 		}
-		return array_values( array_unique( $out ) );
+		if ( preg_match_all( '#<form\b[^>]*?\saction=(["\'])(.*?)\1#is', (string) $html, $m ) ) {
+			$out = array_merge( $out, $m[2] );
+		}
+		$keep = array();
+		foreach ( $out as $h ) {
+			$h = html_entity_decode( $h, ENT_QUOTES, 'UTF-8' );
+			if ( preg_match( '#/wp-(?:content|includes)/#i', $h ) ) {
+				continue;
+			}
+			$keep[] = $h;
+		}
+		return array_values( array_unique( $keep ) );
 	}
 
 	/**
