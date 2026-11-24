@@ -1250,6 +1250,38 @@ class Reserve {
 	}
 
 	/**
+	 * The fish of a group held by hand.
+	 *
+	 * @param array[] $holds Holds (qty).
+	 * @return int
+	 */
+	public static function hand_total( array $holds ) {
+		$n = 0;
+		foreach ( $holds as $hold ) {
+			$n += is_array( $hold ) ? max( 0, (int) ( $hold['qty'] ?? 0 ) ) : 0;
+		}
+		return $n;
+	}
+
+	/**
+	 * What the phone's hand "Shipped" says when fish of the group are held
+	 * by hand — they never come off by themselves: "2 of these are held by
+	 * hand for Mike S. — release the hold once they go." ('' for none).
+	 *
+	 * @param array[] $holds Holds (who, qty).
+	 * @return string
+	 */
+	public static function hand_note( array $holds ) {
+		$qty = self::hand_total( $holds );
+		if ( $qty <= 0 ) {
+			return '';
+		}
+		$who = Feeding::sentence_list( array_values( array_unique( array_filter( array_map( static function ( $h ) { return is_array( $h ) ? trim( (string) ( $h['who'] ?? '' ) ) : ''; }, $holds ), 'strlen' ) ) ) );
+		/* translators: 1: fish held, 2: who for */
+		return sprintf( _n( '%1$d of these is held by hand for %2$s — release the hold once it goes.', '%1$d of these are held by hand for %2$s — release the hold once they go.', $qty, 'fishotel-misc-plugin' ), $qty, $who );
+	}
+
+	/**
 	 * A shipped event in the owner's word: "Shipped · order #1234 (2
 	 * fish)" — '' for an event that is no order's.
 	 *

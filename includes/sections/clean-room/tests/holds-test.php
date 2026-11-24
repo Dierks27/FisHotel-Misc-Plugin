@@ -67,6 +67,8 @@ check_same( 'the tank card', '0 ready · 5 reserved (#1234; 2 for Mike S. — by
 check_same( 'one hold alone, three days on: "5 ready · 2 reserved (Mike S. — by hand, 3 days ago)"', '5 ready · 2 reserved (Mike S. — by hand, 3 days ago)', Reserve::stage_text( array( 'qty_live' => 7, 'sale_ready' => true, 'reserved' => 2, 'reserved_holds' => array( array( 'who' => 'Mike S.', 'qty' => 2, 'at' => $now ) ) ), $now + 3 * DAY_IN_SECONDS + 5 ) );
 check_same( 'how long: today, 1 day ago, 20 days ago — and 14 days or more stands out', array( 'today', '1 day ago', '20 days ago', false, true ), array( Reserve::age_text( $now, $now + 100 ), Reserve::age_text( $now, $now + DAY_IN_SECONDS ), Reserve::age_text( $now, $now + 20 * DAY_IN_SECONDS ), Holds::is_old( array( 'at' => $now ), $now + 13 * DAY_IN_SECONDS ), Holds::is_old( array( 'at' => $now ), $now + 14 * DAY_IN_SECONDS ) ) );
 
+check_same( 'the phone\'s hand "Shipped" on a group with fish held by hand: they never come off by themselves', '2 of these are held by hand for Mike S. — release the hold once they go.', Reserve::hand_note( array( array( 'who' => 'Mike S.', 'qty' => 2 ) ) ) );
+
 /* ------------------------------------------------------------------ */
 echo "3. Never runs out by itself; released by hand\n";
 

@@ -938,7 +938,7 @@ class Front_Desk {
 			'reservedText'    => Reserve::stage_text( $stay ),
 			// Held by hand: who for, how long (an old one stands out), the note — each with Release.
 			'holds'           => self::holds_shown( (array) ( $stay['reserved_holds'] ?? array() ) ),
-			'soldNote'        => Reserve::sold_note( (int) ( $stay['reserved'] ?? 0 ), (array) ( $stay['reserved_orders'] ?? array() ) ),
+			'soldNote'        => trim( Reserve::sold_note( max( 0, (int) ( $stay['reserved'] ?? 0 ) - Reserve::hand_total( (array) ( $stay['reserved_holds'] ?? array() ) ) ), (array) ( $stay['reserved_orders'] ?? array() ) ) . ' ' . Reserve::hand_note( (array) ( $stay['reserved_holds'] ?? array() ) ) ),
 		);
 	}
 
