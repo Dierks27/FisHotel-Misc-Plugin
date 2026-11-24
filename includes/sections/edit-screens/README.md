@@ -59,8 +59,9 @@ Three bands. Bands 1 and 2 open; band 3 closed.
      $product_id )`, each chip `label` and optional `href`). Absent when
      nothing is missing.
 2. **Price, stock & sizes** — WooCommerce's *Product data* box, renamed.
-   Tabs: General (simple products), **Attributes** (12), **Variations** (14),
-   the theme's medication tab when it is there (15), Inventory, Shipping —
+   Tabs: General (simple products), the theme's **Medication & food** tab
+   when it is there (11, right after General), **Attributes** (12),
+   **Variations** (14), Inventory, Shipping —
    the **Shipping class** moved first by the script —, Linked products,
    Advanced.
 

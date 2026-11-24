@@ -47,9 +47,9 @@ class Product_Screen {
 	}
 
 	/**
-	 * The product data tabs' new places (pure): Attributes and Variations
-	 * after General, the medication tab after them. Anything else as it
-	 * is.
+	 * The product data tabs' new places (pure): the medication tab right
+	 * after General (what a medication must have), then Attributes and
+	 * Variations. Anything else as it is.
 	 *
 	 * @param mixed $tabs WooCommerce's tabs.
 	 * @return mixed
@@ -59,9 +59,9 @@ class Product_Screen {
 			return $tabs;
 		}
 		foreach ( array(
+			'fishotel_med' => 11,
 			'attribute'    => 12,
 			'variations'   => 14,
-			'fishotel_med' => 15,
 		) as $key => $priority ) {
 			if ( isset( $tabs[ $key ] ) && is_array( $tabs[ $key ] ) ) {
 				$tabs[ $key ]['priority'] = $priority;
