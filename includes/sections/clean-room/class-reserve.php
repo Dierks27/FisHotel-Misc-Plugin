@@ -411,40 +411,91 @@ class Reserve {
 	 * then each line short of fish — the oldest order first — is given
 	 * groups out of what is still free. Nothing already held moves.
 	 *
-	 * @param array[] $orders Open orders, oldest first: id, number, lines (Feeding::fish_lines() rows with
-	 *                        item_id, ref, held, offered; a line already gone is not passed).
+	 * The top rung (before the Invoices link): fish held BY HAND for this
+	 * order's own customer (their account), of the line's fish in its size
+	 * (Holds::for_line()). A paid order takes them — the hold gives them to
+	 * the order (takes) — and an order not paid yet waits for them: it is
+	 * given no other fish for them and they stay held. Never another
+	 * customer's: a hold with a typed name is never taken here.
+	 *
+	 * @param array[] $orders Open orders, oldest first: id, number, paid, customer (user_id, email), lines
+	 *                        (Feeding::fish_lines() rows with item_id, ref, held, offered; a line already gone
+	 *                        is not passed).
 	 * @param array[] $clean  The open groups in clean water.
 	 * @param array[] $all    Every open group.
-	 * @param array   $counts What other orders (not passed) already hold: stay id => { qty, orders }.
-	 * @return array{counts: array<int, array{qty: int, orders: string[]}>, adds: array<int, array<string, array<int, int>>>,
-	 *               unknown: array<int, array<string, int>>}
-	 *         adds: order id => ref => the groups to add; unknown: order id => ref => fish no group was found for.
+	 * @param array   $counts What other orders (not passed) and the holds by hand already hold: stay id => { qty,
+	 *                        orders, hand, holds }.
+	 * @param array   $holds  Holds::effective() — what each hold by hand holds now (counted in $counts).
+	 * @return array{counts: array, adds: array<int, array<string, array<int, int>>>, unknown: array<int, array<string, int>>,
+	 *               takes: array<int, array[]>, holds: array}
+	 *         adds: order id => ref => the groups to add; unknown: order id => ref => fish no group was found for;
+	 *         takes: hold id => [ { order_id, number, ref, qty } ] given to orders; holds: $holds after them.
 	 */
-	public static function plan( array $orders, array $clean, array $all = array(), array $counts = array() ) {
-		foreach ( $orders as $order ) {
-			foreach ( (array) ( $order['lines'] ?? array() ) as $line ) {
-				self::count_in( $counts, self::trim( (array) ( $line['held'] ?? array() ), (int) ( $line['qty'] ?? 0 ) ), (string) ( $order['number'] ?? '' ) );
+	public static function plan( array $orders, array $clean, array $all = array(), array $counts = array(), array $holds = array() ) {
+		$counts = self::counted( $orders, $counts );
+
+		// The groups by id, for the holds by hand (an account's hold is taken by its own order first).
+		$by_id = array();
+		foreach ( $all ? $all : $clean as $stay ) {
+			if ( is_array( $stay ) ) {
+				$by_id[ (int) ( $stay['id'] ?? 0 ) ] = $stay;
 			}
 		}
+		$waiting = array(); // Hold id => fish an unpaid order of its customer waits for (this pass only).
 
 		$adds    = array();
 		$unknown = array();
+		$takes   = array();
 		foreach ( $orders as $order ) {
-			$id = (int) ( $order['id'] ?? 0 );
+			$id     = (int) ( $order['id'] ?? 0 );
+			$number = (string) ( $order['number'] ?? '' );
 			foreach ( (array) ( $order['lines'] ?? array() ) as $line ) {
 				$ref     = (string) ( $line['ref'] ?? '' );
 				$missing = (int) ( $line['qty'] ?? 0 ) - self::total( self::trim( (array) ( $line['held'] ?? array() ), (int) ( $line['qty'] ?? 0 ) ) );
 				if ( $missing <= 0 || null === self::key( self::META, $ref ) ) {
 					continue;
 				}
-				$found = self::candidates( $line, $clean, $all );
-				$add   = self::assign( $missing, $found['stays'], $counts );
+
+				// 0. Held by hand for this very customer (their account), of this fish in this size: their own
+				// paid order takes those fish first; an order not paid yet waits for them (it takes no others).
+				$add = array();
+				if ( $holds && ! empty( $order['customer'] ) && is_array( $order['customer'] ) ) {
+					foreach ( Holds::for_line( $line, $order['customer'], $holds, $by_id ) as $hold ) {
+						$hid  = (int) $hold['id'];
+						$left = (int) $holds[ $hid ]['qty'] - (int) ( $waiting[ $hid ] ?? 0 );
+						$n    = min( $missing, max( 0, $left ) );
+						if ( $n <= 0 ) {
+							continue;
+						}
+						$missing -= $n;
+						if ( empty( $order['paid'] ) ) {
+							$waiting[ $hid ] = (int) ( $waiting[ $hid ] ?? 0 ) + $n;
+							continue;
+						}
+						$stay                  = (int) $hold['stay_id'];
+						$add[ $stay ]          = ( $add[ $stay ] ?? 0 ) + $n;
+						$holds[ $hid ]['qty'] -= $n;
+						$takes[ $hid ][]       = array(
+							'order_id' => $id,
+							'number'   => $number,
+							'ref'      => $ref,
+							'qty'      => $n,
+						);
+						$counts = Holds::move_in_counts( $counts, $stay, $hid, $n, $number );
+					}
+				}
+
+				$found = $missing > 0 ? self::candidates( $line, $clean, $all ) : array( 'stays' => array() );
+				$more  = self::assign( $missing, $found['stays'], $counts );
+				if ( $more ) {
+					self::count_in( $counts, $more, $number );
+				}
+				$add = self::merge( $add, $more );
 				if ( $add ) {
 					$adds[ $id ][ $ref ] = $add;
-					self::count_in( $counts, $add, (string) ( $order['number'] ?? '' ) );
 				}
-				if ( $missing - self::total( $add ) > 0 && empty( $line['loose'] ) ) {
-					$unknown[ $id ][ $ref ] = $missing - self::total( $add );
+				if ( $missing - self::total( $more ) > 0 && empty( $line['loose'] ) ) {
+					$unknown[ $id ][ $ref ] = $missing - self::total( $more );
 				}
 			}
 		}
@@ -453,7 +504,25 @@ class Reserve {
 			'counts'  => $counts,
 			'adds'    => $adds,
 			'unknown' => $unknown,
+			'takes'   => $takes,
+			'holds'   => $holds,
 		);
+	}
+
+	/**
+	 * The counts with every line's reservation added (cut to its fish now).
+	 *
+	 * @param array[] $orders Orders: number, lines (held, qty).
+	 * @param array   $counts What is held already.
+	 * @return array
+	 */
+	public static function counted( array $orders, array $counts = array() ) {
+		foreach ( $orders as $order ) {
+			foreach ( (array) ( $order['lines'] ?? array() ) as $line ) {
+				self::count_in( $counts, self::trim( (array) ( $line['held'] ?? array() ), (int) ( $line['qty'] ?? 0 ) ), (string) ( $order['number'] ?? '' ) );
+			}
+		}
+		return $counts;
 	}
 
 	/**
@@ -1068,6 +1137,22 @@ class Reserve {
 		if ( (int) $qty <= 0 ) {
 			return '';
 		}
+		$who = self::reserved_who( $numbers, $holds, $now );
+		/* translators: %d: fish reserved */
+		$text = sprintf( __( '%d reserved', 'fishotel-misc-plugin' ), (int) $qty );
+		return '' !== $who ? $text . ' (' . $who . ')' : $text;
+	}
+
+	/**
+	 * Who reserved fish are held for: "#1234, #1240", "Mike S. — by hand,
+	 * 3 days ago", "#1234; 1 for Mike S. — by hand, 3 days ago".
+	 *
+	 * @param string[] $numbers Order numbers.
+	 * @param array[]  $holds   Holds by hand: who, qty, at.
+	 * @param int      $now     UNIX time now (0 = now).
+	 * @return string
+	 */
+	public static function reserved_who( array $numbers, array $holds = array(), $now = 0 ) {
 		$now     = (int) $now > 0 ? (int) $now : time();
 		$numbers = array_values( array_unique( array_filter( array_map( 'strval', $numbers ), 'strlen' ) ) );
 		$holds   = array_values( array_filter( $holds, 'is_array' ) );
@@ -1078,9 +1163,7 @@ class Reserve {
 			/* translators: 1: fish, 2: "Mike S. — by hand, 3 days ago" */
 			$parts[] = $many ? sprintf( __( '%1$d for %2$s', 'fishotel-misc-plugin' ), (int) ( $hold['qty'] ?? 0 ), $label ) : $label;
 		}
-		/* translators: %d: fish reserved */
-		$text = sprintf( __( '%d reserved', 'fishotel-misc-plugin' ), (int) $qty );
-		return $parts ? $text . ' (' . implode( '; ', $parts ) . ')' : $text;
+		return implode( '; ', $parts );
 	}
 
 	/**

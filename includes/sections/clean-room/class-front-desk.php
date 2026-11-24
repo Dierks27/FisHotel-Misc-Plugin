@@ -265,6 +265,15 @@ class Front_Desk {
 			'pullNothing' => __( 'No fish ship today.', 'fishotel-misc-plugin' ),
 			'tankNotKnown' => __( 'Tank not known', 'fishotel-misc-plugin' ),
 			'fixOnTodo'   => __( 'on the To do tab', 'fishotel-misc-plugin' ),
+			'reserveDots'  => __( 'Reserve…', 'fishotel-misc-plugin' ),
+			'reserveTitle' => __( 'Reserve by hand', 'fishotel-misc-plugin' ),
+			'reserveWho'   => __( 'For whom? A customer of the shop (name or e-mail) — or type any name', 'fishotel-misc-plugin' ),
+			'reserveNote'  => __( 'Note (optional), e.g. paying Friday', 'fishotel-misc-plugin' ),
+			'reserveHint'  => __( 'Held fish stay in the tank and are not ready for anybody else until you release them. A customer\'s own order takes them by itself.', 'fishotel-misc-plugin' ),
+			'readyOf'      => __( 'of %d ready', 'fishotel-misc-plugin' ),
+			'heldByHand'   => __( 'Held by hand', 'fishotel-misc-plugin' ),
+			'release'      => __( 'Release', 'fishotel-misc-plugin' ),
+			'customerAcct' => __( 'customer', 'fishotel-misc-plugin' ),
 			'moveReserved' => __( '%d not reserved: they move without touching an order or a hold; the reserved fish stay with this group if only part of it moves.', 'fishotel-misc-plugin' ),
 			'cleared'     => __( 'Cleared', 'fishotel-misc-plugin' ),
 			'note'        => __( 'Note', 'fishotel-misc-plugin' ),
@@ -926,8 +935,34 @@ class Front_Desk {
 			'ready'           => Reserve::ready( $stay ),
 			'reservedFor'     => ! empty( $stay['reserved_orders'] ) ? '#' . implode( ', #', array_map( 'strval', (array) $stay['reserved_orders'] ) ) : '',
 			'reservedText'    => Reserve::stage_text( $stay ),
+			// Held by hand: who for, how long (an old one stands out), the note — each with Release.
+			'holds'           => self::holds_shown( (array) ( $stay['reserved_holds'] ?? array() ) ),
 			'soldNote'        => Reserve::sold_note( (int) ( $stay['reserved'] ?? 0 ), (array) ( $stay['reserved_orders'] ?? array() ) ),
 		);
+	}
+
+	/**
+	 * A group's holds by hand as the phone shows them: "2 for Mike S. —
+	 * by hand, 3 days ago", the note, whether it is old.
+	 *
+	 * @param array[] $holds Holds::shown() rows.
+	 * @return array[] id, text, note, old.
+	 */
+	public static function holds_shown( array $holds ) {
+		$now = time();
+		$out = array();
+		foreach ( $holds as $hold ) {
+			if ( ! is_array( $hold ) ) {
+				continue;
+			}
+			$out[] = array(
+				'id'   => (int) ( $hold['id'] ?? 0 ),
+				'text' => (int) ( $hold['qty'] ?? 0 ) . ' × ' . Reserve::hold_label( $hold, $now ),
+				'note' => (string) ( $hold['note'] ?? '' ),
+				'old'  => Holds::is_old( $hold, $now ),
+			);
+		}
+		return $out;
 	}
 
 	/**
@@ -1249,6 +1284,12 @@ class Front_Desk {
 					break;
 				case 'alias':
 					$result = self::act_alias( $ctx, $raw );
+					break;
+				case 'hold':
+					$result = self::act_hold( $ctx, $raw );
+					break;
+				case 'release':
+					$result = self::act_release( $raw );
 					break;
 				default:
 					// Temporary tanks and the day's list (Temp_Tanks::ACTS).
@@ -1721,6 +1762,39 @@ class Front_Desk {
 			'event_ids' => array( $written['event_id'] ),
 			'overdrawn' => ! empty( $written['overdrawn'] ),
 		);
+	}
+
+	/**
+	 * "Reserve…": some ready fish of one group set aside by hand for
+	 * somebody (a customer of the shop, or a name typed) — not an event:
+	 * the fish alive are unchanged (Reserve_Shop::hold_create()).
+	 */
+	private static function act_hold( array $ctx, array $raw ) {
+		$stays = self::targets( $ctx, $raw, false );
+		if ( ! is_array( $stays ) ) {
+			return array( 'error' => $stays );
+		}
+		$result = Reserve_Shop::hold_create(
+			$ctx['store'],
+			$ctx['settings'],
+			array(
+				'stay_id' => (int) $stays[0]['id'],
+				'qty'     => self::int( $raw, 'qty' ),
+				'who'     => self::text( $raw, 'who', Holds::WHO_MAX ),
+				'user_id' => max( 0, self::int( $raw, 'user_id' ) ),
+				'note'    => self::text( $raw, 'note', Holds::NOTE_MAX ),
+				'by'      => (int) ( $ctx['base']['actor_id'] ?? 0 ),
+			)
+		);
+		return $result['ok'] ? array( 'message' => $result['message'] ) : array( 'error' => $result['message'] );
+	}
+
+	/**
+	 * "Release" a hold by hand: its fish are ready again.
+	 */
+	private static function act_release( array $raw ) {
+		$result = Reserve_Shop::hold_release( max( 0, self::int( $raw, 'hold_id' ) ) );
+		return $result['ok'] ? array( 'message' => $result['message'] ) : array( 'error' => $result['message'] );
 	}
 
 	/**
@@ -2503,13 +2577,19 @@ class Front_Desk {
 	}
 
 	/**
-	 * Species suggestions for the search box.
+	 * Species suggestions for the search box — or, with kind=customers, the
+	 * shop's customers for "Reserve…" (who the fish are held for).
 	 */
 	public function ajax_suggest() {
 		self::guard();
 
 		$raw  = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified in guard().
 		$term = self::text( $raw, 'term', 80 );
+
+		if ( 'customers' === self::text( $raw, 'kind', 20 ) ) {
+			// "Reserve…" → For whom?: the shop's customers whose name or e-mail holds what was typed.
+			wp_send_json_success( array( 'items' => Reserve_Shop::customers( $term ) ) );
+		}
 
 		$store = new Store();
 

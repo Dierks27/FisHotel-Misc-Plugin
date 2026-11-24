@@ -1351,6 +1351,8 @@ class Store {
 		if ( $reserve ) {
 			$list['pull'] = isset( $reserve['pull'] ) ? $reserve['pull'] : null; // Reserve::pull(): which tank each fish of today's boxes comes out of.
 			$list['lost'] = isset( $reserve['lost'] ) ? $reserve['lost'] : array(); // The fish that shipped and whose tank was not found.
+			$list['holds']   = isset( $reserve['holds'] ) ? $reserve['holds'] : array(); // Every hold by hand (Release), oldest first.
+			$list['suggest'] = isset( $reserve['suggest'] ) ? $reserve['suggest'] : array(); // "Is #1240 the order for the fish held for Mike S.?"
 		}
 
 		return array(

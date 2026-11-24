@@ -194,6 +194,17 @@ class WC_Order {
 		$this->meta[ $key ] = $value;
 	}
 
+	/**
+	 * The customer's account and billing e-mail: the meta "_customer_user" and "_billing_email", as stored.
+	 */
+	public function get_customer_id() {
+		return (int) $this->get_meta( '_customer_user' );
+	}
+
+	public function get_billing_email() {
+		return (string) $this->get_meta( '_billing_email' );
+	}
+
 	public function get_date_created() {
 		return $this->created > 0 ? new DateTimeImmutable( '@' . $this->created ) : null;
 	}

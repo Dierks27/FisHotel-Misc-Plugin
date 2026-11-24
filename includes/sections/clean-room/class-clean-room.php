@@ -51,6 +51,10 @@
  *   - class-reserve.php     PURE: a sold fish reserved in its tank, the pull
  *                           list of its ship day, taken out once it shipped
  *                           (the difference only), the words.
+ *   - class-holds.php       PURE: fish reserved BY HAND for somebody (a
+ *                           customer's account or a typed name), counted
+ *                           with the orders, taken by that customer's own
+ *                           order, suggested to an order for a typed name.
  *   - class-reserve-shop.php  its edge: the reservation on the order item,
  *                           the order hooks, the hourly sweep, the events,
  *                           the not-found list.
@@ -224,6 +228,7 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 			require_once self::path() . 'class-todo.php';
 			require_once self::path() . 'class-sold-line.php';
 			require_once self::path() . 'class-reserve.php';
+			require_once self::path() . 'class-holds.php';
 			require_once self::path() . 'class-feeding.php';
 			require_once self::path() . 'class-ship-lines.php';
 			require_once self::path() . 'class-reserve-shop.php';
