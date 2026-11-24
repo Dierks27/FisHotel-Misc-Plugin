@@ -681,6 +681,56 @@ $GLOBALS['fh_can'] = false;
 Letter::forget_today();
 check( 'a user who may not run the shop: nothing added', array() === Letter::today_filter( array() ) );
 
+echo "6b. ShipTracker 1.10.0 marks the letter mailed (its USPS Letter Tracking box)\n";
+if ( ! class_exists( 'FST_Letters', false ) ) { // Declared here, not hoisted: everything above ran with ShipTracker 1.9.x.
+	/**
+	 * ShipTracker 1.10.0's letters, as a stand-in (its public get_by_order()).
+	 */
+	class FST_Letters {
+		public static $rows = array();
+		public static function get_by_order( $order_id ) {
+			return self::$rows[ $order_id ] ?? array();
+		}
+	}
+}
+$GLOBALS['fh_options']['fst_db_version'] = '1.5.0';
+$GLOBALS['fh_can']                       = true;
+$fresh = static function () {
+	\FisHotel\Misc\ShipTracker_Letters::forget();
+	Letter::forget_today();
+};
+$today_text = static function () {
+	foreach ( Letter::today_filter( array() ) as $line ) {
+		if ( 'stickers-letter' === $line['key'] ) {
+			return $line['text'];
+		}
+	}
+	return '';
+};
+FST_Letters::$rows[1234] = array( (object) array( 'state' => 'active', 'mailed_at' => null ) );
+$fresh();
+check( 'a label printed, not mailed yet: still "Mail sticker (2)" and still on the Today line', false !== strpos( $cell( 1234 ), '<mark' ) && 'Stickers to mail by letter: #1234 (2)' === $today_text() );
+FST_Letters::$rows[1234][0]->mailed_at = '2026-11-23 09:30:00';
+$fresh();
+check( 'marked mailed: a quiet "Mailed (2)" in the column (the order stays open: a letter never changes its status)', false !== strpos( $cell( 1234 ), 'Mailed (2)' ) && false === strpos( $cell( 1234 ), '<mark' ) );
+check( '... and the Today line drops it (no other order to mail: no line at all)', '' === $today_text() );
+FST_Letters::$rows[1234] = array( (object) array( 'state' => 'active', 'mailed_at' => null ), (object) array( 'state' => 'resent', 'mailed_at' => '2026-11-10 09:00:00' ) );
+$fresh();
+check( 'resent (a new barcode, not mailed yet): back to "Mail sticker (2)" and on the Today line', false !== strpos( $cell( 1234 ), 'Mail sticker (2)' ) && 'Stickers to mail by letter: #1234 (2)' === $today_text() );
+FST_Letters::$rows[1234] = array( (object) array( 'state' => 'voided', 'mailed_at' => '2026-11-23 09:30:00' ) );
+$fresh();
+check( 'every letter voided: still to mail', false !== strpos( $cell( 1234 ), 'Mail sticker (2)' ) && '' !== $today_text() );
+FST_Letters::$rows[1240] = array( (object) array( 'state' => 'active', 'mailed_at' => '2026-11-01 09:00:00' ) );
+$fresh();
+check( 'a completed order stays "By letter (1)"', false !== strpos( $cell( 1240 ), 'By letter (1)' ) );
+FST_Letters::$rows[1234] = array( (object) array( 'state' => 'active', 'mailed_at' => '2026-11-23 09:30:00' ) );
+unset( $GLOBALS['fh_options']['fst_db_version'] );
+$fresh();
+check( 'ShipTracker\'s database not at 1.5.0 (no letters table yet): not asked, as with 1.9.x', false !== strpos( $cell( 1234 ), 'Mail sticker (2)' ) && '' !== $today_text() );
+FST_Letters::$rows       = array();
+$GLOBALS['fh_can']       = false;
+$fresh();
+
 echo "7. Edge cases the reviews found\n";
 check( 'pure: an add-on priced at 0 is a sticker to mail but not a paid one', array( 'free' => 2, 'paid' => 1 ) === Rules::sticker_counts( array( array( 'kind' => 'extra', 'qty' => 2, 'price' => 0.0 ), array( 'kind' => 'extra', 'qty' => 1, 'price' => 0.99 ) ) ) );
 check( 'pure: EA-only that rides along in a box FisHotel ships: no letter, no fee, nothing to count', array( 'letter' => false, 'count' => 0, 'paid' => 0, 'fee' => 0.0 ) === Rules::mail_letter( array( $l( '', 1, true ), $l( 'extra', 1 ) ), true ) );

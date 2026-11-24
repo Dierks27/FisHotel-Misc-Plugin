@@ -52,10 +52,12 @@ add-ons on at $0.99.
    order gets none of these.
 8. **Orders list.** WooCommerce → Orders (legacy and HPOS screens): the
    *Sticker letter* column shows "Mail sticker (N)"; once the order is
-   completed, "By letter (N)".
+   completed, "By letter (N)". With ShipTracker 1.10.0: press *Mark
+   mailed* in the order's *USPS Letter Tracking* box — the column shows
+   "Mailed (N)".
 9. **Today.** FisHotel Tools → Today and the dashboard widget: "Stickers to
    mail by letter: #1234 (2)"; the order leaves the line when it is
-   completed.
+   completed, or (ShipTracker 1.10.0) once its letter is marked mailed.
 10. **Joining a fish order.** As a customer with an open, unshipped
     fish order, check out a medication + 1 add-on to the same address:
     the checkout says "Shipping combined …", shipping $0, and there is

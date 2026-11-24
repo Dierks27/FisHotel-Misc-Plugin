@@ -98,7 +98,7 @@ class Palette {
 		'link'         => array( 'bg', 'surface', 'raised', 'sunken', 'input', 'info-tint', 'note-private', 'note-customer' ),
 		'link-hover'   => array( 'bg', 'surface', 'raised', 'sunken' ),
 		'on-accent'    => array( 'accent-strong', 'accent-hover', 'danger' ),
-		'danger-text'  => array( 'bg', 'surface', 'raised', 'danger-tint' ),
+		'danger-text'  => array( 'bg', 'surface', 'raised', 'sunken', 'danger-tint' ),
 		'success-text' => array( 'bg', 'surface', 'raised', 'success-tint' ),
 		'success'      => array( 'bg', 'surface' ),
 		'warning'      => array( 'bg', 'surface', 'raised', 'warning-tint' ),

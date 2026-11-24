@@ -74,6 +74,15 @@ class Layouts {
 	const STAFF_NOTES = array( 'fishotel_staff_notes', 'fishotel-staff-notes' );
 
 	/**
+	 * ShipTracker's "USPS Letter Tracking" box (1.10.0), on the side of an
+	 * order right under Order actions, and the box it goes after.
+	 *
+	 * @var string
+	 */
+	const LETTER       = 'fst-letter';
+	const LETTER_AFTER = 'woocommerce-order-actions';
+
+	/**
 	 * The user meta WordPress keeps a layout in, by part.
 	 *
 	 * @var array<string, string>
@@ -171,7 +180,8 @@ class Layouts {
 	 * layout of their own (a stored list, even an empty one, would
 	 * otherwise show it open on every order; Screen Options brings it
 	 * back). Side: Order
-	 * actions; ShipTracker's Pickup (pickup orders) and the combined box's
+	 * actions; ShipTracker's USPS Letter Tracking (open on an order with a
+	 * sticker letter, closed on every other — Order_Screen); its Pickup (pickup orders) and the combined box's
 	 * Fulfillment; Weather; the EA slip and the medication terms; order
 	 * notes; Combine Orders; then — closed — Date Change Override, Order
 	 * attribution, Customer history.
@@ -199,6 +209,7 @@ class Layouts {
 					',',
 					array(
 						'woocommerce-order-actions',
+						self::LETTER,
 						'fst-pickup',
 						'fishotel-fulfillment-delete',
 						'fishotel-weather',
@@ -242,5 +253,36 @@ class Layouts {
 	 */
 	public static function folded_closed() {
 		return array( 'fishotel-packing', 'fishotel-weather', 'fishotel-med-packing-slip', 'fishotel-combine-orders' );
+	}
+
+	/**
+	 * A person's stored order of the boxes with ShipTracker's letter box
+	 * placed (pure): a layout tidied before the box was named here (layout
+	 * version 1, Misc 0.46.19 / 0.46.20) gets it right under Order actions
+	 * — else first on the side — as it is drawn. Nothing is stored, and
+	 * the person's own drags are kept: a layout that already places the
+	 * box anywhere, or that is not an order of columns, is left as it is.
+	 *
+	 * Without this, WordPress draws a box a stored order does not name by
+	 * its own priority — ShipTracker asks "high" on a sticker order, which
+	 * puts it above every placed box, Order actions included.
+	 *
+	 * @param mixed $sorted The stored `meta-box-order_<screen>`.
+	 * @return mixed
+	 */
+	public static function with_letter( $sorted ) {
+		if ( ! is_array( $sorted ) || ! array_key_exists( 'side', $sorted ) || ! is_string( $sorted['side'] ) ) {
+			return $sorted;
+		}
+		foreach ( $sorted as $ids ) {
+			if ( is_string( $ids ) && in_array( self::LETTER, array_map( 'trim', explode( ',', $ids ) ), true ) ) {
+				return $sorted;
+			}
+		}
+		$side = '' === trim( $sorted['side'] ) ? array() : array_map( 'trim', explode( ',', $sorted['side'] ) );
+		$at   = array_search( self::LETTER_AFTER, $side, true );
+		array_splice( $side, false === $at ? 0 : (int) $at + 1, 0, array( self::LETTER ) );
+		$sorted['side'] = implode( ',', $side );
+		return $sorted;
 	}
 }

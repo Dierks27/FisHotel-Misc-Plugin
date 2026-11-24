@@ -16,7 +16,10 @@
  *     escaped) and saved (both places, only a changed name, the nonce, who
  *     may);
  *   - an order folded into a combined box (the theme's answer, else its
- *     meta).
+ *     meta);
+ *   - ShipTracker's letter box: open on an order with a sticker letter
+ *     (the flag, or a letter ShipTracker made), closed on others; placed
+ *     under Order actions for a person tidied before it was named.
  *
  * Run from the plugin root:  php includes/sections/edit-screens/tests/screens-test.php
  */
@@ -52,6 +55,8 @@ check_same(
 		'admin_post_fishotel_edit_screens',
 		'edit_form_after_title',
 		'fishotel_fish_facts_box_fields',
+		'get_user_option_meta-box-order_shop_order',
+		'get_user_option_meta-box-order_woocommerce_page_wc-orders',
 		'postbox_classes_product_fishotel-compat-category',
 		'postbox_classes_product_fishotel_cleanroom',
 		'postbox_classes_product_fishotel_hotel_data',
@@ -60,10 +65,12 @@ check_same(
 		'postbox_classes_shop_order_fishotel-med-packing-slip',
 		'postbox_classes_shop_order_fishotel-packing',
 		'postbox_classes_shop_order_fishotel-weather',
+		'postbox_classes_shop_order_fst-letter',
 		'postbox_classes_woocommerce_page_wc-orders_fishotel-combine-orders',
 		'postbox_classes_woocommerce_page_wc-orders_fishotel-med-packing-slip',
 		'postbox_classes_woocommerce_page_wc-orders_fishotel-packing',
 		'postbox_classes_woocommerce_page_wc-orders_fishotel-weather',
+		'postbox_classes_woocommerce_page_wc-orders_fst-letter',
 		'screen_settings',
 		'woocommerce_process_product_meta',
 		'woocommerce_product_data_tabs',
@@ -72,6 +79,7 @@ check_same(
 	$hooks
 );
 check( 'the short description is written with the post itself (wp_insert_post_data), so save_post — the Batch plugin\'s Master Fish sync — reads the new name', array( Essentials::class, 'insert_data' ) === $GLOBALS['fh_hooks']['wp_insert_post_data'][0]['callback'] && 2 === $GLOBALS['fh_hooks']['wp_insert_post_data'][0]['args'] );
+check( 'the stored order is read with its option name and the person (3 arguments)', 3 === $GLOBALS['fh_hooks']['get_user_option_meta-box-order_shop_order'][0]['args'] && 3 === $GLOBALS['fh_hooks']['get_user_option_meta-box-order_woocommerce_page_wc-orders'][0]['args'] );
 check( 'the switch runs at 50 on add_meta_boxes: after WooCommerce writes its own product layout (40), before a box is drawn', 50 === $GLOBALS['fh_hooks']['add_meta_boxes'][0]['priority'] );
 check( 'the name is saved after WooCommerce and the theme saved theirs (50)', 50 === $GLOBALS['fh_hooks']['woocommerce_process_product_meta'][0]['priority'] && 99 === $GLOBALS['fh_hooks']['woocommerce_product_data_tabs'][0]['priority'] && 99 === $GLOBALS['fh_hooks']['add_meta_boxes_product'][0]['priority'] );
 fh_reset_hooks();
@@ -337,6 +345,70 @@ function fishotel_order_get_fulfillment( $order ) {
 }
 $GLOBALS['fh_theme_on'] = true;
 check( 'the theme\'s answer wins when it is there', true === Order_Screen::is_folded( 302 ) && false === Order_Screen::is_folded( 300 ) );
+
+echo "5b. ShipTracker's USPS Letter Tracking box (fst-letter)\n";
+$_GET            = array();
+$GLOBALS['post'] = null;
+$GLOBALS['fh_orders'][400] = new Fh_Test_Product( 400, '', array( '_fishotel_sticker_mail_letter' => '2' ) );
+$GLOBALS['fh_orders'][401] = new Fh_Test_Product( 401 );
+$GLOBALS['fh_orders'][402] = new Fh_Test_Product( 402 );
+$GLOBALS['fh_orders'][403] = new Fh_Test_Product( 403 );
+$GLOBALS['fh_options']['fst_db_version'] = '1.4.0';
+check( 'ShipTracker 1.9.x (no letters): the Sticker giveaway\'s flag alone decides', ! class_exists( 'FST_Letters', false ) && true === Order_Screen::has_letter( 400 ) && false === Order_Screen::has_letter( 401 ) && false === Order_Screen::has_letter( 0 ) && false === Order_Screen::has_letter( 999 ) );
+$_GET = array( 'id' => '400' );
+$os   = new Order_Screen();
+check( 'an order with a sticker letter: the box open, even if the person closed it on another order', array() === $os->letter_classes( array( 'closed' ) ) );
+$_GET = array( 'id' => '401' );
+$os   = new Order_Screen();
+check( 'an order without one: closed, its title only', array( '', 'closed' ) === $os->letter_classes( array( '' ) ) );
+check( '— read once per screen', array( 'closed' ) === $os->letter_classes( array() ) );
+
+/**
+ * ShipTracker 1.10.0's letters, as a stand-in (its public get_by_order()).
+ */
+if ( ! class_exists( 'FST_Letters', false ) ) { // Declared here, not hoisted: the checks above ran without it.
+	class FST_Letters {
+		public static function get_by_order( $order_id ) {
+			$rows = array(
+				402 => array( (object) array( 'state' => 'active', 'mailed_at' => '2026-11-20 10:00:00' ) ),
+				403 => array( (object) array( 'state' => 'voided', 'mailed_at' => null ) ),
+			);
+			return $rows[ $order_id ] ?? array();
+		}
+	}
+}
+\FisHotel\Misc\ShipTracker_Letters::forget();
+unset( $GLOBALS['fh_options']['fst_db_version'] );
+check( 'ShipTracker 1.10.0 with its database not upgraded yet: not asked', false === Order_Screen::has_letter( 402 ) );
+$GLOBALS['fh_options']['fst_db_version'] = '1.5.0';
+\FisHotel\Misc\ShipTracker_Letters::forget();
+check( 'a letter made in ShipTracker on an order without the flag (by hand): open', true === Order_Screen::has_letter( 402 ) );
+check( '— every letter voided: closed', false === Order_Screen::has_letter( 403 ) );
+check( '— the flag still counts', true === Order_Screen::has_letter( 400 ) && false === Order_Screen::has_letter( 401 ) );
+unset( $GLOBALS['fh_options']['fst_db_version'] );
+\FisHotel\Misc\ShipTracker_Letters::forget();
+
+$tidied_v1 = array( 'side' => 'woocommerce-order-actions,fst-pickup,woocommerce-order-notes', 'normal' => 'woocommerce-order-data', 'advanced' => '' );
+$GLOBALS['fh_user_meta'][21] = array(
+	Switcher::STATE                       => array(
+		'shop_order'                 => array( 'v' => 1 ),
+		'woocommerce_page_wc-orders' => array( 'v' => 1, 'undone' => 1 ),
+	),
+	'meta-box-order_shop_order'                 => $tidied_v1,
+	'meta-box-order_woocommerce_page_wc-orders' => $tidied_v1,
+);
+$writes = $GLOBALS['fh_meta_writes'];
+$os     = new Order_Screen( new Switcher( new User_Store() ) );
+$placed = $os->stored_order( $tidied_v1, 'meta-box-order_shop_order', (object) array( 'ID' => 21 ) );
+check( 'a person tidied before the box was named: it is drawn right under Order actions', 'woocommerce-order-actions,fst-letter,fst-pickup,woocommerce-order-notes' === $placed['side'] );
+check( '— nothing written: their stored layout is as it was', $writes === $GLOBALS['fh_meta_writes'] && $tidied_v1 === $GLOBALS['fh_user_meta'][21]['meta-box-order_shop_order'] );
+check( 'the same person put their old layout back on the other order screen: left as it is (the box lands where ShipTracker puts it)', $tidied_v1 === $os->stored_order( $tidied_v1, 'meta-box-order_woocommerce_page_wc-orders', (object) array( 'ID' => 21 ) ) );
+fh_login( 21 );
+check( 'no person handed over: the one logged in', 'woocommerce-order-actions,fst-letter,fst-pickup,woocommerce-order-notes' === $os->stored_order( $tidied_v1, 'meta-box-order_shop_order' )['side'] );
+check( 'a person never tidied: left as it is', $tidied_v1 === $os->stored_order( $tidied_v1, 'meta-box-order_shop_order', (object) array( 'ID' => 22 ) ) );
+check( 'another screen\'s option: left as it is', $tidied_v1 === $os->stored_order( $tidied_v1, 'meta-box-order_product', (object) array( 'ID' => 21 ) ) );
+check( 'a freshly tidied layout (names the box): as it is', Layouts::order()['order'] === $os->stored_order( Layouts::order()['order'], 'meta-box-order_shop_order', (object) array( 'ID' => 21 ) ) );
+check( 'the section made without a switcher makes its own (the real user store)', 'woocommerce-order-actions,fst-letter,fst-pickup,woocommerce-order-notes' === ( new Order_Screen() )->stored_order( $tidied_v1, 'meta-box-order_shop_order', (object) array( 'ID' => 21 ) )['side'] );
 
 echo "6. Nothing for a visitor, nothing outside these screens\n";
 $code = '';
