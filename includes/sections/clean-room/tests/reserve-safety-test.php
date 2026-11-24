@@ -154,6 +154,18 @@ check_same( 'shipped before, moved back to processing: still nothing (its shipme
 $o3300->set_status( 'completed' );
 work( $store, 3300, true );
 check_same( 'open but past its delivery date at the switch-on, tidied to completed: nothing', array( 4, array(), array() ), array( alive( $store, $s122 ), held( $i3300 ), sold( $store, $s122 ) ) );
+// A combined box still "fulfillment" at the switch-on, its delivery date yesterday: it went out unmarked. The
+// orders inside it have no date of their own — the box's date counts for them (found on the rehearsal site).
+$o3400 = fh_shop_order( new WC_Order( 3400, 'fulfillment', array( '_fishotel_shipping_date' => $yesterday, '_fishotel_is_fulfillment' => '1', '_fishotel_fulfillment_sources' => '3401' ), time() - 86400 * 2 ) );
+$o3401 = fh_shop_order( new WC_Order( 3401, 'processing', array( '_fishotel_fulfilled_by_order' => '3400' ), time() - 86400 * 4 ) );
+$i3401 = $o3401->add_item( 'Test Tang - Medium', 1, $tang_m, $medium );
+read_room( $store );
+check_same( 'an order inside a combined box past its delivery date at the switch-on: not reserved, not seen', array( array(), '' ), array( held( $i3401 ), (string) $i3401->get_meta( Reserve::META_SEEN ) ) );
+$o3400->set_status( 'shipped' );
+work( $store, 3400, true );
+work( $store, 3401, true );
+Reserve_Shop::sweep( $store, $settings );
+check_same( '… and nothing is taken out when the box is marked shipped afterwards', array( 4, array(), array() ), array( alive( $store, $s122 ), held( $i3401 ), sold( $store, $s122 ) ) );
 check_same( 'none of them is on the not-found list', array(), Reserve_Shop::lost() );
 
 /* ------------------------------------------------------------------ */

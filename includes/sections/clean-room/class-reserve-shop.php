@@ -629,12 +629,29 @@ class Reserve_Shop {
 
 		if ( null === $box && $head['folded'] ) {
 			$wrapper = wc_get_order( (int) $order->get_meta( Ship_Lines::META_FOLDED ) );
-			$box     = is_object( $wrapper ) ? self::signals( $wrapper ) : null;
+			$box     = is_object( $wrapper ) ? self::box_signals( $wrapper ) : null;
+		}
+		if ( '' === $head['delivery'] && is_array( $box ) && '' !== (string) ( $box['delivery'] ?? '' ) ) {
+			// An order inside a combined box has no date of its own: the box's is the day its fish go out.
+			$head['delivery'] = (string) $box['delivery'];
 		}
 		$head['lines']   = $lines;
 		$head['signals'] = array_merge( self::signals( $order ), array( 'box' => $box ) );
 		$head['paid']    = self::paid( $order );
 		return $head;
+	}
+
+	/**
+	 * A combined box's signals (signals()) and its delivery date — the
+	 * date of the orders inside it, which have none of their own.
+	 *
+	 * @param object $wrapper The combined box.
+	 * @return array
+	 */
+	private static function box_signals( $wrapper ) {
+		$delivery = $wrapper->get_meta( Ship_Lines::META_DELIVERY );
+		$delivery = is_string( $delivery ) && Replay::is_date( trim( $delivery ) ) ? trim( $delivery ) : '';
+		return array_merge( self::signals( $wrapper ), array( 'delivery' => $delivery ) );
 	}
 
 	/**
@@ -694,7 +711,7 @@ class Reserve_Shop {
 			$facts = self::facts( $order );
 			return $facts ? array( $facts ) : array();
 		}
-		$box   = self::signals( $order );
+		$box   = self::box_signals( $order );
 		$out   = array();
 		$known = 0;
 		foreach ( $head['sources'] as $source_id ) {

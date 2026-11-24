@@ -1270,7 +1270,9 @@ removed from the tank." Three steps, nothing logged by hand:
   back** to processing after it, or an order still open whose
   **delivery date had passed** (it went out and was never marked: a line
   of an order that came in before the switch-on, never looked at, with
-  its delivery date today or earlier is left alone for good).
+  its delivery date today or earlier is left alone for good; an order
+  inside a combined box has no date of its own and is read with the
+  box's).
 - **One tick**, Settings → Numbers: *Reserve sold fish in their tank and
   take them out when the order ships*, **on by default**. Off: nothing
   is reserved or shown, there is no Pull today, no event is written and
