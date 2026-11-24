@@ -1289,6 +1289,7 @@ class Store {
 			// Reserved for open orders: not an event, the count alive is unchanged.
 			$stay['reserved']        = (int) ( $counts[ (int) $stay['id'] ]['qty'] ?? 0 );
 			$stay['reserved_orders'] = (array) ( $counts[ (int) $stay['id'] ]['orders'] ?? array() );
+			$stay['reserved_holds']  = (array) ( $counts[ (int) $stay['id'] ]['holds'] ?? array() ); // Held by hand (who, qty, at).
 			$by_tank[ (int) $stay['tank_id'] ][] = $stay;
 		}
 

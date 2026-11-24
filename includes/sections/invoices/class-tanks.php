@@ -123,6 +123,7 @@ class Tanks {
 			'order_ref'  => $ref,
 			'product_id' => ! empty( $stay['product_id'] ) ? (int) $stay['product_id'] : null,
 			'needs_id'   => ! empty( $stay['needs_id'] ),
+			'for_sale'   => ! empty( $stay['sale_ready'] ), // Its sale date has come: its fish not reserved are "ready".
 			'open'       => 'closed' !== (string) ( isset( $stay['stored_status'] ) ? $stay['stored_status'] : ( isset( $stay['status'] ) ? $stay['status'] : '' ) ),
 		);
 	}
@@ -247,6 +248,25 @@ class Tanks {
 			return 0;
 		}
 		return max( 0, (int) ( $count['qty'] ?? 0 ) - max( 0, (int) ( $count['invoice'] ?? 0 ) ) );
+	}
+
+	/**
+	 * Who one reserved count (reserved()) holds its fish for, in the Clean
+	 * Room's words: "#1234, #1240" — with the holds made by hand when there
+	 * are some ("#1234; 1 for Mike S. — by hand, 3 days ago").
+	 *
+	 * @param mixed $count A reserved() entry: orders, who (the Clean Room's words, when it gives them).
+	 * @return string
+	 */
+	public static function reserved_for( $count ) {
+		if ( ! is_array( $count ) ) {
+			return '';
+		}
+		if ( ! empty( $count['who'] ) && is_string( $count['who'] ) ) {
+			return $count['who'];
+		}
+		$orders = array_values( array_filter( array_map( 'strval', (array) ( $count['orders'] ?? array() ) ), 'strlen' ) );
+		return $orders ? '#' . implode( ', #', $orders ) : '';
 	}
 
 	/**

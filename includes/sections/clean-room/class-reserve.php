@@ -1007,20 +1007,128 @@ class Reserve {
 	/* ============================================================== */
 
 	/**
-	 * "2 reserved · #1234" / "3 reserved · #1234, #1240".
+	 * The owner's three stages, worked out for one group: READY (alive, for
+	 * sale and not reserved), RESERVED (held for an order or by hand — still
+	 * in the tank), SHIPPED (gone: an event, not a count here). A group not
+	 * for sale yet has no fish ready (its "Sale …" words say when).
 	 *
-	 * @param int      $qty     Fish reserved.
-	 * @param string[] $numbers Order numbers.
+	 * @param array $stay qty_live, sale_ready, reserved (every fish held: orders and by hand).
+	 * @return int
+	 */
+	public static function ready( array $stay ) {
+		if ( empty( $stay['sale_ready'] ) ) {
+			return 0;
+		}
+		return max( 0, (int) ( $stay['qty_live'] ?? 0 ) - max( 0, (int) ( $stay['reserved'] ?? 0 ) ) );
+	}
+
+	/**
+	 * How long ago something was set aside, in days: "today", "1 day ago",
+	 * "3 days ago".
+	 *
+	 * @param int $at  UNIX time it was made.
+	 * @param int $now UNIX time now.
 	 * @return string
 	 */
-	public static function reserved_text( $qty, array $numbers ) {
+	public static function age_text( $at, $now ) {
+		$days = (int) floor( max( 0, (int) $now - (int) $at ) / DAY_IN_SECONDS );
+		if ( $days <= 0 ) {
+			return __( 'today', 'fishotel-misc-plugin' );
+		}
+		/* translators: %d: days */
+		return sprintf( _n( '%d day ago', '%d days ago', $days, 'fishotel-misc-plugin' ), $days );
+	}
+
+	/**
+	 * One hold by hand in words: "Mike S. — by hand, 3 days ago".
+	 *
+	 * @param array $hold who, at.
+	 * @param int   $now  UNIX time now.
+	 * @return string
+	 */
+	public static function hold_label( array $hold, $now ) {
+		$who = trim( (string) ( $hold['who'] ?? '' ) );
+		/* translators: 1: who the fish are held for, 2: how long ago ("3 days ago") */
+		return sprintf( __( '%1$s — by hand, %2$s', 'fishotel-misc-plugin' ), '' !== $who ? $who : __( 'somebody', 'fishotel-misc-plugin' ), self::age_text( (int) ( $hold['at'] ?? 0 ), (int) $now ) );
+	}
+
+	/**
+	 * "2 reserved (#1234)" / "3 reserved (#1234, #1240)" / "2 reserved (Mike
+	 * S. — by hand, 3 days ago)" / "3 reserved (#1234; 1 for Mike S. — by
+	 * hand, 3 days ago)" — a hold's count is said when it is not the only
+	 * thing the fish are held for.
+	 *
+	 * @param int      $qty     Fish reserved (orders and by hand).
+	 * @param string[] $numbers Order numbers.
+	 * @param array[]  $holds   Holds by hand: who, qty, at.
+	 * @param int      $now     UNIX time now (0 = now).
+	 * @return string
+	 */
+	public static function reserved_text( $qty, array $numbers, array $holds = array(), $now = 0 ) {
 		if ( (int) $qty <= 0 ) {
 			return '';
 		}
-		$numbers = array_values( array_filter( array_map( 'strval', $numbers ), 'strlen' ) );
+		$now     = (int) $now > 0 ? (int) $now : time();
+		$numbers = array_values( array_unique( array_filter( array_map( 'strval', $numbers ), 'strlen' ) ) );
+		$holds   = array_values( array_filter( $holds, 'is_array' ) );
+		$parts   = $numbers ? array( '#' . implode( ', #', $numbers ) ) : array();
+		$many    = count( $numbers ) + count( $holds ) > 1;
+		foreach ( $holds as $hold ) {
+			$label = self::hold_label( $hold, $now );
+			/* translators: 1: fish, 2: "Mike S. — by hand, 3 days ago" */
+			$parts[] = $many ? sprintf( __( '%1$d for %2$s', 'fishotel-misc-plugin' ), (int) ( $hold['qty'] ?? 0 ), $label ) : $label;
+		}
 		/* translators: %d: fish reserved */
 		$text = sprintf( __( '%d reserved', 'fishotel-misc-plugin' ), (int) $qty );
-		return $numbers ? $text . ' · #' . implode( ', #', $numbers ) : $text;
+		return $parts ? $text . ' (' . implode( '; ', $parts ) . ')' : $text;
+	}
+
+	/**
+	 * A group's stages in words, where something is reserved: "5 ready · 2
+	 * reserved (#1234)"; a group not for sale yet only "2 reserved (#1234)"
+	 * (its sale words say when) — '' when nothing is reserved (every fish
+	 * alive is then ready, or waits for its sale date, and the badge says
+	 * which).
+	 *
+	 * @param array $stay qty_live, sale_ready, reserved, reserved_orders, reserved_holds.
+	 * @param int   $now  UNIX time now (0 = now).
+	 * @return string
+	 */
+	public static function stage_text( array $stay, $now = 0 ) {
+		$text = self::reserved_text( (int) ( $stay['reserved'] ?? 0 ), (array) ( $stay['reserved_orders'] ?? array() ), (array) ( $stay['reserved_holds'] ?? array() ), $now );
+		if ( '' === $text || empty( $stay['sale_ready'] ) ) {
+			return $text;
+		}
+		/* translators: %d: fish ready (for sale, not reserved) */
+		return sprintf( __( '%d ready', 'fishotel-misc-plugin' ), self::ready( $stay ) ) . ' · ' . $text;
+	}
+
+	/**
+	 * Several groups shown as one (a line of a tank card): their fish alive,
+	 * reserved, orders and holds summed — for sale when every one is.
+	 *
+	 * @param array[] $stays Groups (qty_live, sale_ready, reserved, reserved_orders, reserved_holds).
+	 * @return array A group-like array for stage_text().
+	 */
+	public static function stage_sum( array $stays ) {
+		$out = array(
+			'qty_live'        => 0,
+			'sale_ready'      => (bool) $stays,
+			'reserved'        => 0,
+			'reserved_orders' => array(),
+			'reserved_holds'  => array(),
+		);
+		foreach ( $stays as $stay ) {
+			if ( ! is_array( $stay ) ) {
+				continue;
+			}
+			$out['qty_live']       += (int) ( $stay['qty_live'] ?? 0 );
+			$out['sale_ready']      = $out['sale_ready'] && ! empty( $stay['sale_ready'] );
+			$out['reserved']       += (int) ( $stay['reserved'] ?? 0 );
+			$out['reserved_orders'] = array_values( array_unique( array_merge( $out['reserved_orders'], array_map( 'strval', (array) ( $stay['reserved_orders'] ?? array() ) ) ) ) );
+			$out['reserved_holds']  = array_merge( $out['reserved_holds'], (array) ( $stay['reserved_holds'] ?? array() ) );
+		}
+		return $out;
 	}
 
 	/**
@@ -1112,31 +1220,39 @@ class Reserve {
 	}
 
 	/**
-	 * "Shop says 5 in stock, tanks have 3 free" — '' when they agree or
-	 * the shop does not count it.
+	 * "Shop says 5 in stock, tanks have 3 ready" ("… 3 ready (+2 not for
+	 * sale yet)") — '' when they agree or the shop does not count it. The
+	 * fish not for sale yet are counted with the ready ones (the shop may
+	 * sell them ahead), and said apart.
 	 *
 	 * @param int|null $stock The shop's stock (null = not tracked).
-	 * @param int      $free  Fish alive in the tanks no open order holds.
+	 * @param int      $ready Fish in the tanks for sale and not reserved.
+	 * @param int      $later Fish in the tanks not reserved but not for sale yet.
 	 * @return string
 	 */
-	public static function stock_text( $stock, $free ) {
-		if ( null === $stock || (int) $stock === (int) $free ) {
+	public static function stock_text( $stock, $ready, $later = 0 ) {
+		$ready = max( 0, (int) $ready );
+		$later = max( 0, (int) $later );
+		if ( null === $stock || (int) $stock === $ready + $later ) {
 			return '';
 		}
-		/* translators: 1: shop stock, 2: free fish in the tanks */
-		return sprintf( __( 'Shop says %1$d in stock, tanks have %2$d free', 'fishotel-misc-plugin' ), (int) $stock, max( 0, (int) $free ) );
+		/* translators: 1: shop stock, 2: fish ready in the tanks (for sale, not reserved) */
+		$text = sprintf( __( 'Shop says %1$d in stock, tanks have %2$d ready', 'fishotel-misc-plugin' ), (int) $stock, $ready );
+		/* translators: %d: fish not reserved that are not for sale yet */
+		return $later > 0 ? $text . ' ' . sprintf( __( '(+%d not for sale yet)', 'fishotel-misc-plugin' ), $later ) : $text;
 	}
 
 	/**
 	 * Where the shop's stock and the tanks disagree — a warning only, the
 	 * shop's stock is never written: each stock row (a product counted as a
 	 * whole, or one size of it) against the fish alive in its open groups
-	 * that no open order holds.
+	 * that nothing holds (no open order, no hold by hand): ready, and not
+	 * for sale yet.
 	 *
 	 * @param array[] $stock  Rows: product_id, size_slug ('' = the product as a whole), label, stock (null = not tracked).
-	 * @param array[] $stays  Groups (id, product_id, size_slug, qty_live, status).
+	 * @param array[] $stays  Groups (id, product_id, size_slug, qty_live, status, sale_ready).
 	 * @param array   $counts Reserved: stay id => { qty }.
-	 * @return array[] The rows that differ, each with free and text.
+	 * @return array[] The rows that differ, each with free (ready + later), ready, later and text.
 	 */
 	public static function stock_warnings( array $stock, array $stays, array $counts ) {
 		$out = array();
@@ -1144,7 +1260,8 @@ class Reserve {
 			if ( ! is_array( $row ) || null === ( $row['stock'] ?? null ) ) {
 				continue;
 			}
-			$free = 0;
+			$ready = 0;
+			$later = 0;
 			foreach ( $stays as $stay ) {
 				if ( ! is_array( $stay ) || 'closed' === (string) ( $stay['status'] ?? '' ) || (int) ( $stay['product_id'] ?? 0 ) !== (int) $row['product_id'] ) {
 					continue;
@@ -1152,15 +1269,21 @@ class Reserve {
 				if ( '' !== (string) ( $row['size_slug'] ?? '' ) && Sizes::slug( (string) ( $stay['size_slug'] ?? '' ) ) !== Sizes::slug( (string) $row['size_slug'] ) ) {
 					continue;
 				}
-				$free += self::free( $stay, $counts );
+				if ( ! empty( $stay['sale_ready'] ) ) {
+					$ready += self::free( $stay, $counts );
+				} else {
+					$later += self::free( $stay, $counts );
+				}
 			}
-			$text = self::stock_text( (int) $row['stock'], $free );
+			$text = self::stock_text( (int) $row['stock'], $ready, $later );
 			if ( '' !== $text ) {
 				$out[] = array_merge(
 					$row,
 					array(
-						'free' => $free,
-						'text' => $text,
+						'free'  => $ready + $later,
+						'ready' => $ready,
+						'later' => $later,
+						'text'  => $text,
 					)
 				);
 			}

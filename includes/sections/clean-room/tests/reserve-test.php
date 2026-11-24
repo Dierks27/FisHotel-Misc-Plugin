@@ -229,10 +229,19 @@ check_same( 'the count: every fish, and the ones still to pull', array( 7, 6 ), 
 /* ------------------------------------------------------------------ */
 echo "8. The words\n";
 
-check_same( 'the tank card', array( '2 reserved · #1234', '3 reserved · #1234, #1240', '' ), array( Reserve::reserved_text( 2, array( '1234' ) ), Reserve::reserved_text( 3, array( '1234', '1240' ) ), Reserve::reserved_text( 0, array() ) ) );
+check_same( 'the tank card', array( '2 reserved (#1234)', '3 reserved (#1234, #1240)', '' ), array( Reserve::reserved_text( 2, array( '1234' ) ), Reserve::reserved_text( 3, array( '1234', '1240' ) ), Reserve::reserved_text( 0, array() ) ) );
+$now_w = 1800000000;
+check_same( 'Ready → Reserved: "5 ready · 2 reserved (#1234)", several orders, a group not for sale yet says only what is reserved, nothing reserved says nothing', array( '5 ready · 2 reserved (#1234)', '4 ready · 3 reserved (#1234, #1240)', '2 reserved (#1234)', '' ), array(
+	Reserve::stage_text( array( 'qty_live' => 7, 'sale_ready' => true, 'reserved' => 2, 'reserved_orders' => array( '1234' ) ), $now_w ),
+	Reserve::stage_text( array( 'qty_live' => 7, 'sale_ready' => true, 'reserved' => 3, 'reserved_orders' => array( '1234', '1240' ) ), $now_w ),
+	Reserve::stage_text( array( 'qty_live' => 7, 'sale_ready' => false, 'reserved' => 2, 'reserved_orders' => array( '1234' ) ), $now_w ),
+	Reserve::stage_text( array( 'qty_live' => 7, 'sale_ready' => true, 'reserved' => 0 ), $now_w ),
+) );
+check_same( 'ready: for sale and not reserved — never below 0; a group not for sale yet has none', array( 5, 0, 0 ), array( Reserve::ready( array( 'qty_live' => 7, 'sale_ready' => true, 'reserved' => 2 ) ), Reserve::ready( array( 'qty_live' => 1, 'sale_ready' => true, 'reserved' => 2 ) ), Reserve::ready( array( 'qty_live' => 7, 'reserved' => 0 ) ) ) );
+check_same( 'a card line sums its groups (orders once each)', '6 ready · 3 reserved (#1234, #1240)', Reserve::stage_text( Reserve::stage_sum( array( array( 'qty_live' => 4, 'sale_ready' => true, 'reserved' => 2, 'reserved_orders' => array( '1234' ) ), array( 'qty_live' => 5, 'sale_ready' => true, 'reserved' => 1, 'reserved_orders' => array( '1234', '1240' ) ) ) ), $now_w ) );
 check_same( 'the hand "Shipped" on a group that holds fish for an order', '2 of these are reserved for #1234 and will come off by themselves when it ships.', Reserve::sold_note( 2, array( '1234' ) ) );
 check_same( 'History says "Shipped" and the order', array( 'Shipped · order #1234 (2 fish)', 'Back in the tank · order #1234 (2 fish)', '' ), array( Reserve::event_text( array( 'type' => 'sold', 'qty' => 2, 'note' => 'order:1234 item:31' ) ), Reserve::event_text( array( 'type' => 'sold', 'qty' => -2, 'note' => 'order:1234 item:31' ) ), Reserve::event_text( array( 'type' => 'sold', 'qty' => 2, 'note' => '' ) ) ) );
-check_same( 'the stock warning — only when the shop and the tanks differ', array( 'Shop says 5 in stock, tanks have 3 free', '', '' ), array( Reserve::stock_text( 5, 3 ), Reserve::stock_text( 3, 3 ), Reserve::stock_text( null, 3 ) ) );
+check_same( 'the stock warning — only when the shop and the tanks differ, in the owner\'s word "ready"; fish not for sale yet said apart', array( 'Shop says 5 in stock, tanks have 3 ready', '', '', 'Shop says 6 in stock, tanks have 3 ready (+2 not for sale yet)', '' ), array( Reserve::stock_text( 5, 3 ), Reserve::stock_text( 3, 3 ), Reserve::stock_text( null, 3 ), Reserve::stock_text( 6, 3, 2 ), Reserve::stock_text( 5, 3, 2 ) ) );
 check_same( 'the not-found line', 'Could not find a tank for 4 fish that shipped', Reserve::lost_text( 4 ) );
 check_contains( 'the tick in Settings says what it does', 'reserved in the tank', Reserve::setting_text()['text'] );
 
@@ -252,7 +261,7 @@ $groups = array(
 	rstay( 5, 'Demo Wrasse', array( 'product_id' => 777, 'qty_live' => 2 ) ),
 );
 $warn = Reserve::stock_warnings( $stock, $groups, array( 1 => array( 'qty' => 2, 'orders' => array( '1234' ) ) ) );
-check_same( 'the medium tangs: 5 in the shop, 3 + 2 alive less 2 reserved = 3 free — said; the angel agrees; an untracked product is never compared', array( array( 501, 3, 'Shop says 5 in stock, tanks have 3 free' ) ), array_map( static function ( $w ) { return array( $w['product_id'], $w['free'], $w['text'] ); }, $warn ) );
+check_same( 'the medium tangs: 5 in the shop, 3 + 2 alive less 2 reserved = 3 ready — said; the angel agrees; an untracked product is never compared', array( array( 501, 3, 'Shop says 5 in stock, tanks have 3 ready' ) ), array_map( static function ( $w ) { return array( $w['product_id'], $w['free'], $w['text'] ); }, $warn ) );
 
 /* ------------------------------------------------------------------ */
 echo "10. The pull list's words\n";

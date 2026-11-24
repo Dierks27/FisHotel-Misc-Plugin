@@ -1913,7 +1913,7 @@ class Reserve_Shop {
 	}
 
 	/**
-	 * "Shop says 5 in stock, tanks have 3 free" for the products of some
+	 * "Shop says 5 in stock, tanks have 3 ready" for the products of some
 	 * groups — empty while the feature is off.
 	 *
 	 * @param object  $store    Store or stand-in.

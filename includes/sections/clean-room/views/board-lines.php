@@ -39,14 +39,8 @@ $fh_origins = isset( $origins ) && is_array( $origins ) ? $origins : array();
 		$fh_class .= Board_Lines::matches( $fh_line, $fh_species ) ? ' is-hit' : '';
 		$fh_class .= $fh_line['unknown'] ? ' is-unknown' : '';
 		$fh_class .= $fh_line['repeat'] ? ' is-repeat' : '';
-		// Reserved for open orders (Reserve): "2 reserved · #1234" — still in the tank until the order ships.
-		$fh_res_qty    = 0;
-		$fh_res_orders = array();
-		foreach ( $fh_line['stays'] as $fh_res_stay ) {
-			$fh_res_qty   += (int) ( $fh_res_stay['reserved'] ?? 0 );
-			$fh_res_orders = array_merge( $fh_res_orders, (array) ( $fh_res_stay['reserved_orders'] ?? array() ) );
-		}
-		$fh_reserved = Reserve::reserved_text( $fh_res_qty, array_values( array_unique( $fh_res_orders ) ) );
+		// Ready → Reserved → Shipped: "5 ready · 2 reserved (#1234)" — reserved fish are still in the tank until they ship.
+		$fh_reserved = Reserve::stage_text( Reserve::stage_sum( $fh_line['stays'] ) );
 		$fh_notes    = $fh_groups > 1 || $fh_line['unknown'] || ( $fh_line['size'] && ! $fh_line['size']['standard'] ) || $fh_line['in_spa'] || '' !== $fh_sale || '' !== $fh_reserved;
 		?>
 		<li class="<?php echo esc_attr( $fh_class ); ?>">
@@ -91,7 +85,7 @@ $fh_origins = isset( $origins ) && is_array( $origins ) ? $origins : array();
 						}
 						$fh_parts[] = '' !== $fh_words['date'] ? $fh_words['text'] . ' (' . $fh_words['source'] . ')' : $fh_words['text'];
 						if ( ! empty( $fh_stay['reserved'] ) ) {
-							$fh_parts[] = Reserve::reserved_text( (int) $fh_stay['reserved'], (array) ( $fh_stay['reserved_orders'] ?? array() ) );
+							$fh_parts[] = Reserve::stage_text( $fh_stay );
 						}
 						?>
 						<li>

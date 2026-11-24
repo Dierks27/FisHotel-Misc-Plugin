@@ -265,7 +265,7 @@ class Front_Desk {
 			'pullNothing' => __( 'No fish ship today.', 'fishotel-misc-plugin' ),
 			'tankNotKnown' => __( 'Tank not known', 'fishotel-misc-plugin' ),
 			'fixOnTodo'   => __( 'on the To do tab', 'fishotel-misc-plugin' ),
-			'moveReserved' => __( '%d free to move without touching an order; the reserved fish stay with this group if only part of it moves.', 'fishotel-misc-plugin' ),
+			'moveReserved' => __( '%d not reserved: they move without touching an order or a hold; the reserved fish stay with this group if only part of it moves.', 'fishotel-misc-plugin' ),
 			'cleared'     => __( 'Cleared', 'fishotel-misc-plugin' ),
 			'note'        => __( 'Note', 'fishotel-misc-plugin' ),
 			'mic'         => __( 'Mic', 'fishotel-misc-plugin' ),
@@ -921,10 +921,11 @@ class Front_Desk {
 			'saleReady'       => ! empty( $stay['sale_ready'] ),
 			'readyInSpa'      => ! empty( $stay['ready_in_spa'] ),
 			'needsId'         => ! empty( $stay['needs_id'] ),
-			// Reserved for open orders (Reserve): "2 reserved · #1234", and what the hand "Shipped" says.
+			// Ready → Reserved → Shipped: "5 ready · 2 reserved (#1234)", and what the hand "Shipped" says.
 			'reserved'        => (int) ( $stay['reserved'] ?? 0 ),
+			'ready'           => Reserve::ready( $stay ),
 			'reservedFor'     => ! empty( $stay['reserved_orders'] ) ? '#' . implode( ', #', array_map( 'strval', (array) $stay['reserved_orders'] ) ) : '',
-			'reservedText'    => Reserve::reserved_text( (int) ( $stay['reserved'] ?? 0 ), (array) ( $stay['reserved_orders'] ?? array() ) ),
+			'reservedText'    => Reserve::stage_text( $stay ),
 			'soldNote'        => Reserve::sold_note( (int) ( $stay['reserved'] ?? 0 ), (array) ( $stay['reserved_orders'] ?? array() ) ),
 		);
 	}

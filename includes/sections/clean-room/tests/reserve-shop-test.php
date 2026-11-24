@@ -146,7 +146,7 @@ foreach ( $room['tanks'] as $tank ) {
 		$occ[ (int) $stay['id'] ] = $stay;
 	}
 }
-check_same( 'the tank card: 2 reserved · #1234 — and still 3 alive (reserved is no event)', array( 2, array( '1234' ), 3, '2 reserved · #1234' ), array( $occ[ $s121 ]['reserved'], $occ[ $s121 ]['reserved_orders'], $occ[ $s121 ]['qty_live'], Reserve::reserved_text( $occ[ $s121 ]['reserved'], $occ[ $s121 ]['reserved_orders'] ) ) );
+check_same( 'the tank card: 1 ready · 2 reserved (#1234) — and still 3 alive (reserved is no event)', array( 2, array( '1234' ), 3, '1 ready · 2 reserved (#1234)' ), array( $occ[ $s121 ]['reserved'], $occ[ $s121 ]['reserved_orders'], $occ[ $s121 ]['qty_live'], Reserve::stage_text( $occ[ $s121 ] ) ) );
 check_same( 'nothing was written in the tank', array(), sold( $store, $s121 ) );
 check_same( 'the phone\'s tank screen says it too', array( 2, '#1234' ), ( static function () use ( $store, $settings, $today ) {
 	$screen = Front_Desk::screen_from( $store, 121, $settings, $today );
@@ -426,7 +426,7 @@ $tab        = 'board';
 ob_start();
 include FISHOTEL_MISC_PATH . 'includes/sections/clean-room/views/board.php';
 $board = (string) ob_get_clean();
-check( 'the Board\'s tank card says what is reserved', 1 === preg_match( '/class="fh-cr-reserved">\d+ reserved · #\d+/', $board ) );
+check( 'the Board\'s tank card says what is reserved (and, for a group for sale, what is ready)', 1 === preg_match( '/class="fh-cr-reserved">(\d+ ready · )?\d+ reserved \(#\d+\)/', $board ) );
 
 $screen = Front_Desk::screen_from( $store, 123, $settings, $today );
 $angels = array_values( array_filter( $screen['tank']['occupants'], static function ( $o ) { return $o['reserved'] > 0; } ) );

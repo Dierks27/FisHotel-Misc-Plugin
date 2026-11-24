@@ -9,7 +9,7 @@
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  *
- * @var array[] $stays        Open stays (each with reserved / reserved_orders: fish held for open orders).
+ * @var array[] $stays        Open stays (each with reserved / reserved_orders / reserved_holds: fish held for open orders and by hand).
  * @var bool    $show_closed  Whether closed stays are listed.
  * @var array[] $closed_stays Closed stays (when shown).
  * @var array   $product_states Stay id => unknown|linked|none (Admin_No_Product::stay_states()).
@@ -95,7 +95,7 @@ $fh_table  = static function ( array $rows, $open ) use ( $today, $sizes, $fh_st
 					</td>
 					<td class="fh-cr-num"><?php echo esc_html( $fh_stay['qty_live'] ); ?> / <?php echo esc_html( $fh_stay['qty_arrived'] ); ?>
 						<?php if ( ! empty( $fh_stay['reserved'] ) ) : // Held for open orders: still in the tank until they ship. ?>
-							<span class="fh-cr-sub fh-cr-reserved"><?php echo esc_html( Reserve::reserved_text( (int) $fh_stay['reserved'], (array) ( $fh_stay['reserved_orders'] ?? array() ) ) ); ?></span>
+							<span class="fh-cr-sub fh-cr-reserved"><?php echo esc_html( Reserve::stage_text( $fh_stay ) ); // "5 ready · 2 reserved (#1234)". ?></span>
 						<?php endif; ?>
 					</td>
 					<td><?php echo ! empty( $fh_stay['checkin_unknown'] ) ? $fh_unknown : esc_html( $fh_stay['checkin_date'] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above. ?></td>

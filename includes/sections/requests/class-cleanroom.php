@@ -333,7 +333,7 @@ class Cleanroom {
 			$status = (string) ( $stay['status'] ?? ( $stay['stored_status'] ?? '' ) );
 			$out[]  = array(
 				'id'         => (int) ( $stay['id'] ?? 0 ),
-				// The fish free to offer: alive, less the ones a customer's open order already holds.
+				// The fish free to offer: alive, less the ones reserved (a customer's open order, a hold by hand).
 				'qty_live'   => max( 0, (int) ( $stay['qty_live'] ?? 0 ) - (int) ( $reserved[ (int) ( $stay['id'] ?? 0 ) ]['qty'] ?? 0 ) ),
 				'sale_ready' => ! empty( $stay['sale_ready'] ),
 				'open'       => 'closed' !== $status,

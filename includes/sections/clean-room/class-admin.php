@@ -236,6 +236,7 @@ class Admin {
 			foreach ( $stays as $fh_i => $fh_open ) {
 				$stays[ $fh_i ]['reserved']        = (int) ( $reserved[ (int) $fh_open['id'] ]['qty'] ?? 0 );
 				$stays[ $fh_i ]['reserved_orders'] = (array) ( $reserved[ (int) $fh_open['id'] ]['orders'] ?? array() );
+				$stays[ $fh_i ]['reserved_holds']  = (array) ( $reserved[ (int) $fh_open['id'] ]['holds'] ?? array() );
 			}
 			$stock_notes    = Reserve_Shop::stock_warnings( $store, $settings, $stays ); // Where the shop's stock and the tanks differ.
 
@@ -503,7 +504,7 @@ class Admin {
 		}
 
 		$board_url    = self::page_url( 'stays' );
-		$stock_notes  = Reserve_Shop::stock_warnings( $store, $settings, $stays ); // "Shop says 5 in stock, tanks have 3 free" — a warning only.
+		$stock_notes  = Reserve_Shop::stock_warnings( $store, $settings, $stays ); // "Shop says 5 in stock, tanks have 3 ready" — a warning only.
 		$release_ts   = (int) get_post_meta( $product_id, self::RELEASE_META, true );
 		$release_url  = '';
 		$nonce_action = self::NONCE_PRODUCT . $product_id;

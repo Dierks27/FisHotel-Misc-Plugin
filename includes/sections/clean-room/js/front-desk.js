@@ -1731,7 +1731,7 @@
 			o.status === 'cleared' && o.clearedUnknown ? el('span', { text: dates.cleared }) : null,
 			!o.saleReady ? el('span', { text: sale.short }) : null,
 			o.qtyArrived !== o.qtyLive ? el('span', { text: o.qtyLive + '/' + o.qtyArrived }) : null,
-			// Reserved for open orders: "2 reserved · #1234" — still in the tank until the order ships.
+			// Ready → Reserved → Shipped: "5 ready · 2 reserved (#1234)" — reserved fish stay in the tank until they ship.
 			o.reservedText ? el('span', { class: 'fh-fd-reserved', text: o.reservedText }) : null
 		];
 		var node = el(tag, attrs, [
@@ -2479,7 +2479,7 @@
 		// Fish reserved for an order: the whole group takes them along; a part moved off leaves them here.
 		moving.forEach(function (m) {
 			if (m && m.reserved > 0) {
-				screen.appendChild(el('p', { class: 'fh-fd-muted fh-fd-reserved', text: m.species + ': ' + m.reservedText + ' — ' + fmt(t('moveReserved', '%d free to move without touching an order; the reserved fish stay with this group if only part of it moves.'), Math.max(0, m.qtyLive - m.reserved)) }));
+				screen.appendChild(el('p', { class: 'fh-fd-muted fh-fd-reserved', text: m.species + ': ' + m.reservedText + ' — ' + fmt(t('moveReserved', '%d not reserved: they move without touching an order or a hold; the reserved fish stay with this group if only part of it moves.'), Math.max(0, m.qtyLive - m.reserved)) }));
 			}
 		});
 		app.appendChild(screen);

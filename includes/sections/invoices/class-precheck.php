@@ -655,8 +655,8 @@ class Precheck {
 					/* translators: 1: fish alive, 2: fish on other open invoices, 3: quantity on the invoice */
 					$notes[ $index ][] = sprintf( __( '%1$d alive in this tank group, %2$d already on other open invoices, %3$d on this one.', 'fishotel-misc-plugin' ), $group['alive'], $other, $qty );
 				} elseif ( isset( $ordered[ (int) $line['stay_id'] ] ) && Tanks::for_orders( $ordered[ (int) $line['stay_id'] ] ) > 0 && $group['alive'] < $qty + $other + Tanks::for_orders( $ordered[ (int) $line['stay_id'] ] ) ) {
-					/* translators: 1: fish alive, 2: fish reserved for orders, 3: the orders, 4: quantity on the invoice */
-					$notes[ $index ][] = sprintf( __( '%1$d alive in this tank group, %2$d already reserved for orders (%3$s), %4$d on this invoice.', 'fishotel-misc-plugin' ), $group['alive'], Tanks::for_orders( $ordered[ (int) $line['stay_id'] ] ), '#' . implode( ', #', (array) $ordered[ (int) $line['stay_id'] ]['orders'] ), $qty );
+					/* translators: 1: fish alive, 2: fish reserved, 3: who for ("#1234" or "Mike S. — by hand, 3 days ago"), 4: quantity on the invoice */
+					$notes[ $index ][] = sprintf( __( '%1$d alive in this tank group, %2$d already reserved (%3$s), %4$d on this invoice.', 'fishotel-misc-plugin' ), $group['alive'], Tanks::for_orders( $ordered[ (int) $line['stay_id'] ] ), Tanks::reserved_for( $ordered[ (int) $line['stay_id'] ] ), $qty );
 				}
 			}
 		}
