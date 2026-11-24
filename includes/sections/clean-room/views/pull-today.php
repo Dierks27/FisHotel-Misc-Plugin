@@ -153,7 +153,7 @@ $fh_pick_form = static function ( $op, $order, $ref, $from, array $choices, $lab
 				<?php foreach ( $fh_lost as $fh_entry ) : ?>
 					<li class="fh-cr-pull__row">
 						<span>
-							<?php echo esc_html( Reserve::row_text( array_merge( $fh_entry, array( 'size' => (string) ( $fh_entry['size_label'] ?? '' ) ) ) ) ); ?>
+							<?php echo esc_html( Reserve::lost_row_text( $fh_entry ) ); ?>
 							· <?php echo esc_html( (string) $fh_entry['date'] ); ?>
 							· <?php echo esc_html( 'short' === (string) $fh_entry['why'] ? __( 'its tank has fewer alive — recount it, or say which tank', 'fishotel-misc-plugin' ) : __( 'its tank was not known', 'fishotel-misc-plugin' ) ); ?>
 							<a href="<?php echo esc_url( Admin_Reserve::order_url( (int) $fh_entry['order_id'] ) ); ?>"><?php esc_html_e( 'order', 'fishotel-misc-plugin' ); ?></a>

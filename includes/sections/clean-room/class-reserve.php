@@ -895,6 +895,25 @@ class Reserve {
 	}
 
 	/**
+	 * A not-found entry's row: "1 × Firefish 2-3.5" (#1234)" — the shop
+	 * title and the size, as Pull today's rows read; without a title, the
+	 * line's own name (which already carries its size: never twice).
+	 *
+	 * @param array $entry A not-found entry: qty, name, names, size_label, number.
+	 * @return string
+	 */
+	public static function lost_row_text( array $entry ) {
+		$names = isset( $entry['names'] ) && is_array( $entry['names'] ) ? array_values( $entry['names'] ) : array();
+		$title = trim( (string) ( $names[0] ?? '' ) );
+		$size  = trim( (string) ( $entry['size_label'] ?? '' ) );
+		if ( '' === $title ) {
+			$title = (string) ( $entry['name'] ?? '' );
+			$size  = '';
+		}
+		return self::row_text( array_merge( $entry, array( 'name' => $title, 'size' => $size ) ) );
+	}
+
+	/**
 	 * "Tank not known — 1 × Blue Hippo Tang (#1251)" — the fish still
 	 * here only (one whose order left is ticked on its own row instead).
 	 *

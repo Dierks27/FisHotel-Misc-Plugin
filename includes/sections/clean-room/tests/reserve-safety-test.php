@@ -421,6 +421,15 @@ check_same( 'a put-back reads as one', 'Back in the tank · order #1234 (2 fish)
 check_same( 'the chip says Shipped, the rest names the order', array( 'Shipped', 'order #1234 (2 fish)', 'Back in the tank', '' ), array( Reserve::type_label( array( 'type' => 'sold', 'qty' => 2, 'note' => 'order:1234 item:5' ) ), Reserve::event_detail( array( 'type' => 'sold', 'qty' => 2, 'note' => 'order:1234 item:5' ) ), Reserve::type_label( array( 'type' => 'sold', 'qty' => -2, 'note' => 'order:1234 item:5' ) ), Reserve::type_label( array( 'type' => 'sold', 'qty' => 1, 'note' => '' ) ) ) );
 check_contains( 'the hand "Shipped" note for several orders: when they ship', 'when they ship', Reserve::sold_note( 3, array( '1', '2', '3' ) ) );
 check_contains( '… for one: when it ships', 'when it ships', Reserve::sold_note( 2, array( '1' ) ) );
+// Found on the rehearsal site: "1 × Firefish Test - 2-3.5" 2-3.5" (#34275)" on the not-found list.
+check_same(
+	'a not-found row names the fish and its size once',
+	array( '1 × Firefish Test 2-3.5" (#34275)', '1 × Firefish Test - 2-3.5" (#34275)' ),
+	array(
+		Reserve::lost_row_text( array( 'qty' => 1, 'name' => 'Firefish Test - 2-3.5"', 'names' => array( 'Firefish Test' ), 'size_label' => '2-3.5"', 'number' => '34275' ) ),
+		Reserve::lost_row_text( array( 'qty' => 1, 'name' => 'Firefish Test - 2-3.5"', 'names' => array(), 'size_label' => '2-3.5"', 'number' => '34275' ) ),
+	)
+);
 
 function get_term_by( $field, $value, $taxonomy ) {
 	return 'pa_size' === $taxonomy && '2-3-5' === $value ? (object) array( 'name' => '2-3.5&quot;' ) : false;
