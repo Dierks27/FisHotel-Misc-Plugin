@@ -306,7 +306,7 @@ helper files exit cleanly when they are run directly (the CI runs every
   not; quick edit's 3rd-bag tick from a row's state, and the helper's
   ticked rows posted as one field.
 
-993 checks in the fifteen PHP files and 62 in the node test. Since 0.46.18
+993 checks in the fifteen PHP files and 62 in the node test. Since 0.46.19
 the storefront test expects the products list's hooks (quick edit, bulk
 edit, the view) and the order screen's own two hooks instead of the generic
 `add_meta_boxes`, and layers-test the tick instead of the *Bagging*

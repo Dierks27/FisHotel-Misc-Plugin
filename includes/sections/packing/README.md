@@ -75,7 +75,7 @@ one) — a **Packing** box, under the order's Items and above the theme's
 Shipments box on both screens (it is added on each order screen's own hook,
 `add_meta_boxes_shop_order` / `add_meta_boxes_woocommerce_page_wc-orders`,
 at priority 20 — after WooCommerce's Order data and Items, before the
-Shipments box at 30; until 0.46.18 it was added on the generic hook and
+Shipments box at 30; until 0.46.19 it was added on the generic hook and
 landed above Order data on the legacy screen): each fish line with the bag to use (bold) and its
 layers ("Medium ×2", "Large ×3 — spines"), "upsized
 from <smallest> to fill the box" or "chosen by hand", its smallest bag and
