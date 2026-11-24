@@ -235,6 +235,13 @@ body.fh-dark-admin a.row-title {
 	color: var(--fh-da-link);
 }
 
+/* "Skip to main content" / "Skip to toolbar": shown only while focused
+   from the keyboard, on WordPress's own white. */
+body.fh-dark-admin .screen-reader-shortcut:focus {
+	background: var(--fh-da-surface);
+	color: var(--fh-da-link);
+}
+
 body.fh-dark-admin a:hover,
 body.fh-dark-admin a:focus,
 body.fh-dark-admin a:active,
@@ -2144,6 +2151,33 @@ body.fh-dark-admin #variable_product_options .woocommerce-notice-invalid-variati
 	color: var(--fh-da-text);
 }
 
+/* WooCommerce writes its Variations notices ("1 variation does not have a
+   price") with two ids (#variable_product_options #message), which beat a
+   class: the same ids here, or the box stays white. */
+body.fh-dark-admin #variable_product_options #message,
+body.fh-dark-admin #variable_product_options .notice {
+	background: var(--fh-da-warning-tint);
+	border-color: var(--fh-da-warning);
+	color: var(--fh-da-text);
+}
+
+/* WooCommerce 11's variation gallery draws itself from its own colour
+   variables (--wc-vg-*): the same variables, taken from the palette. The
+   small badge and "Replace" button over a photo keep their own white /
+   black pair, which reads on any picture. */
+body.fh-dark-admin #variable_product_options .woocommerce_variation:has(.wc-variation-gallery-field) {
+	--wc-vg-surface: var(--fh-da-sunken);
+	--wc-vg-surface-hover: var(--fh-da-raised);
+	--wc-vg-border: var(--fh-da-border);
+	--wc-vg-border-dashed: var(--fh-da-border-strong);
+	--wc-vg-border-hover: var(--fh-da-border-strong);
+	--wc-vg-text-muted: var(--fh-da-text-quiet);
+	--wc-vg-text-placeholder: var(--fh-da-text-quiet);
+	--wc-vg-text-subtle: var(--fh-da-text-quiet);
+	--wc-vg-link: var(--fh-da-link);
+	--wc-vg-link-hover: var(--fh-da-link-hover);
+}
+
 body.fh-dark-admin .wc-metaboxes-wrapper .wc-metabox-sortable-placeholder,
 body.fh-dark-admin .woocommerce_variation.wc-metabox-sortable-placeholder {
 	background: transparent;
@@ -3184,6 +3218,16 @@ body.fh-dark-admin .code-snippets-hero figure {
 body.fh-dark-admin .code-snippets-toolbar a,
 body.fh-dark-admin .snippet-type-nav a {
 	color: var(--fh-da-link);
+}
+
+/* Its Pro-only snippet types are greyed on purpose (#646970, which reads on
+   white only): the quiet text colour keeps them quiet and readable. */
+body.fh-dark-admin .snippet-type-nav .snippet-type-link {
+	border-color: var(--fh-da-border);
+}
+
+body.fh-dark-admin .snippet-type-nav .snippet-type-link.pro-locked-type {
+	color: var(--fh-da-text-quiet);
 }
 
 body.fh-dark-admin .pro-chip {
