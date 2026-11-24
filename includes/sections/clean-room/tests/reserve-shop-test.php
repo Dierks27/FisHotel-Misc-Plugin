@@ -361,7 +361,80 @@ foreach ( $room['todo']['blocks'] as $block ) {
 check_contains( 'the angel held in 123 makes only that system fast — not "also in" another', '1 × Sample Angel - Small (tank 123, #1800)', $fasting );
 
 /* ------------------------------------------------------------------ */
-echo "14. The hooks and the hourly sweep\n";
+echo "14. As the screens render it\n";
+
+if ( ! function_exists( 'esc_html_e' ) ) {
+	function esc_html_e( $text, $domain = null ) {
+		echo esc_html( $text );
+	}
+}
+if ( ! function_exists( 'esc_attr_e' ) ) {
+	function esc_attr_e( $text, $domain = null ) {
+		echo esc_attr( $text );
+	}
+}
+if ( ! function_exists( 'wp_nonce_field' ) ) {
+	function wp_nonce_field( $action = -1, $name = '_wpnonce' ) {
+		echo '<input type="hidden" name="' . esc_attr( $name ) . '" value="' . esc_attr( wp_create_nonce( $action ) ) . '">';
+	}
+}
+foreach ( array( 'selected', 'checked', 'disabled' ) as $fh_word ) {
+	if ( ! function_exists( $fh_word ) ) {
+		eval( 'function ' . $fh_word . '( $a, $b = true, $echo = true ) { if ( (string) $a === (string) $b ) { echo " ' . $fh_word . '=\"' . $fh_word . '\""; } }' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- three one-line template stubs.
+	}
+}
+
+$o2000 = fh_shop_order( new WC_Order( 2000, 'processing', array( '_fishotel_shipping_date' => $tomorrow ), time() - 5 ) );
+$i2000 = $o2000->add_item( 'Blue Hippo Tang - Small', 5, $hippo_s, $small );
+fresh();
+$store->room( $today, $settings, $protocols );
+$o2000->set_status( 'shipped' );
+work( $store, 2000, true );
+
+fresh();
+$tab          = 'todo';
+$can_settings = false;
+$tables_ok    = true;
+$flash        = '';
+$list         = Front_Desk::todo_screen( $store->room( $today, $settings, $protocols )['todo'] );
+ob_start();
+include FISHOTEL_MISC_PATH . 'includes/sections/clean-room/views/todo.php';
+$html = (string) ob_get_clean();
+check_contains( 'the To do tab has the Pull today block', '<h2>Pull today</h2>', $html );
+check_contains( '… a tank with its fish and order', '2 × Test Tang Medium (#1234)', $html );
+check_contains( '… a line out of its tank reads Shipped', '<em>Shipped</em>', $html );
+check_contains( '… each row offers "Pulled from a different tank"', 'Pulled from a different tank', $html );
+check_contains( '… posting to the corrections', 'name="action" value="fishotel_cleanroom_reserve"', $html );
+check_contains( 'the not-found line', 'Could not find a tank for', $html );
+check_contains( '… with Ignore all', 'Ignore all', $html );
+check_same( 'the phone gets the same list, with its words', array( true, true ), array( '' !== (string) $list['pull']['count_text'], '' !== (string) $list['lost_text'] ) );
+
+$labels_url = 'https://example.test/labels';
+$filters    = \FisHotel\Misc\Sections\Clean_Room\Admin::filters_from_request( array() );
+$room       = $store->room( $today, $settings, $protocols );
+$tanks      = $room['tanks'];
+$todo       = $room['todo'];
+$groups     = \FisHotel\Misc\Sections\Clean_Room\Layout::group( $store->buildings(), $tanks );
+$totals     = \FisHotel\Misc\Sections\Clean_Room\Admin::totals( $tanks );
+$doses      = \FisHotel\Misc\Sections\Clean_Room\Dose::board_doses( $store->latest_doses() );
+$sizes      = \FisHotel\Misc\Sections\Clean_Room\Sizes::standard( $store, $settings )['sizes'];
+$temp       = \FisHotel\Misc\Sections\Clean_Room\Admin_Temp::board( $store, $tanks, $protocols, $today );
+$origins    = \FisHotel\Misc\Sections\Clean_Room\Admin::origins( $store, $tanks );
+$tab        = 'board';
+ob_start();
+include FISHOTEL_MISC_PATH . 'includes/sections/clean-room/views/board.php';
+$board = (string) ob_get_clean();
+check( 'the Board\'s tank card says what is reserved', 1 === preg_match( '/class="fh-cr-reserved">\d+ reserved · #\d+/', $board ) );
+
+$screen = Front_Desk::screen_from( $store, 123, $settings, $today );
+$angels = array_values( array_filter( $screen['tank']['occupants'], static function ( $o ) { return $o['reserved'] > 0; } ) );
+check( 'the phone\'s hand "Shipped" on a group with reserved fish says so', ! empty( $angels ) && false !== strpos( (string) $angels[0]['soldNote'], 'when it ships' ) );
+$before_hand = $angels ? (int) $angels[0]['qtyLive'] : 0;
+$result      = $angels ? Front_Desk::perform( 'sold', array( 'store' => $store, 'settings' => $settings, 'today' => $today, 'tank' => $store->tank_by_number( 123 ), 'base' => array( 'actor_id' => 1, 'source' => 'qr' ) ), array( 'stay_id' => $angels[0]['stayId'], 'qty' => 1 ) ) : array( 'error' => 'none' );
+check_same( '… and still allows it: the hand sale is written as before', array( false, $before_hand - 1 ), array( isset( $result['error'] ), $angels ? alive( $store, $angels[0]['stayId'] ) : -1 ) );
+
+/* ------------------------------------------------------------------ */
+echo "15. The hooks and the hourly sweep\n";
 
 $GLOBALS['fh_cron'] = array();
 function wp_next_scheduled( $hook ) {

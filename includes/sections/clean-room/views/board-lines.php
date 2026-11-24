@@ -23,6 +23,7 @@ defined( 'ABSPATH' ) || exit;
 
 use FisHotel\Misc\Sections\Clean_Room\Admin;
 use FisHotel\Misc\Sections\Clean_Room\Board_Lines;
+use FisHotel\Misc\Sections\Clean_Room\Reserve;
 
 $fh_origins = isset( $origins ) && is_array( $origins ) ? $origins : array();
 ?>
@@ -38,7 +39,15 @@ $fh_origins = isset( $origins ) && is_array( $origins ) ? $origins : array();
 		$fh_class .= Board_Lines::matches( $fh_line, $fh_species ) ? ' is-hit' : '';
 		$fh_class .= $fh_line['unknown'] ? ' is-unknown' : '';
 		$fh_class .= $fh_line['repeat'] ? ' is-repeat' : '';
-		$fh_notes  = $fh_groups > 1 || $fh_line['unknown'] || ( $fh_line['size'] && ! $fh_line['size']['standard'] ) || $fh_line['in_spa'] || '' !== $fh_sale;
+		// Reserved for open orders (Reserve): "2 reserved · #1234" — still in the tank until the order ships.
+		$fh_res_qty    = 0;
+		$fh_res_orders = array();
+		foreach ( $fh_line['stays'] as $fh_res_stay ) {
+			$fh_res_qty   += (int) ( $fh_res_stay['reserved'] ?? 0 );
+			$fh_res_orders = array_merge( $fh_res_orders, (array) ( $fh_res_stay['reserved_orders'] ?? array() ) );
+		}
+		$fh_reserved = Reserve::reserved_text( $fh_res_qty, array_values( array_unique( $fh_res_orders ) ) );
+		$fh_notes    = $fh_groups > 1 || $fh_line['unknown'] || ( $fh_line['size'] && ! $fh_line['size']['standard'] ) || $fh_line['in_spa'] || '' !== $fh_sale || '' !== $fh_reserved;
 		?>
 		<li class="<?php echo esc_attr( $fh_class ); ?>">
 			<button type="button" class="fh-cr-cardline__name" aria-expanded="false" aria-controls="<?php echo esc_attr( $fh_more ); ?>"><?php echo esc_html( $fh_line['species'] ); ?></button>
@@ -61,6 +70,9 @@ $fh_origins = isset( $origins ) && is_array( $origins ) ? $origins : array();
 					<?php if ( '' !== $fh_sale ) : ?>
 						<span class="fh-cr-tank__sale"><?php echo esc_html( $fh_sale ); ?></span>
 					<?php endif; ?>
+					<?php if ( '' !== $fh_reserved ) : ?>
+						<span class="fh-cr-reserved"><?php echo esc_html( $fh_reserved ); ?></span>
+					<?php endif; ?>
 				</span>
 			<?php endif; ?>
 			<div class="fh-cr-cardline__more" id="<?php echo esc_attr( $fh_more ); ?>" hidden>
@@ -78,6 +90,9 @@ $fh_origins = isset( $origins ) && is_array( $origins ) ? $origins : array();
 							$fh_parts[] = sprintf( __( 'cleared from %d', 'fishotel-misc-plugin' ), (int) $fh_origins[ (int) $fh_stay['id'] ] );
 						}
 						$fh_parts[] = '' !== $fh_words['date'] ? $fh_words['text'] . ' (' . $fh_words['source'] . ')' : $fh_words['text'];
+						if ( ! empty( $fh_stay['reserved'] ) ) {
+							$fh_parts[] = Reserve::reserved_text( (int) $fh_stay['reserved'], (array) ( $fh_stay['reserved_orders'] ?? array() ) );
+						}
 						?>
 						<li>
 							<?php echo esc_html( implode( ' · ', $fh_parts ) ); ?>

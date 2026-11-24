@@ -1312,6 +1312,87 @@ class Reserve_Shop {
 	}
 
 	/**
+	 * The shop's stock of some products, as Reserve::stock_warnings()
+	 * reads it: a product that counts its stock as a whole, and each
+	 * variation that counts its own (by its size).
+	 *
+	 * @param int[] $product_ids Product ids (at most 200 are read).
+	 * @return array[] product_id, size_slug, label, stock.
+	 */
+	public static function stock_rows( array $product_ids ) {
+		if ( ! function_exists( 'wc_get_product' ) ) {
+			return array();
+		}
+		$out = array();
+		foreach ( array_slice( array_values( array_unique( array_filter( array_map( 'intval', $product_ids ) ) ) ), 0, 200 ) as $id ) {
+			try {
+				$product = wc_get_product( $id );
+				if ( ! is_object( $product ) ) {
+					continue;
+				}
+				$name = method_exists( $product, 'get_name' ) ? (string) $product->get_name() : '';
+				if ( method_exists( $product, 'managing_stock' ) && $product->managing_stock() ) {
+					$out[] = array(
+						'product_id' => $id,
+						'size_slug'  => '',
+						'label'      => $name,
+						'stock'      => (int) $product->get_stock_quantity(),
+					);
+				}
+				if ( ! method_exists( $product, 'is_type' ) || ! $product->is_type( 'variable' ) ) {
+					continue;
+				}
+				foreach ( (array) $product->get_children() as $child ) {
+					$variation = wc_get_product( (int) $child );
+					if ( ! is_object( $variation ) || ! $variation->managing_stock() || (int) $variation->get_stock_managed_by_id() !== (int) $child ) {
+						continue; // Counted on the parent (above), or not at all.
+					}
+					$size = '';
+					foreach ( (array) $variation->get_attributes() as $key => $value ) {
+						if ( Sizes::matches( (string) $key ) && is_scalar( $value ) && '' !== (string) $value ) {
+							$size = (string) $value;
+							break;
+						}
+					}
+					if ( '' === $size ) {
+						continue;
+					}
+					$out[] = array(
+						'product_id' => $id,
+						'size_slug'  => Sizes::slug( $size ),
+						'label'      => $name . ' · ' . $size,
+						'stock'      => (int) $variation->get_stock_quantity(),
+					);
+				}
+			} catch ( \Throwable $e ) {
+				continue;
+			}
+		}
+		return $out;
+	}
+
+	/**
+	 * "Shop says 5 in stock, tanks have 3 free" for the products of some
+	 * groups — empty while the feature is off.
+	 *
+	 * @param object  $store    Store or stand-in.
+	 * @param array   $settings Settings.
+	 * @param array[] $stays    Groups (open ones count).
+	 * @return array[] Reserve::stock_warnings().
+	 */
+	public static function stock_warnings( $store, array $settings, array $stays ) {
+		if ( ! self::enabled( $settings ) || ! $stays ) {
+			return array();
+		}
+		try {
+			$counts = self::ensure( $store, $settings )['counts'];
+			return Reserve::stock_warnings( self::stock_rows( array_column( $stays, 'product_id' ) ), $stays, $counts );
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+	}
+
+	/**
 	 * Every group's reserved fish for other sections (the Invoices picker,
 	 * the Requests job): stay id => { qty, orders }. Empty while the
 	 * feature (or the Clean Room) is off.

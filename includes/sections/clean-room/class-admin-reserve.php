@@ -34,6 +34,24 @@ class Admin_Reserve {
 	}
 
 	/**
+	 * An order's edit screen (the orders tables' when they are in use).
+	 *
+	 * @param int $order_id Order id.
+	 * @return string
+	 */
+	public static function order_url( $order_id ) {
+		$util = '\\Automattic\\WooCommerce\\Utilities\\OrderUtil';
+		if ( class_exists( $util ) && method_exists( $util, 'get_order_admin_edit_url' ) ) {
+			try {
+				return (string) $util::get_order_admin_edit_url( (int) $order_id );
+			} catch ( \Throwable $e ) {
+				unset( $e );
+			}
+		}
+		return admin_url( 'post.php?post=' . (int) $order_id . '&action=edit' );
+	}
+
+	/**
 	 * One correction, then back to the To do tab with what was done.
 	 */
 	public static function admin_post() {

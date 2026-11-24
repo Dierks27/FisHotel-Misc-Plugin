@@ -1730,7 +1730,9 @@
 			(o.status === 'in_qt' || o.checkinUnknown) && dates.arrived ? el('span', { text: dates.arrived }) : null,
 			o.status === 'cleared' && o.clearedUnknown ? el('span', { text: dates.cleared }) : null,
 			!o.saleReady ? el('span', { text: sale.short }) : null,
-			o.qtyArrived !== o.qtyLive ? el('span', { text: o.qtyLive + '/' + o.qtyArrived }) : null
+			o.qtyArrived !== o.qtyLive ? el('span', { text: o.qtyLive + '/' + o.qtyArrived }) : null,
+			// Reserved for open orders: "2 reserved · #1234" — still in the tank until the order ships.
+			o.reservedText ? el('span', { class: 'fh-fd-reserved', text: o.reservedText }) : null
 		];
 		var node = el(tag, attrs, [
 			el('span', { class: 'fh-fd-occ__qty' }, [String(o.qtyLive), el('small', { text: t('live', 'live') })]),
@@ -2424,6 +2426,10 @@
 			});
 			screen.appendChild(el('div', { class: 'fh-fd-field' }, [el('label', { class: 'fh-fd-label', text: t('reason', 'Reason (optional)') }), chips]));
 		}
+		if (p.act === 'sold' && o && o.soldNote) {
+			// Some of these are reserved for an order: they come off by themselves when it ships (no double count).
+			screen.appendChild(el('p', { class: 'fh-fd-note fh-fd-reserved', text: o.soldNote }));
+		}
 		app.appendChild(screen);
 		var cls = p.act === 'loss' ? 'fh-fd-btn--danger' : (p.act === 'sold' ? 'fh-fd-btn--ok' : 'fh-fd-btn--primary');
 		bar([
@@ -2470,6 +2476,12 @@
 		if (moveClears({ clean: true }, moving)) {
 			screen.appendChild(el('p', { class: 'fh-fd-muted fh-fd-move-hint', text: t('moveClearsHint', 'Still in quarantine: a move into the Clean Room — or into a clean temporary tank — clears the group today.') }));
 		}
+		// Fish reserved for an order: the whole group takes them along; a part moved off leaves them here.
+		moving.forEach(function (m) {
+			if (m && m.reserved > 0) {
+				screen.appendChild(el('p', { class: 'fh-fd-muted fh-fd-reserved', text: m.species + ': ' + m.reservedText + ' — ' + fmt(t('moveReserved', '%d free to move without touching an order; the reserved fish stay with this group if only part of it moves.'), Math.max(0, m.qtyLive - m.reserved)) }));
+			}
+		});
 		app.appendChild(screen);
 		renderGrid(app, function (dest) {
 			var fields = { act: 'move', tank: tk.number, to_tank: dest.number, reason: f.reason || '', via: 'qr' };
@@ -4009,6 +4021,9 @@
 				// A fish ships today and the site does not know its tank: no clean system is fed.
 				app.appendChild(el('p', { class: 'fh-fd-fast fh-fd-fast--all', text: [list.fast.text, list.fast.hint].filter(Boolean).join(' ') }));
 			}
+			if (list.pull) {
+				app.appendChild(pullBlock(list.pull, list.lost_text || ''));
+			}
 			(list.blocks || []).forEach(function (block) {
 				app.appendChild(todoBlock(block, tick));
 			});
@@ -4031,6 +4046,51 @@
 				}).catch(sayFailed).then(function () { busy(false); });
 			} } })
 		]));
+	}
+
+	/*
+	 * Pull today: which tank each fish of today's boxes comes out of —
+	 * building, tank, fish, order. A list to work from: nothing to tick
+	 * here (a fish comes off its tank by itself once its order ships,
+	 * and then reads Shipped).
+	 */
+	function pullBlock(pull, lostText) {
+		var node = el('div', { class: 'fh-fd-todo-block fh-fd-pull' }, [
+			el('div', { class: 'fh-fd-todo-block__head' }, [
+				el('span', { class: 'fh-fd-todo-block__title', text: t('pullToday', 'Pull today') }),
+				el('small', { text: pull.count_text || '' })
+			])
+		]);
+		(pull.buildings || []).forEach(function (building) {
+			if (building.label) {
+				node.appendChild(el('p', { class: 'fh-fd-pull__building', text: building.label }));
+			}
+			(building.tanks || []).forEach(function (tk) {
+				node.appendChild(el('div', { class: 'fh-fd-pull__tank' }, [
+					el('strong', { text: fmt(t('tankCap', 'Tank %d'), tk.number) }),
+					el('div', {}, (tk.rows || []).map(function (row) {
+						return el('div', { class: 'fh-fd-pull__row' + (row.shipped ? ' is-done' : '') }, [
+							el('span', { text: (row.shipped ? '✓ ' : '') + row.text }),
+							row.shipped ? el('small', { text: t('shippedWord', 'Shipped') }) : null
+						]);
+					}))
+				]));
+			});
+		});
+		if (pull.unknown_text) {
+			node.appendChild(el('p', { class: 'fh-fd-fast fh-fd-fast--all', text: pull.unknown_text }));
+			node.appendChild(el('p', { class: 'fh-fd-muted', text: pull.hint || '' }));
+		}
+		if (pull.loose_text) {
+			node.appendChild(el('p', { class: 'fh-fd-muted', text: pull.loose_text }));
+		}
+		if (!(pull.buildings || []).length && !pull.unknown_text && !pull.loose_text) {
+			node.appendChild(el('p', { class: 'fh-fd-muted', text: t('pullNothing', 'No fish ship today.') }));
+		}
+		if (lostText) {
+			node.appendChild(el('p', { class: 'fh-fd-warn' }, [lostText + ' — ', el('a', { href: cfg.boardUrl ? cfg.boardUrl + (cfg.boardUrl.indexOf('?') >= 0 ? '&' : '?') + 'tab=todo' : '#', text: t('fixOnTodo', 'on the To do tab') })]));
+		}
+		return node;
 	}
 
 	function todoBlock(block, tick) {

@@ -144,6 +144,7 @@ class Search {
 		}
 
 		$reserved = $store->stay_reservations( array_column( $groups, 'stay_id' ), $invoice_id );
+		$ordered  = method_exists( $tanks, 'reserved' ) ? $tanks->reserved( array_column( $groups, 'stay_id' ) ) : array(); // Reserved for customers' open orders.
 		$items    = array();
 
 		foreach ( $groups as $group ) {
@@ -181,6 +182,11 @@ class Search {
 				/* translators: %d: fish */
 				$detail[] = sprintf( __( '%d on other open invoices', 'fishotel-misc-plugin' ), $on_other );
 			}
+			$for_orders = isset( $ordered[ $group['stay_id'] ] ) ? (int) $ordered[ $group['stay_id'] ]['qty'] : 0;
+			if ( $for_orders > 0 ) {
+				/* translators: 1: fish, 2: order numbers */
+				$detail[] = sprintf( __( '%1$d reserved for orders (%2$s)', 'fishotel-misc-plugin' ), $for_orders, '#' . implode( ', #', (array) $ordered[ $group['stay_id'] ]['orders'] ) );
+			}
 
 			$items[] = array(
 				'source'       => 'tank',
@@ -197,6 +203,7 @@ class Search {
 				'size_label'   => $group['size_label'],
 				'alive'        => $group['alive'],
 				'reserved'     => $on_other,
+				'free'         => max( 0, $group['alive'] - $for_orders ), // Alive and not reserved for an order.
 			);
 		}
 

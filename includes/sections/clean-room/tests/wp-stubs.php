@@ -349,6 +349,7 @@ require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-admin-impo
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-admin-order-import.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-admin-temp.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-admin-no-product.php';
+require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-admin-reserve.php';
 require_once __DIR__ . '/fake-store.php';
 
 /**

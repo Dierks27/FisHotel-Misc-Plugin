@@ -236,4 +236,30 @@ check_same( 'the stock warning — only when the shop and the tanks differ', arr
 check_same( 'the not-found line', 'Could not find a tank for 4 fish that shipped', Reserve::lost_text( 4 ) );
 check_contains( 'the tick in Settings says what it does', 'reserved in the tank', Reserve::setting_text()['text'] );
 
+/* ------------------------------------------------------------------ */
+echo "9. The shop's stock against the free fish (a warning only)\n";
+
+$stock = array(
+	array( 'product_id' => 501, 'size_slug' => 'medium', 'label' => 'Test Tang · Medium', 'stock' => 5 ),
+	array( 'product_id' => 601, 'size_slug' => '', 'label' => 'Sample Angel', 'stock' => 1 ),
+	array( 'product_id' => 777, 'size_slug' => '', 'label' => 'Demo Wrasse', 'stock' => null ),
+);
+$groups = array(
+	rstay( 1, 'Test Tang', array( 'product_id' => 501, 'size_slug' => 'medium', 'qty_live' => 3 ) ),
+	rstay( 2, 'Test Tang', array( 'product_id' => 501, 'size_slug' => 'medium', 'qty_live' => 2 ) ),
+	rstay( 3, 'Test Tang', array( 'product_id' => 501, 'size_slug' => 'large', 'qty_live' => 4 ) ),
+	rstay( 4, 'Sample Angel', array( 'product_id' => 601, 'qty_live' => 1 ) ),
+	rstay( 5, 'Demo Wrasse', array( 'product_id' => 777, 'qty_live' => 2 ) ),
+);
+$warn = Reserve::stock_warnings( $stock, $groups, array( 1 => array( 'qty' => 2, 'orders' => array( '1234' ) ) ) );
+check_same( 'the medium tangs: 5 in the shop, 3 + 2 alive less 2 reserved = 3 free — said; the angel agrees; an untracked product is never compared', array( array( 501, 3, 'Shop says 5 in stock, tanks have 3 free' ) ), array_map( static function ( $w ) { return array( $w['product_id'], $w['free'], $w['text'] ); }, $warn ) );
+
+/* ------------------------------------------------------------------ */
+echo "10. The pull list's words\n";
+
+$words = Reserve::pull_words( $pull );
+check_same( 'each row, the count, the unknown line with its hint, the inverts', array( '2 × Test Tang Medium (#1234)', '6 of 7 fish still to pull', 'Tank not known — 1 × Blue Hippo Tang (#1251)', 'Not in a tank on the site: 2 × Test Snail (#1251)' ), array( $words['buildings'][0]['tanks'][0]['rows'][0]['text'], $words['count_text'], $words['unknown_text'], $words['loose_text'] ) );
+check_contains( '… the hint is the feeding rule\'s: correct a group already there before adding one', 'do not add it again', $words['hint'] );
+check_same( 'alternatives: the other clean groups of the fish, the one that ships first first', array( 2 ), array_column( Reserve::alternatives( $tang_line, $clean, array( 1 ) ), 'id' ) );
+
 fh_finish();

@@ -621,6 +621,7 @@ class Precheck {
 			}
 		}
 		$reserved = $stays ? $this->store->stay_reservations( $stays, (int) ( isset( $invoice['id'] ) ? $invoice['id'] : 0 ) ) : array();
+		$ordered  = $stays && method_exists( $this->tanks, 'reserved' ) ? $this->tanks->reserved( $stays ) : array(); // Reserved for customers' open orders.
 
 		foreach ( array_values( $lines ) as $index => $line ) {
 			if ( 'fish' !== $line['kind'] ) {
@@ -653,6 +654,9 @@ class Precheck {
 				} elseif ( $group['alive'] < $qty + $other ) {
 					/* translators: 1: fish alive, 2: fish on other open invoices, 3: quantity on the invoice */
 					$notes[ $index ][] = sprintf( __( '%1$d alive in this tank group, %2$d already on other open invoices, %3$d on this one.', 'fishotel-misc-plugin' ), $group['alive'], $other, $qty );
+				} elseif ( isset( $ordered[ (int) $line['stay_id'] ] ) && $group['alive'] < $qty + $other + (int) $ordered[ (int) $line['stay_id'] ]['qty'] ) {
+					/* translators: 1: fish alive, 2: fish reserved for orders, 3: the orders, 4: quantity on the invoice */
+					$notes[ $index ][] = sprintf( __( '%1$d alive in this tank group, %2$d already reserved for orders (%3$s), %4$d on this invoice.', 'fishotel-misc-plugin' ), $group['alive'], (int) $ordered[ (int) $line['stay_id'] ]['qty'], '#' . implode( ', #', (array) $ordered[ (int) $line['stay_id'] ]['orders'] ), $qty );
 				}
 			}
 		}

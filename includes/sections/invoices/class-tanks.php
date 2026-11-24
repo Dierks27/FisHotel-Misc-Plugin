@@ -213,6 +213,27 @@ class Tanks {
 	}
 
 	/**
+	 * The fish of each tank group already reserved for a customer's open
+	 * order (the Clean Room's Reserved → Pull today → Shipped) — a paid
+	 * invoice is such an order, so it counts here and no longer as an
+	 * open invoice. Empty while that is switched off.
+	 *
+	 * @param int[] $stay_ids Tank group ids.
+	 * @return array<int, array{qty: int, orders: string[]}>
+	 */
+	public function reserved( array $stay_ids ) {
+		$class = self::CLEAN_ROOM . 'Reserve_Shop';
+		if ( ! $stay_ids || ! $this->context() || ! class_exists( $class, false ) || ! method_exists( $class, 'counts_for' ) ) {
+			return array();
+		}
+		try {
+			return (array) $class::counts_for( array_map( 'intval', $stay_ids ) );
+		} catch ( \Throwable $e ) {
+			return array();
+		}
+	}
+
+	/**
 	 * Species-list rows whose name (or scientific name) starts a word
 	 * with the search text.
 	 *

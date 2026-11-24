@@ -258,6 +258,13 @@ class Front_Desk {
 			'lost'        => __( 'Lost', 'fishotel-misc-plugin' ),
 			'lostOne'     => __( '−1 lost', 'fishotel-misc-plugin' ),
 			'shipped'     => __( 'Shipped', 'fishotel-misc-plugin' ),
+			// Reserved → Pull today → Shipped (the day's list).
+			'pullToday'   => __( 'Pull today', 'fishotel-misc-plugin' ),
+			'tankCap'     => __( 'Tank %d', 'fishotel-misc-plugin' ),
+			'shippedWord' => __( 'Shipped', 'fishotel-misc-plugin' ),
+			'pullNothing' => __( 'No fish ship today.', 'fishotel-misc-plugin' ),
+			'fixOnTodo'   => __( 'on the To do tab', 'fishotel-misc-plugin' ),
+			'moveReserved' => __( '%d free to move without touching an order; the reserved fish stay with this group if only part of it moves.', 'fishotel-misc-plugin' ),
 			'cleared'     => __( 'Cleared', 'fishotel-misc-plugin' ),
 			'note'        => __( 'Note', 'fishotel-misc-plugin' ),
 			'mic'         => __( 'Mic', 'fishotel-misc-plugin' ),
@@ -842,6 +849,10 @@ class Front_Desk {
 			$list['flags'][ $f ]['ago'] = $ago( $flag['logged_at'] );
 		}
 		$list['text'] = Todo::headline( $list );
+		if ( ! empty( $list['pull'] ) && is_array( $list['pull'] ) ) {
+			$list['pull'] = Reserve::pull_words( $list['pull'] ); // The phone's words, worked out once here.
+		}
+		$list['lost_text'] = ! empty( $list['lost'] ) ? Reserve::lost_text( Reserve_Shop::lost_fish( (array) $list['lost'] ) ) : '';
 		return $list;
 	}
 

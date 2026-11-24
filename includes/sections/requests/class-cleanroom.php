@@ -323,15 +323,18 @@ class Cleanroom {
 		if ( ! $this->can( 'stays_for_line' ) ) {
 			return array();
 		}
-		$out = array();
-		foreach ( (array) $this->store->stays_for_line( (int) $line_id, $this->today, $this->settings ) as $stay ) {
+		$out      = array();
+		$stays    = (array) $this->store->stays_for_line( (int) $line_id, $this->today, $this->settings );
+		$reserved = $this->reserved( array_column( array_filter( $stays, 'is_array' ), 'id' ) );
+		foreach ( $stays as $stay ) {
 			if ( ! is_array( $stay ) ) {
 				continue;
 			}
 			$status = (string) ( $stay['status'] ?? ( $stay['stored_status'] ?? '' ) );
 			$out[]  = array(
 				'id'         => (int) ( $stay['id'] ?? 0 ),
-				'qty_live'   => (int) ( $stay['qty_live'] ?? 0 ),
+				// The fish free to offer: alive, less the ones a customer's open order already holds.
+				'qty_live'   => max( 0, (int) ( $stay['qty_live'] ?? 0 ) - (int) ( $reserved[ (int) ( $stay['id'] ?? 0 ) ]['qty'] ?? 0 ) ),
 				'sale_ready' => ! empty( $stay['sale_ready'] ),
 				'open'       => 'closed' !== $status,
 				'product_id' => ! empty( $stay['product_id'] ) ? (int) $stay['product_id'] : null,
@@ -339,6 +342,26 @@ class Cleanroom {
 			);
 		}
 		return $out;
+	}
+
+	/**
+	 * The fish of some tank groups reserved for customers' open orders (the
+	 * Clean Room's Reserved → Pull today → Shipped) — empty while that is
+	 * off, or when the Clean Room is older.
+	 *
+	 * @param int[] $stay_ids Stay ids.
+	 * @return array<int, array{qty: int}>
+	 */
+	private function reserved( array $stay_ids ) {
+		$class = self::NS . 'Reserve_Shop';
+		if ( ! $stay_ids || ! class_exists( $class, false ) || ! method_exists( $class, 'counts_for' ) ) {
+			return array();
+		}
+		try {
+			return (array) call_user_func( array( $class, 'counts_for' ), array_map( 'intval', $stay_ids ) );
+		} catch ( \Throwable $e ) {
+			return array();
+		}
 	}
 
 	/**

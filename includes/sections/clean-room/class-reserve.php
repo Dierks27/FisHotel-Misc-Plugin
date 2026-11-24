@@ -791,6 +791,36 @@ class Reserve {
 	}
 
 	/**
+	 * The pull list with its words: each row's ("2 × Yellow Tang M
+	 * (#1234)"), the count ("6 of 8 fish still to pull"), the unknown
+	 * line and its hint, the inverts in no tank.
+	 *
+	 * @param array $pull pull().
+	 * @return array
+	 */
+	public static function pull_words( array $pull ) {
+		foreach ( (array) ( $pull['buildings'] ?? array() ) as $b => $building ) {
+			foreach ( (array) ( $building['tanks'] ?? array() ) as $t => $tank ) {
+				foreach ( (array) ( $tank['rows'] ?? array() ) as $r => $row ) {
+					$pull['buildings'][ $b ]['tanks'][ $t ]['rows'][ $r ]['text'] = self::row_text( $row );
+				}
+			}
+		}
+		$fish                 = (int) ( $pull['fish'] ?? 0 );
+		$left                 = (int) ( $pull['left'] ?? 0 );
+		$pull['count_text']   = $fish > 0 ? ( $left > 0 ? sprintf( /* translators: 1: fish still in their tanks, 2: every fish */ _n( '%1$d of %2$d fish still to pull', '%1$d of %2$d fish still to pull', $fish, 'fishotel-misc-plugin' ), $left, $fish ) : __( 'All shipped', 'fishotel-misc-plugin' ) ) : '';
+		$pull['unknown_text'] = self::unknown_text( (array) ( $pull['unknown'] ?? array() ) );
+		$pull['hint']         = '' !== $pull['unknown_text'] ? self::unknown_hint() : '';
+		$loose                = array();
+		foreach ( (array) ( $pull['loose'] ?? array() ) as $row ) {
+			$loose[] = self::row_text( $row );
+		}
+		/* translators: %s: inverts, e.g. "2 × Test Snail (#1251)" */
+		$pull['loose_text'] = $loose ? sprintf( __( 'Not in a tank on the site: %s', 'fishotel-misc-plugin' ), implode( ', ', $loose ) ) : '';
+		return $pull;
+	}
+
+	/**
 	 * What to do about a fish whose tank is not known — the feeding
 	 * rule's own hint (correct a group already there under another name
 	 * before adding one).
@@ -887,6 +917,47 @@ class Reserve {
 		}
 		/* translators: 1: shop stock, 2: free fish in the tanks */
 		return sprintf( __( 'Shop says %1$d in stock, tanks have %2$d free', 'fishotel-misc-plugin' ), (int) $stock, max( 0, (int) $free ) );
+	}
+
+	/**
+	 * Where the shop's stock and the tanks disagree — a warning only, the
+	 * shop's stock is never written: each stock row (a product counted as a
+	 * whole, or one size of it) against the fish alive in its open groups
+	 * that no open order holds.
+	 *
+	 * @param array[] $stock  Rows: product_id, size_slug ('' = the product as a whole), label, stock (null = not tracked).
+	 * @param array[] $stays  Groups (id, product_id, size_slug, qty_live, status).
+	 * @param array   $counts Reserved: stay id => { qty }.
+	 * @return array[] The rows that differ, each with free and text.
+	 */
+	public static function stock_warnings( array $stock, array $stays, array $counts ) {
+		$out = array();
+		foreach ( $stock as $row ) {
+			if ( ! is_array( $row ) || null === ( $row['stock'] ?? null ) ) {
+				continue;
+			}
+			$free = 0;
+			foreach ( $stays as $stay ) {
+				if ( ! is_array( $stay ) || 'closed' === (string) ( $stay['status'] ?? '' ) || (int) ( $stay['product_id'] ?? 0 ) !== (int) $row['product_id'] ) {
+					continue;
+				}
+				if ( '' !== (string) ( $row['size_slug'] ?? '' ) && Sizes::slug( (string) ( $stay['size_slug'] ?? '' ) ) !== Sizes::slug( (string) $row['size_slug'] ) ) {
+					continue;
+				}
+				$free += self::free( $stay, $counts );
+			}
+			$text = self::stock_text( (int) $row['stock'], $free );
+			if ( '' !== $text ) {
+				$out[] = array_merge(
+					$row,
+					array(
+						'free' => $free,
+						'text' => $text,
+					)
+				);
+			}
+		}
+		return $out;
 	}
 
 	/**
