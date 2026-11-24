@@ -389,6 +389,31 @@ $o4300->set_status( 'shipped' );
 work( $store, 4300, true );
 check_same( 'shipped: one out of each', array( array( 1 ), array( 1 ) ), array( array_column( array_values( array_filter( sold( $store, $first ), static function ( $e ) { return 0 === strpos( $e[1], 'order:4300 ' ); } ) ), 0 ), array_column( array_values( array_filter( sold( $store, $other ), static function ( $e ) { return 0 === strpos( $e[1], 'order:4300 ' ); } ) ), 0 ) ) );
 
+// On Pull today, each row of a line split over two tanks offers the other one (found on the rehearsal
+// site: both rows said "No other clean tank holds this fish").
+$o4310 = fh_shop_order( new WC_Order( 4310, 'processing', array( '_fishotel_shipping_date' => $tomorrow ), time() + 91 ) );
+$i4310 = $o4310->add_item( 'Test Wrasse - Small', 2, $wrasse_s, $small );
+read_room( $store );
+$first = key( held( $i4310 ) );
+$other = $first === $s233 ? $s232 : $s233;
+Reserve_Shop::act( $store, $settings, array( 'op' => 'pick', 'order_id' => 4310, 'ref' => 'i:' . $i4310->get_id(), 'stay_id' => $other, 'from' => $first, 'qty' => 1 ) );
+$room   = read_room( $store );
+$offers = array();
+foreach ( Front_Desk::todo_screen( $room['todo'] )['pull']['buildings'] as $building ) {
+	foreach ( $building['tanks'] as $ptank ) {
+		foreach ( $ptank['rows'] as $row ) {
+			if ( 4310 === (int) $row['order_id'] ) {
+				$offers[ (int) $row['stay_id'] ] = array_column( $row['others'], 'stay_id' );
+			}
+		}
+	}
+}
+check_same( 'a split line: each row offers the other tank of the two', array( true, true ), array( in_array( $other, $offers[ $first ] ?? array(), true ), in_array( $first, $offers[ $other ] ?? array(), true ) ) );
+Reserve_Shop::act( $store, $settings, array( 'op' => 'pick', 'order_id' => 4310, 'ref' => 'i:' . $i4310->get_id(), 'stay_id' => $other, 'from' => $first, 'qty' => 0 ) );
+check_same( '… and picking it joins the two rows', array( $other => 2 ), held( $i4310 ) );
+$o4310->set_status( 'cancelled' );
+work( $store, 4310, true );
+
 /* ------------------------------------------------------------------ */
 echo "13. The words\n";
 

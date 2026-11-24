@@ -1787,7 +1787,7 @@ class Reserve_Shop {
 			foreach ( $building['tanks'] as $t => $tank ) {
 				foreach ( $tank['rows'] as $r => $row ) {
 					$line = $by[ $row['order_id'] . '|' . $row['ref'] ] ?? array();
-					$pull['buildings'][ $b ]['tanks'][ $t ]['rows'][ $r ]['others'] = self::choices( Reserve::alternatives( $line, $clean, array_keys( Reserve::held( $line['held'] ?? array() ) ) ) );
+					$pull['buildings'][ $b ]['tanks'][ $t ]['rows'][ $r ]['others'] = self::choices( Reserve::alternatives( $line, $clean, array( (int) $row['stay_id'] ) ) ); // A line split over two tanks: each row offers the other.
 					$pull['buildings'][ $b ]['tanks'][ $t ]['rows'][ $r ]['line_qty'] = (int) ( $line['qty'] ?? 0 );
 					$pull['buildings'][ $b ]['tanks'][ $t ]['rows'][ $r ]['left']     = ! empty( $line['left'] );
 				}
