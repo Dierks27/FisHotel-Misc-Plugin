@@ -185,6 +185,7 @@ class Sticker_Giveaway {
 		require_once self::path() . 'class-reorder.php';
 		require_once self::path() . 'class-cart.php';
 		require_once self::path() . 'class-letter.php';
+		require_once dirname( __DIR__, 2 ) . '/class-shiptracker-letters.php';
 	}
 
 	/**

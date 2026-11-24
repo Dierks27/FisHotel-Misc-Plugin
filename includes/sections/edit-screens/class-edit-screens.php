@@ -29,7 +29,9 @@
  *   - class-product-screen.php  the area under the title, the names, the
  *                               product data tabs, the kind on the page.
  *   - class-order-screen.php    an order folded into a combined box: the
- *                               boxes that only point there, closed.
+ *                               boxes that only point there, closed;
+ *                               ShipTracker's letter box open on an order
+ *                               with a sticker letter, closed on others.
  *
  * Nothing runs outside wp-admin, and nothing at all for a visitor.
  *
@@ -81,6 +83,7 @@ class Edit_Screens {
 	 */
 	public static function load() {
 		require_once dirname( __DIR__, 2 ) . '/class-live-categories.php';
+		require_once dirname( __DIR__, 2 ) . '/class-shiptracker-letters.php';
 		require_once __DIR__ . '/class-layouts.php';
 		require_once __DIR__ . '/class-switcher.php';
 		require_once __DIR__ . '/class-user-store.php';

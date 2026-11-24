@@ -375,7 +375,8 @@ too), worked out from the order's own lines:
   (`woocommerce_email_before_order_table`), for that order only;
 - a **Sticker letter** column in the admin orders list, legacy and HPOS
   screens: "Mail sticker (2)" in WooCommerce's own yellow pill while the
-  order is open, a quiet "By letter (2)" once it is completed (or
+  order is open, a quiet "Mailed (2)" once ShipTracker says the letter
+  was mailed (below), a quiet "By letter (2)" once it is completed (or
   cancelled, refunded, failed). The column is given a width of its own
   (`Letter::column_css()`), or WooCommerce's pill cuts the badge to
   "Mail sticker…" and the number is lost;
@@ -385,7 +386,23 @@ too), worked out from the order's own lines:
   completed, cancelled, refunded, failed, pending payment). One order
   links to that order, more to the orders list. At most 50 orders are
   looked at, oldest first; the line names as many as fit and says
-  "and N more".
+  "and N more". An order whose letter ShipTracker marked mailed leaves
+  the line (below).
+
+**Mailed, from ShipTracker 1.10.0.** ShipTracker's *USPS Letter
+Tracking* box makes the letter's barcode and has *Mark mailed* (a first
+USPS scan marks it too). A letter never changes the order's status, so
+an EA-only order stays open after the letter is mailed — and without this
+it would stay on the Today line until the order is completed. So the
+line drops an order once every letter on it still standing is mailed,
+and its badge turns into the quiet "Mailed (N)". A label printed but not
+mailed, a regenerated barcode, or a *Resend* not mailed yet is still "to
+mail"; every letter voided is too. ShipTracker is asked through its
+public `FST_Letters::get_by_order()` only
+(`includes/class-shiptracker-letters.php`, read only, once per order
+per request), and only once its database is at 1.5.0 (the option
+`fst_db_version`); with ShipTracker 1.9.x nothing is ever "mailed" and
+the line works as before.
 
 The order's fee line carries hidden meta `_fh_sticker_mail_fee`. On the
 pay page of a failed order (`guard_order()`), when its sticker lines are
@@ -547,7 +564,9 @@ php includes/sections/sticker-giveaway/tests/letter-test.php
   has it, a variation by its parent), the cart's $0.99 lines and one
   $1.00 fee taxed as the sticker, the message, a fish removed and added
   again, the placed order's meta and note, the email lines, the orders-list
-  column and the Today line; then the edge cases the reviews found: an
+  column and the Today line; ShipTracker 1.10.0 marking the letter
+  mailed (the badge, the line; printed but not mailed, resent, voided,
+  its database not upgraded); then the edge cases the reviews found: an
   add-on priced at 0, prices entered with tax, joining an open fish or
   EA-only order (in the cart, at checkout, when paid), and refunds.
   `cart-stock-test` section 7: the fee, the flag and the fresh note when

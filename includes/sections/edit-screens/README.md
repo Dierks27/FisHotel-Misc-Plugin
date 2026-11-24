@@ -110,8 +110,10 @@ order's life a box is used:
   *Downloadable product permissions* **hidden** — as WooCommerce hides it
   for a person with no layout of their own (a stored list, even an empty
   one, would show it open on every order); Screen Options brings it back.
-- **Side:** Order actions; FisHotel Pickup (ShipTracker — placed by its id
-  `fst-pickup` only) / Fulfillment (combined box); Weather; EA Packing Slip /
+- **Side:** Order actions; **USPS Letter Tracking** (ShipTracker 1.10.0 —
+  placed by its id `fst-letter` only; see below); FisHotel Pickup
+  (ShipTracker — placed by its id `fst-pickup` only) / Fulfillment
+  (combined box); Weather; EA Packing Slip /
   Medication terms; Order notes; Combine Orders; closed: Date Change
   Override, Order attribution, Customer history.
 - **An order folded into a combined box:** Packing, Weather, EA Packing Slip
@@ -119,6 +121,28 @@ order's life a box is used:
   screen is Order data, Items, Shipments. (The theme's answer,
   `fishotel_order_get_fulfillment()`, else the order meta
   `_fishotel_fulfilled_by_order`.)
+
+- **ShipTracker's USPS Letter Tracking box** (`fst-letter`, ShipTracker
+  1.10.0 — the letter's barcode, Print label, Mark mailed, Void &
+  regenerate, Resend): right under Order actions, where the sticker
+  letter's work is. It is **open** on an order with a sticker letter —
+  the Sticker giveaway's flag `_fishotel_sticker_mail_letter`, or a
+  letter ShipTracker already made on it (one made by hand, without the
+  flag) — and **closed** (its title only) on every other order, the way
+  ShipTracker itself puts it high on a sticker order and low on others.
+  ShipTracker is read through its public `FST_Letters::get_by_order()`
+  only (`includes/class-shiptracker-letters.php`), never its table, and
+  not before its database is at 1.5.0; with ShipTracker 1.9.x the flag
+  alone decides, and the box is not there at all.
+  A person tidied by Misc 0.46.19 / 0.46.20 has a stored layout that does
+  not name the box — WordPress would draw it by ShipTracker's own
+  priority, above Order actions on a sticker order. For them it is placed
+  right under Order actions as the screen is drawn
+  (`get_user_option_meta-box-order_<screen>`, `Layouts::with_letter()`):
+  nothing is written, the layout version stays 1, so nobody is tidied
+  again and their own drags are kept; once they drag a box, WordPress
+  saves the order as drawn. A person who put their old layout back, or
+  dragged the letter box somewhere themselves, is left as they are.
 
 Boxes that only appear on some orders still only appear then. A box this
 section does not name (PayPal's, if it adds one) lands where its owner put
@@ -181,7 +205,7 @@ edit-screens/
 ├── class-kinds.php          PURE: the kind of a product; which boxes each kind shows
 ├── class-essentials.php     the Fish essentials box: drawn and saved
 ├── class-product-screen.php the area under the title, the names, the tabs, the kind on the page
-├── class-order-screen.php   a folded order's boxes, closed
+├── class-order-screen.php   a folded order's boxes, closed; the letter box open or closed, and placed
 ├── css/edit-screens.css     the box, the kinds, the chips (plain admin colours)
 ├── js/edit-screens.js       the boxes under the title; the kind; the name; the Shipping class
 └── tests/                   headless — see below
@@ -205,7 +229,10 @@ node includes/sections/edit-screens/tests/edit-screens.test.js
   kinds (fish, invert, Livestock outside the fish categories, unticked,
   medication, food, "Who ships it", invoice, dry, none; the Batch filter) and
   which boxes each shows; the scientific name (which is shown, when they
-  differ, what a save writes, emptied, nonsense); the titles and the tabs.
+  differ, what a save writes, emptied, nonsense); the titles and the tabs;
+  ShipTracker's letter box (placed under Order actions in a layout that
+  does not name it, else first on the side; left where a layout already
+  has it; open / closed classes; who counts as tidied).
 - **screens-test.php** — the hooks (none outside wp-admin; on; off = the
   give-back only; the priorities); the switch on each screen, the notice and
   its links, Screen Options, every link refused without its own nonce, for
@@ -222,7 +249,11 @@ node includes/sections/edit-screens/tests/edit-screens.test.js
   more than the name (what counts, the first line offered, kept on save,
   its box left on the screen, the line that says so); one read for the
   kind categories; a category ticked live in Product checks; the HPOS
-  orders list (no notice, no links) against an order; a folded order; and in the source: no front-end hook, no REST route, no cron, no
+  orders list (no notice, no links) against an order; a folded order;
+  the letter box on an order (the flag; a letter ShipTracker made; all
+  voided; ShipTracker's database not at 1.5.0; open / closed as drawn;
+  placed for a person tidied on version 1, nothing written; not for one
+  who put their old layout back, nor one never tidied); and in the source: no front-end hook, no REST route, no cron, no
   option, user meta written by the user store only, no box removed.
 - **edit-screens.test.js** — the kind from what is ticked (the PHP rule's
   cases), the class swapped on `<body>`, the boxes the area takes, what the
@@ -262,6 +293,10 @@ node includes/sections/edit-screens/tests/edit-screens.test.js
    *Downloadable product permissions* not shown (Screen Options lists it,
    unticked). With HPOS on: the orders list has no "This screen was tidied"
    notice; an order has it.
+5b. With ShipTracker 1.10.0: an EA-only order with a sticker letter has
+   *USPS Letter Tracking* open right under Order actions; a fish order
+   has it closed in the same place. A person tidied before this version
+   sees the same, and their own drags are still there.
 6. Switch the section off, open a product and an order: your old screens.
    Switch it on: tidied once more.
 7. On the live site, check Screen Options on a product and an order: where
