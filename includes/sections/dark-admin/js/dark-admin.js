@@ -236,7 +236,7 @@
 		if ( r.width <= 1 || r.height <= 1 || r.bottom + view.pageYOffset <= 0 || r.right + view.pageXOffset <= 0 ) {
 			return false; // .screen-reader-text and its kind, or parked off the page
 		}
-		if ( el.closest( ':disabled, .disabled, [aria-disabled="true"], .screen-reader-text, .screen-reader-shortcut' ) ) {
+		if ( el.closest( ':disabled, .disabled, [aria-disabled="true"], .screen-reader-text, .screen-reader-shortcut, details:not([open]) > :not(summary)' ) ) {
 			return false;
 		}
 		return true;
@@ -289,6 +289,12 @@
 		} else {
 			el.style.setProperty( '--fh-da-fix-fg', css( fix.color ) );
 			el.classList.add( 'fh-da-fix' );
+			// A sheet that says "!important" on a stronger selector still wins over the class:
+			// then the colour goes on the element itself.
+			var now = parse( el.ownerDocument.defaultView.getComputedStyle( el ).color );
+			if ( now && contrast( now, found.bg ) < MIN ) {
+				el.style.setProperty( 'color', css( fix.color ), 'important' );
+			}
 		}
 		stats.fixed++;
 		if ( stats.fixes.length < 200 ) {

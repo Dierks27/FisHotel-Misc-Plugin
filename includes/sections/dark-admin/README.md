@@ -112,12 +112,15 @@ These stay light, with dark words, inside the dark screens:
 |---|---|---|
 | The paper previews: the foam cut sheet, an invoice's preview, a Lost Fish e-mail's preview | Foam Cuts, Invoices, Lost Fish | They show the printed page / the e-mail as the customer gets it (`.fh-fc-paper`, `.fh-inv-preview__box`, `.fh-lf-preview__frame`) |
 | The Shop App QR code | FisHotel Tools → Shop App | A phone camera reads dark squares on white (`.fh-sa-link__qr`) |
+| Small coloured badges with white words (Clean Room's green *ready*, Health's *OK* / *Warning*, Code Snippets' *Core*) | FisHotel Tools pages, Code Snippets | Already so on the light admin (their own colours, under 4.5 : 1); the guard darkens their words so they read |
 | Order status pills (Processing, Completed, …) | Orders list, order preview | WooCommerce's pale pill with dark words reads well on dark; recolouring would lose their meaning |
-| Yoast's Google preview | Yoast box on a product | It imitates Google's white results page |
+| The inside of Yoast's box, and Yoast's own pages' cards | A product's *Yoast SEO* box (its frame and tab strip are dark), Yoast SEO → … | Yoast draws them with its own React styles whose class names change with every Yoast release; styling them from outside would break at the next update, and Yoast is never changed. Its own dark words on its own white stay readable |
+| E-mail and print previews: WooCommerce's e-mail preview, Batch Manager's Ship Day print preview | WooCommerce → Settings → Emails, Batch → Ship Day | They show the e-mail / the paper as it comes out (`.wc-settings-email-preview`, `.fh-sd-print`). WooCommerce's own e-mail template has a grey (#787c82, 4.2 : 1) that is the same in the light admin |
+| Code editors (CodeMirror) | Code Snippets, Tools → Theme / Plugin file editor | Their syntax colours are made for a white page (`.CodeMirror`) |
 | The colour field of a colour picker | WooCommerce → Settings → Emails, … | It is the colours themselves (its frame is dark) |
 | Pictures, product photos, the media library's thumbnails, the welcome panel's artwork | everywhere | Images are never recoloured |
 | The block editor, the Customizer, the site editor | Posts / pages edited with blocks, Appearance | See *Where it is never loaded* |
-| Pages of other sites shown inside wp-admin (WordPress.org's plugin details pop-up, a payment provider's iframe) | Plugins → *View details*, WooCommerce → Payments | A frame from another site cannot be styled from here |
+| Pages of other sites shown inside wp-admin (WordPress.org's plugin details pop-up, a payment provider's iframe, Code Snippets' and Yoast's "upgrade" pages that open their own sites) | Plugins → *View details*, WooCommerce → Payments, Snippets → Upgrade | A page from another site cannot be styled from here |
 | WooCommerce's charts' coloured lines and bars | WooCommerce → Analytics | Their own colours; the axes and words around them are dark-themed |
 
 To keep another box light, give it the class `fh-da-light` (it sets the

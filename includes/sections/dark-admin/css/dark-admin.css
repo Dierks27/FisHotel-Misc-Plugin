@@ -1229,6 +1229,16 @@ body.fh-dark-admin .wp-editor-wrap .wp-editor-container {
 	border-color: var(--fh-da-border);
 }
 
+body.fh-dark-admin #postdivrich.woocommerce-product-description .wp-editor-tools,
+body.fh-dark-admin #postdivrich .wp-editor-tools {
+	background: var(--fh-da-bg);
+}
+
+body.fh-dark-admin .wc-metaboxes-wrapper .wc-metabox.woocommerce_attribute h3 .woocommerce-attribute-global-badge {
+	background: var(--fh-da-sunken);
+	color: var(--fh-da-text);
+}
+
 body.fh-dark-admin #postexcerpt .wp-editor-container,
 body.fh-dark-admin #postexcerpt .wp-editor-tools {
 	background: var(--fh-da-surface);
