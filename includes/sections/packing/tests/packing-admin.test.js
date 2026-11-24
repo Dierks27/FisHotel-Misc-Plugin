@@ -35,7 +35,7 @@ function same( a, b ) {
 }
 
 console.log( '1. Exports' );
-check( 'the helpers are exported for node', helpers && [ 'fmt', 'rowFromTemplate', 'fillStep', 'nowLine', 'confirmPayload', 'bagPayload', 'afterSave', 'unsavedElsewhere', 'livestockFromCategories', 'drawnAsAfterClick', 'changedDetail' ].every( function ( name ) {
+check( 'the helpers are exported for node', helpers && [ 'fmt', 'rowFromTemplate', 'fillStep', 'nowLine', 'confirmPayload', 'bagPayload', 'afterSave', 'unsavedElsewhere', 'livestockFromCategories', 'drawnAsAfterClick', 'changedDetail', 'quickEditThird', 'tickIds' ].every( function ( name ) {
 	return typeof helpers[ name ] === 'function';
 } ) );
 check( 'and hung on the global for the browser', globalThis.fhPacking && globalThis.fhPacking.helpers === helpers );
@@ -157,7 +157,7 @@ check( 'what is not an order id is 0', same( helpers.changedDetail( '' ), { orde
 				return me;
 			}
 		};
-		[ 'closest', 'find', 'prop', 'removeClass', 'addClass', 'text', 'last', 'first', 'data', 'toggleClass' ].forEach( function ( name ) {
+		[ 'closest', 'find', 'prop', 'removeClass', 'addClass', 'text', 'last', 'first', 'data', 'toggleClass', 'prepend', 'each' ].forEach( function ( name ) {
 			me[ name ] = function () {
 				return me;
 			};
@@ -225,6 +225,12 @@ check( 'what is not an order id is 0', same( helpers.changedDetail( '' ), { orde
 	check( 'a failed post is not', drawn.length === 2 && heard.length === 2 );
 	delete global.document;
 }() );
+
+console.log( '11. Needs a 3rd bag: quick edit and the helper\'s list' );
+check( 'a row drawn ticked: the quick edit tick is ticked and posts "drawn ticked"', same( helpers.quickEditThird( '1' ), { checked: true, shown: 'yes' } ) );
+check( 'a row drawn unticked: unticked, "drawn unticked"', same( helpers.quickEditThird( '0' ), { checked: false, shown: 'no' } ) );
+check( 'a row with no state printed (another plugin\'s list, a user not shown it): the tick is left out of the save', same( helpers.quickEditThird( undefined ), { checked: false, shown: '' } ) && same( helpers.quickEditThird( 'yes' ), { checked: false, shown: '' } ) );
+check( 'the helper posts the ticked rows as one field: whole numbers, each once', helpers.tickIds( [ '12', '7', '12', 'x', '-3', '0', 40 ] ) === '12,7,40' && helpers.tickIds( [] ) === '' && helpers.tickIds( null ) === '' );
 
 console.log( '\n' + ( failures ? failures + ' of ' + checks + ' checks FAILED' : 'All ' + checks + ' checks passed' ) );
 process.exit( failures ? 1 : 0 );

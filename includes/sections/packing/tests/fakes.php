@@ -28,6 +28,7 @@ class Fh_Fake_Product {
 	public $attributes;
 	public $description = '';
 	public $status      = 'publish';
+	public $name        = '';
 
 	/**
 	 * Meta as stored / as changed but not saved yet.
@@ -74,6 +75,10 @@ class Fh_Fake_Product {
 
 	public function get_description() {
 		return $this->description;
+	}
+
+	public function get_name() {
+		return $this->name;
 	}
 
 	/**
@@ -380,9 +385,19 @@ function fh_reset_shop() {
 	$GLOBALS['fh_terms']    = array();
 }
 
+$GLOBALS['fh_wc_get_product_calls'] = 0;
 function wc_get_product( $id ) {
+	$GLOBALS['fh_wc_get_product_calls']++;
 	$id = is_object( $id ) && method_exists( $id, 'get_id' ) ? $id->get_id() : (int) $id;
 	return isset( $GLOBALS['fh_products'][ $id ] ) ? $GLOBALS['fh_products'][ $id ] : false;
+}
+
+/* Post meta as WordPress's cache answers it (the list table primed it): the fake product's own meta. */
+if ( ! function_exists( 'get_post_meta' ) ) {
+	function get_post_meta( $id, $key = '', $single = false ) {
+		$product = $GLOBALS['fh_products'][ (int) $id ] ?? null;
+		return is_object( $product ) && isset( $product->meta[ $key ] ) ? $product->meta[ $key ] : '';
+	}
 }
 
 function wc_get_order( $id ) {
@@ -410,6 +425,22 @@ class Fh_Fake_Store {
 	 * @var int
 	 */
 	public $scans = 0;
+
+	/**
+	 * The products the 3rd-bag helper reads, and how many have the tick.
+	 *
+	 * @var array
+	 */
+	public $third_candidates = array();
+	public $third_count      = 0;
+
+	public function third_bag_candidates() {
+		return $this->third_candidates;
+	}
+
+	public function third_bag_count() {
+		return $this->third_count;
+	}
 
 	public function size_attributes() {
 		return $this->size_attributes;

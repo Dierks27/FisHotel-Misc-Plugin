@@ -1,24 +1,29 @@
 <?php
 /**
  * The product editor: the "Livestock — packed in a bag" checkbox and the
- * "Bagging" choice (Shipping tab, simple and variable products) and the
+ * "Needs a 3rd bag (sharp spines or a scalpel)" tick (Shipping tab, simple
+ * and variable products — or the Fish essentials box of the Edit screens
+ * section, which draws both through render_essentials_fields()) and the
  * "Bag size" dropdown — on every variation, and on a simple product
- * (Shipping tab).
+ * (Shipping tab). The tick is also on the products list's quick edit and
+ * bulk edit.
  *
  * All are RECORDS, strictly: the hidden product meta `_fh_packs_in_bag`
- * ('yes' / 'no', on the parent product), `_fh_bag_layers` ('2' / '3', on
- * the parent product) and `_fh_bag_size` (a bag id).
+ * ('yes' / 'no', on the parent product), `_fh_bag_layers` ('3' when
+ * ticked; '2' is a "Double" chosen before the tick existed, kept and
+ * shown unticked; on the parent product) and `_fh_bag_size` (a bag id).
  * None is a product attribute, creates a variation or a term, and
  * nothing on the storefront, in the cart, at checkout, in an e-mail, on an
  * invoice, in My Account or in the customer-facing REST / Store API reads
  * them — this section registers no hook outside wp-admin and never adds
  * anything to an order line.
  *
- * "Bagging" says in how many layers this fish's bag is used: Auto (double,
- * or triple when its name or category has one of the "Triple-bag these"
- * words — the option says which it is for this product), Double or Triple. Auto stores nothing; the other two store '2'
- * or '3' (decide_layers()). It is shown, like the Bag size, only while the
- * checkbox is ticked.
+ * "Needs a 3rd bag" says this fish is packed in three bags, one inside
+ * the other, not two. Ticked stores '3'; unticking a '3' deletes it; a
+ * save that leaves it as it was drawn changes nothing — so a '2' stored
+ * earlier stays '2' (decide_third()). A hidden field beside it says how it
+ * was drawn, which tells an untick from "not on the form". At the top of
+ * the Shipping tab it is always shown, whatever the Livestock checkbox.
  *
  * The checkbox says whether the product is something that goes in a bag
  * at all (fish and other livestock do; medication, food and dry goods do
@@ -43,7 +48,7 @@
  * choice too: the variation then follows the size → bag map, and the
  * first option says which bag that is right now.
  *
- * decide(), decide_packs() and decide_layers() are the pure rules of a save; the save
+ * decide(), decide_packs() and decide_third() are the pure rules of a save; the save
  * handlers read the posted values, ask them, and write through the product
  * object.
  *
@@ -83,9 +88,32 @@ class Product {
 	const FIELD_PACKS_SHOWN = 'fh_packs_in_bag_shown';
 
 	/**
-	 * Form field of the "Bagging" choice: '' (Auto), '2' or '3'.
+	 * Form fields of the "Needs a 3rd bag" tick: the checkbox (posted only
+	 * while ticked), the state it was drawn in beside it ('yes' / 'no' —
+	 * which also says it was on the form), and the bulk-edit choice
+	 * ('' no change, 'yes', 'no').
 	 */
-	const FIELD_LAYERS = 'fh_bag_layers';
+	const FIELD_THIRD       = 'fh_third_bag';
+	const FIELD_THIRD_SHOWN = 'fh_third_bag_shown';
+	const FIELD_THIRD_BULK  = 'fh_third_bag_bulk';
+
+	/**
+	 * Whether the Livestock checkbox and the tick were drawn elsewhere on
+	 * this screen (the Fish essentials box): the Shipping tab then leaves
+	 * them out, so each is on the form once.
+	 *
+	 * @var bool
+	 */
+	private static $drawn_elsewhere = false;
+
+	/**
+	 * Whether the Shipping tab drew them already on this screen (a person
+	 * who dragged the product data box above Fish essentials): the other
+	 * box then leaves them out.
+	 *
+	 * @var bool
+	 */
+	private static $drawn_in_tab = false;
 
 	/**
 	 * The class the product-data box carries while the checkbox is off:
@@ -129,6 +157,12 @@ class Product {
 		add_action( 'woocommerce_admin_process_product_object', array( $this, 'save_product' ), 10, 1 );
 		// The classes of the product-data box on the product edit screen (wp-admin only).
 		add_filter( 'postbox_classes_product_woocommerce-product-data', array( $this, 'product_data_classes' ) );
+		// The products list: the tick's state for quick edit, quick edit and bulk edit.
+		add_action( 'manage_product_posts_custom_column', array( $this, 'list_column_data' ), 20, 2 );
+		add_action( 'woocommerce_product_quick_edit_end', array( $this, 'render_quick_edit' ) );
+		add_action( 'woocommerce_product_quick_edit_save', array( $this, 'save_quick_edit' ) );
+		add_action( 'woocommerce_product_bulk_edit_end', array( $this, 'render_bulk_edit' ) );
+		add_action( 'woocommerce_product_bulk_edit_save', array( $this, 'save_bulk_edit' ) );
 	}
 
 	/**
@@ -250,45 +284,83 @@ class Product {
 	}
 
 	/**
-	 * What a posted "Bagging" choice does to the stored one (pure). Auto
-	 * stores nothing — it removes a stored choice; Double and Triple store
-	 * '2' and '3'. A save that does not carry the field (quick edit, another
-	 * screen), or carries anything else, changes nothing.
+	 * What a posted "Needs a 3rd bag" tick does to the stored choice
+	 * (pure). Ticked stores '3'; unticked deletes a '3'; a save that leaves
+	 * the tick as it was drawn, or does not carry it at all, changes
+	 * nothing — so a '2' ("Double", chosen before the tick existed) is
+	 * kept.
 	 *
-	 * @param mixed $posted  The posted value: '' (Auto) | '2' | '3' (null = the field was not on the form).
-	 * @param mixed $current The stored choice ('2' | '3' | '' = Auto).
+	 * @param mixed $shown   The state the tick was drawn in, as posted beside it: 'yes' | 'no'
+	 *                       (anything else = the tick was not on the form).
+	 * @param bool  $ticked  Whether the tick was posted ticked.
+	 * @param mixed $current The stored choice ('3' | '2' | '').
 	 * @return array{action: string, value: string} action = keep | set | delete.
 	 */
-	public static function decide_layers( $posted, $current ) {
+	public static function decide_third( $shown, $ticked, $current ) {
 		$stored = Layers::choice( $current );
 		$keep   = array(
 			'action' => 'keep',
 			'value'  => $stored > 0 ? (string) $stored : '',
 		);
+		$shown  = Livestock::flag( $shown );
 
-		if ( null === $posted || ! is_scalar( $posted ) || is_bool( $posted ) ) {
-			return $keep;
+		if ( '' === $shown || ( $ticked ? Livestock::YES : Livestock::NO ) === $shown ) {
+			return $keep; // Not on the form, or left as it was drawn.
 		}
-		$posted = trim( (string) $posted );
+		if ( $ticked ) {
+			return Layers::TRIPLE === $stored ? $keep : array(
+				'action' => 'set',
+				'value'  => (string) Layers::TRIPLE,
+			);
+		}
+		return Layers::TRIPLE === $stored
+			? array(
+				'action' => 'delete',
+				'value'  => '',
+			)
+			: $keep;
+	}
 
+	/**
+	 * What the bulk edit's "3rd bag" choice does (pure): '' changes
+	 * nothing, 'yes' ticks, 'no' unticks (a '2' is kept).
+	 *
+	 * @param mixed $posted  '' | 'yes' | 'no' (anything else = no change).
+	 * @param mixed $current The stored choice.
+	 * @return array{action: string, value: string}
+	 */
+	public static function decide_third_bulk( $posted, $current ) {
+		$posted = Livestock::flag( $posted );
 		if ( '' === $posted ) {
-			return $stored > 0
-				? array(
-					'action' => 'delete',
-					'value'  => '',
-				)
-				: $keep;
+			return self::decide_third( null, false, $current );
 		}
+		$stored = Layers::ticked( $current ) ? Livestock::YES : Livestock::NO;
+		return self::decide_third( $stored, Livestock::YES === $posted, $current );
+	}
 
-		$choice = Layers::choice( $posted );
-		if ( $choice < 1 || $choice === $stored ) {
-			return $keep; // Not a choice of the list, or stored already.
+	/**
+	 * Apply a decide_third() decision to a product object (not saved here).
+	 *
+	 * @param object $product  WC_Product (the parent).
+	 * @param array  $decision decide_third().
+	 * @return bool Whether the object changed.
+	 */
+	public static function apply_third( $product, array $decision ) {
+		if ( ! is_object( $product ) || ! method_exists( $product, 'update_meta_data' ) || ! method_exists( $product, 'delete_meta_data' ) ) {
+			return false;
 		}
-
-		return array(
-			'action' => 'set',
-			'value'  => (string) $choice,
-		);
+		if ( method_exists( $product, 'is_type' ) && $product->is_type( 'variation' ) ) {
+			return false;
+		}
+		if ( 'set' === $decision['action'] ) {
+			$product->update_meta_data( Packing::META_LAYERS, (string) $decision['value'] );
+			return true;
+		}
+		if ( 'delete' === $decision['action'] ) {
+			$product->delete_meta_data( Packing::META_LAYERS );
+			return true;
+		}
+		return false;
 	}
 
 	/**
@@ -583,86 +655,179 @@ class Product {
 	}
 
 	/* ============================================================== */
-	/*  Bagging: Auto / Double / Triple                                */
+	/*  Needs a 3rd bag                                                */
 	/* ============================================================== */
 
 	/**
-	 * The "Bagging" choice (Shipping tab, simple and variable products),
-	 * right under the checkbox. It carries the Bag size fields' class, so
-	 * it shows only while the checkbox is ticked.
+	 * The "Needs a 3rd bag" tick, with the state it is drawn in beside it.
+	 * While the word list still reaches every line, the help says what
+	 * the list makes of this fish when the tick is off.
 	 *
 	 * @param object|null $product WC_Product.
+	 * @param string      $wrapper Extra classes of its row.
 	 */
-	private function render_layers_field( $product ) {
+	private function render_third_field( $product, $wrapper = '' ) {
+		if ( ! function_exists( 'woocommerce_wp_checkbox' ) ) {
+			return;
+		}
 		$settings = $this->settings();
 		$current  = null !== $product ? Layers::stored( $product ) : '';
-		$words    = $settings['triple_words'];
+		$ticked   = Layers::ticked( $current );
 
-		if ( $words ) {
-			/* translators: %s: the "Triple-bag these" words, separated by commas */
-			$auto = sprintf( __( 'Auto: double-bagged, or triple when the fish\'s name or category has one of these words — %s (the list is under FisHotel Tools → Packing → Bags).', 'fishotel-misc-plugin' ), implode( ', ', $words ) );
-		} else {
-			$auto = __( 'Auto: double-bagged (the “Triple-bag these” list under FisHotel Tools → Packing → Bags is empty).', 'fishotel-misc-plugin' );
+		$help = __( 'Tick for a fish with sharp spines or a scalpel (tangs, rabbitfish, lionfish…): it is packed in three bags, one inside the other, not two. For your records and the packing counts only: customers never see this.', 'fishotel-misc-plugin' );
+		if ( '2' === $current ) {
+			$help .= ' ' . __( 'This product was set to Double before this tick existed: it stays double-bagged.', 'fishotel-misc-plugin' );
 		}
-
-		// What Auto comes to for this product as it was last saved, said on the option itself.
-		$auto_option = __( 'Auto', 'fishotel-misc-plugin' );
-		$name        = null !== $product && method_exists( $product, 'get_name' ) ? trim( (string) $product->get_name() ) : '';
-		$categories  = null !== $product ? Layers::category_names( $product ) : array();
-		if ( '' !== $name || $categories ) {
-			$now = Layers::decide( '', $words, $name, $categories );
+		if ( ! $ticked && '2' !== $current && Layers::words_reach( $settings['triple_scope'], true ) && null !== $product ) {
+			$name = method_exists( $product, 'get_name' ) ? trim( (string) $product->get_name() ) : '';
+			$now  = Layers::decide( '', $settings['triple_words'], $name, Layers::category_names( $product ) );
 			if ( Layers::TRIPLE === $now['layers'] ) {
 				/* translators: %s: the word of the "Triple-bag these" list that was found */
-				$auto_option = sprintf( __( 'Auto — triple for this fish (“%s” is on the list)', 'fishotel-misc-plugin' ), substr( $now['why'], strlen( Layers::WHY_WORD ) ) );
-			} else {
-				$auto_option = __( 'Auto — double for this fish', 'fishotel-misc-plugin' );
+				$help .= ' ' . sprintf( __( 'Unticked, this fish is still triple-bagged for now: “%s” is on the word list, which still reaches every fish (FisHotel Tools → Packing → Bags).', 'fishotel-misc-plugin' ), substr( $now['why'], strlen( Layers::WHY_WORD ) ) );
 			}
 		}
 
-		woocommerce_wp_select(
+		woocommerce_wp_checkbox(
 			array(
-				'id'            => self::FIELD_LAYERS,
-				'name'          => self::FIELD_LAYERS,
-				'label'         => __( 'Bagging', 'fishotel-misc-plugin' ),
-				'value'         => $current,
-				'options'       => array(
-					''  => $auto_option,
-					'2' => __( 'Double — two bags', 'fishotel-misc-plugin' ),
-					'3' => __( 'Triple — three bags (sharp spines, a scalpel)', 'fishotel-misc-plugin' ),
-				),
-				'desc_tip'      => true,
-				'description'   => $auto . ' ' . __( 'For your records and the packing counts only: customers never see this.', 'fishotel-misc-plugin' ),
-				'wrapper_class' => 'show_if_simple show_if_variable fh-bag-size-field',
+				'id'            => self::FIELD_THIRD,
+				'name'          => self::FIELD_THIRD,
+				'label'         => __( 'Needs a 3rd bag (sharp spines or a scalpel)', 'fishotel-misc-plugin' ),
+				'value'         => $ticked ? Livestock::YES : Livestock::NO,
+				'cbvalue'       => Livestock::YES,
+				'description'   => $help,
+				'wrapper_class' => trim( 'show_if_simple show_if_variable fh-third-bag-field ' . $wrapper ),
 			)
 		);
+		echo '<input type="hidden" id="' . esc_attr( self::FIELD_THIRD_SHOWN ) . '" name="' . esc_attr( self::FIELD_THIRD_SHOWN ) . '" value="' . esc_attr( $ticked ? Livestock::YES : Livestock::NO ) . '">';
 	}
 
 	/**
-	 * Save the "Bagging" choice onto the product object WooCommerce is
-	 * about to save (the parent product — a variation has none of its own).
+	 * Save the tick onto the product object WooCommerce is about to save.
 	 *
 	 * @param object $product WC_Product.
 	 * @param array  $raw     Unslashed POST (the nonce and the capability were checked).
 	 * @return bool Whether the object changed.
 	 */
-	private function save_layers( $product, array $raw ) {
-		if ( ! method_exists( $product, 'update_meta_data' ) || ! method_exists( $product, 'delete_meta_data' ) || ! method_exists( $product, 'get_meta' ) ) {
+	private function save_third( $product, array $raw ) {
+		if ( ! method_exists( $product, 'get_meta' ) ) {
 			return false;
 		}
-		if ( method_exists( $product, 'is_type' ) && $product->is_type( 'variation' ) ) {
-			return false;
-		}
+		$ticked = isset( $raw[ self::FIELD_THIRD ] ) && Livestock::YES === Livestock::flag( $raw[ self::FIELD_THIRD ] );
+		return self::apply_third( $product, self::decide_third( $raw[ self::FIELD_THIRD_SHOWN ] ?? null, $ticked, $product->get_meta( Packing::META_LAYERS, true ) ) );
+	}
 
-		$decision = self::decide_layers( $raw[ self::FIELD_LAYERS ] ?? null, $product->get_meta( Packing::META_LAYERS, true ) );
-		if ( 'set' === $decision['action'] ) {
-			$product->update_meta_data( Packing::META_LAYERS, (string) $decision['value'] );
-			return true;
+	/**
+	 * The Livestock checkbox and the tick for another box of the product
+	 * screen (the Edit screens section's Fish essentials), with this
+	 * section's nonce. The Shipping tab then leaves the two out. Nothing
+	 * for a user who may not manage the shop.
+	 *
+	 * @param object|null $product WC_Product.
+	 * @return bool Whether they were drawn.
+	 */
+	public function render_essentials_fields( $product ) {
+		if ( self::$drawn_in_tab || ! current_user_can( Packing::CAPABILITY ) || ! function_exists( 'woocommerce_wp_checkbox' ) ) {
+			return false;
 		}
-		if ( 'delete' === $decision['action'] ) {
-			$product->delete_meta_data( Packing::META_LAYERS );
-			return true;
+		$product = is_object( $product ) ? $product : null;
+
+		$this->render_packs_field( $product );
+		$this->render_third_field( $product, 'fh-es-live-only' );
+		wp_nonce_field( self::NONCE_ACTION, self::NONCE_FIELD, false );
+		self::$drawn_elsewhere = true;
+		return true;
+	}
+
+	/**
+	 * Forget that the two were drawn elsewhere (the tests draw many screens).
+	 */
+	public static function reset_drawn() {
+		self::$drawn_elsewhere = false;
+		self::$drawn_in_tab    = false;
+	}
+
+	/* ============================================================== */
+	/*  The products list: quick edit, bulk edit                       */
+	/* ============================================================== */
+
+	/**
+	 * The tick's state for quick edit, hidden in the Name cell of the
+	 * products list (WooCommerce's own hidden data has no hook): the
+	 * script reads it when a row's quick edit opens.
+	 *
+	 * @param string $column  Column key.
+	 * @param int    $post_id Product ID.
+	 */
+	public function list_column_data( $column, $post_id ) {
+		if ( 'name' !== $column || ! current_user_can( Packing::CAPABILITY ) ) {
+			return;
 		}
-		return false;
+		// A row of the list is a product (never a variation), and the list primed its meta: read from
+		// that cache — no product object and no query of its own.
+		$stored = get_post_meta( (int) $post_id, Packing::META_LAYERS, true );
+		echo '<span class="hidden fh-third-bag-data" data-third="' . ( Layers::ticked( $stored ) ? '1' : '0' ) . '"></span>';
+	}
+
+	/**
+	 * The tick in quick edit (the script fills it from the row).
+	 */
+	public function render_quick_edit() {
+		if ( ! current_user_can( Packing::CAPABILITY ) ) {
+			return;
+		}
+		echo '<div class="inline-edit-group fh-third-bag-quick"><label class="alignleft">';
+		echo '<input type="checkbox" name="' . esc_attr( self::FIELD_THIRD ) . '" value="yes"> ';
+		echo '<span class="checkbox-title">' . esc_html__( 'Needs a 3rd bag (sharp spines or a scalpel)', 'fishotel-misc-plugin' ) . '</span>';
+		echo '</label><input type="hidden" name="' . esc_attr( self::FIELD_THIRD_SHOWN ) . '" value=""></div>';
+	}
+
+	/**
+	 * The "3rd bag" choice in bulk edit.
+	 */
+	public function render_bulk_edit() {
+		if ( ! current_user_can( Packing::CAPABILITY ) ) {
+			return;
+		}
+		echo '<label class="alignleft fh-third-bag-bulk"><span class="title">' . esc_html__( '3rd bag', 'fishotel-misc-plugin' ) . '</span><span class="input-text-wrap">';
+		echo '<select name="' . esc_attr( self::FIELD_THIRD_BULK ) . '">';
+		echo '<option value="">' . esc_html__( '— No change —', 'fishotel-misc-plugin' ) . '</option>';
+		echo '<option value="yes">' . esc_html__( 'Yes — needs a 3rd bag', 'fishotel-misc-plugin' ) . '</option>';
+		echo '<option value="no">' . esc_html__( 'No', 'fishotel-misc-plugin' ) . '</option>';
+		echo '</select></span></label>';
+	}
+
+	/**
+	 * Quick edit's save: WooCommerce checked its own nonce and that the
+	 * user may edit the product, and saved it; this writes the tick.
+	 *
+	 * @param object $product WC_Product.
+	 */
+	public function save_quick_edit( $product ) {
+		if ( ! is_object( $product ) || ! current_user_can( Packing::CAPABILITY ) || ! method_exists( $product, 'get_meta' ) ) {
+			return;
+		}
+		$raw = wp_unslash( $_REQUEST ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- WooCommerce verified woocommerce_quick_edit_nonce.
+		$raw = is_array( $raw ) ? $raw : array();
+		if ( $this->save_third( $product, $raw ) && method_exists( $product, 'save_meta_data' ) ) {
+			$product->save_meta_data();
+		}
+	}
+
+	/**
+	 * Bulk edit's save, one product at a time.
+	 *
+	 * @param object $product WC_Product.
+	 */
+	public function save_bulk_edit( $product ) {
+		if ( ! is_object( $product ) || ! current_user_can( Packing::CAPABILITY ) || ! method_exists( $product, 'get_meta' ) ) {
+			return;
+		}
+		$raw      = wp_unslash( $_REQUEST ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended -- WooCommerce verified woocommerce_quick_edit_nonce.
+		$raw      = is_array( $raw ) ? $raw : array();
+		$decision = self::decide_third_bulk( $raw[ self::FIELD_THIRD_BULK ] ?? '', $product->get_meta( Packing::META_LAYERS, true ) );
+		if ( self::apply_third( $product, $decision ) && method_exists( $product, 'save_meta_data' ) ) {
+			$product->save_meta_data();
+		}
 	}
 
 	/* ============================================================== */
@@ -670,8 +835,10 @@ class Product {
 	/* ============================================================== */
 
 	/**
-	 * The Shipping tab (with the weight and the dimensions): the checkbox,
-	 * the "Bagging" choice, then the Bag size dropdown of a simple product.
+	 * The Shipping tab (with the weight and the dimensions): the "Needs a
+	 * 3rd bag" tick (moved to the top of the tab by the script), the
+	 * checkbox, then the Bag size dropdown of a simple product. The tick and
+	 * the checkbox are left out when the Fish essentials box drew them.
 	 */
 	public function render_simple_field() {
 		global $product_object;
@@ -688,8 +855,14 @@ class Product {
 		$size     = null !== $product && ! $variable ? Bags::product_size( $product, $standard ) : '';
 		$mapped   = Bags::resolve( '', $size, $settings, $standard['sizes'] );
 
-		$this->render_packs_field( $product );
-		$this->render_layers_field( $product );
+		if ( ! self::$drawn_elsewhere ) {
+			// At the top of the tab (the script moves the row there): the tick, then the checkbox.
+			echo '<div class="fh-third-bag-top">';
+			$this->render_third_field( $product );
+			echo '</div>';
+			$this->render_packs_field( $product );
+			self::$drawn_in_tab = true;
+		}
 
 		woocommerce_wp_select(
 			array(
@@ -707,9 +880,9 @@ class Product {
 	}
 
 	/**
-	 * Save the Shipping tab's fields onto the product object WooCommerce is
-	 * about to save: the checkbox and the "Bagging" choice (simple and
-	 * variable products), and a simple product's Bag size.
+	 * Save the product screen's fields onto the product object WooCommerce
+	 * is about to save: the checkbox and the tick (simple and variable
+	 * products), and a simple product's Bag size.
 	 *
 	 * @param object $product WC_Product.
 	 */
@@ -720,7 +893,7 @@ class Product {
 		}
 
 		$this->save_packs( $product, $raw );
-		$this->save_layers( $product, $raw );
+		$this->save_third( $product, $raw );
 		$this->save_simple( $product, $raw );
 	}
 
