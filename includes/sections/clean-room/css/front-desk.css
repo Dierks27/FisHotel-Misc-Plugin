@@ -1024,6 +1024,7 @@ button.fh-fd-occ:active {
 }
 
 .fh-fd-badge--ready { background: #1f8f4d; box-shadow: 0 0 0 2px rgba(61, 220, 132, 0.6); }
+.fh-fd-badge--reserved { background: #8a4fbf; } /* Every fish for sale reserved: RESERVED, never READY. */
 
 /* For sale, but its sale date came before it left the Spa. */
 .fh-fd-warn {

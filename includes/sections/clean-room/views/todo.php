@@ -13,6 +13,9 @@
  * @var string $tab          'todo'.
  * @var bool   $tables_ok    Whether the tables exist.
  * @var bool   $can_settings Whether the Settings tab is offered.
+ * @var object $store        The store (the pull list's pickers).
+ * @var array  $settings     Settings.
+ * @var string $flash        What a correction just did ('' = nothing).
  */
 
 defined( 'ABSPATH' ) || exit;
@@ -67,6 +70,10 @@ $fh_total = (int) $list['total'];
 			<?php echo esc_html( $list['fast']['hint'] ); ?>
 		</p>
 	<?php endif; ?>
+
+	<?php include Clean_Room::path() . 'views/pull-today.php'; // Reserved → Pull today → Shipped: which tank each fish of today's boxes comes out of. ?>
+
+	<?php include Clean_Room::path() . 'views/holds.php'; // Held by hand: every hold with Release, and the orders that may be one a hold was made for. ?>
 
 	<?php if ( ! $list['blocks'] ) : ?>
 		<p class="fh-cr-muted"><?php esc_html_e( 'No quarantine system and no temporary tank is in use.', 'fishotel-misc-plugin' ); ?></p>

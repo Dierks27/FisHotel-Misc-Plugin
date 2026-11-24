@@ -258,6 +258,28 @@ class Front_Desk {
 			'lost'        => __( 'Lost', 'fishotel-misc-plugin' ),
 			'lostOne'     => __( '−1 lost', 'fishotel-misc-plugin' ),
 			'shipped'     => __( 'Shipped', 'fishotel-misc-plugin' ),
+			// Reserved → Pull today → Shipped (the day's list).
+			'pullToday'   => __( 'Pull today', 'fishotel-misc-plugin' ),
+			'tankCap'     => __( 'Tank %d', 'fishotel-misc-plugin' ),
+			'shippedWord' => __( 'Shipped', 'fishotel-misc-plugin' ),
+			'pullNothing' => __( 'No fish ship today.', 'fishotel-misc-plugin' ),
+			'tankNotKnown' => __( 'Tank not known', 'fishotel-misc-plugin' ),
+			'fixOnTodo'   => __( 'on the To do tab', 'fishotel-misc-plugin' ),
+			'reserveDots'  => __( 'Reserve…', 'fishotel-misc-plugin' ),
+			'reserveTitle' => __( 'Reserve by hand', 'fishotel-misc-plugin' ),
+			'reserveWho'   => __( 'For whom? A customer of the shop (name or e-mail) — or type any name', 'fishotel-misc-plugin' ),
+			'reserveNote'  => __( 'Note (optional), e.g. paying Friday', 'fishotel-misc-plugin' ),
+			'reserveHint'  => __( 'Held fish stay in the tank and are not ready for anybody else until you release them. A customer\'s own order takes them by itself.', 'fishotel-misc-plugin' ),
+			'readyOf'      => __( 'of %d ready', 'fishotel-misc-plugin' ),
+			'holdHowMany'  => __( 'How many (%d ready)', 'fishotel-misc-plugin' ),
+			'holdAccount'  => __( 'Tied to the customer account of %s — their own paid order takes these fish.', 'fishotel-misc-plugin' ),
+			'holdTyped'    => __( 'A name typed, no account: no order takes these by itself — you will be asked when one comes in.', 'fishotel-misc-plugin' ),
+			'holdShipped'  => __( 'These were held for %s (the hold goes down by them)', 'fishotel-misc-plugin' ),
+			'reservedBadge' => __( 'reserved', 'fishotel-misc-plugin' ),
+			'heldByHand'   => __( 'Held by hand', 'fishotel-misc-plugin' ),
+			'release'      => __( 'Release', 'fishotel-misc-plugin' ),
+			'customerAcct' => __( 'customer', 'fishotel-misc-plugin' ),
+			'moveReserved' => __( '%d not reserved: they move without touching an order or a hold; the reserved fish stay with this group if only part of it moves (fish held by hand cannot be moved off in part — move the whole group, its hold goes along).', 'fishotel-misc-plugin' ),
 			'cleared'     => __( 'Cleared', 'fishotel-misc-plugin' ),
 			'note'        => __( 'Note', 'fishotel-misc-plugin' ),
 			'mic'         => __( 'Mic', 'fishotel-misc-plugin' ),
@@ -585,6 +607,7 @@ class Front_Desk {
 				'voiceEnabled'       => ! empty( $settings['voice_enabled'] ),
 				'undoSeconds'        => Settings::UNDO_SECONDS,
 				'undoWindow'         => self::UNDO_WINDOW, // The status line's Undo leaves before this ends.
+				'reserveOn'          => Reserve_Shop::enabled( $settings ), // "Reserve…" by hand is offered (holds are hidden while it is off).
 				'saleReadyDays'      => (int) $settings['sale_ready_days'], // The suggestion only (occupants carry saleSuggested).
 				'copperFloor'        => (float) $settings['copper_floor'],
 				'copperTarget'       => (float) $settings['copper_target'],
@@ -842,6 +865,12 @@ class Front_Desk {
 			$list['flags'][ $f ]['ago'] = $ago( $flag['logged_at'] );
 		}
 		$list['text'] = Todo::headline( $list );
+		if ( ! empty( $list['pull'] ) && is_array( $list['pull'] ) ) {
+			// The phone's words, worked out once here — no hint of its own when the feeding line above already
+			// says what to do about a fish whose tank is not known.
+			$list['pull'] = Reserve::pull_words( $list['pull'], ! empty( $list['fast']['hint'] ) );
+		}
+		$list['lost_text'] = ! empty( $list['lost'] ) ? Reserve::lost_text( Reserve_Shop::lost_fish( (array) $list['lost'] ) ) : '';
 		return $list;
 	}
 
@@ -893,7 +922,8 @@ class Front_Desk {
 			'qtyArrived'      => (int) $stay['qty_arrived'],
 			'day'             => $stay['day'],
 			'status'          => (string) $stay['status'],
-			'stateLabel'      => (string) $stay['state_label'],
+			'stateLabel'      => Reserve::all_reserved( $stay ) ? __( 'reserved', 'fishotel-misc-plugin' ) : (string) $stay['state_label'],
+			'badge'           => Reserve::all_reserved( $stay ) ? 'reserved' : ( ! empty( $stay['sale_ready'] ) ? 'ready' : (string) $stay['status'] ), // Every fish for sale reserved: RESERVED, never READY.
 			'checkinDate'     => (string) $stay['checkin_date'],
 			'checkinUnknown'  => ! empty( $stay['checkin_unknown'] ),
 			'clearedDate'     => $stay['cleared_date'],
@@ -907,7 +937,41 @@ class Front_Desk {
 			'saleReady'       => ! empty( $stay['sale_ready'] ),
 			'readyInSpa'      => ! empty( $stay['ready_in_spa'] ),
 			'needsId'         => ! empty( $stay['needs_id'] ),
+			// Ready → Reserved → Shipped: "5 ready · 2 reserved (#1234)", and what the hand "Shipped" says.
+			'reserved'        => (int) ( $stay['reserved'] ?? 0 ),
+			'ready'           => Reserve::ready( $stay ),
+			'reservedFor'     => ! empty( $stay['reserved_orders'] ) ? '#' . implode( ', #', array_map( 'strval', (array) $stay['reserved_orders'] ) ) : '',
+			'reservedText'    => Reserve::stage_text( $stay ),
+			// Held by hand: who for, how long (an old one stands out), the note — each with Release.
+			'holds'           => self::holds_shown( (array) ( $stay['reserved_holds'] ?? array() ) ),
+			'soldNote'        => trim( Reserve::sold_note( max( 0, (int) ( $stay['reserved'] ?? 0 ) - Reserve::hand_total( (array) ( $stay['reserved_holds'] ?? array() ) ) ), (array) ( $stay['reserved_orders'] ?? array() ) ) . ' ' . Reserve::hand_note( (array) ( $stay['reserved_holds'] ?? array() ) ) ),
 		);
+	}
+
+	/**
+	 * A group's holds by hand as the phone shows them: "2 for Mike S. —
+	 * by hand, 3 days ago", the note, whether it is old.
+	 *
+	 * @param array[] $holds Holds::shown() rows.
+	 * @return array[] id, who, qty, text, note, old.
+	 */
+	public static function holds_shown( array $holds ) {
+		$now = time();
+		$out = array();
+		foreach ( $holds as $hold ) {
+			if ( ! is_array( $hold ) ) {
+				continue;
+			}
+			$out[] = array(
+				'id'   => (int) ( $hold['id'] ?? 0 ),
+				'who'  => (string) ( $hold['who'] ?? '' ),
+				'qty'  => (int) ( $hold['qty'] ?? 0 ),
+				'text' => (int) ( $hold['qty'] ?? 0 ) . ' × ' . Reserve::hold_label( $hold, $now ),
+				'note' => (string) ( $hold['note'] ?? '' ),
+				'old'  => Holds::is_old( $hold, $now ),
+			);
+		}
+		return $out;
 	}
 
 	/**
@@ -1229,6 +1293,12 @@ class Front_Desk {
 					break;
 				case 'alias':
 					$result = self::act_alias( $ctx, $raw );
+					break;
+				case 'hold':
+					$result = self::act_hold( $ctx, $raw );
+					break;
+				case 'release':
+					$result = self::act_release( $raw );
 					break;
 				default:
 					// Temporary tanks and the day's list (Temp_Tanks::ACTS).
@@ -1678,6 +1748,8 @@ class Front_Desk {
 		if ( ! $written ) {
 			return array( 'error' => __( 'That could not be recorded.', 'fishotel-misc-plugin' ) );
 		}
+		// Shipped by hand, and they were somebody's held fish (ticked): that hold goes down by them — one step.
+		$off = 'sold' === $type && isset( $raw['hold_ids'] ) ? Reserve_Shop::hold_shipped( (int) $stay['id'], array_map( 'intval', (array) $raw['hold_ids'] ), $qty ) : 0;
 
 		if ( 'loss' === $type ) {
 			/* translators: 1: quantity, 2: species */
@@ -1685,6 +1757,10 @@ class Front_Desk {
 		} else {
 			/* translators: 1: quantity, 2: species */
 			$message = sprintf( __( '%1$d × %2$s shipped', 'fishotel-misc-plugin' ), $qty, $stay['species'] );
+		}
+		if ( $off > 0 ) {
+			/* translators: %d: fish taken off a hold by hand */
+			$message .= ' · ' . sprintf( _n( 'the hold by hand went down by %d', 'the hold by hand went down by %d', $off, 'fishotel-misc-plugin' ), $off );
 		}
 		if ( (int) $written['state']['qty_live'] <= 0 ) {
 			$message .= ' · ' . __( 'group closed', 'fishotel-misc-plugin' );
@@ -1701,6 +1777,39 @@ class Front_Desk {
 			'event_ids' => array( $written['event_id'] ),
 			'overdrawn' => ! empty( $written['overdrawn'] ),
 		);
+	}
+
+	/**
+	 * "Reserve…": some ready fish of one group set aside by hand for
+	 * somebody (a customer of the shop, or a name typed) — not an event:
+	 * the fish alive are unchanged (Reserve_Shop::hold_create()).
+	 */
+	private static function act_hold( array $ctx, array $raw ) {
+		$stays = self::targets( $ctx, $raw, false );
+		if ( ! is_array( $stays ) ) {
+			return array( 'error' => $stays );
+		}
+		$result = Reserve_Shop::hold_create(
+			$ctx['store'],
+			$ctx['settings'],
+			array(
+				'stay_id' => (int) $stays[0]['id'],
+				'qty'     => self::int( $raw, 'qty' ),
+				'who'     => self::text( $raw, 'who', Holds::WHO_MAX ),
+				'user_id' => max( 0, self::int( $raw, 'user_id' ) ),
+				'note'    => self::text( $raw, 'note', Holds::NOTE_MAX ),
+				'by'      => (int) ( $ctx['base']['actor_id'] ?? 0 ),
+			)
+		);
+		return $result['ok'] ? array( 'message' => $result['message'] ) : array( 'error' => $result['message'] );
+	}
+
+	/**
+	 * "Release" a hold by hand: its fish are ready again.
+	 */
+	private static function act_release( array $raw ) {
+		$result = Reserve_Shop::hold_release( max( 0, self::int( $raw, 'hold_id' ) ) );
+		return $result['ok'] ? array( 'message' => $result['message'] ) : array( 'error' => $result['message'] );
 	}
 
 	/**
@@ -1739,6 +1848,12 @@ class Front_Desk {
 		$ids    = array();
 
 		if ( 1 === count( $stays ) && $qty > 0 && $qty < (int) $stays[0]['qty_live'] ) {
+			// Part of a group: never the fish held by hand (the hold stays with the group — it would shrink, and
+			// its fish be ready for anybody in the other tank).
+			$refused = Reserve_Shop::move_refuse( $store, $ctx['settings'], $stays[0], $qty );
+			if ( '' !== $refused ) {
+				return array( 'error' => $refused );
+			}
 			$split = $store->split_stay( $stays[0], $qty, $to, $ctx['base'], $ctx['today'], $ctx['settings'], $reason );
 			if ( ! $split ) {
 				return array( 'error' => __( 'The split could not be recorded.', 'fishotel-misc-plugin' ) );
@@ -2483,13 +2598,19 @@ class Front_Desk {
 	}
 
 	/**
-	 * Species suggestions for the search box.
+	 * Species suggestions for the search box — or, with kind=customers, the
+	 * shop's customers for "Reserve…" (who the fish are held for).
 	 */
 	public function ajax_suggest() {
 		self::guard();
 
 		$raw  = wp_unslash( $_POST ); // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified in guard().
 		$term = self::text( $raw, 'term', 80 );
+
+		if ( 'customers' === self::text( $raw, 'kind', 20 ) ) {
+			// "Reserve…" → For whom?: the shop's customers whose name or e-mail holds what was typed.
+			wp_send_json_success( array( 'items' => Reserve_Shop::customers( $term ) ) );
+		}
 
 		$store = new Store();
 

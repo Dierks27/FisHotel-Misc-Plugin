@@ -28,7 +28,8 @@ use FisHotel\Misc\Sections\Clean_Room\Tests\Fake_Store;
 
 $today     = Replay::date_in_zone( time(), wp_timezone() );
 $tomorrow  = Replay::add_days( $today, 1 );
-$settings  = Settings::get();
+// The feeding rule alone: reserving sold fish (Reserve, its own test) reads the shop too, and is off here.
+$settings  = array_merge( Settings::get(), array( \FisHotel\Misc\Sections\Clean_Room\Reserve::SETTING => false ) );
 $protocols = Settings::protocols();
 
 /**

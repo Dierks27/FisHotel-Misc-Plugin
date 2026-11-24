@@ -9,7 +9,7 @@
  *
  * @package FisHotel\Misc\Sections\Clean_Room
  *
- * @var array[] $stays        Open stays.
+ * @var array[] $stays        Open stays (each with reserved / reserved_orders / reserved_holds: fish held for open orders and by hand).
  * @var bool    $show_closed  Whether closed stays are listed.
  * @var array[] $closed_stays Closed stays (when shown).
  * @var array   $product_states Stay id => unknown|linked|none (Admin_No_Product::stay_states()).
@@ -22,6 +22,7 @@
  * @var string  $today        Site date.
  * @var bool    $tables_ok    Whether the tables exist.
  * @var bool    $can_settings Whether the Settings tab is offered.
+ * @var array[] $stock_notes  Reserve::stock_warnings() of the open stays' products.
  */
 
 defined( 'ABSPATH' ) || exit;
@@ -34,6 +35,7 @@ use FisHotel\Misc\Sections\Clean_Room\Clean_Room;
 use FisHotel\Misc\Sections\Clean_Room\Identify;
 use FisHotel\Misc\Sections\Clean_Room\Layout;
 use FisHotel\Misc\Sections\Clean_Room\Replay;
+use FisHotel\Misc\Sections\Clean_Room\Reserve;
 use FisHotel\Misc\Sections\Clean_Room\Sizes;
 
 $tab = 'stays';
@@ -91,7 +93,11 @@ $fh_table  = static function ( array $rows, $open ) use ( $today, $sizes, $fh_st
 							<span class="fh-cr-sub"><?php echo esc_html( $fh_stay['notes'] ); ?></span>
 						<?php endif; ?>
 					</td>
-					<td class="fh-cr-num"><?php echo esc_html( $fh_stay['qty_live'] ); ?> / <?php echo esc_html( $fh_stay['qty_arrived'] ); ?></td>
+					<td class="fh-cr-num"><?php echo esc_html( $fh_stay['qty_live'] ); ?> / <?php echo esc_html( $fh_stay['qty_arrived'] ); ?>
+						<?php if ( ! empty( $fh_stay['reserved'] ) ) : // Held for open orders: still in the tank until they ship. ?>
+							<span class="fh-cr-sub fh-cr-reserved"><?php echo esc_html( Reserve::stage_text( $fh_stay ) ); // "5 ready · 2 reserved (#1234)". ?></span>
+						<?php endif; ?>
+					</td>
 					<td><?php echo ! empty( $fh_stay['checkin_unknown'] ) ? $fh_unknown : esc_html( $fh_stay['checkin_date'] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above. ?></td>
 					<td class="fh-cr-num"><?php echo null !== $fh_stay['day'] ? esc_html( $fh_stay['day'] ) : ( ! empty( $fh_stay['checkin_unknown'] ) ? '?' : '—' ); ?></td>
 					<td>
@@ -314,6 +320,13 @@ $fh_table  = static function ( array $rows, $open ) use ( $today, $sizes, $fh_st
 			· <a href="<?php echo esc_url( Admin::page_url( 'stays' ) ); ?>"><?php esc_html_e( 'show every tank', 'fishotel-misc-plugin' ); ?></a>
 		<?php endif; ?>
 	</p>
+	<?php if ( ! empty( $stock_notes ) ) : // Where the shop's stock and the tanks' free fish differ — a warning only, the shop's stock is never written. ?>
+		<div class="fishotel-misc-notice fishotel-misc-notice--warning">
+			<?php foreach ( array_slice( (array) $stock_notes, 0, 12 ) as $fh_stock ) : ?>
+				<p><a href="<?php echo esc_url( get_edit_post_link( (int) $fh_stock['product_id'] ) ?: '#' ); ?>"><?php echo esc_html( $fh_stock['label'] ); ?></a>: <?php echo esc_html( $fh_stock['text'] ); ?></p>
+			<?php endforeach; ?>
+		</div>
+	<?php endif; ?>
 	<?php $fh_table( $stays, true ); ?>
 	<?php
 	$fh_identify_colspan = 10;

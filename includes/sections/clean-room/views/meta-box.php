@@ -51,6 +51,9 @@ foreach ( $stays as $fh_stay ) {
 			· <?php echo esc_html( sprintf( /* translators: %d: groups */ __( '%d cleared', 'fishotel-misc-plugin' ), count( $facts['cleared'] ) ) ); ?>
 			· <?php echo esc_html( sprintf( /* translators: %d: fish */ __( '%d for sale', 'fishotel-misc-plugin' ), (int) $facts['ready_total'] ) ); ?>
 		</p>
+		<?php foreach ( isset( $stock_notes ) ? (array) $stock_notes : array() as $fh_stock ) : // A warning only: the shop's stock is never written. ?>
+			<p class="fh-cr-metabox__muted"><strong><?php echo esc_html( $fh_stock['text'] . ( '' !== (string) $fh_stock['size_slug'] ? ' (' . $fh_stock['label'] . ')' : '' ) ); ?></strong></p>
+		<?php endforeach; ?>
 		<?php if ( ! empty( $facts['next'] ) ) : ?>
 			<p class="fh-cr-metabox__muted">
 				<?php

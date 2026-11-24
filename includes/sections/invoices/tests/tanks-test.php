@@ -26,6 +26,17 @@ namespace FisHotel\Misc\Sections\Clean_Room {
 	}
 
 	/**
+	 * Stand-in for the Clean Room's reserved counts (Reserved → Pull today
+	 * → Shipped): the fish of a tank group held for customers' open orders.
+	 */
+	class Reserve_Shop {
+		public static $counts = array( 21 => array( 'qty' => 2, 'orders' => array( '1234' ) ) );
+		public static function counts_for( array $stay_ids = array() ) {
+			return array_intersect_key( self::$counts, array_flip( $stay_ids ) );
+		}
+	}
+
+	/**
 	 * Stand-in for the Clean Room's settings.
 	 */
 	class Settings {
@@ -159,7 +170,7 @@ namespace {
 	echo "2. Searching the tanks\n";
 	$found = $tanks->search( 'tang' );
 	check_same( 'the groups with fish alive — a group with nothing alive and a closed one are not offered', array( 21, 22, 23 ), array_column( $found, 'stay_id' ) );
-	check_same( 'a tank group: species, size, how many alive, tank, fish order, product, whether it is identified, open', array( 'stay_id' => 21, 'species' => 'Blue Test Tang', 'size_slug' => 'medium', 'size_label' => 'Medium', 'alive' => 5, 'tank' => 121, 'order_ref' => '2026-3', 'product_id' => 501, 'needs_id' => false, 'open' => true ), $found[0] );
+	check_same( 'a tank group: species, size, how many alive, tank, fish order, product, whether it is identified, open', array( 'stay_id' => 21, 'species' => 'Blue Test Tang', 'size_slug' => 'medium', 'size_label' => 'Medium', 'alive' => 5, 'tank' => 121, 'order_ref' => '2026-3', 'product_id' => 501, 'needs_id' => false, 'for_sale' => false, 'open' => true ), $found[0] );
 	check( 'the fish order is the batch\'s ref; without one, the stay\'s own', '2026-3' === $found[0]['order_ref'] && '2026-1' === $found[1]['order_ref'] && '' === $found[2]['order_ref'] );
 	check( 'a group in no tank, of no product, of no size, still to be identified', null === $found[2]['tank'] && null === $found[2]['product_id'] && null === $found[2]['size_slug'] && true === $found[2]['needs_id'] );
 	check_same( 'every word must be in the species, in any order', array( 22 ), array_column( $tanks->search( 'tang powder' ), 'stay_id' ) );
@@ -197,7 +208,10 @@ namespace {
 	$source = (string) file_get_contents( dirname( __DIR__ ) . '/class-tanks.php' );
 	preg_match_all( '/\$context\[0\]->(\w+)\(/', $source, $m );
 	check_same( 'the only methods called on its store are reads', array( 'open_stays', 'species_by_name', 'species_by_product', 'species_list', 'stay' ), array_values( array_unique( ( sort( $m[1] ) ? $m[1] : $m[1] ) ) ) );
-	check( 'its classes are looked up without the autoloader, and every method is checked first', 3 === substr_count( $source, 'class_exists( $' ) && substr_count( $source, 'method_exists(' ) >= 7 && false === strpos( $source, 'use FisHotel\\Misc\\Sections\\Clean_Room' ) );
+	check_same( 'the fish a group holds for customers\' open orders are read from the Clean Room (only the groups asked for)', array( 21 => array( 'qty' => 2, 'orders' => array( '1234' ) ) ), ( new Tanks() )->reserved( array( 21, 22 ) ) );
+	check_same( 'who a reserved count holds its fish for: the orders, or the Clean Room\'s own words (holds by hand too)', array( '#1234, #1240', '#1234; 1 for Mike S. — by hand, today', '' ), array( Tanks::reserved_for( array( 'qty' => 2, 'orders' => array( '1234', '1240' ) ) ), Tanks::reserved_for( array( 'qty' => 2, 'orders' => array( '1234' ), 'who' => '#1234; 1 for Mike S. — by hand, today' ) ), Tanks::reserved_for( null ) ) );
+	check_same( 'an unpaid invoice\'s order is counted once — as the open invoice — not again as reserved', array( 1, 3, 0 ), array( Tanks::for_orders( array( 'qty' => 3, 'invoice' => 2 ) ), Tanks::for_orders( array( 'qty' => 3 ) ), Tanks::for_orders( null ) ) );
+	check( 'its classes (the reserved counts too) are looked up without the autoloader, and every method is checked first', 4 === substr_count( $source, 'class_exists( $' ) && substr_count( $source, 'method_exists(' ) >= 7 && false === strpos( $source, 'use FisHotel\\Misc\\Sections\\Clean_Room' ) );
 
 	fh_finish();
 }
