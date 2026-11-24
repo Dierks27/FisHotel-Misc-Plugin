@@ -1047,7 +1047,7 @@ out, their fish, the waters, the words); `class-sold-line.php` is the
 ladder, pure — **the one place that answers "which tank group does this
 order line come out of"**, asked again when a sold fish is reserved in
 its tank, listed to pull, or taken out of its tank once shipped (see
-*Reserved, Pull today, Shipped*); a line reserved in its group is found
+*Ready, Reserved, Shipped*); a line reserved in its group is found
 there first. It answers over the groups it is
 given: `Feeding::plan()` gives it the groups in clean water first and
 all of them only for the Invoices section's own link; `class-ship-lines.php` reads the
@@ -1099,14 +1099,40 @@ Room 2 (ship day)", or both), url, count, tone ('todo' / 'done' /
 something due, or on which a clean system goes without food. With the
 Today section off nobody asks; with the Clean Room off there is no line.
 
-## Reserved, Pull today, Shipped
+## Ready, Reserved, Shipped
 
 "Eventually I am hopeful that everything will be brought in and logged
 so when we sell a fish we know what tank it's coming out of, and it
 will automatically get pulled from the clean tanks. Otherwise if I have
 to log all that manually there simply is no way." And: "when we get the
 order, it 'Reserves' the fish — then shipping day the fish is actually
-removed from the tank." Three steps, nothing logged by hand:
+removed from the tank." And, after: "Wouldn't the stages be — Ready >
+Reserved > Shipped". The owner's three words, on every screen of it:
+
+- **Ready** — alive in its tank, **for sale** (its sale date has come:
+  the section's own "for sale", `ready_total`) and **not reserved**. A
+  group not for sale yet has no fish ready; it keeps saying "on sale …"
+  as before.
+- **Reserved** — held for a customer's open order (below), or **by
+  hand** for somebody (*Reserve by hand*). Still in the tank: not an
+  event, the count alive is unchanged.
+- **Shipped** — gone with its order: one `sold` event, read "Shipped ·
+  order #1234" in History.
+
+**Pull today** is not a stage: it is the name of the ship day's list
+(below).
+
+The tank card on the Board, the phone's tank screen and the Stays tab
+say it as "5 ready · 2 reserved (#1234)" ("4 ready · 3 reserved (#1234,
+#1240)"; "2 reserved (Mike S. — by hand, 3 days ago)"; for an order and
+a hold together "3 reserved (#1234; 1 for Mike S. — by hand, 3 days
+ago)"); a group not for sale yet "2 reserved (#1234)" only; nothing when
+nothing is reserved (every fish alive is then ready, or waiting for its
+sale date — the badge says which). Pure: `Reserve::ready()`,
+`stage_text()`, `stage_sum()` (a card line of several groups),
+`reserved_text()` / `reserved_who()`.
+
+Three steps for an order, nothing logged by hand:
 
 - **Reserved — when the order comes in.** Each fish line of an order
   that is *processing*, *on hold* or a combined box (*fulfillment* —
@@ -1132,26 +1158,32 @@ removed from the tank." Three steps, nothing logged by hand:
   never moves by itself** — stock must not drift; only the owner's
   *Pulled from a different tank* moves one.
 - **Reserved is not an event.** The tank's count of fish alive is
-  unchanged; "reserved" is worked out from the open orders — the tank
-  card on the Board, the phone's tank screen and the Stays tab say
-  "2 reserved · #1234" ("3 reserved · #1234, #1240"). An order
+  unchanged; "reserved" is worked out from the open orders (and the
+  holds by hand) — the tank card on the Board, the phone's tank screen
+  and the Stays tab say "5 ready · 2 reserved (#1234)". An order
   cancelled, refunded or failed before it left — or a line refunded to
   nothing — holds nothing any more: its `_fh_stay` stays on the item as
   history but no longer counts (only open orders count, and a line only
   up to the fish it still asks for).
-- **Free fish, wherever fish are offered**: the Invoices section's tank
-  picker says "2 reserved for orders (#1234)" beside the fish alive and
-  warns when a line asks more than are free (a paid invoice is an order:
+- **Ready fish, wherever fish are offered**: the Invoices section's tank
+  picker says "4 alive · 3 ready · 1 reserved (#1234)" (ready only for a
+  group for sale; "reserved" counts the holds by hand too, named: "(#1234;
+  1 for Mike S. — by hand, 3 days ago)") and warns when a line asks more
+  than are not reserved (a paid invoice is an order:
   it counts there as reserved and no longer as an open invoice; an
   invoice whose order is not paid yet — on hold, a cheque — still counts
   as the open invoice, and its order's fish are not counted again as
-  reserved: never twice); the phone's Move sheet says which fish of the group are held
-  for an order (a whole group takes them along; a part moved off leaves
-  them in the group); the Requests job offers only free fish.
+  reserved: never twice); the phone's Move sheet says how many of the
+  group are not reserved (a whole group takes the reserved ones along; a
+  part moved off leaves them in the group); the Requests job offers only
+  fish nothing holds.
 - **The shop's stock** is never written. Where it disagrees with the
   tanks, the product's *Clean room* box and the Stays tab say so: "Shop
-  says 5 in stock, tanks have 3 free" (a product that counts its stock
-  as a whole, or each variation that counts its own, by its size).
+  says 5 in stock, tanks have 3 ready" — with "(+2 not for sale yet)"
+  when some fish nothing holds are not for sale yet; it warns when the
+  stock differs from both together, as before (a product that counts its
+  stock as a whole, or each variation that counts its own, by its
+  size).
 - **Pull today — on the To do tab and the phone's day list.** The orders
   going out today (the feeding rule's: delivery date tomorrow,
   processing / on hold / combined box / shipped), by building → tank →
@@ -1251,7 +1283,9 @@ removed from the tank." Three steps, nothing logged by hand:
 - **The hand "Shipped" on the phone** still works as before; on a group
   that holds fish for an order its sheet says "2 of these are reserved
   for #1234 and will come off by themselves when it ships." ("… when they
-  ship" for several orders) — so they are not taken out twice.
+  ship" for several orders) — so they are not taken out twice; fish held
+  by hand never come off by themselves: "2 of these are held by hand for
+  Mike S. — release the hold once they go."
 - **The feeding rule** asks the reservation first: a line held in its
   group(s) is located there before the Invoices link and the ladder
   (`Sold_Line::stays()`'s first rung, *held*).
@@ -1285,7 +1319,17 @@ removed from the tank." Three steps, nothing logged by hand:
   save (ShipTracker saves orders often) nor by a loss, a count or a note
   logged on the phone. A miss reads the open orders once (the newest 400
   — they ship soonest — the lines through the Lost Fish reader) and
-  writes the reservations it adds. Today's pull list is a second
+  writes the reservations it adds. WooCommerce reads those orders with
+  their meta, lines, line meta, products and refunds in a few queries;
+  what is asked here is asked **once per read, not per order**:
+  ShipTracker's shipments of every open order in one query on its own
+  table (`Store::shipment_rows()`, handed to the Lost Fish reader for
+  that read only: `Orders::prime_shipments()`, forgotten after it — the
+  pull list and the feeding read of tomorrow's lines do the same), and
+  the Requests offers naming an open clean group in one read
+  (`Requests\Store::offered_to_stays()`) instead of two searches per
+  order with a fish still to place. A table that cannot be read, or an
+  older Requests section, falls back to one order at a time. Today's pull list is a second
   transient (`fishotel_cleanroom_pull`), dropped with it and whenever an
   order is saved: a warm Board, To do tab or phone reads no order at
   all. Tracking added to an order whose fish are all reserved reads only
@@ -1293,16 +1337,88 @@ removed from the tank." Three steps, nothing logged by hand:
   but the hooks dropping the cache. The not-found list is one option
   (`fishotel_cleanroom_reserve_lost`, the newest 200).
 
+### Reserve by hand
+
+"Or I should be able to mark it reserved. In a perfect world I could note
+who reserved it…" — a forum member, a phone call, a customer paying on
+Friday.
+
+- **Reserve…** — on a group of a tank card on the Board (open its line)
+  and on a group on the phone: **how many** (never more than are
+  **ready**: a group not for sale, or with every fish already held, offers
+  none), **for whom** — the shop's customers found by name or e-mail as
+  you type (their name and e-mail are then read from their account, "Mike
+  S."), or any name typed — and a short **note** ("paying Friday").
+- **Shown wherever reserved counts show**: "5 ready · 2 reserved (Mike S.
+  — by hand, 3 days ago)". The held fish are **not ready**: no order, no
+  invoice of the Invoices picker, no request of the Requests job and no
+  "not reserved" count of the Move sheet counts them.
+- **Not an event**: the fish alive are unchanged; nothing is written in
+  the tank's history. **Not on Pull today** — no order is behind a hold.
+- **It never runs out by itself.** Its age is shown ("3 days ago"); a
+  hold of 14 days or more stands out. **Release** — on the group (Board,
+  phone) and on the To do tab's **Held by hand** list of every hold (tank,
+  fish, who, how many, how long, the note) — ends it: its fish are ready
+  again.
+- **Orders first, never more than alive.** Holds count with the orders'
+  reservations; when fish die, a hold shrinks (the older hold keeps its
+  fish first) — never an order. The list says "only 1 still in the tank
+  for it"; a hold whose group closed holds nothing and says "its tank
+  group is gone".
+- **When that person orders.** A hold for a **customer's account** is
+  taken by **that customer's own paid order** (same account, or the same
+  e-mail on a guest checkout) for **the same fish in the same size**: the
+  order's line is reserved in the hold's group, the hold keeps what is
+  left over and closes when nothing is ("taken by order #1240"). An order
+  of theirs **not paid yet** waits for the held fish (it is given no
+  others for them, and they stay held). **Never another customer's
+  order.** It is the reservation's **top rung, before the Invoices
+  link**: the hold is the owner's promise to that person, and the
+  Invoices picker never offers held fish, so an invoice for them names
+  the same group (same answer) or another one picked only because the
+  held fish looked taken — taking the hold first keeps one set of fish
+  for one customer.
+- **A name typed is never matched by itself.** When an order of that fish
+  in that size comes in after the hold (paid or not, whoever placed it),
+  the To do tab asks "Is #1240 the order for the fish held for Mike S.?"
+  — **Give them the held fish** (one tap: the line is reserved in the
+  hold's group first, its other fish stay where they were, the hold closes
+  "taken by order #1240") or **Not this order** (not asked again for that
+  hold).
+- **It follows its group**: a hold names the group (stay id), so a whole
+  group moved to another tank takes its holds along; a part moved off
+  leaves them in the group — as an order's reservation.
+- **Storage**: one option, `fishotel_cleanroom_holds` (not autoloaded):
+  `{ next, holds: { id => { stay_id, qty, who, user_id, email, note, at,
+  by, closed, why, taken, not } } }` — no table, no column, no event
+  (a hold is not one), no order item (a hold has no order). At most
+  **300 open holds**: a new one beyond is refused with what to do, none is
+  ever dropped; only closed holds are trimmed (the newest 100 kept as
+  history). Every write holds the same lock as the reservations.
+- **The tick** (*Reserve sold fish…*) off hides every hold and refuses a
+  new one; the option is kept untouched, and on again shows them all.
+
+`class-holds.php` is its rule, pure (made only from ready fish, counted
+with the orders — orders first —, the account rung's holds, taken,
+released, the suggestions, the cap); the edge is in `class-reserve-shop.php`
+(`hold_create()`, `hold_release()`, `hold_give()`, `hold_dismiss()`,
+`customers()` — WooCommerce's customer search, else WordPress's users);
+the phone posts the acts `hold` and `release` and searches customers
+through its own suggest read (`kind=customers`), so the Shop App's gate
+keeps its four actions.
+
 How it is built: `class-reserve.php` is the rule, pure (which group, how
 many, the counts, whether a line left, the difference, the gate, the
 pull list, the words); `class-reserve-shop.php` is its edge (the order's
 head and lines through `Ship_Lines`, its shipments through the Lost Fish
 section's `Orders::shipments()`, the item meta, the hooks, the sweep,
 the events through `record_event()`, the not-found list);
-`class-admin-reserve.php` takes the To do tab's corrections
-(admin-post `fishotel_cleanroom_reserve`). Other sections read the counts
+`class-admin-reserve.php` takes the To do tab's corrections and the
+holds' buttons (admin-post `fishotel_cleanroom_reserve`: pick, ignore,
+ignore_all, hold, release, give, not). Other sections read the counts
 through `Reserve_Shop::counts_for( $stay_ids )` (stay id → `{ qty,
-orders }`, empty while it is off).
+orders, hand, holds, who }` — qty counts the holds by hand too; who is
+"#1234; 1 for Mike S. — by hand, 3 days ago" —, empty while it is off).
 
 ## Fish orders (the tab once called Supplier orders, and Arrivals before that)
 
@@ -3179,7 +3295,7 @@ the owner saves one, at most 40, not autoloaded),
 `fishotel_cleanroom_sales_statuses` (the order statuses that
 count as a sale on *Stats → Real sales*, slugs without "wc-"; absent —
 and then the suggested list applies — until Settings → Sales statuses is
-saved; not autoloaded), `fishotel_cleanroom_settings` (with `size_attribute` and `size_list`, the source of the standard sizes, `medications`, the medication list — absent until it is first edited, which means the seed; no table and no schema change —, and `no_feed_on_ship_day`, the tick of *No feeding on a ship day*: absent means on; `reserve_sold_fish`, the tick of *Reserved, Pull today, Shipped*: absent means on), `fishotel_cleanroom_reserve_since` (the moment reserving sold fish was first switched on, UNIX time; never moved), `fishotel_cleanroom_reserve_lost` (the fish that shipped and whose tank was not found: "order id|ref" → entry, the newest 200; not autoloaded), the transient `fishotel_cleanroom_reserved` (every group's reserved fish), the transient `fishotel_cleanroom_pull` (today's pull list), `fishotel_cleanroom_reserve_lock` (held while a request writes shipped fish; gone otherwise) and, on each fish line of an order, the item meta `_fh_stay` (its reservation, `{stay id: fish}`), `_fh_stay_seen`, `_fh_stay_was` and `_fh_stay_ignore` (`_<n>` added for a fish of an invoice kept as one line), `fishotel_cleanroom_protocol`
+saved; not autoloaded), `fishotel_cleanroom_settings` (with `size_attribute` and `size_list`, the source of the standard sizes, `medications`, the medication list — absent until it is first edited, which means the seed; no table and no schema change —, and `no_feed_on_ship_day`, the tick of *No feeding on a ship day*: absent means on; `reserve_sold_fish`, the tick of *Ready, Reserved, Shipped*: absent means on), `fishotel_cleanroom_reserve_since` (the moment reserving sold fish was first switched on, UNIX time; never moved), `fishotel_cleanroom_reserve_lost` (the fish that shipped and whose tank was not found: "order id|ref" → entry, the newest 200; not autoloaded), `fishotel_cleanroom_holds` (the holds by hand: `{ next, holds }`, at most 300 open, the newest 100 closed; not autoloaded), the transient `fishotel_cleanroom_reserved` (every group's reserved fish), the transient `fishotel_cleanroom_pull` (today's pull list), `fishotel_cleanroom_reserve_lock` (held while a request writes shipped fish; gone otherwise) and, on each fish line of an order, the item meta `_fh_stay` (its reservation, `{stay id: fish}`), `_fh_stay_seen`, `_fh_stay_was` and `_fh_stay_ignore` (`_<n>` added for a fish of an invoice kept as one line), `fishotel_cleanroom_protocol`
 (`{ default: name, templates: { name: steps[] } }` — an older bare steps
 array is read as the "14 Day CM" template next to the other four seeds),
 `fishotel_cleanroom_box_rates` (rows of supplier, origin, per box,
@@ -3259,8 +3375,13 @@ clean-room/
 ├── class-reserve-shop.php  its edge: the reservation on the order item, the order hooks (at
 │                           shutdown), the hourly sweep, the sold events, the not-found list, the
 │                           counts other sections read
-├── class-admin-reserve.php the To do tab's corrections (admin-post): It was tank… / Pulled from a
-│                           different tank / Ignore / Ignore all
+├── class-holds.php         PURE: fish reserved BY HAND (Reserve…): made only from ready fish,
+│                           counted with the orders (orders first, never more than alive), taken
+│                           by that customer's own paid order, suggested to an order for a typed
+│                           name, released by hand, the cap
+├── class-admin-reserve.php the To do tab's corrections and the holds' buttons (admin-post): It was
+│                           tank… / Pulled from a different tank / Ignore / Ignore all / Reserve… /
+│                           Release / Give them the held fish / Not this order
 ├── class-replay.php        PURE: events → state, day math, the chosen sale date (own > batch > none,
 │                           the suggestion, ready, "still in the Spa"), splits, compensating events
 ├── class-protocol.php      PURE: the named treatment templates (the five seeds, the option's
