@@ -1,0 +1,88 @@
+/* Med listings — the cleanup page. Uses the plugin's dark admin colours (admin/css/admin-style.css). */
+
+.fhml-wrap { max-width: 1400px; }
+.fhml-wrap h3, .fhml-wrap h4 { color: var(--fh-text-primary, #e0e0e0); }
+.fhml-wrap .fishotel-misc-card a:not(.button) { color: var(--fh-accent-hover, #0eb5e8); }
+.fhml-wrap .fhml-table a:not(.button) { color: #0a6fa0; }
+.fhml-wrap .button { display: inline-block; width: auto; }
+.fhml-wrap select, .fhml-wrap input[type="text"], .fhml-wrap textarea { max-width: 100%; box-sizing: border-box; }
+.fhml-lead { font-size: 14px; max-width: 900px; color: var(--fh-text-primary, #e0e0e0); }
+.fhml-step { margin: 18px 0; padding: 18px 20px; }
+.fhml-step h2 { display: flex; align-items: center; gap: 10px; }
+.fhml-num {
+	display: inline-flex; align-items: center; justify-content: center;
+	width: 28px; height: 28px; border-radius: 50%;
+	background: var(--fh-accent, #00a0d2); color: #fff; font-weight: 700; font-size: 14px;
+}
+.fhml-muted { color: var(--fh-text-secondary, #a0a0a0); }
+.fhml-small { font-size: 12px; }
+.fhml-note { color: var(--fh-warning, #ffb900); font-size: 12px; }
+.fhml-table .fhml-note { color: #8a5a00; }
+.fhml-table .fhml-muted { color: #646970; }
+.fhml-ok { color: var(--fh-success, #46b450); }
+.fhml-bad { color: var(--fh-danger, #dc3232); }
+.fhml-notice { padding: 8px 12px; border-left: 4px solid var(--fh-success, #46b450); background: var(--fh-bg-secondary, #2d2d2d); margin: 10px 0; }
+.fhml-notice--warn { border-left-color: var(--fh-warning, #ffb900); }
+
+.fhml-found { columns: 2; margin: 8px 0 12px 18px; list-style: disc; }
+.fhml-found li { break-inside: avoid; }
+
+.fhml-words summary, .fhml-done summary { cursor: pointer; font-weight: 600; margin: 8px 0; }
+.fhml-words-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.fhml-words-item span { display: block; font-weight: 600; margin-bottom: 4px; }
+.fhml-words-item textarea, .fhml-words-item input { width: 100%; font-family: monospace; font-size: 12px; }
+
+.fhml-legend mark { margin-right: 6px; }
+.fhml-hit { padding: 0 2px; border-radius: 3px; color: #111; }
+.fhml-hit--diseases { background: #ff9a9a; }
+.fhml-hit--claims { background: #ffd27a; }
+.fhml-hit--dosing { background: #b9e3ff; }
+.fhml-hit--labels { background: #d9b8ff; }
+.fhml-hit--links { background: #b6f0b6; }
+
+.fhml-flags { border: 1px solid var(--fh-warning, #ffb900); border-radius: var(--fh-radius, 8px); padding: 10px 16px; margin: 12px 0 18px; }
+.fhml-flags h4 { margin: 12px 0 4px; }
+.fhml-flags ul { margin: 0 0 0 18px; list-style: disc; }
+.fhml-flags q { font-style: italic; color: var(--fh-text-secondary, #a0a0a0); }
+
+.fhml-product { border-top: 1px solid var(--fh-border, rgba(255,255,255,.1)); padding-top: 14px; margin-top: 18px; }
+.fhml-product-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.fhml-product-head h3 { margin: 0 0 8px; }
+
+.fhml-table { margin-top: 6px; border-collapse: collapse; }
+.fhml-wrap .fhml-table th, .fhml-wrap .fhml-table td { vertical-align: top; padding: 8px; }
+.fhml-c-tick { width: 52px; text-align: center; }
+.fhml-c-field { width: 18%; }
+.fhml-c-now, .fhml-c-new { width: 40%; }
+.fhml-now { white-space: pre-wrap; word-break: break-word; max-height: 260px; overflow: auto; font-size: 12px; }
+.fhml-proposed { width: 100%; font-size: 12px; }
+.fhml-row--done { opacity: .55; }
+.fhml-status { display: block; margin-top: 4px; font-size: 12px; }
+.fhml-product-status { margin-left: 8px; }
+.fhml-when label { display: block; margin-top: 4px; }
+.fhml-when input[type="text"], .fhml-when textarea { width: 100%; }
+#fhml-pages ul { margin: 4px 0 0 18px; list-style: disc; }
+
+@media (max-width: 900px) {
+	.fhml-found { columns: 1; }
+	.fhml-table, .fhml-table tbody { display: block; width: 100%; }
+	.fhml-table thead { display: none; }
+	.fhml-table tr, .fhml-table td { display: block; width: auto !important; }
+	.fhml-table code { word-break: break-all; }
+}
+
+/* Phone width: nothing wider than the screen (long addresses, selects, code). */
+.fhml-wrap, .fhml-wrap * { min-width: 0; }
+.fhml-wrap { overflow-wrap: anywhere; }
+.fhml-wrap code { white-space: normal; word-break: break-all; }
+.fhml-wrap select { max-width: 100%; }
+.fhml-ingredient { width: 100%; font-size: 13px; padding: 6px; border: 2px solid var(--fh-warning, #ffb900); }
+.fhml-term--blocked { opacity: .7; }
+@media (max-width: 600px) {
+	.fhml-step { padding: 12px 10px; }
+	.fhml-words-grid { grid-template-columns: 1fr; }
+	.fhml-table, .fhml-table tbody, .fhml-table tr, .fhml-table td { max-width: 100%; box-sizing: border-box; }
+	.fhml-wrap .fhml-table th, .fhml-wrap .fhml-table td { padding: 6px 4px; }
+	.fhml-c-tick { text-align: left; }
+	.fhml-product-head { flex-direction: column; }
+}
