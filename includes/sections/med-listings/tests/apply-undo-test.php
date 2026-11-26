@@ -218,4 +218,34 @@ foreach ( array( 'product first', 'categories first' ) as $order ) {
 	check( "$order: each value exists once", 2 === count( get_terms( array( 'taxonomy' => 'pa_med_treats' ) ) ) );
 }
 
+echo "\n9. Attributes taken off one by one come back in their old order (ties on position keep the order shown on the page)\n";
+$ids  = fh_seed();
+$t    = $ids['trio'];
+$keys = array();
+foreach ( array( 'Treats' => array( 0, 'pa_med_treats' ), 'Directions' => array( 0, 'directions' ), 'Use' => array( 0, 'use' ), 'Shelf' => array( 1, 'shelf' ) ) as $label => $pk ) {
+	if ( ! isset( $GLOBALS['fh']['attrs'][ $t ][ $pk[1] ] ) ) {
+		$a = new WC_Product_Attribute();
+		$a->set_name( $label );
+		$a->set_options( array( 'Dose every 48 hours' ) );
+		$a->set_position( $pk[0] );
+		$GLOBALS['fh']['attrs'][ $t ][ $pk[1] ] = $a;
+	}
+}
+// Put a fixed order on the product: the medication attributes first, then the rest as they were.
+$was   = $GLOBALS['fh']['attrs'][ $t ];
+$order = array_merge( array( 'pa_med_treats', 'directions', 'use', 'shelf' ), array_diff( array_keys( $was ), array( 'pa_med_treats', 'directions', 'use', 'shelf' ) ) );
+$GLOBALS['fh']['attrs'][ $t ] = array();
+foreach ( $order as $k ) {
+	$GLOBALS['fh']['attrs'][ $t ][ $k ] = $was[ $k ];
+}
+$before_keys = array_keys( $GLOBALS['fh']['attrs'][ $t ] );
+$rows        = array();
+foreach ( array( 'attr:pa_med_treats', 'attr:directions', 'attr:use' ) as $f ) {
+	$rows[] = array( 'object' => $t, 'field' => $f, 'value' => '', 'hash' => Fields::hash( Fields::read( $t, $f ) ) );
+}
+$res = Ledger::apply( $t, $rows, Inventory::owned_ids( $t ) );
+check( 'three attributes taken off in one Apply', 3 === count( array_filter( wp_list_pluck( $res, 'ok' ) ) ) && ! isset( $GLOBALS['fh']['attrs'][ $t ]['use'] ) );
+Ledger::undo( $t );
+check( 'after Undo the attributes are in the same order as before', $before_keys === array_keys( $GLOBALS['fh']['attrs'][ $t ] ), implode( ',', array_keys( $GLOBALS['fh']['attrs'][ $t ] ) ) );
+
 fh_done();

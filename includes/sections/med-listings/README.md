@@ -188,6 +188,10 @@ not proposed again.
 - **Global attributes** are recorded with their values' slugs too. If step
   5 removed those values, Undo makes them again. Undo works in either
   order (product first or categories first).
+- **Attribute order.** An attribute put back goes into the place it had
+  among the product's attributes, so the "Additional information" list
+  reads in the same order as before (several attributes at the same
+  position keep their order).
 - **What WooCommerce rewrites itself.** When a product with variations is
   saved, WooCommerce rewrites each variation's attribute summary (the
   variation's own excerpt). That text is WooCommerce's, not yours.

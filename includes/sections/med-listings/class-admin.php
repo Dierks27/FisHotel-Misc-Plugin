@@ -367,7 +367,7 @@ class Admin {
 			$cats = wp_get_object_terms( $pid, 'product_cat', array( 'fields' => 'ids' ) );
 			$rows[] = array( 'product', $pid, $snap['name'], $pid, 'categories', 'Categories', '', self::csv_safe( implode( ', ', $snap['cats'] ) ), wp_json_encode( array( 'exists' => true, 'raw' => is_array( $cats ) ? array_map( 'intval', $cats ) : array() ) ) );
 			foreach ( $snap['fields'] as $f ) {
-				$rows[] = array( 'product', $pid, $snap['name'], $f['object'], $f['field'], $f['label'], $f['where'], self::csv_safe( (string) $f['read']['text'] ), wp_json_encode( array( 'exists' => (bool) $f['read']['exists'], 'raw' => $f['read']['raw'] ) ) );
+				$rows[] = array( 'product', $pid, $snap['name'], $f['object'], $f['field'], $f['label'], $f['where'], self::csv_safe( (string) $f['read']['text'] ), wp_json_encode( array( 'exists' => (bool) $f['read']['exists'], 'raw' => $f['read']['raw'] ) + ( isset( $f['read']['order'] ) ? array( 'order' => $f['read']['order'] ) : array() ) ) );
 			}
 			foreach ( $snap['comments'] as $c ) {
 				$rows[] = array( 'review', $pid, $snap['name'], $c['id'], 'comment_status', 'Review', (string) $c['author'], self::csv_safe( (string) $c['content'] ), wp_json_encode( array( 'exists' => true, 'raw' => $c['status'] ) ) );

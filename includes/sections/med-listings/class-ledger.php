@@ -168,6 +168,9 @@ class Ledger {
 					'at'         => time(),
 					'user'       => $user,
 				);
+				if ( isset( $before['order'] ) ) {
+					$mine[ $key ]['old_order'] = (array) $before['order'];
+				}
 			}
 			$mine[ $key ]['new_text'] = (string) $after['text'];
 			$result[]                 = array( 'key' => $key, 'ok' => true, 'message' => '' );
@@ -202,7 +205,7 @@ class Ledger {
 				$left[ $key ] = $e;
 				continue;
 			}
-			$ok = Fields::write( (int) $e['object'], (string) $e['field'], $e['old'], (bool) $e['old_exists'] );
+			$ok = Fields::write( (int) $e['object'], (string) $e['field'], $e['old'], (bool) $e['old_exists'], isset( $e['old_order'] ) ? (array) $e['old_order'] : array() );
 			if ( true === $ok ) {
 				$done++;
 			} else {

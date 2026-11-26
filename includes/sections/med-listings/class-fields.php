@@ -181,11 +181,16 @@ class Fields {
 			$key     = substr( $field, 5 );
 			$product = function_exists( 'wc_get_product' ) ? wc_get_product( $object_id ) : null;
 			$attrs   = $product ? $product->get_attributes( 'edit' ) : array();
+			// 'order': the attribute keys as the product holds them now. It is
+			// not part of the value (nor of its fingerprint): Undo uses it to
+			// put an attribute back in its old place, so attributes with the
+			// same position keep the order the page showed them in.
 			if ( ! isset( $attrs[ $key ] ) || ! is_object( $attrs[ $key ] ) ) {
 				return array(
 					'exists' => false,
 					'raw'    => null,
 					'text'   => '',
+					'order'  => array_map( 'strval', array_keys( $attrs ) ),
 				);
 			}
 			$raw = self::export_attribute( $attrs[ $key ] );
@@ -193,6 +198,7 @@ class Fields {
 				'exists' => true,
 				'raw'    => $raw,
 				'text'   => self::attribute_text( $raw ),
+				'order'  => array_map( 'strval', array_keys( $attrs ) ),
 			);
 		}
 		return array(
@@ -209,9 +215,12 @@ class Fields {
 	 * @param string $field     Key.
 	 * @param mixed  $raw       Value as read() gives it (or input_to_raw()).
 	 * @param bool   $exists    False to remove it (meta and attributes).
+	 * @param array  $order     Attributes only: the keys in the order the product
+	 *                          held them when this value was read (read()['order']).
+	 *                          An attribute put back goes into that place.
 	 * @return true|string True, or what went wrong in words.
 	 */
-	public static function write( $object_id, $field, $raw, $exists = true ) {
+	public static function write( $object_id, $field, $raw, $exists = true, array $order = array() ) {
 		$object_id = (int) $object_id;
 		$field     = (string) $field;
 		if ( ! self::allowed( $field ) ) {
@@ -288,8 +297,10 @@ class Fields {
 			$attrs = $product->get_attributes( 'edit' );
 			if ( ! $exists || null === $raw ) {
 				unset( $attrs[ $key ] );
-			} else {
+			} elseif ( isset( $attrs[ $key ] ) || ! $order ) {
 				$attrs[ $key ] = self::import_attribute( (array) $raw );
+			} else {
+				$attrs = self::insert_in_order( $attrs, $key, self::import_attribute( (array) $raw ), $order );
 			}
 			$product->set_attributes( array_values( array_filter( $attrs ) ) );
 			$product->save();
@@ -297,6 +308,58 @@ class Fields {
 		}
 
 		return 'This field cannot be changed here.';
+	}
+
+	/**
+	 * Put $key back among $attrs where it stood in $order: before the first
+	 * key that followed it then and is still there, else after the last one
+	 * that preceded it, else at the end. Several attributes put back one by
+	 * one, in any order, so end up in their old order again.
+	 *
+	 * @param array  $attrs Key => attribute, as the product holds them now.
+	 * @param string $key   The attribute to put back.
+	 * @param object $attr  It.
+	 * @param array  $order The keys as they were.
+	 * @return array
+	 */
+	public static function insert_in_order( array $attrs, $key, $attr, array $order ) {
+		$order = array_values( array_map( 'strval', $order ) );
+		$at    = array_search( (string) $key, $order, true );
+		$keys  = array_map( 'strval', array_keys( $attrs ) );
+		$slot  = count( $keys );
+		if ( false !== $at ) {
+			$found = false;
+			foreach ( array_slice( $order, $at + 1 ) as $next ) {
+				$i = array_search( $next, $keys, true );
+				if ( false !== $i ) {
+					$slot  = $i;
+					$found = true;
+					break;
+				}
+			}
+			if ( ! $found ) {
+				foreach ( array_reverse( array_slice( $order, 0, $at ) ) as $prev ) {
+					$i = array_search( $prev, $keys, true );
+					if ( false !== $i ) {
+						$slot = $i + 1;
+						break;
+					}
+				}
+			}
+		}
+		$out = array();
+		$n   = 0;
+		foreach ( $attrs as $k => $a ) {
+			if ( $n === $slot ) {
+				$out[ $key ] = $attr;
+			}
+			$out[ $k ] = $a;
+			$n++;
+		}
+		if ( ! isset( $out[ $key ] ) ) {
+			$out[ $key ] = $attr;
+		}
+		return $out;
 	}
 
 	/**
