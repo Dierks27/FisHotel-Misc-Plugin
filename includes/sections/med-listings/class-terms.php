@@ -301,6 +301,15 @@ class Terms {
 						? sprintf( /* translators: %d: products */ __( 'A disease or medicine-type tag that is also on %d other products (fish …): it is only taken off the medications. The tag and its page stay for the others.', 'fishotel-misc-plugin' ), $others )
 						: __( 'A disease or medicine-type tag: taken off every product and removed; its page goes to Medications.', 'fishotel-misc-plugin' );
 					$rows[] = $row;
+				} elseif ( $name_hit && $objs && Finder::has( (string) $t->description, $words, array( 'claims', 'dosing' ) ) ) {
+					// A disease tag no longer on any medication (step 4 took it off) but
+					// kept for other products: its page stays, its claim description goes.
+					$row             = self::row( $t, $tax );
+					$row['hits']     = Finder::words( Finder::find( (string) $t->description, $words, $claim ) );
+					$row['action']   = 'rename';
+					$row['new_desc'] = Finder::clean( (string) $t->description, $words, $claim );
+					$row['note']     = __( 'A disease tag left only on products that are not medications (fish …): the tag and its page stay; its description makes a claim and is cleaned.', 'fishotel-misc-plugin' );
+					$rows[]          = $row;
 				} elseif ( $desc_hit && $on_med ) {
 					$row             = self::row( $t, $tax );
 					$row['hits']     = Finder::words( Finder::find( (string) $t->description, $words, $claim ) );

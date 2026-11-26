@@ -307,4 +307,15 @@ Ledger::save( $l );
 $u = Terms::undo( 'cgone' );
 check( 'undo of a rename whose category is gone: nothing to put back, and it leaves the list', $u['ok'] && ! isset( Ledger::all()['terms']['cgone'] ), $u['message'] );
 
+echo "\n13. A disease tag already taken off the medications (by step 4) and left on a fish: its claim description is still cleaned\n";
+$ids = fh_seed();
+wp_set_object_terms( $ids['cure'], array(), 'product_tag' );
+wp_set_object_terms( $ids['fish'], array( $ids['tag_flukes'] ), 'product_tag', true );
+wp_update_term( $ids['tag_flukes'], 'product_tag', array( 'description' => 'Products that treat flukes.' ) );
+$rows = array();
+foreach ( Terms::proposals( $w ) as $r ) {
+	$rows[ $r['tax'] . ':' . $r['slug'] ] = $r;
+}
+check( 'proposed: description only, cleaned', isset( $rows['product_tag:flukes'] ) && 'rename' === $rows['product_tag:flukes']['action'] && '' === $rows['product_tag:flukes']['new_desc'] && 'Flukes' === $rows['product_tag:flukes']['new_name'] );
+
 fh_done();
