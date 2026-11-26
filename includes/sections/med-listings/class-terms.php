@@ -292,6 +292,10 @@ class Terms {
 					$row           = self::row( $t, $tax );
 					$row['hits']   = Finder::words( Finder::find( $t->name, $words, $claim ) );
 					$row['action'] = $others ? 'untag' : 'delete';
+					if ( $others ) {
+						// The tag and its page stay (for the fish): its description must not make a claim.
+						$row['new_desc'] = $desc_hit ? Finder::clean( (string) $t->description, $words, $claim ) : (string) $t->description;
+					}
 					$row['note']   = $others
 						? sprintf( /* translators: %d: products */ __( 'A disease or medicine-type tag that is also on %d other products (fish …): it is only taken off the medications. The tag and its page stay for the others.', 'fishotel-misc-plugin' ), $others )
 						: __( 'A disease or medicine-type tag: taken off every product and removed; its page goes to Medications.', 'fishotel-misc-plugin' );
@@ -712,6 +716,14 @@ class Terms {
 		}
 
 		if ( 'untag' === $action ) {
+			$desc = isset( $row['new_desc'] ) ? wp_kses_post( (string) $row['new_desc'] ) : (string) $t->description;
+			if ( $desc !== (string) $t->description ) {
+				$done = wp_update_term( (int) $t->term_id, $tax, array( 'description' => $desc ) );
+				if ( is_wp_error( $done ) ) {
+					return self::answer( false, $done->get_error_message() );
+				}
+				$entry['new'] = array( 'description' => $desc );
+			}
 			foreach ( self::products_in( (int) $t->term_id, $tax ) as $pid ) {
 				if ( isset( $med_set[ $pid ] ) ) {
 					wp_remove_object_terms( $pid, (int) $t->term_id, $tax );
@@ -1133,6 +1145,10 @@ class Terms {
 			}
 			foreach ( (array) $e['objects'] as $pid ) {
 				wp_set_object_terms( (int) $pid, array( (int) $old['term_id'] ), $tax, true );
+			}
+			// Its description back, unless someone wrote a new one since.
+			if ( isset( $e['new']['description'] ) && (string) $back->description === (string) $e['new']['description'] ) {
+				wp_update_term( (int) $old['term_id'], $tax, array( 'description' => (string) $old['description'] ) );
 			}
 		} else {
 			$back = get_term_by( 'slug', $old['slug'], $tax );

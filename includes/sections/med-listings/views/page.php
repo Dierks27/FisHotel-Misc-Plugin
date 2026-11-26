@@ -338,6 +338,8 @@ $fhml_backup = wp_nonce_url( admin_url( 'admin-post.php?action=fishotel_med_list
 							<span class="fhml-when fhml-when--rename">
 								<label><?php esc_html_e( 'Name', 'fishotel-misc-plugin' ); ?> <input type="text" class="fhml-new-name" value="<?php echo esc_attr( $fhml_t['new_name'] ); ?>"></label>
 								<label><?php esc_html_e( 'Slug', 'fishotel-misc-plugin' ); ?> <input type="text" class="fhml-new-slug" value="<?php echo esc_attr( $fhml_t['new_slug'] ); ?>"></label>
+							</span>
+							<span class="fhml-when fhml-when--rename fhml-when--untag">
 								<label><?php esc_html_e( 'Description', 'fishotel-misc-plugin' ); ?><textarea class="fhml-new-desc" rows="2"><?php echo esc_textarea( $fhml_t['new_desc'] ); ?></textarea></label>
 							</span>
 							<?php endif; ?>

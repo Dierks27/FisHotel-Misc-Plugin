@@ -256,7 +256,8 @@ not proposed again.
   the record: WooCommerce counts the products again as they go back.
 - **Tags.** A disease or medicine-type tag only on medications is removed
   (its page goes to Medications). One that is also on other products (a
-  fish) is **only taken off the medications**; the tag and its page stay.
+  fish) is **only taken off the medications**; the tag and its page stay,
+  and its description loses what makes a claim ("Products that treat …").
   A tag on no medication is not listed. A tag that stays (an ingredient)
   and a brand on a medication get their description cleaned when it makes
   a claim ("Products that treat …"); brand names are only flagged.

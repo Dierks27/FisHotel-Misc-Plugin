@@ -279,4 +279,18 @@ foreach ( array( 'oldest first', 'newest first' ) as $undo_order ) {
 	check( "$undo_order: WooCommerce's product count is not put back from the record (it was 0 when recorded; WooCommerce counts it again)", $p && array() === get_term_meta( $p->term_id, 'product_count_product_cat' ) );
 }
 
+echo "\n11. A disease tag kept for a fish: taken off the medications, and its description cleaned (Undo puts both back)\n";
+$ids = fh_seed();
+wp_set_object_terms( $ids['fish'], array( $ids['tag_flukes'] ), 'product_tag', true );
+wp_update_term( $ids['tag_flukes'], 'product_tag', array( 'description' => 'Products that treat flukes.' ) );
+$rows = array();
+foreach ( Terms::proposals( $w ) as $r ) {
+	$rows[ $r['tax'] . ':' . $r['slug'] ] = $r;
+}
+check( 'the tag is only taken off the medications, its description proposed clean', 'untag' === $rows['product_tag:flukes']['action'] && '' === $rows['product_tag:flukes']['new_desc'] );
+$un = Terms::apply( $rows['product_tag:flukes'], $w );
+check( 'description cleaned, tag still on the fish', $un['ok'] && '' === get_term( $ids['tag_flukes'] )->description && in_array( 'Flukes', wp_get_object_terms( $ids['fish'], 'product_tag', array( 'fields' => 'names' ) ), true ) );
+Terms::undo( $un['change'] );
+check( 'Undo: the old description and the medication back', 'Products that treat flukes.' === get_term( $ids['tag_flukes'] )->description && in_array( 'Flukes', wp_get_object_terms( $ids['cure'], 'product_tag', array( 'fields' => 'names' ) ), true ) );
+
 fh_done();
