@@ -655,7 +655,11 @@ class Terms {
 			'description' => (string) $t->description,
 			'parent'      => (int) $t->parent,
 		);
-		$old_paths = self::old_paths( $t, $tax );
+		// The parent by slug too: when the parent is removed as well, Undo
+		// makes it again under a new id and finds it by its slug.
+		$parent_term        = $t->parent ? get_term( (int) $t->parent, $tax ) : null;
+		$old['parent_slug'] = $parent_term && ! is_wp_error( $parent_term ) ? (string) $parent_term->slug : '';
+		$old_paths          = self::old_paths( $t, $tax );
 		$entry     = array(
 			'type'    => $action,
 			'tax'     => $tax,
@@ -904,9 +908,14 @@ class Terms {
 	private static function restore_kept( array $keep, $old_id, $new_id, $tax ) {
 		if ( function_exists( 'get_term_meta' ) ) {
 			foreach ( array_keys( (array) get_term_meta( $new_id ) ) as $k ) {
-				delete_term_meta( $new_id, $k );
+				if ( 0 !== strpos( (string) $k, 'product_count_' ) ) {
+					delete_term_meta( $new_id, $k );
+				}
 			}
 			foreach ( (array) ( $keep['meta'] ?? array() ) as $k => $vals ) {
+				if ( 0 === strpos( (string) $k, 'product_count_' ) ) {
+					continue; // WooCommerce's own count, recorded after the products left: WooCommerce counts it again.
+				}
 				foreach ( (array) $vals as $v ) {
 					add_term_meta( $new_id, (string) $k, maybe_unserialize( $v ) );
 				}
@@ -928,8 +937,12 @@ class Terms {
 			}
 		}
 		foreach ( (array) ( $keep['children'] ?? array() ) as $c ) {
-			if ( get_term( (int) $c['term_id'], $tax ) ) {
-				wp_update_term( (int) $c['term_id'], $tax, array( 'parent' => (int) $new_id ) );
+			$child = get_term( (int) $c['term_id'], $tax );
+			if ( ( ! $child || is_wp_error( $child ) ) && ! empty( $c['slug'] ) ) {
+				$child = get_term_by( 'slug', (string) $c['slug'], $tax ); // Removed and made again since: a new id.
+			}
+			if ( $child && ! is_wp_error( $child ) ) {
+				wp_update_term( (int) $child->term_id, $tax, array( 'parent' => (int) $new_id ) );
 			}
 		}
 		foreach ( (array) ( $keep['primary'] ?? array() ) as $pid ) {
@@ -1126,9 +1139,17 @@ class Terms {
 			if ( $back && ! is_wp_error( $back ) ) {
 				$tid = (int) $back->term_id;
 			} else {
-				$parent = (int) $old['parent'];
+				$parent  = (int) $old['parent'];
+				$orphan  = false;
 				if ( $parent && ! get_term( $parent, $tax ) ) {
 					$parent = 0;
+					$p_slug = (string) ( $old['parent_slug'] ?? '' );
+					$p_now  = '' !== $p_slug ? get_term_by( 'slug', $p_slug, $tax ) : false;
+					if ( $p_now && ! is_wp_error( $p_now ) ) {
+						$parent = (int) $p_now->term_id;
+					} elseif ( '' !== $p_slug ) {
+						$orphan = true; // Its parent is not back yet: it goes under it when it is.
+					}
 				}
 				$made = wp_insert_term(
 					$old['name'],
@@ -1143,6 +1164,7 @@ class Terms {
 					return self::answer( false, $made->get_error_message() );
 				}
 				$tid = (int) $made['term_id'];
+				self::adopt( $tid, (string) $old['slug'], $tax, $orphan ? (string) $old['parent_slug'] : '' );
 			}
 			foreach ( (array) $e['objects'] as $pid ) {
 				wp_set_object_terms( (int) $pid, array( $tid ), $tax, true );
@@ -1173,6 +1195,41 @@ class Terms {
 		Ledger::save( $l );
 		self::forget_created( array() );
 		return self::answer( true, __( 'Put back.', 'fishotel-misc-plugin' ), $change );
+	}
+
+	/**
+	 * A term made again by Undo: sub-categories put back before it (while
+	 * it was still gone) now go under it; and when its own parent is not
+	 * back yet, it waits on the list for that parent.
+	 *
+	 * @param int    $tid         The term made again.
+	 * @param string $slug        Its slug.
+	 * @param string $tax         Taxonomy.
+	 * @param string $wait_for    Slug of its parent when that is not back yet ('' = none).
+	 */
+	private static function adopt( $tid, $slug, $tax, $wait_for ) {
+		$l    = Ledger::all();
+		$list = (array) ( $l['orphans'] ?? array() );
+		$left = array();
+		foreach ( $list as $o ) {
+			if ( (string) $o['tax'] === (string) $tax && (string) $o['parent_slug'] === (string) $slug ) {
+				$child = get_term_by( 'slug', (string) $o['slug'], $tax );
+				if ( $child && ! is_wp_error( $child ) && 0 === (int) $child->parent ) {
+					wp_update_term( (int) $child->term_id, $tax, array( 'parent' => (int) $tid ) );
+				}
+				continue;
+			}
+			$left[] = $o;
+		}
+		if ( '' !== $wait_for ) {
+			$left[] = array(
+				'tax'         => (string) $tax,
+				'slug'        => (string) $slug,
+				'parent_slug' => (string) $wait_for,
+			);
+		}
+		$l['orphans'] = $left;
+		Ledger::save( $l );
 	}
 
 	/**

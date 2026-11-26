@@ -240,7 +240,10 @@ not proposed again.
   - its own settings (picture, display type, order), the Yoast primary
     category of its products and its Yoast SEO text are recorded.
 
-  Undo puts all of it back on the category it makes again.
+  Undo puts all of it back on the category it makes again. A
+  sub-category that was removed too goes back under it, whichever of the
+  two you undo first. WooCommerce's own product count is not taken from
+  the record: WooCommerce counts the products again as they go back.
 - **Tags.** A disease or medicine-type tag only on medications is removed
   (its page goes to Medications). One that is also on other products (a
   fish) is **only taken off the medications**; the tag and its page stay.

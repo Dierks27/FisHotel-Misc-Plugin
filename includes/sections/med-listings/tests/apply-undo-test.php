@@ -249,4 +249,34 @@ check( 'three attributes taken off in one Apply', 3 === count( array_filter( wp_
 Ledger::undo( $t );
 check( 'after Undo the attributes are in the same order as before', $before_keys === array_keys( $GLOBALS['fh']['attrs'][ $t ] ), implode( ',', array_keys( $GLOBALS['fh']['attrs'][ $t ] ) ) );
 
+echo "\n10. A sub-category removed before its parent comes back under its parent, whichever is undone first\n";
+foreach ( array( 'oldest first', 'newest first' ) as $undo_order ) {
+	$ids = fh_seed();
+	$sub = fh_term( 'product_cat', 'Gram Negative', 'gram-negative', $ids['cat_bact'], 'For gram-negative infections.' );
+	add_term_meta( $ids['cat_para'], 'display_type', 'products' );
+	add_term_meta( $ids['cat_para'], 'product_count_product_cat', '1' );
+	$rows = array();
+	foreach ( Terms::proposals( $w ) as $r ) {
+		$rows[ $r['tax'] . ':' . $r['slug'] ] = $r;
+	}
+	check( "$undo_order: the sub-category is proposed", isset( $rows['product_cat:gram-negative'] ) && 'keep' !== $rows['product_cat:gram-negative']['action'] );
+	$a1 = Terms::apply( $rows['product_cat:gram-negative'], $w );
+	$a2 = Terms::apply( $rows['product_cat:antibacterial'], $w );
+	$a3 = Terms::apply( $rows['product_cat:antiparasitic'], $w );
+	check( "$undo_order: sub-category, its parent and Antiparasitic removed", $a1['ok'] && $a2['ok'] && $a3['ok'] && false === get_term_by( 'slug', 'gram-negative', 'product_cat' ) && false === get_term_by( 'slug', 'antibacterial', 'product_cat' ) );
+	$changes = array_keys( Ledger::all()['terms'] );
+	if ( 'newest first' === $undo_order ) {
+		$changes = array_reverse( $changes );
+	}
+	foreach ( $changes as $change ) {
+		Terms::undo( $change );
+	}
+	$g = get_term_by( 'slug', 'gram-negative', 'product_cat' );
+	$b = get_term_by( 'slug', 'antibacterial', 'product_cat' );
+	check( "$undo_order: Gram Negative is back under Antibacterial", $g && $b && (int) $g->parent === (int) $b->term_id, $g ? 'parent ' . $g->parent : 'missing' );
+	$p = get_term_by( 'slug', 'antiparasitic', 'product_cat' );
+	check( "$undo_order: Antiparasitic's own settings are back", $p && 'products' === get_term_meta( $p->term_id, 'display_type', true ) );
+	check( "$undo_order: WooCommerce's product count is not put back from the record (it was 0 when recorded; WooCommerce counts it again)", $p && array() === get_term_meta( $p->term_id, 'product_count_product_cat' ) );
+}
+
 fh_done();
