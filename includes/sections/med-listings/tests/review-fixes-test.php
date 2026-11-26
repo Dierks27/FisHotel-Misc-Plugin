@@ -344,4 +344,29 @@ $b   = Proposals::build( Inventory::snapshot( $ids['trio'], Words::get() ), Word
 $rev = $b['flags'][ array_search( 'review', array_column( $b['flags'], 'type' ), true ) ];
 check( 'it names the public review list', false !== strpos( $rev['text'], '/wp-json/wc/store/v1/products/reviews' ) );
 
+echo "\n14. A claim name renamed after Apply: the fields that carry the old name are proposed again\n";
+$ids = fh_seed();
+$w   = Words::get();
+$q   = $ids['cure'];
+update_post_meta( $q, '_fishotel_active_ingredient', 'Praziquantel' );
+$b    = Proposals::build( Inventory::snapshot( $q, $w ), $w );
+$rows = array();
+foreach ( $b['rows'] as $r ) {
+	if ( $r['ticked'] ) {
+		$rows[] = array( 'object' => $r['object'], 'field' => $r['field'], 'value' => $r['proposed'], 'hash' => $r['hash'] );
+	}
+}
+Ledger::apply( $q, $rows, Inventory::owned_ids( $q ) );
+$again = Proposals::build( Inventory::snapshot( $q, $w ), $w );
+check( 'right after Apply nothing is proposed again', array() === array_values( array_filter( $again['rows'], function ( $r ) { return $r['ticked']; } ) ) );
+check( 'the address (slug) with a claim word is flagged', in_array( 'slug', array_column( $again['flags'], 'type' ), true ) );
+$GLOBALS['fh']['posts'][ $q ]->post_title = 'Praziquantel Powder'; // The owner renames it, as the flag suggests.
+$after = Proposals::build( Inventory::snapshot( $q, $w ), $w );
+$by    = array();
+foreach ( $after['rows'] as $r ) {
+	$by[ $r['field'] ] = $r;
+}
+check( 'the description written with the old name is proposed again, with the new name', isset( $by['post_content'] ) && false !== strpos( $by['post_content']['proposed'], 'Praziquantel Powder' ) && false === strpos( $by['post_content']['proposed'], 'Fluke' ) );
+check( 'no name flag any more', ! in_array( 'name', array_column( $after['flags'], 'type' ), true ) );
+
 fh_done();

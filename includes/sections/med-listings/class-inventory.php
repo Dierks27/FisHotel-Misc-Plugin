@@ -467,6 +467,7 @@ class Inventory {
 			'pictures'    => $pictures,
 			'slug'        => (string) $post->post_name,
 			'ledger'      => Ledger::written( $pid ),
+			'ledger_name' => Ledger::written_names( $pid ),
 		);
 	}
 

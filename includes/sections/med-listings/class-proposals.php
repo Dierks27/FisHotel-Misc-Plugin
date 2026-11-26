@@ -110,13 +110,21 @@ class Proposals {
 		$pid      = (int) $snap['id'];
 		$fields   = (array) ( $snap['fields'] ?? array() );
 		$done     = (array) ( $snap['ledger'] ?? array() );
+		$done_as  = (array) ( $snap['ledger_name'] ?? array() );
+		$name_now = (string) $snap['name'];
 
-		$add = function ( array $f, $proposed, array $extra = array() ) use ( &$rows, $words, $done ) {
+		$add = function ( array $f, $proposed, array $extra = array() ) use ( &$rows, $words, $done, $done_as, $name_now ) {
 			$key  = (int) $f['object'] . '|' . $f['field'];
 			$read = $f['read'];
-			// Changed by this tool already and not touched since: the owner decided.
+			// Changed by this tool already and not touched since: the owner decided —
+			// unless it was written with a product name the owner has changed since
+			// (a claim name renamed after Apply) and still carries that old name.
 			if ( array_key_exists( $key, $done ) && Fields::same( $read['raw'], $done[ $key ] ) ) {
-				return;
+				$was = (string) ( $done_as[ $key ] ?? '' );
+				$txt = (string) $read['text'];
+				if ( '' === $was || $was === $name_now || ( false === stripos( $txt, $was ) && false === stripos( $txt, sanitize_title( $was ) ) ) ) {
+					return;
+				}
 			}
 			$current = (string) $read['text'];
 			if ( empty( $extra['force'] ) && trim( $current ) === trim( (string) $proposed ) ) {
@@ -270,6 +278,14 @@ class Proposals {
 				'type'    => 'name',
 				'text'    => sprintf( /* translators: 1: name 2: words */ __( 'The product name "%1$s" is a claim itself (%2$s).', 'fishotel-misc-plugin' ), $snap['name'], implode( ', ', Finder::words( $name_hits ) ) ),
 				'suggest' => Composer::neutral_name( (string) $snap['name'], $facts, $words ),
+			);
+		}
+		$slug_hits = Finder::find( str_replace( '-', ' ', (string) ( $snap['slug'] ?? '' ) ), $words, array( 'diseases', 'claims', 'labels', 'dosing' ) );
+		if ( $slug_hits ) {
+			$flags[] = array(
+				'type' => 'slug',
+				'text' => sprintf( /* translators: 1: slug 2: words */ __( 'The product\'s address "%1$s" has a claim word in it (%2$s). On the product page, edit the permalink (after renaming the product): WordPress sends the old address on. Then open this page again: the fields that still carry the old name are proposed again.', 'fishotel-misc-plugin' ), (string) $snap['slug'], implode( ', ', Finder::words( $slug_hits ) ) ),
+				'link' => (string) ( $snap['edit'] ?? '' ),
 			);
 		}
 		if ( '' === trim( (string) $snap['ingredients'] ) ) {

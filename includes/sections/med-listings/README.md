@@ -137,7 +137,10 @@ Other fields:
 | Active ingredient | never changed. A claim inside it is flagged. |
 
 A field the tool already changed, and that nobody has touched since, is
-not proposed again.
+not proposed again — unless it was written with a product name you have
+changed since (a claim name renamed after Apply) and still carries the
+old name: then it is proposed again with the new one. Renaming the
+flagged products **before** Apply saves that second round.
 
 ## For you to decide (never changed by the page)
 
@@ -146,6 +149,9 @@ not proposed again.
   (one word, or only words like General / Duo / Trio), the name is built
   from the ingredients and the form, e.g. "General Cure" → "Metronidazole +
   Praziquantel Powder". Old orders keep the old name.
+- **Product addresses with a claim word** ("…/ich-attack-copper/"). Edit
+  the permalink on the product page after renaming it; WordPress sends
+  the old address on.
 - **Missing or unclear ingredients.**
 - **Reviews and questions** that name a disease or dosing. Each one comes
   with a link and a **Hide** button that only acts when you press it. Hide

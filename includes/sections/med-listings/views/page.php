@@ -21,6 +21,7 @@ foreach ( $fhml_products as $fhml_p ) {
 }
 $fhml_flag_types = array(
 	'name'        => __( 'Product names that are claims', 'fishotel-misc-plugin' ),
+	'slug'        => __( 'Product addresses with a claim word', 'fishotel-misc-plugin' ),
 	'ingredients' => __( 'Ingredients missing or unclear', 'fishotel-misc-plugin' ),
 	'review'      => __( 'Reviews and questions that name diseases or dosing', 'fishotel-misc-plugin' ),
 	'not_med'     => __( 'Medications the site does not treat as medications (not in Medications)', 'fishotel-misc-plugin' ),

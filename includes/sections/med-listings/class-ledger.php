@@ -93,6 +93,22 @@ class Ledger {
 	}
 
 	/**
+	 * The product's name when each field was written (key => name; '' when
+	 * not recorded). A field written with a name the owner has changed
+	 * since is proposed again.
+	 *
+	 * @param int $pid Product id.
+	 * @return array<string, string>
+	 */
+	public static function written_names( $pid ) {
+		$out = array();
+		foreach ( self::for_product( $pid ) as $key => $e ) {
+			$out[ $key ] = (string) ( $e['name'] ?? '' );
+		}
+		return $out;
+	}
+
+	/**
 	 * Whether a post id belongs to a product: the product itself, one of
 	 * its variations, or one of its pictures (main, gallery, a
 	 * variation's).
@@ -125,6 +141,7 @@ class Ledger {
 		$l      = self::all();
 		$mine   = isset( $l['products'][ $pid ] ) && is_array( $l['products'][ $pid ] ) ? $l['products'][ $pid ] : array();
 		$user   = function_exists( 'get_current_user_id' ) ? (int) get_current_user_id() : 0;
+		$pid_post = get_post( $pid );
 
 		foreach ( $rows as $row ) {
 			$object = (int) ( $row['object'] ?? 0 );
@@ -173,6 +190,7 @@ class Ledger {
 				}
 			}
 			$mine[ $key ]['new_text'] = (string) $after['text'];
+			$mine[ $key ]['name']     = $pid_post ? (string) $pid_post->post_title : '';
 			$result[]                 = array( 'key' => $key, 'ok' => true, 'message' => '' );
 		}
 
