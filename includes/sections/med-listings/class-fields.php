@@ -294,20 +294,78 @@ class Fields {
 			if ( ! $product ) {
 				return 'The product could not be opened.';
 			}
-			$attrs = $product->get_attributes( 'edit' );
+			$attrs  = $product->get_attributes( 'edit' );
+			$wanted = array();
 			if ( ! $exists || null === $raw ) {
 				unset( $attrs[ $key ] );
 			} elseif ( isset( $attrs[ $key ] ) || ! $order ) {
 				$attrs[ $key ] = self::import_attribute( (array) $raw );
 			} else {
-				$attrs = self::insert_in_order( $attrs, $key, self::import_attribute( (array) $raw ), $order );
+				$attrs  = self::insert_in_order( $attrs, $key, self::import_attribute( (array) $raw ), $order );
+				$wanted = array_keys( self::by_position( array_filter( $attrs ) ) );
 			}
 			$product->set_attributes( array_values( array_filter( $attrs ) ) );
 			$product->save();
+			if ( $wanted ) {
+				// WooCommerce puts an attribute it did not have at the end of the
+				// list (then sorts by position, keeping ties in list order), so
+				// the stored list is put back in its old order here.
+				self::store_order( $object_id, $wanted );
+			}
 			return true;
 		}
 
 		return 'This field cannot be changed here.';
+	}
+
+	/**
+	 * Attributes sorted by position the way WooCommerce does (a stable
+	 * sort: the same position keeps the list order).
+	 *
+	 * @param array $attrs Key => attribute.
+	 * @return array
+	 */
+	public static function by_position( array $attrs ) {
+		$rank = array();
+		$i    = 0;
+		foreach ( $attrs as $k => $a ) {
+			$rank[ $k ] = array( (int) $a->get_position(), $i++ );
+		}
+		uksort(
+			$attrs,
+			function ( $x, $y ) use ( $rank ) {
+				return $rank[ $x ] <=> $rank[ $y ];
+			}
+		);
+		return $attrs;
+	}
+
+	/**
+	 * Store a product's attribute list in the given key order (the values
+	 * are WooCommerce's, untouched; only the order changes).
+	 *
+	 * @param int      $object_id Product id.
+	 * @param string[] $wanted    Keys in order.
+	 */
+	private static function store_order( $object_id, array $wanted ) {
+		$meta = get_post_meta( $object_id, '_product_attributes', true );
+		if ( ! is_array( $meta ) || array_keys( $meta ) === $wanted ) {
+			return;
+		}
+		$sorted = array();
+		foreach ( $wanted as $k ) {
+			if ( isset( $meta[ $k ] ) ) {
+				$sorted[ $k ] = $meta[ $k ];
+			}
+		}
+		$sorted += $meta;
+		update_post_meta( $object_id, '_product_attributes', $sorted );
+		if ( function_exists( 'wc_delete_product_transients' ) ) {
+			wc_delete_product_transients( $object_id );
+		}
+		if ( function_exists( 'clean_post_cache' ) ) {
+			clean_post_cache( $object_id );
+		}
 	}
 
 	/**

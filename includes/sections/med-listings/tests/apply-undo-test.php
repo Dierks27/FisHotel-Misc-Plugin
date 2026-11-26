@@ -238,6 +238,7 @@ $GLOBALS['fh']['attrs'][ $t ] = array();
 foreach ( $order as $k ) {
 	$GLOBALS['fh']['attrs'][ $t ][ $k ] = $was[ $k ];
 }
+$GLOBALS['fh']['attrs'][ $t ] = fh_stable_by_position( $GLOBALS['fh']['attrs'][ $t ] ); // WooCommerce stores them sorted by position.
 $before_keys = array_keys( $GLOBALS['fh']['attrs'][ $t ] );
 $rows        = array();
 foreach ( array( 'attr:pa_med_treats', 'attr:directions', 'attr:use' ) as $f ) {

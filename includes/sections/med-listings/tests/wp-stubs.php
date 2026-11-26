@@ -222,6 +222,13 @@ class FH_Multi {
 	public $v = array();
 }
 function get_post_meta( $id, $key = '', $single = false ) {
+	if ( '_product_attributes' === $key ) { // The product's attributes as WooCommerce stores them, in their stored order.
+		$out = array();
+		foreach ( $GLOBALS['fh']['attrs'][ (int) $id ] ?? array() as $k => $a ) {
+			$out[ $k ] = array( 'name' => $a->get_name(), 'position' => $a->get_position() );
+		}
+		return $single ? $out : array( $out );
+	}
 	$v = $GLOBALS['fh']['meta'][ (int) $id ][ $key ] ?? null;
 	if ( $v instanceof FH_Multi ) {
 		return $single ? ( $v->v[0] ?? '' ) : $v->v;
@@ -253,6 +260,17 @@ function maybe_unserialize( $v ) {
 	return $v;
 }
 function update_post_meta( $id, $key, $value ) {
+	if ( '_product_attributes' === $key ) { // Only the order is taken from it here.
+		$now = $GLOBALS['fh']['attrs'][ (int) $id ] ?? array();
+		$new = array();
+		foreach ( array_keys( (array) $value ) as $k ) {
+			if ( isset( $now[ $k ] ) ) {
+				$new[ $k ] = $now[ $k ];
+			}
+		}
+		$GLOBALS['fh']['attrs'][ (int) $id ] = $new + $now;
+		return true;
+	}
 	$GLOBALS['fh']['meta'][ (int) $id ][ $key ] = wp_unslash( $value );
 	return true;
 }
@@ -524,10 +542,15 @@ class FH_Fake_Product {
 	public function __construct( $id ) { $this->id = $id; }
 	public function get_attributes( $c = 'view' ) { return $GLOBALS['fh']['attrs'][ $this->id ] ?? array(); }
 	public function set_attributes( $list ) {
-		$this->pending = array();
+		// As WooCommerce's WC_Product::set_attributes(): the keys the product
+		// has already keep their place, a new one goes to the end, then a
+		// stable sort by position.
+		$this->pending = array_fill_keys( array_keys( $this->get_attributes() ), null );
 		foreach ( $list as $a ) {
 			$this->pending[ sanitize_title( $a->get_name() ) ] = $a;
 		}
+		$this->pending = array_filter( $this->pending );
+		$this->pending = fh_stable_by_position( $this->pending );
 	}
 	public function save() {
 		if ( null === $this->pending ) {
@@ -545,6 +568,20 @@ class FH_Fake_Product {
 			}
 		}
 	}
+}
+function fh_stable_by_position( array $attrs ) {
+	$i    = 0;
+	$keys = array();
+	foreach ( $attrs as $k => $a ) {
+		$keys[ $k ] = array( (int) $a->get_position(), $i++ );
+	}
+	uksort(
+		$attrs,
+		function ( $x, $y ) use ( $keys ) {
+			return $keys[ $x ] <=> $keys[ $y ];
+		}
+	);
+	return $attrs;
 }
 function wc_get_product( $id ) {
 	$p = get_post( $id );
