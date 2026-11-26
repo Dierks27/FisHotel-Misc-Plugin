@@ -132,7 +132,7 @@ Other fields:
 | Variation descriptions (they sit in the page source) | claim sentences out |
 | Picture alt text, picture title | the product name (the title is in the page source and the shop's public product data) |
 | Picture caption, picture description | claim sentences out |
-| Picture address (its slug) | from the product name; WordPress sends the old address on |
+| Picture address (its slug) | from the product name. The old picture-page address then shows "page not found" (WordPress does not send a picture's old page address on); the file address does not change |
 | Description, when the old text gives amounts the new one lacks (net weight, strength, pellet size) | the row says which, so you can add them before applying |
 | Active ingredient | never changed. A claim inside it is flagged. |
 

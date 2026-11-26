@@ -224,7 +224,7 @@ class Proposals {
 			if ( 'post_name' === $field && (int) $f['object'] !== $pid ) {
 				if ( Finder::has( str_replace( array( '-', '_' ), ' ', $text ), $words ) ) {
 					$want = function_exists( 'sanitize_title' ) ? sanitize_title( (string) $snap['name'] ) : strtolower( (string) $snap['name'] );
-					$add( $f, $want, array( 'note' => __( 'The picture\'s own page address. WordPress sends the old address on to the new one.', 'fishotel-misc-plugin' ) ) );
+					$add( $f, $want, array( 'note' => __( 'The picture\'s own page address (not its file, which keeps its name). The old page address then shows "page not found" — no text from it is left; the picture itself is not affected.', 'fishotel-misc-plugin' ) ) );
 				}
 				continue;
 			}
