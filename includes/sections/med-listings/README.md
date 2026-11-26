@@ -80,7 +80,8 @@ working while the section is switched off.
      Scheduler, quarantine guides). Each page passes or fails, with the
      offending words and where they were found. A tool page fails when it
      links to a medication product or category, also through an old
-     address on the redirect list (the link still reaches the product).
+     address on the redirect list or a product address under an old
+     category path (WooCommerce sends both on to the product).
    - The **Home page** row is for information only: its words come from
      your fish service and the header and footer, and are not counted
      against the other pages. Links are what a visitor can follow (`<a>`

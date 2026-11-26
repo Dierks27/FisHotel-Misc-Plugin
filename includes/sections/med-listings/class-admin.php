@@ -310,7 +310,7 @@ class Admin {
 		wp_send_json_success(
 			array(
 				'fetched' => true,
-				'hits'    => Verify::scan( $got['html'], $page['kind'], Words::get(), $med_urls ),
+				'hits'    => Verify::scan( $got['html'], $page['kind'], Words::get(), $med_urls, Verify::product_slugs( $pages ) ),
 			)
 		);
 	}

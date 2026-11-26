@@ -281,15 +281,39 @@ class Verify {
 	}
 
 	/**
+	 * Each medication product page as [first path segment, product slug]
+	 * (pure). WooCommerce answers a product address under any category path
+	 * (/shop/<any>/<slug>/) and sends it on, so a tool page is checked for
+	 * those too.
+	 *
+	 * @param array $pages pages() rows (url, kind).
+	 * @return array<int, array{0: string, 1: string}>
+	 */
+	public static function product_slugs( array $pages ) {
+		$out = array();
+		foreach ( $pages as $p ) {
+			if ( 'product' !== ( $p['kind'] ?? '' ) ) {
+				continue;
+			}
+			$parts = array_values( array_filter( explode( '/', trim( (string) wp_parse_url( (string) $p['url'], PHP_URL_PATH ), '/' ) ), 'strlen' ) );
+			if ( count( $parts ) >= 2 ) {
+				$out[] = array( strtolower( $parts[0] ), strtolower( (string) end( $parts ) ) );
+			}
+		}
+		return array_values( array_map( 'unserialize', array_unique( array_map( 'serialize', $out ) ) ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions -- de-duplicating plain arrays.
+	}
+
+	/**
 	 * What a page says that it must not (pure).
 	 *
 	 * @param string   $html     Page.
 	 * @param string   $kind     product / category / home / tool.
 	 * @param array    $words    Words::get().
 	 * @param string[] $med_urls Medication product and category addresses (for tool pages).
+	 * @param array    $slugs    product_slugs() (for tool pages).
 	 * @return array<int, array{where: string, kind: string, word: string, snippet: string, key: string}>
 	 */
-	public static function scan( $html, $kind, array $words, array $med_urls = array() ) {
+	public static function scan( $html, $kind, array $words, array $med_urls = array(), array $slugs = array() ) {
 		$hits = array();
 		if ( 'tool' === $kind ) {
 			$paths = array();
@@ -308,6 +332,14 @@ class Verify {
 				}
 				if ( false !== $pos ) {
 					$hits[] = self::hit( 'link or product data', 'product-link', $p . '/', substr( $raw, max( 0, $pos - 60 ), 160 ) );
+				}
+			}
+			foreach ( self::links( $raw ) as $href ) {
+				$parts = array_values( array_filter( explode( '/', strtolower( trim( (string) wp_parse_url( $href, PHP_URL_PATH ), '/' ) ) ), 'strlen' ) );
+				foreach ( $slugs as $pair ) {
+					if ( count( $parts ) >= 2 && $parts[0] === $pair[0] && end( $parts ) === $pair[1] ) {
+						$hits[] = self::hit( 'link', 'product-link', '/' . $pair[0] . '/…/' . $pair[1] . '/', $href );
+					}
 				}
 			}
 			if ( preg_match( '#add-to-cart=\d+#i', $raw, $m ) ) {

@@ -126,5 +126,10 @@ $paths = Verify::med_paths(
 check( 'the tool-page check also knows the old addresses from the redirect list', in_array( '/shop/medications/antiparasitic/general-cure-powder/', $paths, true ) && in_array( '/product-category/medications/antiparasitic/', $paths, true ) && ! in_array( 'https://shop.test/qt-guide/', $paths, true ) );
 $old_link = Verify::scan( '<p>Step 2: buy <a href="https://shop.test/shop/medications/antiparasitic/general-cure-powder/">it</a></p>', 'tool', $w, $paths );
 check( 'a guide still linking to a product\'s old address (it redirects) fails', 1 === count( $old_link ) );
+$slugs = Verify::product_slugs( array( array( 'url' => 'https://shop.test/shop/medications/powders-chemicals/general-cure-powder/', 'kind' => 'product' ), array( 'url' => 'https://shop.test/product-category/medications/', 'kind' => 'category' ) ) );
+check( 'product pages give their shop base and slug', array( array( 'shop', 'general-cure-powder' ) ) === $slugs );
+$by_slug = Verify::scan( '<p>Step 2: buy <a href="https://shop.test/shop/medications/antiparasitic/general-cure-powder/">it</a></p>', 'tool', $w, array(), $slugs );
+check( 'a guide linking to a product under an old category path (WooCommerce sends it on) fails', 1 === count( $by_slug ) );
+check( 'a link that only shares a word with a product does not', array() === Verify::scan( '<a href="https://shop.test/blog/general-cure-powder-history/">x</a>', 'tool', $w, array(), $slugs ) );
 
 fh_done();
