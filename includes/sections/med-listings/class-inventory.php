@@ -97,6 +97,30 @@ class Inventory {
 	}
 
 	/**
+	 * Whether the site (the theme's fishotel_med_is_med_product()) treats a
+	 * product with these categories as a medication: one of them is
+	 * Medications or under it. Only then does its page get the
+	 * ornamental-use pop-up and lose the Dosing Calculator / QT Scheduler
+	 * links in the footer.
+	 *
+	 * @param int[] $cat_ids The product's category ids.
+	 * @return bool
+	 */
+	public static function site_sees_med( array $cat_ids ) {
+		$parent = self::parent_term();
+		if ( ! $parent ) {
+			return false;
+		}
+		$pid = (int) $parent->term_id;
+		foreach ( $cat_ids as $tid ) {
+			if ( (int) $tid === $pid || in_array( $pid, array_map( 'intval', (array) get_ancestors( (int) $tid, 'product_cat', 'taxonomy' ) ), true ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
 	 * The products to look at, with why each one is in.
 	 *
 	 * @param array $words Words::get().
@@ -431,6 +455,7 @@ class Inventory {
 			'edit'        => admin_url( 'post.php?post=' . $pid . '&action=edit' ),
 			'cats'        => wp_list_pluck( $cats, 'name' ),
 			'cat_slugs'   => $slugs,
+			'site_med'    => self::site_sees_med( wp_list_pluck( $cats, 'term_id' ) ),
 			'ingredients' => (string) get_post_meta( $pid, '_fishotel_active_ingredient', true ),
 			'is_food'     => self::is_food( $pid, $name, $slugs ),
 			'is_ea'       => self::is_ea( $pid ),

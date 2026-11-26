@@ -136,8 +136,29 @@
 		return phrase ? String( template ).replace( /\[\[[^\]]*\]\]/g, phrase ) : String( template );
 	}
 
+	/**
+	 * A page's own findings (pure): what is on the home page too (header,
+	 * footer) is not counted against it — except a link to the Dosing
+	 * Calculator or the QT Scheduler on a product or category page. The
+	 * theme leaves those out of a medication page's footer, so one there
+	 * means the site does not treat that product as a medication.
+	 *
+	 * @param {Array}  hits     Findings of the page.
+	 * @param {Object} baseline Keys found on the home page.
+	 * @param {string} kind     product / category / tool.
+	 * @return {Array}
+	 */
+	function ownHits( hits, baseline, kind ) {
+		return ( hits || [] ).filter( function ( h ) {
+			if ( h.kind === 'links' && ( kind === 'product' || kind === 'category' ) ) {
+				return true;
+			}
+			return ! baseline[ h.key ];
+		} );
+	}
+
 	if ( typeof module !== 'undefined' && module.exports ) {
-		module.exports = { buildReport: buildReport, ingredientPhrase: ingredientPhrase, fillBlank: fillBlank };
+		module.exports = { buildReport: buildReport, ingredientPhrase: ingredientPhrase, fillBlank: fillBlank, ownHits: ownHits };
 	}
 	if ( typeof document === 'undefined' ) {
 		return;
@@ -505,9 +526,7 @@
 						tr.setAttribute( 'data-result', hits.length ? hits.length + ' words on every page' : 'clean' );
 						return;
 					}
-					var own = hits.filter( function ( h ) {
-						return ! baseline[ h.key ];
-					} );
+					var own = ownHits( hits, baseline, kind );
 					if ( ! own.length ) {
 						out.innerHTML = '<span class="fhml-ok">✓ ' + esc( t.pass ) + '</span>';
 						tr.setAttribute( 'data-result', 'clean' );

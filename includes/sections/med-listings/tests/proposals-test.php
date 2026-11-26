@@ -60,6 +60,13 @@ $types = array_column( $b['flags'], 'type' );
 check( 'flag: the review naming ich and dosing (the clean one is not)', 1 === count( array_keys( $types, 'review', true ) ) && false !== strpos( $b['flags'][ array_search( 'review', $types, true ) ]['text'], 'Pat Example' ) );
 check( 'no name flag: "Sample Trio Flake" is plain', ! in_array( 'name', $types, true ) );
 
+check( 'no "not a medication on the site" flag: the flake is in Medications', ! in_array( 'not_med', $types, true ) );
+$dry  = fh_term( 'product_cat', 'Dry Goods', 'dry-goods' );
+$pond = fh_post( array( 'post_type' => 'product', 'post_title' => 'Prazi Pond Powder', 'post_name' => 'prazi-pond-powder', 'post_content' => 'Praziquantel for ponds.' ) );
+wp_set_object_terms( $pond, array( $dry ), 'product_cat' );
+$bp   = Proposals::build( Inventory::snapshot( $pond, $w ), $w );
+check( 'a medication found by its name outside Medications is flagged (the site does not treat it as one: no pop-up, tool links in its footer)', in_array( 'not_med', array_column( $bp['flags'], 'type' ), true ) );
+
 echo "\n3. The powder with a claim name and no ingredients\n";
 $b2    = Proposals::build( Inventory::snapshot( $ids['cure'], $w ), $w );
 $types = array_column( $b2['flags'], 'type' );

@@ -288,6 +288,12 @@ class Proposals {
 				'text' => sprintf( /* translators: %s: field */ __( 'The active-ingredient field itself says more than the ingredients: "%s". It is shown under the title; change it on the product page.', 'fishotel-misc-plugin' ), $snap['ingredients'] ),
 			);
 		}
+		if ( isset( $snap['site_med'] ) && ! $snap['site_med'] ) {
+			$flags[] = array(
+				'type' => 'not_med',
+				'text' => __( 'Found by its name, but it is not in Medications or a category under it, so the site does not treat it as a medication: no ornamental-use pop-up or checkout tick, and the footer on its page still links to the Dosing Calculator and the QT Scheduler. If it is a medication, add it to Medications (or a category under it) on its product page; step 5 then sorts it.', 'fishotel-misc-plugin' ),
+			);
+		}
 		foreach ( (array) ( $snap['brands'] ?? array() ) as $brand ) {
 			$flags[] = array(
 				'type' => 'brand',

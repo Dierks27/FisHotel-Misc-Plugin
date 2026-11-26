@@ -159,6 +159,13 @@ not proposed again.
   file name is part of the picture's address on every page that shows it.
   Upload the picture again under a plain name; this page does not rename
   files.
+- **Medications the site does not treat as medications.** A product found
+  by the drug in its name but not in Medications (or a category under it).
+  The theme only knows a medication by that category, so its page has no
+  ornamental-use pop-up or checkout tick, and its footer still links to the
+  Dosing Calculator and the QT Scheduler. Add it to Medications on its
+  product page if it is one. The page check (step 6) fails such a page on
+  those footer links, even though the home page has them too.
 - **Other brands.** A brand term that is not one of yours, and products
   sold through Amazon.
 - **Pages and posts that link to the products**, with the tool and QT

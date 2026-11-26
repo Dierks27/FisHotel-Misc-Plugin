@@ -54,4 +54,11 @@ ok( 'not a food: a comma list, "99%+" and TMP kept', lib.ingredientPhrase( 'Metr
 ok( 'the blank is filled', lib.fillBlank( 'Contains: [[fill in the active ingredients — confirm against the EA product]].', 'praziquantel' ) === 'Contains: praziquantel.' );
 ok( 'nothing typed: the blank stays (the row cannot be applied)', lib.fillBlank( 'Contains: [[fill in]].', '' ) === 'Contains: [[fill in]].' );
 
+// The page check: words that are on the home page too are not counted against a page — but a
+// link to the Dosing Calculator or QT Scheduler on a product or category page always is.
+var base = { 'links|medication-dosing|/medication-dosing/': true, 'diseases|ich|x': true };
+var hits = [ { key: 'links|medication-dosing|/medication-dosing/', kind: 'links' }, { key: 'diseases|ich|x', kind: 'diseases' } ];
+ok( 'product page: the footer link to the calculator still counts, a site-wide word does not', JSON.stringify( lib.ownHits( hits, base, 'product' ) ) === JSON.stringify( [ hits[ 0 ] ] ) );
+ok( 'tool page: both excused as on every page', lib.ownHits( hits, base, 'tool' ).length === 0 );
+
 console.log( '\nAll ' + checks + ' checks passed' );
