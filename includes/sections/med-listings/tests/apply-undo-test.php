@@ -293,4 +293,18 @@ check( 'description cleaned, tag still on the fish', $un['ok'] && '' === get_ter
 Terms::undo( $un['change'] );
 check( 'Undo: the old description and the medication back', 'Products that treat flukes.' === get_term( $ids['tag_flukes'] )->description && in_array( 'Flukes', wp_get_object_terms( $ids['cure'], 'product_tag', array( 'fields' => 'names' ) ), true ) );
 
+echo "\n12. The neutral categories once made are not proposed again; an Undo whose category is gone clears itself\n";
+$ids = fh_seed();
+$pc  = fh_term( 'product_cat', 'Powders &amp; Chemicals', 'powders-chemicals', $ids['cat_meds'] ); // As WordPress stores "&".
+$rows = array();
+foreach ( Terms::proposals( $w ) as $r ) {
+	$rows[ $r['tax'] . ':' . $r['slug'] ] = $r;
+}
+check( '"Powders &amp; Chemicals" (WordPress\'s way of storing "&") is not renamed to itself', ! isset( $rows['product_cat:powders-chemicals'] ) );
+$l = Ledger::all();
+$l['terms']['cgone'] = array( 'type' => 'rename', 'tax' => 'product_cat', 'old' => array( 'term_id' => 999999, 'name' => 'Gone', 'slug' => 'gone', 'description' => '', 'parent' => 0 ), 'new' => array( 'name' => 'Gone', 'slug' => 'gone', 'description' => '' ), 'objects' => array(), 'added' => array(), 'created' => array(), 'at' => 1 );
+Ledger::save( $l );
+$u = Terms::undo( 'cgone' );
+check( 'undo of a rename whose category is gone: nothing to put back, and it leaves the list', $u['ok'] && ! isset( Ledger::all()['terms']['cgone'] ), $u['message'] );
+
 fh_done();

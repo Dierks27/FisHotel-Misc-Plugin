@@ -207,7 +207,8 @@ class Terms {
 			if ( isset( $targets_ids[ (int) $t->term_id ] ) ) {
 				// A neutral category: its name as it should be, its description cleaned.
 				$want = self::TARGETS[ $targets_ids[ (int) $t->term_id ] ][0];
-				if ( $want === $t->name && ! $desc_hit ) {
+				// WordPress stores "&" in a term name as "&amp;".
+				if ( $want === html_entity_decode( (string) $t->name, ENT_QUOTES, 'UTF-8' ) && ! $desc_hit ) {
 					continue;
 				}
 				$row['action']   = 'rename';
@@ -1120,7 +1121,12 @@ class Terms {
 		} elseif ( 'rename' === $e['type'] ) {
 			$now = get_term( (int) $old['term_id'], $tax );
 			if ( ! $now || is_wp_error( $now ) ) {
-				return self::answer( false, __( 'The category is not there any more.', 'fishotel-misc-plugin' ) );
+				// Removed since (a neutral category this step made, emptied by
+				// another Undo): nothing left to put back, so it leaves the list.
+				$l = Ledger::all();
+				unset( $l['terms'][ $change ] );
+				Ledger::save( $l );
+				return self::answer( true, __( 'The category is not there any more — nothing to put back.', 'fishotel-misc-plugin' ), $change );
 			}
 			$new = (array) ( $e['new'] ?? array() );
 			if ( $now->name !== ( $new['name'] ?? '' ) || $now->slug !== ( $new['slug'] ?? '' ) || (string) $now->description !== (string) ( $new['description'] ?? '' ) ) {
