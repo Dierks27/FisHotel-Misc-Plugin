@@ -256,6 +256,31 @@ class Verify {
 	}
 
 	/**
+	 * The addresses a tool page must not link to (pure): every medication
+	 * product and category page checked, plus every old address on the
+	 * redirect list — a guide still linking to a product's old address
+	 * reaches it through the 301.
+	 *
+	 * @param array $pages     pages() rows (url, kind).
+	 * @param array $redirects Redirects::all().
+	 * @return string[]
+	 */
+	public static function med_paths( array $pages, array $redirects ) {
+		$out = array();
+		foreach ( $pages as $p ) {
+			if ( in_array( $p['kind'] ?? '', array( 'product', 'category' ), true ) ) {
+				$out[] = (string) $p['url'];
+			}
+		}
+		foreach ( $redirects as $e ) {
+			if ( '' !== (string) ( $e['from'] ?? '' ) ) {
+				$out[] = (string) $e['from'];
+			}
+		}
+		return array_values( array_unique( $out ) );
+	}
+
+	/**
 	 * What a page says that it must not (pure).
 	 *
 	 * @param string   $html     Page.

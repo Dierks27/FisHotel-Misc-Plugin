@@ -116,4 +116,15 @@ check( 'a tool page fails on a product link, even inside its script data', 1 ===
 check( 'a tool page may talk about diseases (it is the guide)', array() === Verify::scan( '<p>Read about flukes and dosing.</p>', 'tool', $w, array( 'https://shop.test/shop/fluke-cure-powder/' ) ) );
 check( 'a tool page with the medications category fallback fails', 1 === count( Verify::scan( '<a href="/product-category/medications/">Browse</a>', 'tool', $w, array() ) ) );
 
+$paths = Verify::med_paths(
+	array(
+		array( 'url' => 'https://shop.test/shop/medications/powders-chemicals/general-cure-powder/', 'kind' => 'product' ),
+		array( 'url' => 'https://shop.test/qt-guide/', 'kind' => 'tool' ),
+	),
+	array( array( 'from' => '/shop/medications/antiparasitic/general-cure-powder/' ), array( 'from' => '/product-category/medications/antiparasitic/' ) )
+);
+check( 'the tool-page check also knows the old addresses from the redirect list', in_array( '/shop/medications/antiparasitic/general-cure-powder/', $paths, true ) && in_array( '/product-category/medications/antiparasitic/', $paths, true ) && ! in_array( 'https://shop.test/qt-guide/', $paths, true ) );
+$old_link = Verify::scan( '<p>Step 2: buy <a href="https://shop.test/shop/medications/antiparasitic/general-cure-powder/">it</a></p>', 'tool', $w, $paths );
+check( 'a guide still linking to a product\'s old address (it redirects) fails', 1 === count( $old_link ) );
+
 fh_done();

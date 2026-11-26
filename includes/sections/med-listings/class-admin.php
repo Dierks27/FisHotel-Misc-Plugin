@@ -306,12 +306,7 @@ class Admin {
 				)
 			);
 		}
-		$med_urls = array();
-		foreach ( $pages as $p ) {
-			if ( in_array( $p['kind'], array( 'product', 'category' ), true ) ) {
-				$med_urls[] = $p['url'];
-			}
-		}
+		$med_urls = Verify::med_paths( $pages, Redirects::all() );
 		wp_send_json_success(
 			array(
 				'fetched' => true,
