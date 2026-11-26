@@ -16,7 +16,8 @@ the colour pickers, thickbox and jQuery UI pop-ups, WordPress's own small
 pop-ups ("someone else is editing this", Media's *Attach*, "your session
 has expired"), notices, Tools,
 Settings, Site Health, and the FisHotel plugins' and the theme's own
-screens and boxes (Batch Manager, ShipTracker, the Shipments, medication
+screens and boxes (Batch Manager, ShipTracker — its USPS Letter Tracking
+box included — the Shipments, medication
 and Packing boxes on an order, Clean Room, Packing, Weather, …).
 WooCommerce's newer pages (Home, Analytics, Customers) are dark as far as
 their own drawing allows (see *Left light on purpose*).

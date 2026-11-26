@@ -18,7 +18,11 @@
  *     number of stickers to mail, a private order note, a badge in the
  *     admin orders list (legacy and HPOS), a line in the admin new-order
  *     email, and "Stickers to mail by letter: #1234 (2)" on the Today page
- *     until the order is completed.
+ *     until the order is completed — or until ShipTracker (1.10.0, its
+ *     USPS Letter Tracking box) says the letter was mailed: then the
+ *     line drops it and the badge turns into a quiet "Mailed (2)"
+ *     (\FisHotel\Misc\ShipTracker_Letters; with ShipTracker 1.9.x
+ *     nothing is ever "mailed", as before).
  *
  * "EA" is the theme's own answer, `fishotel_is_ea_fulfilled_product(
  * parent product id, variation id )` — the one source of truth; the
@@ -821,13 +825,37 @@ class Letter {
 			return '';
 		}
 
-		if ( method_exists( $order, 'has_status' ) && ! $order->has_status( self::NOT_OPEN ) ) {
+		if ( method_exists( $order, 'has_status' ) && ! $order->has_status( self::NOT_OPEN ) && ! self::is_mailed( $order ) ) {
 			/* translators: %d: stickers */
 			return '<mark class="order-status status-on-hold fh-sticker-letter-badge"><span>' . esc_html( sprintf( __( 'Mail sticker (%d)', 'fishotel-misc-plugin' ), $count ) ) . '</span></mark>';
 		}
 
+		if ( method_exists( $order, 'has_status' ) && ! $order->has_status( self::NOT_OPEN ) ) {
+			/* translators: %d: stickers */
+			return '<span class="description fh-sticker-letter-badge">' . esc_html( sprintf( __( 'Mailed (%d)', 'fishotel-misc-plugin' ), $count ) ) . '</span>';
+		}
+
 		/* translators: %d: stickers */
 		return '<span class="description fh-sticker-letter-badge">' . esc_html( sprintf( __( 'By letter (%d)', 'fishotel-misc-plugin' ), $count ) ) . '</span>';
+	}
+
+	/**
+	 * Whether ShipTracker says the order's sticker letter was mailed —
+	 * every letter on it still standing is marked mailed (or scanned).
+	 * False without ShipTracker 1.10.0 or before a letter is made.
+	 *
+	 * @param \WC_Order|object $order Order.
+	 * @return bool
+	 */
+	public static function is_mailed( $order ) {
+		if ( ! is_object( $order ) || ! method_exists( $order, 'get_id' ) || ! class_exists( '\FisHotel\Misc\ShipTracker_Letters' ) ) {
+			return false;
+		}
+		try {
+			return \FisHotel\Misc\ShipTracker_Letters::is_mailed( (int) $order->get_id() );
+		} catch ( \Throwable $e ) {
+			return false;
+		}
 	}
 
 	/* ============================================================== */
@@ -882,7 +910,8 @@ class Letter {
 	}
 
 	/**
-	 * The open orders with a sticker to mail, oldest first.
+	 * The open orders with a sticker still to mail, oldest first — an
+	 * order whose letter ShipTracker marked mailed is left out.
 	 *
 	 * @return array[] [ 'number' => string, 'count' => int, 'url' => string ].
 	 */
@@ -933,7 +962,7 @@ class Letter {
 		$rows = array();
 		foreach ( (array) $found as $order ) {
 			$count = self::flagged( $order );
-			if ( $count < 1 || ! method_exists( $order, 'get_order_number' ) ) {
+			if ( $count < 1 || ! method_exists( $order, 'get_order_number' ) || self::is_mailed( $order ) ) {
 				continue;
 			}
 			$rows[] = array(

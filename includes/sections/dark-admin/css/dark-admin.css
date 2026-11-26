@@ -2916,6 +2916,28 @@ body.fh-dark-admin #fst_shipment_overview [style*="#fef2f2"] {
 	background-color: var(--fh-da-danger-tint) !important;
 }
 
+/* ShipTracker's USPS Letter Tracking box on an order (1.10.0) writes its
+ * colours inline: the pale "Sticker goes by letter" banner, the light
+ * frame of each letter, the red warnings, the grey "(resent)". */
+body.fh-dark-admin #fst-letter-metabox [style*="#fff8e5"] {
+	background-color: var(--fh-da-warning-tint) !important;
+	border-left-color: var(--fh-da-warning) !important;
+	color: var(--fh-da-text) !important;
+}
+
+body.fh-dark-admin #fst-letter-metabox .fst-letter-item {
+	background-color: var(--fh-da-sunken);
+	border-color: var(--fh-da-border) !important;
+}
+
+body.fh-dark-admin #fst-letter-metabox [style*="#b32d2e"] {
+	color: var(--fh-da-danger-text) !important;
+}
+
+body.fh-dark-admin #fst-letter-metabox [style*="color:#999"] {
+	color: var(--fh-da-text-quiet) !important;
+}
+
 /* The theme's Shipments box on an order. */
 body.fh-dark-admin .fishotel-shipments-metabox h3,
 body.fh-dark-admin .fishotel-shipments-metabox h4.fhsm-source-heading,

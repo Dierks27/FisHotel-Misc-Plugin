@@ -12,7 +12,9 @@
  *   - the kind of a product, and which boxes each kind shows;
  *   - the scientific name: what the field shows, when the two places
  *     differ, what a save writes;
- *   - the product data tabs, the box classes, a folded order's boxes.
+ *   - the product data tabs, the box classes, a folded order's boxes;
+ *   - ShipTracker's letter box: placed in a layout tidied before it was
+ *     named, open on an order with a sticker letter, closed on others.
  *
  * Run from the plugin root:  php includes/sections/edit-screens/tests/rules-test.php
  */
@@ -57,7 +59,9 @@ $order  = Layouts::order();
 $normal = fh_col( $order, 'normal' );
 $side   = fh_col( $order, 'side' );
 check_same( 'main: the warnings, Order data, Items, Packing, Shipments, Custom Fields (both kinds), downloads', array( 'fishotel-shipping-flag', 'fishotel-combine-skipped', 'woocommerce-order-data', 'woocommerce-order-items', 'fishotel-packing', 'fishotel-shipments', 'postcustom', 'order_custom', 'woocommerce-order-downloads' ), $normal );
-check( 'side: Order actions first, then ShipTracker\'s Pickup (by its id only), Fulfillment, Weather, the EA slip and med terms, notes, Combine Orders', array( 'woocommerce-order-actions', 'fst-pickup', 'fishotel-fulfillment-delete', 'fishotel-weather', 'fishotel-med-packing-slip', 'fishotel-med-terms', 'woocommerce-order-notes', 'fishotel-combine-orders' ) === array_slice( $side, 0, 8 ) );
+check( 'side: Order actions first, then ShipTracker\'s USPS Letter Tracking and Pickup (by their ids only), Fulfillment, Weather, the EA slip and med terms, notes, Combine Orders', array( 'woocommerce-order-actions', 'fst-letter', 'fst-pickup', 'fishotel-fulfillment-delete', 'fishotel-weather', 'fishotel-med-packing-slip', 'fishotel-med-terms', 'woocommerce-order-notes', 'fishotel-combine-orders' ) === array_slice( $side, 0, 9 ) );
+check( 'every order box is named once', count( array_merge( $normal, $side ) ) === count( array_unique( array_merge( $normal, $side ) ) ) );
+check( 'the letter box is not closed in the stored layout (each order decides: Order_Screen)', ! in_array( 'fst-letter', $order['closed'], true ) && ! in_array( 'fst-letter', $order['hidden'], true ) );
 check_same( 'closed: custom fields, Date Change Override, Order attribution, Customer history', array( 'postcustom', 'order_custom', 'fishotel-date-change-unlock', 'woocommerce-order-source-data', 'woocommerce-customer-history' ), $order['closed'] );
 check( 'the rare three are the last of the side', array( 'fishotel-date-change-unlock', 'woocommerce-order-source-data', 'woocommerce-customer-history' ) === array_slice( $side, -3 ) );
 check_same( 'hidden: only WooCommerce\'s downloads box, as WooCommerce hides it for a person with no layout (a stored empty list would show it open on every order) — what a person had hidden otherwise shows again once', array( 'woocommerce-order-downloads' ), $order['hidden'] );
@@ -66,6 +70,27 @@ check( 'the same layout on the legacy screen and on HPOS; none on another screen
 check_same( 'the screens', array( 'product', 'shop_order', 'woocommerce_page_wc-orders' ), Layouts::screens() );
 check_same( 'on a folded source order the boxes that only point to the combined box are closed', array( 'fishotel-packing', 'fishotel-weather', 'fishotel-med-packing-slip', 'fishotel-combine-orders' ), Layouts::folded_closed() );
 check( '— the class "closed" added on a folded order only, once', array( 'x', 'closed' ) === Order_Screen::classes_for( array( 'x' ), true ) && array( 'closed' ) === Order_Screen::classes_for( array( 'closed' ), true ) && array( 'x' ) === Order_Screen::classes_for( array( 'x' ), false ) && array() === Order_Screen::classes_for( 'x', false ) );
+
+echo "2b. ShipTracker's letter box (fst-letter, ShipTracker 1.10.0)\n";
+$v1 = array(
+	'side'     => 'woocommerce-order-actions,fst-pickup,fishotel-weather,woocommerce-order-notes',
+	'normal'   => 'woocommerce-order-data,woocommerce-order-items,fishotel-shipments',
+	'advanced' => '',
+);
+check_same( 'a layout tidied before the box was named: placed right under Order actions as it is drawn', 'woocommerce-order-actions,fst-letter,fst-pickup,fishotel-weather,woocommerce-order-notes', Layouts::with_letter( $v1 )['side'] );
+check( '— the other columns as they were', $v1['normal'] === Layouts::with_letter( $v1 )['normal'] && '' === Layouts::with_letter( $v1 )['advanced'] );
+check( 'a layout that names it already: as it is (the new layout, or the person dragged it)', Layouts::order()['order'] === Layouts::with_letter( Layouts::order()['order'] ) );
+$dragged           = $v1;
+$dragged['normal'] = 'fst-letter,woocommerce-order-data';
+check( '— dragged to the main column: kept there', $dragged === Layouts::with_letter( $dragged ) );
+$own         = $v1;
+$own['side'] = 'woocommerce-order-notes, fishotel-weather';
+check_same( 'no Order actions on their side: first on the side', 'fst-letter,woocommerce-order-notes,fishotel-weather', Layouts::with_letter( $own )['side'] );
+check_same( 'an empty side: the box alone', 'fst-letter', Layouts::with_letter( array( 'side' => '', 'normal' => 'x' ) )['side'] );
+check( 'nothing stored, or nonsense: handed back as it is', false === Layouts::with_letter( false ) && '' === Layouts::with_letter( '' ) && array( 'normal' => 'x' ) === Layouts::with_letter( array( 'normal' => 'x' ) ) && array( 'side' => array( 'x' ) ) === Layouts::with_letter( array( 'side' => array( 'x' ) ) ) );
+check( 'open on an order with a sticker letter (a "closed" the person left on it taken off)', array( 'x' ) === Order_Screen::letter_classes_for( array( 'x', 'closed' ), true ) && array( '' ) === Order_Screen::letter_classes_for( array( '' ), true ) );
+check( 'closed (its title only) on every other order, once', array( '', 'closed' ) === Order_Screen::letter_classes_for( array( '' ), false ) && array( 'closed' ) === Order_Screen::letter_classes_for( array( 'closed' ), false ) && array( 'closed' ) === Order_Screen::letter_classes_for( 'x', false ) );
+check( 'whose layout is the FisHotel one: switched, not put back, not given back while off', Order_Screen::is_tidied( array( 'v' => 1 ) ) && Order_Screen::is_tidied( array( 'v' => 1, 'notice' => 1 ) ) && ! Order_Screen::is_tidied( array( 'v' => 1, 'undone' => 1 ) ) && ! Order_Screen::is_tidied( array( 'v' => 1, 'off' => 1 ) ) && ! Order_Screen::is_tidied( null ) && ! Order_Screen::is_tidied( array() ) );
 
 echo "3. The switch, once per person\n";
 $store    = new User_Store();
