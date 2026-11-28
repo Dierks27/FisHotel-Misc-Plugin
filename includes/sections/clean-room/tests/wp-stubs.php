@@ -318,6 +318,7 @@ function apply_filters( $hook, $value, ...$args ) {
 	return $value;
 }
 
+require_once FISHOTEL_MISC_PATH . 'includes/class-dates.php'; // The plugin's dates: 11-27-26 for a person.
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-clean-room.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-layout.php';
 require_once FISHOTEL_MISC_PATH . 'includes/sections/clean-room/class-replay.php';

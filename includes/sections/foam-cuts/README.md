@@ -174,6 +174,20 @@ link to that plan. No line otherwise, and none for a user who may not
 open this section. It is hooked in wp-admin only: one small query, once
 per request (`class-today-line.php`).
 
+## Dates
+
+A person reads a date as MM-DD-YY: "3 orders ship on 03-10-26 (delivery
+03-11-26)" on the Plan tab, "For the orders shipping 03-10-26 (delivery
+03-11-26):" on the printed cut sheet, "orders of 03-10-26" in the list of
+plans, and the same in every warning about a second plan for the same
+ship day — written by the plugin's one helper (`\FisHotel\Misc\Dates`, `includes/class-dates.php` — change the format there). The day is picked on the browser's own calendar
+(*Orders shipping on*). What programs read does not change: the day
+picker's value, a plan's `ship_date` and `delivery_date`, and the REST
+route (`ship_date` in and out, its own refusal "ship_date must be a
+date, YYYY-MM-DD.", the `ship_date` / `delivery_date` fields of a 409)
+stay YYYY-MM-DD; only the sentence in a REST answer's `message` reads
+like the screen.
+
 ## Files
 
 `class-units.php`, `class-cut-list.php`, `class-packer.php`,

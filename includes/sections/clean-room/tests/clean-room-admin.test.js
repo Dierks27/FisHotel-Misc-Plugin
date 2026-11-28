@@ -175,6 +175,41 @@ check( 'a suggestion\'s tag: its product, "list" for a species row — as before
 check( '… and one found by a near spelling only says so', '#31 · similar spelling' === helpers.suggestTag( { product_id: 31, match: 'near' }, words ) && 'list · similar spelling' === helpers.suggestTag( { species_id: 4, match: 'near' }, words ) && 'similar spelling' === helpers.suggestTag( { match: 'near' } ) && '' === helpers.suggestTag() );
 check( 'a fish of a fish order found by a near spelling: where it comes from, and that the spelling is only similar', 'on fish order 2026-9 · similar spelling' === helpers.suggestTag( { name: 'Golden Sample Tang', match: 'near', where: 'on fish order 2026-9' }, words ) && 'in tank 512 · similar spelling' === helpers.suggestTag( { name: 'x', match: 'near', where: 'in tank 512' } ) && 'on fish order 2026-9' === helpers.suggestTag( onOrder, words ) );
 
+console.log( '12. The Stays tab\'s pop-up calendar: what "Cleared…" and "Sale date…" ask (no date is typed any more)' );
+var stayWords = { clearedTitle: 'Cleared date', clearedHelp: 'The day this group was cleared. "Not cleared" takes its cleared date away.', clearedNone: 'Not cleared', saleTitle: 'Sale date', saleHelpBatch: 'Pick this group\'s own sale date, or use the batch date (%s).', saleHelpNone: 'Pick this group\'s own sale date, or "No date" for none — the batch has no date yet.', saleUseBatch: 'Use the batch date (%s)', saleNone: 'No date' };
+var page = { name: ' Blue Test Tang ', today: '2026-11-27', min: '2000-01-01', max: '2028-11-27' };
+function withPage( extra ) {
+	var out = {};
+	Object.keys( page ).forEach( function ( key ) { out[ key ] = page[ key ]; } );
+	Object.keys( extra || {} ).forEach( function ( key ) { out[ key ] = extra[ key ]; } );
+	return out;
+}
+var ask = helpers.stayDateAsk( 'ready', withPage( { value: '2026-12-04', batch: '2026-11-27' } ), stayWords );
+check( 'Sale date…: named after the group', 'Sale date — Blue Test Tang' === ask.title );
+check( '… the helpful sentence stayed, the batch date in it US-style', 'Pick this group\'s own sale date, or use the batch date (11-27-26).' === ask.help );
+check( '… it opens with the group\'s own date, in the stored form the calendar needs', '2026-12-04' === ask.value );
+check( '… the earliest and latest day, stored form', '2000-01-01' === ask.min && '2028-11-27' === ask.max );
+check( '… the "no date" button says what an empty answer meant: the batch date, US-style', 'Use the batch date (11-27-26)' === ask.clear );
+ask = helpers.stayDateAsk( 'ready', withPage( { value: '', batch: '2026-11-27' } ), stayWords );
+check( '… a group that follows its batch opens empty (a careless Save copies nothing over the batch date)', '' === ask.value && 'Use the batch date (11-27-26)' === ask.clear );
+ask = helpers.stayDateAsk( 'ready', withPage( { value: '2026-12-10', batch: '' } ), stayWords );
+check( '… no batch date yet: the sentence says so, the button is "No date", the suggestion is filled in', 'Pick this group\'s own sale date, or "No date" for none — the batch has no date yet.' === ask.help && 'No date' === ask.clear && '2026-12-10' === ask.value );
+ask = helpers.stayDateAsk( 'clear', withPage( { cleared: '2026-11-20' } ), stayWords );
+check( 'Cleared…: named after the group, with its sentence', 'Cleared date — Blue Test Tang' === ask.title && stayWords.clearedHelp === ask.help );
+check( '… it opens with the group\'s cleared date', '2026-11-20' === ask.value );
+check( '… its "no date" button is "Not cleared" — what an empty answer meant', 'Not cleared' === ask.clear );
+check( '… any day may be picked, as the server allows', '' === ask.min && '' === ask.max );
+ask = helpers.stayDateAsk( 'clear', withPage( { cleared: '' } ), stayWords );
+check( '… a group not cleared yet opens on today', '2026-11-27' === ask.value );
+var said = [ helpers.stayDateAsk( 'ready', withPage( { value: '2026-12-04', batch: '2026-11-27' } ), stayWords ), helpers.stayDateAsk( 'ready', withPage( { batch: '' } ), stayWords ), helpers.stayDateAsk( 'clear', withPage( {} ), stayWords ) ].map( function ( a ) { return a.title + ' ' + a.help + ' ' + a.clear; } ).join( ' ' );
+check( 'nothing a person reads says YYYY-MM-DD or carries a year-first date', ! /YYYY|\d{4}-\d{2}-\d{2}|Leave empty/.test( said ), said );
+check( 'junk in the page\'s data is not put into the calendar', '' === helpers.stayDateAsk( 'ready', { value: '12-04-26', batch: 'soon', min: 'x', max: 'y' }, stayWords ).value && 'No date' === helpers.stayDateAsk( 'ready', { value: '12-04-26', batch: 'soon' }, stayWords ).clear && '' === helpers.stayDateAsk( 'ready', { min: 'x' }, stayWords ).min );
+check( 'without the page\'s words it still speaks plainly', 'Sale date' === helpers.stayDateAsk( 'ready', {} ).title && 'Not cleared' === helpers.stayDateAsk( 'clear', {} ).clear && 'Use the batch date (11-27-26)' === helpers.stayDateAsk( 'ready', { batch: '2026-11-27' } ).clear );
+check( 'any other button has no calendar', null === helpers.stayDateAsk( 'move', {}, stayWords ) );
+var adminSource = fs.readFileSync( path.join( __dirname, '..', 'js', 'clean-room-admin.js' ), 'utf8' ).replace( /^\s*(\/\/|\*|\/\*).*$/gm, '' );
+check( 'no prompt() asks for a date', ! /prompt\([^\n]*(date|YYYY)/i.test( adminSource ) );
+check( 'what Save posts is the date as the calendar gives it (YYYY-MM-DD); the "no date" button posts an empty date, as an empty answer did', adminSource.indexOf( 'fields.date = ymd;' ) !== -1 && adminSource.indexOf( "fields.date = '';" ) !== -1 );
+
 console.log( '' );
 console.log( failures ? failures + ' of ' + checks + ' checks FAILED' : 'All ' + checks + ' checks passed' );
 process.exit( failures ? 1 : 0 );

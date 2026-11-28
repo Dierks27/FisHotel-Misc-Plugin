@@ -240,6 +240,13 @@ and none for a user who may not open this section. It is hooked in
 wp-admin only: one query over the requests in those four states, once
 per request (`class-today-line.php`).
 
+## Dates
+
+A date and time on these screens (a request's history, a link's "made"
+and "used", the tooltip on "3 days ago") reads 11-27-26 09:14, site time
+— written by the plugin's one helper (`\FisHotel\Misc\Dates`, `includes/class-dates.php` — change the format there). *Works until the end of* on the Links tab is the browser's
+own calendar. What is stored stays as it was (UTC, year first).
+
 ## Files
 
 | File | What |

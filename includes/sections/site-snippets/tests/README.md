@@ -170,7 +170,8 @@ php includes/sections/site-snippets/tests/editor-admin-test.php
   database snippet, and ends the save of an active snippet at
   plugins_loaded:1 after its draft was kept; safe mode by constant.
 - **editor-admin-test.php** — the My snippets / Log tabs and every
-  handler: without the constant (read only, the `define()` line, every
+  handler (a time on them reads 11-27-26 15:14, month first, the Log's
+  UTC tooltip too): without the constant (read only, the `define()` line, every
   write refused with 403 and logged as denied), with it (not listed, by
   ID, no `manage_options`, multisite), a stale nonce, save (redirect,
   test run, row / revision / log / autoloaded option, the notice once),
@@ -230,3 +231,6 @@ in wp-config.php):
    then Restore it from its delete row on the Log tab (it comes back off).
 4. Download the CSV. Remove the line from wp-config.php: the tabs turn
    read only and Save is refused (a `denied` row).
+5. US dates. My snippets, a snippet's History and the Log tab: every
+   time reads like 11-27-26 09:14; hover a Log time for the same moment
+   in UTC, month first as well. The CSV keeps the stored times.

@@ -19,6 +19,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
+use FisHotel\Misc\Dates;
 use FisHotel\Misc\Sections\Clean_Room\Admin;
 use FisHotel\Misc\Sections\Clean_Room\Admin_Temp;
 use FisHotel\Misc\Sections\Clean_Room\Clean_Room;
@@ -80,7 +81,7 @@ $fh_num  = static function ( $value ) {
 							<td><?php echo esc_html( '' !== $fh_row['purpose'] ? $fh_row['purpose'] : '—' ); ?></td>
 							<td><?php echo esc_html( Temp_Tanks::kind_label( $fh_row['kind'] ) ); ?></td>
 							<td class="fh-cr-num"><?php echo esc_html( (int) $fh_row['gallons'] > 0 ? (int) $fh_row['gallons'] : '—' ); ?></td>
-							<td><?php echo esc_html( Temp_Tanks::schedule_label( $fh_row ) ); ?> <span class="fh-cr-sub fh-cr-sub--inline"><?php echo esc_html( sprintf( /* translators: %s: date */ __( 'from %s', 'fishotel-misc-plugin' ), $fh_row['start_date'] ) ); ?></span></td>
+							<td><?php echo esc_html( Temp_Tanks::schedule_label( $fh_row ) ); ?> <span class="fh-cr-sub fh-cr-sub--inline"><?php echo esc_html( sprintf( /* translators: %s: date */ __( 'from %s', 'fishotel-misc-plugin' ), Dates::us( $fh_row['start_date'] ) ) ); ?></span></td>
 							<td><?php echo esc_html( Admin::site_time( $fh_row['created_at'] ) ); ?></td>
 							<td><?php echo esc_html( $fh_row['closed_at'] ? Admin::site_time( $fh_row['closed_at'] ) : '—' ); ?></td>
 							<td class="fh-cr-row__actions"><a class="button button-small" href="<?php echo esc_url( Admin_Temp::history_url( (int) $fh_row['id'] ) ); ?>"><?php esc_html_e( 'Open', 'fishotel-misc-plugin' ); ?></a></td>
@@ -105,7 +106,7 @@ $fh_num  = static function ( $value ) {
 		<div class="fh-cr-summary">
 			<span class="fh-cr-chip"><?php esc_html_e( 'for', 'fishotel-misc-plugin' ); ?> <strong><?php echo esc_html( '' !== $setup['purpose'] ? $setup['purpose'] : '—' ); ?></strong></span>
 			<span class="fh-cr-chip"><strong><?php echo esc_html( (int) $setup['gallons'] > 0 ? (int) $setup['gallons'] . ' gal' : __( 'gallons not known', 'fishotel-misc-plugin' ) ); ?></strong></span>
-			<span class="fh-cr-chip"><?php esc_html_e( 'treatment', 'fishotel-misc-plugin' ); ?> <strong><?php echo esc_html( Temp_Tanks::schedule_label( $setup ) ); ?></strong> <?php echo esc_html( sprintf( /* translators: %s: date */ __( 'from %s', 'fishotel-misc-plugin' ), $setup['start_date'] ) ); ?></span>
+			<span class="fh-cr-chip"><?php esc_html_e( 'treatment', 'fishotel-misc-plugin' ); ?> <strong><?php echo esc_html( Temp_Tanks::schedule_label( $setup ) ); ?></strong> <?php echo esc_html( sprintf( /* translators: %s: date */ __( 'from %s', 'fishotel-misc-plugin' ), Dates::us( $setup['start_date'] ) ) ); ?></span>
 			<span class="fh-cr-chip"><?php esc_html_e( 'set up', 'fishotel-misc-plugin' ); ?> <strong><?php echo esc_html( Admin::site_time( $setup['created_at'] ) ); ?></strong><?php echo '' !== $setup['created_name'] ? ' · ' . esc_html( $setup['created_name'] ) : ''; ?></span>
 			<?php if ( $setup['closed_at'] ) : ?>
 				<span class="fh-cr-chip"><?php esc_html_e( 'taken down', 'fishotel-misc-plugin' ); ?> <strong><?php echo esc_html( Admin::site_time( $setup['closed_at'] ) ); ?></strong><?php echo '' !== $setup['closed_name'] ? ' · ' . esc_html( $setup['closed_name'] ) : ''; ?></span>
@@ -197,11 +198,11 @@ $fh_num  = static function ( $value ) {
 					<?php foreach ( $history['groups'] as $fh_group ) : ?>
 						<tr>
 							<td><strong><?php echo esc_html( $fh_group['species'] ); ?></strong> <span class="fh-cr-sub fh-cr-sub--inline">#<?php echo esc_html( $fh_group['stay_id'] ); ?><?php echo null !== $fh_group['qty'] ? ' · ' . esc_html( sprintf( /* translators: %d: fish */ __( '%d checked in here', 'fishotel-misc-plugin' ), (int) $fh_group['qty'] ) ) : ''; ?></span></td>
-							<td><?php echo esc_html( $fh_group['in'] ); ?></td>
+							<td><?php echo esc_html( Dates::us( $fh_group['in'] ) ); ?></td>
 							<td>
 								<?php
 								if ( '' !== $fh_group['out'] ) {
-									echo esc_html( $fh_group['out'] . ( $fh_group['to'] ? ' → ' . sprintf( /* translators: %d: tank number */ __( 'Tank %d', 'fishotel-misc-plugin' ), (int) $fh_group['to'] ) : '' ) );
+									echo esc_html( Dates::us( $fh_group['out'] ) . ( $fh_group['to'] ? ' → ' . sprintf( /* translators: %d: tank number */ __( 'Tank %d', 'fishotel-misc-plugin' ), (int) $fh_group['to'] ) : '' ) );
 								} else {
 									echo esc_html( $setup['open'] ? __( 'still in it, or ended here', 'fishotel-misc-plugin' ) : __( 'ended here', 'fishotel-misc-plugin' ) );
 								}

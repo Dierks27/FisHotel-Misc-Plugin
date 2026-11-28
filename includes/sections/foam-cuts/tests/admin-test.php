@@ -437,23 +437,23 @@ $GLOBALS['fh_orders'] = array(
 );
 $store->calls = array();
 $html         = fh_page( $admin, array( 'ship' => '2026-03-10' ) );
-check( 'the Plan tab lists the orders of that day by number, with their boxes', false !== strpos( $html, '3 orders ship on 2026-03-10 (delivery 2026-03-11)' ) && false !== strpos( $html, '<strong>#401</strong>' ) && false !== strpos( $html, '1 × Cube' ) && false !== strpos( $html, 'no box yet' ) && false !== strpos( $html, '1 order has no box yet' ) );
+check( 'the Plan tab lists the orders of that day by number, with their boxes', false !== strpos( $html, '3 orders ship on 03-10-26 (delivery 03-11-26)' ) && false !== strpos( $html, '<strong>#401</strong>' ) && false !== strpos( $html, '1 × Cube' ) && false !== strpos( $html, 'no box yet' ) && false !== strpos( $html, '1 order has no box yet' ) );
 check( 'the numbers are filled in and the form remembers where they came from', 1 === preg_match( '/name="boxes\[0\]\[count\]"[^>]*value="1"/', $html ) && false !== strpos( $html, 'name="origin" value="orders"' ) && false !== strpos( $html, 'name="ship_date" value="2026-03-10"' ) );
 check( 'looking the orders up wrote nothing', array() === $store->calls );
 $halt = fh_post( $admin, 'plan', array( 'origin' => 'orders', 'ship_date' => '2026-03-10', 'boxes' => array( array( 'key' => 'cube', 'count' => '2' ), array( 'key' => 'long', 'count' => '1' ) ) ) );
 $plan = end( $store->plans );
 check( 'the plan is made from the numbers as posted (changed by hand: 2 cubes) and remembers the day and its orders', $halt && 'redirect' === $halt->kind && '2 × Cube, 1 × Long' === $plan['title'] && 'orders' === $plan['origin'] && '2026-03-10' === $plan['ship_date'] && array( 401, 402, 403 ) === array_column( $plan['data']['for']['orders'], 'id' ) );
-check( 'the printed sheet names the orders it is for — by number only', false !== strpos( Admin::print_html( $plan, $store ), 'For the orders shipping 2026-03-10 (delivery 2026-03-11):' ) && false !== strpos( Admin::print_html( $plan, $store ), '#401 1 × Cube' ) );
+check( 'the printed sheet names the orders it is for — by number only', false !== strpos( Admin::print_html( $plan, $store ), 'For the orders shipping 03-10-26 (delivery 03-11-26):' ) && false !== strpos( Admin::print_html( $plan, $store ), '#401 1 × Cube' ) );
 
 $count = count( $store->plans );
 $halt  = fh_post( $admin, 'plan', array( 'origin' => 'orders', 'ship_date' => '2026-03-10', 'boxes' => array( array( 'key' => 'cube', 'count' => '2' ), array( 'key' => 'long', 'count' => '1' ) ) ) );
-check( 'the same day and the same numbers posted again (a double-click, a second tab): the page opens the plan that is there — no second one', $count === count( $store->plans ) && $halt && false !== strpos( $halt->data, 'plan=' . $plan['id'] ) && false !== strpos( fh_page( $admin, array( 'plan' => (string) $plan['id'] ) ), 'was already made for the orders shipping 2026-03-10' ) );
+check( 'the same day and the same numbers posted again (a double-click, a second tab): the page opens the plan that is there — no second one', $count === count( $store->plans ) && $halt && false !== strpos( $halt->data, 'plan=' . $plan['id'] ) && false !== strpos( fh_page( $admin, array( 'plan' => (string) $plan['id'] ) ), 'was already made for the orders shipping 03-10-26' ) );
 check( 'a plan that is alone for its day carries no warning about another', false === strpos( fh_page( $admin, array( 'plan' => (string) $plan['id'] ) ), 'same ship day' ) && false === strpos( Admin::print_html( $plan, $store ), 'same ship day' ) );
 fh_post( $admin, 'plan', array( 'origin' => 'orders', 'ship_date' => '2026-03-10', 'boxes' => array( array( 'key' => 'cube', 'count' => '1' ), array( 'key' => 'long', 'count' => '1' ) ) ) );
 $twin = end( $store->plans );
 Admin::take_flash();
 $html = fh_page( $admin, array( 'plan' => (string) $twin['id'] ) );
-check( 'other numbers for the same day: a second plan — and its page names the first, before anything is cut', $twin['id'] !== $plan['id'] && false !== strpos( $html, 'Plan ' . $plan['id'] . ' (2 × Cube, 1 × Long) is another plan for the same ship day, 2026-03-10' ) && false !== strpos( $html, 'Cut from ONE of them' ) );
+check( 'other numbers for the same day: a second plan — and its page names the first, before anything is cut', $twin['id'] !== $plan['id'] && false !== strpos( $html, 'Plan ' . $plan['id'] . ' (2 × Cube, 1 × Long) is another plan for the same ship day, 03-10-26' ) && false !== strpos( $html, 'Cut from ONE of them' ) );
 check( 'the printed sheet says it too, across the top', false !== strpos( Admin::print_html( $twin, $store ), 'is another plan for the same ship day' ) && false !== strpos( Admin::print_html( $plan, $store ), 'Plan ' . $twin['id'] . ' (1 × Cube, 1 × Long) is another plan for the same ship day' ) );
 fh_post( $admin, 'cut', array( 'plan' => (string) $plan['id'] ) );
 Admin::take_flash();

@@ -22,6 +22,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
+use FisHotel\Misc\Dates;
 use FisHotel\Misc\Sections\Clean_Room\Admin_Workbook;
 use FisHotel\Misc\Sections\Clean_Room\Clean_Room;
 use FisHotel\Misc\Sections\Clean_Room\Costing;
@@ -267,7 +268,7 @@ $fh_group_table = static function ( array $groups, $label, $labels = false ) use
 							<td><a href="<?php echo esc_url( Admin_Workbook::order_url( (int) $fh_r['id'] ) ); ?>"><strong><?php echo esc_html( $fh_r['ref'] ); ?></strong></a></td>
 							<td><?php echo esc_html( '' !== $fh_r['supplier'] ? $fh_r['supplier'] : '—' ); ?></td>
 							<td><?php echo esc_html( '' !== $fh_r['origin'] ? $fh_r['origin'] : '—' ); ?></td>
-							<td><?php echo esc_html( $fh_r['received_date'] ? $fh_r['received_date'] : ( $fh_r['order_date'] ? $fh_r['order_date'] . ' ' . __( '(ordered)', 'fishotel-misc-plugin' ) : '—' ) ); ?></td>
+							<td><?php echo esc_html( $fh_r['received_date'] ? Dates::us( $fh_r['received_date'] ) : ( $fh_r['order_date'] ? Dates::us( $fh_r['order_date'] ) . ' ' . __( '(ordered)', 'fishotel-misc-plugin' ) : '—' ) ); ?></td>
 							<td class="fh-cr-num"><?php echo esc_html( $fh_r['lines'] ); ?></td>
 							<td class="fh-cr-num"><?php echo esc_html( $fh_r['ordered'] ); ?></td>
 							<td class="fh-cr-num"><?php echo esc_html( $fh_r['received'] ); ?></td>

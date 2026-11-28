@@ -474,5 +474,10 @@ $before = count( $store->log );
 $halt   = fh_call( 'handle_save', fh_form( array( 'slug' => 'late' ) ) );
 check( 'a save by the named editor is refused and logged', $halt instanceof RuntimeException && null === $store->get_by_slug( 'late' ) && $before + 1 === count( $store->log ) && false !== strpos( $store->log_rows( array(), 1 )[0]['summary'], 'DISALLOW_FILE_EDIT' ) );
 
+echo "A date and time on the Snippets screens: month first (no site zone in this test: UTC)\n";
+check( 'a stored UTC time reads 11-27-26 15:14', '11-27-26 15:14' === Admin_Editor::when( '2026-11-27 15:14:03' ) );
+check( 'nothing stored: nothing', '' === Admin_Editor::when( '' ) && '' === Admin_Editor::when( null ) );
+check( 'the log\'s tooltip (the exact UTC time) is month first too', false !== strpos( (string) file_get_contents( dirname( __DIR__ ) . '/views/editor-log.php' ), "Dates::us_time( (string) \$fh_log['created_at'] ) . ' UTC'" ) );
+
 Catalog::use_dir( null );
 fh_finish();

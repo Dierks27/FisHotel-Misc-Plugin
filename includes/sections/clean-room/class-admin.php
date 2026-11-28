@@ -36,6 +36,8 @@
 
 namespace FisHotel\Misc\Sections\Clean_Room;
 
+use FisHotel\Misc\Dates;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -576,11 +578,11 @@ class Admin {
 		}
 		foreach ( $result['invalid'] as $label ) {
 			/* translators: 1: the group (species, tank) and what was typed, 2: earliest date, 3: latest date */
-			$lines[] = sprintf( __( 'Clean room: %1$s is not a date from %2$s to %3$s — ignored, that group keeps its sale date.', 'fishotel-misc-plugin' ), $label, Replay::SALE_DATE_MIN, Replay::sale_date_max( $today ) );
+			$lines[] = sprintf( __( 'Clean room: %1$s is not a date from %2$s to %3$s — ignored, that group keeps its sale date.', 'fishotel-misc-plugin' ), $label, Dates::us( Replay::SALE_DATE_MIN ), Dates::us( Replay::sale_date_max( $today ) ) );
 		}
 		foreach ( $result['follows_batch'] as $row ) {
 			/* translators: 1: the group, 2: the batch's sale date, 3: fish order ref */
-			$lines[] = sprintf( __( 'Clean room: %1$s follows the batch date (%2$s) — change or clear it on fish order %3$s (Clean Room → Fish orders).', 'fishotel-misc-plugin' ), $row['label'], $row['date'], $row['ref'] );
+			$lines[] = sprintf( __( 'Clean room: %1$s follows the batch date (%2$s) — change or clear it on fish order %3$s (Clean Room → Fish orders).', 'fishotel-misc-plugin' ), $row['label'], Dates::us( $row['date'] ), $row['ref'] );
 		}
 		foreach ( $result['failed'] as $label ) {
 			/* translators: %s: the group */
@@ -646,7 +648,7 @@ class Admin {
 			} elseif ( Replay::is_sale_date_in_range( $date, $today ) ) {
 				$wanted = $date;
 			} else {
-				$out['invalid'][] = $label . ': "' . substr( $date, 0, 20 ) . '"';
+				$out['invalid'][] = $label . ': "' . Dates::us( substr( $date, 0, 20 ) ) . '"'; // For a notice: a date reads 11-27-26; anything else as it was typed.
 				continue;
 			}
 
@@ -747,10 +749,14 @@ class Admin {
 			FISHOTEL_MISC_VERSION
 		);
 
+		// The plugin's dates: 11-27-26 for a person, and the pop-up calendar of the Stays tab.
+		Dates::register_script();
+		$today = Clean_Room::today();
+
 		wp_enqueue_script(
 			'fishotel-cleanroom-admin',
 			Clean_Room::url() . 'js/clean-room-admin.js',
-			array( 'jquery' ),
+			array( 'jquery', Dates::SCRIPT ),
 			FISHOTEL_MISC_VERSION,
 			true
 		);
@@ -764,7 +770,11 @@ class Admin {
 				'settingsNonce' => wp_create_nonce( Settings::NONCE_ACTION ),
 				'boxRates'      => $on_page ? Settings::box_rates() : array(),
 				'noProduct'     => $on_page ? Admin_No_Product::js_config() : array(),
-				'i18n'          => array(
+				// For the Stays tab's pop-up calendar — stored form (YYYY-MM-DD), as a calendar needs.
+				'today'         => $today,
+				'saleMin'       => Replay::SALE_DATE_MIN,
+				'saleMax'       => Replay::sale_date_max( $today ),
+				'i18n'          => self::stay_date_words() + array(
 					'holdAccount'   => __( 'Tied to the customer account of %s — their own paid order takes these fish.', 'fishotel-misc-plugin' ),
 					'holdTyped'     => __( 'A name typed, no account: no order takes these by itself — you will be asked when one comes in.', 'fishotel-misc-plugin' ),
 					'saved'          => __( 'Saved.', 'fishotel-misc-plugin' ),
@@ -778,10 +788,6 @@ class Admin {
 					'confirmUndo'    => __( 'Undo this event? (A compensating event is written; nothing is deleted.)', 'fishotel-misc-plugin' ),
 					'reloading'      => __( 'Saved. Reloading…', 'fishotel-misc-plugin' ),
 					'howMany'        => __( 'How many?', 'fishotel-misc-plugin' ),
-					'which'          => __( 'Which date (YYYY-MM-DD)? Leave empty to clear.', 'fishotel-misc-plugin' ),
-					/* translators: %s: the batch's sale date */
-					'whichSaleBatch' => __( 'This group\'s own sale date (YYYY-MM-DD)? Leave empty to use the batch date (%s).', 'fishotel-misc-plugin' ),
-					'whichSale'      => __( 'This group\'s own sale date (YYYY-MM-DD)? Leave empty for none — the batch has no date yet.', 'fishotel-misc-plugin' ),
 					'whichTank'      => __( 'Move to which tank number?', 'fishotel-misc-plugin' ),
 					'whyMove'        => __( 'Why? (optional: clear building / bullying / pairing / hospital / other)', 'fishotel-misc-plugin' ),
 					'confirmCheckin' => __( 'Check the received fish in? One stay per line with fish (lines already checked in are skipped). The order becomes "received".', 'fishotel-misc-plugin' ),
@@ -958,7 +964,7 @@ class Admin {
 					}
 					if ( 'range' === $check ) {
 						/* translators: 1: earliest date, 2: latest date */
-						wp_send_json_error( array( 'message' => sprintf( __( 'Pick a sale date from %1$s to %2$s.', 'fishotel-misc-plugin' ), Replay::SALE_DATE_MIN, Replay::sale_date_max( $today ) ) ), 400 );
+						wp_send_json_error( array( 'message' => sprintf( __( 'Pick a sale date from %1$s to %2$s.', 'fishotel-misc-plugin' ), Dates::us( Replay::SALE_DATE_MIN ), Dates::us( Replay::sale_date_max( $today ) ) ) ), 400 );
 					}
 					if ( 'same' === $check ) {
 						$ok  = true;
@@ -1585,13 +1591,39 @@ class Admin {
 	/* ============================================================== */
 
 	/**
-	 * What the Stays tab's "Sale date…" prompt opens with (pure): the
-	 * group's own date; else nothing when its batch has a date (OK then
-	 * keeps the batch's date instead of copying one over it); else the
-	 * suggestion (check-in + the setting).
+	 * The words of the Stays tab's pop-up calendar (pure) — the "Cleared…"
+	 * and "Sale date…" buttons. A date is picked on the calendar, never
+	 * typed; the "no date" button of each means what an empty answer
+	 * meant: "Not cleared" removes the cleared date, "Use the batch date"
+	 * (or "No date" when the batch has none) removes the group's own
+	 * sale date. js/clean-room-admin.js (stayDateAsk) puts the batch date
+	 * into the %s, written 11-27-26.
+	 *
+	 * @return array<string,string>
+	 */
+	public static function stay_date_words() {
+		return array(
+			'clearedTitle'  => __( 'Cleared date', 'fishotel-misc-plugin' ),
+			'clearedHelp'   => __( 'The day this group was cleared. "Not cleared" takes its cleared date away.', 'fishotel-misc-plugin' ),
+			'clearedNone'   => __( 'Not cleared', 'fishotel-misc-plugin' ),
+			'saleTitle'     => __( 'Sale date', 'fishotel-misc-plugin' ),
+			/* translators: %s: the batch's sale date */
+			'saleHelpBatch' => __( 'Pick this group\'s own sale date, or use the batch date (%s).', 'fishotel-misc-plugin' ),
+			'saleHelpNone'  => __( 'Pick this group\'s own sale date, or "No date" for none — the batch has no date yet.', 'fishotel-misc-plugin' ),
+			/* translators: %s: the batch's sale date */
+			'saleUseBatch'  => __( 'Use the batch date (%s)', 'fishotel-misc-plugin' ),
+			'saleNone'      => __( 'No date', 'fishotel-misc-plugin' ),
+		);
+	}
+
+	/**
+	 * What the Stays tab's "Sale date…" calendar opens with (pure): the
+	 * group's own date; else nothing when its batch has a date (so
+	 * nothing is copied over the batch's date by a careless Save); else
+	 * the suggestion (check-in + the setting).
 	 *
 	 * @param array $stay Hydrated stay.
-	 * @return string Y-m-d or ''.
+	 * @return string Y-m-d or '' — the stored form, as a calendar needs.
 	 */
 	public static function sale_prompt_default( array $stay ) {
 		if ( Replay::is_date( $stay['sale_ready_override'] ?? null ) ) {
@@ -1703,13 +1735,14 @@ class Admin {
 	}
 
 	/**
-	 * A stay's check-in date, or "arrival unknown" (pure).
+	 * A stay's check-in date as a person reads it (11-27-26), or
+	 * "arrival unknown" (pure).
 	 *
 	 * @param array $stay Hydrated stay (checkin_date, checkin_unknown).
 	 * @return string
 	 */
 	public static function checkin_text( array $stay ) {
-		return Replay::is_date( $stay['checkin_date'] ?? null ) ? (string) $stay['checkin_date'] : __( 'arrival unknown', 'fishotel-misc-plugin' );
+		return Replay::is_date( $stay['checkin_date'] ?? null ) ? Dates::us( (string) $stay['checkin_date'] ) : __( 'arrival unknown', 'fishotel-misc-plugin' );
 	}
 
 	/**
@@ -1726,10 +1759,11 @@ class Admin {
 
 	/**
 	 * A stay's sale state in words (pure): the effective sale date ("on
-	 * sale 2026-10-30") with where it comes from ("from the batch" / "own
+	 * sale 10-30-26") with where it comes from ("from the batch" / "own
 	 * date"), or "Sale date not set" with the suggestion ("suggested …",
 	 * check-in + the setting); the warning "still in the Spa" when it is
-	 * for sale but not cleared.
+	 * for sale but not cleared. 'date' stays the stored YYYY-MM-DD (a
+	 * calendar's value, a comparison); 'text' and 'hint' are for reading.
 	 *
 	 * @param array $stay Hydrated stay.
 	 * @return array{date: string, text: string, source: string, hint: string, warning: string}
@@ -1749,11 +1783,11 @@ class Admin {
 			$suggested   = (string) ( $stay['sale_ready_suggested'] ?? '' );
 			if ( Replay::is_date( $suggested ) ) {
 				/* translators: %s: date */
-				$out['hint'] = sprintf( __( 'suggested %s', 'fishotel-misc-plugin' ), $suggested );
+				$out['hint'] = sprintf( __( 'suggested %s', 'fishotel-misc-plugin' ), Dates::us( $suggested ) );
 			}
 		} else {
 			/* translators: %s: date */
-			$out['text']   = sprintf( __( 'on sale %s', 'fishotel-misc-plugin' ), $date );
+			$out['text']   = sprintf( __( 'on sale %s', 'fishotel-misc-plugin' ), Dates::us( $date ) );
 			$out['source'] = Replay::SALE_OWN === (string) ( $stay['sale_date_source'] ?? '' ) ? __( 'own date', 'fishotel-misc-plugin' ) : __( 'from the batch', 'fishotel-misc-plugin' );
 		}
 		if ( ! empty( $stay['ready_in_spa'] ) ) {
@@ -1764,7 +1798,7 @@ class Admin {
 	}
 
 	/**
-	 * A UTC datetime as a site-time label.
+	 * A UTC datetime as a site-time label: 11-27-26 09:14.
 	 *
 	 * @param string $utc Y-m-d H:i:s (UTC).
 	 * @return string
@@ -1775,11 +1809,7 @@ class Admin {
 			return (string) $utc;
 		}
 
-		if ( function_exists( 'wp_date' ) ) {
-			return (string) wp_date( 'Y-m-d H:i', $ts );
-		}
-
-		return gmdate( 'Y-m-d H:i', $ts );
+		return Dates::stamp( $ts );
 	}
 
 	/**
@@ -1826,17 +1856,17 @@ class Admin {
 					return 'cleared (date unknown)' . $undo;
 				}
 				$date = Replay::note_date( $note, Replay::NOTE_CLEARED );
-				return ( '' !== $date ? 'cleared date set to ' . $date : 'cleared' ) . $undo;
+				return ( '' !== $date ? 'cleared date set to ' . Dates::us( $date ) : 'cleared' ) . $undo; // The note keeps its stored date; the sentence reads 11-27-26.
 			case 'count':
 				return sprintf( 'recount: %d%s', null === $qty ? 0 : $qty, $undo );
 			case 'note':
 				if ( 0 === strpos( $note, Replay::NOTE_SALE_READY ) ) {
 					$date = trim( substr( $note, strlen( Replay::NOTE_SALE_READY ) ) );
-					return '' !== $date ? 'own sale date set to ' . $date : 'own sale date removed (the batch date applies)';
+					return '' !== $date ? 'own sale date set to ' . Dates::us( $date ) : 'own sale date removed (the batch date applies)';
 				}
 				if ( 0 === strpos( $note, Replay::NOTE_CHECKIN ) ) {
 					$date = trim( substr( $note, strlen( Replay::NOTE_CHECKIN ) ) );
-					return '' !== $date ? 'check-in date set to ' . $date : 'check-in date back to the arrival';
+					return '' !== $date ? 'check-in date set to ' . Dates::us( $date ) : 'check-in date back to the arrival';
 				}
 				if ( Identify::is_note( $note ) ) {
 					return $note; // "identified: ?? small wrasse → Lined Wrasse" reads as it is.

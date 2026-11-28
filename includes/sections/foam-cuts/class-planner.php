@@ -29,6 +29,8 @@
 
 namespace FisHotel\Misc\Sections\Foam_Cuts;
 
+use FisHotel\Misc\Dates;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -145,7 +147,7 @@ class Planner {
 				return array(
 					'ok'       => true,
 					/* translators: 1: plan number, 2: ship date */
-					'message'  => sprintf( __( 'Plan %1$d was already made for the orders shipping %2$s — the same boxes — and has not been cut yet, so no second plan was made. This is that plan.', 'fishotel-misc-plugin' ), (int) $row['id'], $ship ),
+					'message'  => sprintf( __( 'Plan %1$d was already made for the orders shipping %2$s — the same boxes — and has not been cut yet, so no second plan was made. This is that plan.', 'fishotel-misc-plugin' ), (int) $row['id'], Dates::us( $ship ) ),
 					'id'       => (int) $row['id'],
 					'existing' => true,
 				);
@@ -279,9 +281,9 @@ class Planner {
 		foreach ( $others as $other ) {
 			$lines[] = 'cut' === $other['status']
 				/* translators: 1: plan number, 2: its boxes, 3: ship date */
-				? sprintf( __( 'Plan %1$d (%2$s) for the same ship day, %3$s, is already marked as cut. This plan counts ALL of that day\'s orders again — cutting it as well cuts their foam twice.', 'fishotel-misc-plugin' ), $other['id'], $other['title'], (string) $plan['ship_date'] )
+				? sprintf( __( 'Plan %1$d (%2$s) for the same ship day, %3$s, is already marked as cut. This plan counts ALL of that day\'s orders again — cutting it as well cuts their foam twice.', 'fishotel-misc-plugin' ), $other['id'], $other['title'], Dates::us( (string) $plan['ship_date'] ) )
 				/* translators: 1: plan number, 2: its boxes, 3: ship date */
-				: sprintf( __( 'Plan %1$d (%2$s) is another plan for the same ship day, %3$s. Cut from ONE of them and delete the other — marking both as cut books the foam twice, under different labels.', 'fishotel-misc-plugin' ), $other['id'], $other['title'], (string) $plan['ship_date'] );
+				: sprintf( __( 'Plan %1$d (%2$s) is another plan for the same ship day, %3$s. Cut from ONE of them and delete the other — marking both as cut books the foam twice, under different labels.', 'fishotel-misc-plugin' ), $other['id'], $other['title'], Dates::us( (string) $plan['ship_date'] ) );
 		}
 		return $lines;
 	}
@@ -301,7 +303,7 @@ class Planner {
 			foreach ( self::same_day( $store, $plan ) as $other ) {
 				if ( 'cut' === $other['status'] ) {
 					/* translators: 1: plan number, 2: ship date */
-					$result['message'] .= ' ' . sprintf( __( 'Mind: plan %1$d for the same ship day (%2$s) is marked as cut as well. If both were printed for the same boxes, the foam is now booked twice — undo one of them.', 'fishotel-misc-plugin' ), $other['id'], (string) $plan['ship_date'] );
+					$result['message'] .= ' ' . sprintf( __( 'Mind: plan %1$d for the same ship day (%2$s) is marked as cut as well. If both were printed for the same boxes, the foam is now booked twice — undo one of them.', 'fishotel-misc-plugin' ), $other['id'], Dates::us( (string) $plan['ship_date'] ) );
 				}
 			}
 			self::announce( 'fishotel_foam_cuts_plan_cut', (int) $plan['id'], isset( $plan['data'] ) && is_array( $plan['data'] ) ? $plan['data'] : array() );
@@ -370,9 +372,9 @@ class Planner {
 				'ok'      => false,
 				'message' => $orders['orders']
 					/* translators: %s: date */
-					? sprintf( __( 'None of the orders shipping on %s has a box yet, so there is nothing to cut for.', 'fishotel-misc-plugin' ), $orders['ship_date'] )
+					? sprintf( __( 'None of the orders shipping on %s has a box yet, so there is nothing to cut for.', 'fishotel-misc-plugin' ), Dates::us( $orders['ship_date'] ) )
 					/* translators: 1: ship date, 2: delivery date */
-					: sprintf( __( 'No open order ships on %1$s (delivery %2$s).', 'fishotel-misc-plugin' ), $orders['ship_date'], $orders['delivery_date'] ),
+					: sprintf( __( 'No open order ships on %1$s (delivery %2$s).', 'fishotel-misc-plugin' ), Dates::us( $orders['ship_date'] ), Dates::us( $orders['delivery_date'] ) ),
 				'id'      => 0,
 				'orders'  => $orders,
 			);

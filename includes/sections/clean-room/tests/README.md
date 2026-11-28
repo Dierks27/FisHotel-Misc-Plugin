@@ -50,6 +50,7 @@ php  includes/sections/clean-room/tests/workbook-test.php
 php  includes/sections/clean-room/tests/import-map-test.php
 php  includes/sections/clean-room/tests/import-test.php
 php  includes/sections/clean-room/tests/sale-dates-test.php
+php  includes/sections/clean-room/tests/us-dates-test.php
 php  includes/sections/clean-room/tests/sizes-test.php
 php  includes/sections/clean-room/tests/sizes-tidy-test.php
 php  includes/sections/clean-room/tests/sizes-tidy-run-test.php
@@ -96,6 +97,7 @@ node includes/sections/clean-room/tests/order-import.test.js
 node includes/sections/clean-room/tests/order-entry.test.js
 node includes/sections/clean-room/tests/temp-tanks.test.js
 node includes/sections/clean-room/tests/front-desk-feeding.test.js
+node includes/sections/clean-room/tests/us-dates.test.js
 ```
 
 Every species, price, supplier and figure in these tests is invented
@@ -513,10 +515,35 @@ system temp directory (`FH_TEST_TMP` overrides).
   date bounds (`sale_date_max()` with Feb 29, `is_sale_date_in_range()`,
   `own_sale_date_check()`), the batch calendar refusing dates outside
   them, the phone writing nothing for an unchanged date and refusing a
-  far one, the Stays tab prompt's default (`sale_prompt_default()`: empty
+  far one, what the Stays tab's calendar opens with (`sale_prompt_default()`: empty
   when the batch has a date), "ready (still in the Spa)" in the CSV and
   XLSX state column, the order card's Spa count and own-date flag, and
   the Board's building line counting as its summary does.
+- **us-dates-test.php** — a person reads 11-27-26, what is stored and
+  sent stays 2026-11-27: no `prompt()` asks for a date and no screen
+  string says YYYY-MM-DD; the words of the Stays tab's pop-up calendar
+  (`Admin::stay_date_words()`); the server takes the stored form only
+  (`12-04-26` in a payload is refused, never guessed at); the phone's
+  acts — the toast US-style, the note events `sale_ready:` / `cleared:` /
+  `checkin:` with the stored date, "No date" = an empty date as before;
+  the phone's screen payload; the Stays tab rendered (cells 11-27-26 in
+  cells that do not wrap, every `value` / `max` / `data-*` date stored
+  form, the note under the table); the stays CSV and XLSX; the sentences
+  (Events tab, sale words, the Fish orders cell, a Board line, a
+  temporary tank, the order note of a hold); and a date and time in site
+  time near midnight and across both daylight-saving changes.
+- **us-dates.test.js** — the plugin's page helper,
+  `admin/js/fishotel-dates.js` (it sits here because the section tests
+  are the ones CI runs under node): `us()` / `usTime()` / `parse()`
+  against `tests/fixtures/us-dates.json` (the fixture
+  `tests/dates-test.php` runs the PHP helper against), the same answers
+  in six time zones and on the days the clocks change, `stamp()` one
+  minute before midnight, `check()` (what the pop-up refuses), and the
+  pop-up itself (`ask()`) run against a tiny stand-in DOM: a dialog with
+  a `type="date"` field, Save hands back YYYY-MM-DD, the "no date"
+  button, Cancel, Esc, a click outside, Enter, an empty or out-of-range
+  field refused in words, Tab staying inside, focus going back, dates
+  inside its words kept on one line.
 - **sizes-tidy-test.php** — "Tidy up the sizes", the thinking
   (`Sizes_Tidy`, pure), on the invented shop of `tidy-fixture.php` (the
   31 sizes, a dozen fish that between them show every case, a row or two
@@ -2087,3 +2114,31 @@ line's `split` field holds anything (`fields_before`) — and one press on
     shop's order screens: no customer is offered, a typed name works.
     (i) An invoice of 2 fish of a group of 5 left open: *Reserve…* of 4
     is refused ("Only 3 are ready").
+
+42. US dates. Stays tab: every date in the table reads like 11-27-26
+    (check-in, cleared, on sale; "suggested 12-12-26"). Press **Sale
+    date…** on a group that follows its batch: a small pop-up opens (no
+    browser question), headed "Sale date — <the fish>", saying "Pick this
+    group's own sale date, or use the batch date (12-12-26)."; the field
+    is the browser's calendar and shows mm/dd/yyyy; it is empty. Press
+    Save with nothing picked: it says "Pick a date first, or choose "Use
+    the batch date (12-12-26)"." and nothing is saved. Esc: it closes,
+    nothing saved, the button has focus again. Open it, pick a date,
+    Cancel: nothing saved. Open it, pick a date, Save: the page reloads
+    and the row reads that date with "own date". Open it again: it holds
+    that date; press **Use the batch date (…)**: the row is back on the
+    batch's date. On a group whose batch has no date the button reads
+    **No date**. **Cleared…** on a cleared group opens with its cleared
+    date; **Not cleared** takes it away; on a group not cleared it opens
+    on today. Do the same on a phone-wide window (390 px): the pop-up
+    sits at the bottom of the screen, every button a thumb high.
+    Board and To do: today reads 11-27-26 in the summary line. Fish
+    orders: Ordered, Received and On sale read 11-27-26; on an order, the
+    *Goes on sale* calendar shows mm/dd/yyyy and "suggested 12-12-26".
+    Events: "own sale date set to 12-04-26", the time "11-27-26 09:14".
+    The phone, a tank with a group: "on sale 12-04-26", "in since
+    11-14-26"; its Dates screen: three calendars, "suggested 12-12-26",
+    **Use the batch date (12-12-26)** on a group with its own date (one
+    tap: "… back to the batch date (12-12-26)"), "Empty = the batch date
+    (12-12-26)."; the Today list is headed "… · 11-27-26". Export the
+    stays CSV: its dates are still 2026-11-27.

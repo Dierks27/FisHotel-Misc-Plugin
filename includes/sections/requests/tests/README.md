@@ -32,7 +32,7 @@ node includes/sections/requests/tests/requests-admin.test.js
 | `fees-test.php` | whether a fee is possible (and not with a product Batch Manager would not credit); the pay link's decisions; the cart line (that line only, quantity 1, no coupon); the order tag; the paid order; a wallet that was not credited; a short payment (a coupon's remainder cent is not one); prices that include tax |
 | `listing-test.php` | filters, search, sorting, grouping by fish, Needs you, sheets, Demand |
 | `front-test.php` | the rate limit (per e-mail, and four times as many per shared address); whose sheet it is; the form as printed; my requests; ownership by account and by personal link; who gets suggestions; the My Account tab; the public shortcode |
-| `admin-test.php` | every operation of the page's write action; "Save, and add another fish for this person" (the person kept, one invoice); the list; "Requested by"; every tab printed with no notice and nothing unescaped |
+| `admin-test.php` | a date and time on the screens reads 11-27-26 09:14 in site time (near midnight, the day the clocks change, nothing stored = nothing shown); every operation of the page's write action; "Save, and add another fish for this person" (the person kept, one invoice); the list; "Requested by"; every tab printed with no notice and nothing unescaped |
 | `*.test.js` | the pure helpers of the two page scripts, and "Add another fish" on a stand-in document |
 
 `follow-test.php` loads the Clean Room section's classes and its

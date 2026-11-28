@@ -21,6 +21,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
+use FisHotel\Misc\Dates;
 use FisHotel\Misc\Sections\Foam_Cuts\Admin;
 use FisHotel\Misc\Sections\Foam_Cuts\Svg;
 
@@ -291,7 +292,7 @@ $fh_title = sprintf( __( 'Foam cut sheet — plan %d', 'fishotel-misc-plugin' ),
 				<strong>
 					<?php
 					/* translators: 1: ship date, 2: delivery date */
-					echo esc_html( sprintf( __( 'For the orders shipping %1$s (delivery %2$s):', 'fishotel-misc-plugin' ), (string) $fh_for['ship_date'], (string) $fh_for['delivery_date'] ) );
+					echo esc_html( sprintf( __( 'For the orders shipping %1$s (delivery %2$s):', 'fishotel-misc-plugin' ), Dates::us( (string) $fh_for['ship_date'] ), Dates::us( (string) $fh_for['delivery_date'] ) ) );
 					?>
 				</strong>
 				<?php

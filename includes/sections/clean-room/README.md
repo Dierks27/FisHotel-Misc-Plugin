@@ -466,8 +466,8 @@ day · badge on a wide card; on a narrow one (most are) the name, up to its
 badge, over size · count · day. The name never wraps into the numbers,
 "day 15" never breaks, a long size is cut in its own column, and what needs
 saying ("needs identifying", "not a standard size", "still in the Spa",
-"on sale 2026-12-12") stands under the line — a gathered line lends its
-date to no group without one: "on sale 2026-12-12 · 1 not set". A click or
+"on sale 12-12-26") stands under the line — a gathered line lends its
+date to no group without one: "on sale 12-12-26 · 1 not set". A click or
 a tap on a line opens it (no hover; a small ▸ in the card's margin, beside
 the line, says it opens — the name itself starts at the card's edge and
 keeps the whole width of its columns): the name and the size in full and its
@@ -480,7 +480,7 @@ never lines. Then: a header per building with its system gallons ("205 gal
 system"), its schedule, the count in QT and the last dose per medication
 (a system dose or a tank dose in that building, with its amount, its
 working and its time — "Copper Power 16.6 ml (2.16 → 2.40 ppm, 100 gal)
-2026-11-12 09:20"), a **Calculator** button in the toolbar (the phone's
+11-12-26 09:20"), a **Calculator** button in the toolbar (the phone's
 sum for any gallons, each building's water one click away; nothing is
 saved), the last
 copper reading, the to-do count and what is still due today (printed on
@@ -499,10 +499,13 @@ everything due today as one list by water system (see *To do*). **Stays** — ev
 stay (species with its size and "needs identifying", live / arrived, check-in, day, state, cleared, on sale —
 the effective date with "from the batch" / "own date", or "Sale date not
 set" with the suggestion —, tank, supplier / order ref linked to its
-order) with Lost / Shipped / Count / Cleared… / Sale date… (the group's
-own date: pre-filled with it, else empty when the batch has a date — OK
-then keeps the batch's —, else the suggestion; empty = the batch's; the
-date it already has writes nothing) / Move… / Coming Soon / **Identify…** (*Correct fish…* on a named fish: the real fish, its size, or still unknown) / Edit (species, size, product, check-in date, supplier,
+order) with Lost / Shipped / Count / Cleared… / Sale date… (both open a
+pop-up calendar — see *Dates on the screens*; Sale date… is the group's
+own date: the calendar opens with it, else empty when the batch has a
+date, else on the suggestion; *Use the batch date* — *No date* when the
+batch has none — takes the own date away again; the date it already has
+writes nothing. Cleared… opens with the cleared date, else today, and
+*Not cleared* removes it) / Move… / Coming Soon / **Identify…** (*Correct fish…* on a named fish: the real fish, its size, or still unknown) / Edit (species, size, product, check-in date, supplier,
 order ref, landed cost, a note — a changed species or size is the same
 correction as Identify…), a *For sale now*, a *Needs identifying* and a *No sale date* filter
 (and, from a Board card's links, *Tank N only* — `tank=N`, with every row an anchor `#fh-cr-stay-<id>`), **Add fish
@@ -3054,6 +3057,55 @@ credit / note, `product_id`) has its own reader,
 
 A species id that is not in the list is not believed (the line falls
 back to its exact name); an exception over there never breaks the tab.
+
+## Dates on the screens
+
+**A person reads a date as MM-DD-YY — 11-27-26 — and never types one.**
+
+*Reading.* Every date these screens show (the Board, To do, Stays, Fish
+orders, Species, Stats, Events, the temporary tanks and their history,
+the product's *Clean room* box, the phone, every message, toast and
+notice, and the order note of a hold) is written by the plugin's one
+helper: `\FisHotel\Misc\Dates::us()` in PHP (`includes/class-dates.php`)
+and `fhDates.us()` on the page (`admin/js/fishotel-dates.js` — a script
+dependency in wp-admin, inlined before `front-desk.js` on the phone). A
+date and time reads "11-27-26 09:14", site time (`Admin::site_time()` →
+`Dates::stamp()`). To change how dates read everywhere, change those two
+files; both are run against `tests/fixtures/us-dates.json`. The helper
+works on the digits alone — a date is a calendar day and is never passed
+through a clock or a time zone, where it could slip to the day before.
+
+*Picking.* Every date is picked on the browser's own calendar
+(`<input type="date">`: month/day/year in a US browser, a wheel on a
+phone). The two questions that used to be typed as YYYY-MM-DD — the
+Stays tab's **Cleared…** and **Sale date…** — open a small pop-up
+(`fhDates.ask()`, the words from `Admin::stay_date_words()`, what it
+asks from `stayDateAsk()` in `clean-room-admin.js`): the calendar, the
+helpful sentence, **Save**, **Cancel**, and the button that means what
+an empty answer meant — **Not cleared** (the cleared date is removed),
+**Use the batch date (12-12-26)** or, when the batch has none, **No
+date** (the group's own sale date is removed). Enter saves; Esc, Cancel
+and a click outside save nothing; Tab stays inside; focus goes back to
+the button. Save with nothing picked is refused in words — an empty
+calendar is never taken for "no date". On the phone's Dates screen a
+group with its own sale date has the same **Use the batch date (…)** /
+**No date** chip beside the suggestion.
+
+*What does not change.* Everything stored or sent stays YYYY-MM-DD: the
+columns, the event notes (`sale_ready:2026-05-20`, `cleared:…`,
+`checkin:…`), what the pop-up and the phone post (`date=2026-12-04` —
+the server refuses anything else, `12-04-26` included, and never
+guesses), the phone's screen payload, every `value`, `min`, `max` and
+`data-*` attribute, the CSV and XLSX exports, and the Health log line of
+a batch date change. A note somebody typed is shown as typed.
+
+*A date in a sheet.* The workbook and pasted sheets are read by the same
+reader (`Dates::parse()`, through `Import_Map::to_ymd()`): 7/2/26,
+07-02-26, 07/02/2026 — month first, a two-digit year is 20YY — or
+2026-07-02, with or without a time after it. A date that does not exist
+(2/30/26, month 13) is never moved to another day: the cell reads as no
+date, and the import's warning says "2/30/26 is not a day on the
+calendar."
 
 ## Exports
 

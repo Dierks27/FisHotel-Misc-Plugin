@@ -70,7 +70,8 @@ class Admin {
 			return;
 		}
 		wp_enqueue_style( 'fishotel-med-listings', Med_Listings::url() . 'css/med-listings.css', array(), FISHOTEL_MISC_VERSION );
-		wp_enqueue_script( 'fishotel-med-listings', Med_Listings::url() . 'js/med-listings.js', array(), FISHOTEL_MISC_VERSION, true );
+		\FisHotel\Misc\Dates::register_script(); // The plugin's dates: the report's "Made 11-27-26 09:14".
+		wp_enqueue_script( 'fishotel-med-listings', Med_Listings::url() . 'js/med-listings.js', array( \FisHotel\Misc\Dates::SCRIPT ), FISHOTEL_MISC_VERSION, true );
 		wp_localize_script(
 			'fishotel-med-listings',
 			'fhMedListings',

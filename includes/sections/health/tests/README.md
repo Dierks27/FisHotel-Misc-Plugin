@@ -92,7 +92,10 @@ node includes/sections/health/tests/admin.test.js
   filter dropdown sources; `request_args()` round-tripping the search as
   `s` through the CSV URL; `write_csv()` paging past the store's 500-row
   clamp (620 rows, filters and search applied, newest first), stopping at
-  5000 with a trailing `notice` row, and an empty store.
+  5000 with a trailing `notice` row, and an empty store; the Log
+  screen's time reads month first in site time ("04-01-26 16:00", one
+  minute before midnight still that day) while the CSV keeps the stored
+  UTC value.
 - **admin.test.js** — `filterRows()` (level, source, ANDed search terms,
   case-insensitivity, null rows, no mutation), `escapeHtml()`,
   `levelClass()`.
@@ -122,3 +125,7 @@ node includes/sections/health/tests/admin.test.js
 5. Temporarily set a wrong GitHub token in wpit-updater and click *Check
    for Updates*: the Updates group must show the red *GitHub returned 401*
    row and the Log tab a row with source `updater` and no token in it.
+6. US dates. Health → Log: the time of each row reads like 11-27-26
+   09:14 (site time). Download CSV: its `logged_at_utc` column is still
+   year first. Settings → *Send a test alarm*: the real alarm's wording
+   is "… saw this at 11-27-26 09:14 (site time):".

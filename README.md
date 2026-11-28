@@ -56,6 +56,15 @@ One word for one thing, on every screen of these sections:
 | **e-mail** | written with a hyphen everywhere | email |
 | **fish room** | the room the tanks are in, and the screens the Shop App opens there | wet room, shop floor |
 
+## Dates
+
+**A person reads a date as MM-DD-YY — 11-27-26 — and picks one on a calendar; nothing stored changes.**
+
+- **Reading.** Every date these sections print for a person — wp-admin, the Shop App's Front Desk, printed sheets, messages, staff e-mails and staff order notes — is written by one helper per language: `\FisHotel\Misc\Dates` (`includes/class-dates.php`: `us()` for a stored date, `us_time()` for a stored date and time, `stamp()` / `day()` / `from_utc()` for a moment in site time) and `fhDates` (`admin/js/fishotel-dates.js`, the same on the page). A date and time reads `11-27-26 09:14`. To change the format everywhere, change those two files; both are run against `tests/fixtures/us-dates.json`. A date is a calendar day: the helper works on its digits and never passes it through a clock or a time zone. Dates already written in words ("Nov 27", "Friday, November 27") are left as they are, and so are the screens that follow WordPress's own date setting (Settings → General → Date Format): the Shop App's devices and log, Coming Soon, Health's overview and settings, the weather's next run.
+- **Picking.** A date is never typed. Every date field is the browser's own calendar (`<input type="date">`: month/day/year in a US browser, a wheel on a phone). Where a date used to be asked in a browser question, `fhDates.ask()` opens a small pop-up with that calendar, Save, Cancel and a button that means what an empty answer meant ("Not cleared", "Use the batch date (12-12-26)", "No date"); Esc closes it, focus returns to the button, it works by keyboard and at phone width. A section's script gets it by naming the handle `fishotel-dates` as a dependency after `\FisHotel\Misc\Dates::register_script()`; a page that inlines its script (the Front Desk) inlines the file before it.
+- **Typed text that remains** (a cell of the workbook, a pasted sheet) is read by `Dates::parse()`: MM-DD-YY, MM/DD/YY, MM-DD-YYYY, M/D/YY and still YYYY-MM-DD; a two-digit year is 20YY; a date that does not exist (02-30-26, month 13) is refused with one plain sentence and never moved to another day.
+- **Stored and machine formats do not change**: the database, event notes (`sale_ready:2026-05-20`), AJAX and REST payloads, CSV / XLSX exports, file names, sort and cache keys, and every `value=""` of a date field stay YYYY-MM-DD. Call the helper at the last moment, where the date is printed.
+
 ## Requirements
 
 - WordPress 5.8+
@@ -77,6 +86,7 @@ fishotel-misc-plugin/
 │   ├── class-section-manager.php   # Section discovery & toggling
 │   ├── class-layout.php            # Menu order, Dashboard headings, one sentence per card
 │   ├── class-versions.php          # The "FisHotel versions" card: every FisHotel build, its version, folder, on/off
+│   ├── class-dates.php             # US dates: the one place PHP writes a date for a person (11-27-26) and reads a typed one
 │   │                               # (the main file also includes sections/site-snippets/early-loader.php at load time)
 │   └── sections/
 │       ├── announcer/              # Announcement bars
@@ -97,10 +107,13 @@ fishotel-misc-plugin/
 ├── admin/
 │   ├── css/admin-style.css         # Dark theme styles
 │   ├── js/admin-script.js          # Toggle & AJAX handling
+│   ├── js/fishotel-dates.js        # US dates on the page: the same format and reader, and the pop-up calendar (no dependencies)
 │   └── views/dashboard.php         # Dashboard template
 ├── tests/layout-test.php           # The menu order and the Dashboard's headings
 ├── tests/hook-callbacks-test.php   # Every hook / menu / REST callback names a method that exists
 ├── tests/versions-test.php         # The FisHotel versions card and its warnings
+├── tests/dates-test.php            # US dates: format, typed dates, impossible dates, time zones, midnight, daylight saving
+├── tests/dates-screens-test.php    # Every screen that shows a stored date uses the helper; what programs read stays YYYY-MM-DD
 └── README.md
 ```
 

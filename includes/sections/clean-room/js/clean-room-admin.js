@@ -29,9 +29,69 @@
  * @package FisHotel\Misc\Sections\Clean_Room
  */
 
-/* global jQuery, module */
+/* global jQuery, module, require */
 (function (root, $) {
 	'use strict';
+
+	/* The plugin's dates (admin/js/fishotel-dates.js): a script dependency on the page, required in node. */
+	var dates = root.fhDates || (typeof require === 'function' ? require('../../../../admin/js/fishotel-dates.js') : null);
+
+	/**
+	 * What the pop-up calendar of a Stays row asks (pure) — it replaced
+	 * the two typed "YYYY-MM-DD" questions. "clear" is the Cleared… button,
+	 * "ready" the Sale date… button. The dates it is given and the value
+	 * it opens with are the stored YYYY-MM-DD; only the words a person
+	 * reads carry a US date (11-27-26).
+	 *
+	 * Cleared…: opens with the group's cleared date, else today; its "no
+	 * date" button is "Not cleared" — what an empty answer meant: the
+	 * cleared date is removed.
+	 * Sale date…: opens with what the button carries (the group's own
+	 * date; nothing when its batch has a date; else the suggestion); its
+	 * "no date" button is "Use the batch date (…)" — or "No date" when
+	 * the batch has none — what an empty answer meant: no own date.
+	 *
+	 * @param {string} op    'clear' or 'ready'.
+	 * @param {Object} data  { name, cleared, value, batch, today, min, max }.
+	 * @param {Object} words The page's i18n.
+	 * @return {{title: string, help: string, value: string, min: string, max: string, clear: string}|null}
+	 */
+	function stayDateAsk(op, data, words) {
+		data = data || {};
+		words = words || {};
+		var us = dates ? dates.us : function (ymd) { return String(ymd || ''); };
+		var isYmd = dates ? dates.isYmd : function () { return false; };
+		var name = String(data.name || '').replace(/^\s+|\s+$/g, '');
+		function titled(text) {
+			return name ? text + ' — ' + name : text;
+		}
+		if (op === 'clear') {
+			return {
+				title: titled(words.clearedTitle || 'Cleared date'),
+				help: words.clearedHelp || 'The day this group was cleared. "Not cleared" takes its cleared date away.',
+				value: isYmd(data.cleared) ? data.cleared : (isYmd(data.today) ? data.today : ''),
+				min: '',
+				max: '',
+				clear: words.clearedNone || 'Not cleared'
+			};
+		}
+		if (op === 'ready') {
+			var batch = isYmd(data.batch) ? data.batch : '';
+			return {
+				title: titled(words.saleTitle || 'Sale date'),
+				help: batch
+					? (words.saleHelpBatch || 'Pick this group\'s own sale date, or use the batch date (%s).').replace('%s', us(batch))
+					: (words.saleHelpNone || 'Pick this group\'s own sale date, or "No date" for none — the batch has no date yet.'),
+				value: isYmd(data.value) ? data.value : '',
+				min: isYmd(data.min) ? data.min : '',
+				max: isYmd(data.max) ? data.max : '',
+				clear: batch
+					? (words.saleUseBatch || 'Use the batch date (%s)').replace('%s', us(batch))
+					: (words.saleNone || 'No date')
+			};
+		}
+		return null;
+	}
 
 	/**
 	 * Renumber the prefix[n][…] names of a table so the posted array is
@@ -655,6 +715,7 @@
 	}
 
 	var api = {
+		stayDateAsk: stayDateAsk,
 		suggestTag: suggestTag,
 		linePick: linePick,
 		existingPost: existingPost,
@@ -1200,21 +1261,28 @@
 				if (fields.qty === 0 && !root.confirm(i18n.confirmZero || 'Close this group?')) {
 					return;
 				}
-			} else if (op === 'clear') {
-				var date = root.prompt(i18n.which || 'Which date (YYYY-MM-DD)? Leave empty to clear.', '');
-				if (date === null) {
-					return;
-				}
-				fields.date = $.trim(date);
-			} else if (op === 'ready') {
-				// Pre-filled with the group's own date; empty when the batch has a date (OK keeps the batch's); else the suggestion (check-in + the setting). Nothing is saved until OK, and an unchanged date writes nothing.
-				var batch = String($(this).data('batch') || '');
-				var ask = batch ? (i18n.whichSaleBatch || 'This group\'s own sale date (YYYY-MM-DD)? Leave empty to use the batch date (%s).').replace('%s', batch) : (i18n.whichSale || 'This group\'s own sale date (YYYY-MM-DD)? Leave empty for none — the batch has no date yet.');
-				var sale = root.prompt(ask, String($(this).data('default') || ''));
-				if (sale === null) {
-					return;
-				}
-				fields.date = $.trim(sale);
+			} else if (op === 'clear' || op === 'ready') {
+				// A date is picked on a pop-up calendar, never typed. Sale date…: it opens with the group's own date; empty when the batch has a date; else the suggestion (check-in + the setting). Nothing is saved until Save, and an unchanged date writes nothing. The "no date" button posts what an empty answer did: date ''.
+				var ask = stayDateAsk(op, {
+					name: $row.find('td').first().find('strong').first().text(),
+					cleared: String($(this).attr('data-cleared') || ''),
+					value: String($(this).attr('data-default') || ''),
+					batch: String($(this).attr('data-batch') || ''),
+					today: String(cfg.today || ''),
+					min: String(cfg.saleMin || ''),
+					max: String(cfg.saleMax || '')
+				}, i18n);
+				ask.opener = this;
+				ask.onSave = function (ymd) {
+					fields.date = ymd; // YYYY-MM-DD, as the server stores it.
+					stayPost(fields, $status);
+				};
+				ask.onClear = function () {
+					fields.date = '';
+					stayPost(fields, $status);
+				};
+				dates.ask(ask);
+				return;
 			} else if (op === 'move') {
 				var to = root.prompt(i18n.whichTank || 'Move to which tank number?', String($(this).data('tank') || ''));
 				if (to === null) {

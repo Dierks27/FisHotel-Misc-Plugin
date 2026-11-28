@@ -229,11 +229,11 @@ $sale = Board_Lines::card(
 );
 check_same( 'the foot counts the stays without a date, gathered or not', 3, $sale['no_sale'] );
 check_same( 'a line whose stays have none says nothing itself', '', Board_Lines::sale_text( $sale['lines'][0] ) );
-check_same( 'a line that has a sale date keeps saying it — and lends it to no group without one', 'on sale 2026-12-12 · 1 not set', Board_Lines::sale_text( $sale['lines'][2] ) );
+check_same( 'a line that has a sale date keeps saying it — and lends it to no group without one', 'on sale 12-12-26 · 1 not set', Board_Lines::sale_text( $sale['lines'][2] ) );
 check( '… and still counts its stay without one', 1 === $sale['lines'][2]['no_sale'] && 2 === $sale['lines'][0]['no_sale'] );
-check_same( 'two dates in one line: the first and the last', 'on sale 2026-12-12 – 2026-12-19', Board_Lines::sale_text( $sale['lines'][3] ) );
-check_same( 'every group of the line has the date: the date alone', 'on sale 2026-12-12', Board_Lines::sale_text( Board_Lines::card( array( fh_stay( 1, 'Test Tang', array( 'sale_ready_date' => '2026-12-12' ) ), fh_stay( 2, 'Test Tang', array( 'sale_ready_date' => '2026-12-12' ) ) ), $sizes )['lines'][0] ) );
-check_same( 'two dates and two groups without: all three said', 'on sale 2026-12-12 – 2026-12-19 · 2 not set', Board_Lines::sale_text( array( 'state' => 'cleared', 'sale_dates' => array( '2026-12-12', '2026-12-19' ), 'no_sale' => 2 ) ) );
+check_same( 'two dates in one line: the first and the last', 'on sale 12-12-26 – 12-19-26', Board_Lines::sale_text( $sale['lines'][3] ) );
+check_same( 'every group of the line has the date: the date alone', 'on sale 12-12-26', Board_Lines::sale_text( Board_Lines::card( array( fh_stay( 1, 'Test Tang', array( 'sale_ready_date' => '2026-12-12' ) ), fh_stay( 2, 'Test Tang', array( 'sale_ready_date' => '2026-12-12' ) ) ), $sizes )['lines'][0] ) );
+check_same( 'two dates and two groups without: all three said', 'on sale 12-12-26 – 12-19-26 · 2 not set', Board_Lines::sale_text( array( 'state' => 'cleared', 'sale_dates' => array( '2026-12-12', '2026-12-19' ), 'no_sale' => 2 ) ) );
 check( 'what the lines say is missing adds up to the foot', $sale['no_sale'] === array_sum( array_column( $sale['lines'], 'no_sale' ) ) );
 check_same( 'a line for sale says so with its badge alone', '', Board_Lines::sale_text( $sale['lines'][1] ) );
 
@@ -340,7 +340,7 @@ check( 'the anthias from two Spa tanks: one line × 5', 5 === $card['lines'][0][
 check( 'the two tangs of one size from two Spa tanks: one line × 2, day 15–20; the larger one under it', 2 === $card['lines'][3]['qty'] && 'day 15–20' === Board_Lines::day_text( $card['lines'][3] ) && '2-3"' === $card['lines'][3]['size']['label'] && '3-4"' === $card['lines'][4]['size']['label'] && true === $card['lines'][4]['repeat'] );
 check( 'the wrasse for sale wears READY; the rest are cleared', 'ready' === $card['lines'][1]['state'] && 'cleared' === $card['lines'][0]['state'] && 'cleared' === $card['lines'][3]['state'] );
 check_same( 'the foot: six of the eight have no sale date', 6, $card['no_sale'] );
-check_same( 'the tangs\' line keeps the one date it has, and says the other group has none', 'on sale ' . $in_a_week . ' · 1 not set', Board_Lines::sale_text( $card['lines'][3] ) );
+check_same( 'the tangs\' line keeps the one date it has, and says the other group has none', 'on sale ' . \FisHotel\Misc\Dates::us( $in_a_week ) . ' · 1 not set', Board_Lines::sale_text( $card['lines'][3] ) );
 check( 'the card did not touch the tank\'s own list', $before === $by_no[121]['occupants'] );
 
 $totals = Admin::totals( $tanks );
@@ -428,10 +428,10 @@ check_same( '"Sale date not set" is said once, in the foot, with the count', 1, 
 check( '… as a link to the Stays tab filtered to that tank\'s groups without one', false !== strpos( $c121, 'class="fh-cr-tank__nosale" href="' . esc_url( Admin::tank_stays_url( 121, true ) ) . '"' ) && false !== strpos( Admin::tank_stays_url( 121, true ), 'tab=stays' ) && false !== strpos( Admin::tank_stays_url( 121, true ), 'tank=121' ) && false !== strpos( Admin::tank_stays_url( 121, true ), 'no_sale=1' ) );
 $rows = (string) preg_replace( '/<div class="fh-cr-cardline__more".*?<\/div>/s', '', $c121 );
 check( '… and on no line: only the opened groups say it, each for itself', 1 === substr_count( $rows, 'Sale date not set' ) && 7 === substr_count( $c121, 'Sale date not set' ) );
-check( 'the line that has a sale date keeps saying it — for the one group that has it', false !== strpos( $rows, '<span class="fh-cr-tank__sale">on sale ' . $in_a_week . ' · 1 not set</span>' ) );
+check( 'the line that has a sale date keeps saying it — for the one group that has it', false !== strpos( $rows, '<span class="fh-cr-tank__sale">on sale ' . \FisHotel\Misc\Dates::us( $in_a_week ) . ' · 1 not set</span>' ) && false === strpos( $rows, 'on sale ' . $in_a_week ) );
 check( 'the badges are the Board\'s own', 1 === substr_count( $c121, 'fh-cr-badge--ready' ) && 5 === substr_count( $c121, 'fh-cr-badge--cleared' ) );
 check( 'the unknown fish says "needs identifying" on its line', 1 === substr_count( $rows, 'needs identifying' ) && false !== strpos( $c121, 'fh-cr-cardline is-unknown' ) );
-check( 'an opened line names the tank each group was cleared from, its own date and its row on the Stays tab', false !== strpos( $c121, 'cleared from 521' ) && false !== strpos( $c121, 'cleared from 522' ) && false !== strpos( $c121, 'on sale ' . $in_a_week . ' (own date)' ) && false !== strpos( $c121, esc_url( Admin::tank_stays_url( 121, false, $g['tang_b'] ) ) ) );
+check( 'an opened line names the tank each group was cleared from, its own date and its row on the Stays tab', false !== strpos( $c121, 'cleared from 521' ) && false !== strpos( $c121, 'cleared from 522' ) && false !== strpos( $c121, 'on sale ' . \FisHotel\Misc\Dates::us( $in_a_week ) . ' (own date)' ) && false !== strpos( $c121, esc_url( Admin::tank_stays_url( 121, false, $g['tang_b'] ) ) ) );
 check( 'an opened line says the name and the size in full, whatever the row had room for', false !== strpos( $c121, '<strong class="fh-cr-cardline__full">' . esc_html( 'Test Yellow Tang · 2-3"' ) . '</strong>' ) && false !== strpos( $c121, '<strong class="fh-cr-cardline__full">Test Anthias</strong>' ) );
 check( 'the opened part starts closed and its name is the button that opens it', 6 === substr_count( $c121, 'class="fh-cr-cardline__more" id="fh-cr-cardline-121-' ) && 6 === preg_match_all( '/<div class="fh-cr-cardline__more" id="[^"]+" hidden>/', $c121 ) && 6 === substr_count( $c121, 'aria-expanded="false" aria-controls="fh-cr-cardline-121-' ) );
 check( 'the second tang line is marked as the same fish again', 1 === substr_count( $c121, 'fh-cr-cardline is-repeat' ) );

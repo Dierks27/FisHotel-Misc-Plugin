@@ -102,7 +102,7 @@ $fh_levels    = array(
 					}
 					?>
 					<tr>
-						<td title="<?php echo esc_attr( (string) $fh_log['created_at'] . ' UTC' ); ?>"><?php echo esc_html( Admin_Editor::when( $fh_log['created_at'] ) ); ?></td>
+						<td title="<?php echo esc_attr( \FisHotel\Misc\Dates::us_time( (string) $fh_log['created_at'] ) . ' UTC' ); ?>"><?php echo esc_html( Admin_Editor::when( $fh_log['created_at'] ) ); ?></td>
 						<td><span class="fh-snip-action is-<?php echo esc_attr( $fh_level ); ?>"><?php echo esc_html( $fh_action ); ?></span></td>
 						<td>
 							<?php if ( '' !== (string) $fh_log['slug'] ) : ?>

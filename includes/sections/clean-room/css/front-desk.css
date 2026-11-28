@@ -597,6 +597,11 @@ button.fh-fd-occ:active {
 	color: var(--fd-accent);
 }
 
+/* A chip under a field's calendar (suggested 12-12-26, Use the batch date, Not cleared): room above it and beside the next one. */
+.fh-fd-field > .fh-fd-chip {
+	margin: 8px 8px 0 0;
+}
+
 /* Suggestions */
 .fh-fd-suggest {
 	list-style: none;

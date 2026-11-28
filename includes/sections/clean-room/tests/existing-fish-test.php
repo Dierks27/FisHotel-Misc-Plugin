@@ -262,7 +262,7 @@ $first = (int) $r['stay_id'];
 $r = act( $store, 122, 'existing', array( 'species' => 'Test Clownfish', 'product_id' => 13, 'qty' => 2, 'arrived' => Replay::add_days( $today, -60 ), 'cleared' => Replay::add_days( $today, -30 ), 'supplier' => 'Test Supplier', 'origin' => 'Testland' ) );
 $s = stay_of( $store, $r['stay_id'] );
 check( 'Clean Room tank 122 with both dates: check-in 60 days ago (day 61), cleared 30 days ago, supplier kept, origin in the note', empty( $r['error'] ) && Replay::add_days( $today, -60 ) === $s['checkin_date'] && 61 === $s['day'] && Replay::add_days( $today, -30 ) === $s['cleared_date'] && ! $s['cleared_unknown'] && ! $s['checkin_unknown'] && 'Test Supplier' === $s['supplier'] && 'Origin: Testland' === $s['notes'] && null === $s['order_line_id'], json_encode( $r ) );
-check( '… the toast names the dates', false !== strpos( $r['message'], 'arrived ' . Replay::add_days( $today, -60 ) ) && false !== strpos( $r['message'], 'cleared ' . Replay::add_days( $today, -30 ) ) );
+check( '… the toast names the dates', false !== strpos( $r['message'], 'arrived ' . \FisHotel\Misc\Dates::us( Replay::add_days( $today, -60 ) ) ) && false !== strpos( $r['message'], 'cleared ' . \FisHotel\Misc\Dates::us( Replay::add_days( $today, -30 ) ) ) && 0 === preg_match( '/\d{4}-\d{2}-\d{2}/', $r['message'] ) );
 check( '… and its arrival is dated that day, so the replay needs nothing else', Replay::add_days( $today, -60 ) === Replay::event_date( $store->events( $r['stay_id'] )[0]['event_at'], wp_timezone() ) && 'already here' === $store->events( $r['stay_id'] )[0]['note'] );
 
 $r = act( $store, 521, 'existing', array( 'species' => 'Test Goby', 'qty' => 3 ) );
@@ -479,7 +479,7 @@ $stay_spa   = stay_of( $store, 2 );
 $stay_clean = stay_of( $store, 1 );
 check( 'the Board: "day ?" (and "QT day ?" on a temporary tank\'s card)', 'day ?' === Admin::day_text( $stay_spa ) && 'QT day ?' === Admin::day_text( $stay_spa, true ) && 'day 3' === Admin::day_text( array( 'day' => 3 ) ) && '' === Admin::day_text( array( 'day' => null ) ) );
 check( 'the Stays tab: "treatment day unknown — set the arrival date" on the Spa group only', 'treatment day unknown — set the arrival date' === Admin::treatment_unknown( $stay_spa ) && '' === Admin::treatment_unknown( $stay_clean ) && '' === Admin::treatment_unknown( array( 'status' => 'in_qt', 'checkin_unknown' => false ) ) );
-check( 'the check-in in words, and the source', 'arrival unknown' === Admin::checkin_text( $stay_spa ) && '2025-01-02' === Admin::checkin_text( array( 'checkin_date' => '2025-01-02' ) ) && 'already here' === Admin::source_label( 'existing' ) && 'order' === Admin::source_label( 'order' ) );
+check( 'the check-in in words, and the source', 'arrival unknown' === Admin::checkin_text( $stay_spa ) && '01-02-25' === Admin::checkin_text( array( 'checkin_date' => '2025-01-02' ) ) && 'already here' === Admin::source_label( 'existing' ) && 'order' === Admin::source_label( 'order' ) );
 $events = $store->events( 1 );
 check( 'the Events tab: "2 added as already here in Tank 121 (arrival date unknown)" and "cleared (date unknown)"', '2 added as already here in Tank 121 (arrival date unknown)' === Admin::event_text( $events[0] ) && 'cleared (date unknown)' === Admin::event_text( $events[1] ), Admin::event_text( $events[0] ) . ' / ' . Admin::event_text( $events[1] ) );
 $half = array( 'type' => 'arrival', 'qty' => 1, 'to_tank_number' => 111, 'source' => 'existing', 'note' => Replay::NOTE_ARRIVED_UNKNOWN . ' · split from #7' );

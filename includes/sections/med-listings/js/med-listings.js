@@ -552,7 +552,8 @@
 	/* ── Report download ─────────────────────────────────────────────── */
 	function collect() {
 		return {
-			date: new Date().toISOString().slice( 0, 16 ).replace( 'T', ' ' ),
+			// When the report was made, by this computer's own clock, read 11-27-26 09:14 (the plugin's dates, admin/js/fishotel-dates.js).
+			date: window.fhDates ? window.fhDates.stamp( new Date() ) : '',
 			products: $$( '.fhml-product' ).map( function ( b ) {
 				return {
 					id: b.getAttribute( 'data-product' ),

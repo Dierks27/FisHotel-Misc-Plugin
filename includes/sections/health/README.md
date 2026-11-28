@@ -238,6 +238,14 @@ While a checkout alarm signal is active, a second, red line sits there
 too: **"Checkout alarm: customers may not be able to check out"**, with
 the signals beside it (one option read, no query of its own).
 
+## Dates
+
+The Log tab's time and the checkout alarm's e-mail ("… saw this at
+11-27-26 09:14 (site time):") read month first, in site time — written by the plugin's one helper (`\FisHotel\Misc\Dates`, `includes/class-dates.php` — change the format there).
+The CSV export keeps the stored UTC time (`logged_at_utc`,
+2026-11-27 15:14:03), and a message another section logged is shown as
+it was written.
+
 ## Files
 
 ```

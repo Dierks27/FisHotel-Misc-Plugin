@@ -16,6 +16,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
+use FisHotel\Misc\Dates;
 use FisHotel\Misc\Sections\Weather\Admin;
 use FisHotel\Misc\Sections\Weather\Bands;
 use FisHotel\Misc\Sections\Weather\Note;
@@ -82,7 +83,7 @@ $fh_box_id = 'fh-weather-email-' . (int) $order->get_id();
 		<p class="fh-weather-box__meta">
 			<?php
 			/* translators: %s: date/time of the last check */
-			echo esc_html( sprintf( __( 'Checked %s', 'fishotel-misc-plugin' ), $stored['checked_at'] ) );
+			echo esc_html( sprintf( __( 'Checked %s', 'fishotel-misc-plugin' ), Dates::us_time( $stored['checked_at'] ) ) ); // Stored as the site's own time; read 11-27-26 09:14:03.
 			?>
 		</p>
 

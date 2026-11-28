@@ -44,6 +44,8 @@
 
 namespace FisHotel\Misc\Sections\Clean_Room;
 
+use FisHotel\Misc\Dates;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -814,7 +816,7 @@ class Admin_Workbook {
 		}
 		if ( Replay::is_sale_ready( $date, $today, 'cleared' ) ) {
 			/* translators: 1: groups, 2: date */
-			$line   = sprintf( _n( 'Applies to %1$d group still in tanks — for sale since %2$s.', 'Applies to %1$d groups still in tanks — for sale since %2$s.', $applies, 'fishotel-misc-plugin' ), $applies, $date );
+			$line   = sprintf( _n( 'Applies to %1$d group still in tanks — for sale since %2$s.', 'Applies to %1$d groups still in tanks — for sale since %2$s.', $applies, 'fishotel-misc-plugin' ), $applies, Dates::us( $date ) );
 			$in_spa = (int) ( $batch['in_spa'] ?? 0 );
 			if ( $in_spa > 0 ) {
 				/* translators: %d: groups */
@@ -832,7 +834,7 @@ class Admin_Workbook {
 	 *
 	 * @param array $order  The order (sale_date).
 	 * @param array $counts Store::batch_sale_counts() for it: open, own.
-	 * @return array{date: string, text: string, note: string}
+	 * @return array{date: string, text: string, note: string} date is the stored YYYY-MM-DD; text is for reading (11-27-26).
 	 */
 	public static function on_sale_cell( array $order, array $counts ) {
 		$date = Replay::is_date( $order['sale_date'] ?? null ) ? (string) $order['sale_date'] : '';
@@ -845,7 +847,7 @@ class Admin_Workbook {
 		}
 		return array(
 			'date' => $date,
-			'text' => '' !== $date ? $date : __( 'not set', 'fishotel-misc-plugin' ),
+			'text' => '' !== $date ? Dates::us( $date ) : __( 'not set', 'fishotel-misc-plugin' ),
 			'note' => $note,
 		);
 	}
@@ -1869,7 +1871,7 @@ class Admin_Workbook {
 			if ( ! Replay::is_sale_date_in_range( $date, $today ) ) {
 				$out['status']  = 400;
 				/* translators: 1: what was typed, 2: earliest date, 3: latest date */
-				$out['message'] = sprintf( __( '%1$s is outside the dates a sale can be set to (%2$s to %3$s). Nothing was changed.', 'fishotel-misc-plugin' ), $date, Replay::SALE_DATE_MIN, Replay::sale_date_max( $today ) );
+				$out['message'] = sprintf( __( '%1$s is outside the dates a sale can be set to (%2$s to %3$s). Nothing was changed.', 'fishotel-misc-plugin' ), Dates::us( $date ), Dates::us( Replay::SALE_DATE_MIN ), Dates::us( Replay::sale_date_max( $today ) ) );
 				return $out;
 			}
 			$new = $date;
@@ -1885,7 +1887,7 @@ class Admin_Workbook {
 				/* translators: %s: order ref */
 				? sprintf( __( 'Order %s has no sale date; nothing changed.', 'fishotel-misc-plugin' ), $ref )
 				/* translators: 1: order ref, 2: date */
-				: sprintf( __( 'Order %1$s already goes on sale %2$s; nothing changed.', 'fishotel-misc-plugin' ), $ref, $new );
+				: sprintf( __( 'Order %1$s already goes on sale %2$s; nothing changed.', 'fishotel-misc-plugin' ), $ref, Dates::us( $new ) );
 			return $out;
 		}
 
@@ -1916,9 +1918,9 @@ class Admin_Workbook {
 		$out['ok']      = true;
 		$out['message'] = null === $new
 			/* translators: 1: order ref, 2: the old date */
-			? sprintf( __( 'Order %1$s: sale date cleared (was %2$s). Its groups without their own date are not for sale until a date is set.', 'fishotel-misc-plugin' ), $ref, (string) $old )
+			? sprintf( __( 'Order %1$s: sale date cleared (was %2$s). Its groups without their own date are not for sale until a date is set.', 'fishotel-misc-plugin' ), $ref, Dates::us( (string) $old ) )
 			/* translators: 1: order ref, 2: date, 3: the old date or "not set" */
-			: sprintf( __( 'Order %1$s goes on sale %2$s (was %3$s).', 'fishotel-misc-plugin' ), $ref, $new, null !== $old ? $old : __( 'not set', 'fishotel-misc-plugin' ) );
+			: sprintf( __( 'Order %1$s goes on sale %2$s (was %3$s).', 'fishotel-misc-plugin' ), $ref, Dates::us( $new ), null !== $old ? Dates::us( $old ) : __( 'not set', 'fishotel-misc-plugin' ) );
 		return $out;
 	}
 

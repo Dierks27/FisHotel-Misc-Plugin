@@ -335,6 +335,7 @@ $fh_state = Alarm::run();
 check( 'both signals found: ONE e-mail to the admin address', 1 === count( $GLOBALS['fh_mails'] ) && 'owner@example.test' === $GLOBALS['fh_mails'][0]['to'] );
 check( 'the page is not opened while its check is off', array( 'fatal', 'stall' ) === $fh_calls );
 $fh_mail = $GLOBALS['fh_mails'][0];
+check( 'body: when it was seen — site time, month first (11-27-26 09:14), no year-first date', 1 === preg_match( '/saw this at \d{2}-\d{2}-\d{2} \d{2}:\d{2} \(site time\):/', $fh_mail['message'] ) && 0 === preg_match( '/\d{4}-\d{2}-\d{2}/', $fh_mail['message'] ), $fh_mail['message'] );
 check( 'subject says what it means', '[FisHotel] Checkout alarm: customers may not be able to check out' === $fh_mail['subject'], $fh_mail['subject'] );
 check( 'body: what was seen, each with where to look', false !== strpos( $fh_mail['message'], '- A new PHP fatal error: x' ) && false !== strpos( $fh_mail['message'], '- 4 or more orders from the last 30 minutes' ) && 2 === substr_count( $fh_mail['message'], 'Where to look' ) );
 check( 'body: how to go back on the last upload, for a plugin and for the theme', false !== strpos( $fh_mail['message'], 'Plugins → Add New Plugin → Upload Plugin → choose the zip of the version you had before → "Replace current with uploaded".' ) && false !== strpos( $fh_mail['message'], 'Appearance → Themes → Add New Theme → Upload Theme' ) );

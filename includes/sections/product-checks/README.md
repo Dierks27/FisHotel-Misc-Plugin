@@ -124,6 +124,11 @@ view is the one `_fh_todo_photo` key (both values), not two keys.
 Nothing is shown to a visitor; no e-mail; no outside call. The flags are
 never read on the storefront.
 
+## Dates
+
+"… finished 11-27-26 03:10" on the section's page reads month first, in
+site time — written by the plugin's one helper (`\FisHotel\Misc\Dates`, `includes/class-dates.php` — change the format there). It used to read day first ("27 Nov 2026 03:10").
+
 ## Files
 
 ```

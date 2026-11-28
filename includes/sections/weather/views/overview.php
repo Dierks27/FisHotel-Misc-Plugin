@@ -17,6 +17,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
+use FisHotel\Misc\Dates;
 use FisHotel\Misc\Sections\Weather\Admin;
 use FisHotel\Misc\Sections\Weather\Note;
 use FisHotel\Misc\Sections\Weather\Weather;
@@ -75,7 +76,7 @@ $fh_tiles    = array(
 				<?php
 				if ( ! empty( $last_run['at'] ) ) {
 					/* translators: 1: date/time, 2: orders checked, 3: unavailable */
-					echo esc_html( sprintf( __( 'Last run %1$s: %2$d checked, %3$d unavailable.', 'fishotel-misc-plugin' ), $last_run['at'], (int) ( $last_run['checked'] ?? 0 ), (int) ( $last_run['unavailable'] ?? 0 ) ) );
+					echo esc_html( sprintf( __( 'Last run %1$s: %2$d checked, %3$d unavailable.', 'fishotel-misc-plugin' ), Dates::us_time( $last_run['at'] ), (int) ( $last_run['checked'] ?? 0 ), (int) ( $last_run['unavailable'] ?? 0 ) ) );
 				} else {
 					esc_html_e( 'The nightly job has not run yet.', 'fishotel-misc-plugin' );
 				}

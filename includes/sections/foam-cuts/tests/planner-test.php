@@ -142,7 +142,7 @@ $GLOBALS['fh_orders'] = array(
 $made = Planner::create_for_orders( $store, '2026-03-10', 7 );
 check( 'orders, but none with a box yet: refused, saying so', false === $made['ok'] && false !== strpos( $made['message'], 'has a box yet' ) && array() === $store->plans, $made['message'] );
 $made = Planner::create_for_orders( $store, '2026-03-20', 7 );
-check( 'a day nothing ships: refused, naming the day and its delivery date', false === $made['ok'] && false !== strpos( $made['message'], '2026-03-20' ) && false !== strpos( $made['message'], '2026-03-21' ), $made['message'] );
+check( 'a day nothing ships: refused, naming the day and its delivery date', false === $made['ok'] && 'No open order ships on 03-20-26 (delivery 03-21-26).' === $made['message'] && '2026-03-20' === $made['orders']['ship_date'] && '2026-03-21' === $made['orders']['delivery_date'], $made['message'] );
 
 $GLOBALS['fh_suggest'] = static function ( $order ) {
 	$map = array( 201 => 'Cube', 202 => array( 'box' => 'cube' ), 203 => array( 'boxes' => array( 'Flat', '14x9x7' ) ) );
@@ -185,7 +185,7 @@ check( 'other boxes for the same day: a new plan', true === $other['ok'] && fals
 $twin = $store->plan( $other['id'] );
 check_same( 'each names the other', array( array( array( 'id' => $twin['id'], 'status' => 'draft', 'title' => $twin['title'] ) ), array( array( 'id' => 1, 'status' => 'draft', 'title' => $plan['title'] ) ) ), array( Planner::same_day( $store, $store->plan( 1 ) ), Planner::same_day( $store, $twin ) ) );
 $lines = Planner::same_day_lines( Planner::same_day( $store, $twin ), $twin );
-check( 'in words: cut from ONE of them', 1 === count( $lines ) && false !== strpos( $lines[0], 'Plan 1 (' ) && false !== strpos( $lines[0], 'Cut from ONE of them' ) && false !== strpos( $lines[0], '2026-03-10' ), implode( ' ', $lines ) );
+check( 'in words: cut from ONE of them', 1 === count( $lines ) && false !== strpos( $lines[0], 'Plan 1 (' ) && false !== strpos( $lines[0], 'Cut from ONE of them' ) && false !== strpos( $lines[0], 'the same ship day, 03-10-26.' ), implode( ' ', $lines ) );
 check_same( 'a typed plan has no ship day and so no such plans', array(), Planner::same_day( $store, array( 'id' => 9, 'ship_date' => '' ) ) );
 check_same( 'the export lists them (the assistant sees it too)', array( 1 ), array_column( Planner::export( $twin, $store )['same_day'], 'id' ) );
 
@@ -196,7 +196,7 @@ check( 'the other one now says the day was already cut for, and that it counts a
 $again = Planner::create_for_orders( $store, '2026-03-10', 7 );
 check( 'asked again now: the remaining draft with these boxes is handed back, not a third plan', true === $again['existing'] && $twin['id'] === $again['id'] && 2 === count( $store->plans ) );
 $cut = Planner::cut( $store, $store->plan( $twin['id'] ), 7 );
-check( 'marking the second as cut as well is allowed — the cutting may have happened — but the answer says the foam is now booked twice', true === $cut['ok'] && false !== strpos( $cut['message'], 'Mind: plan 1 for the same ship day (2026-03-10) is marked as cut as well' ) && false !== strpos( $cut['message'], 'undo one of them' ), $cut['message'] );
+check( 'marking the second as cut as well is allowed — the cutting may have happened — but the answer says the foam is now booked twice', true === $cut['ok'] && false !== strpos( $cut['message'], 'Mind: plan 1 for the same ship day (03-10-26) is marked as cut as well' ) && false !== strpos( $cut['message'], 'undo one of them' ), $cut['message'] );
 $again = Planner::create_for_orders( $store, '2026-03-10', 7 );
 check( 'with no draft left for the day a new plan is made — and it names both cut ones', false === $again['existing'] && 2 === count( Planner::same_day( $store, $store->plan( $again['id'] ) ) ) );
 $stale = $store->plan( $again['id'] );

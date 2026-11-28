@@ -13,7 +13,7 @@ var assert = require( 'assert' );
 var lib    = require( path.join( __dirname, '..', 'js', 'med-listings.js' ) );
 
 var md = lib.buildReport( {
-	date: '2026-11-24 10:00',
+	date: '11-24-26 10:00',
 	products: [ {
 		id: '1012',
 		name: 'Sample Trio Flake',
@@ -60,5 +60,13 @@ var base = { 'links|medication-dosing|/medication-dosing/': true, 'diseases|ich|
 var hits = [ { key: 'links|medication-dosing|/medication-dosing/', kind: 'links' }, { key: 'diseases|ich|x', kind: 'diseases' } ];
 ok( 'product page: the footer link to the calculator still counts, a site-wide word does not', JSON.stringify( lib.ownHits( hits, base, 'product' ) ) === JSON.stringify( [ hits[ 0 ] ] ) );
 ok( 'tool page: both excused as on every page', lib.ownHits( hits, base, 'tool' ).length === 0 );
+
+// When the report was made: this computer's own clock, month first — never toISOString() (UTC, and year first).
+var pageSource = require( 'fs' ).readFileSync( require( 'path' ).join( __dirname, '..', 'js', 'med-listings.js' ), 'utf8' );
+ok( 'the report opens with when it was made, as given: "Made 11-24-26 10:00."', md.indexOf( 'Made 11-24-26 10:00. ' ) !== -1 );
+ok( 'the page stamps it with the plugin\'s dates (local time), not toISOString()', pageSource.indexOf( 'window.fhDates.stamp( new Date() )' ) !== -1 && pageSource.indexOf( 'toISOString' ) === -1 );
+var fhDates = require( require( 'path' ).join( __dirname, '..', '..', '..', '..', 'admin', 'js', 'fishotel-dates.js' ) );
+ok( 'which reads 11-27-26 09:14 for 9:14 that morning', fhDates.stamp( new Date( 2026, 10, 27, 9, 14 ) ) === '11-27-26 09:14' );
+ok( 'the page asks WordPress for that script first', require( 'fs' ).readFileSync( require( 'path' ).join( __dirname, '..', 'class-admin.php' ), 'utf8' ).indexOf( "array( \\FisHotel\\Misc\\Dates::SCRIPT )" ) !== -1 );
 
 console.log( '\nAll ' + checks + ' checks passed' );

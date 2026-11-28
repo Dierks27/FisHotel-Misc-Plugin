@@ -55,6 +55,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
+use FisHotel\Misc\Dates;
 use FisHotel\Misc\Sections\Clean_Room\Admin;
 use FisHotel\Misc\Sections\Clean_Room\Admin_No_Product;
 use FisHotel\Misc\Sections\Clean_Room\Admin_Workbook;
@@ -279,7 +280,7 @@ $fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks,
 					<button type="submit" class="button button-primary" form="fh-cr-sale-form" name="op" value="save"><?php esc_html_e( 'Save', 'fishotel-misc-plugin' ); ?></button>
 					<button type="submit" class="button" form="fh-cr-sale-form" name="op" value="clear" <?php disabled( '' === $batch['date'] ); ?>><?php esc_html_e( 'Clear', 'fishotel-misc-plugin' ); ?></button>
 					<?php if ( '' !== $batch['suggested'] ) : ?>
-						<button type="button" class="button-link fh-cr-suggest-date" data-target="fh-cr-sale-date" data-date="<?php echo esc_attr( $batch['suggested'] ); ?>" title="<?php esc_attr_e( 'Check-in + the suggested days (Settings). Fills the date; Save keeps it.', 'fishotel-misc-plugin' ); ?>"><?php echo esc_html( sprintf( /* translators: %s: date */ __( 'suggested %s', 'fishotel-misc-plugin' ), $batch['suggested'] ) ); ?></button>
+						<button type="button" class="button-link fh-cr-suggest-date" data-target="fh-cr-sale-date" data-date="<?php echo esc_attr( $batch['suggested'] ); ?>" title="<?php esc_attr_e( 'Check-in + the suggested days (Settings). Fills the date; Save keeps it.', 'fishotel-misc-plugin' ); ?>"><?php echo esc_html( sprintf( /* translators: %s: date */ __( 'suggested %s', 'fishotel-misc-plugin' ), Dates::us( $batch['suggested'] ) ) ); ?></button>
 					<?php else : ?>
 						<span class="fh-cr-sub fh-cr-sub--inline"><?php esc_html_e( 'A suggestion appears once the fish are checked in.', 'fishotel-misc-plugin' ); ?></span>
 					<?php endif; ?>
@@ -307,7 +308,7 @@ $fh_line_row = static function ( $i, array $line, array $fig ) use ( $spa_tanks,
 									</td>
 									<td><?php echo esc_html( null !== $fh_own['tank'] ? (string) $fh_own['tank'] : '—' ); ?></td>
 									<td>
-										<?php echo esc_html( $fh_own['date'] ); ?><?php echo $fh_own['ready'] ? ' <span class="fh-cr-sub fh-cr-sub--inline">' . esc_html__( 'for sale', 'fishotel-misc-plugin' ) . '</span>' : ''; ?>
+										<?php echo esc_html( Dates::us( $fh_own['date'] ) ); ?><?php echo $fh_own['ready'] ? ' <span class="fh-cr-sub fh-cr-sub--inline">' . esc_html__( 'for sale', 'fishotel-misc-plugin' ) . '</span>' : ''; ?>
 										<?php if ( ! empty( $fh_own['in_spa'] ) ) : ?>
 											<span class="fh-cr-warn"><?php esc_html_e( 'still in the Spa', 'fishotel-misc-plugin' ); ?></span>
 										<?php endif; ?>

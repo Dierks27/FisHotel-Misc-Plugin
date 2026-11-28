@@ -27,6 +27,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
+use FisHotel\Misc\Dates;
 use FisHotel\Misc\Sections\Clean_Room\Admin;
 use FisHotel\Misc\Sections\Clean_Room\Admin_No_Product;
 use FisHotel\Misc\Sections\Clean_Room\No_Product;
@@ -98,7 +99,7 @@ $fh_table  = static function ( array $rows, $open ) use ( $today, $sizes, $fh_st
 							<span class="fh-cr-sub fh-cr-reserved"><?php echo esc_html( Reserve::stage_text( $fh_stay ) ); // "5 ready · 2 reserved (#1234)". ?></span>
 						<?php endif; ?>
 					</td>
-					<td><?php echo ! empty( $fh_stay['checkin_unknown'] ) ? $fh_unknown : esc_html( $fh_stay['checkin_date'] ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above. ?></td>
+					<td class="fh-cr-date"><?php echo ! empty( $fh_stay['checkin_unknown'] ) ? $fh_unknown : esc_html( Dates::us( $fh_stay['checkin_date'] ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above. ?></td>
 					<td class="fh-cr-num"><?php echo null !== $fh_stay['day'] ? esc_html( $fh_stay['day'] ) : ( ! empty( $fh_stay['checkin_unknown'] ) ? '?' : '—' ); ?></td>
 					<td>
 						<?php echo Admin::badge_html( $fh_stay ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped by badge_html(). ?>
@@ -106,10 +107,10 @@ $fh_table  = static function ( array $rows, $open ) use ( $today, $sizes, $fh_st
 							<span class="fh-cr-warn"><?php echo esc_html( Admin::treatment_unknown( $fh_stay ) ); ?></span>
 						<?php endif; ?>
 					</td>
-					<td><?php echo $fh_stay['cleared_date'] ? esc_html( $fh_stay['cleared_date'] ) : ( ! empty( $fh_stay['cleared_unknown'] ) ? $fh_unknown : '—' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above. ?></td>
+					<td class="fh-cr-date"><?php echo $fh_stay['cleared_date'] ? esc_html( Dates::us( $fh_stay['cleared_date'] ) ) : ( ! empty( $fh_stay['cleared_unknown'] ) ? $fh_unknown : '—' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above. ?></td>
 					<td>
 						<?php if ( '' !== $fh_sale['date'] ) : ?>
-							<?php echo esc_html( $fh_sale['date'] ); ?>
+							<span class="fh-cr-date"><?php echo esc_html( Dates::us( $fh_sale['date'] ) ); ?></span>
 							<span class="fh-cr-sub"><?php echo esc_html( $fh_sale['source'] ); ?></span>
 						<?php else : ?>
 							<span class="fh-cr-muted"><?php echo esc_html( $fh_sale['text'] ); ?></span>
@@ -142,8 +143,9 @@ $fh_table  = static function ( array $rows, $open ) use ( $today, $sizes, $fh_st
 							<button type="button" class="button button-small fh-cr-act" data-op="loss"><?php esc_html_e( 'Lost', 'fishotel-misc-plugin' ); ?></button>
 							<button type="button" class="button button-small fh-cr-act" data-op="sold"><?php esc_html_e( 'Shipped', 'fishotel-misc-plugin' ); ?></button>
 							<button type="button" class="button button-small fh-cr-act" data-op="count"><?php esc_html_e( 'Count', 'fishotel-misc-plugin' ); ?></button>
-							<button type="button" class="button button-small fh-cr-act" data-op="clear"><?php esc_html_e( 'Cleared…', 'fishotel-misc-plugin' ); ?></button>
-							<button type="button" class="button button-small fh-cr-act" data-op="ready" data-default="<?php echo esc_attr( Admin::sale_prompt_default( $fh_stay ) ); ?>" data-batch="<?php echo esc_attr( (string) $fh_stay['batch_sale_date'] ); ?>"><?php esc_html_e( 'Sale date…', 'fishotel-misc-plugin' ); ?></button>
+							<?php // Cleared… and Sale date… open a pop-up calendar (js: stayDateAsk); their data-* dates are the stored YYYY-MM-DD. ?>
+							<button type="button" class="button button-small fh-cr-act" data-op="clear" aria-haspopup="dialog" data-cleared="<?php echo esc_attr( Replay::is_date( $fh_stay['cleared_date'] ) ? (string) $fh_stay['cleared_date'] : '' ); ?>"><?php esc_html_e( 'Cleared…', 'fishotel-misc-plugin' ); ?></button>
+							<button type="button" class="button button-small fh-cr-act" data-op="ready" aria-haspopup="dialog" data-default="<?php echo esc_attr( Admin::sale_prompt_default( $fh_stay ) ); ?>" data-batch="<?php echo esc_attr( (string) $fh_stay['batch_sale_date'] ); ?>"><?php esc_html_e( 'Sale date…', 'fishotel-misc-plugin' ); ?></button>
 							<button type="button" class="button button-small fh-cr-act" data-op="move" data-tank="<?php echo esc_attr( (string) $fh_stay['tank_number'] ); ?>"><?php esc_html_e( 'Move…', 'fishotel-misc-plugin' ); ?></button>
 							<?php if ( $fh_stay['product_id'] && Replay::is_date( $fh_stay['sale_ready_date'] ) ) : ?>
 								<button type="button" class="button button-small fh-cr-release" title="<?php esc_attr_e( 'Set the product\'s Coming Soon countdown to this sale date', 'fishotel-misc-plugin' ); ?>"><?php esc_html_e( 'Coming Soon', 'fishotel-misc-plugin' ); ?></button>
@@ -339,6 +341,6 @@ $fh_table  = static function ( array $rows, $open ) use ( $today, $sizes, $fh_st
 	<?php endif; ?>
 
 	<p class="fh-cr-footnote">
-		<?php esc_html_e( 'Lost / Shipped / Count / Move… write events (the counts stay editable at any time — a customer\'s order itself is edited in WooCommerce). Cleared… sets the cleared date by hand (empty removes it). A group is on sale from its own date (Sale date…, the product page, or Dates on the phone) or else its batch\'s date (Goes on sale, on its fish order — Fish orders tab); Sale date… with nothing typed goes back to the batch\'s. Identify… / Correct fish… names the real fish and its size — the stay, its fish order line (which keeps what the label said, for the mislabel stats) and the remembered box share follow; a fish nobody knows yet reads "??" and is marked "needs identifying". Edit corrects the species and the size the same way (one of the standard sizes, Settings → Sizes), and the check-in date and the supplier fields. Coming Soon sets the product\'s release countdown to the sale date at 09:00. A mistake is undone from the Events tab. The CSV guards every cell against spreadsheet formulas.', 'fishotel-misc-plugin' ); ?>
+		<?php esc_html_e( 'Lost / Shipped / Count / Move… write events (the counts stay editable at any time — a customer\'s order itself is edited in WooCommerce). Cleared… opens a calendar for the cleared date ("Not cleared" removes it). A group is on sale from its own date (Sale date…, the product page, or Dates on the phone) or else its batch\'s date (Goes on sale, on its fish order — Fish orders tab); Sale date… opens a calendar too, and its "Use the batch date" goes back to the batch\'s. Identify… / Correct fish… names the real fish and its size — the stay, its fish order line (which keeps what the label said, for the mislabel stats) and the remembered box share follow; a fish nobody knows yet reads "??" and is marked "needs identifying". Edit corrects the species and the size the same way (one of the standard sizes, Settings → Sizes), and the check-in date and the supplier fields. Coming Soon sets the product\'s release countdown to the sale date at 09:00. A mistake is undone from the Events tab. The CSV guards every cell against spreadsheet formulas.', 'fishotel-misc-plugin' ); ?>
 	</p>
 </div>

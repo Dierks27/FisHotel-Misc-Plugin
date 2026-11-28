@@ -16,6 +16,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
+use FisHotel\Misc\Dates;
 use FisHotel\Misc\Sections\Clean_Room\Admin;
 use FisHotel\Misc\Sections\Clean_Room\Admin_Temp;
 use FisHotel\Misc\Sections\Clean_Room\Board_Lines;
@@ -187,7 +188,7 @@ foreach ( $temp['slots'] as $fh_slot ) {
 					<div class="fh-cr-temp-clock">
 						<?php echo esc_html( Temp_Tanks::schedule_label( $fh_setup ) ); ?>
 						· <strong><?php echo esc_html( Temp_Tanks::day_text( $fh_setup, $today ) ); ?></strong>
-						<span class="fh-cr-muted">· <?php echo esc_html( sprintf( /* translators: %s: date */ __( 'since %s', 'fishotel-misc-plugin' ), $fh_setup['start_date'] ) ); ?></span>
+						<span class="fh-cr-muted">· <?php echo esc_html( sprintf( /* translators: %s: date */ __( 'since %s', 'fishotel-misc-plugin' ), Dates::us( $fh_setup['start_date'] ) ) ); ?></span>
 					</div>
 					<?php if ( '' !== trim( $fh_setup['note'] ) ) : ?>
 						<p class="fh-cr-temp-note"><?php echo esc_html( $fh_setup['note'] ); ?></p>

@@ -325,6 +325,14 @@ theme first: the page check shows these until it is.
 - Old orders keep their item names and the checkout ticks that were
   accepted.
 
+## Dates
+
+The report's first line — "Made 11-27-26 09:14." — is stamped by this
+computer's own clock, month first (`fhDates.stamp()`, the plugin's
+`admin/js/fishotel-dates.js`, loaded before the page's script). It used
+to be the UTC time, year first. The backup CSV's file name and contents
+are unchanged.
+
 ## Files
 
 | File | What |

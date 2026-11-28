@@ -74,6 +74,21 @@
 	/* The dose maths: inlined before this file on the page, required in node. */
 	var doseMath = root.fhDoseMath || (typeof require === 'function' ? require('./dose-math.js') : null);
 
+	/* The plugin's dates (admin/js/fishotel-dates.js): inlined before this file on the page, required in node. */
+	var fhDates = root.fhDates || (typeof require === 'function' ? require('../../../../admin/js/fishotel-dates.js') : null);
+
+	/**
+	 * A stored date (YYYY-MM-DD) as a person reads it: 11-27-26. Only for
+	 * words on the screen — every value, min, max and posted date stays
+	 * as the server sent it.
+	 *
+	 * @param {string} ymd A stored date.
+	 * @return {string}
+	 */
+	function usDate(ymd) {
+		return fhDates ? fhDates.us(ymd) : String(ymd === null || typeof ymd === 'undefined' ? '' : ymd);
+	}
+
 	/* ---------------------------------------------------------------- */
 	/*  Pure helpers                                                     */
 	/* ---------------------------------------------------------------- */
@@ -349,7 +364,30 @@
 	}
 
 	/**
-	 * A group's sale state in words: "on sale 2026-10-30 · from the batch",
+	 * The words of the Dates screen's "Sale date (this group)" field
+	 * (pure): the suggestion chip, the "no own date" chip — shown only on
+	 * a group that has its own date; it posts an empty date, what saving
+	 * an empty field does — and the hint under the field. Dates read
+	 * 11-27-26; the group's own values stay as the server sent them.
+	 *
+	 * @param {Object} o       Occupant (saleSuggested, saleReadyManual, batchSaleDate).
+	 * @param {string} picked  What the calendar holds now (YYYY-MM-DD or '').
+	 * @param {Object} strings suggestedOn, useBatchDate, noOwnDate, readyBatch, readyNone.
+	 * @return {{suggest: string, remove: string, hint: string}}
+	 */
+	function saleDateWords(o, picked, strings) {
+		var s = strings || {};
+		var get = function (key, fallback) { return s[key] ? s[key] : fallback; };
+		o = o || {};
+		return {
+			suggest: o.saleSuggested && o.saleSuggested !== picked ? fmt(get('suggestedOn', 'suggested %s'), usDate(o.saleSuggested)) : '',
+			remove: o.saleReadyManual ? (o.batchSaleDate ? fmt(get('useBatchDate', 'Use the batch date (%s)'), usDate(o.batchSaleDate)) : get('noOwnDate', 'No date')) : '',
+			hint: o.batchSaleDate ? fmt(get('readyBatch', 'Empty = the batch date (%s).'), usDate(o.batchSaleDate)) : get('readyNone', 'Empty = no sale date: the batch has none yet (set it on its fish order: Clean Room → Fish orders).')
+		};
+	}
+
+	/**
+	 * A group's sale state in words: "on sale 10-30-26 · from the batch",
 	 * "on sale … · own date", or "Sale date not set · suggested …"; and the
 	 * "still in the Spa" warning when it is for sale but not cleared.
 	 *
@@ -363,11 +401,11 @@
 		o = o || {};
 		var out = { text: '', short: '', warning: '' };
 		if (o.saleReadyDate) {
-			out.short = fmt(get('readyOn', 'on sale %s'), o.saleReadyDate);
+			out.short = fmt(get('readyOn', 'on sale %s'), usDate(o.saleReadyDate));
 			out.text = out.short + ' · ' + (o.saleSource === 'own' ? get('saleOwn', 'own date') : get('saleBatch', 'from the batch'));
 		} else {
 			out.short = get('noSaleDate', 'Sale date not set');
-			out.text = out.short + (o.saleSuggested ? ' · ' + fmt(get('suggestedOn', 'suggested %s'), o.saleSuggested) : '');
+			out.text = out.short + (o.saleSuggested ? ' · ' + fmt(get('suggestedOn', 'suggested %s'), usDate(o.saleSuggested)) : '');
 		}
 		if (o.readyInSpa) {
 			out.warning = get('stillInSpa', 'still in the Spa');
@@ -432,10 +470,10 @@
 			}
 		} else {
 			out.day = (o.day === null || typeof o.day === 'undefined') ? '' : fmt(get('day', 'day %d'), o.day);
-			out.arrived = o.checkinDate ? fmt(get('inSince', 'in since %s'), o.checkinDate) : '';
+			out.arrived = o.checkinDate ? fmt(get('inSince', 'in since %s'), usDate(o.checkinDate)) : '';
 		}
 		if (o.clearedDate) {
-			out.cleared = fmt(get('clearedOn', 'cleared %s'), o.clearedDate);
+			out.cleared = fmt(get('clearedOn', 'cleared %s'), usDate(o.clearedDate));
 		} else if (o.clearedUnknown) {
 			out.cleared = get('clearedUnknown', 'cleared: unknown');
 		}
@@ -930,6 +968,7 @@
 		fmt: fmt,
 		escapeHtml: escapeHtml,
 		saleSummary: saleSummary,
+		saleDateWords: saleDateWords,
 		datesText: datesText,
 		existingFields: existingFields,
 		clearedSaveFields: clearedSaveFields,
@@ -2657,6 +2696,7 @@
 			o.clearedDate || o.clearedUnknown ? el('button', { type: 'button', class: 'fh-fd-chip fh-fd-chip--ghost', text: t('unsetDate', 'Not cleared'), on: { click: function () { act({ act: 'clear', tank: tk.number, stay_id: o.stayId, unset: 1, via: 'qr' }); } } }) : null
 		]));
 		// The suggestion (check-in + the setting) only fills the picker on a tap; Save writes it.
+		var saleWords = saleDateWords(o, f.ready, i18n);
 		var readyInput = el('input', { id: 'fh-fd-rdate', class: 'fh-fd-input', type: 'date', value: f.ready, min: state.screen.saleDateMin || null, max: state.screen.saleDateMax || null, on: { change: function (e) { f.ready = e.target.value; } } });
 		screen.appendChild(el('div', { class: 'fh-fd-field' }, [
 			el('label', { class: 'fh-fd-label', for: 'fh-fd-rdate', text: t('readyDate', 'Sale date (this group)') }),
@@ -2664,8 +2704,10 @@
 				readyInput,
 				button(t('save', 'Save'), 'fh-fd-btn--primary', function () { act({ act: 'ready', tank: tk.number, stay_id: o.stayId, date: f.ready || '', via: 'qr' }); })
 			]),
-			o.saleSuggested && o.saleSuggested !== f.ready ? el('button', { type: 'button', class: 'fh-fd-chip fh-fd-chip--ghost', text: fmt(t('suggestedOn', 'suggested %s'), o.saleSuggested), on: { click: function () { f.ready = o.saleSuggested; readyInput.value = o.saleSuggested; } } }) : null,
-			el('p', { class: 'fh-fd-muted', text: o.batchSaleDate ? fmt(t('readyBatch', 'Empty = the batch date (%s).'), o.batchSaleDate) : t('readyNone', 'Empty = no sale date: the batch has none yet (set it on its fish order: Clean Room → Fish orders).') })
+			saleWords.suggest ? el('button', { type: 'button', class: 'fh-fd-chip fh-fd-chip--ghost', text: saleWords.suggest, on: { click: function () { f.ready = o.saleSuggested; readyInput.value = o.saleSuggested; } } }) : null,
+			// A group with its own date: one tap takes it away again — what saving an empty date does (date '').
+			saleWords.remove ? el('button', { type: 'button', class: 'fh-fd-chip fh-fd-chip--ghost', text: saleWords.remove, on: { click: function () { act({ act: 'ready', tank: tk.number, stay_id: o.stayId, date: '', via: 'qr' }); } } }) : null,
+			el('p', { class: 'fh-fd-muted', text: saleWords.hint })
 		]));
 		app.appendChild(screen);
 		bar([button(t('back', 'Back'), 'fh-fd-btn--quiet', function () { go('occupant', { stay: o }); })]);
@@ -4100,7 +4142,7 @@
 	function renderTodayList() {
 		var list = state.screen.todoList;
 		var tk = tank();
-		app.appendChild(header(t('today', 'Today'), [todoHeadline(list, i18n) + (list && list.date ? ' · ' + list.date : '')]));
+		app.appendChild(header(t('today', 'Today'), [todoHeadline(list, i18n) + (list && list.date ? ' · ' + usDate(list.date) : '')]));
 		function tick(fields) {
 			fields.act = 'todo_tick';
 			fields.tank = tk ? tk.number : 0;

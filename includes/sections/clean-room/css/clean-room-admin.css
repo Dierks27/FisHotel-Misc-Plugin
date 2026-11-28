@@ -673,6 +673,11 @@ a.fh-cr-chip--muted {
 	white-space: nowrap;
 }
 
+/* A date (11-27-26) stays on one line: it never breaks at a hyphen. */
+.fh-cr-date {
+	white-space: nowrap;
+}
+
 .fh-cr-when {
 	white-space: nowrap;
 	width: 1%;

@@ -689,3 +689,6 @@ foreach ( array( 'words', 'finder', 'composer', 'proposals', 'fields', 'ledger',
 function wp_strip_all_tags( $s ) {
 	return trim( strip_tags( (string) $s ) );
 }
+
+// The plugin's dates (11-27-26 for a person): the section's classes call it.
+require_once dirname( __DIR__, 4 ) . '/includes/class-dates.php';

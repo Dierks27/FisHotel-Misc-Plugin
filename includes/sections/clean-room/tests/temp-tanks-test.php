@@ -254,7 +254,7 @@ $store = new Fake_Store( array( 12 => 'Blue Test Wrasse', 13 => 'Test Clownfish'
 $a     = set_up( $store, array_merge( $good, array( 'start_date' => Replay::add_days( $today, -2 ) ) ) );
 check( 'day 1 is the treatment start date: started two days ago = day 3', 3 === Temp_Tanks::day( $a, $today ) && 'day 3' === Temp_Tanks::day_text( $a, $today ) );
 $late = set_up( $store, array( 'kind' => 'clean', 'template' => 'Trifecta', 'start_date' => Replay::add_days( $today, 3 ) ) );
-check( 'a treatment that starts later is not on day 1 yet', -2 === Temp_Tanks::day( $late, $today ) && 'starts ' . Replay::add_days( $today, 3 ) === Temp_Tanks::day_text( $late, $today ) );
+check( 'a treatment that starts later is not on day 1 yet', -2 === Temp_Tanks::day( $late, $today ) && 'starts ' . \FisHotel\Misc\Dates::us( Replay::add_days( $today, 3 ) ) === Temp_Tanks::day_text( $late, $today ) );
 
 // A group checked in nine days ago, moved into the hospital tank today.
 act( $store, 521, 'arrival', array( 'product_id' => 12, 'qty' => 3, 'date' => Replay::add_days( $today, -9 ) ) );
@@ -268,7 +268,7 @@ $todo  = $tanks[901]['todo'];
 check( 'the to-do counts from the tank\'s start, not the fish\'s check-in: day 3 of Trifecta', array( 'Feed', '25 % water change, then the combo' ) === array_column( $todo, 'label' ) && 3 === $todo[1]['day'] && null === $todo[0]['day'], json_encode( $todo ) );
 check( 'a tank whose treatment has not started lists nothing but (with fish) the feeding', array() === $tanks[902]['todo'] );
 $r = act( $store, 901, 'setup_edit', array( 'start_date' => $today ) );
-check( 'the clock can be restarted: the treatment counts from today', empty( $r['error'] ) && false !== strpos( $r['message'], 'counts from ' . $today ) && 1 === Temp_Tanks::day( $store->setup( $a['id'] ), $today ) );
+check( 'the clock can be restarted: the treatment counts from today', empty( $r['error'] ) && false !== strpos( $r['message'], 'counts from ' . \FisHotel\Misc\Dates::us( $today ) ) && $today === $store->setup( $a['id'] )['start_date'] && 1 === Temp_Tanks::day( $store->setup( $a['id'] ), $today ) );
 $tanks = array_column( $store->room( $today, $settings, $protocols )['tanks'], null, 'number' );
 check( 'day 1 again: the combo', array( 'Feed', 'Metronidazole + Kanamycin + Furan-2' ) === array_column( $tanks[901]['todo'], 'label' ) );
 $r = act( $store, 901, 'setup_edit', array( 'name' => 'Hospital One', 'gallons' => '12', 'purpose' => 'fin rot', 'note' => '' ) );

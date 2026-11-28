@@ -301,3 +301,6 @@ function fh_finish() {
 	echo "\n" . ( $failures ? "$failures of $checks checks FAILED\n" : "All $checks checks passed\n" );
 	exit( $failures ? 1 : 0 );
 }
+
+// The plugin's dates (11-27-26 for a person): the section's classes call it.
+require_once dirname( __DIR__, 4 ) . '/includes/class-dates.php';

@@ -29,6 +29,8 @@
 
 namespace FisHotel\Misc\Sections\Site_Snippets;
 
+use FisHotel\Misc\Dates;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -918,7 +920,7 @@ class Admin_Editor {
 	}
 
 	/**
-	 * A stored UTC time in the site's zone.
+	 * A stored UTC time in the site's zone: 11-27-26 09:14.
 	 *
 	 * @param string|null $utc Y-m-d H:i:s.
 	 * @return string
@@ -927,7 +929,7 @@ class Admin_Editor {
 		if ( empty( $utc ) ) {
 			return '';
 		}
-		return function_exists( 'get_date_from_gmt' ) ? get_date_from_gmt( (string) $utc, 'Y-m-d H:i' ) : (string) $utc;
+		return Dates::from_utc( (string) $utc );
 	}
 
 	/* ============================================================== */

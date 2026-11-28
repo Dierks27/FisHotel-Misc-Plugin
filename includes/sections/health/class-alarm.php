@@ -50,6 +50,8 @@
 
 namespace FisHotel\Misc\Sections\Health;
 
+use FisHotel\Misc\Dates;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -816,7 +818,7 @@ class Alarm {
 			}
 
 			$site = function_exists( 'get_bloginfo' ) ? (string) get_bloginfo( 'name' ) : 'FisHotel';
-			$when = function_exists( 'wp_date' ) ? (string) wp_date( 'Y-m-d H:i', self::now() ) : gmdate( 'Y-m-d H:i', self::now() );
+			$when = Dates::stamp( self::now() ); // Site time, read 11-27-26 09:14.
 			$url  = function_exists( 'admin_url' ) ? admin_url( 'admin.php?page=' . Health::MENU_SLUG ) : '';
 
 			return (bool) wp_mail(

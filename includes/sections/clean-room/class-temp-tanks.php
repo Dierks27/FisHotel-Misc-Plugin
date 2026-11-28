@@ -44,6 +44,8 @@
 
 namespace FisHotel\Misc\Sections\Clean_Room;
 
+use FisHotel\Misc\Dates;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -354,7 +356,7 @@ class Temp_Tanks {
 		}
 		if ( $day < 1 ) {
 			/* translators: %s: date */
-			return sprintf( __( 'starts %s', 'fishotel-misc-plugin' ), (string) $setup['start_date'] );
+			return sprintf( __( 'starts %s', 'fishotel-misc-plugin' ), Dates::us( (string) $setup['start_date'] ) );
 		}
 		/* translators: %d: day number */
 		return sprintf( __( 'day %d', 'fishotel-misc-plugin' ), $day );
@@ -934,7 +936,7 @@ class Temp_Tanks {
 			$errors[] = __( 'The treatment start date is not a date.', 'fishotel-misc-plugin' );
 		} elseif ( ! self::start_in_range( $start, $today ) ) {
 			/* translators: 1: earliest date, 2: latest date */
-			$errors[] = sprintf( __( 'Pick a start date from %1$s to %2$s.', 'fishotel-misc-plugin' ), Replay::add_days( $today, -self::START_BACK ), Replay::add_days( $today, self::START_AHEAD ) );
+			$errors[] = sprintf( __( 'Pick a start date from %1$s to %2$s.', 'fishotel-misc-plugin' ), Dates::us( Replay::add_days( $today, -self::START_BACK ) ), Dates::us( Replay::add_days( $today, self::START_AHEAD ) ) );
 		}
 
 		if ( $errors ) {
@@ -1050,7 +1052,7 @@ class Temp_Tanks {
 				$errors[] = __( 'The treatment start date is not a date.', 'fishotel-misc-plugin' );
 			} elseif ( $start !== (string) $setup['start_date'] && ! self::start_in_range( $start, $today ) ) {
 				/* translators: 1: earliest date, 2: latest date */
-				$errors[] = sprintf( __( 'Pick a start date from %1$s to %2$s.', 'fishotel-misc-plugin' ), Replay::add_days( $today, -self::START_BACK ), Replay::add_days( $today, self::START_AHEAD ) );
+				$errors[] = sprintf( __( 'Pick a start date from %1$s to %2$s.', 'fishotel-misc-plugin' ), Dates::us( Replay::add_days( $today, -self::START_BACK ) ), Dates::us( Replay::add_days( $today, self::START_AHEAD ) ) );
 			} else {
 				$fields['start_date'] = $start;
 			}
@@ -1088,7 +1090,7 @@ class Temp_Tanks {
 			'errors'  => array(),
 			'message' => isset( $fields['start_date'] )
 				/* translators: %s: date */
-				? sprintf( __( 'Saved — the treatment now counts from %s.', 'fishotel-misc-plugin' ), $fields['start_date'] )
+				? sprintf( __( 'Saved — the treatment now counts from %s.', 'fishotel-misc-plugin' ), Dates::us( $fields['start_date'] ) )
 				: __( 'Setup saved.', 'fishotel-misc-plugin' ),
 		);
 	}

@@ -9,7 +9,7 @@ php includes/sections/med-listings/tests/proposals-test.php       # find, propos
 php includes/sections/med-listings/tests/apply-undo-test.php      # apply/undo round trips, categories, refusals
 php includes/sections/med-listings/tests/redirects-verify-test.php # the 301 list, its hook, the page check
 php includes/sections/med-listings/tests/review-fixes-test.php     # pictures, linking pages, tags/brands, SEO titles, the tree guard, menus/settings kept, backup, ingredient box
-node includes/sections/med-listings/tests/report.test.js          # med-cleanup-report.md
+node includes/sections/med-listings/tests/report.test.js          # med-cleanup-report.md, "Made 11-27-26 09:14." (local time, month first)
 ```
 
 The supporting files:

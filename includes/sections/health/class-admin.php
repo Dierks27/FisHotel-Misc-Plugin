@@ -13,6 +13,8 @@
 
 namespace FisHotel\Misc\Sections\Health;
 
+use FisHotel\Misc\Dates;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -519,7 +521,7 @@ class Admin {
 	}
 
 	/**
-	 * A UTC logged_at as a site-time label.
+	 * A UTC logged_at as a site-time label: 11-27-26 09:14.
 	 *
 	 * @param string $logged_at Y-m-d H:i:s (UTC).
 	 * @return string
@@ -530,11 +532,7 @@ class Admin {
 			return (string) $logged_at;
 		}
 
-		if ( function_exists( 'wp_date' ) ) {
-			return (string) wp_date( 'Y-m-d H:i', $ts );
-		}
-
-		return gmdate( 'Y-m-d H:i', $ts );
+		return Dates::stamp( $ts );
 	}
 
 	/**

@@ -35,6 +35,8 @@
 
 namespace FisHotel\Misc\Sections\Clean_Room;
 
+use FisHotel\Misc\Dates;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -282,9 +284,9 @@ class Board_Lines {
 	/**
 	 * What a line says about its sale date: nothing once it is for sale
 	 * (its badge says so) or while none of its stays has a date (the
-	 * card's foot counts those); else "on sale 2026-12-12", or the first
+	 * card's foot counts those); else "on sale 12-12-26", or the first
 	 * and the last date when its stays differ. A gathered line never
-	 * lends a date to a group that has none: "on sale 2026-12-12 · 1 not
+	 * lends a date to a group that has none: "on sale 12-12-26 · 1 not
 	 * set" when some of its stays have a date and some do not.
 	 *
 	 * @param array $line state, sale_dates, no_sale.
@@ -297,10 +299,10 @@ class Board_Lines {
 		}
 		if ( 1 === count( $dates ) ) {
 			/* translators: %s: date */
-			$text = sprintf( __( 'on sale %s', 'fishotel-misc-plugin' ), $dates[0] );
+			$text = sprintf( __( 'on sale %s', 'fishotel-misc-plugin' ), Dates::us( $dates[0] ) );
 		} else {
 			/* translators: 1: the first sale date, 2: the last */
-			$text = sprintf( __( 'on sale %1$s – %2$s', 'fishotel-misc-plugin' ), $dates[0], $dates[ count( $dates ) - 1 ] );
+			$text = sprintf( __( 'on sale %1$s – %2$s', 'fishotel-misc-plugin' ), Dates::us( $dates[0] ), Dates::us( $dates[ count( $dates ) - 1 ] ) );
 		}
 		$none = (int) ( $line['no_sale'] ?? 0 );
 		if ( $none > 0 ) {

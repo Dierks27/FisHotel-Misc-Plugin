@@ -131,4 +131,10 @@ rewind( $out );
 check( 'with no notice', 1 === count( array_filter( explode( "\n", stream_get_contents( $out ) ), 'strlen' ) ) );
 fclose( $out );
 
+echo "The Log screen reads month first in site time; the CSV keeps the stored UTC time\n";
+check( 'on the screen: 2026-04-01 21:00 UTC is 04-01-26 16:00 in Chicago', '04-01-26 16:00' === Admin::site_time( '2026-04-01 21:00:00' ) );
+check( 'one minute before midnight is still that day', '11-27-26 23:59' === Admin::site_time( '2026-11-28 05:59:00' ) );
+check( 'in the CSV: the stored value, untouched', in_array( '2026-04-01 21:00:00', Admin::csv_row( array( 'id' => 1, 'logged_at' => '2026-04-01 21:00:00', 'level' => 'error', 'source' => 'php', 'message' => 'x', 'repeats' => 1, 'context' => array() ) ), true ) );
+check( 'not a time: shown as it is', 'never' === Admin::site_time( 'never' ) );
+
 fh_finish();

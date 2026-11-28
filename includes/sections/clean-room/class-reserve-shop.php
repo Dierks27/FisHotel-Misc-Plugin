@@ -37,6 +37,8 @@
 
 namespace FisHotel\Misc\Sections\Clean_Room;
 
+use FisHotel\Misc\Dates;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -1952,7 +1954,7 @@ class Reserve_Shop {
 
 	/**
 	 * The order note of a hold given to an order: "Clean Room: 2 × Test
-	 * Tang Medium in tank 121, held by hand for Ann B. since 2026-11-20 —
+	 * Tang Medium in tank 121, held by hand for Ann B. since 11-20-26 —
 	 * taken by this order (…)".
 	 *
 	 * @param array      $hold The hold.
@@ -1964,7 +1966,7 @@ class Reserve_Shop {
 	public static function hold_note( array $hold, $stay, $n, $how ) {
 		$fish = is_array( $stay ) ? trim( (string) ( $stay['species'] ?? '' ) . ' ' . (string) ( $stay['size_label'] ?? '' ) ) : '';
 		$tank = is_array( $stay ) ? (int) ( $stay['tank_number'] ?? 0 ) : 0;
-		$when = (int) ( $hold['at'] ?? 0 ) > 0 ? ( function_exists( 'wp_date' ) ? wp_date( 'Y-m-d', (int) $hold['at'] ) : gmdate( 'Y-m-d', (int) $hold['at'] ) ) : '';
+		$when = Dates::day( (int) ( $hold['at'] ?? 0 ) ); // The site's day, read 11-20-26. A note already written keeps its words.
 		/* translators: 1: fish, 2: the fish, 3: tank, 4: who they were held for, 5: since when, 6: how */
 		return sprintf( __( 'Clean Room: %1$d × %2$s in tank %3$d, held by hand for %4$s since %5$s — %6$s.', 'fishotel-misc-plugin' ), (int) $n, '' !== $fish ? $fish : __( 'fish', 'fishotel-misc-plugin' ), $tank, (string) ( $hold['who'] ?? '' ), '' !== $when ? $when : '?', $how );
 	}

@@ -62,6 +62,8 @@
 
 namespace FisHotel\Misc\Sections\Clean_Room;
 
+use FisHotel\Misc\Dates;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -239,8 +241,8 @@ class Front_Desk {
 
 		$css  = (string) file_get_contents( Clean_Room::path() . 'css/front-desk.css' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- our own file, inlined so the page makes no further requests.
 		$css .= "\n" . (string) file_get_contents( Clean_Room::path() . 'css/front-desk-temp.css' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- the temporary tanks and the day's list, inlined the same way.
-		// The dose maths first: front-desk.js reads it from the global.
-		$js  = (string) file_get_contents( Clean_Room::path() . 'js/dose-math.js' ) . "\n" . (string) file_get_contents( Clean_Room::path() . 'js/front-desk.js' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
+		// The plugin's dates (11-27-26 for a person) and the dose maths first: front-desk.js reads both from the global.
+		$js  = (string) file_get_contents( FISHOTEL_MISC_PATH . 'admin/js/fishotel-dates.js' ) . "\n" . (string) file_get_contents( Clean_Room::path() . 'js/dose-math.js' ) . "\n" . (string) file_get_contents( Clean_Room::path() . 'js/front-desk.js' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents
 
 		include Clean_Room::path() . 'views/front-desk.php';
 		exit;
@@ -367,6 +369,9 @@ class Front_Desk {
 			'checkinDate' => __( 'Check-in date', 'fishotel-misc-plugin' ),
 			'readyDate'   => __( 'Sale date (this group)', 'fishotel-misc-plugin' ),
 			'readyBatch'  => __( 'Empty = the batch date (%s).', 'fishotel-misc-plugin' ),
+			/* translators: %s: the batch's sale date */
+			'useBatchDate' => __( 'Use the batch date (%s)', 'fishotel-misc-plugin' ),
+			'noOwnDate'   => __( 'No date', 'fishotel-misc-plugin' ),
 			'readyNone'   => __( 'Empty = no sale date: the batch has none yet (set it on its fish order: Clean Room → Fish orders).', 'fishotel-misc-plugin' ),
 			'unsetDate'   => __( 'Not cleared', 'fishotel-misc-plugin' ),
 			'dates'       => __( 'Dates', 'fishotel-misc-plugin' ),
@@ -1512,7 +1517,7 @@ class Front_Desk {
 		}
 		if ( '' !== $arrived && ! $in_range( $arrived ) ) {
 			/* translators: %s: earliest date */
-			return array( 'error' => sprintf( __( 'Arrived on: a date from %s up to today — or Unknown.', 'fishotel-misc-plugin' ), Replay::SALE_DATE_MIN ) );
+			return array( 'error' => sprintf( __( 'Arrived on: a date from %s up to today — or Unknown.', 'fishotel-misc-plugin' ), Dates::us( Replay::SALE_DATE_MIN ) ) );
 		}
 
 		$cleared_unknown = false;
@@ -1534,7 +1539,7 @@ class Front_Desk {
 		}
 		if ( '' !== $cleared && ! $in_range( $cleared ) ) {
 			/* translators: %s: earliest date */
-			return array( 'error' => sprintf( __( 'Cleared on: a date from %s up to today — or Unknown.', 'fishotel-misc-plugin' ), Replay::SALE_DATE_MIN ) );
+			return array( 'error' => sprintf( __( 'Cleared on: a date from %s up to today — or Unknown.', 'fishotel-misc-plugin' ), Dates::us( Replay::SALE_DATE_MIN ) ) );
 		}
 		if ( '' !== $cleared && '' !== $arrived && strcmp( $cleared, $arrived ) < 0 ) {
 			return array( 'error' => __( 'Cleared before it arrived? Check the two dates.', 'fishotel-misc-plugin' ) );
@@ -1647,11 +1652,11 @@ class Front_Desk {
 		$what = $fish['species'] . ( null !== $fish['size']['label'] ? ' · ' . $fish['size']['label'] : '' );
 		$bits = array(
 			/* translators: %s: date */
-			'' !== $answers['arrived'] ? sprintf( __( 'arrived %s', 'fishotel-misc-plugin' ), $answers['arrived'] ) : __( 'arrived: unknown', 'fishotel-misc-plugin' ),
+			'' !== $answers['arrived'] ? sprintf( __( 'arrived %s', 'fishotel-misc-plugin' ), Dates::us( $answers['arrived'] ) ) : __( 'arrived: unknown', 'fishotel-misc-plugin' ),
 		);
 		if ( '' !== $answers['cleared'] ) {
 			/* translators: %s: date */
-			$bits[] = sprintf( __( 'cleared %s', 'fishotel-misc-plugin' ), $answers['cleared'] );
+			$bits[] = sprintf( __( 'cleared %s', 'fishotel-misc-plugin' ), Dates::us( $answers['cleared'] ) );
 		} elseif ( $answers['cleared_unknown'] ) {
 			$bits[] = __( 'cleared: unknown', 'fishotel-misc-plugin' );
 		} else {
@@ -1949,7 +1954,7 @@ class Front_Desk {
 
 		return array(
 			/* translators: 1: species, 2: date */
-			'message'   => sprintf( __( '%1$s cleared %2$s', 'fishotel-misc-plugin' ), $what, $date === $ctx['today'] ? __( 'today', 'fishotel-misc-plugin' ) : $date ),
+			'message'   => sprintf( __( '%1$s cleared %2$s', 'fishotel-misc-plugin' ), $what, $date === $ctx['today'] ? __( 'today', 'fishotel-misc-plugin' ) : Dates::us( $date ) ),
 			'event_ids' => $ids,
 		);
 	}
@@ -1979,7 +1984,7 @@ class Front_Desk {
 
 		return array(
 			/* translators: 1: species, 2: date */
-			'message'   => sprintf( __( '%1$s checked in %2$s', 'fishotel-misc-plugin' ), $stay['species'], $date ),
+			'message'   => sprintf( __( '%1$s checked in %2$s', 'fishotel-misc-plugin' ), $stay['species'], Dates::us( $date ) ),
 			'event_ids' => array( $written['event_id'] ),
 		);
 	}
@@ -2003,7 +2008,7 @@ class Front_Desk {
 		}
 		if ( 'range' === $check ) {
 			/* translators: 1: earliest date, 2: latest date */
-			return array( 'error' => sprintf( __( 'Pick a sale date from %1$s to %2$s.', 'fishotel-misc-plugin' ), Replay::SALE_DATE_MIN, Replay::sale_date_max( (string) $ctx['today'] ) ) );
+			return array( 'error' => sprintf( __( 'Pick a sale date from %1$s to %2$s.', 'fishotel-misc-plugin' ), Dates::us( Replay::SALE_DATE_MIN ), Dates::us( Replay::sale_date_max( (string) $ctx['today'] ) ) ) );
 		}
 		if ( 'same' === $check ) {
 			return array(
@@ -2026,8 +2031,8 @@ class Front_Desk {
 
 	/**
 	 * The toast after a sale date was set or removed (pure): "Pajama
-	 * Cardinalfish on sale 2026-10-30", "… back to the batch date
-	 * (2026-11-02)", "… no sale date now — set one on its fish order",
+	 * Cardinalfish on sale 10-30-26", "… back to the batch date
+	 * (11-02-26)", "… no sale date now — set one on its fish order",
 	 * with ", still in the Spa" when the date has come before the group
 	 * was cleared.
 	 *
@@ -2040,10 +2045,10 @@ class Front_Desk {
 		$batch = isset( $state['batch_sale_date'] ) && Replay::is_date( $state['batch_sale_date'] ) ? (string) $state['batch_sale_date'] : '';
 		if ( '' !== $date ) {
 			/* translators: 1: species, 2: date */
-			$text = sprintf( __( '%1$s on sale %2$s', 'fishotel-misc-plugin' ), $species, $date );
+			$text = sprintf( __( '%1$s on sale %2$s', 'fishotel-misc-plugin' ), $species, Dates::us( $date ) );
 		} elseif ( '' !== $batch ) {
 			/* translators: 1: species, 2: the batch's sale date */
-			$text = sprintf( __( '%1$s back to the batch date (%2$s)', 'fishotel-misc-plugin' ), $species, $batch );
+			$text = sprintf( __( '%1$s back to the batch date (%2$s)', 'fishotel-misc-plugin' ), $species, Dates::us( $batch ) );
 		} else {
 			/* translators: %s: species */
 			$text = sprintf( __( '%s: no sale date now — set one on its fish order', 'fishotel-misc-plugin' ), $species );

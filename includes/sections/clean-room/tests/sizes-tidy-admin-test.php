@@ -423,7 +423,7 @@ $shop->runs[ $go->data['run'] ]['created_at'] = '2026-03-01 02:30:00';
 $status = Admin_Sizes_Tidy::status_html( Admin_Sizes_Tidy::status( 'pa_size' ) );
 check( 'a tidy-up\'s time is shown in the site\'s own time, without "(UTC)"', false !== strpos( $status, Admin_Sizes_Tidy::when( '2026-03-01 02:30:00' ) . ', by owner' ) && false === strpos( $status, 'UTC' ) && false === strpos( $status, '2026-03-01 02:30:00' ) );
 $zone = wp_timezone();
-check_same( '…worked out from the UTC the record keeps', ( new DateTimeImmutable( '2026-03-01 02:30:00', new DateTimeZone( 'UTC' ) ) )->setTimezone( $zone )->format( 'j M Y, g:i a' ), Admin_Sizes_Tidy::when( '2026-03-01 02:30:00' ) );
+check_same( '…worked out from the UTC the record keeps, month first like every date here (11-27-26 09:14)', ( new DateTimeImmutable( '2026-03-01 02:30:00', new DateTimeZone( 'UTC' ) ) )->setTimezone( $zone )->format( 'm-d-y H:i' ), Admin_Sizes_Tidy::when( '2026-03-01 02:30:00' ) );
 check_contains( 'the Undo box says what Undo leaves alone', 'a variation you have given another size since (it is named, not overwritten), and stock and prices, which Undo never touches', $status );
 Admin_Sizes_Tidy::use_shop( null );
 

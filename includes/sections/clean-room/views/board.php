@@ -24,6 +24,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
+use FisHotel\Misc\Dates;
 use FisHotel\Misc\Sections\Clean_Room\Admin;
 use FisHotel\Misc\Sections\Clean_Room\Admin_No_Product;
 use FisHotel\Misc\Sections\Clean_Room\Admin_Temp;
@@ -95,7 +96,7 @@ $fh_temp_done = false;
 		<?php endif; ?>
 		<span class="fh-cr-chip"><strong><?php echo esc_html( $totals['live'] ); ?></strong> <?php esc_html_e( 'fish alive', 'fishotel-misc-plugin' ); ?></span>
 		<span class="fh-cr-chip"><strong><?php echo esc_html( $totals['empty'] ); ?></strong> / <?php echo esc_html( $totals['tanks'] ); ?> <?php esc_html_e( 'tanks empty', 'fishotel-misc-plugin' ); ?></span>
-		<span class="fh-cr-summary__meta"><?php echo esc_html( $today ); ?></span>
+		<span class="fh-cr-summary__meta"><?php echo esc_html( Dates::us( $today ) ); ?></span>
 	</div>
 	<?php if ( ! empty( $todo['fast']['text'] ) ) : // A fish ships today and no tank group answers for it: no clean system is fed. ?>
 		<p class="fh-cr-fast fh-cr-fast--all"><strong><?php echo esc_html( $todo['fast']['text'] ); ?></strong> <?php echo esc_html( $todo['fast']['hint'] ); ?></p>

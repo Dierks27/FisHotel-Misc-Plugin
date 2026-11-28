@@ -14,6 +14,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
+use FisHotel\Misc\Dates;
 use FisHotel\Misc\Sections\Clean_Room\Admin;
 use FisHotel\Misc\Sections\Clean_Room\Admin_Stats;
 use FisHotel\Misc\Sections\Clean_Room\Admin_Workbook;
@@ -136,7 +137,7 @@ $fh_counts     = $data['counts'];
 								<?php else : ?>
 									<?php echo esc_html( $fh_r['latest_ref'] ); ?>
 								<?php endif; ?>
-								<span class="fh-cr-sub"><?php echo esc_html( trim( $fh_r['latest_date'] . ( '' !== $fh_r['supplier'] ? ' · ' . $fh_r['supplier'] : '' ), ' ·' ) ); ?></span>
+								<span class="fh-cr-sub"><?php echo esc_html( trim( Dates::us( $fh_r['latest_date'] ) . ( '' !== $fh_r['supplier'] ? ' · ' . $fh_r['supplier'] : '' ), ' ·' ) ); ?></span>
 							</td>
 							<td class="fh-cr-num"><?php echo esc_html( Costing::money( $fh_r['landed_latest'] ) ); ?></td>
 							<td class="fh-cr-num">

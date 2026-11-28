@@ -219,6 +219,20 @@ check_same( 'to_ymd(Y-m-d H:i)', '2026-07-02', Import_Map::to_ymd( '2026-07-02 1
 check_same( 'to_ymd(serial)', '2026-01-14', Import_Map::to_ymd( 46036 ) );
 check_same( 'to_ymd(nonsense)', null, Import_Map::to_ymd( 'nonsense' ) );
 check_same( 'to_ymd(0.5)', null, Import_Map::to_ymd( 0.5 ) );
+// Typed dates are read by the plugin's one reader (FisHotel\Misc\Dates::parse): month first, a two-digit year is 20YY.
+check_same( 'to_ymd(07-02-26): MM-DD-YY', '2026-07-02', Import_Map::to_ymd( '07-02-26' ) );
+check_same( 'to_ymd(07/02/26): MM/DD/YY', '2026-07-02', Import_Map::to_ymd( '07/02/26' ) );
+check_same( 'to_ymd(07-02-2026): MM-DD-YYYY', '2026-07-02', Import_Map::to_ymd( '07-02-2026' ) );
+check_same( 'to_ymd(7.2.26): dots, as before', '2026-07-02', Import_Map::to_ymd( '7.2.26' ) );
+check_same( 'to_ymd(7/2/26 6:00 PM): a time after the date is left out, as before', '2026-07-02', Import_Map::to_ymd( '7/2/26 6:00 PM' ) );
+check_same( 'to_ymd(2026-7-2): the stored form with single digits, as before', '2026-07-02', Import_Map::to_ymd( '2026-7-2' ) );
+check_same( 'to_ymd(2/30/26): a day that does not exist is null — never March 2', null, Import_Map::to_ymd( '2/30/26' ) );
+check_same( 'to_ymd(13/1/26): month 13 is null', null, Import_Map::to_ymd( '13/1/26' ) );
+check_same( 'to_ymd(2026-02-30) is null', null, Import_Map::to_ymd( '2026-02-30' ) );
+check_same( 'to_ymd(7/2/126): a three-digit year is not guessed at', null, Import_Map::to_ymd( '7/2/126' ) );
+check_same( 'date_refusal(2/30/26): one plain sentence', '2/30/26 is not a day on the calendar.', Import_Map::date_refusal( '2/30/26' ) );
+check_same( 'date_refusal(2/30/26 6:00 PM): the time aside', '2/30/26 is not a day on the calendar.', Import_Map::date_refusal( '2/30/26 6:00 PM' ) );
+check_same( 'date_refusal: nothing to say about a good date, a number, an empty cell or plain words', array( '', '', '', '', '' ), array( Import_Map::date_refusal( '7/2/26' ), Import_Map::date_refusal( 46036 ), Import_Map::date_refusal( null ), Import_Map::date_refusal( '' ), Import_Map::date_refusal( 'nonsense' ) ) );
 check_same( 'to_hm(6:45 PM)', '18:45', Import_Map::to_hm( '6:45 PM' ) );
 check_same( 'to_hm(12:05 am)', '00:05', Import_Map::to_hm( '12:05 am' ) );
 check_same( 'to_hm(12:30 PM)', '12:30', Import_Map::to_hm( '12:30 PM' ) );

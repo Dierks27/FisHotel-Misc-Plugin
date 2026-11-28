@@ -168,7 +168,7 @@ class Admin {
 					<?php
 					if ( ! empty( $sweep['done'] ) ) {
 						/* translators: 1: number of products, 2: date and time */
-						echo esc_html( sprintf( __( 'Every product was last checked through: %1$d products, finished %2$s. A product is checked again each time it is saved; every product, each night.', 'fishotel-misc-plugin' ), (int) ( $sweep['checked'] ?? 0 ), function_exists( 'wp_date' ) ? wp_date( 'j M Y H:i', (int) $sweep['done'] ) : gmdate( 'j M Y H:i', (int) $sweep['done'] ) ) );
+						echo esc_html( sprintf( __( 'Every product was last checked through: %1$d products, finished %2$s. A product is checked again each time it is saved; every product, each night.', 'fishotel-misc-plugin' ), (int) ( $sweep['checked'] ?? 0 ), \FisHotel\Misc\Dates::stamp( (int) $sweep['done'] ) ) ); // Site time, month first: 11-27-26 03:10.
 					} elseif ( isset( $sweep['cursor'] ) ) {
 						/* translators: %d: number of products */
 						echo esc_html( sprintf( __( 'Checking every product: %d so far.', 'fishotel-misc-plugin' ), (int) ( $sweep['checked'] ?? 0 ) ) );

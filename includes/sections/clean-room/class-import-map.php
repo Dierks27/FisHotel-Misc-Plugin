@@ -12,6 +12,8 @@
 
 namespace FisHotel\Misc\Sections\Clean_Room;
 
+use FisHotel\Misc\Dates;
+
 defined( 'ABSPATH' ) || exit;
 
 class Import_Map {
@@ -191,7 +193,9 @@ class Import_Map {
 		}
 		$start_date = self::to_ymd( $start_raw, $date1904 );
 		if ( null === $start_date && null !== self::text( $start_raw ) ) {
-			$warnings[] = $sheet . ': start date "' . self::text( $start_raw ) . '" is not a date.';
+			// A date that does not exist (02/30/26) is said as such; it is never moved to another day.
+			$why        = self::date_refusal( $start_raw );
+			$warnings[] = $sheet . ': start date — ' . ( '' !== $why ? $why : '"' . self::text( $start_raw ) . '" is not a date.' );
 		}
 		$schedule = self::text( $schedule_raw );
 
@@ -868,7 +872,11 @@ class Import_Map {
 	 * Any date-like cell => 'Y-m-d' or null.
 	 *
 	 * Accepts the reader's 'Y-m-d' / 'Y-m-d H:i' strings, typed text such as
-	 * 7/2/2026 or 7/2/26, and a raw serial number.
+	 * 7/2/2026, 7/2/26 or 07-02-26 (month first; a two-digit year is 20YY —
+	 * the plugin's one reader of typed dates, \FisHotel\Misc\Dates::parse()),
+	 * with or without a time after it, and a raw serial number. A date
+	 * that does not exist (02/30/26) is null — never another day;
+	 * date_refusal() says why in a plain sentence.
 	 *
 	 * @param mixed $value
 	 * @param bool  $date1904
@@ -881,21 +889,48 @@ class Import_Map {
 		if ( is_int( $value ) || is_float( $value ) ) {
 			return ( $value >= 1 ) ? Workbook::serial_to_date( $value, $date1904 ) : null;
 		}
-		$text = trim( (string) $value );
-		if ( preg_match( '/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T].*)?$/', $text, $m ) ) {
-			return checkdate( (int) $m[2], (int) $m[3], (int) $m[1] ) ? sprintf( '%04d-%02d-%02d', $m[1], $m[2], $m[3] ) : null;
-		}
-		if ( preg_match( '#^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{2,4})(?:\s.*)?$#', $text, $m ) ) {
-			$year = (int) $m[3];
-			if ( $year < 100 ) {
-				$year += 2000;
-			}
-			return checkdate( (int) $m[1], (int) $m[2], $year ) ? sprintf( '%04d-%02d-%02d', $year, $m[1], $m[2] ) : null;
+		$text  = trim( (string) $value );
+		$typed = self::typed_date( $text );
+		if ( null !== $typed ) {
+			return Dates::to_ymd( $typed );
 		}
 		if ( is_numeric( $text ) ) {
 			return ( (float) $text >= 1 ) ? Workbook::serial_to_date( (float) $text, $date1904 ) : null;
 		}
 		return null;
+	}
+
+	/**
+	 * The date part of a cell that is written like a date (a time after
+	 * it is left out), or null when the text is not shaped like one.
+	 *
+	 * @param string $text Trimmed cell text.
+	 * @return string|null
+	 */
+	private static function typed_date( $text ) {
+		if ( preg_match( '/^(\d{4}-\d{1,2}-\d{1,2})(?:[ T].*)?$/', $text, $m ) ) {
+			return $m[1];
+		}
+		if ( preg_match( '#^(\d{1,2}[/\-.]\d{1,2}[/\-.]\d{2,4})(?:\s.*)?$#', $text, $m ) ) {
+			return $m[1];
+		}
+		return null;
+	}
+
+	/**
+	 * Why a cell written like a date was not read as one, in one plain
+	 * sentence ("02/30/26 is not a day on the calendar."); '' when the
+	 * cell is fine, empty, a number, or not written like a date at all.
+	 *
+	 * @param mixed $value A cell.
+	 * @return string
+	 */
+	public static function date_refusal( $value ) {
+		if ( null === $value || is_bool( $value ) || is_int( $value ) || is_float( $value ) ) {
+			return '';
+		}
+		$typed = self::typed_date( trim( (string) $value ) );
+		return null !== $typed ? Dates::parse( $typed )['error'] : '';
 	}
 
 	/**

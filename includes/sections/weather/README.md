@@ -182,6 +182,15 @@ request goes through `wp_remote_get` with a 10-second timeout.
 - Nothing is sent and no order status is changed. Holds and UPS Store
   pickups are flagged for Jeff, not acted on.
 
+## Dates
+
+"Checked 11-27-26 09:14:03" in an order's Weather box and "Last run
+11-27-26 02:10:44: …" on the overview read month first — written by the plugin's one helper (`\FisHotel\Misc\Dates`, `includes/class-dates.php` — change the format there); the
+stored values (`_fh_weather_checked_at`, the last-run record) keep the
+site's own `Y-m-d H:i:s`. The delivery days themselves were already in
+words ("Fri, Nov 27"), and the *next run* line follows WordPress's own
+date setting (Settings → General).
+
 ## Files
 
 | File | Responsibility |

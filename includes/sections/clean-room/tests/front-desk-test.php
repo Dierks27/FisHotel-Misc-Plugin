@@ -160,7 +160,7 @@ check( 'a check-in corrected: the note, the date, day 11, the SUGGESTED sale dat
 $r = act( $store, 521, 'undo', array( 'event_ids' => $r['event_ids'] ) );
 check( 'undone: back to the arrival\'s date (day 5)', empty( $r['error'] ) && 5 === $store->stay( 2, $today, $settings )['day'] );
 $r = act( $store, 521, 'ready', array( 'stay_id' => 2, 'date' => Replay::add_days( $today, 3 ) ) );
-check( 'an own sale date set: "on sale <date>", the note event, not for sale yet', 'Ocellaris Clownfish on sale ' . Replay::add_days( $today, 3 ) === ( $r['message'] ?? '' ) && 'sale_ready:' . Replay::add_days( $today, 3 ) === $store->last_event()['note'] && false === $store->stay( 2, $today, $settings )['sale_ready'], json_encode( $r ) );
+check( 'an own sale date set: "on sale <date>", the note event, not for sale yet', 'Ocellaris Clownfish on sale ' . \FisHotel\Misc\Dates::us( Replay::add_days( $today, 3 ) ) === ( $r['message'] ?? '' ) && 'sale_ready:' . Replay::add_days( $today, 3 ) === $store->last_event()['note'] && 1 === preg_match( '/^sale_ready:\d{4}-\d{2}-\d{2}$/', (string) $store->last_event()['note'] ) && false === $store->stay( 2, $today, $settings )['sale_ready'], json_encode( $r ) );
 $r = act( $store, 521, 'ready', array( 'stay_id' => 2, 'date' => '' ) );
 check( 'the own date removed with no batch date: the toast says there is no sale date now and where to set one', 'Ocellaris Clownfish: no sale date now — set one on its fish order' === ( $r['message'] ?? '' ) && null === $store->stay( 2, $today, $settings )['sale_ready_date'], json_encode( $r ) );
 $r = act( $store, 521, 'ready', array( 'stay_id' => 2, 'date' => 'soon' ) );

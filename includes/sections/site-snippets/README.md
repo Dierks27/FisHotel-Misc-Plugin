@@ -502,6 +502,14 @@ otherwise alter every column on every install.
 Plugin deactivation drops the index (rebuilt on the next request); the
 choices, the files, the tables and the database snippets stay.
 
+## Dates
+
+The times on the My snippets, History and Log screens read 11-27-26
+09:14, site time — written by the plugin's one helper (`\FisHotel\Misc\Dates`, `includes/class-dates.php` — change the format there); the Log's tooltip gives the same moment in
+UTC. The log CSV, a snippet's export header and a file's own `Origin:`
+line ("… imported 2026-10-18" — free text in the file) are left as
+written.
+
 ## Files
 
 ```

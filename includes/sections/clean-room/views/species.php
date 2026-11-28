@@ -21,6 +21,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
+use FisHotel\Misc\Dates;
 use FisHotel\Misc\Sections\Clean_Room\Admin;
 use FisHotel\Misc\Sections\Clean_Room\Admin_Workbook;
 use FisHotel\Misc\Sections\Clean_Room\Clean_Room;
@@ -173,7 +174,7 @@ $fh_page_url = static function ( $page ) use ( $filters ) {
 						<td>
 							<?php echo esc_html( Costing::money( $fh_row['online_price'] ) ); ?>
 							<?php if ( $fh_row['online_site'] || $fh_row['online_date'] ) : ?>
-								<span class="fh-cr-sub"><?php echo esc_html( trim( (string) $fh_row['online_site'] . ' ' . (string) $fh_row['online_date'] ) ); ?></span>
+								<span class="fh-cr-sub"><?php echo esc_html( trim( (string) $fh_row['online_site'] . ' ' . Dates::us( $fh_row['online_date'] ) ) ); ?></span>
 							<?php endif; ?>
 						</td>
 						<td><?php echo esc_html( '' !== $fh_row['reef_safe'] ? $fh_row['reef_safe'] : '—' ); ?></td>

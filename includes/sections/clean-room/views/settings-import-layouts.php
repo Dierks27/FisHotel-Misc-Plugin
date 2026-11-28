@@ -13,6 +13,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
+use FisHotel\Misc\Dates;
 use FisHotel\Misc\Sections\Clean_Room\Import_Layouts;
 ?>
 <div class="fishotel-misc-card fh-cr-card fh-cr-card--wide" id="fishotel-cleanroom-import-layouts">
@@ -61,7 +62,7 @@ use FisHotel\Misc\Sections\Clean_Room\Import_Layouts;
 								?>
 							</span>
 						</td>
-						<td><?php echo esc_html( '' !== $fh_layout['used'] ? $fh_layout['used'] : '—' ); ?></td>
+						<td><?php echo esc_html( Dates::us( $fh_layout['used'], '—' ) ); ?></td>
 						<td class="fh-cr-row__actions"><button type="button" class="button button-small fh-cr-layout-forget"><?php esc_html_e( 'Forget', 'fishotel-misc-plugin' ); ?></button></td>
 					</tr>
 				<?php endforeach; ?>

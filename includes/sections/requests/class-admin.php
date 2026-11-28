@@ -28,6 +28,8 @@
 
 namespace FisHotel\Misc\Sections\Requests;
 
+use FisHotel\Misc\Dates;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -524,17 +526,13 @@ class Admin {
 	}
 
 	/**
-	 * A date and time in the site zone, for a screen.
+	 * A date and time in the site zone, for a screen: 11-27-26 09:14.
 	 *
 	 * @param string $utc A stored UTC datetime.
 	 * @return string
 	 */
 	public static function when( $utc ) {
-		$ts = Rules::ts( $utc );
-		if ( $ts <= 0 ) {
-			return '';
-		}
-		return function_exists( 'wp_date' ) ? (string) wp_date( 'Y-m-d H:i', $ts ) : gmdate( 'Y-m-d H:i', $ts );
+		return Dates::stamp( Rules::ts( $utc ) );
 	}
 
 	/**

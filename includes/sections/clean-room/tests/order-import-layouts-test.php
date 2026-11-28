@@ -144,7 +144,7 @@ ob_start();
 include Clean_Room::path() . 'views/settings-import-layouts.php';
 $html = (string) ob_get_clean();
 check( 'the Settings list shows it escaped: no tag of the heading, the supplier, the origin, the sheet or the junk word reaches the page', false === strpos( $html, '<script>' ) && false === strpos( $html, '<img' ) && false === strpos( $html, '<svg' ) && false === strpos( $html, '<b>' ) && false === strpos( $html, '<u>' ) && false === strpos( $html, '<i>' ) && false !== strpos( $html, '&lt;script&gt;alert(1)&lt;/script&gt;' ) && false !== strpos( $html, '&lt;b&gt;Example&lt;/b&gt; &amp; &quot;Sons&quot;' ) );
-check( '… one row with its id, the moment, the columns in words, the last use and Forget', 1 === substr_count( $html, 'data-layout="' . $saved['id'] . '"' ) && false !== strpos( $html, 'ordered (the order sheet)' ) && false !== strpos( $html, '→ the fish' ) && false !== strpos( $html, '2026-05-01' ) && false !== strpos( $html, 'fh-cr-layout-forget' ) && false !== strpos( $html, 'header on row 1' ) );
+check( '… one row with its id, the moment, the columns in words, the last use and Forget', 1 === substr_count( $html, 'data-layout="' . $saved['id'] . '"' ) && false !== strpos( $html, 'ordered (the order sheet)' ) && false !== strpos( $html, '→ the fish' ) && false !== strpos( $html, '05-01-26' ) && false === strpos( $html, '2026-05-01' ) && false !== strpos( $html, 'fh-cr-layout-forget' ) && false !== strpos( $html, 'header on row 1' ) );
 $import_layouts = array();
 ob_start();
 include Clean_Room::path() . 'views/settings-import-layouts.php';

@@ -25,6 +25,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
+use FisHotel\Misc\Dates;
 use FisHotel\Misc\Sections\Clean_Room\Admin;
 use FisHotel\Misc\Sections\Clean_Room\Admin_Workbook;
 use FisHotel\Misc\Sections\Clean_Room\Clean_Room;
@@ -62,7 +63,7 @@ foreach ( $stays as $fh_stay ) {
 					echo esc_html( sprintf( __( 'For sale now from %s.', 'fishotel-misc-plugin' ), $facts['next']['tank'] ) );
 				} elseif ( null !== $facts['next']['sale_ready_date'] ) {
 					/* translators: 1: date, 2: tank path */
-					echo esc_html( sprintf( __( 'Next on sale %1$s (%2$s).', 'fishotel-misc-plugin' ), $facts['next']['sale_ready_date'], $facts['next']['tank'] ) );
+					echo esc_html( sprintf( __( 'Next on sale %1$s (%2$s).', 'fishotel-misc-plugin' ), Dates::us( $facts['next']['sale_ready_date'] ), $facts['next']['tank'] ) );
 				} else {
 					esc_html_e( 'No sale date set yet: set the batch\'s on its fish order (Clean Room → Fish orders), or a group\'s own date below.', 'fishotel-misc-plugin' );
 				}
@@ -122,7 +123,7 @@ foreach ( $stays as $fh_stay ) {
 								echo esc_html(
 									'' !== $fh_batch
 										/* translators: %s: the batch's sale date */
-										? sprintf( __( 'Use the batch date (%s)', 'fishotel-misc-plugin' ), $fh_batch )
+										? sprintf( __( 'Use the batch date (%s)', 'fishotel-misc-plugin' ), Dates::us( $fh_batch ) )
 										: __( 'Use the batch date (none set yet)', 'fishotel-misc-plugin' )
 								);
 								?>

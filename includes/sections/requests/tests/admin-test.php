@@ -397,5 +397,12 @@ check_contains( 'Settings: "tell people by themselves", on', 'name="settings[aut
 restore_error_handler();
 check_same( 'printing every tab raised no PHP notice or warning', array(), $noise );
 
+echo "A date and time on the Requests screens: site time (America/Chicago here), month first\n";
+check_same( 'a morning: 11-27-26 09:14', '11-27-26 09:14', Admin::when( '2026-11-27 15:14:03' ) );
+check_same( 'one minute before midnight is still that day', '11-27-26 23:59', Admin::when( '2026-11-28 05:59:00' ) );
+check_same( 'midnight is the next day', '11-28-26 00:00', Admin::when( '2026-11-28 06:00:00' ) );
+check_same( 'the day the clocks go forward: 01:59, then 03:00', array( '03-08-26 01:59', '03-08-26 03:00' ), array( Admin::when( '2026-03-08 07:59:00' ), Admin::when( '2026-03-08 08:00:00' ) ) );
+check_same( 'nothing stored: nothing', array( '', '' ), array( Admin::when( '' ), Admin::when( '0000-00-00 00:00:00' ) ) );
+
 Requests::use_service( null );
 fh_finish();

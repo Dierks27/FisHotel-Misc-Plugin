@@ -20,6 +20,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
+use FisHotel\Misc\Dates;
 use FisHotel\Misc\Sections\Clean_Room\Admin_Temp;
 use FisHotel\Misc\Sections\Clean_Room\Clean_Room;
 use FisHotel\Misc\Sections\Clean_Room\Layout;
@@ -58,7 +59,7 @@ $fh_total = (int) $list['total'];
 			<span class="fh-cr-todo-flag<?php echo ( ! empty( $fh_flag['low'] ) || ! empty( $fh_flag['overdue'] ) ) ? ' is-bad' : ''; ?>"><?php echo esc_html( Admin_Temp::flag_text( $fh_flag ) ); ?></span>
 		<?php endforeach; ?>
 		<span class="fh-cr-todo-top__meta">
-			<?php echo esc_html( $today ); ?>
+			<?php echo esc_html( Dates::us( $today ) ); ?>
 			· <a href="<?php echo esc_url( Clean_Room::front_desk_url( 0 ) . '&list=1' ); ?>" target="_blank" rel="noopener"><?php esc_html_e( 'On the phone', 'fishotel-misc-plugin' ); ?> &rarr;</a>
 		</span>
 	</div>

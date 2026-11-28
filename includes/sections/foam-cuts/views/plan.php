@@ -19,6 +19,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
+use FisHotel\Misc\Dates;
 use FisHotel\Misc\Sections\Foam_Cuts\Admin;
 use FisHotel\Misc\Sections\Foam_Cuts\Boxes;
 use FisHotel\Misc\Sections\Foam_Cuts\Cut_List;
@@ -79,8 +80,8 @@ $fh_sheets  = Admin::sheets_shown( $stock['sheets'] );
 									/* translators: 1: number of orders, 2: ship date, 3: delivery date */
 									_n( '%1$d order ships on %2$s (delivery %3$s):', '%1$d orders ship on %2$s (delivery %3$s):', count( $orders['orders'] ), 'fishotel-misc-plugin' ),
 									count( $orders['orders'] ),
-									$orders['ship_date'],
-									$orders['delivery_date']
+									Dates::us( $orders['ship_date'] ),
+									Dates::us( $orders['delivery_date'] )
 								)
 							);
 							?>
@@ -226,7 +227,7 @@ $fh_sheets  = Admin::sheets_shown( $stock['sheets'] );
 									<span class="fh-fc-muted">
 										<?php
 										/* translators: %s: date */
-										echo esc_html( sprintf( __( 'orders of %s', 'fishotel-misc-plugin' ), $fh_row['ship_date'] ) );
+										echo esc_html( sprintf( __( 'orders of %s', 'fishotel-misc-plugin' ), Dates::us( $fh_row['ship_date'] ) ) );
 										?>
 									</span>
 								<?php endif; ?>

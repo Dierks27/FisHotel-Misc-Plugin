@@ -55,14 +55,17 @@ php includes/sections/foam-cuts/tests/section-test.php
   box list is read from its classes.
 - **planner-test** — making, deleting, exporting a plan; the print key;
   more than a plan lays out refused; the same day asked for again (one
-  plan), plans of the same day naming each other.
+  plan), plans of the same day naming each other — the day in a
+  sentence reads 03-10-26, a plan's `ship_date` stays 2026-03-10.
 - **svg-test** — well-formed, to scale, labelled, numbered, escaped,
   self-contained.
 - **rest-test** — permissions, the three routes, the stock never touched.
 - **admin-test** — page and print permissions, capability + nonce on every
   write, each handler, escaping, a GET writes nothing, a stale Boxes tab
   refused, the printable page — a busy source's cuts on headed pages of
-  their own.
+  their own; the Plan tab and the printed sheet say "shipping 03-10-26
+  (delivery 03-11-26)" while the day picker's value and the posted
+  `ship_date` stay 2026-03-10.
 - **section-test** — discovery, what a front-end / REST / admin request
   loads and costs, activation, PHP 7.4 syntax, no mail / HTTP / order
   write anywhere.

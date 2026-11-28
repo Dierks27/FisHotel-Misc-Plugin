@@ -17,6 +17,7 @@
 
 defined( 'ABSPATH' ) || exit;
 
+use FisHotel\Misc\Dates;
 use FisHotel\Misc\Sections\Clean_Room\Admin_No_Product;
 use FisHotel\Misc\Sections\Clean_Room\Admin_Workbook;
 use FisHotel\Misc\Sections\Clean_Room\No_Product;
@@ -95,8 +96,8 @@ $tab = 'arrivals';
 							<td><a href="<?php echo esc_url( Admin_Workbook::order_url( (int) $fh_order['id'] ) ); ?>"><strong><?php echo esc_html( $fh_order['ref'] ); ?></strong></a> <span class="fh-cr-sub"><?php echo esc_html( 'bag' === $fh_order['cost_mode'] ? __( 'bag mode', 'fishotel-misc-plugin' ) : __( 'box mode', 'fishotel-misc-plugin' ) ); ?></span></td>
 							<td><?php echo esc_html( '' !== $fh_order['supplier'] ? $fh_order['supplier'] : '—' ); ?></td>
 							<td><?php echo esc_html( '' !== $fh_order['origin'] ? $fh_order['origin'] : '—' ); ?></td>
-							<td><?php echo esc_html( $fh_order['order_date'] ? $fh_order['order_date'] : '—' ); ?></td>
-							<td><?php echo esc_html( $fh_order['received_date'] ? $fh_order['received_date'] : '—' ); ?></td>
+							<td class="fh-cr-date"><?php echo esc_html( Dates::us( $fh_order['order_date'], '—' ) ); ?></td>
+							<td class="fh-cr-date"><?php echo esc_html( Dates::us( $fh_order['received_date'], '—' ) ); ?></td>
 							<td>
 								<span class="fh-cr-badge fh-cr-badge--order-<?php echo esc_attr( $fh_order['status'] ); ?>"><?php echo esc_html( $fh_order['status'] ); ?></span>
 								<?php if ( $fh_order['to_identify'] > 0 ) : ?>

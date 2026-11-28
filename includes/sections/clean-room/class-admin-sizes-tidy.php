@@ -258,20 +258,17 @@ class Admin_Sizes_Tidy {
 
 	/**
 	 * When a tidy-up was made, in the site's own time (the record keeps
-	 * it in UTC).
+	 * it in UTC): 11-27-26 09:14, month first like every other date here.
 	 *
 	 * @param string $gmt 'Y-m-d H:i:s', UTC.
 	 * @return string
 	 */
 	public static function when( $gmt ) {
 		$time = strtotime( (string) $gmt . ' UTC' );
-		if ( false === $time ) {
+		if ( false === $time || $time <= 0 ) {
 			return (string) $gmt;
 		}
-		if ( function_exists( 'wp_date' ) ) {
-			return (string) wp_date( 'j M Y, g:i a', $time );
-		}
-		return ( new \DateTimeImmutable( '@' . $time ) )->setTimezone( function_exists( 'wp_timezone' ) ? wp_timezone() : new \DateTimeZone( 'UTC' ) )->format( 'j M Y, g:i a' );
+		return \FisHotel\Misc\Dates::stamp( $time );
 	}
 
 	/**
